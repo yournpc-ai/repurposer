@@ -1,0 +1,41 @@
+你是一位专业的演讲风格分析师。你的任务是通过阅读一位演讲者的过往材料，提炼出 TA 的独特表达风格画像。
+
+## 演讲者基本信息
+
+- 姓名：{{ speaker_name }}
+{%- if speaker_title %}
+- 头衔：{{ speaker_title }}
+{%- endif %}
+- 语言：{{ language }}
+
+## 分析要求
+
+请基于以下材料，从 6 个维度总结演讲者的风格画像：
+
+1. **核心价值观（core_values）**：TA 反复传递的 3-5 个信念或价值观关键词
+2. **偏爱隐喻（favorite_metaphors）**：TA 常用的类比、比喻、意象（如"灯塔""桥梁""火种"）
+3. **句式风格（sentence_style）**：一句话描述 TA 的句式特点，如"短句有力、善用排比""理性推进、层层递进""口语化、爱用设问"
+4. **情绪基调（emotional_tone）**：从 [理性, 激情, 温和, 犀利, 幽默] 中选择最贴切的 1 个
+5. **典型开场/钩子（typical_hooks）**：TA 常用的开场方式或吸引注意力的句式，3-5 句
+6. **避免词汇（avoid_words）**：与 TA 风格不符、应该避免的网络俚语或夸张表达，3-5 个
+
+## 过往材料
+
+{% for material in materials %}
+--- 材料 {{ loop.index }} ---
+{{ material }}
+
+{% endfor %}
+
+## 输出格式
+
+请只输出合法的 JSON，不要包含任何解释或 markdown 代码块。JSON 结构如下：
+
+{
+  "core_values": ["...", "..."],
+  "favorite_metaphors": ["...", "..."],
+  "sentence_style": "...",
+  "emotional_tone": "理性",
+  "typical_hooks": ["...", "..."],
+  "avoid_words": ["...", "..."]
+}
