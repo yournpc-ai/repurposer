@@ -15,10 +15,16 @@ import {
   PenTool,
   Megaphone,
   Bell,
-  Zap,
-  Upload,
+  Star,
+  Mic2,
+  SlidersHorizontal,
+  Sparkles,
+  ChevronDown,
+  Check,
   FolderKanban,
 } from "lucide-react"
+
+import { cn } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -26,6 +32,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -35,6 +53,11 @@ interface Project {
   id: string
   title: string
   status: string
+}
+
+interface Speaker {
+  id: string
+  name: string
 }
 
 const tools = [
@@ -49,6 +72,13 @@ const tools = [
   { icon: Megaphone, id: "pressRelease", isNew: true },
 ] as const
 
+const tones = ["professional", "thoughtLeadership", "conversational", "academic"] as const
+const lengths = ["short", "medium", "long"] as const
+const variantOptions = [1, 3, 5] as const
+
+type Tone = (typeof tones)[number]
+type Length = (typeof lengths)[number]
+
 export const Route = createFileRoute("/")({
   component: Home,
 })
@@ -57,20 +87,26 @@ function Home() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[]>([])
+  const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState("")
+  const [tone, setTone] = useState<Tone>("professional")
+  const [length, setLength] = useState<Length>("medium")
+  const [variants, setVariants] = useState<number>(3)
+  const [fileName, setFileName] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [autoSave, setAutoSave] = useState(true)
   const [autoImport, setAutoImport] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([
       fetch(`${API_URL}/api/v1/speakers`).then((r) => r.json()),
       fetch(`${API_URL}/api/v1/projects`).then((r) => r.json()),
     ]).then(([s, p]) => {
+      setSpeakers(s)
       setProjects(p.slice(0, 3))
-      if (s.length > 0) setSpeakerId(s[0].id)
     })
   }, [])
 
@@ -91,7 +127,7 @@ function Home() {
         body: JSON.stringify({
           title: prompt.slice(0, 60),
           event_name: "",
-          language: "zh",
+          language: "en",
           speaker_id: speakerId,
         }),
       })
@@ -102,10 +138,14 @@ function Home() {
     }
   }
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileName(e.target.files?.[0]?.name ?? "")
+  }
+
   const handleFeatureClick = (label: string) => {
     setPrompt((prev) => {
-      if (prev.trim()) return `${prev}\n（使用 ${label}）`
-      return `帮我用「${label}」方式处理这场演讲内容...`
+      if (prev.trim()) return `${prev}\n${t("home.promptAppendTool", { label })}`
+      return t("home.promptSeedTool", { label })
     })
     textareaRef.current?.focus()
   }
@@ -131,7 +171,7 @@ function Home() {
           </Button>
 
           <div className="flex h-7 items-center gap-2 rounded-md border bg-card px-3 text-sm">
-            <Zap className="h-4 w-4 fill-amber-400 text-amber-500" />
+            <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
             <span>0</span>
           </div>
 
@@ -146,20 +186,40 @@ function Home() {
             {t("home.hero")}
           </h1>
 
-          <Card className="overflow-hidden border shadow-lg">
-            <CardContent className="p-0">
-              <div className="flex items-start gap-3 p-4">
+          <Card className="overflow-hidden py-0 ring-1 ring-border shadow-xl">
+            <CardContent className="p-4 text-left">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".txt,.md,.pdf,.doc,.docx,.srt,.vtt"
+                onChange={handleFileChange}
+              />
+
+              <div className="flex items-start gap-3">
                 <Tooltip>
                   <TooltipTrigger
                     render={
                       <button
                         type="button"
-                        className="flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-xl border border-dashed bg-muted/50 text-muted-foreground transition-colors hover:bg-muted"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative flex h-20 w-14 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       />
                     }
                   >
-                    <Plus className="h-5 w-5" />
-                    <span className="mt-1 text-[10px]">{t("home.reference")}</span>
+                    {fileName ? (
+                      <>
+                        <FileText className="h-5 w-5" />
+                        <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight">
+                          {fileName}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-5 w-5" />
+                        <span className="text-[10px]">{t("home.reference")}</span>
+                      </>
+                    )}
                   </TooltipTrigger>
                   <TooltipContent>{t("home.referenceTooltip")}</TooltipContent>
                 </Tooltip>
@@ -179,32 +239,152 @@ function Home() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-card/50 px-3 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" className="gap-2 rounded-full">
-                    <Upload className="h-3.5 w-3.5" />
-                    {t("common.upload")}
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-2 rounded-full">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-                    </svg>
-                    {t("common.googleDrive")}
-                  </Button>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {/* Speaker */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                        >
+                          <Mic2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="max-w-[120px] truncate">
+                            {speakers.find((s) => s.id === speakerId)?.name ??
+                              t("composer.speaker")}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start" className="w-52">
+                      <DropdownMenuLabel>{t("composer.speakerLabel")}</DropdownMenuLabel>
+                      {speakers.map((s) => (
+                        <DropdownMenuItem key={s.id} onClick={() => setSpeakerId(s.id)}>
+                          <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 truncate">{s.name}</span>
+                          {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Tone */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                        >
+                          <Sparkles className="h-4 w-4 text-muted-foreground" />
+                          <span>{t(`composer.tones.${tone}`)}</span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start" className="w-60">
+                      <DropdownMenuLabel>{t("composer.toneLabel")}</DropdownMenuLabel>
+                      {tones.map((tn) => (
+                        <DropdownMenuItem key={tn} onClick={() => setTone(tn)}>
+                          <div className="flex-1">
+                            <p className="text-sm">{t(`composer.tones.${tn}`)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {t(`composer.toneDesc.${tn}`)}
+                            </p>
+                          </div>
+                          {tn === tone && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Format */}
+                  <Popover>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                        >
+                          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                          <span>{t("composer.format")}</span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      }
+                    />
+                    <PopoverContent align="start" className="w-72 space-y-3 p-3">
+                      <div>
+                        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                          {t("composer.length")}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {lengths.map((l) => (
+                            <button
+                              key={l}
+                              type="button"
+                              onClick={() => setLength(l)}
+                              className={cn(
+                                "h-8 rounded-md border text-xs font-medium transition-colors",
+                                length === l
+                                  ? "border-primary bg-primary/10 text-foreground"
+                                  : "border-border text-muted-foreground hover:bg-accent"
+                              )}
+                            >
+                              {t(`composer.lengths.${l}`)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                          {t("composer.variants")}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {variantOptions.map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setVariants(n)}
+                              className={cn(
+                                "h-8 rounded-md border text-xs font-medium transition-colors",
+                                variants === n
+                                  ? "border-primary bg-primary/10 text-foreground"
+                                  : "border-border text-muted-foreground hover:bg-accent"
+                              )}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
-                <Button
-                  className="h-9 w-9 rounded-full"
-                  size="icon"
-                  disabled={!prompt.trim() || !speakerId || isGenerating}
-                  onClick={handleGenerate}
-                >
-                  {isGenerating ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  ) : (
-                    <ArrowUp className="h-4 w-4" />
-                  )}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 items-center gap-1.5 px-1 text-sm text-muted-foreground">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                    <span>0</span>
+                  </div>
+
+                  <Button
+                    className="h-9 w-9 rounded-full"
+                    size="icon"
+                    disabled={!prompt.trim() || !speakerId || isGenerating}
+                    onClick={handleGenerate}
+                  >
+                    {isGenerating ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <ArrowUp className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -240,7 +420,7 @@ function Home() {
       {/* Projects */}
       <section className="px-6 pb-16">
         <div className="mx-auto w-full max-w-6xl">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
             <div className="flex items-center gap-6 text-sm">
               <span className="font-medium text-foreground">
                 {t("home.allProjects", { count: projects.length })}
@@ -256,7 +436,7 @@ function Home() {
             <div className="flex items-center gap-4 text-sm">
               <span className="text-muted-foreground">{t("home.storage")}</span>
 
-              <label className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5">
+              <label className="flex items-center gap-2 rounded-full px-3 py-1.5">
                 <Switch
                   size="sm"
                   checked={autoSave}
@@ -265,7 +445,7 @@ function Home() {
                 <span className="text-xs">{t("home.autoSave")}</span>
               </label>
 
-              <label className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5">
+              <label className="flex items-center gap-2 rounded-full px-3 py-1.5">
                 <Switch
                   size="sm"
                   checked={autoImport}

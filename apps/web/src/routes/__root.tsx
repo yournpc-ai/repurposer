@@ -43,7 +43,7 @@ function RootComponent() {
     <ThemeProvider>
       <I18nProvider>
         <TooltipProvider>
-          <SidebarProvider>
+          <SidebarProvider defaultOpen={false}>
             <AppSidebar />
             <SidebarInset className="relative overflow-hidden">
               <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">

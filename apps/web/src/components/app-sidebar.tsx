@@ -91,55 +91,6 @@ export function AppSidebar() {
           </Button>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-12 group-data-[state=collapsed]:w-12 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
-              >
-                <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
-                  <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
-                    U
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
-                  <span className="text-sm font-medium leading-none">User</span>
-                  <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
-                </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
-              </Button>
-            }
-          />
-          <DropdownMenuContent
-            className="w-56 rounded-xl"
-            side="bottom"
-            align="start"
-            sideOffset={8}
-          >
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                {t("common.freePlan")}
-              </span>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              {t("common.profile")}
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              {t("common.settings")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOut className="mr-2 h-4 w-4" />
-              {t("common.logout")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         <SidebarMenuButton
           tooltip={t("common.inviteMembers")}
           className="h-10 text-sm font-normal"
@@ -197,7 +148,56 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="gap-3 p-2">
+      <SidebarFooter className="gap-3 p-2 group-data-[state=collapsed]:items-center">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-12 group-data-[state=collapsed]:w-12 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
+              >
+                <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
+                  <AvatarImage src="" alt="User" />
+                  <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
+                    U
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
+                  <span className="text-sm font-medium leading-none">User</span>
+                  <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent
+            className="w-56 rounded-xl"
+            side="top"
+            align="start"
+            sideOffset={8}
+          >
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                {t("common.freePlan")}
+              </span>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <User className="mr-2 h-4 w-4" />
+              {t("common.profile")}
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              {t("common.settings")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <LogOut className="mr-2 h-4 w-4" />
+              {t("common.logout")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <SidebarGroup className="px-0 py-0">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
