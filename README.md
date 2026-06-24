@@ -36,6 +36,30 @@ repurposer/
 
 ### 1. 安装依赖
 
+本项目后端用 [`uv`](https://github.com/astral-sh/uv) 管理 Python 依赖，前端用 [`pnpm`](https://pnpm.io/) 管理 Node 依赖。
+
+**为什么用这俩：**
+- **uv**：Rust 写的 Python 包管理器，比 `pip`/`venv` 快 10–100 倍，自动管理虚拟环境和 Python 版本，`uv sync` 按 lockfile 精确复现依赖。
+- **pnpm**：用硬链接共享全局缓存，安装更快、占用磁盘更小，依赖隔离更严格，避免 npm 的「幽灵依赖」问题。
+
+**如果还没装：**
+
+```bash
+# 安装 uv（macOS / Linux）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# macOS 也可用 Homebrew： brew install uv
+# Windows（PowerShell）： powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 安装 pnpm（需要 Node.js 18+）
+npm install -g pnpm
+# 或独立安装脚本： curl -fsSL https://get.pnpm.io/install.sh | sh -
+# macOS 也可用 Homebrew： brew install pnpm
+```
+
+> 装完后重开终端（或 `source` 一下 shell 配置）让 `uv` / `pnpm` 进入 PATH，可用 `uv --version`、`pnpm --version` 验证。
+
+**安装项目依赖：**
+
 ```bash
 # 后端
 cd apps/api
