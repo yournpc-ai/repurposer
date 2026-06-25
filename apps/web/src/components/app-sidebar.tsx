@@ -8,7 +8,8 @@ import {
   Crown,
   BookOpen,
   HelpCircle,
-  ChevronLeft,
+  ArrowLeftToLine,
+  ArrowRightToLine,
   ChevronDown,
   User,
   Settings,
@@ -71,7 +72,14 @@ export function AppSidebar() {
   const { toggleSidebar } = useSidebar()
 
   return (
-    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
+    <Sidebar
+      collapsible="icon"
+      className={
+        currentPath.startsWith("/brand-template")
+          ? undefined
+          : "group-data-[side=left]:border-r-0"
+      }
+    >
       <SidebarHeader className="gap-3 p-3 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
@@ -83,11 +91,12 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0"
+            className="relative h-8 w-8 shrink-0 rounded-md"
             onClick={toggleSidebar}
             aria-label={t("a11y.toggleSidebar")}
           >
-            <ChevronLeft className="h-5 w-5 transition-transform group-data-[state=collapsed]:rotate-180" />
+            <ArrowLeftToLine className="absolute inset-0 m-auto size-4.5 transition-opacity group-data-[state=collapsed]:opacity-0" />
+            <ArrowRightToLine className="absolute inset-0 m-auto size-4.5 opacity-0 transition-opacity group-data-[state=collapsed]:opacity-100" />
           </Button>
         </div>
 
@@ -154,7 +163,7 @@ export function AppSidebar() {
             render={
               <Button
                 variant="ghost"
-                className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-12 group-data-[state=collapsed]:w-12 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
+                className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
               >
                 <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
                   <AvatarImage src="" alt="User" />
