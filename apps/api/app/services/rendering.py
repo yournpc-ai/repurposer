@@ -7,6 +7,7 @@ POSTs the spec to the render service (black box: spec -> MP4+SRT), and writes th
 resulting output URLs back onto the clip.
 """
 
+import copy
 from typing import Any
 from uuid import UUID
 
@@ -48,7 +49,7 @@ async def render_clip(clip_id: UUID) -> None:
             return
 
         try:
-            spec = _absolutize(dict(clip.render_spec))
+            spec = _absolutize(copy.deepcopy(clip.render_spec))
             payload = {
                 "spec": spec,
                 "out_subdir": str(clip.project_id),

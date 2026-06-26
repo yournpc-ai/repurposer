@@ -77,13 +77,15 @@ async def run_generation(run_id: UUID) -> None:
             if not materials:
                 raise ValueError("No source material to analyze")
 
-            # Source video/audio (with ASR word timestamps) to render clips from;
-            # None for text-only projects -> clips carry no render_spec.
+            # Source video (with ASR word timestamps) to render clips from;
+            # None for text/audio-only projects -> clips carry no render_spec.
+            # (Audio-only clips need a different composition — waveform/still +
+            # captions — not OffthreadVideo; deferred.)
             source_av = next(
                 (
                     a
                     for a in assets
-                    if a.type in (AssetType.VIDEO, AssetType.AUDIO)
+                    if a.type == AssetType.VIDEO
                     and a.file_url
                     and (a.meta or {}).get("words")
                 ),
