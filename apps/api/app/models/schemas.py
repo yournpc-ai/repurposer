@@ -111,7 +111,7 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     """Create project request."""
 
-    speaker_id: UUID
+    speaker_id: UUID | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -130,7 +130,7 @@ class ProjectResponse(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    speaker_id: UUID
+    speaker_id: UUID | None
     status: ProjectStatus
     tone_snapshot: ToneSettings | None = None
     created_at: datetime
@@ -281,6 +281,16 @@ class ClipResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class ClipUpdate(BaseModel):
+    """Partial update for a clip."""
+
+    hook: str | None = None
+    script: ClipScript | None = None
+    title_options: list[str] | None = None
+    music_mood: str | None = None
+    status: str | None = None
+
+
 class DerivativeResponse(BaseModel):
     """Generated derivative (LinkedIn post, quote cards, …)."""
 
@@ -297,6 +307,13 @@ class DerivativeResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class DerivativeUpdate(BaseModel):
+    """Partial update for a derivative."""
+
+    content: dict | None = None
+    status: str | None = None
+
+
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
@@ -308,6 +325,14 @@ class GenerateRequest(BaseModel):
     target_language: str = Field(
         default="en",
         description="Target language code, e.g. en/zh/fr/de/es/it",
+    )
+
+
+class ExportRequest(BaseModel):
+    """Export project content request."""
+
+    formats: list[Literal["text", "images"]] = Field(
+        default_factory=lambda: ["text"]
     )
 
 

@@ -46,7 +46,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=False)
+    speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
     title = Column(String(255), nullable=False)
     event_name = Column(String(255), nullable=True)
     language = Column(String(10), default="zh")

@@ -53,9 +53,13 @@ async def run_generation(run_id: UUID) -> None:
             await db.commit()
 
             project = await db.get(Project, run.project_id)
-            speaker = await db.get(Speaker, project.speaker_id) if project else None
-            if project is None or speaker is None:
-                raise ValueError("Project or speaker not found")
+            if project is None:
+                raise ValueError("Project not found")
+            speaker = (
+                await db.get(Speaker, project.speaker_id)
+                if project.speaker_id
+                else None
+            )
 
             asset_rows = await db.execute(
                 select(Asset).where(Asset.project_id == project.id)
@@ -69,7 +73,9 @@ async def run_generation(run_id: UUID) -> None:
                 raise ValueError("No source material to analyze")
 
             persona = (
-                SpeakerPersona.model_validate(speaker.persona) if speaker.persona else None
+                SpeakerPersona.model_validate(speaker.persona)
+                if speaker is not None and speaker.persona
+                else None
             )
 
             # Idempotency: clear prior outputs for the requested types so reruns
@@ -154,8 +160,8 @@ async def run_generation(run_id: UUID) -> None:
                 await db.commit()
                 result = await quote_card_agent.generate(
                     materials=materials,
-                    speaker_name=speaker.name,
-                    speaker_title=speaker.title,
+                    speaker_name=speaker.name if speaker is not None else "",
+                    speaker_title=speaker.title if speaker is not None else "",
                     event_name=project.event_name,
                     count=3,
                     target_language=target_language,

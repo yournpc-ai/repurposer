@@ -1,9 +1,11 @@
 """Project router."""
 
+import io
+import zipfile
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, status
 from sqlalchemy import select
 
 from app.agents.blog import blog_agent
@@ -18,6 +20,7 @@ from app.models.schemas import (
     ClipResponse,
     DerivativeResponse,
     DerivativeType,
+    ExportRequest,
     GenerateRequest,
     LinkedInPost,
     ProjectCreate,
@@ -92,11 +95,11 @@ async def _extract_project_materials(project_id: UUID, db: DBDep) -> list[str]:
 
 async def _load_project_and_speaker(
     project_id: UUID, db: DBDep
-) -> tuple[Project, Speaker]:
-    """Load a project with its associated speaker."""
+) -> tuple[Project, Speaker | None]:
+    """Load a project with its associated speaker (optional)."""
     result = await db.execute(
         select(Project, Speaker)
-        .join(Speaker, Project.speaker_id == Speaker.id)
+        .outerjoin(Speaker, Project.speaker_id == Speaker.id)
         .where(Project.id == project_id)
     )
     row = result.one_or_none()
@@ -118,13 +121,14 @@ def _parse_persona(speaker: Speaker) -> SpeakerPersona | None:
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, db: DBDep) -> Project:
     """Create a new project."""
-    speaker_result = await db.execute(select(Speaker).where(Speaker.id == data.speaker_id))
-    speaker = speaker_result.scalar_one_or_none()
-    if not speaker:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
-        )
+    if data.speaker_id:
+        speaker_result = await db.execute(select(Speaker).where(Speaker.id == data.speaker_id))
+        speaker = speaker_result.scalar_one_or_none()
+        if not speaker:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Speaker not found",
+            )
 
     project = Project(**data.model_dump())
     db.add(project)
@@ -309,7 +313,7 @@ async def generate_linkedin_post(
     """Generate a LinkedIn post for a project."""
     project, speaker = await _load_project_and_speaker(project_id, db)
     materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker)
+    persona = _parse_persona(speaker) if speaker else None
 
     try:
         post = await linkedin_agent.generate(
@@ -383,7 +387,7 @@ async def generate_summary(
     """Generate a multi-language summary for a project."""
     project, speaker = await _load_project_and_speaker(project_id, db)
     materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker)
+    persona = _parse_persona(speaker) if speaker else None
 
     try:
         result = await summary_agent.generate(
@@ -418,7 +422,7 @@ async def generate_blog(
     """Generate a blog post for a project."""
     project, speaker = await _load_project_and_speaker(project_id, db)
     materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker)
+    persona = _parse_persona(speaker) if speaker else None
 
     try:
         result = await blog_agent.generate(
@@ -444,3 +448,103 @@ async def generate_blog(
     await db.refresh(derivative)
 
     return result
+
+
+@router.post("/{project_id}/export")
+async def export_project(
+    project_id: UUID,
+    request: ExportRequest,
+    db: DBDep,
+) -> Response:
+    """Export all generated content for a project as a zip archive."""
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    clips_result = await db.execute(
+        select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
+    )
+    clips = list(clips_result.scalars().all())
+
+    derivatives_result = await db.execute(
+        select(Derivative)
+        .where(Derivative.project_id == project_id)
+        .order_by(Derivative.created_at.desc())
+    )
+    derivatives = list(derivatives_result.scalars().all())
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Clips
+        if clips:
+            lines: list[str] = [f"# Clips for {project.title}\n"]
+            for idx, clip in enumerate(clips, start=1):
+                script = clip.script
+                lines.append(f"\n## Clip {idx}: {clip.hook}\n")
+                lines.append(f"- Duration: {clip.duration}s\n")
+                lines.append(f"- Mood: {clip.music_mood}\n")
+                lines.append(f"- Title options: {', '.join(clip.title_options or [])}\n")
+                lines.append("\n### Script\n")
+                for shot in script.get("shots", []):
+                    lines.append(f"**{shot.get('time_range', '')}** — {shot.get('mood', '')}\n")
+                    lines.append(f"> {shot.get('subtitle', '')}\n\n")
+                    lines.append(f"Visual: {shot.get('visual', '')}\n\n")
+            zf.writestr("clips.md", "".join(lines))
+
+        # Derivatives grouped by type
+        linkedin = [d for d in derivatives if d.type == DerivativeType.LINKEDIN_POST]
+        if linkedin:
+            lines = [f"# LinkedIn Posts for {project.title}\n"]
+            for d in linkedin:
+                content = d.content
+                lines.append(f"\n---\n\n{content.get('content', '')}\n")
+                hashtags = content.get("hashtags", [])
+                if hashtags:
+                    lines.append("\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags) + "\n")
+            zf.writestr("linkedin.md", "".join(lines))
+
+        quote_cards = [d for d in derivatives if d.type == DerivativeType.QUOTE_CARD]
+        if quote_cards:
+            lines = [f"# Quote Cards for {project.title}\n"]
+            for d in quote_cards:
+                for q in d.content.get("quotes", []):
+                    lines.append(f"\n> \"{q.get('quote', '')}\"\n")
+                    lines.append(f"> — {q.get('attribution', '')}\n")
+            zf.writestr("quote-cards.md", "".join(lines))
+
+        summaries = [d for d in derivatives if d.type == DerivativeType.SUMMARY]
+        if summaries:
+            lines = [f"# Summaries for {project.title}\n"]
+            for d in summaries:
+                content = d.content
+                if content.get("tldr"):
+                    lines.append(f"\n## TL;DR\n\n{content['tldr']}\n")
+                if content.get("key_points"):
+                    lines.append("\n### Key Points\n")
+                    for p in content["key_points"]:
+                        lines.append(f"- {p}\n")
+                if content.get("full"):
+                    lines.append(f"\n### Full Summary\n\n{content['full']}\n")
+            zf.writestr("summary.md", "".join(lines))
+
+        blogs = [d for d in derivatives if d.type == DerivativeType.BLOG]
+        if blogs:
+            lines = [f"# Blog Posts for {project.title}\n"]
+            for d in blogs:
+                content = d.content
+                if content.get("title"):
+                    lines.append(f"\n## {content['title']}\n")
+                lines.append(f"\n{content.get('content', '')}\n")
+            zf.writestr("blog.md", "".join(lines))
+
+    buffer.seek(0)
+    filename = f"{project.title.replace(' ', '_').lower() or 'export'}.zip"
+    return Response(
+        content=buffer.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

@@ -37,6 +37,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -44,6 +45,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
@@ -61,26 +72,25 @@ interface Speaker {
   name: string
 }
 
+const OUTPUT_OPTIONS = ["clips", "linkedin", "quote_cards"] as const
+type OutputKey = (typeof OUTPUT_OPTIONS)[number]
+
 const tools = [
-  { icon: Linkedin, id: "linkedinPost", isNew: false },
-  { icon: Quote, id: "quoteCard", isNew: false },
-  { icon: Languages, id: "multiLangSummary", isNew: true },
-  { icon: Newspaper, id: "newsletter", isNew: false },
-  { icon: Lightbulb, id: "keyInsights", isNew: true },
-  { icon: FileText, id: "onePager", isNew: false },
-  { icon: Presentation, id: "slides", isNew: true },
-  { icon: PenTool, id: "blogPost", isNew: false },
-  { icon: Megaphone, id: "pressRelease", isNew: true },
+  { icon: Linkedin, id: "linkedinPost", outputKey: "linkedin", isNew: false },
+  { icon: Quote, id: "quoteCard", outputKey: "quote_cards", isNew: false },
+  { icon: Languages, id: "multiLangSummary", outputKey: null, isNew: true },
+  { icon: Newspaper, id: "newsletter", outputKey: null, isNew: false },
+  { icon: Lightbulb, id: "keyInsights", outputKey: null, isNew: true },
+  { icon: FileText, id: "onePager", outputKey: null, isNew: false },
+  { icon: Presentation, id: "slides", outputKey: null, isNew: true },
+  { icon: PenTool, id: "blogPost", outputKey: null, isNew: false },
+  { icon: Megaphone, id: "pressRelease", outputKey: null, isNew: true },
 ] as const
 
 const tones = ["professional", "thoughtLeadership", "conversational", "academic"] as const
-const lengths = ["short", "medium", "long"] as const
-const variantOptions = [1, 3, 5] as const
-
 type Tone = (typeof tones)[number]
-type Length = (typeof lengths)[number]
 
-// Maps the composer's tone/length pills onto the backend ToneSettings schema.
+// Maps the composer's tone onto the backend ToneSettings schema.
 const TONE_MAP: Record<
   Tone,
   {
@@ -94,7 +104,6 @@ const TONE_MAP: Record<
   conversational: { academic_vs_casual: 0.7, rational_vs_passionate: 0.6, audience: "general" },
   academic: { academic_vs_casual: 0.15, rational_vs_passionate: 0.3, audience: "academic" },
 }
-const LENGTH_CONCISE: Record<Length, number> = { short: 0.2, medium: 0.5, long: 0.8 }
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -108,14 +117,20 @@ function Home() {
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState("")
   const [tone, setTone] = useState<Tone>("professional")
-  const [length, setLength] = useState<Length>("medium")
-  const [variants, setVariants] = useState<number>(3)
+  const [outputs, setOutputs] = useState<OutputKey[]>(["linkedin", "quote_cards"])
   const [fileName, setFileName] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState("")
   const [mounted, setMounted] = useState(false)
   const [autoSave, setAutoSave] = useState(true)
   const [autoImport, setAutoImport] = useState(false)
+
+  // Inline speaker creation
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [newTitle, setNewTitle] = useState("")
+  const [creatingSpeaker, setCreatingSpeaker] = useState(false)
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -127,7 +142,7 @@ function Home() {
       setSpeakers(s)
       setProjects(p.slice(0, 3))
     })
-  }, [])
+  }, [createOpen])
 
   useEffect(() => {
     const el = textareaRef.current
@@ -142,9 +157,37 @@ function Home() {
 
   const heroWords = t("home.heroWords", { returnObjects: true }) as string[]
 
+  const handleCreateSpeaker = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setCreatingSpeaker(true)
+    try {
+      const res = await fetch(`${API_URL}/api/v1/speakers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), title: newTitle.trim() || null, language: "en" }),
+      })
+      if (!res.ok) throw new Error("Failed")
+      const speaker: Speaker = await res.json()
+      setSpeakers((prev) => [speaker, ...prev])
+      setSpeakerId(speaker.id)
+      setNewName("")
+      setNewTitle("")
+      setCreateOpen(false)
+    } catch {
+      setError(t("home.speakerCreateFailed"))
+    } finally {
+      setCreatingSpeaker(false)
+    }
+  }
+
   const handleGenerate = async () => {
     const file = fileInputRef.current?.files?.[0]
-    if ((!file && !prompt.trim()) || !speakerId) return
+    const hasContent = file || prompt.trim()
+    if (!hasContent) {
+      setError(t("home.noContentError"))
+      return
+    }
     setIsGenerating(true)
     setError("")
     try {
@@ -153,42 +196,37 @@ function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: file?.name || prompt.slice(0, 60) || "Untitled",
+          title: file?.name || prompt.slice(0, 60) || t("common.untitled"),
           event_name: "",
           language: "en",
-          speaker_id: speakerId,
+          speaker_id: speakerId || undefined,
         }),
       })
       if (!projectRes.ok) throw new Error("Failed to create project")
       const project = await projectRes.json()
 
-      // 2. Upload the source material: the chosen transcript file, or the
-      //    typed prompt turned into a transcript so generation has something
-      //    to analyze.
+      // 2. Upload the source material: file or typed prompt as transcript.
       const form = new FormData()
       form.append("type", "transcript")
-      form.append(
-        "file",
-        file ?? new File([prompt], "prompt.txt", { type: "text/plain" })
-      )
+      form.append("file", file ?? new File([prompt], "prompt.txt", { type: "text/plain" }))
       const assetRes = await fetch(
         `${API_URL}/api/v1/projects/${project.id}/assets`,
         { method: "POST", body: form }
       )
       if (!assetRes.ok) throw new Error("Failed to upload material")
 
-      // 3. Kick off generation with the composer's tone/length/variants.
+      // 3. Kick off generation. Clips are always generated; outputs controls extras.
       const generateRes = await fetch(
         `${API_URL}/api/v1/projects/${project.id}/generate`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            clip_count: variants,
-            outputs: ["clips", "linkedin", "quote_cards"],
+            clip_count: 3,
+            outputs: ["clips", ...outputs],
             tone_settings: {
               ...TONE_MAP[tone],
-              concise_vs_detailed: LENGTH_CONCISE[length],
+              concise_vs_detailed: 0.5,
             },
             target_language: "en",
           }),
@@ -212,19 +250,30 @@ function Home() {
     setFileName(e.target.files?.[0]?.name ?? "")
   }
 
-  const handleFeatureClick = (label: string) => {
-    setPrompt((prev) => {
-      if (prev.trim()) return `${prev}\n${t("home.promptAppendTool", { label })}`
-      return t("home.promptSeedTool", { label })
-    })
-    textareaRef.current?.focus()
+  const toggleOutput = (key: OutputKey) => {
+    setOutputs((prev) =>
+      prev.includes(key) ? prev.filter((o) => o !== key) : [...prev, key]
+    )
   }
+
+  const handleToolClick = (tool: (typeof tools)[number]) => {
+    if (tool.outputKey) {
+      toggleOutput(tool.outputKey)
+      return
+    }
+    setError(t("home.comingSoon"))
+    setTimeout(() => setError(""), 2000)
+  }
+
+  const selectedSpeakerName = speakerId
+    ? speakers.find((s) => s.id === speakerId)?.name
+    : t("composer.styleDefault")
 
   return (
     <div className="flex min-h-svh flex-1 flex-col">
       {/* Global top bar */}
       <header className="flex items-center justify-between px-6 py-4">
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={() => navigate({ to: "/" })}>
           <MessageSquarePlus className="h-4 w-4" />
           {t("home.newChat")}
         </Button>
@@ -277,7 +326,7 @@ function Home() {
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".txt,.md,.pdf,.doc,.docx,.srt,.vtt"
+                accept=".txt,.md,.pdf,.doc,.docx,.srt,.vtt,.mp3,.mp4,.wav,.m4a"
                 onChange={handleFileChange}
               />
 
@@ -302,11 +351,11 @@ function Home() {
                     ) : (
                       <>
                         <Plus className="h-5 w-5" />
-                        <span className="text-[10px]">{t("home.reference")}</span>
+                        <span className="text-[10px]">{t("home.uploadSource")}</span>
                       </>
                     )}
                   </TooltipTrigger>
-                  <TooltipContent>{t("home.referenceTooltip")}</TooltipContent>
+                  <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
                 </Tooltip>
 
                 <Textarea
@@ -319,14 +368,14 @@ function Home() {
                       handleGenerate()
                     }
                   }}
-                  placeholder={t("home.placeholder")}
+                  placeholder={t("home.pastePlaceholder")}
                   className="min-h-[80px] flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0"
                 />
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  {/* Speaker */}
+                  {/* Style / Speaker */}
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
@@ -336,16 +385,21 @@ function Home() {
                           className="h-9 gap-1.5 rounded-md px-3 text-sm"
                         >
                           <Mic2 className="h-4 w-4 text-muted-foreground" />
-                          <span className="max-w-[120px] truncate">
-                            {speakers.find((s) => s.id === speakerId)?.name ??
-                              t("composer.speaker")}
+                          <span className="max-w-[140px] truncate">
+                            {selectedSpeakerName}
                           </span>
                           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       }
                     />
-                    <DropdownMenuContent align="start" className="w-52">
-                      <DropdownMenuLabel>{t("composer.speakerLabel")}</DropdownMenuLabel>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => setSpeakerId("")}>
+                        <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <span className="flex-1 truncate">{t("composer.styleDefault")}</span>
+                        {speakerId === "" && <Check className="ml-2 h-4 w-4" />}
+                      </DropdownMenuItem>
+                      {speakers.length > 0 && <DropdownMenuSeparator />}
                       {speakers.map((s) => (
                         <DropdownMenuItem key={s.id} onClick={() => setSpeakerId(s.id)}>
                           <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -353,6 +407,11 @@ function Home() {
                           {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
                         </DropdownMenuItem>
                       ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        {t("composer.createSpeaker")}
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
 
@@ -387,7 +446,7 @@ function Home() {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {/* Format */}
+                  {/* Outputs */}
                   <Popover>
                     <PopoverTrigger
                       render={
@@ -397,56 +456,40 @@ function Home() {
                           className="h-9 gap-1.5 rounded-md px-3 text-sm"
                         >
                           <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                          <span>{t("composer.format")}</span>
+                          <span>{t("composer.outputs")}</span>
+                          {outputs.length > 0 && (
+                            <Badge variant="secondary" className="ml-1 px-1.5 text-[10px]">
+                              {outputs.length + 1}
+                            </Badge>
+                          )}
                           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       }
                     />
-                    <PopoverContent align="start" className="w-72 space-y-3 p-3">
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                          {t("composer.length")}
-                        </p>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {lengths.map((l) => (
-                            <button
-                              key={l}
-                              type="button"
-                              onClick={() => setLength(l)}
-                              className={cn(
-                                "h-8 rounded-md border text-xs font-medium transition-colors",
-                                length === l
-                                  ? "border-primary bg-primary/10 text-foreground"
-                                  : "border-border text-muted-foreground hover:bg-accent"
-                              )}
-                            >
-                              {t(`composer.lengths.${l}`)}
-                            </button>
-                          ))}
-                        </div>
+                    <PopoverContent align="start" className="w-56 space-y-1 p-2">
+                      <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        {t("composer.outputsLabel")}
+                      </p>
+                      <div className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
+                        {t("composer.outputOptions.clips")} — {t("home.alwaysIncluded")}
                       </div>
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                          {t("composer.variants")}
-                        </p>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {variantOptions.map((n) => (
-                            <button
-                              key={n}
-                              type="button"
-                              onClick={() => setVariants(n)}
-                              className={cn(
-                                "h-8 rounded-md border text-xs font-medium transition-colors",
-                                variants === n
-                                  ? "border-primary bg-primary/10 text-foreground"
-                                  : "border-border text-muted-foreground hover:bg-accent"
-                              )}
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      {OUTPUT_OPTIONS.filter((o) => o !== "clips").map((key) => {
+                        const active = outputs.includes(key)
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => toggleOutput(key)}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors",
+                              active ? "bg-accent text-foreground" : "hover:bg-accent/50"
+                            )}
+                          >
+                            {t(`composer.outputOptions.${key}`)}
+                            {active && <Check className="h-4 w-4" />}
+                          </button>
+                        )
+                      })}
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -460,7 +503,7 @@ function Home() {
                   <Button
                     className="h-9 w-9 rounded-full"
                     size="icon"
-                    disabled={(!prompt.trim() && !fileName) || !speakerId || isGenerating}
+                    disabled={isGenerating}
                     onClick={handleGenerate}
                   >
                     {isGenerating ? (
@@ -486,28 +529,36 @@ function Home() {
 
         {/* Tool row */}
         <div className="mt-12 flex w-full max-w-5xl flex-wrap items-start justify-center gap-x-3 gap-y-6">
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => handleFeatureClick(t(`home.tools.${tool.id}`))}
-              className="group relative flex w-[84px] flex-col items-center gap-2.5"
-            >
-              {tool.isNew && (
-                <Badge
-                  variant="secondary"
-                  className="absolute -top-2 right-1 z-10 px-1.5 text-[10px]"
+          {tools.map((tool) => {
+            const active = tool.outputKey ? outputs.includes(tool.outputKey) : false
+            return (
+              <button
+                key={tool.id}
+                onClick={() => handleToolClick(tool)}
+                className="group relative flex w-[84px] flex-col items-center gap-2.5"
+              >
+                {tool.isNew && (
+                  <Badge
+                    variant="secondary"
+                    className="absolute -top-2 right-1 z-10 px-1.5 text-[10px]"
+                  >
+                    New
+                  </Badge>
+                )}
+                <div
+                  className={cn(
+                    "flex h-14 w-14 items-center justify-center rounded-full bg-card text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground",
+                    active && "ring-2 ring-primary bg-primary/10"
+                  )}
                 >
-                  New
-                </Badge>
-              )}
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-card text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                <tool.icon className="h-6 w-6" />
-              </div>
-              <span className="text-center text-xs font-medium leading-tight">
-                {t(`home.tools.${tool.id}`)}
-              </span>
-            </button>
-          ))}
+                  <tool.icon className="h-6 w-6" />
+                </div>
+                <span className="text-center text-xs font-medium leading-tight">
+                  {t(`home.tools.${tool.id}`)}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </section>
 
@@ -581,6 +632,44 @@ function Home() {
           )}
         </div>
       </section>
+
+      {/* Create Speaker Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleCreateSpeaker}>
+            <DialogHeader>
+              <DialogTitle>{t("composer.createSpeaker")}</DialogTitle>
+              <DialogDescription>{t("speakers.dialogDesc")}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="speaker-name">{t("speakers.labelName")}</Label>
+                <Input
+                  id="speaker-name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder={t("speakers.labelName")}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="speaker-title">{t("speakers.labelTitle")}</Label>
+                <Input
+                  id="speaker-title"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder={t("speakers.noTitle")}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={creatingSpeaker || !newName.trim()}>
+                {creatingSpeaker ? t("common.creating") : t("common.create")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
