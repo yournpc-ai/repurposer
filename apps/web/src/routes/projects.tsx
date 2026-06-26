@@ -204,7 +204,7 @@ function ProjectsPage() {
       {projects.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <FolderKanban className="h-6 w-6 text-primary" />
             </div>
             <CardTitle className="mb-2">{t("projects.emptyTitle")}</CardTitle>

@@ -11,14 +11,18 @@ import {
   Play,
   Download,
   Pencil,
+  RotateCw,
   X,
   FileArchive,
+  SlidersHorizontal,
+  ChevronDown,
+  Check,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -41,6 +50,9 @@ const OUTPUT_LANGUAGES = [
   { code: 'es', label: 'Español' },
   { code: 'it', label: 'Italiano' },
 ]
+
+// Outputs the unified background generation can produce, in display order.
+const OUTPUT_KINDS = ['clips', 'linkedin', 'quote_cards', 'summary', 'blog'] as const
 
 interface Project {
   id: string
@@ -66,6 +78,8 @@ interface Asset {
   type: string
   file_url: string | null
   extracted_text: string | null
+  processing_status: string
+  processing_error: string | null
   created_at: string
 }
 
@@ -201,9 +215,7 @@ function ProjectDetailPage() {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [genKind, setGenKind] = useState<
-    'linkedin' | 'quote-cards' | 'summary' | 'blog' | null
-  >(null)
+  const [outputs, setOutputs] = useState<string[]>(['clips', 'linkedin', 'quote_cards'])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [targetLanguage, setTargetLanguage] = useState('en')
@@ -288,6 +300,24 @@ function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.id, job?.status, id])
 
+  // While any asset is still being processed, poll the asset list until all
+  // assets reach a terminal state (completed / failed).
+  const assetsPending = assets.some(
+    (a) => a.processing_status === 'pending' || a.processing_status === 'processing'
+  )
+  useEffect(() => {
+    if (!assetsPending) return
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/projects/${id}/assets`)
+        if (res.ok) setAssets(await res.json())
+      } catch {
+        /* transient network error — keep polling */
+      }
+    }, 2500)
+    return () => clearInterval(timer)
+  }, [assetsPending, id])
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -327,7 +357,22 @@ function ProjectDetailPage() {
     }
   }
 
+  const handleReprocessAsset = async (assetId: string) => {
+    setError('')
+    try {
+      const res = await fetch(
+        `${API_URL}/api/v1/projects/${id}/assets/${assetId}/reprocess`,
+        { method: 'POST' }
+      )
+      if (!res.ok) throw new Error('Reprocess failed')
+      fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reprocess failed')
+    }
+  }
+
   const handleGenerate = async () => {
+    if (outputs.length === 0) return
     setGenerating(true)
     setError('')
     setMessage('')
@@ -337,7 +382,7 @@ function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clip_count: 3,
-          outputs: ['clips', 'linkedin', 'quote_cards'],
+          outputs,
           target_language: targetLanguage,
         }),
       })
@@ -349,36 +394,6 @@ function ProjectDetailPage() {
       setError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
       setGenerating(false)
-    }
-  }
-
-  const handleGenerateDerivative = async (
-    kind: 'linkedin' | 'quote-cards' | 'summary' | 'blog'
-  ) => {
-    setGenKind(kind)
-    setError('')
-    setMessage('')
-    try {
-      const qs = kind === 'quote-cards' ? '?count=3' : ''
-      const res = await fetch(`${API_URL}/api/v1/projects/${id}/${kind}${qs}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_language: targetLanguage }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Generation failed')
-      const msgKey = {
-        linkedin: 'msgLinkedin',
-        'quote-cards': 'msgQuotes',
-        summary: 'msgSummary',
-        blog: 'msgBlog',
-      }[kind]
-      setMessage(t(`projectDetail.${msgKey}`))
-      fetchData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed')
-    } finally {
-      setGenKind(null)
     }
   }
 
@@ -594,9 +609,50 @@ function ProjectDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{t('projectDetail.sourceMaterials')}</h2>
           <div className="flex flex-wrap items-center gap-2">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                  >
+                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                    <span>{t('composer.outputsLabel')}</span>
+                    <Badge variant="secondary" className="ml-1 px-1.5 text-[10px]">
+                      {outputs.length}
+                    </Badge>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-56 space-y-1 p-2">
+                {OUTPUT_KINDS.map((key) => {
+                  const active = outputs.includes(key)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        setOutputs((prev) =>
+                          active ? prev.filter((o) => o !== key) : [...prev, key]
+                        )
+                      }
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors',
+                        active ? 'bg-accent text-foreground' : 'hover:bg-accent/50'
+                      )}
+                    >
+                      {t(`composer.outputOptions.${key}`)}
+                      {active && <Check className="h-4 w-4" />}
+                    </button>
+                  )
+                })}
+              </PopoverContent>
+            </Popover>
             <Select value={targetLanguage} onValueChange={(v) => setTargetLanguage(v ?? 'en')}>
               <SelectTrigger className="h-9 w-auto gap-2 rounded-md text-sm">
-                <span className="text-muted-foreground">Output:</span>
+                <span className="text-muted-foreground">{t('projectDetail.outputLanguage')}</span>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -609,63 +665,19 @@ function ProjectDetailPage() {
             </Select>
             <Button
               className="h-9 gap-2"
-              disabled={jobActive || generating || assets.length === 0}
+              disabled={jobActive || generating || assets.length === 0 || outputs.length === 0}
               onClick={handleGenerate}
             >
               <Wand2 className="h-4 w-4" />
               {jobActive || generating
                 ? t('projectDetail.generating')
-                : t('projectDetail.generateClips')}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9 gap-2"
-              disabled={jobActive || genKind !== null || assets.length === 0}
-              onClick={() => handleGenerateDerivative('linkedin')}
-            >
-              <Wand2 className="h-4 w-4" />
-              {genKind === 'linkedin'
-                ? t('projectDetail.generating')
-                : t('projectDetail.generateLinkedin')}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9 gap-2"
-              disabled={jobActive || genKind !== null || assets.length === 0}
-              onClick={() => handleGenerateDerivative('quote-cards')}
-            >
-              <Wand2 className="h-4 w-4" />
-              {genKind === 'quote-cards'
-                ? t('projectDetail.generating')
-                : t('projectDetail.generateQuotes')}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9 gap-2"
-              disabled={jobActive || genKind !== null || assets.length === 0}
-              onClick={() => handleGenerateDerivative('summary')}
-            >
-              <Wand2 className="h-4 w-4" />
-              {genKind === 'summary'
-                ? t('projectDetail.generating')
-                : t('projectDetail.generateSummary')}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9 gap-2"
-              disabled={jobActive || genKind !== null || assets.length === 0}
-              onClick={() => handleGenerateDerivative('blog')}
-            >
-              <Wand2 className="h-4 w-4" />
-              {genKind === 'blog'
-                ? t('projectDetail.generating')
-                : t('projectDetail.generateBlog')}
+                : t('projectDetail.generate')}
             </Button>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-muted px-3 text-sm font-medium transition-colors hover:bg-accent">
+          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-muted px-3 text-sm transition-colors hover:bg-accent">
             <Upload className="h-4 w-4" />
             {uploading ? t('projectDetail.uploading') : t('projectDetail.uploadTranscript')}
             <input
@@ -685,38 +697,71 @@ function ProjectDetailPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {assets.map((asset) => (
-              <div key={asset.id} className="flex items-start justify-between gap-4 py-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {asset.file_url?.split('/').pop() || t('common.untitled')}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {asset.extracted_text
-                        ? t('projectDetail.charsExtracted', { count: asset.extracted_text.length })
-                        : t('projectDetail.noText')}
-                    </p>
-                    <p className="text-xs text-muted-foreground/70">
-                      {t('projectDetail.uploadedAt', {
-                        type: asset.type,
-                        date: new Date(asset.created_at).toLocaleString(),
-                      })}
-                    </p>
+            {assets.map((asset) => {
+              const isProcessing =
+                asset.processing_status === 'pending' ||
+                asset.processing_status === 'processing'
+              const isFailed = asset.processing_status === 'failed'
+              return (
+                <div key={asset.id} className="flex items-start justify-between gap-4 py-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        {asset.file_url?.split('/').pop() || t('common.untitled')}
+                      </p>
+                      {isProcessing ? (
+                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          {t('projectDetail.processing')}
+                        </p>
+                      ) : isFailed ? (
+                        <p className="text-sm text-destructive">
+                          {t('projectDetail.processingFailed')}
+                          {asset.processing_error ? `: ${asset.processing_error}` : ''}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {asset.extracted_text
+                            ? t('projectDetail.charsExtracted', {
+                                count: asset.extracted_text.length,
+                              })
+                            : t('projectDetail.noText')}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground/70">
+                        {t('projectDetail.uploadedAt', {
+                          type: asset.type,
+                          date: new Date(asset.created_at).toLocaleString(),
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isFailed && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => handleReprocessAsset(asset.id)}
+                      >
+                        <RotateCw className="h-3.5 w-3.5" />
+                        {t('projectDetail.retry')}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={t('common.delete')}
+                      onClick={() => handleDeleteAsset(asset.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-destructive"
-                  aria-label={t('common.delete')}
-                  onClick={() => handleDeleteAsset(asset.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -742,7 +787,7 @@ function ProjectDetailPage() {
                           <Input
                             value={editClipHook}
                             onChange={(e) => setEditClipHook(e.target.value)}
-                            className="h-8 flex-1"
+                            className="h-9 flex-1"
                           />
                         ) : (
                           <h3 className="text-lg font-semibold">{clip.hook}</h3>
@@ -751,9 +796,9 @@ function ProjectDetailPage() {
                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span>{clip.duration}s</span>
                         <span>·</span>
-                        <span>BGM: {clip.music_mood}</span>
+                        <span>{t('projectDetail.bgm')}: {clip.music_mood}</span>
                         <span>·</span>
-                        <span>Score: {clip.script.virality_score ?? '-'}</span>
+                        <span>{t('projectDetail.score')}: {clip.script.virality_score ?? '-'}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -762,15 +807,15 @@ function ProjectDetailPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-9 w-9"
                             onClick={() => saveClip(clip.id)}
                           >
-                            <Download className="h-4 w-4" />
+                            <Check className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-9 w-9"
                             onClick={cancelEditClip}
                           >
                             <X className="h-4 w-4" />
@@ -804,7 +849,7 @@ function ProjectDetailPage() {
                           value={editClipTitles}
                           onChange={(e) => setEditClipTitles(e.target.value)}
                           className="min-h-[80px]"
-                          placeholder="One title per line"
+                          placeholder={t('projectDetail.titlePerLine')}
                         />
                       ) : (
                         <div className="flex flex-wrap gap-2">
