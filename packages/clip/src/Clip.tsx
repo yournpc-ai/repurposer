@@ -32,6 +32,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const segStart = seg?.start ?? 0;
   const segEnd = seg?.end ?? 0;
   const sourceTime = segStart + frame / (fps || COMPOSITION_FPS);
+  // Render the source only when present — keeps the composition valid for
+  // text/audio-only or preview-before-source cases (renders captions on black).
+  const hasSource = Boolean(seg && spec.source.url);
 
   const lines = groupLines(spec.caption_track);
   const activeLine =
@@ -43,20 +46,22 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
-      <AbsoluteFill
-        style={{
-          // Reframe via transform (object-position is unsupported on the
-          // future client-render path — keep to the CSS ∩ libass subset).
-          transform: `scale(${spec.crop.scale}) translate(${(0.5 - spec.crop.x) * 100}%, ${(0.5 - spec.crop.y) * 100}%)`,
-        }}
-      >
-        <OffthreadVideo
-          src={spec.source.url}
-          startFrom={Math.round(segStart * (fps || COMPOSITION_FPS))}
-          endAt={Math.round(segEnd * (fps || COMPOSITION_FPS))}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      </AbsoluteFill>
+      {hasSource ? (
+        <AbsoluteFill
+          style={{
+            // Reframe via transform (object-position is unsupported on the
+            // future client-render path — keep to the CSS ∩ libass subset).
+            transform: `scale(${spec.crop.scale}) translate(${(0.5 - spec.crop.x) * 100}%, ${(0.5 - spec.crop.y) * 100}%)`,
+          }}
+        >
+          <OffthreadVideo
+            src={spec.source.url}
+            startFrom={Math.round(segStart * (fps || COMPOSITION_FPS))}
+            endAt={Math.round(segEnd * (fps || COMPOSITION_FPS))}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </AbsoluteFill>
+      ) : null}
 
       {spec.title.enabled && spec.title.text ? (
         <div
