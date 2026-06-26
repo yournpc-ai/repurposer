@@ -29,15 +29,6 @@ def get_alembic_config() -> AlembicConfig:
     return alembic_cfg
 
 
-async def get_db() -> AsyncSession:
-    """Get database session."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
 async def init_db() -> None:
     """Initialize database by running Alembic migrations to head."""
     alembic_cfg = get_alembic_config()

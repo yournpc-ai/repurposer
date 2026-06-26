@@ -1,15 +1,13 @@
 """Asset router for projects and speakers."""
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.dependencies import DBDep
-from app.models.schemas import AssetResponse, AssetType
+from app.models.schemas import AssetResponse, AssetStatus, AssetType
 from app.models.tables import Asset, Project, Speaker
-from app.services.extraction import extract_text
 from app.services.storage import (
     delete_file,
     save_speaker_upload,
@@ -48,16 +46,52 @@ async def upload_asset(
     filename = file.filename or "unnamed"
     relative_path = await save_upload(file.file, project_id, filename)
 
-    extracted = extract_text(relative_path)
-
+    # Processing (text extraction / ASR / OCR) runs in the worker; the asset is
+    # created PENDING and the client polls until it settles.
     asset = Asset(
         project_id=project_id,
         type=type,
         file_url=relative_path,
-        extracted_text=extracted,
-        processed_at=datetime.now(UTC) if extracted is not None else None,
+        processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
+    await db.commit()
+    await db.refresh(asset)
+    return asset
+
+
+@router.get("/{project_id}/assets/{asset_id}", response_model=AssetResponse)
+async def get_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
+    """Get a single project asset (used to poll processing status)."""
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
+    )
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset not found",
+        )
+    return asset
+
+
+@router.post(
+    "/{project_id}/assets/{asset_id}/reprocess",
+    response_model=AssetResponse,
+)
+async def reprocess_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
+    """Re-queue a project asset for processing (e.g. after a failure)."""
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
+    )
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset not found",
+        )
+    asset.processing_status = AssetStatus.PENDING
+    asset.processing_error = None
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -116,14 +150,11 @@ async def upload_speaker_asset(
     filename = file.filename or "unnamed"
     relative_path = await save_speaker_upload(file.file, speaker_id, filename)
 
-    extracted = extract_text(relative_path)
-
     asset = Asset(
         speaker_id=speaker_id,
         type=AssetType.PAST_MATERIAL,
         file_url=relative_path,
-        extracted_text=extracted,
-        processed_at=datetime.now(UTC) if extracted is not None else None,
+        processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
     await db.commit()

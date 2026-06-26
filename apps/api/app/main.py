@@ -12,6 +12,7 @@ from app.routers import (
     brand_templates,
     clips,
     derivatives,
+    files,
     projects,
     speaker_assets,
     speakers,
@@ -47,6 +48,7 @@ app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(clips, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(derivatives, prefix="/api/v1/derivatives", tags=["derivatives"])
+app.include_router(files, prefix="/api/v1/files", tags=["files"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )

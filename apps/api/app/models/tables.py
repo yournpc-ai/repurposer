@@ -17,7 +17,14 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.database import Base
-from app.models.schemas import AssetType, DerivativeType, ProjectStatus, WorkflowStatus
+from app.models.schemas import (
+    AssetStatus,
+    AssetType,
+    DerivativeType,
+    ProjectStatus,
+    RenderStatus,
+    WorkflowStatus,
+)
 
 
 def now_utc() -> datetime:
@@ -79,8 +86,14 @@ class Asset(Base):
     file_url = Column(String(512), nullable=True)
     transcript = Column(Text, nullable=True)
     extracted_text = Column(Text, nullable=True)
-    keyframes = Column(JSON, nullable=True)
     slide_pages = Column(JSON, nullable=True)
+    processing_status = Column(
+        Enum(AssetStatus), nullable=False, default=AssetStatus.PENDING
+    )
+    processing_error = Column(Text, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    # Processor extras (e.g. ASR word-level timestamps, detected language).
+    meta = Column(JSON, nullable=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
@@ -95,13 +108,18 @@ class Clip(Base):
     hook = Column(String(500), nullable=False)
     script = Column(JSON, nullable=False)
     title_options = Column(JSON, default=list)
-    subtitles = Column(JSON, nullable=True)
     music_mood = Column(String(50), default="沉稳")
     status = Column(String(50), default="generated")
     video_url = Column(String(512), nullable=True)
     duration = Column(Integer, default=30)
     language = Column(String(10), default="zh")
     source_segment = Column(JSON, nullable=True)
+    # Vertical-clip render contract + job state (see docs/VIDEO_EDITOR.md).
+    # render_status NULL = render not requested.
+    render_spec = Column(JSON, nullable=True)
+    render_status = Column(Enum(RenderStatus), nullable=True)
+    render_error = Column(Text, nullable=True)
+    srt_url = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -136,21 +154,6 @@ class WorkflowRun(Base):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
-class WorkflowStep(Base):
-    """Workflow step table."""
-
-    __tablename__ = "workflow_steps"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    run_id = Column(UUID(as_uuid=True), ForeignKey("workflow_runs.id"), nullable=False)
-    step_name = Column(String(100), nullable=False)
-    input_json = Column(JSON, default=dict)
-    output_json = Column(JSON, default=dict)
-    attempts = Column(Integer, default=1)
-    error = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
 class HumanFeedback(Base):

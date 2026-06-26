@@ -19,6 +19,7 @@ dependencies = [
     "tenacity>=8.4",
     "structlog>=24.1",
     "psycopg2-binary>=2.9.12",
+    "faster-whisper>=1.2.1",
 ]
 
 [project.optional-dependencies]

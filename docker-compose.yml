@@ -25,6 +25,20 @@ services:
     depends_on:
       - db
 
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    command: python -m app.worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+    depends_on:
+      - db
+
   web:
     build:
       context: ./apps/web

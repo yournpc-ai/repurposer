@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class AssetType(StrEnum):
@@ -18,6 +18,21 @@ class AssetType(StrEnum):
     IMAGE = "image"
     VOICE_SAMPLE = "voice_sample"
     PAST_MATERIAL = "past_material"
+
+
+class AssetStatus(StrEnum):
+    """Asset processing statuses.
+
+    Drives the async processing pipeline: an asset is created ``PENDING`` on
+    upload, a worker flips it to ``PROCESSING`` while it runs, then to
+    ``COMPLETED`` or ``FAILED``. Replaces the previous ``processed_at IS NULL``
+    overload that could not distinguish "not yet processed" from "failed".
+    """
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ProjectStatus(StrEnum):
@@ -149,8 +164,19 @@ class AssetResponse(BaseModel):
     file_url: str | None = None
     transcript: str | None = None
     extracted_text: str | None = None
+    processing_status: AssetStatus
+    processing_error: str | None = None
+    duration_seconds: int | None = None
     processed_at: datetime | None = None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def stream_url(self) -> str | None:
+        """Browser-playable URL for this asset, resolved through the storage seam."""
+        from app.services.storage import stream_url
+
+        return stream_url(self.file_url)
 
 
 class Shot(BaseModel):
@@ -261,6 +287,101 @@ class DerivativeType(StrEnum):
     BLOG = "blog"
 
 
+class RenderStatus(StrEnum):
+    """Vertical-clip render job statuses (NULL on a Clip = render not requested)."""
+
+    PENDING = "pending"
+    RENDERING = "rendering"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+# ---------------------------------------------------------------------------
+# clip-spec: the renderer-agnostic contract for the vertical-clip editor.
+# See docs/VIDEO_EDITOR.md §4. Describes WHAT to render, never HOW — contains no
+# Remotion/React/FFmpeg concepts, so the renderer behind it stays swappable.
+# ---------------------------------------------------------------------------
+
+
+class ClipSource(BaseModel):
+    """Source video for a clip."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: UUID
+    url: str  # browser-playable URL via storage.stream_url() (storage seam)
+    fps: int = 30
+
+
+class ClipSegment(BaseModel):
+    """A kept span of the source. ``hidden=True`` is a non-destructive delete."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+    hidden: bool = False
+
+
+class ClipCrop(BaseModel):
+    """9:16/1:1 reframe as a normalized center + scale (applied via transform)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(default=0.5, ge=0.0, le=1.0)
+    y: float = Field(default=0.5, ge=0.0, le=1.0)
+    scale: float = Field(default=1.0, gt=0.0)
+
+
+class CaptionCue(BaseModel):
+    """One caption cue (word/line) from ASR word-level timestamps; text editable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+    text: str
+    lang: str = "en"
+
+
+class ClipTitle(BaseModel):
+    """Optional title/hook card overlay."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = ""
+    enabled: bool = False
+
+
+class ClipMusic(BaseModel):
+    """Optional background music."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    track_id: str | None = None
+    enabled: bool = False
+    gain_db: float = -18.0
+
+
+class ClipSpec(BaseModel):
+    """Renderer-agnostic clip render contract (see docs/VIDEO_EDITOR.md §4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: ClipSource
+    aspect: Literal["9:16", "1:1"] = "9:16"
+    segments: list[ClipSegment] = Field(default_factory=list)
+    crop: ClipCrop = Field(default_factory=ClipCrop)
+    caption_track: list[CaptionCue] = Field(default_factory=list)
+    # Preset enum, NOT free styling — keeps preview=render parity and the
+    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset).
+    caption_style_preset: Literal["clean-bottom", "karaoke-highlight"] = "clean-bottom"
+    title: ClipTitle = Field(default_factory=ClipTitle)
+    music: ClipMusic = Field(default_factory=ClipMusic)
+    brand_ref: UUID | None = None
+    target_language: str = "en"
+
+
 class ClipResponse(BaseModel):
     """Generated clip response."""
 
@@ -277,6 +398,10 @@ class ClipResponse(BaseModel):
     duration: int
     language: str
     source_segment: Segment | None = None
+    render_spec: ClipSpec | None = None
+    render_status: RenderStatus | None = None
+    render_error: str | None = None
+    srt_url: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -289,6 +414,7 @@ class ClipUpdate(BaseModel):
     title_options: list[str] | None = None
     music_mood: str | None = None
     status: str | None = None
+    render_spec: ClipSpec | None = None
 
 
 class DerivativeResponse(BaseModel):
@@ -318,7 +444,7 @@ class GenerateRequest(BaseModel):
     """Generate content request."""
 
     clip_count: int = Field(default=3, ge=1, le=10)
-    outputs: list[Literal["clips", "linkedin", "quote_cards"]] = Field(
+    outputs: list[Literal["clips", "linkedin", "quote_cards", "summary", "blog"]] = Field(
         default_factory=lambda: ["clips", "linkedin", "quote_cards"]
     )
     tone_settings: ToneSettings | None = None

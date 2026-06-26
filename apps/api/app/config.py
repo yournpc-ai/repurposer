@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # Background worker
+    worker_poll_interval: float = 2.0
+
+    # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
+    asr_model: str = "base"  # tiny/base/small/medium/large-v3
+    asr_device: str = "cpu"  # cpu | cuda
+    asr_compute_type: str = "int8"  # int8 (cpu) | float16 (gpu)
+
     def ensure_dirs(self) -> None:
         """Ensure storage directories exist."""
         self.upload_dir.mkdir(parents=True, exist_ok=True)

@@ -75,12 +75,19 @@ echo "Starting API on http://localhost:8000 ..."
 ( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ) &
 API_PID=$!
 
+# --- worker ----------------------------------------------------------------
+# Processes the Postgres-backed job queue (asset processing + generation) in a
+# separate process so heavy jobs don't compete with the API's online requests.
+echo "Starting background worker ..."
+( cd "$ROOT/apps/api" && uv run python -m app.worker ) &
+WORKER_PID=$!
+
 # --- frontend --------------------------------------------------------------
 echo "Starting web app on http://localhost:3000 ..."
 ( cd "$ROOT/apps/web" && pnpm dev ) &
 WEB_PID=$!
 
 # --- cleanup ---------------------------------------------------------------
-trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WEB_PID" 2>/dev/null; exit' INT TERM
+trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null; exit' INT TERM
 
 wait

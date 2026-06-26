@@ -11,9 +11,11 @@ import structlog
 from sqlalchemy import delete, select
 
 from app.agents.analyzer import analyzer_agent
+from app.agents.blog import blog_agent
 from app.agents.linkedin import linkedin_agent
 from app.agents.quote_card import quote_card_agent
 from app.agents.script import script_agent
+from app.agents.summary import summary_agent
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     DerivativeType,
@@ -26,7 +28,7 @@ from app.models.tables import Asset, Clip, Derivative, Project, Speaker, Workflo
 
 logger = structlog.get_logger()
 
-KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards")
+KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "summary", "blog")
 
 
 async def run_generation(run_id: UUID) -> None:
@@ -94,6 +96,20 @@ async def run_generation(run_id: UUID) -> None:
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.QUOTE_CARD,
+                    )
+                )
+            if "summary" in outputs:
+                await db.execute(
+                    delete(Derivative).where(
+                        Derivative.project_id == project.id,
+                        Derivative.type == DerivativeType.SUMMARY,
+                    )
+                )
+            if "blog" in outputs:
+                await db.execute(
+                    delete(Derivative).where(
+                        Derivative.project_id == project.id,
+                        Derivative.type == DerivativeType.BLOG,
                     )
                 )
             await db.commit()
@@ -171,6 +187,50 @@ async def run_generation(run_id: UUID) -> None:
                         project_id=project.id,
                         type=DerivativeType.QUOTE_CARD,
                         content=result.model_dump(),
+                        language=target_language,
+                    )
+                )
+                await db.commit()
+                done += 1
+                run.progress = int(done / total * 100)
+                await db.commit()
+
+            if "summary" in outputs:
+                run.current_step = "summary"
+                await db.commit()
+                summary = await summary_agent.generate(
+                    materials=materials,
+                    persona=persona,
+                    event_name=project.event_name,
+                    target_language=target_language,
+                )
+                db.add(
+                    Derivative(
+                        project_id=project.id,
+                        type=DerivativeType.SUMMARY,
+                        content=summary.model_dump(),
+                        language=target_language,
+                    )
+                )
+                await db.commit()
+                done += 1
+                run.progress = int(done / total * 100)
+                await db.commit()
+
+            if "blog" in outputs:
+                run.current_step = "blog"
+                await db.commit()
+                blog = await blog_agent.generate(
+                    materials=materials,
+                    persona=persona,
+                    event_name=project.event_name,
+                    target_language=target_language,
+                )
+                db.add(
+                    Derivative(
+                        project_id=project.id,
+                        type=DerivativeType.BLOG,
+                        content=blog.model_dump(),
                         language=target_language,
                     )
                 )

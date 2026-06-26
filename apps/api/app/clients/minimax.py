@@ -1,5 +1,6 @@
 """MiniMax M3 client."""
 
+import re
 from typing import TypeVar
 
 import httpx
@@ -12,6 +13,10 @@ from app.config import settings
 logger = structlog.get_logger()
 
 T = TypeVar("T", bound=BaseModel)
+
+# M3 may emit a <think>...</think> reasoning preamble before the JSON payload,
+# even with thinking disabled. Strip it so JSON parsing doesn't choke on it.
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
 class MiniMaxError(Exception):
@@ -78,14 +83,24 @@ class MiniMaxClient:
             raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
     def _clean_json(self, text: str) -> str:
-        """Clean markdown code blocks from JSON response."""
-        text = text.strip()
+        """Clean markdown code blocks and <think> preambles from a JSON response."""
+        text = _THINK_BLOCK.sub("", text).strip()
         if text.startswith("```json"):
             text = text[7:]
         if text.startswith("```"):
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
+        text = text.strip()
+        # If any prose still precedes the JSON (e.g. an unterminated think
+        # block), fall back to the first balanced {...} / [...] span.
+        if text and text[0] not in "{[":
+            start = min(
+                (i for i in (text.find("{"), text.find("[")) if i != -1),
+                default=-1,
+            )
+            if start != -1:
+                text = text[start:]
         return text.strip()
 
 

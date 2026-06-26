@@ -2,34 +2,22 @@
 
 import io
 import zipfile
-from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Response, status
+from sqlalchemy import delete, select
 
-from app.agents.blog import blog_agent
-from app.agents.linkedin import linkedin_agent
-from app.agents.quote_card import quote_card_agent
-from app.agents.summary import summary_agent
-from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep
 from app.models.schemas import (
-    AssetType,
-    BlogPost,
     ClipResponse,
     DerivativeResponse,
     DerivativeType,
     ExportRequest,
     GenerateRequest,
-    LinkedInPost,
     ProjectCreate,
     ProjectResponse,
     ProjectStatus,
     ProjectUpdate,
-    QuoteCardsResponse,
-    SpeakerPersona,
-    Summary,
     WorkflowRunResponse,
     WorkflowStatus,
 )
@@ -37,85 +25,14 @@ from app.models.tables import (
     Asset,
     Clip,
     Derivative,
+    HumanFeedback,
     Project,
     Speaker,
     WorkflowRun,
 )
-from app.services.extraction import extract_text
-from app.services.generation import run_generation
 from app.services.storage import delete_file, delete_project_files
 
 router = APIRouter()
-
-
-async def _extract_project_materials(project_id: UUID, db: DBDep) -> list[str]:
-    """Extract text from all analyzable project assets.
-
-    Returns a list of non-empty extracted texts. Raises HTTPException
-    if no usable text is found.
-    """
-    result = await db.execute(
-        select(Asset).where(
-            Asset.project_id == project_id,
-            Asset.type.in_(
-                [
-                    AssetType.TRANSCRIPT,
-                    AssetType.VIDEO,
-                    AssetType.AUDIO,
-                    AssetType.SLIDES,
-                ]
-            ),
-        )
-    )
-    assets = list(result.scalars().all())
-    if not assets:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No analyzable assets found for this project",
-        )
-
-    materials: list[str] = []
-    for asset in assets:
-        if not asset.extracted_text and asset.file_url:
-            asset.extracted_text = extract_text(asset.file_url)
-            asset.processed_at = datetime.now(UTC)
-            db.add(asset)
-        if asset.extracted_text:
-            materials.append(asset.extracted_text)
-
-    if not materials:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not extract text from any project asset",
-        )
-
-    await db.commit()
-    return materials
-
-
-async def _load_project_and_speaker(
-    project_id: UUID, db: DBDep
-) -> tuple[Project, Speaker | None]:
-    """Load a project with its associated speaker (optional)."""
-    result = await db.execute(
-        select(Project, Speaker)
-        .outerjoin(Speaker, Project.speaker_id == Speaker.id)
-        .where(Project.id == project_id)
-    )
-    row = result.one_or_none()
-    if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    return row._tuple()  # type: ignore[attr-defined]
-
-
-def _parse_persona(speaker: Speaker) -> SpeakerPersona | None:
-    """Parse speaker persona from JSON if present."""
-    if speaker.persona:
-        return SpeakerPersona.model_validate(speaker.persona)
-    return None
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -197,13 +114,18 @@ async def delete_project(project_id: UUID, db: DBDep) -> None:
             detail="Project not found",
         )
 
-    # Delete associated assets (files + DB rows)
+    # Delete child rows in FK-safe order, then the project. Asset files are
+    # unlinked individually since we need each file_url before deletion.
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
-    assets = list(result.scalars().all())
-    for asset in assets:
+    for asset in result.scalars().all():
         delete_file(asset.file_url)
-        await db.delete(asset)
 
+    clip_ids = select(Clip.id).where(Clip.project_id == project_id)
+    await db.execute(delete(HumanFeedback).where(HumanFeedback.clip_id.in_(clip_ids)))
+    await db.execute(delete(Clip).where(Clip.project_id == project_id))
+    await db.execute(delete(Derivative).where(Derivative.project_id == project_id))
+    await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
+    await db.execute(delete(Asset).where(Asset.project_id == project_id))
     await db.delete(project)
     await db.commit()
 
@@ -215,13 +137,12 @@ async def delete_project(project_id: UUID, db: DBDep) -> None:
 async def generate_content(
     project_id: UUID,
     request: GenerateRequest,
-    background_tasks: BackgroundTasks,
     db: DBDep,
 ) -> dict:
     """Queue background generation for a project.
 
-    Creates a WorkflowRun, dispatches the orchestration to a background task,
-    and returns immediately with a job id to poll.
+    Creates a PENDING WorkflowRun and returns immediately with a job id to
+    poll; the background worker claims and runs it (see app.worker).
     """
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
@@ -249,8 +170,6 @@ async def generate_content(
     project.status = ProjectStatus.PROCESSING
     await db.commit()
     await db.refresh(run)
-
-    background_tasks.add_task(run_generation, run.id)
 
     return {"job_id": str(run.id), "status": run.status.value}
 
@@ -304,150 +223,6 @@ async def list_project_derivatives(project_id: UUID, db: DBDep) -> list[Derivati
         .order_by(Derivative.created_at.desc())
     )
     return list(result.scalars().all())
-
-
-@router.post("/{project_id}/linkedin", response_model=LinkedInPost)
-async def generate_linkedin_post(
-    project_id: UUID, request: GenerateRequest, db: DBDep
-) -> LinkedInPost:
-    """Generate a LinkedIn post for a project."""
-    project, speaker = await _load_project_and_speaker(project_id, db)
-    materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker) if speaker else None
-
-    try:
-        post = await linkedin_agent.generate(
-            materials=materials,
-            persona=persona,
-            event_name=project.event_name,
-            target_language=request.target_language,
-        )
-    except MiniMaxError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    derivative = Derivative(
-        project_id=project_id,
-        type=DerivativeType.LINKEDIN_POST,
-        content=post.model_dump(),
-        language=project.language,
-    )
-    db.add(derivative)
-    await db.commit()
-    await db.refresh(derivative)
-
-    return post
-
-
-@router.post("/{project_id}/quote-cards", response_model=QuoteCardsResponse)
-async def generate_quote_cards(
-    project_id: UUID,
-    request: GenerateRequest,
-    count: int = 3,
-    db: DBDep = None,  # type: ignore[assignment]
-) -> QuoteCardsResponse:
-    """Generate quote cards for a project."""
-    project, speaker = await _load_project_and_speaker(project_id, db)
-    materials = await _extract_project_materials(project_id, db)
-
-    try:
-        result = await quote_card_agent.generate(
-            materials=materials,
-            speaker_name=speaker.name,
-            speaker_title=speaker.title,
-            event_name=project.event_name,
-            count=count,
-            target_language=request.target_language,
-        )
-    except MiniMaxError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    derivative = Derivative(
-        project_id=project_id,
-        type=DerivativeType.QUOTE_CARD,
-        content=result.model_dump(),
-        language=project.language,
-    )
-    db.add(derivative)
-    await db.commit()
-    await db.refresh(derivative)
-
-    return result
-
-
-@router.post("/{project_id}/summary", response_model=Summary)
-async def generate_summary(
-    project_id: UUID, request: GenerateRequest, db: DBDep
-) -> Summary:
-    """Generate a multi-language summary for a project."""
-    project, speaker = await _load_project_and_speaker(project_id, db)
-    materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker) if speaker else None
-
-    try:
-        result = await summary_agent.generate(
-            materials=materials,
-            persona=persona,
-            event_name=project.event_name,
-            target_language=request.target_language,
-        )
-    except MiniMaxError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    derivative = Derivative(
-        project_id=project_id,
-        type=DerivativeType.SUMMARY,
-        content=result.model_dump(),
-        language=request.target_language,
-    )
-    db.add(derivative)
-    await db.commit()
-    await db.refresh(derivative)
-
-    return result
-
-
-@router.post("/{project_id}/blog", response_model=BlogPost)
-async def generate_blog(
-    project_id: UUID, request: GenerateRequest, db: DBDep
-) -> BlogPost:
-    """Generate a blog post for a project."""
-    project, speaker = await _load_project_and_speaker(project_id, db)
-    materials = await _extract_project_materials(project_id, db)
-    persona = _parse_persona(speaker) if speaker else None
-
-    try:
-        result = await blog_agent.generate(
-            materials=materials,
-            persona=persona,
-            event_name=project.event_name,
-            target_language=request.target_language,
-        )
-    except MiniMaxError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    derivative = Derivative(
-        project_id=project_id,
-        type=DerivativeType.BLOG,
-        content=result.model_dump(),
-        language=request.target_language,
-    )
-    db.add(derivative)
-    await db.commit()
-    await db.refresh(derivative)
-
-    return result
 
 
 @router.post("/{project_id}/export")

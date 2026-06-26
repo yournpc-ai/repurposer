@@ -74,16 +74,6 @@ def get_output_path(project_id: UUID, filename: str) -> Path:
     return directory / _sanitize_filename(filename)
 
 
-def get_relative_url(path: Path) -> str:
-    """Get relative URL for a stored file.
-
-    Note: returns a URL relative to the upload root. For files nested in
-    project/speaker directories, the name alone is not unique; callers should
-    use file IDs instead of names for public URLs.
-    """
-    return f"/files/{path.name}"
-
-
 async def save_upload(file_obj: BinaryIO, project_id: UUID, filename: str) -> str:
     """Save uploaded file to project storage and return relative path string."""
     destination = get_upload_path(project_id, filename)
@@ -105,6 +95,35 @@ def resolve_file_path(relative_path: str | None) -> Path | None:
     if not relative_path:
         return None
     return settings.upload_dir / relative_path
+
+
+def resolve_safe(relative_path: str | None) -> Path | None:
+    """Resolve a relative path to an absolute Path, refusing traversal escapes.
+
+    Returns None if the path is empty or resolves outside ``upload_dir``. Used by
+    the file-streaming endpoint, which serves arbitrary client-supplied paths.
+    """
+    if not relative_path:
+        return None
+    root = settings.upload_dir.resolve()
+    candidate = (root / relative_path).resolve()
+    if root == candidate or root in candidate.parents:
+        return candidate
+    return None
+
+
+def stream_url(relative_path: str | None) -> str | None:
+    """Return a browser-playable URL for a stored file.
+
+    SEAM (see docs/VIDEO_EDITOR.md §5): callers depend only on "a playable URL",
+    never on a local path. Today this points at the local Range-capable
+    streaming endpoint; migrating to object storage means returning a presigned
+    S3/MinIO URL here, leaving every caller (clip-spec, frontend, worker,
+    Remotion) unchanged.
+    """
+    if not relative_path:
+        return None
+    return f"/api/v1/files/{relative_path}"
 
 
 def delete_file(relative_path: str | None) -> None:
