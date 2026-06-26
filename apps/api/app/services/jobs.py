@@ -20,8 +20,8 @@ import structlog
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import AssetStatus, WorkflowStatus
-from app.models.tables import Asset, WorkflowRun
+from app.models.schemas import AssetStatus, RenderStatus, WorkflowStatus
+from app.models.tables import Asset, Clip, WorkflowRun
 
 logger = structlog.get_logger()
 
@@ -79,6 +79,29 @@ async def claim_pending_run(db: AsyncSession) -> UUID | None:
     return run_id
 
 
+async def claim_pending_render(db: AsyncSession) -> UUID | None:
+    """Atomically claim one clip awaiting render, flipping it to RENDERING."""
+    result = await db.execute(
+        select(Clip.id)
+        .where(Clip.render_status == RenderStatus.PENDING)
+        .order_by(Clip.created_at)
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    )
+    clip_id = result.scalar_one_or_none()
+    if clip_id is None:
+        return None
+
+    clip_id = await db.scalar(
+        update(Clip)
+        .where(Clip.id == clip_id)
+        .values(render_status=RenderStatus.RENDERING, render_error=None)
+        .returning(Clip.id)
+    )
+    await db.commit()
+    return clip_id
+
+
 async def reap_stale(db: AsyncSession) -> None:
     """Reset rows orphaned by a crashed worker back to pending.
 
@@ -98,8 +121,19 @@ async def reap_stale(db: AsyncSession) -> None:
         .where(WorkflowRun.status == WorkflowStatus.RUNNING)
         .values(status=WorkflowStatus.PENDING)
     )
+    renders = await db.execute(
+        update(Clip)
+        .where(Clip.render_status == RenderStatus.RENDERING)
+        .values(render_status=RenderStatus.PENDING)
+    )
     await db.commit()
     asset_count = assets.rowcount if isinstance(assets, CursorResult) else 0
     run_count = runs.rowcount if isinstance(runs, CursorResult) else 0
-    if asset_count or run_count:
-        logger.info("reaped_stale_jobs", assets=asset_count, runs=run_count)
+    render_count = renders.rowcount if isinstance(renders, CursorResult) else 0
+    if asset_count or run_count or render_count:
+        logger.info(
+            "reaped_stale_jobs",
+            assets=asset_count,
+            runs=run_count,
+            renders=render_count,
+        )

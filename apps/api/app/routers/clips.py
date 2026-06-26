@@ -14,6 +14,7 @@ from app.models.schemas import (
     ClipScript,
     ClipUpdate,
     FeedbackRequest,
+    RenderStatus,
     Segment,
     SpeakerPersona,
 )
@@ -139,6 +140,32 @@ async def revise_clip(
     clip.duration = revised_script.duration_seconds
     clip.updated_at = datetime.now(UTC)
 
+    await db.commit()
+    await db.refresh(clip)
+    return clip
+
+
+@router.post(
+    "/{clip_id}/render",
+    response_model=ClipResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def render_clip(clip_id: UUID, db: DBDep) -> Clip:
+    """Queue this clip for video rendering (worker claims render_status=PENDING)."""
+    result = await db.execute(select(Clip).where(Clip.id == clip_id))
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clip not found",
+        )
+    if not clip.render_spec:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Clip has no render_spec (text-only project — no source video)",
+        )
+    clip.render_status = RenderStatus.PENDING
+    clip.render_error = None
     await db.commit()
     await db.refresh(clip)
     return clip

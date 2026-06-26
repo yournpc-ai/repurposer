@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     asr_device: str = "cpu"  # cpu | cuda
     asr_compute_type: str = "int8"  # int8 (cpu) | float16 (gpu)
 
+    # Video render service (Remotion, apps/render — black box: spec -> MP4+SRT)
+    render_url: str = "http://localhost:3001/render"
+    # Public base of this API, used to absolutize source URLs the render service
+    # fetches (clip-spec stores relative stream URLs via the storage seam).
+    api_public_url: str = "http://localhost:8000"
+
     def ensure_dirs(self) -> None:
         """Ensure storage directories exist."""
         self.upload_dir.mkdir(parents=True, exist_ok=True)

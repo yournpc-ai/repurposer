@@ -18,7 +18,13 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.services.asset_processing import process_asset
 from app.services.generation import run_generation
-from app.services.jobs import claim_pending_asset, claim_pending_run, reap_stale
+from app.services.jobs import (
+    claim_pending_asset,
+    claim_pending_render,
+    claim_pending_run,
+    reap_stale,
+)
+from app.services.rendering import render_clip
 
 logger = structlog.get_logger()
 
@@ -38,6 +44,12 @@ async def _tick() -> bool:
     if run_id is not None:
         did_work = True
         await run_generation(run_id)
+
+    async with AsyncSessionLocal() as db:
+        render_id = await claim_pending_render(db)
+    if render_id is not None:
+        did_work = True
+        await render_clip(render_id)
 
     return did_work
 

@@ -98,14 +98,20 @@ def resolve_file_path(relative_path: str | None) -> Path | None:
 
 
 def resolve_safe(relative_path: str | None) -> Path | None:
-    """Resolve a relative path to an absolute Path, refusing traversal escapes.
+    """Resolve a relative upload path, refusing traversal escapes (None if unsafe)."""
+    return _resolve_within(settings.upload_dir, relative_path)
 
-    Returns None if the path is empty or resolves outside ``upload_dir``. Used by
-    the file-streaming endpoint, which serves arbitrary client-supplied paths.
-    """
+
+def resolve_output_safe(relative_path: str | None) -> Path | None:
+    """Resolve a relative output path (rendered MP4/SRT), refusing traversal."""
+    return _resolve_within(settings.output_dir, relative_path)
+
+
+def _resolve_within(base: Path, relative_path: str | None) -> Path | None:
+    """Resolve ``relative_path`` under ``base``, or None if empty/escaping."""
     if not relative_path:
         return None
-    root = settings.upload_dir.resolve()
+    root = base.resolve()
     candidate = (root / relative_path).resolve()
     if root == candidate or root in candidate.parents:
         return candidate
@@ -113,17 +119,17 @@ def resolve_safe(relative_path: str | None) -> Path | None:
 
 
 def stream_url(relative_path: str | None) -> str | None:
-    """Return a browser-playable URL for a stored file.
-
-    SEAM (see docs/VIDEO_EDITOR.md §5): callers depend only on "a playable URL",
-    never on a local path. Today this points at the local Range-capable
-    streaming endpoint; migrating to object storage means returning a presigned
-    S3/MinIO URL here, leaving every caller (clip-spec, frontend, worker,
-    Remotion) unchanged.
-    """
+    """Browser-playable URL for an uploaded file (storage seam; see VIDEO_EDITOR §5)."""
     if not relative_path:
         return None
     return f"/api/v1/files/{relative_path}"
+
+
+def output_url(relative_path: str | None) -> str | None:
+    """Browser-playable URL for a rendered output (MP4/SRT) under output_dir."""
+    if not relative_path:
+        return None
+    return f"/api/v1/outputs/{relative_path}"
 
 
 def delete_file(relative_path: str | None) -> None:
