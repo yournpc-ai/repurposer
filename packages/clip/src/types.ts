@@ -59,6 +59,7 @@ export interface ClipBrand {
   cta?: string | null;
   caption_color?: string | null;
   caption_size?: number | null;
+  caption_font?: string | null;
   fill_mode?: "fill" | "fit";
 }
 

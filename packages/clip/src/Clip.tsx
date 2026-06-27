@@ -10,6 +10,7 @@ import {
 } from "remotion";
 import type { CaptionCue, ClipSpec } from "./types";
 import { COMPOSITION_FPS, keptSegments } from "./types";
+import { fontFamilyFor } from "./fonts";
 
 /**
  * The single source of truth for how a clip looks — consumed by BOTH the
@@ -64,6 +65,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const brand = spec.brand ?? undefined;
   const captionColor = brand?.caption_color || "#ffffff";
   const captionSize = brand?.caption_size || 56;
+  const captionFont = fontFamilyFor(brand?.caption_font);
   const objectFit = brand?.fill_mode === "fit" ? "contain" : "cover";
   const accent =
     spec.caption_style_preset === "karaoke-highlight" ? "#facc15" : captionColor;
@@ -143,7 +145,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             left: 60,
             right: 60,
             textAlign: "center",
-            fontFamily: "sans-serif",
+            fontFamily: captionFont,
             fontSize: captionSize,
             fontWeight: 700,
             lineHeight: 1.25,

@@ -379,6 +379,7 @@ class ClipBrand(BaseModel):
     cta: str | None = None  # call-to-action text shown near the bottom
     caption_color: str | None = None  # hex; overrides the default white caption
     caption_size: int | None = None  # px; overrides the default caption size
+    caption_font: str | None = None  # font key: lilita/inter/playfair/source-serif
     fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
 
 

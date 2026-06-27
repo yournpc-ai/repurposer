@@ -169,6 +169,9 @@ importers:
 
   packages/clip:
     dependencies:
+      '@remotion/google-fonts':
+        specifier: ^4.0.0
+        version: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react:
         specifier: ^19.0.0
         version: 19.2.7
@@ -884,6 +887,9 @@ packages:
     resolution: {integrity: sha512-MxTN7uCZ5zD+X7TaaYfAR4ewtH9BZ7Wh5xS+oRJ72XbNHV/d+nULtOG3VdphFo/HhaPRzTYO9i/sZjogE+In/g==}
     cpu: [x64]
     os: [win32]
+
+  '@remotion/google-fonts@4.0.484':
+    resolution: {integrity: sha512-ZFq0pbchI/BkOuFDYKeuJI9OWHzwE8+7qyOEcK6AXih4ppfip9VKVrLscXptSZpyda2lszHXChAFSTavTJc/VQ==}
 
   '@remotion/licensing@4.0.484':
     resolution: {integrity: sha512-YtiERD4bC3n5yQtNgEZasdZXqDKjIJssjKDLL+YjGDU3mMcw/93my83UU6jJVCB7TBrIms8DVbCgqt4hhU8kMA==}
@@ -4341,6 +4347,13 @@ snapshots:
 
   '@remotion/compositor-win32-x64-msvc@4.0.484':
     optional: true
+
+  '@remotion/google-fonts@4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      remotion: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+    transitivePeerDependencies:
+      - react
+      - react-dom
 
   '@remotion/licensing@4.0.484': {}
 

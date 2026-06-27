@@ -33,6 +33,7 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
         cta=_clean("cta"),
         caption_color=_clean("captionColor"),
         caption_size=caption_size,
+        caption_font=_clean("captionFont"),
         fill_mode=fill_mode,
     )
 
