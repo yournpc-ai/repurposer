@@ -364,6 +364,23 @@ class ClipMusic(BaseModel):
     gain_db: float = -18.0
 
 
+class ClipBrand(BaseModel):
+    """Resolved brand values baked into the spec at generation time.
+
+    Renderer-agnostic data (no DB ref): the API resolves the latest
+    ``BrandTemplate`` config into these fields so the render service / preview
+    never need DB access. ``None`` = renderer falls back to its default look.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    logo_url: str | None = None  # corner logo overlay (absolute or storage URL)
+    cta: str | None = None  # call-to-action text shown near the bottom
+    caption_color: str | None = None  # hex; overrides the default white caption
+    caption_size: int | None = None  # px; overrides the default caption size
+    fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
+
+
 class ClipSpec(BaseModel):
     """Renderer-agnostic clip render contract (see docs/VIDEO_EDITOR.md §4)."""
 
@@ -379,6 +396,7 @@ class ClipSpec(BaseModel):
     caption_style_preset: Literal["clean-bottom", "karaoke-highlight"] = "clean-bottom"
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)
+    brand: ClipBrand | None = None  # resolved brand values (None = default look)
     brand_ref: UUID | None = None
     target_language: str = "en"
 

@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AbsoluteFill,
+  Img,
   OffthreadVideo,
   Series,
   useCurrentFrame,
@@ -58,7 +59,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     lines.find((line) => sourceTime < line[0].start) ??
     [];
 
-  const accent = spec.caption_style_preset === "karaoke-highlight" ? "#facc15" : "#ffffff";
+  // Brand (baked into the spec by the API; absent -> default look).
+  const brand = spec.brand ?? undefined;
+  const captionColor = brand?.caption_color || "#ffffff";
+  const captionSize = brand?.caption_size || 56;
+  const objectFit = brand?.fill_mode === "fit" ? "contain" : "cover";
+  const accent =
+    spec.caption_style_preset === "karaoke-highlight" ? "#facc15" : captionColor;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -77,12 +84,27 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                   src={spec.source.url}
                   startFrom={Math.round(t.seg.start * fpsv)}
                   endAt={Math.round(t.seg.end * fpsv)}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{ width: "100%", height: "100%", objectFit }}
                 />
               </Series.Sequence>
             ))}
           </Series>
         </AbsoluteFill>
+      ) : null}
+
+      {brand?.logo_url ? (
+        <Img
+          src={brand.logo_url}
+          style={{
+            position: "absolute",
+            top: 40,
+            right: 40,
+            height: 72,
+            width: "auto",
+            objectFit: "contain",
+            filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
+          }}
+        />
       ) : null}
 
       {spec.title.enabled && spec.title.text ? (
@@ -114,10 +136,10 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             right: 60,
             textAlign: "center",
             fontFamily: "sans-serif",
-            fontSize: 56,
+            fontSize: captionSize,
             fontWeight: 700,
             lineHeight: 1.25,
-            color: "#ffffff",
+            color: captionColor,
             WebkitTextStroke: "2px rgba(0,0,0,0.55)",
             textShadow: "0 2px 10px rgba(0,0,0,0.6)",
           }}
@@ -125,12 +147,40 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
           {activeLine.map((cue, i) => {
             const isActive = sourceTime >= cue.start && sourceTime < cue.end;
             return (
-              <span key={i} style={{ color: isActive ? accent : "#ffffff" }}>
+              <span key={i} style={{ color: isActive ? accent : captionColor }}>
                 {cue.text}
                 {i < activeLine.length - 1 ? " " : ""}
               </span>
             );
           })}
+        </div>
+      ) : null}
+
+      {brand?.cta ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 96,
+            left: 60,
+            right: 60,
+            textAlign: "center",
+            fontFamily: "sans-serif",
+            fontSize: 34,
+            fontWeight: 700,
+            color: "#ffffff",
+            textShadow: "0 2px 10px rgba(0,0,0,0.7)",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              padding: "10px 28px",
+              borderRadius: 9999,
+              backgroundColor: "rgba(0,0,0,0.55)",
+            }}
+          >
+            {brand.cta}
+          </span>
         </div>
       ) : null}
     </AbsoluteFill>

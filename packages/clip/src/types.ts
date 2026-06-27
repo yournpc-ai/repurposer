@@ -52,6 +52,15 @@ export interface ClipMusic {
   gain_db: number;
 }
 
+/** Resolved brand values baked into the spec by the API (renderer-agnostic). */
+export interface ClipBrand {
+  logo_url?: string | null;
+  cta?: string | null;
+  caption_color?: string | null;
+  caption_size?: number | null;
+  fill_mode?: "fill" | "fit";
+}
+
 export interface ClipSpec {
   source: ClipSource;
   aspect: Aspect;
@@ -61,6 +70,7 @@ export interface ClipSpec {
   caption_style_preset: CaptionStylePreset;
   title: ClipTitle;
   music: ClipMusic;
+  brand?: ClipBrand | null;
   brand_ref: string | null;
   target_language: string;
 }

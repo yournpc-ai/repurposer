@@ -55,11 +55,17 @@ export const Route = createFileRoute('/projects/$id/clips/$clipId')({
 })
 
 function withAbsoluteSource(spec: ClipSpec): ClipSpec {
+  let next = spec
   const url = spec.source.url
   if (url && url.startsWith('/')) {
-    return { ...spec, source: { ...spec.source, url: API_URL + url } }
+    next = { ...next, source: { ...next.source, url: API_URL + url } }
   }
-  return spec
+  // Brand logo may also be a relative storage URL (external URLs are untouched).
+  const logo = next.brand?.logo_url
+  if (logo && logo.startsWith('/')) {
+    next = { ...next, brand: { ...next.brand, logo_url: API_URL + logo } }
+  }
+  return next
 }
 
 function toLines(cues: CaptionCue[]): { cue: CaptionCue; index: number }[][] {

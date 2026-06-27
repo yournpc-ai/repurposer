@@ -25,7 +25,16 @@ from app.models.schemas import (
     ToneSettings,
     WorkflowStatus,
 )
-from app.models.tables import Asset, Clip, Derivative, Project, Speaker, WorkflowRun
+from app.models.tables import (
+    Asset,
+    BrandTemplate,
+    Clip,
+    Derivative,
+    Project,
+    Speaker,
+    WorkflowRun,
+)
+from app.services.brand import brand_from_template
 from app.services.clip_spec import build_clip_spec
 
 logger = structlog.get_logger()
@@ -143,6 +152,17 @@ async def run_generation(run_id: UUID) -> None:
                     clip_count=clip_count,
                     event_name=project.event_name,
                 )
+                # Bake the latest brand template into each clip's render_spec so
+                # the renderer/preview show it without DB access (see ADR-016).
+                bt = (
+                    await db.execute(
+                        select(BrandTemplate)
+                        .order_by(BrandTemplate.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                brand = brand_from_template(bt.config) if bt is not None else None
+                brand_ref = bt.id if bt is not None else None
                 for segment in analysis.segments[:clip_count]:
                     script = await script_agent.generate(
                         segment=segment,
@@ -153,7 +173,13 @@ async def run_generation(run_id: UUID) -> None:
                     # render_spec = the actual render contract (None for
                     # text-only projects). script stays as the AI suggestion.
                     spec = (
-                        build_clip_spec(source_av, segment, target_language)
+                        build_clip_spec(
+                            source_av,
+                            segment,
+                            target_language,
+                            brand=brand,
+                            brand_ref=brand_ref,
+                        )
                         if source_av is not None
                         else None
                     )
