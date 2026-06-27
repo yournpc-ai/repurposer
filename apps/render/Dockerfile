@@ -15,7 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable
+# Pin pnpm to the repo's version (matches local; lockfile is v9.0). Without a
+# packageManager field, bare `corepack enable` grabs the latest pnpm (11.x),
+# whose minimumReleaseAge supply-chain policy rejects freshly-published deps
+# (e.g. a day-old Remotion release) even against a committed --frozen-lockfile.
+RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
 
 WORKDIR /repo
 

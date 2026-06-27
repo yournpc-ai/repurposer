@@ -9,7 +9,9 @@
 # exported fetch handler (dist/server/server.js) — see docs/DECISIONS.md.
 FROM node:22-bookworm-slim
 
-RUN corepack enable
+# Pin pnpm to the repo's version (matches local; lockfile is v9.0) so corepack
+# doesn't pull pnpm 11.x, whose minimumReleaseAge policy rejects day-old deps.
+RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
 
 WORKDIR /repo
 
