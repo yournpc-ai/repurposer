@@ -52,7 +52,7 @@ const OUTPUT_LANGUAGES = [
 ]
 
 // Outputs the unified background generation can produce, in display order.
-const OUTPUT_KINDS = ['clips', 'linkedin', 'quote_cards', 'summary', 'blog'] as const
+const OUTPUT_KINDS = ['clips', 'linkedin', 'quote_cards', 'carousel', 'summary', 'blog'] as const
 
 interface Project {
   id: string
@@ -121,6 +121,7 @@ interface Derivative {
     content?: string
     hashtags?: string[]
     quotes?: { quote: string; attribution: string }[]
+    slides?: { title: string; body?: string }[]
     tldr?: string
     key_points?: string[]
     full?: string
@@ -190,6 +191,61 @@ function QuoteCardArt({
           <p className="text-sm font-medium text-white">{attribution}</p>
           {brand?.cta && <p className="mt-1 text-xs text-white/60">{brand.cta}</p>}
         </div>
+      </div>
+      <Button variant="outline" size="sm" className="w-full gap-2" onClick={download}>
+        <Download className="h-4 w-4" />
+        {downloadLabel}
+      </Button>
+    </div>
+  )
+}
+
+function CarouselSlideArt({
+  index,
+  title,
+  body,
+  brand,
+  label,
+  downloadLabel,
+}: {
+  index: number
+  title: string
+  body: string
+  brand: BrandConfig | null
+  label: string
+  downloadLabel: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const accent = brand?.captionColor || '#facc15'
+
+  const download = async () => {
+    if (!ref.current) return
+    const dataUrl = await toPng(ref.current, { pixelRatio: 3, cacheBust: true })
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `carousel-${index}.png`
+    a.click()
+  }
+
+  return (
+    <div className="w-56 shrink-0 space-y-2">
+      <div
+        ref={ref}
+        className="flex aspect-[4/5] flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-950 p-6"
+      >
+        <div className="flex items-center justify-between">
+          {brand?.logoUrl ? (
+            <img src={brand.logoUrl} alt="" className="h-6 w-auto object-contain" />
+          ) : (
+            <div className="h-6" />
+          )}
+          <span className="text-xs font-medium text-white/50">{label}</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xl font-bold leading-snug text-white">{title}</p>
+          {body && <p className="text-sm leading-snug text-white/80">{body}</p>}
+        </div>
+        <div className="h-0.5 w-10" style={{ backgroundColor: accent }} />
       </div>
       <Button variant="outline" size="sm" className="w-full gap-2" onClick={download}>
         <Download className="h-4 w-4" />
@@ -498,6 +554,7 @@ function ProjectDetailPage() {
 
   const linkedinPosts = derivatives.filter((d) => d.type === 'linkedin_post')
   const quoteCardSets = derivatives.filter((d) => d.type === 'quote_card')
+  const carouselSets = derivatives.filter((d) => d.type === 'carousel')
   const summaries = derivatives.filter((d) => d.type === 'summary')
   const blogs = derivatives.filter((d) => d.type === 'blog')
 
@@ -952,6 +1009,31 @@ function ProjectDetailPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* Carousel */}
+      {carouselSets.length > 0 && (
+        <div className="space-y-4 rounded-xl bg-card p-6 ring-1 ring-border">
+          <h2 className="text-lg font-semibold">{t('projectDetail.carousel')}</h2>
+          {carouselSets.map((d) => {
+            const slides = d.content.slides ?? []
+            return (
+              <div key={d.id} className="flex gap-4 overflow-x-auto pb-2">
+                {slides.map((s, i) => (
+                  <CarouselSlideArt
+                    key={`${d.id}-${i}`}
+                    index={i + 1}
+                    title={s.title}
+                    body={s.body ?? ''}
+                    brand={brand}
+                    label={t('projectDetail.slideLabel', { index: i + 1, total: slides.length })}
+                    downloadLabel={t('projectDetail.downloadCard')}
+                  />
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
 

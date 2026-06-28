@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 
 from app.agents.analyzer import analyzer_agent
 from app.agents.blog import blog_agent
+from app.agents.carousel import carousel_agent
 from app.agents.linkedin import linkedin_agent
 from app.agents.quote_card import quote_card_agent
 from app.agents.script import script_agent
@@ -36,10 +37,11 @@ from app.models.tables import (
 )
 from app.services.brand import brand_from_template, music_from_template
 from app.services.clip_spec import build_clip_spec
+from app.services.storage import stream_url
 
 logger = structlog.get_logger()
 
-KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "summary", "blog")
+KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
 
 
 async def run_generation(run_id: UUID) -> None:
@@ -123,6 +125,13 @@ async def run_generation(run_id: UUID) -> None:
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.QUOTE_CARD,
+                    )
+                )
+            if "carousel" in outputs:
+                await db.execute(
+                    delete(Derivative).where(
+                        Derivative.project_id == project.id,
+                        Derivative.type == DerivativeType.CAROUSEL,
                     )
                 )
             if "summary" in outputs:
@@ -243,6 +252,30 @@ async def run_generation(run_id: UUID) -> None:
                         project_id=project.id,
                         type=DerivativeType.QUOTE_CARD,
                         content=result.model_dump(),
+                        language=target_language,
+                    )
+                )
+                await db.commit()
+                done += 1
+                run.progress = int(done / total * 100)
+                await db.commit()
+
+            if "carousel" in outputs:
+                run.current_step = "carousel"
+                await db.commit()
+                carousel = await carousel_agent.generate(
+                    materials=materials,
+                    speaker_name=speaker.name if speaker is not None else "",
+                    speaker_title=speaker.title if speaker is not None else "",
+                    event_name=project.event_name,
+                    count=6,
+                    target_language=target_language,
+                )
+                db.add(
+                    Derivative(
+                        project_id=project.id,
+                        type=DerivativeType.CAROUSEL,
+                        content=carousel.model_dump(),
                         language=target_language,
                     )
                 )

@@ -257,6 +257,23 @@ class QuoteCardsResponse(BaseModel):
     quotes: list[QuoteCard] = Field(default_factory=list)
 
 
+class CarouselSlide(BaseModel):
+    """One slide of a LinkedIn/social carousel (a swipeable narrative)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str  # short heading
+    body: str = ""  # 1-3 short lines; may be empty on a pure-title cover/CTA
+
+
+class CarouselResponse(BaseModel):
+    """A carousel = ordered slides (cover/hook -> points -> CTA)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slides: list[CarouselSlide] = Field(default_factory=list)
+
+
 class Summary(BaseModel):
     """Generated multi-language summary."""
 
