@@ -51,14 +51,14 @@
 | Agent | 输入 | 输出 | 说明 |
 |:---|:---|:---|:---|
 | `persona` | 演讲者过往材料 | `SpeakerPersona` | 风格画像 |
-| `analyzer` | 演讲稿 + persona | `ContentSegments` | 内容切片与评分 |
-| `script` | 片段 + persona + tone | `ClipScript` | 竖屏脚本 |
-| `review` | 脚本 + persona | `StyleReview` | 风格评分 |
+| `analyzer` | 演讲稿 + persona + target_language | `ContentAnalysis` | 内容切片与评分 |
+| `script` | 片段 + persona + tone + target_language | `ClipScript` | 竖屏脚本 |
 | `reviser` | 脚本 + 反馈 + persona | `ClipScript` | 修正后的脚本 |
-| `hook` | 脚本 + 反馈 | `str` | 重新生成 hook |
-| `linkedin` | clip + persona | `LinkedInPost` | LinkedIn 长帖 |
-| `quote_card` | clips + persona | `QuoteCards` | 金句卡文案 |
-| `translator` | 脚本 + 目标语言 | `ClipScript` | 多语言版本 |
+| `linkedin` | 材料/片段 + persona | `LinkedInPost` | LinkedIn 长帖 |
+| `quote_card` | 材料/片段 + persona | `QuoteCards` | 金句卡文案 |
+| `summary` | 材料 + persona | `Summary` | 多语言摘要 |
+| `blog` | 材料 + persona | `BlogPost` | 博客文章 |
+| `caption_translate` | 词级字幕 + target_language | list[str] | 字幕换语言 |
 
 ### 3.2 生成流程
 
@@ -112,23 +112,26 @@ class FeedbackRequest(BaseModel):
     ↓
 FastAPI 接收文件 → 本地文件系统
     ↓
-写入 PostgreSQL，创建 workflow_run
+写入 PostgreSQL：创建 Asset(processing_status=PENDING)
     ↓
-asyncio 后台任务异步处理：
-    - 图片 → 压缩 + 描述
-    - 幻灯片/PDF → 文档解析（P0 可选）
+worker 进程认领并执行：
+    - 文本/PDF → 提取
+    - 视频/音频 → ASR（词级时间戳）
     ↓
-Agent 编排器按步骤执行
+用户触发 Generate → 创建 WorkflowRun(status=PENDING)
     ↓
-每步结果写入 workflow_steps 表
+worker 认领 WorkflowRun，按顺序调用 Agent：
+    analyzer → script → linkedin / quote_card / summary / blog
     ↓
-workflow_run 状态更新为 review
+生成 clip-spec（含品牌、配乐）保存到 Clip.render_spec
     ↓
-TanStack Start 前端：用户审校 / 反馈
+WorkflowRun 状态更新为 completed
     ↓
-Reviser Agent 局部重生成
+TanStack Start 前端：用户审校 / 编辑 / 导出
     ↓
-用户导出
+渲染触发 → Clip.render_status=PENDING → worker 调 Remotion 渲染服务
+    ↓
+导出 MP4 + SRT
 ```
 
 ## 5. 代码结构
@@ -139,46 +142,49 @@ apps/api/
 │   ├── main.py              # FastAPI 入口
 │   ├── config.py            # 配置管理
 │   ├── dependencies.py      # 依赖注入
+│   ├── worker.py            # 独立 worker 进程入口
 │   ├── routers/             # API 路由
 │   │   ├── speakers.py
-│   │   ├── projects.py
+│   │   ├── projects.py      # 含生成、导出、jobs、clips、derivatives
 │   │   ├── assets.py
-│   │   ├── generate.py
-│   │   ├── clips.py
-│   │   └── derivatives.py
+│   │   ├── clips.py         # 审校、渲染触发、字幕翻译
+│   │   ├── derivatives.py
+│   │   ├── files.py         # Range 流式端点（uploads/outputs/music）
+│   │   └── brand_templates.py
 │   ├── services/            # 业务逻辑
-│   │   ├── workflow.py
-│   │   ├── storage.py
-│   │   └── preprocessing.py
+│   │   ├── jobs.py          # 队列认领
+│   │   ├── asset_processing.py   # ASR / 文本提取 processor
+│   │   ├── generation.py    # 生成流程编排
+│   │   ├── rendering.py     # 调用 Remotion 渲染服务
+│   │   ├── clip_spec.py     # clip-spec 构建
+│   │   ├── brand.py         # 品牌模板 → ClipBrand
+│   │   ├── storage.py       # 存储 seam
+│   │   └── asr.py           # faster-whisper
 │   ├── models/              # 数据库模型 + Pydantic schemas
 │   │   ├── database.py
 │   │   ├── schemas.py
 │   │   └── tables.py
 │   ├── agents/              # Agent steps
-│   │   ├── __init__.py
 │   │   ├── persona.py
 │   │   ├── analyzer.py
 │   │   ├── script.py
-│   │   ├── reviewer.py
 │   │   ├── reviser.py
 │   │   ├── linkedin.py
 │   │   ├── quote_card.py
-│   │   └── translator.py
+│   │   ├── summary.py
+│   │   ├── blog.py
+│   │   └── caption_translate.py
 │   ├── prompts/             # Jinja2 模板
-│   │   ├── persona.j2
-│   │   ├── script.j2
-│   │   ├── review.j2
-│   │   ├── revise.j2
-│   │   ├── linkedin.j2
-│   │   └── quote_card.j2
 │   └── clients/
 │       └── minimax.py       # MiniMax M3 封装
 ├── migrations/              # Alembic 迁移脚本
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions/
 ├── pyproject.toml
-└── README.md
+└── Dockerfile
+
+apps/web/                    # TanStack Start 前端
+apps/render/                 # Remotion 渲染服务（Node）
+packages/clip/               # 共享 <Clip> + clip-spec TS 类型
+pnpm-workspace.yaml          # web/render/clip
 ```
 
 ## 6. 状态管理
@@ -201,21 +207,33 @@ class WorkflowRun(BaseModel):
     updated_at: datetime
 ```
 
-### 6.2 Workflow Step
+### 6.2 Asset Status
 
-记录每个 Agent step 的执行情况：
+`Asset` 自带处理状态机：
 
 ```python
-class WorkflowStep(BaseModel):
-    id: UUID
-    run_id: UUID
-    step_name: str
-    input_json: dict
-    output_json: dict
-    attempts: int
-    error: Optional[str]
-    created_at: datetime
+class AssetStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 ```
+
+- 上传后 API 立即返回 `PENDING`，由 worker 认领处理。
+- `processing_error` 保存失败原因，前端可重试。
+
+### 6.3 Clip Render Status
+
+```python
+class RenderStatus(StrEnum):
+    PENDING = "pending"
+    RENDERING = "rendering"
+    COMPLETED = "completed"
+    FAILED = "failed"
+```
+
+- `Clip.render_status` 是 worker 的第三个认领源。
+- `Clip.render_spec` 保存 clip-spec 契约，`video_url` / `srt_url` 保存成片产物。
 
 ## 7. 关键设计决策
 
@@ -265,12 +283,12 @@ clip-spec(JSON)  ← 永久契约（渲染器无关）
      │
      ├──► 预览：Remotion <Player>（浏览器实时渲染，编辑器画布）
      └──► 出片：Remotion 渲染服务(Node, 无头 Chrome + 内部 FFmpeg)
-                └─ Python 队列(§9)触发 → MP4 + SRT
+              └─ Python 队列(§9)经 HTTP 触发 → MP4 + SRT
 ```
 
-- **第一个渲染器 = Remotion**（服务端），当 `spec→MP4+SRT` 黑盒；pnpm 启动、自托管 EU。
+- **第一个渲染器 = Remotion**（服务端），当 `spec→MP4+SRT` 黑盒；pnpm 启动。
 - **品类 = OpusClip 类**（服务端流水线 + 瘦编辑面 + 甩剪映精剪），编辑形态抄 Descript（文字稿编辑 / 删句=剪段非破坏性 / 单轨 trim），**不做多轨 NLE / 图层 / 特效 / 客户端引擎**。
+- **品牌进渲染**：API 在生成时从 `BrandTemplate` 解析出 `ClipBrand`（logo/CTA/字幕色/字号/字体/fill/片头尾）**烘焙进 `render_spec`**，渲染服务只读 spec、不读 DB，保证 parity。
+- **配乐进渲染**：`BrandTemplate.musicMood` → `ClipMusic.url`（内置 mood 曲库 `/api/v1/music/<mood>`）→ Remotion `<Audio>` 循环混音。
 - **硬前置**：多语 ASR（词级时间戳）+ 可流式播放/seek 的视频（**本地 FS + Range 端点即可**；对象存储留到规模化，ADR-011）。
 - **低后悔**：spec 稳定，将来可换手搓 FFmpeg（+ 两端共享 libass）或客户端 WebCodecs，契约不变。
-
-> 媒体处理层（第 2 节抽象图里的"视频渲染引擎"）由此具体化为：**本地存储 + Range 流式端点 + ASR + clip-spec + Remotion 渲染服务**（对象存储留规模化）。

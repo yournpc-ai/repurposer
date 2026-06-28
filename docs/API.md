@@ -9,7 +9,17 @@
 - **Content-Type**：`application/json`
 - **认证**：本期暂不实现，后续通过 JWT 或 session
 
-## 2. 错误格式
+## 2. 文件流式
+
+上传源视频、渲染成片、内置配乐均通过支持 HTTP Range 的端点，供浏览器播放 / seek / 渲染服务拉取：
+
+```http
+GET /api/v1/files/{file_path}
+GET /api/v1/outputs/{file_path}
+GET /api/v1/music/{mood}        # 内置 mood 曲库，如 calm / uplifting / corporate
+```
+
+## 3. 错误格式
 
 ```json
 {
@@ -172,8 +182,8 @@ Request:
 ```json
 {
   "clip_count": 3,
-  "languages": ["en"],
-  "outputs": ["clips", "linkedin", "quote_cards"],
+  "outputs": ["clips", "linkedin", "quote_cards", "summary", "blog"],
+  "target_language": "en",
   "tone_settings": {
     "academic_vs_casual": 0.7,
     "rational_vs_passionate": 0.4,
@@ -187,44 +197,17 @@ Response:
 
 ```json
 {
-  "run_id": "uuid",
-  "status": "running",
+  "job_id": "uuid",
+  "status": "pending",
   "message": "Generation started"
 }
 ```
 
-### 查询生成状态
+### 查询生成任务
 
 ```http
-GET /api/v1/projects/{project_id}/generate/status
-```
-
-Response:
-
-```json
-{
-  "run_id": "uuid",
-  "status": "running",
-  "current_step": "script_agent",
-  "progress": 0.6,
-  "clips_generated": 2,
-  "total_clips": 3
-}
-```
-
-### 重新生成单个 Clip
-
-```http
-POST /api/v1/clips/{clip_id}/regenerate
-```
-
-Request:
-
-```json
-{
-  "scope": "hook",
-  "feedback": "Hook 不够抓人"
-}
+GET /api/v1/projects/{project_id}/jobs
+GET /api/v1/projects/{project_id}/jobs/{job_id}
 ```
 
 ## 7. Clip 管理
@@ -251,11 +234,46 @@ Request:
 
 ```json
 {
-  "hook": "AI 这把火已经烧起来了",
-  "shots": [...],
-  "title_options": ["...", "..."]
+  "hook": "Your keynote reached 300 people...",
+  "script": { "hook": "...", "shots": [...], ... },
+  "title_options": ["...", "..."],
+  "music_mood": "corporate",
+  "render_spec": {
+    "source": { "asset_id": "uuid", "url": "...", "fps": 30 },
+    "aspect": "9:16",
+    "segments": [{ "start": 0, "end": 30, "hidden": false }],
+    "caption_track": [{ "start": 0, "end": 1.2, "text": "Hello", "lang": "en" }],
+    "caption_style_preset": "clean-bottom",
+    "title": { "text": "...", "enabled": true },
+    "music": { "track_id": "calm", "url": "...", "enabled": true, "gain_db": -18 },
+    "brand": { "logo_url": "...", "cta": "...", "caption_color": "#ffffff" }
+  }
 }
 ```
+
+### 触发渲染
+
+```http
+POST /api/v1/clips/{clip_id}/render
+```
+
+将 `Clip.render_spec` 提交给 Remotion 渲染服务，异步生成 MP4 + SRT。
+
+### 字幕换语言
+
+```http
+POST /api/v1/clips/{clip_id}/translate-captions
+```
+
+Request:
+
+```json
+{
+  "target_language": "fr"
+}
+```
+
+Response：更新后的 `Clip`（`caption_track` 与 `target_language` 已重写）。
 
 ### 提交反馈
 
@@ -272,6 +290,16 @@ Request:
   "detail": "太平淡了，没有冲突感"
 }
 ```
+
+### 基于反馈修订
+
+```http
+POST /api/v1/clips/{clip_id}/revise
+```
+
+Request：同上 `FeedbackRequest`。
+
+Response：修订后的 `Clip`。
 
 ## 8. 衍生内容
 
@@ -299,7 +327,7 @@ Request:
 
 ```json
 {
-  "formats": ["video", "subtitles", "text", "images"]
+  "formats": ["text", "images"]
 }
 ```
 
@@ -312,18 +340,69 @@ Response:
 }
 ```
 
-## 10. 数据模型
+## 10. 品牌模板（Brand Template）
+
+品牌模板决定视频成片中的品牌叠加元素。系统取**最新一份**模板，在生成 clip 时烘焙进 `render_spec.brand`。
+
+### 创建/更新品牌模板
+
+```http
+POST /api/v1/brand-templates
+PUT /api/v1/brand-templates/{template_id}
+```
+
+Request:
+
+```json
+{
+  "name": "Default",
+  "config": {
+    "aspect": "9:16",
+    "fillMode": "fill",
+    "captionFont": "lilita",
+    "captionSize": 56,
+    "captionColor": "#facc15",
+    "logoUrl": "https://.../logo.png",
+    "cta": "Read the full talk →",
+    "introEnabled": true,
+    "introText": "This talk is from…",
+    "outroEnabled": true,
+    "outroText": "Follow for more insights",
+    "musicEnabled": true,
+    "musicMood": "corporate"
+  }
+}
+```
+
+### 获取品牌模板列表
+
+```http
+GET /api/v1/brand-templates
+```
+
+### 获取单个品牌模板
+
+```http
+GET /api/v1/brand-templates/{template_id}
+```
+
+### 删除品牌模板
+
+```http
+DELETE /api/v1/brand-templates/{template_id}
+```
+
+## 11. 数据模型
 
 详见 [架构设计](./ARCHITECTURE.md) 中的数据模型部分。
 
 核心模型：
 
-- `User`
 - `Speaker`
 - `Project`
 - `Asset`
 - `Clip`
 - `Derivative`
 - `WorkflowRun`
-- `WorkflowStep`
 - `HumanFeedback`
+- `BrandTemplate`

@@ -407,10 +407,12 @@ uv run alembic downgrade -1
 - render 的 `spec.source.url` 必须是**绝对 URL**（api worker 调用前把存储 seam 的相对 URL 绝对化）。
 - render 把 MP4/SRT 写到共享 `data/outputs`，api 经 Range 端点服务（存储 seam）。
 - 首次渲染 Remotion 会下载无头 Chromium（约几百 MB）；个别原生依赖的 build script 可能需 `pnpm approve-builds`。
-- `<Clip>` MVP 渲染首个 kept 段；多段 concat（文字稿删句产生间隔）是后续扩展。
+- `<Clip>` MVP 渲染首个 kept 段；多段 concat（文字稿删句产生间隔）已实施。
+- 品牌（logo/CTA/字幕色/字号/字体/fill/片头尾）与配乐以已解析值**烘焙进 `render_spec`**，`<Clip>` 消费 `spec.brand` / `spec.music`；渲染服务不读 DB。
+- 字幕字体使用 `@remotion/google-fonts`（拉丁子集），首次渲染从 Google CDN 拉取；离线场景未来可换 `@remotion/fonts` 本地 woff2。
 
 **相关文件**：
-- `apps/render/`（`src/server.ts`/`render.ts`/`srt.ts`）、`packages/clip/`（`src/Clip.tsx`/`Root.tsx`/`types.ts`）
+- `apps/render/`（`src/server.ts`/`render.ts`/`srt.ts`）、`packages/clip/`（`src/Clip.tsx`/`Root.tsx`/`types.ts`/`fonts.ts`）
 - `pnpm-workspace.yaml`、`scripts/dev.sh`、`README.md`、`docs/VIDEO_EDITOR.md` §6
 
 **容器化（补充）**：
@@ -418,4 +420,28 @@ uv run alembic downgrade -1
 - **`render` / `web` 的构建上下文是仓库根**——它们 import workspace 包 `@repurposer/clip`，子目录上下文拿不到 `pnpm-workspace.yaml` / `pnpm-lock.yaml` / `packages/clip`。Dockerfile 先 COPY 各 workspace 的 `package.json`（pnpm 解析整图所需）+ lockfile 装依赖，再 COPY 源码，最大化层缓存。
 - `render` 镜像装无头 Chromium 的系统库（libnss3/libatk/libgbm/字体等）；Chromium 二进制在**首次渲染时惰性下载**（不在构建期拉，避免构建依赖外网、在 CI/受限网络上挂起；render 服务运行时本就有外网用于回拉源视频）。生产可在 Remotion 下载目录挂缓存卷避免重启重下。
 - 容器内服务名互联：`API_PUBLIC_URL=http://api:8000`、`RENDER_URL=http://render:3001/render`（覆盖 `config.py` 里的 localhost 默认）。render 写共享卷 `./data/outputs`，api 经 Range 端点服务。
-- **`web` 用 `vite preview` 起 SSR**：MVP/staging 够用；高流量再换围绕导出 fetch handler（`dist/server/server.js`）的轻量 node http 适配层。这是当前唯一未在容器里端到端跑通就交付的点。
+- **`web` 用 `vite preview` 起 SSR**：MVP/staging 够用；高流量再换围绕导出 fetch handler（`dist/server/server.js`）的轻量 node http 适配层。该 SSR 路径已通过镜像构建与单帧渲染冒烟验证。
+
+## ADR-019：配乐用内置 mood 曲库（用户供曲）
+
+**状态**：已实施
+
+**背景**：clip-spec 有 `music` 块，品牌模板有 `musicMood`，但缺"曲从哪来"。涉及版权，不能由 AI 自动抓取无授权音乐。
+
+**决策**：
+1. **内置 mood 曲库**：`data/music/<mood>.<ext>`（支持 `.mp3/.m4a/.aac/.ogg/.wav`），用户/运营提供授权曲目。
+2. **按 mood 路由**：`GET /api/v1/music/<mood>` 扩展名无关，resolver 按 stem 找文件；带 Range 支持。
+3. **生成时烘焙**：`services/brand.py:music_from_template` 把 `BrandTemplate.musicMood` → `ClipMusic{track_id, url}`；`ClipMusic.enabled` 受 `musicEnabled` 控制。
+4. **渲染混音**：Remotion `<Audio src={url} volume={dbToLinear(gain_db)} loop>`。
+
+**原因**：
+- 不引入第三方音乐 API/订阅，零新增依赖与费用。
+- 版权责任清晰：用户/运营只放已授权曲目；仓库不打包音乐。
+- 曲库可随运营扩展：加文件即可，无需改代码。
+
+**相关文件**：
+- `apps/api/app/services/storage.py`（`resolve_music_safe` / `music_url`）
+- `apps/api/app/routers/files.py`（`/music/{mood}`）
+- `apps/api/app/services/brand.py`（`music_from_template`）
+- `packages/clip/src/Clip.tsx`（`<Audio>`）
+- `data/music/README.md`

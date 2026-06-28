@@ -13,7 +13,7 @@
 - **包管理**：后端 `uv`；前端/渲染/共享组件用 `pnpm` workspace（`web`/`render`/`clip`）
 - **数据库**：PostgreSQL
 - **文件存储**：本地文件系统（对象存储留到规模化）
-- **本地协调**：`Justfile` / `scripts/dev.sh`
+- **本地协调**：`scripts/dev.sh`
 - **部署**：Docker Compose
 
 ## 目录结构
@@ -37,7 +37,6 @@ repurposer/
 │   └── dev.sh              # 本地一键启动
 ├── pnpm-workspace.yaml     # web/render/clip 工作区（api 独立用 uv，不在工作区内）
 ├── docker-compose.yml
-├── Justfile
 └── README.md
 ```
 
@@ -137,11 +136,7 @@ uv run alembic downgrade -1
 ### 5. 一键启动应用，然后访问 3000
 
 ```bash
-# 方式一：shell 脚本（推荐）
 ./scripts/dev.sh
-
-# 方式二：Justfile
-just dev
 ```
 
 脚本会同时拉起 **后端（:8000）**、**队列 worker**、**渲染服务（:3001）** 和 **前端（:3000）**，并在需要时自动启动数据库。
