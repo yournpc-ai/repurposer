@@ -25,15 +25,16 @@ import {
   Check,
   Trash2,
   Plus,
-  ChevronRight,
-  ChevronLeft,
   type LucideIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Select,
   SelectContent,
@@ -241,33 +242,6 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function NavRow({
-  icon: Icon,
-  label,
-  value,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  value?: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-accent"
-    >
-      <Icon className="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
-      <span className="flex-1 text-sm">{label}</span>
-      {value && (
-        <span className="max-w-[110px] truncate text-xs text-muted-foreground">{value}</span>
-      )}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-    </button>
-  )
-}
-
 function ToggleRow({
   icon: Icon,
   label,
@@ -293,39 +267,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
-    </div>
-  )
-}
-
-function Segmented({
-  options,
-  value,
-  onChange,
-  cols = 3,
-}: {
-  options: (string | number)[]
-  value: string | number
-  onChange: (v: string | number) => void
-  cols?: 2 | 3 | 4
-}) {
-  const grid = cols === 2 ? "grid-cols-2" : cols === 4 ? "grid-cols-4" : "grid-cols-3"
-  return (
-    <div className={cn("grid gap-1.5", grid)}>
-      {options.map((o) => (
-        <button
-          key={String(o)}
-          type="button"
-          onClick={() => onChange(o)}
-          className={cn(
-            "h-8 rounded-md border text-xs font-medium transition-colors",
-            value === o
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border text-muted-foreground hover:bg-accent"
-          )}
-        >
-          {o}
-        </button>
-      ))}
     </div>
   )
 }
@@ -448,10 +389,6 @@ function BrandTemplatePage() {
     }
   }
 
-  const fontLabel =
-    FONTS.find((f) => f.value === template.captionFont)?.label ?? template.captionFont
-  const moodLabel = t(`brandTemplate.music.moods.${template.musicMood}`)
-
   const previewSpec = useMemo(() => buildPreviewSpec(template), [template])
 
   const previewRef = useRef<HTMLDivElement | null>(null)
@@ -540,246 +477,234 @@ function BrandTemplatePage() {
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left setting panel */}
-        <aside className="w-[360px] shrink-0 overflow-y-auto p-4">
-          <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
-            <div className="border-b px-4 py-3">
-              <h2 className="font-semibold">{t("brandTemplate.setting")}</h2>
-            </div>
+        {/* Left setting panel — shadcn vertical Tabs: list (left) + detail (right) */}
+        <Tabs
+          value={section ?? "clipLayout"}
+          onValueChange={(v) => setSection((v as Section) ?? null)}
+          orientation="vertical"
+          className="flex shrink-0 gap-3 overflow-hidden p-4"
+        >
+          {/* Section list */}
+          <div className="w-[240px] shrink-0 overflow-y-auto">
+            <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+              <div className="border-b px-4 py-3">
+                <h2 className="font-semibold">{t("brandTemplate.setting")}</h2>
+              </div>
+              <div className="p-2">
+                <TabsList
+                  variant="line"
+                  className="h-fit w-full flex-col items-stretch gap-0.5 bg-transparent p-0"
+                >
+                  <TabsTrigger value="clipLayout" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <LayoutTemplate className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.clipLayout")}
+                  </TabsTrigger>
+                  <TabsTrigger value="caption" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <Captions className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.caption")}
+                  </TabsTrigger>
+                  <TabsTrigger value="overlay" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <ImagePlus className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.overlay")}
+                  </TabsTrigger>
+                  <TabsTrigger value="introOutro" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <Clapperboard className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.introOutro")}
+                  </TabsTrigger>
+                  <TabsTrigger value="music" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <Music className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.music")}
+                  </TabsTrigger>
+                </TabsList>
 
-            <div className="p-2">
-              {section === null && (
-                <>
-                  <GroupLabel>{t("brandTemplate.groups.style")}</GroupLabel>
-                  <NavRow
-                    icon={LayoutTemplate}
-                    label={t("brandTemplate.rows.clipLayout")}
-                    value={`${template.aspect} ${t(`brandTemplate.clipLayout.${template.fillMode}`)}`}
-                    onClick={() => setSection("clipLayout")}
-                  />
-                  <NavRow
-                    icon={Captions}
-                    label={t("brandTemplate.rows.caption")}
-                    value={`${fontLabel} ${template.captionSize}`}
-                    onClick={() => setSection("caption")}
-                  />
-
-                  <GroupLabel>{t("brandTemplate.groups.brand")}</GroupLabel>
-                  <NavRow
-                    icon={ImagePlus}
-                    label={t("brandTemplate.rows.overlay")}
-                    onClick={() => setSection("overlay")}
-                  />
-                  <NavRow
-                    icon={Clapperboard}
-                    label={t("brandTemplate.rows.introOutro")}
-                    onClick={() => setSection("introOutro")}
-                  />
-                  <NavRow
-                    icon={Music}
-                    label={t("brandTemplate.rows.music")}
-                    value={template.musicEnabled ? moodLabel : undefined}
-                    onClick={() => setSection("music")}
-                  />
-
-                  <GroupLabel>{t("brandTemplate.groups.ai")}</GroupLabel>
-                  <ToggleRow
-                    icon={Eraser}
-                    label={t("brandTemplate.rows.removeFiller")}
-                    checked={template.removeFiller}
-                    onCheckedChange={(v) => update("removeFiller", v)}
-                  />
-                  <ToggleRow
-                    icon={Highlighter}
-                    label={t("brandTemplate.rows.keywordHighlighter")}
-                    checked={template.keywordHighlighter}
-                    onCheckedChange={(v) => update("keywordHighlighter", v)}
-                  />
-                </>
-              )}
-
-              {section !== null && (
-                <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setSection(null)}
-                    className="flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    {t(`brandTemplate.rows.${section}`)}
-                  </button>
-
-                  <div className="space-y-4 px-1 pb-2">
-                    {section === "clipLayout" && (
-                      <>
-                        <Field label={t("brandTemplate.clipLayout.aspect")}>
-                          <Segmented
-                            options={[...ASPECTS]}
-                            value={template.aspect}
-                            onChange={(v) => update("aspect", v as Template["aspect"])}
-                          />
-                        </Field>
-                        <Field label={t("brandTemplate.clipLayout.fillMode")}>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {(["fill", "fit"] as const).map((m) => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => update("fillMode", m)}
-                                className={cn(
-                                  "h-8 rounded-md border text-xs font-medium transition-colors",
-                                  template.fillMode === m
-                                    ? "border-primary bg-primary/10 text-foreground"
-                                    : "border-border text-muted-foreground hover:bg-accent"
-                                )}
-                              >
-                                {t(`brandTemplate.clipLayout.${m}`)}
-                              </button>
-                            ))}
-                          </div>
-                        </Field>
-                      </>
-                    )}
-
-                    {section === "caption" && (
-                      <>
-                        <Field label={t("brandTemplate.caption.font")}>
-                          <Select
-                            value={template.captionFont}
-                            onValueChange={(v) => update("captionFont", v ?? "inter")}
-                          >
-                            <SelectTrigger className="h-9 w-full rounded-md text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FONTS.map((f) => (
-                                <SelectItem key={f.value} value={f.value}>
-                                  {f.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                        <Field label={t("brandTemplate.caption.size")}>
-                          <Segmented
-                            options={[...CAPTION_SIZES]}
-                            value={template.captionSize}
-                            onChange={(v) => update("captionSize", Number(v))}
-                            cols={4}
-                          />
-                        </Field>
-                        <Field label={t("brandTemplate.caption.color")}>
-                          <div className="flex items-center gap-2">
-                            {CAPTION_COLORS.map((c) => (
-                              <button
-                                key={c}
-                                type="button"
-                                aria-label={c}
-                                onClick={() => update("captionColor", c)}
-                                style={{ backgroundColor: c }}
-                                className={cn(
-                                  "h-7 w-7 rounded-full ring-2 ring-offset-2 ring-offset-card transition-all",
-                                  template.captionColor === c ? "ring-primary" : "ring-transparent"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        </Field>
-                      </>
-                    )}
-
-                    {section === "overlay" && (
-                      <>
-                        <Field label={t("brandTemplate.overlay.logo")}>
-                          <Input
-                            value={template.logoUrl}
-                            onChange={(e) => update("logoUrl", e.target.value)}
-                            placeholder={t("brandTemplate.overlay.logoPlaceholder")}
-                          />
-                        </Field>
-                        <Field label={t("brandTemplate.overlay.cta")}>
-                          <Input
-                            value={template.cta}
-                            onChange={(e) => update("cta", e.target.value)}
-                            placeholder={t("brandTemplate.overlay.ctaPlaceholder")}
-                          />
-                        </Field>
-                      </>
-                    )}
-
-                    {section === "introOutro" && (
-                      <>
-                        <label className="flex items-center justify-between">
-                          <span className="text-sm">{t("brandTemplate.introOutro.intro")}</span>
-                          <Switch
-                            checked={template.introEnabled}
-                            onCheckedChange={(v) => update("introEnabled", v)}
-                          />
-                        </label>
-                        {template.introEnabled && (
-                          <Field label={t("brandTemplate.introOutro.introText")}>
-                            <Input
-                              value={template.introText}
-                              onChange={(e) => update("introText", e.target.value)}
-                              placeholder={t("brandTemplate.introOutro.introPlaceholder")}
-                            />
-                          </Field>
-                        )}
-                        <label className="flex items-center justify-between">
-                          <span className="text-sm">{t("brandTemplate.introOutro.outro")}</span>
-                          <Switch
-                            checked={template.outroEnabled}
-                            onCheckedChange={(v) => update("outroEnabled", v)}
-                          />
-                        </label>
-                        {template.outroEnabled && (
-                          <Field label={t("brandTemplate.introOutro.outroText")}>
-                            <Input
-                              value={template.outroText}
-                              onChange={(e) => update("outroText", e.target.value)}
-                              placeholder={t("brandTemplate.introOutro.outroPlaceholder")}
-                            />
-                          </Field>
-                        )}
-                      </>
-                    )}
-
-                    {section === "music" && (
-                      <>
-                        <label className="flex items-center justify-between">
-                          <span className="text-sm">{t("brandTemplate.music.enable")}</span>
-                          <Switch
-                            checked={template.musicEnabled}
-                            onCheckedChange={(v) => update("musicEnabled", v)}
-                          />
-                        </label>
-                        {template.musicEnabled && (
-                          <Field label={t("brandTemplate.music.mood")}>
-                            <Select
-                              value={template.musicMood}
-                              onValueChange={(v) => update("musicMood", v ?? "calm")}
-                            >
-                              <SelectTrigger className="h-9 w-full rounded-md text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {MOODS.map((m) => (
-                                  <SelectItem key={m} value={m}>
-                                    {t(`brandTemplate.music.moods.${m}`)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </Field>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+                <GroupLabel>{t("brandTemplate.groups.ai")}</GroupLabel>
+                <ToggleRow
+                  icon={Eraser}
+                  label={t("brandTemplate.rows.removeFiller")}
+                  checked={template.removeFiller}
+                  onCheckedChange={(v) => update("removeFiller", v)}
+                />
+                <ToggleRow
+                  icon={Highlighter}
+                  label={t("brandTemplate.rows.keywordHighlighter")}
+                  checked={template.keywordHighlighter}
+                  onCheckedChange={(v) => update("keywordHighlighter", v)}
+                />
+              </div>
             </div>
           </div>
-        </aside>
+
+          {/* Section detail */}
+          <div className="w-[320px] shrink-0 overflow-y-auto">
+            <Card className="ring-1 ring-border">
+              <CardContent className="p-4">
+                <TabsContent value="clipLayout" className="space-y-4">
+                  <Field label={t("brandTemplate.clipLayout.aspect")}>
+                    <ToggleGroup
+                      variant="outline"
+                      spacing={0}
+                      value={[template.aspect]}
+                      onValueChange={(v) => v[0] && update("aspect", v[0] as Template["aspect"])}
+                      className="w-full"
+                    >
+                      {ASPECTS.map((a) => (
+                        <ToggleGroupItem key={a} value={a} className="flex-1 text-xs">
+                          {a}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                  <Field label={t("brandTemplate.clipLayout.fillMode")}>
+                    <ToggleGroup
+                      variant="outline"
+                      spacing={0}
+                      value={[template.fillMode]}
+                      onValueChange={(v) => v[0] && update("fillMode", v[0] as "fill" | "fit")}
+                      className="w-full"
+                    >
+                      {(["fill", "fit"] as const).map((m) => (
+                        <ToggleGroupItem key={m} value={m} className="flex-1 text-xs">
+                          {t(`brandTemplate.clipLayout.${m}`)}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                </TabsContent>
+
+                <TabsContent value="caption" className="space-y-4">
+                  <Field label={t("brandTemplate.caption.font")}>
+                    <Select
+                      value={template.captionFont}
+                      onValueChange={(v) => update("captionFont", v ?? "inter")}
+                    >
+                      <SelectTrigger className="h-9 w-full rounded-md text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FONTS.map((f) => (
+                          <SelectItem key={f.value} value={f.value}>
+                            {f.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label={t("brandTemplate.caption.size")}>
+                    <ToggleGroup
+                      variant="outline"
+                      spacing={0}
+                      value={[String(template.captionSize)]}
+                      onValueChange={(v) => v[0] && update("captionSize", Number(v[0]))}
+                      className="w-full"
+                    >
+                      {CAPTION_SIZES.map((s) => (
+                        <ToggleGroupItem key={s} value={String(s)} className="flex-1 text-xs">
+                          {s}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                  <Field label={t("brandTemplate.caption.color")}>
+                    <div className="flex items-center gap-2">
+                      {CAPTION_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          aria-label={c}
+                          onClick={() => update("captionColor", c)}
+                          style={{ backgroundColor: c }}
+                          className={cn(
+                            "h-7 w-7 rounded-full ring-2 ring-offset-2 ring-offset-card transition-all",
+                            template.captionColor === c ? "ring-primary" : "ring-transparent"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </Field>
+                </TabsContent>
+
+                <TabsContent value="overlay" className="space-y-4">
+                  <Field label={t("brandTemplate.overlay.logo")}>
+                    <Input
+                      value={template.logoUrl}
+                      onChange={(e) => update("logoUrl", e.target.value)}
+                      placeholder={t("brandTemplate.overlay.logoPlaceholder")}
+                    />
+                  </Field>
+                  <Field label={t("brandTemplate.overlay.cta")}>
+                    <Input
+                      value={template.cta}
+                      onChange={(e) => update("cta", e.target.value)}
+                      placeholder={t("brandTemplate.overlay.ctaPlaceholder")}
+                    />
+                  </Field>
+                </TabsContent>
+
+                <TabsContent value="introOutro" className="space-y-4">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm">{t("brandTemplate.introOutro.intro")}</span>
+                    <Switch
+                      checked={template.introEnabled}
+                      onCheckedChange={(v) => update("introEnabled", v)}
+                    />
+                  </label>
+                  {template.introEnabled && (
+                    <Field label={t("brandTemplate.introOutro.introText")}>
+                      <Input
+                        value={template.introText}
+                        onChange={(e) => update("introText", e.target.value)}
+                        placeholder={t("brandTemplate.introOutro.introPlaceholder")}
+                      />
+                    </Field>
+                  )}
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm">{t("brandTemplate.introOutro.outro")}</span>
+                    <Switch
+                      checked={template.outroEnabled}
+                      onCheckedChange={(v) => update("outroEnabled", v)}
+                    />
+                  </label>
+                  {template.outroEnabled && (
+                    <Field label={t("brandTemplate.introOutro.outroText")}>
+                      <Input
+                        value={template.outroText}
+                        onChange={(e) => update("outroText", e.target.value)}
+                        placeholder={t("brandTemplate.introOutro.outroPlaceholder")}
+                      />
+                    </Field>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="music" className="space-y-4">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm">{t("brandTemplate.music.enable")}</span>
+                    <Switch
+                      checked={template.musicEnabled}
+                      onCheckedChange={(v) => update("musicEnabled", v)}
+                    />
+                  </label>
+                  {template.musicEnabled && (
+                    <Field label={t("brandTemplate.music.mood")}>
+                      <ToggleGroup
+                        variant="outline"
+                        spacing={0}
+                        value={[template.musicMood]}
+                        onValueChange={(v) => v[0] && update("musicMood", v[0])}
+                        className="w-full"
+                      >
+                        {MOODS.filter((m) => m !== "none").map((m) => (
+                          <ToggleGroupItem key={m} value={m} className="flex-1 text-xs">
+                            {t(`brandTemplate.music.moods.${m}`)}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    </Field>
+                  )}
+                </TabsContent>
+              </CardContent>
+            </Card>
+          </div>
+        </Tabs>
 
         {/* Right preview — the REAL <Clip>, with draggable overlay markers */}
         <main className="flex flex-1 items-center justify-center overflow-hidden p-8">
