@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Player } from "@remotion/player"
+import {
+  Clip as ClipComposition,
+  ASPECT_DIMENSIONS,
+  COMPOSITION_FPS,
+  totalDurationSeconds,
+  type CaptionCue,
+  type ClipBrand,
+  type ClipSpec,
+} from "@repurposer/clip"
 import {
   LayoutTemplate,
   Captions,
@@ -9,21 +19,20 @@ import {
   Music,
   Eraser,
   Highlighter,
-  Sparkles,
   Undo2,
   Redo2,
   Save,
   Check,
+  Trash2,
+  Plus,
   ChevronRight,
   ChevronLeft,
-  Play,
   type LucideIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -51,10 +60,14 @@ const FONTS = [
   { value: "source-serif", label: "Source Serif 4", family: "'Source Serif 4', serif" },
 ]
 
-const ASPECTS = ["9:16", "1:1", "16:9"] as const
+// Renderer supports 9:16 / 1:1 only (vertical-first positioning).
+const ASPECTS = ["9:16", "1:1"] as const
 const CAPTION_SIZES = [32, 40, 44, 56] as const
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
 const MOODS = ["calm", "uplifting", "corporate", "none"] as const
+
+/** Normalized center point [0,1] (matches @repurposer/clip Point). */
+type Pt = { x: number; y: number }
 
 type Template = {
   aspect: (typeof ASPECTS)[number]
@@ -62,6 +75,10 @@ type Template = {
   captionFont: string
   captionSize: number
   captionColor: string
+  captionPosition: Pt
+  titleSize: number
+  titlePosition: Pt
+  ctaPosition: Pt
   logoUrl: string
   cta: string
   introEnabled: boolean
@@ -74,12 +91,20 @@ type Template = {
   keywordHighlighter: boolean
 }
 
-const PRESET_1: Template = {
+type SavedTemplate = { id: string; name: string; config: Partial<Template> }
+
+const NEW_OPTION = "__new__"
+
+const DEFAULT_TEMPLATE: Template = {
   aspect: "9:16",
   fillMode: "fill",
   captionFont: "lilita",
   captionSize: 44,
   captionColor: "#facc15",
+  captionPosition: { x: 0.5, y: 0.84 },
+  titleSize: 58,
+  titlePosition: { x: 0.5, y: 0.12 },
+  ctaPosition: { x: 0.5, y: 0.92 },
   logoUrl: "",
   cta: "Read the full talk →",
   introEnabled: false,
@@ -92,36 +117,121 @@ const PRESET_1: Template = {
   keywordHighlighter: true,
 }
 
-const PRESET_2: Template = {
-  aspect: "9:16",
-  fillMode: "fit",
-  captionFont: "inter",
-  captionSize: 40,
-  captionColor: "#ffffff",
-  logoUrl: "",
-  cta: "Watch the full keynote →",
-  introEnabled: true,
-  introText: "This talk is from…",
-  outroEnabled: true,
-  outroText: "Follow for more insights",
-  musicEnabled: true,
-  musicMood: "corporate",
-  removeFiller: true,
-  keywordHighlighter: false,
-}
-
-const PRESETS = [
-  { id: "1", value: PRESET_1 },
-  { id: "2", value: PRESET_2 },
-]
-
 type Section = null | "clipLayout" | "caption" | "overlay" | "introOutro" | "music"
 
-const LOAD_STEPS = 7
+// Fixed LATIN samples so the brand fonts (Lilita/Inter/Playfair/Source Serif —
+// all latin) actually render in the preview. Real text comes from the talk's
+// ASR at generation time; these only demonstrate the *style*.
+const DEMO_CAPTION = "Your captions show up here"
+const DEMO_TITLE = "The hook line"
+
+// ---------------------------------------------------------------------------
+// Template -> clip-spec (live preview uses the SAME <Clip> as the real render,
+// so the preview is pixel-identical to generated output — mirrors the backend
+// services/brand.py mapping).
+// ---------------------------------------------------------------------------
+
+function templateToBrand(tpl: Template): ClipBrand {
+  return {
+    logo_url: tpl.logoUrl || null,
+    cta: tpl.cta || null,
+    cta_position: tpl.ctaPosition,
+    caption_color: tpl.captionColor || null,
+    caption_size: tpl.captionSize || null,
+    caption_font: tpl.captionFont || null,
+    intro_text: tpl.introEnabled ? tpl.introText || null : null,
+    outro_text: tpl.outroEnabled ? tpl.outroText || null : null,
+    fill_mode: tpl.fillMode,
+  }
+}
+
+function buildPreviewSpec(tpl: Template): ClipSpec {
+  const aspect = tpl.aspect === "1:1" ? "1:1" : "9:16"
+  const words = DEMO_CAPTION.split(/\s+/).filter(Boolean)
+  const per = words.length ? Math.max(0.35, 3 / words.length) : 0.5
+  const caption_track: CaptionCue[] = words.map((w, i) => ({
+    start: i * per,
+    end: (i + 1) * per,
+    text: w,
+    lang: "en",
+  }))
+  const end = Math.max(1, words.length * per)
+  return {
+    source: { asset_id: "preview", kind: "stills", url: "", image_urls: [], fps: 30 },
+    aspect,
+    segments: [{ start: 0, end, hidden: false }],
+    crop: { x: 0.5, y: 0.5, scale: 1 },
+    caption_track,
+    caption_style_preset: tpl.keywordHighlighter ? "karaoke-highlight" : "clean-bottom",
+    caption_position: tpl.captionPosition,
+    title: { text: DEMO_TITLE, enabled: true, size: tpl.titleSize, position: tpl.titlePosition },
+    // Music is intentionally OFF in the preview: the mood still saves to the
+    // template (and drives real renders), but a missing track file would 404 in
+    // the browser <Player>. MVP renders are silent anyway (no bundled tracks).
+    music: { track_id: null, url: null, enabled: false, gain_db: -18 },
+    brand: templateToBrand(tpl),
+    brand_ref: null,
+    target_language: "en",
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Small building blocks
 // ---------------------------------------------------------------------------
+
+/** Clamp a normalized coord into the safe zone [0.05, 0.95]. */
+const clampSafe = (v: number) => Math.min(0.95, Math.max(0.05, v))
+
+/** A draggable overlay marker that moves a normalized point within the preview. */
+function DraggableMarker({
+  point,
+  label,
+  containerRef,
+  onBegin,
+  onChange,
+}: {
+  point: Pt
+  label: string
+  containerRef: React.RefObject<HTMLDivElement | null>
+  onBegin: () => void
+  onChange: (p: Pt) => void
+}) {
+  const onDown = (e: React.PointerEvent) => {
+    e.preventDefault()
+    onBegin()
+    const move = (ev: PointerEvent) => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      onChange({
+        x: clampSafe((ev.clientX - r.left) / r.width),
+        y: clampSafe((ev.clientY - r.top) / r.height),
+      })
+    }
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
+  return (
+    <div
+      onPointerDown={onDown}
+      style={{
+        position: "absolute",
+        left: `${point.x * 100}%`,
+        top: `${point.y * 100}%`,
+        transform: "translate(-50%, -50%)",
+        pointerEvents: "auto",
+        cursor: "move",
+      }}
+      className="select-none whitespace-nowrap rounded-md border border-dashed border-white/70 bg-black/50 px-2 py-1 text-[10px] font-medium text-white shadow"
+    >
+      {label}
+    </div>
+  )
+}
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -220,53 +330,6 @@ function Segmented({
   )
 }
 
-function CaptionText({
-  text,
-  keyword,
-  highlight,
-  color,
-  family,
-  size,
-}: {
-  text: string
-  keyword: string
-  highlight: boolean
-  color: string
-  family: string
-  size: number
-}) {
-  const style: React.CSSProperties = {
-    color,
-    fontFamily: family,
-    fontSize: size,
-    fontWeight: 800,
-    lineHeight: 1.1,
-    textShadow: "0 1px 6px rgba(0,0,0,0.6)",
-  }
-  if (!highlight || !keyword || !text.includes(keyword)) {
-    return <span style={style}>{text}</span>
-  }
-  const idx = text.indexOf(keyword)
-  return (
-    <span style={style}>
-      {text.slice(0, idx)}
-      <span
-        style={{
-          backgroundColor: color,
-          color: "#0a0a0a",
-          borderRadius: 5,
-          padding: "0 5px",
-          boxDecorationBreak: "clone",
-          WebkitBoxDecorationBreak: "clone",
-        }}
-      >
-        {keyword}
-      </span>
-      {text.slice(idx + keyword.length)}
-    </span>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -274,38 +337,40 @@ function CaptionText({
 function BrandTemplatePage() {
   const { t } = useTranslation()
 
-  const [preset, setPreset] = useState("1")
-  const [template, setTemplate] = useState<Template>(PRESET_1)
+  const [template, setTemplate] = useState<Template>(DEFAULT_TEMPLATE)
   const [past, setPast] = useState<Template[]>([])
   const [future, setFuture] = useState<Template[]>([])
   const [section, setSection] = useState<Section>(null)
   const [saved, setSaved] = useState(false)
-  const [savedId, setSavedId] = useState<string | null>(null)
-  const [loadStep, setLoadStep] = useState(0)
+  const [mounted, setMounted] = useState(false)
+  const [templates, setTemplates] = useState<SavedTemplate[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [name, setName] = useState("Default")
 
-  const loading = loadStep < LOAD_STEPS
-  const pct = Math.round((loadStep / LOAD_STEPS) * 100)
+  // Remotion <Player> is client-only (SSR would hydration-mismatch).
+  useEffect(() => setMounted(true), [])
 
-  // Simulated resource loading (matches OpusClip's "Fetching resources" screen).
+  const loadTemplates = async (selectId?: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/brand-templates`)
+      if (!res.ok) return
+      const list: SavedTemplate[] = await res.json()
+      setTemplates(list)
+      const pick = selectId ? list.find((x) => x.id === selectId) : list[0]
+      if (pick) {
+        setSelectedId(pick.id)
+        setName(pick.name)
+        setTemplate({ ...DEFAULT_TEMPLATE, ...pick.config })
+      }
+    } catch {
+      /* offline / no backend — keep the local default */
+    }
+  }
+
+  // Load saved templates on mount (a default is seeded server-side).
   useEffect(() => {
-    if (loadStep >= LOAD_STEPS) return
-    const id = setTimeout(() => setLoadStep((s) => s + 1), 260)
-    return () => clearTimeout(id)
-  }, [loadStep])
-
-  // Load the saved template (if any) on mount.
-  useEffect(() => {
-    fetch(`${API_URL}/api/v1/brand-templates`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: Array<{ id: string; config: Partial<Template> }>) => {
-        if (list.length > 0) {
-          setSavedId(list[0].id)
-          setTemplate((prev) => ({ ...prev, ...list[0].config }))
-        }
-      })
-      .catch(() => {
-        /* offline / no backend — keep the local preset */
-      })
+    void loadTemplates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const commit = (next: Template) => {
@@ -336,31 +401,35 @@ function BrandTemplatePage() {
     setSaved(false)
   }
 
-  const applyPreset = (id: string) => {
-    setPreset(id)
-    const found = PRESETS.find((p) => p.id === id)
-    if (found) commit(found.value)
+  const selectTemplate = (id: string) => {
+    if (id === NEW_OPTION) {
+      setSelectedId(null)
+      setName(t("brandTemplate.untitled"))
+      commit(DEFAULT_TEMPLATE)
+      return
+    }
+    const found = templates.find((x) => x.id === id)
+    if (!found) return
+    setSelectedId(found.id)
+    setName(found.name)
+    commit({ ...DEFAULT_TEMPLATE, ...found.config })
   }
 
   const handleSave = async () => {
     try {
-      const body = JSON.stringify({
-        name: "Brand template",
-        config: template,
-      })
       const res = await fetch(
-        savedId
-          ? `${API_URL}/api/v1/brand-templates/${savedId}`
+        selectedId
+          ? `${API_URL}/api/v1/brand-templates/${selectedId}`
           : `${API_URL}/api/v1/brand-templates`,
         {
-          method: savedId ? "PUT" : "POST",
+          method: selectedId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body,
+          body: JSON.stringify({ name: name || "Untitled", config: template }),
         }
       )
       if (!res.ok) return
       const data = await res.json()
-      setSavedId(data.id)
+      await loadTemplates(data.id)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {
@@ -368,16 +437,33 @@ function BrandTemplatePage() {
     }
   }
 
-  const fontLabel = FONTS.find((f) => f.value === template.captionFont)?.label ?? template.captionFont
-  const fontFamily = FONTS.find((f) => f.value === template.captionFont)?.family ?? "inherit"
+  const handleDelete = async () => {
+    if (!selectedId) return
+    try {
+      await fetch(`${API_URL}/api/v1/brand-templates/${selectedId}`, { method: "DELETE" })
+      setSelectedId(null)
+      await loadTemplates()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const fontLabel =
+    FONTS.find((f) => f.value === template.captionFont)?.label ?? template.captionFont
   const moodLabel = t(`brandTemplate.music.moods.${template.musicMood}`)
 
-  const previewSize =
-    template.aspect === "1:1"
-      ? "aspect-square w-[340px]"
-      : template.aspect === "16:9"
-        ? "aspect-video w-[460px]"
-        : "aspect-[9/16] w-[270px]"
+  const previewSpec = useMemo(() => buildPreviewSpec(template), [template])
+
+  const previewRef = useRef<HTMLDivElement | null>(null)
+  // Snapshot once per drag (one undo entry); live updates skip history.
+  const beginDrag = () => {
+    setPast((p) => [...p, template])
+    setFuture([])
+  }
+  const liveSet = <K extends keyof Template>(key: K, value: Template[K]) => {
+    setTemplate((tpl) => ({ ...tpl, [key]: value }))
+    setSaved(false)
+  }
 
   return (
     <div className="flex h-svh flex-col">
@@ -390,18 +476,32 @@ function BrandTemplatePage() {
           </p>
         </div>
 
-        <Select value={preset} onValueChange={(v) => applyPreset(v ?? "1")}>
-          <SelectTrigger className="h-9 w-48 justify-between rounded-md text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRESETS.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {t("brandTemplate.preset")} {p.id}
+        <div className="flex items-center gap-2">
+          <Select value={selectedId ?? NEW_OPTION} onValueChange={(v) => selectTemplate(v ?? NEW_OPTION)}>
+            <SelectTrigger className="h-9 w-44 justify-between rounded-md text-sm">
+              <SelectValue placeholder={t("brandTemplate.untitled")} />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map((tpl) => (
+                <SelectItem key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                </SelectItem>
+              ))}
+              <SelectItem value={NEW_OPTION}>
+                <span className="flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("brandTemplate.newTemplate")}
+                </span>
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            </SelectContent>
+          </Select>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("brandTemplate.namePlaceholder")}
+            className="h-9 w-40"
+          />
+        </div>
 
         <div className="flex items-center gap-2">
           <Button
@@ -421,6 +521,15 @@ function BrandTemplatePage() {
             onClick={redo}
           >
             <Redo2 className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("brandTemplate.delete")}
+            disabled={!selectedId}
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-5 w-5" />
           </Button>
           <Button onClick={handleSave}>
             {saved ? <Check className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
@@ -672,68 +781,87 @@ function BrandTemplatePage() {
           </div>
         </aside>
 
-        {/* Right preview */}
+        {/* Right preview — the REAL <Clip>, with draggable overlay markers */}
         <main className="flex flex-1 items-center justify-center overflow-hidden p-8">
-          {loading ? (
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                <Sparkles className="h-7 w-7" />
-              </div>
-              <Progress value={pct} className="w-64" />
-              <p className="text-sm text-muted-foreground">
-                {t("brandTemplate.loading")} {loadStep}/{LOAD_STEPS} · {pct}%
-              </p>
-            </div>
-          ) : (
+          <div className="flex h-full max-h-[680px] flex-col items-center gap-2">
+            <span className="text-xs text-muted-foreground">{t("brandTemplate.demo")}</span>
             <div
-              className={cn(
-                "relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-600 to-zinc-900 ring-1 ring-border shadow-xl",
-                previewSize
-              )}
+              ref={previewRef}
+              className="relative"
+              style={{
+                height: "100%",
+                aspectRatio: previewSpec.aspect === "1:1" ? "1 / 1" : "9 / 16",
+              }}
             >
-              <span className="absolute left-3 top-3 rounded-md bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white">
-                {t("brandTemplate.demo")}
-              </span>
-
-              {template.logoUrl && (
-                <img
-                  src={template.logoUrl}
-                  alt=""
-                  className="absolute right-3 top-3 h-6 w-auto object-contain"
+              {mounted ? (
+                <Player
+                  component={ClipComposition}
+                  inputProps={{ spec: previewSpec }}
+                  durationInFrames={Math.max(
+                    1,
+                    Math.round(totalDurationSeconds(previewSpec) * COMPOSITION_FPS)
+                  )}
+                  fps={COMPOSITION_FPS}
+                  compositionWidth={ASPECT_DIMENSIONS[previewSpec.aspect].width}
+                  compositionHeight={ASPECT_DIMENSIONS[previewSpec.aspect].height}
+                  style={{
+                    height: "100%",
+                    width: "100%",
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    boxShadow: "0 10px 40px rgba(0,0,0,0.45)",
+                  }}
+                  controls
+                  autoPlay
                 />
+              ) : (
+                <div className="h-full w-full rounded-2xl bg-card ring-1 ring-border" />
               )}
 
-              {template.introEnabled && (
-                <div className="absolute inset-x-3 top-10 text-center text-[10px] font-medium text-white/70">
-                  {template.introText}
+              {/* Drag overlay (transparent; only markers capture pointer) */}
+              {mounted ? (
+                <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+                  {/* safe zone + center crosshair */}
+                  <div
+                    className="absolute rounded-lg"
+                    style={{ inset: "5%", border: "1px dashed rgba(255,255,255,0.25)" }}
+                  />
+                  <div
+                    className="absolute left-1/2 top-0 bottom-0"
+                    style={{ width: 1, background: "rgba(255,255,255,0.12)" }}
+                  />
+                  <div
+                    className="absolute left-0 right-0 top-1/2"
+                    style={{ height: 1, background: "rgba(255,255,255,0.12)" }}
+                  />
+                  <DraggableMarker
+                    point={template.titlePosition}
+                    label={t("brandTemplate.rows.title")}
+                    containerRef={previewRef}
+                    onBegin={beginDrag}
+                    onChange={(p) => liveSet("titlePosition", p)}
+                  />
+                  <DraggableMarker
+                    point={template.captionPosition}
+                    label={t("brandTemplate.rows.caption")}
+                    containerRef={previewRef}
+                    onBegin={beginDrag}
+                    onChange={(p) => liveSet("captionPosition", p)}
+                  />
+                  <DraggableMarker
+                    point={template.ctaPosition}
+                    label="CTA"
+                    containerRef={previewRef}
+                    onBegin={beginDrag}
+                    onChange={(p) => liveSet("ctaPosition", p)}
+                  />
                 </div>
-              )}
-
-              <div className="absolute inset-x-4 bottom-16 text-center">
-                <CaptionText
-                  text={t("brandTemplate.preview.caption")}
-                  keyword={t("brandTemplate.preview.keyword")}
-                  highlight={template.keywordHighlighter}
-                  color={template.captionColor}
-                  family={fontFamily}
-                  size={Math.round(template.captionSize * 0.42)}
-                />
-              </div>
-
-              {template.cta && (
-                <div className="absolute inset-x-3 bottom-9 text-center text-[10px] text-white/80">
-                  {template.cta}
-                </div>
-              )}
-
-              <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
-                <Play className="h-3 w-3 fill-white text-white" />
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-                  <div className="h-full w-1/3 rounded-full bg-white" />
-                </div>
-              </div>
+              ) : null}
             </div>
-          )}
+            <p className="max-w-[280px] text-center text-xs text-muted-foreground">
+              {t("brandTemplate.previewHint")}
+            </p>
+          </div>
         </main>
       </div>
     </div>

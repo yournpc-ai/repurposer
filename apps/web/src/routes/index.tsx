@@ -19,6 +19,7 @@ import {
   Mic2,
   SlidersHorizontal,
   Sparkles,
+  Palette,
   ChevronDown,
   Check,
   FolderKanban,
@@ -118,6 +119,8 @@ function Home() {
   const [speakerId, setSpeakerId] = useState("")
   const [tone, setTone] = useState<Tone>("professional")
   const [outputs, setOutputs] = useState<OutputKey[]>(["linkedin", "quote_cards"])
+  const [brandTemplates, setBrandTemplates] = useState<{ id: string; name: string }[]>([])
+  const [brandTemplateId, setBrandTemplateId] = useState("")
   const [fileName, setFileName] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState("")
@@ -138,9 +141,12 @@ function Home() {
     Promise.all([
       fetch(`${API_URL}/api/v1/speakers`).then((r) => r.json()),
       fetch(`${API_URL}/api/v1/projects`).then((r) => r.json()),
-    ]).then(([s, p]) => {
+      fetch(`${API_URL}/api/v1/brand-templates`).then((r) => (r.ok ? r.json() : [])),
+    ]).then(([s, p, bt]) => {
       setSpeakers(s)
       setProjects(p.slice(0, 3))
+      setBrandTemplates(bt)
+      setBrandTemplateId((prev) => prev || (bt[0]?.id ?? ""))
     })
   }, [createOpen])
 
@@ -229,6 +235,11 @@ function Home() {
               concise_vs_detailed: 0.5,
             },
             target_language: "en",
+            brand_template_id: brandTemplateId || undefined,
+            // When a file is the source, the typed prompt steers generation
+            // (focus / angle). When there's no file, the prompt IS the content
+            // (uploaded as transcript), so don't also pass it as an instruction.
+            instruction: file && prompt.trim() ? prompt.trim() : undefined,
           }),
         }
       )
@@ -411,6 +422,41 @@ function Home() {
                       <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                         <Plus className="mr-2 h-4 w-4" />
                         {t("composer.createSpeaker")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Brand template */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                        >
+                          <Palette className="h-4 w-4 text-muted-foreground" />
+                          <span className="max-w-[120px] truncate">
+                            {brandTemplates.find((b) => b.id === brandTemplateId)?.name ??
+                              t("composer.brandDefault")}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuLabel>{t("composer.brandLabel")}</DropdownMenuLabel>
+                      {brandTemplates.map((b) => (
+                        <DropdownMenuItem key={b.id} onClick={() => setBrandTemplateId(b.id)}>
+                          <Palette className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 truncate">{b.name}</span>
+                          {b.id === brandTemplateId && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem render={<Link to="/brand-template" />}>
+                        <SlidersHorizontal className="mr-2 h-4 w-4" />
+                        {t("composer.manageBrand")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
