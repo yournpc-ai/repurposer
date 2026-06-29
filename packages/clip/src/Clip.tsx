@@ -130,11 +130,22 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const musicUrl = music?.enabled ? music.url ?? null : null;
   const musicVolume = Math.min(1, Math.pow(10, (music?.gain_db ?? -18) / 20));
 
+  // Cloned-voice dub: when enabled, it REPLACES the source's original audio
+  // (the video is muted / the stills speech track is skipped) and plays across
+  // the video portion. Rough overlay — no lip-sync (see docs/VIDEO_EDITOR.md).
+  const dubUrl = spec.dub?.enabled ? spec.dub.url ?? null : null;
+  const dubVolume = Math.min(1, Math.pow(10, (spec.dub?.gain_db ?? 0) / 20));
+
   const cardText = inIntro ? brand?.intro_text : inOutro ? brand?.outro_text : null;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
       {musicUrl ? <Audio src={musicUrl} volume={musicVolume} loop /> : null}
+      {dubUrl ? (
+        <Sequence from={introFrames} durationInFrames={videoFrames} layout="none">
+          <Audio src={dubUrl} volume={dubVolume} />
+        </Sequence>
+      ) : null}
 
       {isStills ? (
         <Sequence from={introFrames} durationInFrames={videoFrames} layout="none">
@@ -149,7 +160,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
               </Series>
             </AbsoluteFill>
           ) : null}
-          {audioUrl && timeline.length > 0 ? (
+          {!dubUrl && audioUrl && timeline.length > 0 ? (
             <Series>
               {timeline.map((t, i) => (
                 <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
@@ -177,6 +188,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                 <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                   <OffthreadVideo
                     src={spec.source.url}
+                    muted={Boolean(dubUrl)}
                     startFrom={Math.round(t.seg.start * fpsv)}
                     endAt={Math.round(t.seg.end * fpsv)}
                     style={{ width: "100%", height: "100%", objectFit }}

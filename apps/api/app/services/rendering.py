@@ -49,6 +49,11 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
         track = music.get("url") or ""
         if track.startswith("/"):
             music["url"] = base + track
+    dub = spec.get("dub")
+    if isinstance(dub, dict):
+        dub_url = dub.get("url") or ""
+        if dub_url.startswith("/"):
+            dub["url"] = base + dub_url
     return spec
 
 

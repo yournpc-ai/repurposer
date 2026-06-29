@@ -5,22 +5,28 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from app.agents.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError
+from app.config import settings
 from app.dependencies import DBDep
 from app.models.schemas import (
+    AssetType,
     ClipResponse,
     ClipScript,
     ClipUpdate,
+    DubRequest,
     FeedbackRequest,
     RenderStatus,
     Segment,
     SpeakerPersona,
     TranslateCaptionsRequest,
 )
-from app.models.tables import Clip, HumanFeedback, Project, Speaker
+from app.models.tables import Asset, Clip, HumanFeedback, Project, Speaker
 from app.services.caption_translate import translate_caption_track
+from app.services.storage import get_output_path, output_url, resolve_file_path
+from app.services.voice import clone_voice, extract_audio, synthesize
 
 router = APIRouter()
 
@@ -232,6 +238,93 @@ async def translate_captions(
         **spec,
         "caption_track": new_track,
         "target_language": data.target_language,
+    }
+    clip.updated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(clip)
+    return clip
+
+
+@router.post("/{clip_id}/dub", response_model=ClipResponse)
+async def dub_clip(clip_id: UUID, data: DubRequest, db: DBDep) -> Clip:
+    """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
+
+    Clones from the project's voice sample (VOICE_SAMPLE > AUDIO > VIDEO audio),
+    translates the captions, synthesizes the dub via MiniMax T2A, and bakes a
+    ``dub`` track into ``render_spec`` — the renderer then mutes the source audio
+    and plays the dub (overlay; no lip-sync). GDPR set aside for MVP.
+    """
+    result = await db.execute(select(Clip).where(Clip.id == clip_id))
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Clip not found")
+
+    spec = clip.render_spec
+    if not isinstance(spec, dict):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Clip has no render_spec (text-only project)"
+        )
+    track = spec.get("caption_track") or []
+    if not track:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Clip has no captions to dub")
+
+    # Voice sample priority: explicit voice sample > talk audio > talk video.
+    assets = list(
+        (
+            await db.execute(select(Asset).where(Asset.project_id == clip.project_id))
+        ).scalars()
+    )
+    sample = (
+        next((a for a in assets if a.type == AssetType.VOICE_SAMPLE and a.file_url), None)
+        or next((a for a in assets if a.type == AssetType.AUDIO and a.file_url), None)
+        or next((a for a in assets if a.type == AssetType.VIDEO and a.file_url), None)
+    )
+    if sample is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No voice sample — upload audio/video (or a voice sample) to dub",
+        )
+    src_path = resolve_file_path(sample.file_url)
+    if src_path is None or not src_path.is_file():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Voice sample file missing")
+
+    try:
+        # Reuse a cached cloned voice (MiniMax clones are ~168h temporary).
+        voice_id = (sample.meta or {}).get("voice_id")
+        if not voice_id:
+            audio_path = src_path
+            tmp = None
+            if sample.type == AssetType.VIDEO:
+                tmp = await run_in_threadpool(extract_audio, src_path)
+                if tmp is None:
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        "Could not extract audio from the video for voice cloning",
+                    )
+                audio_path = tmp
+            voice_id = await run_in_threadpool(clone_voice, audio_path)
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+            if not voice_id:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Voice cloning unavailable")
+            sample.meta = {**(sample.meta or {}), "voice_id": voice_id}
+
+        new_track = await translate_caption_track(track, data.target_language)
+        text = " ".join(str(c.get("text", "")).strip() for c in new_track).strip()
+        audio_bytes = await run_in_threadpool(synthesize, text, voice_id, data.target_language)
+    except MiniMaxError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+
+    out_path = get_output_path(clip.project_id, f"{clip_id}_dub_{data.target_language}.mp3")
+    out_path.write_bytes(audio_bytes)
+    rel = str(out_path.relative_to(settings.output_dir))
+
+    # Reassign a NEW dict so SQLAlchemy flushes the JSON column.
+    clip.render_spec = {
+        **spec,
+        "caption_track": new_track,
+        "target_language": data.target_language,
+        "dub": {"url": output_url(rel), "enabled": True, "gain_db": 0.0},
     }
     clip.updated_at = datetime.now(UTC)
     await db.commit()

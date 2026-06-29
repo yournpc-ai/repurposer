@@ -102,6 +102,7 @@ function ClipEditorPage() {
   const [saving, setSaving] = useState(false)
   const [rendering, setRendering] = useState(false)
   const [translating, setTranslating] = useState(false)
+  const [dubbing, setDubbing] = useState(false)
   const [error, setError] = useState('')
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -231,6 +232,34 @@ function ClipEditorPage() {
     }
   }
 
+  const dubClip = async (lang: string) => {
+    // Clones the speaker's voice from the project's audio/video and dubs the
+    // (translated) captions into `lang`. Save pending edits first.
+    if (!spec || dubbing) return
+    if (dirty && !(await save())) return
+    setDubbing(true)
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}/dub`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_language: lang }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail || 'Dub failed')
+      }
+      const c: Clip = await res.json()
+      setClip(c)
+      if (c.render_spec) setSpec(c.render_spec)
+      setDirty(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Dub failed')
+    } finally {
+      setDubbing(false)
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <div className="flex items-center justify-between gap-3">
@@ -352,6 +381,33 @@ function ClipEditorPage() {
                       </span>
                     ) : (
                       <SelectValue />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CAPTION_LANGS.map(([code, label]) => (
+                      <SelectItem key={code} value={code}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{t('clipEditor.dubLanguage')}</span>
+                <Select
+                  value={spec.dub?.enabled ? spec.target_language : ''}
+                  onValueChange={(v) => v && dubClip(v)}
+                  disabled={dubbing}
+                >
+                  <SelectTrigger className="h-9 w-36 rounded-md text-sm">
+                    {dubbing ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        {t('clipEditor.dubbing')}
+                      </span>
+                    ) : (
+                      <SelectValue placeholder={t('clipEditor.dubOff')} />
                     )}
                   </SelectTrigger>
                   <SelectContent>

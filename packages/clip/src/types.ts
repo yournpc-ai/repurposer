@@ -79,6 +79,13 @@ export interface ClipMusic {
   gain_db: number;
 }
 
+/** Cloned-voice dubbed speech in the target language (overrides the source audio). */
+export interface ClipDub {
+  url?: string | null;
+  enabled: boolean;
+  gain_db: number;
+}
+
 /** Resolved brand values baked into the spec by the API (renderer-agnostic). */
 export interface ClipBrand {
   logo_url?: string | null;
@@ -104,6 +111,8 @@ export interface ClipSpec {
   caption_position?: Point | null;
   title: ClipTitle;
   music: ClipMusic;
+  /** Cloned-voice dub; when enabled, replaces the source's original audio. */
+  dub?: ClipDub | null;
   brand?: ClipBrand | null;
   brand_ref: string | null;
   target_language: string;

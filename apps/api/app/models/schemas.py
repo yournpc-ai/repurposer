@@ -399,6 +399,16 @@ class ClipMusic(BaseModel):
     gain_db: float = -18.0
 
 
+class ClipDub(BaseModel):
+    """Cloned-voice dubbed speech; when enabled, replaces the source's audio."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = None  # resolved dub audio URL (storage seam)
+    enabled: bool = False
+    gain_db: float = 0.0
+
+
 class ClipBrand(BaseModel):
     """Resolved brand values baked into the spec at generation time.
 
@@ -436,6 +446,7 @@ class ClipSpec(BaseModel):
     caption_position: Point | None = None  # normalized center; None -> default (bottom)
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)
+    dub: ClipDub | None = None  # cloned-voice dub; replaces source audio when enabled
     brand: ClipBrand | None = None  # resolved brand values (None = default look)
     brand_ref: UUID | None = None
     target_language: str = "en"
@@ -486,6 +497,12 @@ class CaptionTranslation(BaseModel):
 
 class TranslateCaptionsRequest(BaseModel):
     """Re-translate a clip's caption track into ``target_language``."""
+
+    target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
+
+
+class DubRequest(BaseModel):
+    """Voice-clone dub a clip into ``target_language`` (speaker's own voice)."""
 
     target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
 
