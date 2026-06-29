@@ -59,3 +59,43 @@ def music_from_template(config: dict[str, Any] | None) -> ClipMusic:
         url=music_url(mood),
         enabled=bool(cfg.get("musicEnabled")),
     )
+
+
+# Built-in mood library keys (data/music/<mood>.<ext>). Kept in sync with the
+# brand-template UI's MOODS and data/music/README.md.
+_LIBRARY_MOODS = {"calm", "uplifting", "corporate"}
+
+# Normalize a free-text mood (e.g. the script agent's suggestion, which may be
+# localized) to a library key. Unknown -> None (no music rather than a 404 URL).
+_MOOD_SYNONYMS = {
+    "calm": "calm", "沉稳": "calm", "温暖": "calm", "warm": "calm",
+    "gentle": "calm", "soft": "calm", "平静": "calm",
+    "uplifting": "uplifting", "激昂": "uplifting", "轻快": "uplifting",
+    "史诗": "uplifting", "epic": "uplifting", "energetic": "uplifting",
+    "upbeat": "uplifting", "inspiring": "uplifting", "激励": "uplifting",
+    "corporate": "corporate", "商务": "corporate", "professional": "corporate",
+    "business": "corporate", "neutral": "corporate",
+}
+
+
+def normalize_mood(mood: str | None) -> str | None:
+    """Map an arbitrary mood string to a library key, or None if unrecognized."""
+    if not isinstance(mood, str):
+        return None
+    key = mood.strip().lower()
+    if key in _LIBRARY_MOODS:
+        return key
+    return _MOOD_SYNONYMS.get(key) or _MOOD_SYNONYMS.get(mood.strip())
+
+
+def music_from_mood(mood: str | None) -> ClipMusic:
+    """ClipMusic from a clip's own mood suggestion (fallback when no brand template).
+
+    Normalizes to a library key and enables playback; unknown moods yield a
+    disabled, track-less block. Playback still requires a track file present
+    (see data/music/README.md) — otherwise the endpoint 404s and it's silent.
+    """
+    key = normalize_mood(mood)
+    if key is None:
+        return ClipMusic()
+    return ClipMusic(track_id=key, url=music_url(key), enabled=True)

@@ -13,7 +13,9 @@ How it wires up:
 
 - The brand template's **music mood** (`calm` / `uplifting` / `corporate` / `none`)
   is baked into each clip's `render_spec.music` at generation time
-  (`services/brand.py:music_from_template`).
+  (`services/brand.py:music_from_template`). With **no brand template**, the clip
+  falls back to the script agent's own mood suggestion, normalized to a library
+  key (`services/brand.py:music_from_mood` / `normalize_mood`).
 - The track URL is **extension-less** — `/api/v1/music/calm` — and the API
   resolver (`storage.py:resolve_music_safe`) serves the first `calm.<ext>` it
   finds (`.mp3/.m4a/.aac/.ogg/.wav`), with HTTP Range support

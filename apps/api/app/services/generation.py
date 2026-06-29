@@ -35,7 +35,7 @@ from app.models.tables import (
     Speaker,
     WorkflowRun,
 )
-from app.services.brand import brand_from_template, music_from_template
+from app.services.brand import brand_from_template, music_from_mood, music_from_template
 from app.services.clip_spec import build_clip_spec
 from app.services.storage import stream_url
 
@@ -205,7 +205,6 @@ async def run_generation(run_id: UUID) -> None:
                     )
                 ).scalar_one_or_none()
                 brand = brand_from_template(bt.config) if bt is not None else None
-                music = music_from_template(bt.config) if bt is not None else None
                 brand_ref = bt.id if bt is not None else None
                 for segment in analysis.segments[:clip_count]:
                     script = await script_agent.generate(
@@ -214,6 +213,15 @@ async def run_generation(run_id: UUID) -> None:
                         tone_settings=tone_settings,
                         target_audience=analysis.target_audience,
                         target_language=target_language,
+                    )
+                    # Music: a brand template (if any) is the source of truth —
+                    # respect it fully, including an explicit "off". With no
+                    # template, fall back to the clip's own mood suggestion so a
+                    # generated clip still carries music (track file permitting).
+                    music = (
+                        music_from_template(bt.config)
+                        if bt is not None
+                        else music_from_mood(script.music_mood)
                     )
                     # render_spec = the actual render contract (None for
                     # text-only projects). script stays as the AI suggestion.

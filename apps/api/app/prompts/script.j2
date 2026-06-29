@@ -35,7 +35,7 @@
 
 ## 输出语言
 
-**请用目标语言 `{{ target_language }}` 输出。hook、shots 里的 subtitle、title_options、music_mood 等所有文案字段都必须使用 {{ target_language }}。**
+**请用目标语言 `{{ target_language }}` 输出。hook、shots 里的 subtitle、title_options 等所有文案字段都必须使用 {{ target_language }}。但 `music_mood` 例外：它是配乐曲库的固定英文键，只能取 `calm`、`uplifting`、`corporate` 之一，不要翻译。**
 
 ## 原始片段
 
@@ -68,7 +68,7 @@
     "标题选项2",
     "标题选项3"
   ],
-  "music_mood": "沉稳 / 激昂 / 轻快 / 史诗 / 温暖"
+  "music_mood": "calm | uplifting | corporate"
 }
 
 要求：
