@@ -17,6 +17,7 @@ from app.routers import (
     speaker_assets,
     speakers,
 )
+from app.services.brand import seed_default_brand_template
 
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     settings.ensure_dirs()
     await init_db()
+    await seed_default_brand_template()
     yield
 
 

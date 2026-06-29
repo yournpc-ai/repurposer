@@ -30,6 +30,7 @@ class ScriptAgent:
         tone_settings: ToneSettings | None,
         target_audience: str,
         target_language: str = "en",
+        instruction: str | None = None,
     ) -> ClipScript:
         """Generate a clip script for a segment.
 
@@ -39,6 +40,7 @@ class ScriptAgent:
             tone_settings: Optional tone overrides.
             target_audience: Target audience description.
             target_language: ISO language code for hook/subtitles (e.g. en/zh/fr).
+            instruction: Optional user steering prompt (hook angle / emphasis).
 
         Returns:
             ClipScript model.
@@ -55,6 +57,7 @@ class ScriptAgent:
             academic_vs_casual=tone.academic_vs_casual,
             rational_vs_passionate=tone.rational_vs_passionate,
             concise_vs_detailed=tone.concise_vs_detailed,
+            instruction=(instruction or "").strip() or None,
         )
 
         messages = [

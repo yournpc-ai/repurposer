@@ -59,6 +59,7 @@ async def run_generation(run_id: UUID) -> None:
                 outputs = ["clips"]
             clip_count = int(ctx.get("clip_count", 3))
             target_language = ctx.get("target_language", "en")
+            instruction = ctx.get("instruction")
             tone_raw = ctx.get("tone_settings")
             tone_settings = ToneSettings.model_validate(tone_raw) if tone_raw else None
 
@@ -194,18 +195,36 @@ async def run_generation(run_id: UUID) -> None:
                     clip_count=clip_count,
                     event_name=project.event_name,
                     target_language=target_language,
+                    instruction=instruction,
                 )
-                # Bake the latest brand template into each clip's render_spec so
+                # Bake the chosen brand template into each clip's render_spec so
                 # the renderer/preview show it without DB access (see ADR-016).
-                bt = (
-                    await db.execute(
-                        select(BrandTemplate)
-                        .order_by(BrandTemplate.created_at.desc())
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
+                # Prefer the template the user selected at generate time; else the
+                # most recent (the seeded default guarantees at least one exists).
+                bt_id = ctx.get("brand_template_id")
+                bt = None
+                if bt_id:
+                    try:
+                        bt = await db.get(BrandTemplate, UUID(str(bt_id)))
+                    except (ValueError, TypeError):
+                        bt = None
+                if bt is None:
+                    bt = (
+                        await db.execute(
+                            select(BrandTemplate)
+                            .order_by(BrandTemplate.created_at.desc())
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none()
                 brand = brand_from_template(bt.config) if bt is not None else None
                 brand_ref = bt.id if bt is not None else None
+                cfg = (bt.config or {}) if bt is not None else {}
+                aspect = str(cfg.get("aspect", "9:16"))
+                # Normalized {x,y} points (or None -> renderer default).
+                cap_pos = cfg.get("captionPosition")
+                ttl_pos = cfg.get("titlePosition")
+                ttl_size_raw = cfg.get("titleSize")
+                ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
                 for segment in analysis.segments[:clip_count]:
                     script = await script_agent.generate(
                         segment=segment,
@@ -213,6 +232,7 @@ async def run_generation(run_id: UUID) -> None:
                         tone_settings=tone_settings,
                         target_audience=analysis.target_audience,
                         target_language=target_language,
+                        instruction=instruction,
                     )
                     # Music: a brand template (if any) is the source of truth —
                     # respect it fully, including an explicit "off". With no
@@ -231,6 +251,10 @@ async def run_generation(run_id: UUID) -> None:
                             segment,
                             target_language,
                             kind=render_kind,
+                            aspect=aspect,
+                            caption_position=cap_pos,
+                            title_size=ttl_size,
+                            title_position=ttl_pos,
                             image_urls=still_images if render_kind == "stills" else None,
                             brand=brand,
                             music=music,

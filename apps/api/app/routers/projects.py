@@ -164,6 +164,10 @@ async def generate_content(
                 request.tone_settings.model_dump() if request.tone_settings else None
             ),
             "target_language": request.target_language,
+            "brand_template_id": (
+                str(request.brand_template_id) if request.brand_template_id else None
+            ),
+            "instruction": request.instruction,
         },
     )
     db.add(run)

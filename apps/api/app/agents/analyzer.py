@@ -31,6 +31,7 @@ class AnalyzerAgent:
         clip_count: int,
         event_name: str | None = None,
         target_language: str = "en",
+        instruction: str | None = None,
     ) -> ContentAnalysis:
         """Analyze materials and return high-potential segments.
 
@@ -39,6 +40,7 @@ class AnalyzerAgent:
             clip_count: Number of segments to extract.
             event_name: Optional event name for context.
             target_language: ISO language code for segment content (e.g. en/zh/fr).
+            instruction: Optional user steering prompt (what to focus on / produce).
 
         Returns:
             ContentAnalysis model.
@@ -58,6 +60,7 @@ class AnalyzerAgent:
             clip_count=clip_count,
             event_name=event_name,
             target_language=target_language,
+            instruction=(instruction or "").strip() or None,
         )
 
         messages = [

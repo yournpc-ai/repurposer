@@ -89,6 +89,10 @@ def build_clip_spec(
     target_language: str,
     *,
     kind: str = "video",
+    aspect: str = "9:16",
+    caption_position: Any = None,
+    title_size: int | None = None,
+    title_position: Any = None,
     image_urls: list[str] | None = None,
     brand: ClipBrand | None = None,
     music: ClipMusic | None = None,
@@ -101,8 +105,18 @@ def build_clip_spec(
     ``source`` is either a speech AUDIO asset (ASR words -> captions + audio
     track) or, when there's no recording, the primary IMAGE asset (no audio, a
     fixed-length slideshow sized by the image count).
+
+    ``caption_position`` / ``title_position`` are normalized ``{x, y}`` points
+    (or None for the renderer default); pydantic coerces the dicts into ``Point``.
     """
     images = image_urls or []
+    aspect = aspect if aspect in ("9:16", "1:1") else "9:16"
+    title = ClipTitle(
+        text=segment.hook or "",
+        enabled=bool(segment.hook),
+        size=title_size,
+        position=title_position,
+    )
 
     if kind == "stills":
         words: list[dict[str, Any]] = cast("dict[str, Any]", source.meta or {}).get(
@@ -138,9 +152,11 @@ def build_clip_spec(
                 image_urls=images,
                 duration=duration,
             ),
+            aspect=aspect,
             segments=[ClipSegment(start=start, end=end)],
             caption_track=caption_track,
-            title=ClipTitle(text=segment.hook or "", enabled=bool(segment.hook)),
+            caption_position=caption_position,
+            title=title,
             target_language=target_language,
             brand=brand,
             music=music or ClipMusic(),
@@ -171,9 +187,11 @@ def build_clip_spec(
             url=url,
             duration=float(source.duration_seconds) if source.duration_seconds else None,
         ),
+        aspect=aspect,
         segments=[ClipSegment(start=start, end=end)],
         caption_track=caption_track,
-        title=ClipTitle(text=segment.hook or "", enabled=bool(segment.hook)),
+        caption_position=caption_position,
+        title=title,
         target_language=target_language,
         brand=brand,
         music=music or ClipMusic(),

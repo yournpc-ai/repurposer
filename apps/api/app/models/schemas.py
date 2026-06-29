@@ -368,6 +368,15 @@ class CaptionCue(BaseModel):
     lang: str = "en"
 
 
+class Point(BaseModel):
+    """Normalized center point in [0,1] (CSS translate / libass \\pos)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
+
+
 class ClipTitle(BaseModel):
     """Optional title/hook card overlay."""
 
@@ -375,6 +384,8 @@ class ClipTitle(BaseModel):
 
     text: str = ""
     enabled: bool = False
+    size: int | None = None  # composition px; None -> renderer default
+    position: Point | None = None  # normalized center; None -> default (top)
 
 
 class ClipMusic(BaseModel):
@@ -400,6 +411,7 @@ class ClipBrand(BaseModel):
 
     logo_url: str | None = None  # corner logo overlay (absolute or storage URL)
     cta: str | None = None  # call-to-action text shown near the bottom
+    cta_position: Point | None = None  # normalized center; None -> default (bottom)
     caption_color: str | None = None  # hex; overrides the default white caption
     caption_size: int | None = None  # px; overrides the default caption size
     caption_font: str | None = None  # font key: lilita/inter/playfair/source-serif
@@ -421,6 +433,7 @@ class ClipSpec(BaseModel):
     # Preset enum, NOT free styling — keeps preview=render parity and the
     # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset).
     caption_style_preset: Literal["clean-bottom", "karaoke-highlight"] = "clean-bottom"
+    caption_position: Point | None = None  # normalized center; None -> default (bottom)
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)
     brand: ClipBrand | None = None  # resolved brand values (None = default look)
@@ -504,13 +517,21 @@ class GenerateRequest(BaseModel):
     """Generate content request."""
 
     clip_count: int = Field(default=3, ge=1, le=10)
-    outputs: list[Literal["clips", "linkedin", "quote_cards", "summary", "blog"]] = Field(
-        default_factory=lambda: ["clips", "linkedin", "quote_cards"]
-    )
+    outputs: list[
+        Literal["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"]
+    ] = Field(default_factory=lambda: ["clips", "linkedin", "quote_cards"])
     tone_settings: ToneSettings | None = None
     target_language: str = Field(
         default="en",
         description="Target language code, e.g. en/zh/fr/de/es/it",
+    )
+    brand_template_id: UUID | None = Field(
+        default=None,
+        description="Brand template to bake into clips; None = most recent.",
+    )
+    instruction: str | None = Field(
+        default=None,
+        description="User steering prompt: what to focus on / produce.",
     )
 
 

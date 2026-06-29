@@ -8,8 +8,47 @@ bake it into the clip-spec, so the render service / preview never touch the DB.
 
 from typing import Any, Literal
 
+from sqlalchemy import func, select
+
+from app.models.database import AsyncSessionLocal
 from app.models.schemas import ClipBrand, ClipMusic
+from app.models.tables import BrandTemplate
 from app.services.storage import music_url
+
+# Seeded when the DB has no brand templates so generation/preview always have a
+# usable default. Mirrors the brand-template UI's PRESET_1.
+DEFAULT_BRAND_CONFIG: dict[str, Any] = {
+    "aspect": "9:16",
+    "fillMode": "fill",
+    "captionFont": "lilita",
+    "captionSize": 44,
+    "captionColor": "#facc15",
+    "logoUrl": "",
+    "cta": "Read the full talk →",
+    "captionPosition": {"x": 0.5, "y": 0.84},
+    "titlePosition": {"x": 0.5, "y": 0.12},
+    "ctaPosition": {"x": 0.5, "y": 0.92},
+    "introEnabled": False,
+    "introText": "",
+    "outroEnabled": False,
+    "outroText": "",
+    "musicEnabled": False,
+    "musicMood": "calm",
+    "removeFiller": False,
+    "keywordHighlighter": True,
+}
+
+
+async def seed_default_brand_template() -> None:
+    """Insert a default brand template if none exist (idempotent)."""
+    async with AsyncSessionLocal() as db:
+        count = (
+            await db.execute(select(func.count()).select_from(BrandTemplate))
+        ).scalar_one()
+        if count and count > 0:
+            return
+        db.add(BrandTemplate(name="Default", config=DEFAULT_BRAND_CONFIG))
+        await db.commit()
 
 
 def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
@@ -34,6 +73,7 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
     return ClipBrand(
         logo_url=_clean("logoUrl"),
         cta=_clean("cta"),
+        cta_position=cfg.get("ctaPosition"),
         caption_color=_clean("captionColor"),
         caption_size=caption_size,
         caption_font=_clean("captionFont"),

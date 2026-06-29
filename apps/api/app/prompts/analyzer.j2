@@ -6,6 +6,14 @@
 1. 总结演讲的核心论点、主题和目标受众
 2. 从中提取 {{ clip_count }} 个最具传播潜力的片段
 
+{% if instruction %}
+## 用户指令（最高优先级）
+
+用户对本次产出的明确要求如下，**请优先遵循**——据此挑选/取舍片段、确定切入角度与 hook 方向：
+
+> {{ instruction }}
+
+{% endif %}
 ## 输出语言
 
 **所有输出（overall_summary、core_arguments、themes、target_audience 以及每个 segment 的 source_text、summary、hook、golden_quote）必须使用目标语言：{{ target_language }}。**
