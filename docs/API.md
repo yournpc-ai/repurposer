@@ -33,6 +33,8 @@ GET /api/v1/music/{mood}        # 内置 mood 曲库，如 calm / uplifting / co
 
 ## 3. Speaker 管理
 
+> **演进说明**：Speaker API 正在按 ADR-021 重构。目标方向是：Speaker 按用户隔离、创建项目时 `speaker_id` 可选、未选择时系统自动创建。当前以下端点仍保留手动创建和过往材料生成 persona 的形态，后续会逐步收敛到 auto/manual 统一的 memory 模型。
+
 ### 创建 Speaker
 
 ```http
@@ -114,6 +116,8 @@ Response:
 
 ## 4. 项目管理
 
+> **演进说明**：创建项目时的 `speaker_id` 计划改为可选。未选择时，系统会在任务处理完成后自动创建一条 Speaker memory 并关联项目。当前实现可能仍为必填，正在重构中。
+
 ### 创建项目
 
 ```http
@@ -155,7 +159,9 @@ Content-Type: multipart/form-data
 Fields:
 
 - `file`: 文件
-- `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample`
+- `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample` | `past_material`
+
+> `voice_sample` 也可挂在 speaker 上(`POST /api/v1/speakers/{id}/assets`，带 `type`)——见「Speaker = 用户画像」。`image`/`slides` 会被处理:图片走 M3 视觉提取要点、幻灯片 PDF 逐页渲染成图。
 
 ### 获取素材列表
 
@@ -182,8 +188,10 @@ Request:
 ```json
 {
   "clip_count": 3,
-  "outputs": ["clips", "linkedin", "quote_cards", "summary", "blog"],
+  "outputs": ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"],
   "target_language": "en",
+  "brand_template_id": "uuid | null",        // 选用哪套品牌模板；缺省取最新
+  "instruction": "聚焦实体机器人角度，hook 要狠",  // 用户意图，驱动 analyzer/script 及各衍生 agent
   "tone_settings": {
     "academic_vs_casual": 0.7,
     "rational_vs_passionate": 0.4,
@@ -192,6 +200,8 @@ Request:
   }
 }
 ```
+
+> `outputs` 可选项：`clips | linkedin | quote_cards | carousel | summary | blog`。`clips` 始终生成。
 
 Response:
 
@@ -239,17 +249,21 @@ Request:
   "title_options": ["...", "..."],
   "music_mood": "corporate",
   "render_spec": {
-    "source": { "asset_id": "uuid", "url": "...", "fps": 30 },
+    "source": { "asset_id": "uuid", "kind": "video", "url": "...", "image_urls": [], "fps": 30 },
     "aspect": "9:16",
     "segments": [{ "start": 0, "end": 30, "hidden": false }],
     "caption_track": [{ "start": 0, "end": 1.2, "text": "Hello", "lang": "en" }],
     "caption_style_preset": "clean-bottom",
-    "title": { "text": "...", "enabled": true },
+    "caption_position": { "x": 0.5, "y": 0.84 },
+    "title": { "text": "...", "enabled": true, "size": 56, "position": { "x": 0.5, "y": 0.12 } },
     "music": { "track_id": "calm", "url": "...", "enabled": true, "gain_db": -18 },
-    "brand": { "logo_url": "...", "cta": "...", "caption_color": "#ffffff" }
+    "dub": { "url": "...", "enabled": false, "gain_db": 0 },
+    "brand": { "logo_url": "...", "cta": "...", "cta_position": { "x": 0.5, "y": 0.92 }, "caption_color": "#ffffff", "fill_mode": "fill" }
   }
 }
 ```
+
+> `source.kind`: `video`(真人录像) | `stills`(图片音频图,`image_urls` 垫底 + `url` 可选语音)。位置点 `caption_position`/`title.position`/`brand.cta_position` 为归一化 `{x,y}`,null→默认。
 
 ### 触发渲染
 
@@ -257,7 +271,7 @@ Request:
 POST /api/v1/clips/{clip_id}/render
 ```
 
-将 `Clip.render_spec` 提交给 Remotion 渲染服务，异步生成 MP4 + SRT。
+队列化渲染:返回 202,worker 认领 `render_status=PENDING` → 调 Remotion → 写回 `video_url`/`srt_url`。
 
 ### 字幕换语言
 
@@ -265,15 +279,23 @@ POST /api/v1/clips/{clip_id}/render
 POST /api/v1/clips/{clip_id}/translate-captions
 ```
 
-Request:
+Request: `{ "target_language": "fr" }`。Response：更新后的 `Clip`（`caption_track` 与 `target_language` 已重写）。
 
-```json
-{
-  "target_language": "fr"
-}
+### 语音克隆配音(dub)
+
+```http
+POST /api/v1/clips/{clip_id}/dub
 ```
 
-Response：更新后的 `Clip`（`caption_track` 与 `target_language` 已重写）。
+Request: `{ "target_language": "fr" }`。用演讲者声音(画像 VOICE_SAMPLE / 本场 AUDIO / VIDEO 抽轨)经 MiniMax voice_clone + T2A 把(翻译后的)字幕配成目标语言。Response：更新后的 `Clip`,`render_spec.dub` 已写入(渲染时静音原声、播配音)。
+
+### 基于反馈修订
+
+```http
+POST /api/v1/clips/{clip_id}/revise
+```
+
+Request: 同 `FeedbackRequest`。Response：修订后的 `Clip`。
 
 ### 提交反馈
 
@@ -290,16 +312,6 @@ Request:
   "detail": "太平淡了，没有冲突感"
 }
 ```
-
-### 基于反馈修订
-
-```http
-POST /api/v1/clips/{clip_id}/revise
-```
-
-Request：同上 `FeedbackRequest`。
-
-Response：修订后的 `Clip`。
 
 ## 8. 衍生内容
 
@@ -342,7 +354,7 @@ Response:
 
 ## 10. 品牌模板（Brand Template）
 
-品牌模板决定视频成片中的品牌叠加元素。系统取**最新一份**模板，在生成 clip 时烘焙进 `render_spec.brand`。
+品牌模板决定视频成片中的品牌叠加元素。**多套 CRUD**;启动时种一份默认。生成时由 `GenerateRequest.brand_template_id` 选用(缺省取最新),把 `aspect` / 字幕·标题·CTA 样式与**位置点** / 片头尾 / 配乐 mood 烘焙进 `render_spec`。
 
 ### 创建/更新品牌模板
 
@@ -362,6 +374,10 @@ Request:
     "captionFont": "lilita",
     "captionSize": 56,
     "captionColor": "#facc15",
+    "captionPosition": { "x": 0.5, "y": 0.84 },
+    "titleSize": 58,
+    "titlePosition": { "x": 0.5, "y": 0.12 },
+    "ctaPosition": { "x": 0.5, "y": 0.92 },
     "logoUrl": "https://.../logo.png",
     "cta": "Read the full talk →",
     "introEnabled": true,
@@ -398,7 +414,7 @@ DELETE /api/v1/brand-templates/{template_id}
 
 核心模型：
 
-- `Speaker`
+- `Speaker`（= 用户画像：persona 风格 + 声纹；见 ADR-021）
 - `Project`
 - `Asset`
 - `Clip`
@@ -406,3 +422,6 @@ DELETE /api/v1/brand-templates/{template_id}
 - `WorkflowRun`
 - `HumanFeedback`
 - `BrandTemplate`
+
+clip-spec 相关：`ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(cta_position) / `Point`。
+请求/衍生:`GenerateRequest`(carousel/brand_template_id/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`。

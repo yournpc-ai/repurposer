@@ -2,10 +2,19 @@
 
 把一场演讲的原始素材（视频、音频、文字稿、幻灯片、照片）自动转化为适合多平台传播的短视频、社媒文案、金句卡和多语言版本。
 
+## 核心能力
+
+- **竖屏成片**：真人录像 → 裁段+烧字幕；**无录像也能出片**——纯音频/图片/幻灯片做成 audiogram/静帧片（stills）。
+- **多种产出**：精彩片段、抓眼球 Hook/标题、LinkedIn 长帖、金句卡、**carousel 轮播长图**、多语言摘要、博客。
+- **多语言**：字幕翻译 + **语音克隆配音**（用演讲者本人声音，MiniMax voice_clone + T2A）。
+- **品牌模板**：多套 CRUD + 默认种子；logo/CTA/字幕样式/片头尾/配乐/版式与**文字拖拽定位**烘焙进成片；品牌页用真 `<Player>` 预览（所见即所得）。
+- **AI 理解**：M3 视觉读图（幻灯片/图表 → 要点）；ASR 词级字幕；主页提示词作为**意图**驱动各产出。
+- **Speaker = persisted memory**：用户可选/自动创建的画像记录，从任务输入中提取口吻、风格、偏好，跨任务复用；按用户隔离，支持多 Speaker（见 ADR-021）。
+
 ## 技术栈
 
 - **后端**：FastAPI + Python（含队列 worker）
-- **核心模型**：MiniMax M3
+- **核心模型**：MiniMax M3（多模态:文本 + 视觉读图 + 语音克隆/T2A）
 - **前端**：TanStack Start + TypeScript
 - **视频渲染**：Remotion（`apps/render`，Node 服务，clip-spec → MP4+SRT）
 - **语音识别**：faster-whisper（自托管，词级时间戳）
@@ -32,7 +41,8 @@ repurposer/
 │   ├── ARCHITECTURE.md     # 架构设计
 │   ├── VIDEO_EDITOR.md     # 竖屏短片编辑器设计
 │   ├── DECISIONS.md        # 架构决策记录
-│   └── DATABASE_MIGRATIONS.md  # 数据库迁移指南
+│   ├── DATABASE_MIGRATIONS.md  # 数据库迁移指南
+│   └── tasks/              # 可交付的任务卡（如 voice-sample-input.md）
 ├── scripts/
 │   └── dev.sh              # 本地一键启动
 ├── pnpm-workspace.yaml     # web/render/clip 工作区（api 独立用 uv，不在工作区内）

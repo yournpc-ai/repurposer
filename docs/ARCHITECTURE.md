@@ -12,7 +12,7 @@
 ```
 ┌─────────────────────────────────────────────┐
 │  前端：TanStack Start                        │
-│  上传素材 / 配置 Speaker / 审校结果 / 导出   │
+│  上传素材 / 可选或自动创建 Speaker memory / 审校结果 / 导出   │
 └─────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────┐
@@ -56,23 +56,27 @@
 | `reviser` | 脚本 + 反馈 + persona | `ClipScript` | 修正后的脚本 |
 | `linkedin` | 材料/片段 + persona | `LinkedInPost` | LinkedIn 长帖 |
 | `quote_card` | 材料/片段 + persona | `QuoteCards` | 金句卡文案 |
+| `carousel` | 材料 + persona | `CarouselResponse` | LinkedIn 轮播长图(封面→观点→CTA) |
 | `summary` | 材料 + persona | `Summary` | 多语言摘要 |
 | `blog` | 材料 + persona | `BlogPost` | 博客文章 |
-| `caption_translate` | 词级字幕 + target_language | list[str] | 字幕换语言 |
+| `caption_translate` | 词级字幕 + target_language | `CaptionTranslation` | 字幕换语言 |
+
+> **意图通道**:`GenerateRequest.instruction`(主页提示词)会额外传给 analyzer/script/linkedin/quote_card/carousel/summary/blog,作为"本次产出的最高优先级指令"。
+> **视觉/语音**:`IMAGE` 资产经 M3 多模态(`services/vision.py`)提取要点进 materials;`POST /clips/{id}/dub` 用 MiniMax voice_clone + T2A(`services/voice.py`)做语音克隆配音。
 
 ### 3.2 生成流程
 
 ```
-用户上传素材
+用户上传素材 + 输入提示词
     ↓
 预处理（转写 / 解析 / 图片处理）
     ↓
-Persona Agent → Speaker 风格画像
-    ↓
 Analyzer Agent → 内容切片 + 传播潜力评分
     ↓
+从任务输入中提取 / 更新 Speaker memory（可选；若用户未选 Speaker，则自动创建）
+    ↓
 对每个高潜片段：
-    Script Agent → 初稿
+    Script Agent → 初稿（带 Speaker memory 风格约束）
     Review Agent → 评分
     如果未通过：
         Reviser Agent → 修正
@@ -84,6 +88,8 @@ LinkedIn Agent / Quote Card Agent → 衍生内容
     ↓
 用户反馈 → Reviser Agent → 局部重生成
 ```
+
+> **与当前实现的差异**：现有代码仍有一个独立的 `persona` Agent，它从 Speaker 上传的"过往材料"中生成 `SpeakerPersona`。按 ADR-021 的目标方向，这个流程正在被重构为"任务输入直接提取 memory 并持久化为 Speaker"。在重构完成前，代码里会暂时并存两种形态。
 
 ### 3.3 人工反馈循环
 
@@ -153,11 +159,15 @@ apps/api/
 │   │   └── brand_templates.py
 │   ├── services/            # 业务逻辑
 │   │   ├── jobs.py          # 队列认领
-│   │   ├── asset_processing.py   # ASR / 文本提取 processor
+│   │   ├── asset_processing.py   # 处理派发：ASR / 文本提取 / 幻灯片渲页 / 图片视觉
 │   │   ├── generation.py    # 生成流程编排
 │   │   ├── rendering.py     # 调用 Remotion 渲染服务
 │   │   ├── clip_spec.py     # clip-spec 构建
-│   │   ├── brand.py         # 品牌模板 → ClipBrand
+│   │   ├── brand.py         # 品牌模板 → ClipBrand/ClipMusic + 默认种子
+│   │   ├── extraction.py    # 文本/PDF 提取 + PyMuPDF 逐页渲图
+│   │   ├── vision.py        # M3 视觉:图片 → 要点文本
+│   │   ├── voice.py         # 语音克隆 + T2A 合成 + 视频抽音轨
+│   │   ├── caption_translate.py  # 字幕轨翻译
 │   │   ├── storage.py       # 存储 seam
 │   │   └── asr.py           # faster-whisper
 │   ├── models/              # 数据库模型 + Pydantic schemas
@@ -171,6 +181,7 @@ apps/api/
 │   │   ├── reviser.py
 │   │   ├── linkedin.py
 │   │   ├── quote_card.py
+│   │   ├── carousel.py
 │   │   ├── summary.py
 │   │   ├── blog.py
 │   │   └── caption_translate.py

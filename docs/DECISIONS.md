@@ -481,3 +481,39 @@ uv run alembic downgrade -1
 
 **未覆盖**：语音克隆配音仍未实现（独立阶段）；无头 Chromium 单帧渲染冒烟未在本轮跑通
 （stills 复用 video 路径同款 Remotion 原语，静态 + 单元层已验证）。
+
+## ADR-021：Speaker = persisted memory（可选选择 / 未选自动创建 / 按用户隔离）
+
+**状态**：已拍板（待落地，已修正）
+
+**背景**：`Speaker` 与 `Persona` 在代码、文档、UI 中被混用，导致概念层出现"Speaker 是 CRM 联系人？还是用户画像？Persona 是独立实体还是 Speaker 的子字段？"等歧义。澄清后：**Speaker 本质是一次任务结束后被持久化的 memory**——记录用户的口吻、风格、偏好、声纹等稳定特征，对外仍叫 Speaker，内部就是 memory。
+
+**决策**：
+1. **Speaker = persisted memory**：从任务输入（提示词 + 附件）经 M3 分析提取出的用户画像，任务结束后持久化到 `speakers` 表。
+2. **按用户隔离**：`speakers` 表加 `user_id`，用户只能看到和操作自己的 Speaker。
+3. **首页/项目创建可选选择**：输入框/项目创建表单中可以选已有 Speaker，但**不强制**。允许用户主动选择历史画像，也允许不选。
+4. **未选则自动创建**：如果用户未选 Speaker，系统在任务分析完成后自动创建一个 Speaker，并与当前项目关联。
+5. **支持多个 Speaker**：用户可以保留多个 Speaker 记录（例如不同场合/不同身份），不是强制单例。但默认自动创建的是当前任务的画像。
+6. **命名统一**：代码与文档中不再把 `Speaker` 和 `Persona` 当作两个实体。`Persona` 仅作为描述 Speaker 内部风格属性的概念词，不体现在表名、路由、组件名中。`SpeakerPersona` 等命名逐步收敛到 `Speaker` 或 `SpeakerMemory`。
+7. **保留 `/speakers` 管理页**：用户可以在列表页查看、编辑、删除自己的 Speaker 记录；详情页用于编辑 memory 字段。
+8. **两层分工不变**：Speaker = 稳定的用户风格记忆；Project = 本次主题/意图 + 素材。
+9. **dub 声纹挂 Speaker**：优先级 画像.VOICE_SAMPLE → 本场 AUDIO/VIDEO；`voice_id` 缓存在 Speaker 上，克隆一次跨项目复用。
+
+**边界（明确不做）**：
+- auth / 多租户 / 团队协作仍然是 auth 之后的事。
+- 不强制用户只能有一个 Speaker；多 Speaker 选择保留到后续产品迭代。
+
+**原因**：
+- 消除 `Speaker`/`Persona` 命名带来的理解成本。
+- 新用户首次使用无需先维护画像，降低门槛。
+- 老用户仍可主动选择或管理历史画像，保留灵活性。
+- dub 声纹有稳定归属、克隆一次复用。
+
+**相关文件（落地时）**：
+- `apps/api/app/models/tables.py`（加 `user_id`）
+- `apps/api/app/routers/speakers.py`（按用户过滤、可选选择支持）
+- `apps/api/app/routers/projects.py`（`speaker_id` 可选）
+- `apps/api/app/services/generation.py`（未选时自动创建 Speaker）
+- `apps/api/app/routers/clips.py`（dub 读画像声纹 + voice_id 缓存画像）
+- `apps/web/src/routes/index.tsx`、`projects.tsx`（可选 Speaker 选择）
+- `apps/web/src/routes/speakers.tsx`、`speakers.$id.tsx`（按用户隔离的多 Speaker 管理页）
