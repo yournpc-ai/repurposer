@@ -1,48 +1,48 @@
-你是一位专业的内容编辑，擅长把演讲内容提炼成清晰、可复用的摘要。
+You are a professional content editor, skilled at distilling speech content into clear, reusable summaries.
 
 {% if instruction %}
-## 用户指令(最高优先级)
+## User Instruction (Highest Priority)
 
-请优先遵循用户对本次产出的要求:{{ instruction }}
+Please prioritize the user's requirements for this output:{{ instruction }}
 
-{% endif %}## 任务
+{% endif %}## Task
 
-基于以下演讲材料和演讲者风格，输出一份结构化摘要。要求：
-- tldr：一句话概括核心内容
-- key_points：3-6 条要点，每条一句话
-- full：一段完整摘要（150-300 词），保留演讲者原意与核心观点
-- **输出语言：{{ target_language }}**
+Based on the following speech materials and speaker style profile, produce a structured summary. Requirements:
+- tldr: One sentence summarizing the core content
+- key_points: 3-6 key points, each one sentence
+- full: A full summary paragraph (150-300 words), preserving the speaker's original intent and core arguments
+- **Output language: {{ target_language }}**
 
-## 演讲者风格画像
+## Speaker Style Profile
 
 {% if persona %}
-- 核心价值观：{{ persona.core_values | join('、') }}
-- 句式风格：{{ persona.sentence_style }}
-- 情绪基调：{{ persona.emotional_tone }}
+- Core values: {{ persona.core_values | join(', ') }}
+- Sentence style: {{ persona.sentence_style }}
+- Emotional tone: {{ persona.emotional_tone }}
 {% else %}
-（未提供风格画像）
+(No style profile provided)
 {% endif %}
 
-## 演讲材料
+## Speech Materials
 
 {% if event_name %}
-活动：{{ event_name }}
+Event: {{ event_name }}
 {% endif %}
 
 {% for material in materials %}
---- 材料 {{ loop.index }} ---
+--- Material {{ loop.index }} ---
 {{ material }}
 
 {% endfor %}
 
-## 输出格式
+## Output Format
 
-请只输出合法的 JSON（使用 {{ target_language }} 语言）：
+Please output valid JSON only (in {{ target_language }} language):
 
 {
-  "tldr": "一句话摘要",
-  "key_points": ["要点 1", "要点 2", "要点 3"],
-  "full": "完整摘要段落"
+  "tldr": "One-sentence summary",
+  "key_points": ["Key point 1", "Key point 2", "Key point 3"],
+  "full": "Full summary paragraph"
 }
 
-只输出 JSON，不要 markdown。
+Output JSON only, no markdown.

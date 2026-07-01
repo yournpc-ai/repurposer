@@ -53,8 +53,8 @@ class ReviserAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位短视频脚本修订专家。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are a short-form video script revision specialist."
+                    "You only output valid JSON with no additional explanation."
                 ),
             },
             {"role": "user", "content": user_prompt},

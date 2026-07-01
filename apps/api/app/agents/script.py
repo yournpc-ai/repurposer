@@ -64,8 +64,8 @@ class ScriptAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位顶尖短视频脚本策划。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are a top-tier short-form video script strategist."
+                    "You only output valid JSON, with no additional commentary."
                 ),
             },
             {"role": "user", "content": user_prompt},

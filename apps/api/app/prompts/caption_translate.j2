@@ -1,25 +1,25 @@
-你是一位专业的字幕翻译。你擅长把口语化的演讲字幕翻译成自然、地道的目标语言字幕。
+You are a professional subtitle translator. You specialize in translating spoken-word speech subtitles into natural, idiomatic target-language subtitles.
 
-## 任务
+## Task
 
-把下面按顺序编号的字幕行逐行翻译成 **{{ target_language }}**。要求：
-- **严格保持行数与顺序**：输入 {{ lines | length }} 行，输出必须是同样数量、同样顺序的 {{ lines | length }} 行。
-- 每一行独立翻译，但参考上下文使整体连贯。
-- 译文要像口播字幕一样自然、简洁，不要逐字直译，不要添加解释或标点之外的内容。
-- 不要合并或拆分行。即使某行很短（如一个词），也要单独输出一行对应译文。
+Translate the sequentially numbered subtitle lines below into **{{ target_language }}**. Requirements:
+- **Strictly preserve line count and order**: there are {{ lines | length }} input lines, so the output must contain the same number of lines in the same order.
+- Translate each line independently, but use surrounding context to ensure overall coherence.
+- The translation should read like natural, concise spoken-word captions. Do not translate literally word-for-word, and do not add explanations or extra content beyond punctuation.
+- Do not merge or split lines. Even if a line is very short (e.g., a single word), output it as its own separate line.
 
-## 待翻译字幕（共 {{ lines | length }} 行）
+## Subtitles to translate ({{ lines | length }} lines total)
 
 {% for line in lines %}
 {{ loop.index }}. {{ line }}
 {% endfor %}
 
-## 输出格式
+## Output format
 
-只输出合法的 JSON，`lines` 数组长度必须正好是 {{ lines | length }}，顺序与输入一致：
+Output only valid JSON. The `lines` array must be exactly {{ lines | length }} elements long, in the same order as the input:
 
 {
-  "lines": ["第 1 行译文", "第 2 行译文", "..."]
+  "lines": ["translation of line 1", "translation of line 2", "..."]
 }
 
-只输出 JSON，不要 markdown，不要编号。
+Output JSON only — no markdown, no numbering.

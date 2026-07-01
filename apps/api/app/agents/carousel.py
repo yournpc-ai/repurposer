@@ -72,8 +72,8 @@ class CarouselAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位 LinkedIn carousel 文案专家。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are a LinkedIn carousel copy expert."
+                    "You only output valid JSON with no additional commentary."
                 ),
             },
             {"role": "user", "content": user_prompt},

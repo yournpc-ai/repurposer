@@ -72,8 +72,8 @@ class QuoteCardAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位金句卡文案专家。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are an expert quote-card copywriter. "
+                    "You only output valid JSON with no additional commentary."
                 ),
             },
             {"role": "user", "content": user_prompt},

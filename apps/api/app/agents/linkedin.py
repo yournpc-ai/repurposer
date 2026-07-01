@@ -66,8 +66,8 @@ class LinkedInAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位专业的 LinkedIn 内容策划。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are a professional LinkedIn content strategist. "
+                    "You only output valid JSON without any additional explanation."
                 ),
             },
             {"role": "user", "content": user_prompt},

@@ -56,7 +56,7 @@ class SummaryAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位专业的内容编辑。你只输出合法的 JSON，不添加任何解释。"
+                    "You are a professional content editor. You only output valid JSON, with no additional explanations."
                 ),
             },
             {"role": "user", "content": user_prompt},

@@ -1,41 +1,41 @@
-你是一位专业的演讲风格分析师。你的任务是通过阅读一位演讲者的过往材料，提炼出 TA 的独特表达风格画像。
+You are a professional speaking style analyst. Your task is to read a speaker's past materials and distill a unique expression style portrait.
 
-## 演讲者基本信息
+## Speaker Basic Information
 
-- 姓名：{{ speaker_name }}
+- Name: {{ speaker_name }}
 {%- if speaker_title %}
-- 头衔：{{ speaker_title }}
+- Title: {{ speaker_title }}
 {%- endif %}
-- 语言：{{ language }}
+- Language: {{ language }}
 
-## 分析要求
+## Analysis Requirements
 
-请基于以下材料，从 6 个维度总结演讲者的风格画像：
+Please summarize the speaker's style portrait across 6 dimensions based on the following materials:
 
-1. **核心价值观（core_values）**：TA 反复传递的 3-5 个信念或价值观关键词
-2. **偏爱隐喻（favorite_metaphors）**：TA 常用的类比、比喻、意象（如"灯塔""桥梁""火种"）
-3. **句式风格（sentence_style）**：一句话描述 TA 的句式特点，如"短句有力、善用排比""理性推进、层层递进""口语化、爱用设问"
-4. **情绪基调（emotional_tone）**：从 [理性, 激情, 温和, 犀利, 幽默] 中选择最贴切的 1 个
-5. **典型开场/钩子（typical_hooks）**：TA 常用的开场方式或吸引注意力的句式，3-5 句
-6. **避免词汇（avoid_words）**：与 TA 风格不符、应该避免的网络俚语或夸张表达，3-5 个
+1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
+2. **Favorite Metaphors (favorite_metaphors)**: Analogies, comparisons, and imagery they commonly use (e.g., "lighthouse", "bridge", "spark")
+3. **Sentence Style (sentence_style)**: A one-sentence description of their syntactic characteristics, such as "short and punchy sentences, fond of parallelism", "rational progression, layer by layer", or "colloquial, fond of rhetorical questions"
+4. **Emotional Tone (emotional_tone)**: Choose the single most fitting value from [rational, passionate, gentle, sharp, humorous]
+5. **Typical Hooks (typical_hooks)**: 3-5 common opening patterns or attention-grabbing phrases they use
+6. **Words to Avoid (avoid_words)**: 3-5 internet slang terms or exaggerated expressions that clash with their style and should be avoided
 
-## 过往材料
+## Past Materials
 
 {% for material in materials %}
---- 材料 {{ loop.index }} ---
+--- Material {{ loop.index }} ---
 {{ material }}
 
 {% endfor %}
 
-## 输出格式
+## Output Format
 
-请只输出合法的 JSON，不要包含任何解释或 markdown 代码块。JSON 结构如下：
+Please output only valid JSON, with no explanations or markdown code blocks. The JSON structure is as follows:
 
 {
   "core_values": ["...", "..."],
   "favorite_metaphors": ["...", "..."],
   "sentence_style": "...",
-  "emotional_tone": "理性",
+  "emotional_tone": "rational",
   "typical_hooks": ["...", "..."],
   "avoid_words": ["...", "..."]
 }

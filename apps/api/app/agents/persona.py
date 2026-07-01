@@ -65,8 +65,8 @@ class PersonaAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一个专业的演讲风格分析师。"
-                    "你只输出合法的 JSON，不添加任何解释。"
+                    "You are a professional speaking-style analyst."
+                    "You only output valid JSON, with no additional commentary."
                 ),
             },
             {"role": "user", "content": user_prompt},

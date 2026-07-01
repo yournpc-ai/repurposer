@@ -44,7 +44,7 @@ class CaptionTranslateAgent:
             {
                 "role": "system",
                 "content": (
-                    "你是一位专业的字幕翻译。你只输出合法的 JSON，不添加任何解释。"
+                    "You are a professional subtitle translator. You only output valid JSON, with no additional explanation."
                 ),
             },
             {"role": "user", "content": user_prompt},
