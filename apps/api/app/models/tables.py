@@ -108,7 +108,7 @@ class Clip(Base):
     hook = Column(String(500), nullable=False)
     script = Column(JSON, nullable=False)
     title_options = Column(JSON, default=list)
-    music_mood = Column(String(50), default="沉稳")
+    music_mood = Column(String(50), default="calm")
     status = Column(String(50), default="generated")
     video_url = Column(String(512), nullable=True)
     duration = Column(Integer, default=30)

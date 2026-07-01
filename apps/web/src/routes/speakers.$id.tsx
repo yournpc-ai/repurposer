@@ -36,7 +36,7 @@ interface SpeakerPersona {
   core_values: string[]
   favorite_metaphors: string[]
   sentence_style: string
-  emotional_tone: "理性" | "激情" | "温和" | "犀利" | "幽默"
+  emotional_tone: "rational" | "passionate" | "gentle" | "sharp" | "humorous"
   typical_hooks: string[]
   avoid_words: string[]
 }
@@ -267,7 +267,7 @@ function SpeakerDetailPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(["理性", "激情", "温和", "犀利", "幽默"] as const).map((tName) => (
+                          {(["rational", "passionate", "gentle", "sharp", "humorous"] as const).map((tName) => (
                             <SelectItem key={tName} value={tName}>
                               {t(`speakerDetail.tones.${tName}`)}
                             </SelectItem>

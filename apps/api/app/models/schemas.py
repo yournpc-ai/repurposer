@@ -63,7 +63,7 @@ class SpeakerPersona(BaseModel):
     core_values: list[str] = Field(default_factory=list)
     favorite_metaphors: list[str] = Field(default_factory=list)
     sentence_style: str = ""
-    emotional_tone: Literal["理性", "激情", "温和", "犀利", "幽默"] = "理性"
+    emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] = "rational"
     typical_hooks: list[str] = Field(default_factory=list)
     avoid_words: list[str] = Field(default_factory=list)
 
@@ -199,7 +199,7 @@ class ClipScript(BaseModel):
     duration_seconds: int = Field(default=30, ge=15, le=60)
     shots: list[Shot] = Field(default_factory=list)
     title_options: list[str] = Field(default_factory=list)
-    music_mood: str = "沉稳"
+    music_mood: str = "calm"
     virality_score: int | None = Field(default=None, ge=1, le=100)
 
 
