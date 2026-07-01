@@ -1,116 +1,116 @@
-# Repurposer — Claude 工作规范
+# Repurposer — Claude Collaboration Guidelines
 
-> 这份文档记录 Repurposer 项目的前端约定与常见坑点，供 AI 协作时遵守。
+> This document records the frontend conventions and common pitfalls of the Repurposer project, to be followed by AI collaborators.
 
-## 技术栈
-- 前端框架：TanStack Router / TanStack Start (React 19 + SSR)
-- UI 组件：shadcn/ui（base-ui 版本）
-- 样式：Tailwind CSS v4
-- 图标：lucide-react（唯一图标来源）
-- 国际化：i18next + react-i18next
-- 状态：React Context + hooks（本项目不用 Redux/Zustand）
+## Tech Stack
+- Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
+- UI components: shadcn/ui (base-ui version)
+- Styling: Tailwind CSS v4
+- Icons: lucide-react (sole icon source)
+- Internationalization: i18next + react-i18next
+- State: React Context + hooks (no Redux / Zustand in this project)
 
-## shadcn/base-ui 约定
+## shadcn / base-ui Conventions
 
-### 用 `render` prop，不用 `asChild`
-本项目使用的 shadcn 组件基于 **base-ui**，它们的触发器组件（`Button`、`DialogTrigger`、`DropdownMenuTrigger`、`PopoverTrigger`、`SidebarMenuButton`、`TooltipTrigger` 等）**不支持 Radix 风格的 `asChild`**，而是使用 `render` prop 来指定渲染元素。
+### Use `render` prop, not `asChild`
+The shadcn components used in this project are based on **base-ui**. Their trigger components (`Button`, `DialogTrigger`, `DropdownMenuTrigger`, `PopoverTrigger`, `SidebarMenuButton`, `TooltipTrigger`, etc.) **do not support the Radix-style `asChild`**; instead, they use the `render` prop to specify the rendered element.
 
-错误：
+Incorrect:
 ```tsx
 <Button asChild><Link to="/" /></Button>
 ```
 
-正确：
+Correct:
 ```tsx
 <Button render={<Link to="/" />}>Label</Button>
 ```
 
-### 图标
-- 所有图标必须从 `lucide-react` 引入。
-- 禁止在项目里手写 SVG icon（除非是第三方 Logo 且没有 lucide 替代）。
-- 尺寸约定：
-  - 顶栏/卡片操作图标：`h-5 w-5`
-  - 行内/pill 内图标：`h-4 w-4`，更小的辅助图标 `h-3.5 w-3.5`
-  - Sidebar 导航图标：`h-4.5 w-4.5`（展开/折叠保持一致，见下）
+### Icons
+- All icons must be imported from `lucide-react`.
+- Hand-written SVG icons are prohibited in the project (unless they are third-party logos with no lucide alternative).
+- Size conventions:
+  - Top bar / card action icons: `h-5 w-5`
+  - Inline / pill icons: `h-4 w-4`, smaller auxiliary icons: `h-3.5 w-3.5`
+  - Sidebar navigation icons: `h-4.5 w-4.5` (consistent when expanded / collapsed; see below)
 
-## 组件使用规范
+## Component Usage Guidelines
 
-### 圆角与按钮
-- **统一小圆角**：按钮、输入、卡片、pill、下拉触发器一律用默认 `rounded-md`（卡片/面板可 `rounded-lg`）。
-- **禁止 `rounded-full`**，仅以下两类例外：
-  1. 真正的圆形图标按钮（如输入框右下角的「发送」箭头 `h-9 w-9 rounded-full`）。
-  2. 状态徽标 / 红点（通知角标）。
-- 同一行的控件高度要对齐：操作区控件统一 `h-9`，与发送按钮同高。
-- pill / 下拉触发器**文字不加粗**（不要加 `font-medium`），保持轻量。
+### Border Radius & Buttons
+- **Uniform small radius**: buttons, inputs, cards, pills, and dropdown triggers all use the default `rounded-md` (cards / panels may use `rounded-lg`).
+- **`rounded-full` is prohibited**, with only the following two exceptions:
+  1. True circular icon buttons (e.g., the send arrow in the bottom-right corner of an input: `h-9 w-9 rounded-full`).
+  2. Status badges / red dots (notification corner markers).
+- Controls in the same row must align in height: action-area controls are uniformly `h-9`, matching the send button height.
+- Pill / dropdown trigger **text must not be bold** (do not add `font-medium`), keep it lightweight.
 
-### 弹层组件（DropdownMenu / Popover / Select）
-- **列表型单选**（点一下即选中并关闭）：用 `DropdownMenu` + `DropdownMenuItem`。
-- **多控件设置面板**（需要保持打开、同时调多个值）：用 `Popover`，里面放分段按钮组。
-- 触发器一律 `render={<Button variant="outline" size="sm" className="h-9 …" />}`，按钮里放「图标 + 文案 + `ChevronDown`」。
-- 选项要表达「当前选中」用 `Check` 图标；底部弹层（footer 里的下拉）记得 `side="top"` 向上弹。
-- 表单里的纯下拉用 `Select`；prompt 操作条里的参数选择用上面的 pill 模式，不要混用样式。
+### Overlay Components (DropdownMenu / Popover / Select)
+- **List-style single-select** (select and close on click): use `DropdownMenu` + `DropdownMenuItem`.
+- **Multi-control settings panel** (needs to stay open while adjusting multiple values): use `Popover`, with segmented button groups inside.
+- Triggers are always `render={<Button variant="outline" size="sm" className="h-9 …" />}`, with "icon + label + `ChevronDown`" inside the button.
+- To express "currently selected" for an option, use the `Check` icon; for bottom overlays (dropdowns in the footer), remember `side="top"` to pop upward.
+- Pure dropdowns in forms use `Select`; parameter selection in the prompt action bar uses the pill pattern above — do not mix styles.
 
-### 卡片立体感：ring + shadow，不要 border
-- 卡片/输入框的「边 + 浮起」效果用**两层 box-shadow**实现，不要用真实 `border`：
+### Card Depth: ring + shadow, no border
+- The "edge + lift" effect for cards / inputs is achieved with **two layers of box-shadow**, not a real `border`:
   ```tsx
   <Card className="ring-1 ring-border shadow-xl">
   ```
-  - `ring-1 ring-border` = 1px 发丝描边（模拟 border，不占布局、跨主题自动适配、缩放不糊）。
-  - `shadow-xl` / `shadow-lg` = 外圈环境阴影。
-- 真实 `border` 只在确实需要「占位的分隔线」时用；区块之间能不画 divider 就不画。
+  - `ring-1 ring-border` = 1px hairline stroke (simulates border, does not affect layout, auto-adapts across themes, no blur on scaling).
+  - `shadow-xl` / `shadow-lg` = outer ambient shadow.
+- Real `border` is only used when a "positional dividing line" is truly needed; avoid drawing dividers between sections whenever possible.
 
-### Composer / 输入卡片
-- 结构：左侧 `Transcript` 竖向方块作为**上传入口**（点了触发隐藏 `<input type="file">`），右侧 `Textarea`。
-- 底部操作条：左边是参数 pill（Speaker / Tone / Format…），右边是积分 chip + 圆形发送按钮，整行 `items-center` 对齐、控件 `h-9`。
-- 卡片内边距用 `CardContent` 控制（`Card` 加 `py-0` 去掉自带纵向 padding，避免双重 padding）。
-- 不要在卡片中部加 divider/border 把输入区和操作区分开，保持一体。
+### Composer / Input Card
+- Structure: left side `Transcript` vertical block as the **upload entry point** (clicking triggers a hidden `<input type="file">`), right side `Textarea`.
+- Bottom action bar: parameter pills on the left (Speaker / Tone / Format…), credit chip + circular send button on the right, entire row aligned with `items-center`, controls at `h-9`.
+- Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
+- Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
 
-## 产品定位
+## Product Positioning
 
-Repurposer 面向**欧洲知识型演讲市场**，核心定位是**把演讲变成可复用的知识资产**，而非“ viral 短视频剪辑”。
+Repurposer targets the **European knowledge-speaking market**. Its core positioning is **turning speeches into reusable knowledge assets**, not "viral short-video clips".
 
-- **目标用户**：学术会议演讲者、企业峰会讲者、研究机构。
-- **核心渠道**：LinkedIn、机构官网、邮件 Newsletter。
-- **核心输出**：LinkedIn 长帖、金句卡、多语言摘要、Newsletter 内容、核心洞察、博客文章等。
-- **多语言是入场门票**：输出必须覆盖欧洲主流语言（FR/DE/ES/IT/EN 等）。
-- **GDPR / EU 数据驻留**：面向欧洲机构销售时的核心卖点；后端部署需支持 EU 区域。
+- **Target users**: academic conference speakers, corporate summit speakers, research institutions.
+- **Core channels**: LinkedIn, institutional websites, email newsletters.
+- **Core outputs**: LinkedIn long-form posts, quote cards, multi-language summaries, newsletter content, core insights, blog articles, etc.
+- **Multi-language is the entry ticket**: outputs must cover mainstream European languages (FR / DE / ES / IT / EN, etc.).
+- **GDPR / EU data residency**: a core selling point when selling to European institutions; backend deployment must support EU regions.
 
-因此前端文案、工具网格、示例占位符都应围绕 **knowledge assets / LinkedIn / multi-language** 展开，避免使用“抖音/TikTok/爆款/viral”等描述。
+Therefore, frontend copy, tool grids, and example placeholders should all revolve around **knowledge assets / LinkedIn / multi-language**, avoiding descriptions like "TikTok / viral / trending".
 
-## 国际化 (i18n)
+## Internationalization (i18n)
 
-### 字典结构
-- 源语言是中文：`src/lib/i18n/locales/zh.ts` 是类型源 (`Resources`)。
-- 英文 `en.ts` 必须满足 `en: Resources`，这样缺 key 会在 TypeScript 阶段报错。
+### Dictionary Structure
+- Source language is English: `apps/web/src/lib/i18n/locales/en.ts` is the source of truth and exports the `Resources` type.
+- Chinese `zh.ts` must satisfy `zh: Resources`, so missing keys will be caught at the TypeScript level.
 
-### 新增文案
-1. 先在 `zh.ts` 里加 key/value。
-2. 同步到 `en.ts` 的相同结构。
-3. 组件里用 `const { t } = useTranslation()`，不要硬编码。
+### Adding New Copy
+1. Add the key / value in `en.ts` first.
+2. Mirror it to `zh.ts` in the same structure.
+3. In components, use `const { t } = useTranslation()`; do not hard-code strings.
 
-### 插值
+### Interpolation
 ```ts
 t("home.allProjects", { count: projects.length })
 ```
 
 ### SSR
-- 首屏默认渲染**英文**，避免 hydration 不匹配。
-- `I18nProvider` 在水合后读取 `repurposer-lang` cookie 再切换。
+- First screen defaults to **English** rendering to avoid hydration mismatches.
+- `I18nProvider` reads the `repurposer-lang` cookie after hydration to switch languages.
 
-## 主题
+## Theme
 
-### 默认
-- 默认跟随系统 `prefers-color-scheme`。
-- **默认按暗色处理**：首次访问或 `system` 偏好均先以暗色渲染，避免 SSR/水合闪烁。
-- 用户手动切换后写入 `localStorage`，key 为 `repurposer-theme`（值：`system|light|dark`）。
+### Defaults
+- Defaults to following the system `prefers-color-scheme`.
+- **Defaults to dark treatment**: on first visit or when the preference is `system`, render in dark mode first to avoid SSR / hydration flicker.
+- After the user manually switches, write to `localStorage` with the key `repurposer-theme` (values: `system|light|dark`).
 
-### 防闪烁 (FOUC)
-`__root.tsx` 的 `head` 里包含一段阻塞式 inline script，在首次绘制前读取 localStorage 并给 `document.documentElement` 加上/移除 `dark` 类。不要删掉这段脚本。
+### FOUC Prevention
+`__root.tsx` contains a blocking inline script in `head` that reads `localStorage` before the first paint and adds / removes the `dark` class on `document.documentElement`. Do not remove this script.
 
-### 切换动画
-- 使用 View Transition API 做圆形扩散揭开效果（从点击位置 clip-path 放大）。
-- 浏览器不支持或用户开启 `prefers-reduced-motion` 时退化为直接切换。
-- CSS 中禁用了默认的 cross-fade：
+### Transition Animation
+- Uses the View Transition API for a circular expansion reveal effect (clip-path scales from the click position).
+- Falls back to direct switching when the browser does not support it or when the user has `prefers-reduced-motion` enabled.
+- The default cross-fade is disabled in CSS:
   ```css
   ::view-transition-old(root),
   ::view-transition-new(root) {
@@ -119,85 +119,85 @@ t("home.allProjects", { count: projects.length })
   }
   ```
 
-## 路由
+## Routing
 
-### 动态 Link
-TanStack Router 对 `to` 是字面量类型约束。动态参数必须写成：
+### Dynamic Links
+TanStack Router enforces literal type constraints on `to`. Dynamic parameters must be written as:
 ```tsx
 <Link to="/projects/$id" params={{ id: project.id }} />
 ```
-不要写模板字符串：
+Do not use template strings:
 ```tsx
-// 错误
+// Incorrect
 <Link to={`/projects/${project.id}`} />
 ```
 
-## SSR 安全
+## SSR Safety
 
-### 禁止在服务端调用浏览器 API
-- `window`、`document`、`localStorage`、`matchMedia` 等只能出现在 `useEffect`、事件处理函数或 anti-FOUC inline script 中。
-- `useState` 初始值必须保证服务端和客户端一致，否则会出现 hydration 错误。
+### Do Not Call Browser APIs on the Server
+- `window`, `document`, `localStorage`, `matchMedia`, etc. can only appear inside `useEffect`, event handlers, or the anti-FOUC inline script.
+- `useState` initial values must be consistent between server and client, otherwise hydration errors will occur.
 
 ## Tailwind
 
-### 颜色
-- 使用 shadcn 主题变量：`bg-background`、`text-foreground`、`text-muted-foreground`、`bg-card`、`border-border`。
-- 不要直接写死颜色值（如 `#333`）。
+### Colors
+- Use shadcn theme variables: `bg-background`, `text-foreground`, `text-muted-foreground`, `bg-card`, `border-border`.
+- Do not hard-code color values (e.g., `#333`).
 
-### 布局
-- 页面主内容必须放在 `SidebarInset` 内；不要自己写 `min-h-screen w-full` 覆盖 sidebar 结构。
+### Layout
+- Page main content must be placed inside `SidebarInset`; do not override the sidebar structure with your own `min-h-screen w-full`.
 
-## Sidebar 与导航
+## Sidebar & Navigation
 
-- Sidebar 采用 `SidebarProvider` + `Sidebar collapsible="icon"` 实现可折叠，**默认折叠**（`SidebarProvider defaultOpen={false}`）。
-- 导航项用 `SidebarMenuButton` + `render={<Link to="..." />}`，不要用 `asChild`。
-- **无右边框**：`Sidebar` 上加 `group-data-[side=left]:border-r-0`，背景与主区融合（见 UI 设计规范）。
-- 结构布局：
-  - **Header**：Logo + 折叠按钮（同一行）+「邀请成员」`SidebarMenuButton`。
-  - **Content**：导航按 Create / Post 分组——Create 含 Home、Brand template、Library；Post 含 Projects、Speakers。
-  - **Footer**：用户头像下拉（`DropdownMenu`，`side="top"` 向上弹，含 Profile / Settings / Logout）放在最上面，其下是账户项（Subscription / Learning / Help）。
-- 导航/账户图标统一 `h-4.5 w-4.5`；`sidebarMenuButtonVariants` 里展开 `[&_svg]:size-4.5`、折叠 `group-data-[collapsible=icon]:[&_svg]:size-4.5`，保持一致。
-- **折叠态居中对齐**：放在 Header/Footer 里的头像/邀请按钮要居中，给容器加 `group-data-[state=collapsed]:items-center`，按钮自身折叠态用 `w-12` 方块；**不要**把这类按钮塞进 `SidebarMenu`（会被列表的 padding 限宽，导致折叠态偏移 4px）。
-- 新增 sidebar 入口时，同步更新 `zh.ts`/`en.ts` 的 `nav.*` key。
+- Sidebar uses `SidebarProvider` + `Sidebar collapsible="icon"` for collapsibility, **collapsed by default** (`SidebarProvider defaultOpen={false}`).
+- Navigation items use `SidebarMenuButton` + `render={<Link to="..." />}`, do not use `asChild`.
+- **No right border**: add `group-data-[side=left]:border-r-0` on `Sidebar`, background blends with the main area (see UI design guidelines).
+- Structural layout:
+  - **Header**: Logo + collapse button (same row) + "Invite members" `SidebarMenuButton`.
+  - **Content**: Navigation grouped by Create / Post — Create contains Home, Brand template, Library; Post contains Projects, Speakers.
+  - **Footer**: User avatar dropdown (`DropdownMenu`, `side="top"` popping upward, containing Profile / Settings / Logout) at the top, followed by account items (Subscription / Learning / Help).
+- Navigation / account icons uniformly `h-4.5 w-4.5`; in `sidebarMenuButtonVariants`, expanded `[&_svg]:size-4.5`, collapsed `group-data-[collapsible=icon]:[&_svg]:size-4.5`, keep them consistent.
+- **Collapsed state center alignment**: avatar / invite buttons placed in Header / Footer must be centered; add `group-data-[state=collapsed]:items-center` to the container, and the button itself uses `w-12` square in collapsed state; **do not** put these buttons inside `SidebarMenu` (the list padding will limit the width, causing a 4px offset in collapsed state).
+- When adding new sidebar entries, simultaneously update the `nav.*` keys in `zh.ts` / `en.ts`.
 
-## UI 设计规范
+## UI Design Guidelines
 
-整体风格：克制、轻量、统一。参考要点：
+Overall style: restrained, lightweight, unified. Key reference points:
 
-- **圆角**：全局小圆角（`rounded-md` / `rounded-lg`），避免 `rounded-full`（圆形图标按钮、红点除外）。
-- **边框与阴影**：优先用 `ring-1 ring-border` 做发丝描边 + `shadow-*` 做浮起，少用实线 `border`；能不画 divider 就不画。
-- **Sidebar 融入主区**：`--sidebar` 颜色等于 `--background`（`styles.css` 中两个主题都已对齐），且无右边框，让侧栏和内容区无缝衔接。
-- **颜色**：只用 shadcn 主题变量（`bg-background`/`text-foreground`/`text-muted-foreground`/`bg-card`/`ring-border` 等），不写死色值。
-- **字重**：正文与控件保持常规字重，pill / 次级按钮文字不加粗。
-- **数据 vs 文案**：界面文案一律走 i18n；用户数据（演讲者名、项目标题等）按原文展示，不要因为是中文就当成「未国际化」——但**默认值不要落在某条数据上**（如 Speaker 默认显示本地化的占位 “Speaker”，让用户主动选）。
+- **Border radius**: global small radius (`rounded-md` / `rounded-lg`), avoid `rounded-full` (except for circular icon buttons and red dots).
+- **Border & shadow**: prefer `ring-1 ring-border` for hairline stroke + `shadow-*` for lift; use solid `border` sparingly; avoid drawing dividers between sections whenever possible.
+- **Sidebar blending into main area**: `--sidebar` color equals `--background` (both themes aligned in `styles.css`), and no right border, allowing the sidebar and content area to blend seamlessly.
+- **Colors**: only use shadcn theme variables (`bg-background` / `text-foreground` / `text-muted-foreground` / `bg-card` / `ring-border`, etc.), no hard-coded color values.
+- **Font weight**: body text and controls stay at regular weight; pill / secondary button text is not bold.
+- **Data vs. copy**: all UI copy goes through i18n; user data (speaker names, project titles, etc.) is displayed as-is — do not treat Chinese text as "not yet internationalized" just because it's Chinese — but **defaults must not fall back to a specific data entry** (e.g., Speaker default should show a localized placeholder "Speaker", letting the user actively select).
 
-## Brand template 页面
+## Brand Template Page
 
-- 路径 `/brand-template`，左侧设置面板 + 右侧实时预览。
-- 设置项包括字体、主色、强调色、Logo、默认 CTA、语言调性；预览实时反映到 quote card 与 LinkedIn post 样例卡片。
-- 新增设置项时同步扩展 `brandTemplate.*` i18n key。
+- Route `/brand-template`, left settings panel + right real-time preview.
+- Settings include font, primary color, accent color, logo, default CTA, language tone; preview is reflected in real time on the quote card and LinkedIn post sample cards.
+- When adding new settings, simultaneously extend the `brandTemplate.*` i18n keys.
 
-## 视频编辑器与渲染（竖屏短片）
+## Video Editor & Rendering (Vertical Shorts)
 
-> 详细方案见 `docs/VIDEO_EDITOR.md` 与 ADR-016。这里是协作时必须遵守的约束。
+> Detailed plan in `docs/VIDEO_EDITOR.md` and ADR-016. The following are constraints that collaborators must observe.
 
-- **clip-spec(JSON) 是唯一契约**，渲染器是它背后的**可替换黑盒**。**不要把 Remotion/React 概念泄进 clip-spec**——它只描述"是什么"（segment/裁切/字幕轨/样式预设/标题/配乐/品牌），保持渲染器无关。
-- **第一个渲染器是 Remotion**（服务端，无头 Chrome + 内部 FFmpeg），用 **pnpm** 起独立 Node 渲染服务，当 `spec→MP4+SRT` 黑盒，由 Python 队列触发。**别把 Remotion 逻辑塞进 Python 后端**。
-- **编辑形态**：文字稿编辑（删句=剪段，**非破坏性**：标 `hidden` 不真删）+ **单轨 trim**；预览用 Remotion `<Player>`（同一份组件既预览又渲染）。
-- **范围纪律（关键）**：**不要**加多轨时间轴 / 图层合成 / 转场特效 / B-roll 库 / 自动人脸 reframe / 客户端引擎——这些是 L3，明确甩给剪映/Premiere。字幕样式走**预设枚举**，不开放自由排版。
-- **样式守在"CSS 与 libass 都能表达"的子集**，保留将来换手搓 FFmpeg（clip-spec→filtergraph + 两端共享 libass）的低成本。
-- 硬前置：**多语 ASR（词级时间戳）+ 可流式播放/seek 的视频**（**本地 FS + FastAPI Range 端点即可**；对象存储留到规模化，ADR-011）。
+- **clip-spec (JSON) is the sole contract**; the renderer is a **replaceable black box** behind it. **Do not leak Remotion / React concepts into clip-spec** — it only describes "what" (segment / crop / subtitle track / style preset / title / soundtrack / brand), remaining renderer-agnostic.
+- **The first renderer is Remotion** (server-side, headless Chrome + internal FFmpeg), launched as an independent Node rendering service with **pnpm**, acting as a `spec → MP4 + SRT` black box triggered by the Python queue. **Do not stuff Remotion logic into the Python backend**.
+- **Editing form**: transcript editing (deleting a sentence = cutting a segment, **non-destructive**: mark `hidden` instead of actually deleting) + **single-track trim**; preview uses the Remotion `<Player>` (the same component is used for both preview and rendering).
+- **Scope discipline (critical)**: **do not** add multi-track timelines / layer compositing / transition effects / B-roll library / automatic face reframe / client-side engine — these are L3, explicitly delegated to CapCut / Premiere. Subtitle styles use **preset enums**, no free-form layout.
+- **Styles stay within the subset that both CSS and libass can express**, preserving the low-cost option of switching to hand-rolled FFmpeg in the future (clip-spec → filtergraph + shared libass on both ends).
+- Hard prerequisites: **multi-language ASR (word-level timestamps) + streamable / seekable video** (**local FS + FastAPI Range endpoint is sufficient**; object storage deferred to scaling, ADR-011).
 
-## 任务队列（后端）
+## Task Queue (Backend)
 
-> 详见 ADR-017。
+> See ADR-017 for details.
 
-- 耗时任务（ASR / 视频渲染 / 生成）一律进 **worker 进程**（`python -m app.worker`），**不要用 FastAPI `BackgroundTasks`**。
-- 新增重活：把 processor 插进 `app/services/asset_processing.py` 的 `PROCESSORS`，或在 worker 加认领源（如 `Clip.render_status`）。
-- 用 **Postgres `FOR UPDATE SKIP LOCKED`** 当队列，**不引入 Redis/Celery**（横向扩展时再换，调用方不变）。
+- Time-consuming tasks (ASR / video rendering / generation) must all go into the **worker process** (`python -m app.worker`), **do not use FastAPI `BackgroundTasks`**.
+- When adding new heavy tasks: plug the processor into `PROCESSORS` in `app/services/asset_processing.py`, or add a claim source in the worker (e.g., `Clip.render_status`).
+- Use **Postgres `FOR UPDATE SKIP LOCKED`** as the queue, **do not introduce Redis / Celery** (swap when scaling horizontally, caller remains unchanged).
 
-## 提交信息
-- 使用 conventional commits，例如：
+## Commit Messages
+- Use conventional commits, for example:
   - `feat: add theme toggle with view transition`
   - `fix: correct SidebarMenuButton render usage`
   - `docs: update i18n and theme conventions`
