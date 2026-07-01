@@ -143,7 +143,9 @@ function Home() {
       apiFetch("/api/v1/projects").then((r) => r.json()),
       apiFetch("/api/v1/brand-templates").then((r) => (r.ok ? r.json() : [])),
     ]).then(([s, p, bt]) => {
-      setSpeakers(s)
+      const speakerList = (s as Speaker[]) || []
+      setSpeakers(speakerList)
+      setSpeakerId((prev) => prev || (speakerList[0]?.id ?? ""))
       setProjects(p.slice(0, 3))
       setBrandTemplates(bt)
       setBrandTemplateId((prev) => prev || (bt[0]?.id ?? ""))
@@ -380,45 +382,37 @@ function Home() {
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  {/* Style / Speaker */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-1.5 rounded-md px-3 text-sm"
-                        >
-                          <Mic2 className="h-4 w-4 text-muted-foreground" />
-                          <span className="max-w-[140px] truncate">
-                            {selectedSpeakerName}
-                          </span>
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent align="start" className="w-56">
-                      <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => setSpeakerId("")}>
-                        <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span className="flex-1 truncate">{t("composer.styleDefault")}</span>
-                        {speakerId === "" && <Check className="ml-2 h-4 w-4" />}
-                      </DropdownMenuItem>
-                      {speakers.length > 0 && <DropdownMenuSeparator />}
-                      {speakers.map((s) => (
-                        <DropdownMenuItem key={s.id} onClick={() => setSpeakerId(s.id)}>
-                          <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span className="flex-1 truncate">{s.name}</span>
-                          {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        {t("composer.createSpeaker")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {/* Style / Speaker — hidden when no speakers exist; the backend
+                      will auto-create a persona from materials during generation. */}
+                  {speakers.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                          >
+                            <Mic2 className="h-4 w-4 text-muted-foreground" />
+                            <span className="max-w-[140px] truncate">
+                              {selectedSpeakerName}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
+                        {speakers.map((s) => (
+                          <DropdownMenuItem key={s.id} onClick={() => setSpeakerId(s.id)}>
+                            <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span className="flex-1 truncate">{s.name}</span>
+                            {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   {/* Brand template */}
                   <DropdownMenu>

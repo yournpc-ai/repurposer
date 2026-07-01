@@ -30,8 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+import { apiFetch } from "@/lib/api"
 
 interface Project {
   id: string
@@ -65,8 +64,8 @@ function ProjectsPage() {
 
   const fetchData = async () => {
     const [projectsRes, speakersRes] = await Promise.all([
-      fetch(`${API_URL}/api/v1/projects`),
-      fetch(`${API_URL}/api/v1/speakers`),
+      apiFetch("/api/v1/projects"),
+      apiFetch("/api/v1/speakers"),
     ])
     setProjects(await projectsRes.json())
     setSpeakers(await speakersRes.json())
@@ -80,15 +79,14 @@ function ProjectsPage() {
     e.preventDefault()
     if (!speakerId) return
     setLoading(true)
-    await fetch(`${API_URL}/api/v1/projects`, {
+    await apiFetch("/api/v1/projects", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: {
         title,
         event_name: eventName,
         language,
         speaker_id: speakerId,
-      }),
+      },
     })
     setTitle("")
     setEventName("")
@@ -101,7 +99,7 @@ function ProjectsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("projects.deleteConfirm"))) return
-    await fetch(`${API_URL}/api/v1/projects/${id}`, { method: "DELETE" })
+    await apiFetch(`/api/v1/projects/${id}`, { method: "DELETE" })
     fetchData()
   }
 

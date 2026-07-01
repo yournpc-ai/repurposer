@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -39,8 +40,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const OUTPUT_LANGUAGE_CODES = ['en', 'zh', 'fr', 'de', 'es', 'it'] as const
 
@@ -282,7 +281,7 @@ function ProjectDetailPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const projectRes = await fetch(`${API_URL}/api/v1/projects/${id}`)
+      const projectRes = await apiFetch(`/api/v1/projects/${id}`)
       if (!projectRes.ok) throw new Error('Project not found')
       const projectData = await projectRes.json()
       setProject(projectData)
@@ -290,13 +289,13 @@ function ProjectDetailPage() {
       const [speakerRes, assetsRes, clipsRes, derivativesRes, jobsRes, brandRes] =
         await Promise.all([
           projectData.speaker_id
-            ? fetch(`${API_URL}/api/v1/speakers/${projectData.speaker_id}`)
+            ? apiFetch(`/api/v1/speakers/${projectData.speaker_id}`)
             : Promise.resolve(new Response('null')),
-          fetch(`${API_URL}/api/v1/projects/${id}/assets`),
-          fetch(`${API_URL}/api/v1/projects/${id}/clips`),
-          fetch(`${API_URL}/api/v1/projects/${id}/derivatives`),
-          fetch(`${API_URL}/api/v1/projects/${id}/jobs`),
-          fetch(`${API_URL}/api/v1/brand-templates`),
+          apiFetch(`/api/v1/projects/${id}/assets`),
+          apiFetch(`/api/v1/projects/${id}/clips`),
+          apiFetch(`/api/v1/projects/${id}/derivatives`),
+          apiFetch(`/api/v1/projects/${id}/jobs`),
+          apiFetch('/api/v1/brand-templates'),
         ])
 
       if (projectData.speaker_id && speakerRes.ok) setSpeaker(await speakerRes.json())
@@ -335,7 +334,7 @@ function ProjectDetailPage() {
     const jobId = job.id
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/v1/projects/${id}/jobs/${jobId}`)
+        const res = await apiFetch(`/api/v1/projects/${id}/jobs/${jobId}`)
         if (!res.ok) return
         const updated: Job = await res.json()
         setJob(updated)
@@ -360,7 +359,7 @@ function ProjectDetailPage() {
     if (!assetsPending) return
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/v1/projects/${id}/assets`)
+        const res = await apiFetch(`/api/v1/projects/${id}/assets`)
         if (res.ok) setAssets(await res.json())
       } catch {
         /* transient network error — keep polling */
@@ -389,7 +388,7 @@ function ProjectDetailPage() {
       const formData = new FormData()
       formData.append('type', type ?? inferAssetType(file))
       formData.append('file', file)
-      const res = await fetch(`${API_URL}/api/v1/projects/${id}/assets`, {
+      const res = await apiFetch(`/api/v1/projects/${id}/assets`, {
         method: 'POST',
         body: formData,
       })
@@ -407,7 +406,7 @@ function ProjectDetailPage() {
   const handleDeleteAsset = async (assetId: string) => {
     if (!confirm(t('projectDetail.deleteConfirm'))) return
     try {
-      const res = await fetch(`${API_URL}/api/v1/projects/${id}/assets/${assetId}`, {
+      const res = await apiFetch(`/api/v1/projects/${id}/assets/${assetId}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('Delete failed')
@@ -421,8 +420,8 @@ function ProjectDetailPage() {
   const handleReprocessAsset = async (assetId: string) => {
     setError('')
     try {
-      const res = await fetch(
-        `${API_URL}/api/v1/projects/${id}/assets/${assetId}/reprocess`,
+      const res = await apiFetch(
+        `/api/v1/projects/${id}/assets/${assetId}/reprocess`,
         { method: 'POST' }
       )
       if (!res.ok) throw new Error('Reprocess failed')
@@ -438,14 +437,13 @@ function ProjectDetailPage() {
     setError('')
     setMessage('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/projects/${id}/generate`, {
+      const res = await apiFetch(`/api/v1/projects/${id}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           clip_count: 3,
           outputs,
           target_language: targetLanguage,
-        }),
+        },
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Generation failed')
@@ -467,10 +465,9 @@ function ProjectDetailPage() {
     setError('')
     setMessage('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/projects/${id}/export`, {
+      const res = await apiFetch(`/api/v1/projects/${id}/export`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ formats: ['text'] }),
+        body: { formats: ['text'] },
       })
       if (!res.ok) throw new Error(t('projectDetail.exportFailed'))
       const blob = await res.blob()
@@ -505,16 +502,15 @@ function ProjectDetailPage() {
   const saveClip = async (clipId: string) => {
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}`, {
+      const res = await apiFetch(`/api/v1/clips/${clipId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           hook: editClipHook,
           title_options: editClipTitles
             .split('\n')
             .map((s) => s.trim())
             .filter(Boolean),
-        }),
+        },
       })
       if (!res.ok) throw new Error('Save failed')
       setMessage(t('projectDetail.msgSaved'))
@@ -539,12 +535,11 @@ function ProjectDetailPage() {
     setError('')
     try {
       const d = derivatives.find((x) => x.id === derivativeId)
-      const res = await fetch(`${API_URL}/api/v1/derivatives/${derivativeId}`, {
+      const res = await apiFetch(`/api/v1/derivatives/${derivativeId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           content: { ...d?.content, content: editDerivativeContent },
-        }),
+        },
       })
       if (!res.ok) throw new Error('Save failed')
       setMessage(t('projectDetail.msgSaved'))

@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { apiFetch } from '@/lib/api'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const WORDS_PER_LINE = 7
@@ -109,7 +110,7 @@ function ClipEditorPage() {
   }, [])
 
   const loadClip = () =>
-    fetch(`${API_URL}/api/v1/clips/${clipId}`)
+    apiFetch(`/api/v1/clips/${clipId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Clip not found'))))
       .then((c: Clip) => {
         setClip(c)
@@ -170,10 +171,9 @@ function ClipEditorPage() {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}`, {
+      const res = await apiFetch(`/api/v1/clips/${clipId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ render_spec: spec }),
+        body: { render_spec: spec },
       })
       if (!res.ok) throw new Error('Save failed')
       setDirty(false)
@@ -191,7 +191,7 @@ function ClipEditorPage() {
     if (dirty && !(await save())) return
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}/render`, { method: 'POST' })
+      const res = await apiFetch(`/api/v1/clips/${clipId}/render`, { method: 'POST' })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.detail || 'Render failed')
@@ -209,10 +209,9 @@ function ClipEditorPage() {
     setTranslating(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}/translate-captions`, {
+      const res = await apiFetch(`/api/v1/clips/${clipId}/translate-captions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_language: lang }),
+        body: { target_language: lang },
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
@@ -237,10 +236,9 @@ function ClipEditorPage() {
     setDubbing(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/v1/clips/${clipId}/dub`, {
+      const res = await apiFetch(`/api/v1/clips/${clipId}/dub`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_language: lang }),
+        body: { target_language: lang },
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))

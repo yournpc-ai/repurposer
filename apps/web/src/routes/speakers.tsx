@@ -17,8 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+import { apiFetch } from "@/lib/api"
 
 interface Speaker {
   id: string
@@ -40,7 +39,7 @@ function SpeakersPage() {
   const [open, setOpen] = useState(false)
 
   const fetchSpeakers = async () => {
-    const res = await fetch(`${API_URL}/api/v1/speakers`)
+    const res = await apiFetch("/api/v1/speakers")
     setSpeakers(await res.json())
   }
 
@@ -50,10 +49,9 @@ function SpeakersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await fetch(`${API_URL}/api/v1/speakers`, {
+    await apiFetch("/api/v1/speakers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, title, language: "zh" }),
+      body: { name, title, language: "zh" },
     })
     setName("")
     setTitle("")

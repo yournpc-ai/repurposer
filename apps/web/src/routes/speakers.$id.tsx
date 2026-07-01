@@ -18,8 +18,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+import { apiFetch } from "@/lib/api"
 
 interface Speaker {
   id: string
@@ -75,8 +74,8 @@ function SpeakerDetailPage() {
     setLoading(true)
     try {
       const [speakerRes, materialsRes] = await Promise.all([
-        fetch(`${API_URL}/api/v1/speakers/${id}`),
-        fetch(`${API_URL}/api/v1/speakers/${id}/assets`),
+        apiFetch(`/api/v1/speakers/${id}`),
+        apiFetch(`/api/v1/speakers/${id}/assets`),
       ])
       if (!speakerRes.ok) throw new Error("Speaker not found")
       const speakerData = await speakerRes.json()
@@ -103,10 +102,9 @@ function SpeakerDetailPage() {
     setError("")
     setMessage("")
     try {
-      const res = await fetch(`${API_URL}/api/v1/speakers/${id}`, {
+      const res = await apiFetch(`/api/v1/speakers/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, title, persona }),
+        body: { name, title, persona },
       })
       if (!res.ok) throw new Error("Failed to update speaker")
       setMessage(t("speakerDetail.msgUpdated"))
@@ -123,7 +121,7 @@ function SpeakerDetailPage() {
     setError("")
     setMessage("")
     try {
-      const res = await fetch(`${API_URL}/api/v1/speakers/${id}/persona/generate`, {
+      const res = await apiFetch(`/api/v1/speakers/${id}/persona/generate`, {
         method: "POST",
       })
       const data = await res.json()
@@ -146,7 +144,7 @@ function SpeakerDetailPage() {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await fetch(`${API_URL}/api/v1/speakers/${id}/assets`, {
+      const res = await apiFetch(`/api/v1/speakers/${id}/assets`, {
         method: "POST",
         body: formData,
       })
@@ -164,7 +162,7 @@ function SpeakerDetailPage() {
   const handleDeleteMaterial = async (assetId: string) => {
     if (!confirm(t("speakerDetail.deleteConfirm"))) return
     try {
-      const res = await fetch(`${API_URL}/api/v1/speakers/${id}/assets/${assetId}`, {
+      const res = await apiFetch(`/api/v1/speakers/${id}/assets/${assetId}`, {
         method: "DELETE",
       })
       if (!res.ok) throw new Error("Delete failed")

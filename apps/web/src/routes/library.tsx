@@ -16,8 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+import { apiFetch } from "@/lib/api"
 
 interface Speaker {
   id: string
@@ -66,8 +65,8 @@ function LibraryPage() {
   useEffect(() => {
     const load = async () => {
       const [speakersRes, projectsRes] = await Promise.all([
-        fetch(`${API_URL}/api/v1/speakers`),
-        fetch(`${API_URL}/api/v1/projects`),
+        apiFetch("/api/v1/speakers"),
+        apiFetch("/api/v1/projects"),
       ])
       const speakersData: Speaker[] = await speakersRes.json()
       const projectsData: Project[] = await projectsRes.json()
@@ -79,7 +78,7 @@ function LibraryPage() {
 
       await Promise.all(
         speakersData.map(async (s) => {
-          const res = await fetch(`${API_URL}/api/v1/speakers/${s.id}/assets`)
+          const res = await apiFetch(`/api/v1/speakers/${s.id}/assets`)
           if (!res.ok) return
           const data: Asset[] = await res.json()
           allAssets.push(...data.map((a) => ({ ...a, speaker_id: s.id })))
@@ -89,8 +88,8 @@ function LibraryPage() {
       await Promise.all(
         projectsData.map(async (p) => {
           const [assetsRes, clipsRes] = await Promise.all([
-            fetch(`${API_URL}/api/v1/projects/${p.id}/assets`),
-            fetch(`${API_URL}/api/v1/projects/${p.id}/clips`),
+            apiFetch(`/api/v1/projects/${p.id}/assets`),
+            apiFetch(`/api/v1/projects/${p.id}/clips`),
           ])
           if (assetsRes.ok) {
             const data: Asset[] = await assetsRes.json()

@@ -11,10 +11,12 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.blog import blog_agent
 from app.agents.carousel import carousel_agent
 from app.agents.linkedin import linkedin_agent
+from app.agents.persona import persona_agent
 from app.agents.planner import planner_agent
 from app.agents.quote_card import quote_card_agent
 from app.agents.summary import summary_agent
@@ -136,6 +138,70 @@ def _collect_media_inputs(assets: list[Asset]) -> list[MediaInput]:
     return inputs
 
 
+async def _resolve_or_create_speaker(
+    db: AsyncSession,
+    project: Project,
+    materials: list[str],
+) -> Speaker | None:
+    """Return the project's speaker, or auto-create one from materials.
+
+    The homepage no longer forces the user to pick/create a speaker. When a
+    project has no speaker, we derive a default persona from the transcript so
+    the planner still receives style guidance.
+    """
+    if project.speaker_id:
+        result = await db.execute(
+            select(Speaker).where(
+                Speaker.id == project.speaker_id,
+                Speaker.user_id == project.user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    if not materials:
+        return None
+
+    trimmed = [m[:20_000] for m in materials if m and m.strip()]
+    if not trimmed:
+        return None
+
+    try:
+        persona = await persona_agent.generate(
+            speaker_name=project.title or "Speaker",
+            speaker_title=None,
+            language=project.language or "en",
+            materials=trimmed,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "auto_persona_generation_failed",
+            project_id=str(project.id),
+            error=str(e),
+        )
+        return None
+
+    speaker = Speaker(
+        user_id=project.user_id,
+        name=project.title or "Auto Speaker",
+        title=None,
+        language=project.language or "en",
+        persona=persona.model_dump(),
+    )
+    db.add(speaker)
+    await db.commit()
+    await db.refresh(speaker)
+
+    project.speaker_id = speaker.id
+    await db.commit()
+
+    logger.info(
+        "auto_created_speaker",
+        project_id=str(project.id),
+        speaker_id=str(speaker.id),
+    )
+    return speaker
+
+
 async def run_generation(run_id: UUID) -> None:
     """Execute a queued generation run. Never raises — failures land on the run."""
     async with AsyncSessionLocal() as db:
@@ -163,15 +229,6 @@ async def run_generation(run_id: UUID) -> None:
             project = await db.get(Project, run.project_id)
             if project is None:
                 raise ValueError("Project not found")
-            speaker = None
-            if project.speaker_id:
-                result = await db.execute(
-                    select(Speaker).where(
-                        Speaker.id == project.speaker_id,
-                        Speaker.user_id == project.user_id,
-                    )
-                )
-                speaker = result.scalar_one_or_none()
 
             asset_rows = await db.execute(
                 select(Asset).where(Asset.project_id == project.id)
@@ -191,6 +248,11 @@ async def run_generation(run_id: UUID) -> None:
                 text_count=len(materials),
                 media_count=len(media_inputs),
             )
+
+            # Resolve the project's speaker. If none is assigned, generate a
+            # default persona from the materials so the planner still has style
+            # guidance. This keeps the homepage UI free of speaker selection.
+            speaker = await _resolve_or_create_speaker(db, project, materials)
 
             # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
             #   1. on-camera VIDEO (with ASR words)      -> video clip

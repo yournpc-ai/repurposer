@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
 
 export const Route = createFileRoute("/brand-template")({
   component: BrandTemplatePage,
@@ -51,8 +52,6 @@ export const Route = createFileRoute("/brand-template")({
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 const FONTS = [
   { value: "lilita", label: "Lilita One", family: "'Lilita One', system-ui, sans-serif" },
@@ -293,7 +292,7 @@ function BrandTemplatePage() {
 
   const loadTemplates = async (selectId?: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/brand-templates`)
+      const res = await apiFetch("/api/v1/brand-templates")
       if (!res.ok) return
       const list: SavedTemplate[] = await res.json()
       setTemplates(list)
@@ -358,14 +357,13 @@ function BrandTemplatePage() {
 
   const handleSave = async () => {
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         selectedId
-          ? `${API_URL}/api/v1/brand-templates/${selectedId}`
-          : `${API_URL}/api/v1/brand-templates`,
+          ? `/api/v1/brand-templates/${selectedId}`
+          : "/api/v1/brand-templates",
         {
           method: selectedId ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name || "Untitled", config: template }),
+          body: { name: name || "Untitled", config: template },
         }
       )
       if (!res.ok) return
@@ -381,7 +379,7 @@ function BrandTemplatePage() {
   const handleDelete = async () => {
     if (!selectedId) return
     try {
-      await fetch(`${API_URL}/api/v1/brand-templates/${selectedId}`, { method: "DELETE" })
+      await apiFetch(`/api/v1/brand-templates/${selectedId}`, { method: "DELETE" })
       setSelectedId(null)
       await loadTemplates()
     } catch {
