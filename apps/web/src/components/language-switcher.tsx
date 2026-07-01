@@ -9,9 +9,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-const locales: { value: Locale; label: string }[] = [
-  { value: "zh", label: "中文" },
-  { value: "en", label: "English" },
+const locales: { value: Locale; labelKey: string }[] = [
+  { value: "zh", labelKey: "languages.zh" },
+  { value: "en", labelKey: "languages.en" },
 ]
 
 export function LanguageSwitcher() {
@@ -43,7 +43,7 @@ export function LanguageSwitcher() {
                 size="sm"
                 onClick={() => setLocale(loc.value)}
               >
-                <span>{loc.label}</span>
+                <span>{t(loc.labelKey)}</span>
                 {active && <Check className="h-3.5 w-3.5" />}
               </Button>
             )

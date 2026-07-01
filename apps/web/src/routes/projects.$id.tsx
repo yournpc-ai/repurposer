@@ -42,14 +42,7 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const OUTPUT_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'zh', label: '中文' },
-  { code: 'fr', label: 'Français' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'es', label: 'Español' },
-  { code: 'it', label: 'Italiano' },
-]
+const OUTPUT_LANGUAGE_CODES = ['en', 'zh', 'fr', 'de', 'es', 'it'] as const
 
 // Outputs the unified background generation can produce, in display order.
 const OUTPUT_KINDS = ['clips', 'linkedin', 'quote_cards', 'carousel', 'summary', 'blog'] as const
@@ -725,9 +718,9 @@ function ProjectDetailPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OUTPUT_LANGUAGES.map((lang) => (
-                  <SelectItem key={lang.code} value={lang.code}>
-                    {lang.label}
+                {OUTPUT_LANGUAGE_CODES.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {t(`languages.${code}`)}
                   </SelectItem>
                 ))}
               </SelectContent>

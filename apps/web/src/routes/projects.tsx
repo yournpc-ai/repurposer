@@ -261,7 +261,7 @@ function ProjectsPage() {
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
-                  <Badge variant="outline">{project.language === "zh" ? "中文" : "English"}</Badge>
+                  <Badge variant="outline">{t(`languages.${project.language}`)}</Badge>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5" />

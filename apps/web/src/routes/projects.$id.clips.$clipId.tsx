@@ -32,14 +32,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const WORDS_PER_LINE = 7
 
 // Caption target languages (European-market focus per product positioning).
-const CAPTION_LANGS: [string, string][] = [
-  ['en', 'English'],
-  ['fr', 'Français'],
-  ['de', 'Deutsch'],
-  ['es', 'Español'],
-  ['it', 'Italiano'],
-  ['zh', '中文'],
-]
+const CAPTION_LANG_CODES = ['en', 'fr', 'de', 'es', 'it', 'zh'] as const
 
 interface Clip {
   id: string
@@ -388,9 +381,9 @@ function ClipEditorPage() {
                     )}
                   </SelectTrigger>
                   <SelectContent>
-                    {CAPTION_LANGS.map(([code, label]) => (
+                    {CAPTION_LANG_CODES.map((code) => (
                       <SelectItem key={code} value={code}>
-                        {label}
+                        {t(`languages.${code}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -415,9 +408,9 @@ function ClipEditorPage() {
                     )}
                   </SelectTrigger>
                   <SelectContent>
-                    {CAPTION_LANGS.map(([code, label]) => (
+                    {CAPTION_LANG_CODES.map((code) => (
                       <SelectItem key={code} value={code}>
-                        {label}
+                        {t(`languages.${code}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
