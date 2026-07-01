@@ -8,6 +8,30 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
+class MediaInputType(StrEnum):
+    """Media types that can be fed directly to a multimodal LLM."""
+
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
+
+
+class MediaInput(BaseModel):
+    """A single media snippet passed to the analyzer alongside text materials.
+
+    Uses OpenAI-compatible content parts (image_url / video_url / audio_url).
+    The URL may be a base64 data URL or an HTTP URL depending on model/provider
+    capabilities and deployment constraints.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: MediaInputType
+    mime: str
+    data_url: str
+    caption: str | None = None
+
+
 class AssetType(StrEnum):
     """Asset types."""
 
@@ -217,6 +241,69 @@ class Segment(BaseModel):
     virality_score: int = Field(default=50, ge=1, le=100)
     golden_quote: str = ""
     duration_seconds: int = Field(default=30, ge=15, le=120)
+
+
+class ClipPlan(BaseModel):
+    """A complete clip plan produced by the multimodal planner.
+
+    Combines segment selection and script writing into one structure so that a
+    single multimodal call can produce everything needed for ``Clip`` creation
+    and ``render_spec`` building. ``to_segment`` / ``to_script`` adapters keep
+    the existing ``clip_spec`` and renderer paths unchanged.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Stable identifier for this clip plan")
+    source_text: str = Field(description="Original segment text from the talk")
+    start_marker: str = Field(description="Approximate start location in source")
+    end_marker: str = Field(description="Approximate end location in source")
+    summary: str = ""
+    hook: str = ""
+    title: str = ""
+    golden_quote: str = ""
+    virality_score: int = Field(default=50, ge=1, le=100)
+    duration_seconds: int = Field(default=30, ge=15, le=120)
+    music_mood: str = "calm"
+    visual_notes: str = ""
+    shots: list[Shot] = Field(default_factory=list)
+    title_options: list[str] = Field(default_factory=list)
+
+    def to_segment(self) -> "Segment":
+        return Segment(
+            id=self.id,
+            source_text=self.source_text,
+            start_marker=self.start_marker,
+            end_marker=self.end_marker,
+            summary=self.summary,
+            hook=self.hook,
+            virality_score=self.virality_score,
+            golden_quote=self.golden_quote,
+            duration_seconds=self.duration_seconds,
+        )
+
+    def to_script(self) -> "ClipScript":
+        return ClipScript(
+            hook=self.hook,
+            duration_seconds=self.duration_seconds,
+            shots=self.shots,
+            title_options=self.title_options
+            or ([self.title] if self.title else []),
+            music_mood=self.music_mood,
+            virality_score=self.virality_score,
+        )
+
+
+class ClipPlans(BaseModel):
+    """Multimodal planner output: analysis + a list of ready-to-render clip plans."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overall_summary: str = ""
+    core_arguments: list[str] = Field(default_factory=list)
+    themes: list[str] = Field(default_factory=list)
+    target_audience: str = ""
+    clips: list[ClipPlan] = Field(default_factory=list)
 
 
 class ContentAnalysis(BaseModel):

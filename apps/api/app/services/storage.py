@@ -1,5 +1,7 @@
 """Storage service for uploads and outputs."""
 
+import base64
+import mimetypes
 import shutil
 from pathlib import Path
 from typing import BinaryIO
@@ -95,6 +97,26 @@ def resolve_file_path(relative_path: str | None) -> Path | None:
     if not relative_path:
         return None
     return settings.upload_dir / relative_path
+
+
+def file_to_data_url(path: Path) -> str | None:
+    """Return a base64 data URL for a local file, or None if it cannot be read.
+
+    Multimodal LLMs (MiniMax M3, GPT-4o, Gemini, etc.) typically accept media
+    inputs as data URLs in OpenAI-compatible ``image_url`` / ``video_url`` /
+    ``audio_url`` content parts. This helper keeps the pipeline self-contained
+    when files are stored locally.
+    """
+    if not path or not path.is_file():
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    mime, _ = mimetypes.guess_type(str(path))
+    mime = mime or "application/octet-stream"
+    encoded = base64.b64encode(raw).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def resolve_safe(relative_path: str | None) -> Path | None:

@@ -54,16 +54,20 @@ def _extract_text_processor(asset: Asset) -> ProcessResult:
 
 
 def _slides_processor(asset: Asset) -> ProcessResult:
-    """Slides: extract text AND render PDF pages to images (stills backing)."""
+    """Slides: render PDF pages to images for stills backing.
+
+    The multimodal planner reads slide images directly, so we no longer extract
+    OCR text here. Keep the page renders so they can be used as visual backing
+    for stills/audiogram clips.
+    """
     if not asset.file_url:
         return ProcessResult()
-    text = extract_text(asset.file_url)
     slide_pages: list[str] | None = None
     if asset.file_url.lower().endswith(".pdf"):
         out_dir = get_project_upload_dir(asset.project_id) / f"slides-{asset.id}"
         pages = render_pdf_pages(asset.file_url, out_dir)
         slide_pages = [_relative_path(p) for p in pages] or None
-    return ProcessResult(extracted_text=text, slide_pages=slide_pages)
+    return ProcessResult(slide_pages=slide_pages)
 
 
 def _asr_processor(asset: Asset) -> ProcessResult:
@@ -83,29 +87,24 @@ def _asr_processor(asset: Asset) -> ProcessResult:
     )
 
 
-def _image_processor(asset: Asset) -> ProcessResult:
-    """Extract key-points from an image via M3 vision (-> extracted_text)."""
-    path = resolve_file_path(asset.file_url)
-    if path is None or not path.is_file():
-        return ProcessResult()
-    from app.services.vision import describe_image  # lazy: network call
-
-    return ProcessResult(extracted_text=describe_image(path))
-
-
 def _noop_processor(asset: Asset) -> ProcessResult:
-    """Placeholder for types with no processor yet (voice samples)."""
+    """Placeholder for types with no text/transcript processor.
+
+    IMAGE assets are consumed directly by the multimodal planner as raw media,
+    so no preprocessing is needed here. VOICE_SAMPLE is only used for voice
+    cloning.
+    """
     return ProcessResult()
 
 
 PROCESSORS: dict[AssetType, Processor] = {
     AssetType.TRANSCRIPT: _extract_text_processor,
     AssetType.PAST_MATERIAL: _extract_text_processor,
-    AssetType.SLIDES: _slides_processor,  # PDF text + per-page render
+    AssetType.SLIDES: _slides_processor,  # PDF page renders only
     AssetType.VIDEO: _asr_processor,
     AssetType.AUDIO: _asr_processor,
     AssetType.VOICE_SAMPLE: _noop_processor,
-    AssetType.IMAGE: _image_processor,  # M3 vision -> extracted_text
+    AssetType.IMAGE: _noop_processor,  # planner consumes the original image
 }
 
 

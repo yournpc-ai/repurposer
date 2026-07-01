@@ -5,22 +5,24 @@ requested ``outputs``, tracking progress on a :class:`WorkflowRun`. Designed to
 run in a FastAPI ``BackgroundTask`` with its own database session.
 """
 
+import mimetypes
+from pathlib import Path
 from uuid import UUID
 
 import structlog
 from sqlalchemy import delete, select
 
-from app.agents.analyzer import analyzer_agent
 from app.agents.blog import blog_agent
 from app.agents.carousel import carousel_agent
 from app.agents.linkedin import linkedin_agent
+from app.agents.planner import planner_agent
 from app.agents.quote_card import quote_card_agent
-from app.agents.script import script_agent
 from app.agents.summary import summary_agent
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetType,
     DerivativeType,
+    MediaInput,
     ProjectStatus,
     SpeakerPersona,
     ToneSettings,
@@ -37,11 +39,101 @@ from app.models.tables import (
 )
 from app.services.brand import brand_from_template, music_from_mood, music_from_template
 from app.services.clip_spec import build_clip_spec
-from app.services.storage import stream_url
+from app.services.storage import file_to_data_url, resolve_file_path, stream_url
 
 logger = structlog.get_logger()
 
 KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
+
+# Media snippets above these thresholds are not sent directly to the multimodal
+# model; we rely on ASR transcripts / extracted text instead. Limits are
+# conservative to avoid huge base64 payloads and model context blow-up.
+_MAX_DIRECT_VIDEO_SECONDS = 300  # 5 minutes
+_MAX_DIRECT_VIDEO_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def _file_size_bytes(path: Path | None) -> int | None:
+    """Return file size in bytes, or None if path is missing/unreadable."""
+    if path is None or not path.is_file():
+        return None
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
+def _media_input_for_image(file_url: str, caption: str | None = None):
+    """Build a MediaInput for an image file URL, or None if unreadable."""
+    path = resolve_file_path(file_url)
+    if path is None:
+        return None
+    data_url = file_to_data_url(path)
+    if data_url is None:
+        return None
+    from app.models.schemas import MediaInput, MediaInputType
+
+    mime, _ = mimetypes.guess_type(str(path))
+    mime = mime or "image/png"
+    return MediaInput(
+        type=MediaInputType.IMAGE,
+        mime=mime,
+        data_url=data_url,
+        caption=caption,
+    )
+
+
+def _media_input_for_video(asset: Asset):
+    """Build a MediaInput for a short video, or None if it exceeds safe limits."""
+    if asset.type != AssetType.VIDEO or not asset.file_url:
+        return None
+    duration = asset.duration_seconds or 0
+    if duration > _MAX_DIRECT_VIDEO_SECONDS:
+        return None
+    path = resolve_file_path(asset.file_url)
+    size = _file_size_bytes(path)
+    if size is None or size > _MAX_DIRECT_VIDEO_BYTES:
+        return None
+    data_url = file_to_data_url(path)
+    if data_url is None:
+        return None
+    from app.models.schemas import MediaInput, MediaInputType
+
+    mime, _ = mimetypes.guess_type(str(path))
+    mime = mime or "video/mp4"
+    return MediaInput(
+        type=MediaInputType.VIDEO,
+        mime=mime,
+        data_url=data_url,
+        caption="A short video clip from the talk. Use it together with the transcript.",
+    )
+
+
+def _collect_media_inputs(assets: list[Asset]) -> list[MediaInput]:
+    """Collect multimodal inputs from image/slide/video assets.
+
+    Returns a list of MediaInput objects. AUDIO is intentionally omitted because
+    MiniMax M3's audio input support is undocumented; speech stays on the ASR
+    transcript path.
+    """
+    inputs: list[MediaInput] = []
+    for asset in assets:
+        if asset.type == AssetType.IMAGE and asset.file_url:
+            item = _media_input_for_image(str(asset.file_url))
+            if item:
+                inputs.append(item)
+        elif asset.type == AssetType.SLIDES and asset.slide_pages:
+            for idx, page_path in enumerate(asset.slide_pages, start=1):
+                item = _media_input_for_image(
+                    str(page_path),
+                    caption=f"Slide {idx} from the talk deck.",
+                )
+                if item:
+                    inputs.append(item)
+        elif asset.type == AssetType.VIDEO:
+            item = _media_input_for_video(asset)
+            if item:
+                inputs.append(item)
+    return inputs
 
 
 async def run_generation(run_id: UUID) -> None:
@@ -86,8 +178,15 @@ async def run_generation(run_id: UUID) -> None:
                 for a in assets
                 if (text := (a.extracted_text or a.transcript))
             ]
-            if not materials:
+            media_inputs = _collect_media_inputs(assets)
+            if not materials and not media_inputs:
                 raise ValueError("No source material to analyze")
+            logger.info(
+                "generation_materials_collected",
+                project_id=str(project.id),
+                text_count=len(materials),
+                media_count=len(media_inputs),
+            )
 
             # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
             #   1. on-camera VIDEO (with ASR words)      -> video clip
@@ -190,12 +289,17 @@ async def run_generation(run_id: UUID) -> None:
             if "clips" in outputs:
                 run.current_step = "clips"
                 await db.commit()
-                analysis = await analyzer_agent.analyze(
+                plans = await planner_agent.plan(
                     materials=materials,
+                    media_inputs=media_inputs,
                     clip_count=clip_count,
                     event_name=project.event_name,
                     target_language=target_language,
                     instruction=instruction,
+                    persona=persona.model_dump() if persona is not None else None,
+                    tone_settings=tone_settings.model_dump()
+                    if tone_settings is not None
+                    else None,
                 )
                 # Bake the chosen brand template into each clip's render_spec so
                 # the renderer/preview show it without DB access (see ADR-016).
@@ -225,15 +329,9 @@ async def run_generation(run_id: UUID) -> None:
                 ttl_pos = cfg.get("titlePosition")
                 ttl_size_raw = cfg.get("titleSize")
                 ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
-                for segment in analysis.segments[:clip_count]:
-                    script = await script_agent.generate(
-                        segment=segment,
-                        persona=persona,
-                        tone_settings=tone_settings,
-                        target_audience=analysis.target_audience,
-                        target_language=target_language,
-                        instruction=instruction,
-                    )
+                for plan in plans.clips[:clip_count]:
+                    segment = plan.to_segment()
+                    script = plan.to_script()
                     # Music: a brand template (if any) is the source of truth —
                     # respect it fully, including an explicit "off". With no
                     # template, fall back to the clip's own mood suggestion so a
