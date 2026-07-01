@@ -60,7 +60,7 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+import { apiFetch } from "@/lib/api"
 
 interface Project {
   id: string
@@ -139,9 +139,9 @@ function Home() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API_URL}/api/v1/speakers`).then((r) => r.json()),
-      fetch(`${API_URL}/api/v1/projects`).then((r) => r.json()),
-      fetch(`${API_URL}/api/v1/brand-templates`).then((r) => (r.ok ? r.json() : [])),
+      apiFetch("/api/v1/speakers").then((r) => r.json()),
+      apiFetch("/api/v1/projects").then((r) => r.json()),
+      apiFetch("/api/v1/brand-templates").then((r) => (r.ok ? r.json() : [])),
     ]).then(([s, p, bt]) => {
       setSpeakers(s)
       setProjects(p.slice(0, 3))
@@ -168,10 +168,9 @@ function Home() {
     if (!newName.trim()) return
     setCreatingSpeaker(true)
     try {
-      const res = await fetch(`${API_URL}/api/v1/speakers`, {
+      const res = await apiFetch("/api/v1/speakers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), title: newTitle.trim() || null, language: "en" }),
+        body: { name: newName.trim(), title: newTitle.trim() || null, language: "en" },
       })
       if (!res.ok) throw new Error("Failed")
       const speaker: Speaker = await res.json()
@@ -198,15 +197,14 @@ function Home() {
     setError("")
     try {
       // 1. Create the project.
-      const projectRes = await fetch(`${API_URL}/api/v1/projects`, {
+      const projectRes = await apiFetch("/api/v1/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           title: file?.name || prompt.slice(0, 60) || t("common.untitled"),
           event_name: "",
           language: "en",
           speaker_id: speakerId || undefined,
-        }),
+        },
       })
       if (!projectRes.ok) throw new Error("Failed to create project")
       const project = await projectRes.json()
@@ -215,34 +213,30 @@ function Home() {
       const form = new FormData()
       form.append("type", "transcript")
       form.append("file", file ?? new File([prompt], "prompt.txt", { type: "text/plain" }))
-      const assetRes = await fetch(
-        `${API_URL}/api/v1/projects/${project.id}/assets`,
-        { method: "POST", body: form }
-      )
+      const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
+        method: "POST",
+        body: form,
+      })
       if (!assetRes.ok) throw new Error("Failed to upload material")
 
       // 3. Kick off generation. Clips are always generated; outputs controls extras.
-      const generateRes = await fetch(
-        `${API_URL}/api/v1/projects/${project.id}/generate`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clip_count: 3,
-            outputs: ["clips", ...outputs],
-            tone_settings: {
-              ...TONE_MAP[tone],
-              concise_vs_detailed: 0.5,
-            },
-            target_language: "en",
-            brand_template_id: brandTemplateId || undefined,
-            // When a file is the source, the typed prompt steers generation
-            // (focus / angle). When there's no file, the prompt IS the content
-            // (uploaded as transcript), so don't also pass it as an instruction.
-            instruction: file && prompt.trim() ? prompt.trim() : undefined,
-          }),
-        }
-      )
+      const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
+        method: "POST",
+        body: {
+          clip_count: 3,
+          outputs: ["clips", ...outputs],
+          tone_settings: {
+            ...TONE_MAP[tone],
+            concise_vs_detailed: 0.5,
+          },
+          target_language: "en",
+          brand_template_id: brandTemplateId || undefined,
+          // When a file is the source, the typed prompt steers generation
+          // (focus / angle). When there's no file, the prompt IS the content
+          // (uploaded as transcript), so don't also pass it as an instruction.
+          instruction: file && prompt.trim() ? prompt.trim() : undefined,
+        },
+      })
       if (!generateRes.ok) {
         const detail = await generateRes.json().catch(() => null)
         throw new Error(detail?.detail || "Generation failed")

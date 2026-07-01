@@ -163,11 +163,15 @@ async def run_generation(run_id: UUID) -> None:
             project = await db.get(Project, run.project_id)
             if project is None:
                 raise ValueError("Project not found")
-            speaker = (
-                await db.get(Speaker, project.speaker_id)
-                if project.speaker_id
-                else None
-            )
+            speaker = None
+            if project.speaker_id:
+                result = await db.execute(
+                    select(Speaker).where(
+                        Speaker.id == project.speaker_id,
+                        Speaker.user_id == project.user_id,
+                    )
+                )
+                speaker = result.scalar_one_or_none()
 
             asset_rows = await db.execute(
                 select(Asset).where(Asset.project_id == project.id)
@@ -309,13 +313,20 @@ async def run_generation(run_id: UUID) -> None:
                 bt = None
                 if bt_id:
                     try:
-                        bt = await db.get(BrandTemplate, UUID(str(bt_id)))
+                        result = await db.execute(
+                            select(BrandTemplate).where(
+                                BrandTemplate.id == UUID(str(bt_id)),
+                                BrandTemplate.user_id == project.user_id,
+                            )
+                        )
+                        bt = result.scalar_one_or_none()
                     except (ValueError, TypeError):
                         bt = None
                 if bt is None:
                     bt = (
                         await db.execute(
                             select(BrandTemplate)
+                            .where(BrandTemplate.user_id == project.user_id)
                             .order_by(BrandTemplate.created_at.desc())
                             .limit(1)
                         )

@@ -4,10 +4,10 @@ import io
 import zipfile
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 
-from app.dependencies import DBDep
+from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
     ClipResponse,
     DerivativeResponse,
@@ -28,6 +28,7 @@ from app.models.tables import (
     HumanFeedback,
     Project,
     Speaker,
+    User,
     WorkflowRun,
 )
 from app.services.storage import delete_file, delete_project_files
@@ -35,11 +36,34 @@ from app.services.storage import delete_file, delete_project_files
 router = APIRouter()
 
 
+async def _get_user_project(project_id: UUID, user_id: UUID, db: DBDep) -> Project:
+    """Fetch a project and ensure it belongs to the given user."""
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.user_id == user_id)
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    return project
+
+
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_project(data: ProjectCreate, db: DBDep) -> Project:
+async def create_project(
+    data: ProjectCreate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Project:
     """Create a new project."""
     if data.speaker_id:
-        speaker_result = await db.execute(select(Speaker).where(Speaker.id == data.speaker_id))
+        speaker_result = await db.execute(
+            select(Speaker).where(
+                Speaker.id == data.speaker_id,
+                Speaker.user_id == current_user.id,
+            )
+        )
         speaker = speaker_result.scalar_one_or_none()
         if not speaker:
             raise HTTPException(
@@ -47,7 +71,7 @@ async def create_project(data: ProjectCreate, db: DBDep) -> Project:
                 detail="Speaker not found",
             )
 
-    project = Project(**data.model_dump())
+    project = Project(**data.model_dump(), user_id=current_user.id)
     db.add(project)
     await db.commit()
     await db.refresh(project)
@@ -57,12 +81,13 @@ async def create_project(data: ProjectCreate, db: DBDep) -> Project:
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
     db: DBDep,
+    current_user: User = Depends(get_current_user),
     speaker_id: UUID | None = None,
     skip: int = 0,
     limit: int = 100,
 ) -> list[Project]:
-    """List projects."""
-    query = select(Project)
+    """List projects for the current user."""
+    query = select(Project).where(Project.user_id == current_user.id)
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
     query = query.offset(skip).limit(limit)
@@ -71,28 +96,24 @@ async def list_projects(
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: UUID, db: DBDep) -> Project:
+async def get_project(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Project:
     """Get project by ID."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    return project
+    return await _get_user_project(project_id, current_user.id, db)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
-async def update_project(project_id: UUID, data: ProjectUpdate, db: DBDep) -> Project:
+async def update_project(
+    project_id: UUID,
+    data: ProjectUpdate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Project:
     """Update project."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    project = await _get_user_project(project_id, current_user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -104,15 +125,13 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: DBDep) -> Pr
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: UUID, db: DBDep) -> None:
+async def delete_project(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> None:
     """Delete project and all associated assets."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    project = await _get_user_project(project_id, current_user.id, db)
 
     # Delete child rows in FK-safe order, then the project. Asset files are
     # unlinked individually since we need each file_url before deletion.
@@ -138,19 +157,14 @@ async def generate_content(
     project_id: UUID,
     request: GenerateRequest,
     db: DBDep,
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Queue background generation for a project.
 
     Creates a PENDING WorkflowRun and returns immediately with a job id to
     poll; the background worker claims and runs it (see app.worker).
     """
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    project = await _get_user_project(project_id, current_user.id, db)
 
     run = WorkflowRun(
         project_id=project_id,
@@ -179,8 +193,13 @@ async def generate_content(
 
 
 @router.get("/{project_id}/jobs", response_model=list[WorkflowRunResponse])
-async def list_project_jobs(project_id: UUID, db: DBDep) -> list[WorkflowRun]:
+async def list_project_jobs(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> list[WorkflowRun]:
     """List generation jobs for a project, newest first."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(WorkflowRun)
         .where(WorkflowRun.project_id == project_id)
@@ -190,8 +209,14 @@ async def list_project_jobs(project_id: UUID, db: DBDep) -> list[WorkflowRun]:
 
 
 @router.get("/{project_id}/jobs/{job_id}", response_model=WorkflowRunResponse)
-async def get_project_job(project_id: UUID, job_id: UUID, db: DBDep) -> WorkflowRun:
+async def get_project_job(
+    project_id: UUID,
+    job_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> WorkflowRun:
     """Get a single generation job's status."""
+    await _get_user_project(project_id, current_user.id, db)
     run = await db.get(WorkflowRun, job_id)
     if run is None or run.project_id != project_id:
         raise HTTPException(
@@ -202,15 +227,13 @@ async def get_project_job(project_id: UUID, job_id: UUID, db: DBDep) -> Workflow
 
 
 @router.get("/{project_id}/clips", response_model=list[ClipResponse])
-async def list_project_clips(project_id: UUID, db: DBDep) -> list[Clip]:
+async def list_project_clips(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> list[Clip]:
     """List generated clips for a project."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    await _get_user_project(project_id, current_user.id, db)
 
     result = await db.execute(
         select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
@@ -219,8 +242,13 @@ async def list_project_clips(project_id: UUID, db: DBDep) -> list[Clip]:
 
 
 @router.get("/{project_id}/derivatives", response_model=list[DerivativeResponse])
-async def list_project_derivatives(project_id: UUID, db: DBDep) -> list[Derivative]:
+async def list_project_derivatives(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> list[Derivative]:
     """List generated derivatives (LinkedIn posts, quote cards) for a project."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Derivative)
         .where(Derivative.project_id == project_id)
@@ -234,15 +262,10 @@ async def export_project(
     project_id: UUID,
     request: ExportRequest,
     db: DBDep,
+    current_user: User = Depends(get_current_user),
 ) -> Response:
     """Export all generated content for a project as a zip archive."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    project = await _get_user_project(project_id, current_user.id, db)
 
     clips_result = await db.execute(
         select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())

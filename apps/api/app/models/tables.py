@@ -32,12 +32,30 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+class User(Base):
+    """User account.
+
+    The MVP ships without a login UI: a seeded default user owns all data.
+    When real authentication is added, ``email`` becomes unique and a password
+    hash / OAuth fields can be appended without changing the public API.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    email = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
 class Speaker(Base):
     """Speaker table."""
 
     __tablename__ = "speakers"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     name = Column(String(255), nullable=False)
     title = Column(String(255), nullable=True)
     language = Column(String(10), default="zh")
@@ -53,6 +71,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
     title = Column(String(255), nullable=False)
     event_name = Column(String(255), nullable=True)
@@ -96,6 +115,19 @@ class Asset(Base):
     meta = Column(JSON, nullable=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class BrandTemplate(Base):
+    """Brand / video template configuration."""
+
+    __tablename__ = "brand_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    config = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
 class Clip(Base):
@@ -167,15 +199,3 @@ class HumanFeedback(Base):
     reason = Column(String(50), nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
-
-
-class BrandTemplate(Base):
-    """Brand / video template configuration."""
-
-    __tablename__ = "brand_templates"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(255), nullable=False)
-    config = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)

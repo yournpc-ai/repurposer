@@ -108,10 +108,22 @@ _LIBRARY_MOODS = {"calm", "uplifting", "corporate"}
 # Normalize a free-text mood (e.g. the script agent's suggestion, which may be
 # localized) to a library key. Unknown -> None (no music rather than a 404 URL).
 _MOOD_SYNONYMS = {
-    "calm": "calm", "warm": "calm", "gentle": "calm", "soft": "calm", "peaceful": "calm",
-    "uplifting": "uplifting", "epic": "uplifting", "energetic": "uplifting",
-    "upbeat": "uplifting", "inspiring": "uplifting", "motivational": "uplifting", "light": "uplifting",
-    "corporate": "corporate", "professional": "corporate", "business": "corporate", "neutral": "corporate",
+    "calm": "calm",
+    "warm": "calm",
+    "gentle": "calm",
+    "soft": "calm",
+    "peaceful": "calm",
+    "uplifting": "uplifting",
+    "epic": "uplifting",
+    "energetic": "uplifting",
+    "upbeat": "uplifting",
+    "inspiring": "uplifting",
+    "motivational": "uplifting",
+    "light": "uplifting",
+    "corporate": "corporate",
+    "professional": "corporate",
+    "business": "corporate",
+    "neutral": "corporate",
 }
 
 

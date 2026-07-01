@@ -2,12 +2,12 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.dependencies import DBDep
+from app.dependencies import DBDep, get_current_user
 from app.models.schemas import AssetResponse, AssetStatus, AssetType
-from app.models.tables import Asset, Project, Speaker
+from app.models.tables import Asset, Project, Speaker, User
 from app.services.storage import (
     delete_file,
     save_speaker_upload,
@@ -16,6 +16,34 @@ from app.services.storage import (
 
 router = APIRouter()
 speaker_assets_router = APIRouter()
+
+
+async def _get_user_project(project_id: UUID, user_id: UUID, db: DBDep) -> Project:
+    """Fetch a project and ensure it belongs to the given user."""
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.user_id == user_id)
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    return project
+
+
+async def _get_user_speaker(speaker_id: UUID, user_id: UUID, db: DBDep) -> Speaker:
+    """Fetch a speaker and ensure it belongs to the given user."""
+    result = await db.execute(
+        select(Speaker).where(Speaker.id == speaker_id, Speaker.user_id == user_id)
+    )
+    speaker = result.scalar_one_or_none()
+    if not speaker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Speaker not found",
+        )
+    return speaker
 
 
 # ---------------------------------------------------------------------------
@@ -33,15 +61,10 @@ async def upload_asset(
     type: AssetType = Form(...),  # noqa: A002
     file: UploadFile = File(...),
     db: DBDep = None,  # type: ignore[assignment]
+    current_user: User = Depends(get_current_user),
 ) -> Asset:
     """Upload an asset to a project."""
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    await _get_user_project(project_id, current_user.id, db)
 
     filename = file.filename or "unnamed"
     relative_path = await save_upload(file.file, project_id, filename)
@@ -61,8 +84,14 @@ async def upload_asset(
 
 
 @router.get("/{project_id}/assets/{asset_id}", response_model=AssetResponse)
-async def get_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
+async def get_asset(
+    project_id: UUID,
+    asset_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Asset:
     """Get a single project asset (used to poll processing status)."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
     )
@@ -79,8 +108,14 @@ async def get_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
     "/{project_id}/assets/{asset_id}/reprocess",
     response_model=AssetResponse,
 )
-async def reprocess_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
+async def reprocess_asset(
+    project_id: UUID,
+    asset_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Asset:
     """Re-queue a project asset for processing (e.g. after a failure)."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
     )
@@ -98,8 +133,13 @@ async def reprocess_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> Asset:
 
 
 @router.get("/{project_id}/assets", response_model=list[AssetResponse])
-async def list_assets(project_id: UUID, db: DBDep) -> list[Asset]:
+async def list_assets(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> list[Asset]:
     """List assets for a project."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.project_id == project_id).order_by(Asset.created_at.desc())
     )
@@ -107,8 +147,14 @@ async def list_assets(project_id: UUID, db: DBDep) -> list[Asset]:
 
 
 @router.delete("/{project_id}/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_asset(project_id: UUID, asset_id: UUID, db: DBDep) -> None:
+async def delete_asset(
+    project_id: UUID,
+    asset_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> None:
     """Delete a project asset."""
+    await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
     )
@@ -137,15 +183,10 @@ async def upload_speaker_asset(
     speaker_id: UUID,
     file: UploadFile = File(...),
     db: DBDep = None,  # type: ignore[assignment]
+    current_user: User = Depends(get_current_user),
 ) -> Asset:
     """Upload a past material asset for a speaker."""
-    result = await db.execute(select(Speaker).where(Speaker.id == speaker_id))
-    speaker = result.scalar_one_or_none()
-    if not speaker:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
-        )
+    await _get_user_speaker(speaker_id, current_user.id, db)
 
     filename = file.filename or "unnamed"
     relative_path = await save_speaker_upload(file.file, speaker_id, filename)
@@ -163,8 +204,13 @@ async def upload_speaker_asset(
 
 
 @speaker_assets_router.get("/{speaker_id}/assets", response_model=list[AssetResponse])
-async def list_speaker_assets(speaker_id: UUID, db: DBDep) -> list[Asset]:
+async def list_speaker_assets(
+    speaker_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> list[Asset]:
     """List past material assets for a speaker."""
+    await _get_user_speaker(speaker_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.speaker_id == speaker_id).order_by(Asset.created_at.desc())
     )
@@ -175,8 +221,14 @@ async def list_speaker_assets(speaker_id: UUID, db: DBDep) -> list[Asset]:
     "/{speaker_id}/assets/{asset_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_speaker_asset(speaker_id: UUID, asset_id: UUID, db: DBDep) -> None:
+async def delete_speaker_asset(
+    speaker_id: UUID,
+    asset_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> None:
     """Delete a speaker asset."""
+    await _get_user_speaker(speaker_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.speaker_id == speaker_id)
     )

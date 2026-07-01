@@ -3,13 +3,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.agents.persona import persona_agent
 from app.clients.minimax import MiniMaxError
-from app.dependencies import DBDep
+from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
     AssetType,
     SpeakerCreate,
@@ -17,7 +17,7 @@ from app.models.schemas import (
     SpeakerResponse,
     SpeakerUpdate,
 )
-from app.models.tables import Asset, Speaker
+from app.models.tables import Asset, Speaker, User
 from app.services.extraction import extract_text
 from app.services.storage import delete_file, delete_speaker_files
 
@@ -25,9 +25,13 @@ router = APIRouter()
 
 
 @router.post("", response_model=SpeakerResponse, status_code=status.HTTP_201_CREATED)
-async def create_speaker(data: SpeakerCreate, db: DBDep) -> Speaker:
+async def create_speaker(
+    data: SpeakerCreate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Speaker:
     """Create a new speaker."""
-    speaker = Speaker(**data.model_dump())
+    speaker = Speaker(**data.model_dump(), user_id=current_user.id)
     db.add(speaker)
     try:
         await db.commit()
@@ -42,16 +46,27 @@ async def create_speaker(data: SpeakerCreate, db: DBDep) -> Speaker:
 
 
 @router.get("", response_model=list[SpeakerResponse])
-async def list_speakers(db: DBDep, skip: int = 0, limit: int = 100) -> list[Speaker]:
-    """List all speakers."""
-    result = await db.execute(select(Speaker).offset(skip).limit(limit))
+async def list_speakers(
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 100,
+) -> list[Speaker]:
+    """List speakers for the current user."""
+    result = await db.execute(
+        select(Speaker)
+        .where(Speaker.user_id == current_user.id)
+        .offset(skip)
+        .limit(limit)
+    )
     return list(result.scalars().all())
 
 
-@router.get("/{speaker_id}", response_model=SpeakerResponse)
-async def get_speaker(speaker_id: UUID, db: DBDep) -> Speaker:
-    """Get speaker by ID."""
-    result = await db.execute(select(Speaker).where(Speaker.id == speaker_id))
+async def _get_user_speaker(speaker_id: UUID, user_id: UUID, db: DBDep) -> Speaker:
+    """Fetch a speaker and ensure it belongs to the given user."""
+    result = await db.execute(
+        select(Speaker).where(Speaker.id == speaker_id, Speaker.user_id == user_id)
+    )
     speaker = result.scalar_one_or_none()
     if not speaker:
         raise HTTPException(
@@ -61,16 +76,25 @@ async def get_speaker(speaker_id: UUID, db: DBDep) -> Speaker:
     return speaker
 
 
+@router.get("/{speaker_id}", response_model=SpeakerResponse)
+async def get_speaker(
+    speaker_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Speaker:
+    """Get speaker by ID."""
+    return await _get_user_speaker(speaker_id, current_user.id, db)
+
+
 @router.put("/{speaker_id}", response_model=SpeakerResponse)
-async def update_speaker(speaker_id: UUID, data: SpeakerUpdate, db: DBDep) -> Speaker:
+async def update_speaker(
+    speaker_id: UUID,
+    data: SpeakerUpdate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Speaker:
     """Update speaker."""
-    result = await db.execute(select(Speaker).where(Speaker.id == speaker_id))
-    speaker = result.scalar_one_or_none()
-    if not speaker:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
-        )
+    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -82,15 +106,13 @@ async def update_speaker(speaker_id: UUID, data: SpeakerUpdate, db: DBDep) -> Sp
 
 
 @router.delete("/{speaker_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_speaker(speaker_id: UUID, db: DBDep) -> None:
+async def delete_speaker(
+    speaker_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> None:
     """Delete speaker and all associated materials."""
-    result = await db.execute(select(Speaker).where(Speaker.id == speaker_id))
-    speaker = result.scalar_one_or_none()
-    if not speaker:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
-        )
+    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     # Delete associated assets (files + DB rows)
     result = await db.execute(select(Asset).where(Asset.speaker_id == speaker_id))
@@ -107,15 +129,13 @@ async def delete_speaker(speaker_id: UUID, db: DBDep) -> None:
 
 
 @router.post("/{speaker_id}/persona/generate", response_model=SpeakerPersona)
-async def generate_persona(speaker_id: UUID, db: DBDep) -> SpeakerPersona:
+async def generate_persona(
+    speaker_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> SpeakerPersona:
     """Generate speaker persona from uploaded past materials."""
-    result = await db.execute(select(Speaker).where(Speaker.id == speaker_id))
-    speaker = result.scalar_one_or_none()
-    if not speaker:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
-        )
+    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     # Find speaker's past material assets
     result = await db.execute(
