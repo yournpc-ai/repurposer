@@ -334,11 +334,18 @@ const en = {
       enable: "Background music",
       mood: "Mood",
       moods: {
+        all: "All",
         calm: "Calm",
         uplifting: "Uplifting",
         corporate: "Corporate",
         none: "None",
       },
+      source: {
+        official: "Official",
+        personal: "Personal",
+      },
+      upload: "Upload track",
+      personalPreviewOnly: "Preview only — not used in rendering yet",
     },
     preview: {
       caption: "Your captions show up right here",

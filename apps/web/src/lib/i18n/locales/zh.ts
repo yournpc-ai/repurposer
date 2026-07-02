@@ -336,11 +336,18 @@ const zh: Resources = {
       enable: "背景配乐",
       mood: "氛围",
       moods: {
+        all: "全部",
         calm: "舒缓",
         uplifting: "激励",
         corporate: "商务",
         none: "无",
       },
+      source: {
+        official: "官方",
+        personal: "个人",
+      },
+      upload: "上传曲目",
+      personalPreviewOnly: "仅试听，暂不影响生成结果",
     },
     preview: {
       caption: "你的字幕会显示在这里",

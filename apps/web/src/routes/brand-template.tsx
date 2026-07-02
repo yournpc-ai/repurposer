@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { MusicPanel } from "@/components/brand-template/music-panel"
 
 export const Route = createFileRoute("/brand-template")({
   component: BrandTemplatePage,
@@ -64,12 +65,11 @@ const FONTS = [
 const ASPECTS = ["9:16", "1:1"] as const
 const CAPTION_SIZES = [32, 40, 44, 56] as const
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
-const MOODS = ["calm", "uplifting", "corporate", "none"] as const
 
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
 
-type Template = {
+export type Template = {
   aspect: (typeof ASPECTS)[number]
   fillMode: "fill" | "fit"
   captionFont: string
@@ -681,23 +681,7 @@ function BrandTemplatePage() {
                       onCheckedChange={(v) => update("musicEnabled", v)}
                     />
                   </label>
-                  {template.musicEnabled && (
-                    <Field label={t("brandTemplate.music.mood")}>
-                      <ToggleGroup
-                        variant="outline"
-                        spacing={0}
-                        value={[template.musicMood]}
-                        onValueChange={(v) => v[0] && update("musicMood", v[0])}
-                        className="w-full"
-                      >
-                        {MOODS.filter((m) => m !== "none").map((m) => (
-                          <ToggleGroupItem key={m} value={m} className="flex-1 text-xs">
-                            {t(`brandTemplate.music.moods.${m}`)}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    </Field>
-                  )}
+                  {template.musicEnabled && <MusicPanel template={template} update={update} />}
                 </TabsContent>
               </CardContent>
             </Card>
