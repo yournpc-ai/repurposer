@@ -1,6 +1,5 @@
 import {
   Home,
-  FolderKanban,
   Mic2,
   Library,
   Palette,
@@ -49,7 +48,6 @@ const createItems = [
 ]
 
 const postItems = [
-  { key: "projects", url: "/projects", icon: FolderKanban },
   { key: "speakers", url: "/speakers", icon: Mic2 },
 ]
 

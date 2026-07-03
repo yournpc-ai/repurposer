@@ -1,0 +1,116 @@
+import { useState } from "react"
+import { Link } from "@tanstack/react-router"
+import { Play } from "lucide-react"
+import { useTranslation } from "react-i18next"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { apiPost } from "@/lib/api"
+
+import { AssetActionBar } from "./AssetActionBar"
+import { AssetChatModal } from "./AssetChatModal"
+
+import type { Clip } from "@/lib/types"
+
+interface ClipCardProps {
+  clip: Clip
+  onRegenerate?: () => void
+}
+
+export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
+  const { t } = useTranslation()
+  const [chatOpen, setChatOpen] = useState(false)
+
+  const handleDownload = () => {
+    if (!clip.video_url) return
+    const a = document.createElement("a")
+    a.href = clip.video_url
+    a.download = `${clip.hook || "clip"}.mp4`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
+  const handleRegenerate = async () => {
+    try {
+      await apiPost(`/api/v1/clips/${clip.id}/regenerate`, {
+        instruction: "Regenerate this clip",
+      })
+      onRegenerate?.()
+    } catch (e) {
+      console.error("Regenerate failed", e)
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden ring-1 ring-border shadow-xl">
+      <div className="relative aspect-[9/16] bg-muted">
+        {clip.video_url ? (
+          <video
+            src={clip.video_url}
+            className="h-full w-full object-cover"
+            controls
+            preload="metadata"
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 rounded-full"
+              render={
+                <Link
+                  to="/projects/$id/clips/$clipId"
+                  params={{ id: clip.project_id, clipId: clip.id }}
+                />
+              }
+            >
+              <Play className="h-5 w-5" />
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {t("results.clipNotRendered")}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-medium">{clip.hook}</h3>
+            <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span>{clip.duration}s</span>
+              <span>·</span>
+              <span>{clip.music_mood}</span>
+            </div>
+          </div>
+          <AssetActionBar
+            onDownload={clip.video_url ? handleDownload : undefined}
+            onRegenerate={handleRegenerate}
+            onChat={() => setChatOpen(true)}
+          />
+        </div>
+
+        {clip.title_options.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {clip.title_options.map((title, i) => (
+              <Badge key={i} variant="secondary">
+                {title}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AssetChatModal
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        asset={clip}
+        assetType="clip"
+        projectId={clip.project_id}
+        onUpdated={onRegenerate}
+      />
+    </Card>
+  )
+}
