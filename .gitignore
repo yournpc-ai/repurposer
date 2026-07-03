@@ -259,6 +259,12 @@ apps/api/data/outputs/*
 !apps/api/data/uploads/.gitkeep
 !apps/api/data/outputs/.gitkeep
 
+# User assets (uploads + rendered outputs; user-scoped under assets/)
+assets/*
+!assets/.gitkeep
+apps/api/assets/*
+!apps/api/assets/.gitkeep
+
 # Built-in mood music library (user supplies licensed tracks)
 data/music/*
 !data/music/.gitkeep

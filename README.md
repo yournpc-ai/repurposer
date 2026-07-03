@@ -33,7 +33,7 @@ Speaker and Brand template are selected from the toolbar below the homepage inpu
 - **Task Queue**: Postgres (`FOR UPDATE SKIP LOCKED`) + standalone worker, no Redis
 - **Package Management**: Backend uses `uv`; frontend / render / shared components use `pnpm` workspace (`web` / `render` / `clip`)
 - **Database**: PostgreSQL
-- **File Storage**: Local filesystem (object storage deferred until scale)
+- **File Storage**: Local filesystem under `assets/`; user-scoped layout (`assets/{user_id}/uploads/projects/{id}/...` and `assets/{user_id}/outputs/projects/{id}/...`). Demo assets live under `assets/demo/`. Object storage deferred until scale.
 - **Local Orchestration**: `scripts/dev.sh`
 - **Deployment**: Docker Compose
 
@@ -194,9 +194,39 @@ Service orchestration details:
 
 Notes:
 - Both `render` and `web` depend on the workspace package `@repurposer/clip`; the build context is the **repo root** (not their individual subdirectories).
-- Inter-container hostnames: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (render pulls source video via HTTP, writes rendered output to shared volume `./data/outputs`).
+- Inter-container hostnames: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (render pulls source video via HTTP, writes rendered output to shared volume `./assets`).
 - The `render` image includes system libraries for headless Chromium; the Chromium binary (~90MB) is downloaded **lazily on first render** (no external network dependency at build time, better for CI / restricted networks).
 - `web` currently uses `vite preview` for SSR, suitable for MVP / staging; for high-traffic deployments, switch to a lightweight Node adapter around the exported fetch handler (see ADR-018).
+
+## Demo Project
+
+The app seeds a demo project on startup so first-time visitors can see a fully populated results page without uploading their own media.
+
+- **Demo project id**: `11111111-1111-1111-1111-111111111111`
+- **Demo user**: the seeded default user (`DEFAULT_USER_ID`)
+- **Demo asset paths**:
+  - Upload: `assets/demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4`
+  - Outputs: `assets/demo/outputs/projects/11111111-1111-1111-1111-111111111111/clip_*.mp4`, `quote_*.png`
+
+To set up the demo locally:
+
+1. Place a short source video at `assets/demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4`.
+2. Optionally pre-render clips to `assets/demo/outputs/projects/11111111-1111-1111-1111-111111111111/clip_1.mp4`, `clip_2.mp4`, `clip_3.mp4`.
+3. If quote-card PNGs are missing, the seed copies `apps/web/public/logo512.png` as a placeholder.
+
+The demo project is idempotent — re-running the app will not duplicate it.
+
+## Tests
+
+```bash
+# Backend tests (inside apps/api)
+cd apps/api
+uv run pytest tests/ -q
+
+# Frontend tests (inside apps/web)
+cd apps/web
+pnpm test
+```
 
 ## Documentation
 
