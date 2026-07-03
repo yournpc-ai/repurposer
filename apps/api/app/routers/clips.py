@@ -3,28 +3,29 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
 from app.agents.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError
 from app.config import settings
-from app.dependencies import DBDep
+from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
     AssetType,
     ClipResponse,
-    ClipScript,
     ClipUpdate,
     DubRequest,
     FeedbackRequest,
     RenderStatus,
-    Segment,
-    SpeakerPersona,
     TranslateCaptionsRequest,
+    WorkflowStatus,
 )
-from app.models.tables import Asset, Clip, HumanFeedback, Project, Speaker
+from app.models.tables import Asset, Clip, HumanFeedback, Project, User, WorkflowRun
 from app.services.caption_translate import translate_caption_track
+from app.services.messages import create_assistant_message
+from app.services.project_context import resolve_clip_for_revision, resolve_speaker_and_persona
 from app.services.storage import get_output_path, output_url, resolve_file_path
 from app.services.voice import clone_voice, extract_audio, synthesize
 
@@ -34,8 +35,7 @@ router = APIRouter()
 @router.get("/{clip_id}", response_model=ClipResponse)
 async def get_clip(clip_id: UUID, db: DBDep) -> Clip:
     """Get a single clip (editor load + render-status polling)."""
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -55,8 +55,7 @@ async def submit_feedback(
     db: DBDep,
 ) -> dict:
     """Submit human feedback for a clip."""
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -88,48 +87,31 @@ async def revise_clip(
     db: DBDep,
 ) -> Clip:
     """Revise a clip based on feedback and return the updated clip."""
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Clip not found",
         )
 
-    result = await db.execute(select(Project).where(Project.id == clip.project_id))
-    project = result.scalar_one_or_none()
+    project = await db.get(Project, clip.project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
 
-    result = await db.execute(select(Speaker).where(Speaker.id == project.speaker_id))
-    speaker = result.scalar_one_or_none()
-
-    # Parse existing script and source segment
     try:
-        current_script = ClipScript.model_validate(clip.script)
-        source_segment = (
-            Segment.model_validate(clip.source_segment)
-            if clip.source_segment
-            else None
+        clip, current_script, source_segment = await resolve_clip_for_revision(
+            db, clip_id, project.id
         )
-    except Exception as e:
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid clip data: {e}",
+            detail=str(e),
         ) from e
 
-    if not source_segment:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Clip has no source segment to revise from",
-        )
-
-    persona = None
-    if speaker is not None and speaker.persona:
-        persona = SpeakerPersona.model_validate(speaker.persona)
+    speaker, persona = await resolve_speaker_and_persona(db, project)
 
     # Persist feedback first
     record = HumanFeedback(
@@ -173,8 +155,7 @@ async def revise_clip(
 )
 async def render_clip(clip_id: UUID, db: DBDep) -> Clip:
     """Queue this clip for video rendering (worker claims render_status=PENDING)."""
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -204,8 +185,7 @@ async def translate_captions(
     first. Stays word-level (see services.caption_translate) and updates the
     spec's ``target_language`` in place.
     """
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -246,7 +226,12 @@ async def translate_captions(
 
 
 @router.post("/{clip_id}/dub", response_model=ClipResponse)
-async def dub_clip(clip_id: UUID, data: DubRequest, db: DBDep) -> Clip:
+async def dub_clip(
+    clip_id: UUID,
+    data: DubRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Clip:
     """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
 
     Clones from the project's voice sample (VOICE_SAMPLE > AUDIO > VIDEO audio),
@@ -254,10 +239,13 @@ async def dub_clip(clip_id: UUID, data: DubRequest, db: DBDep) -> Clip:
     ``dub`` track into ``render_spec`` — the renderer then mutes the source audio
     and plays the dub (overlay; no lip-sync). GDPR set aside for MVP.
     """
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Clip not found")
+
+    project = await db.get(Project, clip.project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
     spec = clip.render_spec
     if not isinstance(spec, dict):
@@ -322,9 +310,9 @@ async def dub_clip(clip_id: UUID, data: DubRequest, db: DBDep) -> Clip:
     except MiniMaxError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
 
-    out_path = get_output_path(clip.project_id, f"{clip_id}_dub_{data.target_language}.mp3")
+    out_path = get_output_path(clip.project_id, project.user_id, f"{clip_id}_dub_{data.target_language}.mp3")
     out_path.write_bytes(audio_bytes)
-    rel = str(out_path.relative_to(settings.output_dir))
+    rel = str(out_path.relative_to(settings.asset_dir))
 
     # Reassign a NEW dict so SQLAlchemy flushes the JSON column.
     clip.render_spec = {
@@ -339,45 +327,71 @@ async def dub_clip(clip_id: UUID, data: DubRequest, db: DBDep) -> Clip:
     return clip
 
 
-@router.put("/{clip_id}", response_model=ClipResponse)
-async def update_clip(
+class ClipRegenerateRequest(BaseModel):
+    """Request to regenerate a clip with an optional instruction."""
+
+    instruction: str | None = Field(
+        default=None,
+        description="Steering prompt for the regeneration.",
+    )
+
+
+@router.post("/{clip_id}/regenerate", response_model=dict)
+async def regenerate_clip(
     clip_id: UUID,
-    data: ClipUpdate,
+    data: ClipRegenerateRequest,
     db: DBDep,
-) -> Clip:
-    """Directly edit a clip (hook, script, title options, music mood)."""
-    result = await db.execute(select(Clip).where(Clip.id == clip_id))
-    clip = result.scalar_one_or_none()
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Queue regeneration of a single clip.
+
+    Creates a WorkflowRun with scope='clip' that the worker will pick up and
+    route through ``generation._run_targeted_revision``. Returns the job id and
+    the tracking assistant message id for polling.
+    """
+    clip = await db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Clip not found",
         )
 
-    update_data = data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        if field == "script" and value is not None:
-            setattr(clip, field, value.model_dump())
-        elif value is not None:
-            setattr(clip, field, value)
+    project = await db.get(Project, clip.project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
 
-    # Keep the nested script object in sync with top-level fields.
-    script_dict = dict(clip.script) if isinstance(clip.script, dict) else clip.script.model_dump()
-    if data.hook is not None:
-        script_dict["hook"] = data.hook
-    if data.title_options is not None:
-        script_dict["title_options"] = data.title_options
-    if data.music_mood is not None:
-        script_dict["music_mood"] = data.music_mood
-    clip.script = script_dict
+    assistant_message = await create_assistant_message(
+        db,
+        project.id,
+        params={
+            "scope": "clip",
+            "target_id": str(clip_id),
+            "operation": "regenerate",
+            "instruction": data.instruction,
+        },
+    )
 
-    # Sync top-level hook/duration/music_mood if script was updated
-    if data.script is not None:
-        clip.hook = data.script.hook
-        clip.music_mood = data.script.music_mood
-        clip.duration = data.script.duration_seconds
-
-    clip.updated_at = datetime.now(UTC)
+    run = WorkflowRun(
+        project_id=project.id,
+        status=WorkflowStatus.PENDING,
+        current_step="queued",
+        progress=0,
+        context={
+            "scope": "clip",
+            "target_id": str(clip_id),
+            "operation": "regenerate",
+            "instruction": data.instruction,
+            "assistant_message_id": str(assistant_message.id),
+        },
+    )
+    db.add(run)
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(run)
+
+    return {
+        "job_id": str(run.id),
+        "message_id": str(assistant_message.id),
+    }

@@ -67,11 +67,12 @@ async def upload_asset(
     await _get_user_project(project_id, current_user.id, db)
 
     filename = file.filename or "unnamed"
-    relative_path = await save_upload(file.file, project_id, filename)
+    relative_path = await save_upload(file.file, project_id, current_user.id, filename)
 
     # Processing (text extraction / ASR / OCR) runs in the worker; the asset is
     # created PENDING and the client polls until it settles.
     asset = Asset(
+        user_id=current_user.id,
         project_id=project_id,
         type=type,
         file_url=relative_path,
@@ -189,9 +190,10 @@ async def upload_speaker_asset(
     await _get_user_speaker(speaker_id, current_user.id, db)
 
     filename = file.filename or "unnamed"
-    relative_path = await save_speaker_upload(file.file, speaker_id, filename)
+    relative_path = await save_speaker_upload(file.file, speaker_id, current_user.id, filename)
 
     asset = Asset(
+        user_id=current_user.id,
         speaker_id=speaker_id,
         type=AssetType.PAST_MATERIAL,
         file_url=relative_path,

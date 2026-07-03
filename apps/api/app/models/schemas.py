@@ -79,6 +79,62 @@ class WorkflowStatus(StrEnum):
     FAILED = "failed"
 
 
+class MessageRole(StrEnum):
+    """Chat message roles."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
+class MessageAttachment(BaseModel):
+    """File attached to a chat message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    type: Literal["file", "image", "video", "audio"]
+    url: str | None = None
+    size: int | None = None
+    status: Literal["uploading", "uploaded", "failed"] = "uploaded"
+
+
+class MessageMarker(BaseModel):
+    """Inline status marker inside an assistant message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    type: Literal["status", "tool", "separator", "error"]
+    label: str
+    timestamp: datetime | None = None
+    meta: dict | None = None
+
+
+class MessageResults(BaseModel):
+    """Result references stored in an assistant message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    clip_ids: list[UUID] = Field(default_factory=list)
+    derivative_ids: list[UUID] = Field(default_factory=list)
+
+
+class MessageMetadata(BaseModel):
+    """Mutable metadata for a chat message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending", "running", "completed", "failed"] | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
+    current_step: str | None = None
+    markers: list[MessageMarker] = Field(default_factory=list)
+    results: MessageResults | None = None
+    error: str | None = None
+    params: dict | None = None
+
+
 class SpeakerPersona(BaseModel):
     """Speaker style persona."""
 
@@ -182,6 +238,7 @@ class AssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    user_id: UUID
     project_id: UUID | None = None
     speaker_id: UUID | None = None
     type: AssetType
@@ -617,6 +674,50 @@ class DerivativeUpdate(BaseModel):
     status: str | None = None
 
 
+class MessageCreate(BaseModel):
+    """Create a chat message."""
+
+    role: MessageRole
+    content: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
+    meta: MessageMetadata | None = None
+    parent_message_id: UUID | None = None
+    asset_id: UUID | None = None
+    asset_type: Literal["clip", "derivative"] | None = None
+
+
+class MessageUpdate(BaseModel):
+    """Partial update for a chat message (used to append markers/results)."""
+
+    content: str | None = None
+    attachments: list[MessageAttachment] | None = None
+    meta: MessageMetadata | None = None
+
+
+class MessageResponse(BaseModel):
+    """Chat message response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    role: MessageRole
+    content: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
+    meta: MessageMetadata = Field(default_factory=MessageMetadata)
+    parent_message_id: UUID | None = None
+    asset_id: UUID | None = None
+    asset_type: Literal["clip", "derivative"] | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class MessageListResponse(BaseModel):
+    """List of chat messages for a project."""
+
+    items: list[MessageResponse]
+
+
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
@@ -636,6 +737,22 @@ class GenerateRequest(BaseModel):
     instruction: str | None = Field(
         default=None,
         description="User steering prompt: what to focus on / produce.",
+    )
+    scope: Literal[
+        "full", "hook", "clip", "linkedin", "quote_card", "translation", "render"
+    ] = Field(
+        default="full",
+        description="Scope of the generation: full project or targeted revision.",
+    )
+    target_id: UUID | None = Field(
+        default=None,
+        description="Clip or derivative ID when scope is not 'full'.",
+    )
+    operation: Literal[
+        "regenerate", "shorten", "lengthen", "translate", "render"
+    ] = Field(
+        default="regenerate",
+        description="Operation to apply when scope is targeted.",
     )
 
 
@@ -701,8 +818,33 @@ class WorkflowRunResponse(BaseModel):
     current_step: str | None = None
     progress: int = Field(default=0, ge=0, le=100)
     error: str | None = None
+    context: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
+
+    @computed_field
+    @property
+    def message_id(self) -> UUID | None:
+        """Assistant chat message tracking this run, if any."""
+        raw = self.context.get("assistant_message_id") if self.context else None
+        if raw:
+            try:
+                return UUID(str(raw))
+            except (ValueError, TypeError):
+                return None
+        return None
+
+
+class ProjectResultsResponse(BaseModel):
+    """Aggregated results for the project detail/results page."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    project: ProjectResponse
+    prompt: str | None = None
+    clips: list[ClipResponse] = Field(default_factory=list)
+    derivatives: list[DerivativeResponse] = Field(default_factory=list)
+    latest_job: WorkflowRunResponse | None = None
 
 
 class BrandTemplateBase(BaseModel):
@@ -731,3 +873,27 @@ class BrandTemplateResponse(BrandTemplateBase):
     id: UUID
     created_at: datetime
     updated_at: datetime | None = None
+
+
+class LibraryItemType(StrEnum):
+    """Asset types exposed by the library endpoint."""
+
+    UPLOAD = "upload"
+    CLIP = "clip"
+    LINKEDIN = "linkedin"
+    QUOTE = "quote"
+    SUMMARY = "summary"
+
+
+class LibraryItemResponse(BaseModel):
+    """A single item in the asset library."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    type: LibraryItemType
+    title: str
+    project_id: UUID
+    created_at: datetime
+    preview: str | None = None
+    download_url: str | None = None

@@ -1,4 +1,17 @@
-"""Storage service for uploads and outputs."""
+"""Storage service for uploads and outputs.
+
+All files are stored under ``assets/``:
+
+- User-scoped: ``assets/{user_id}/uploads/projects/{project_id}/{file}``,
+  ``assets/{user_id}/speakers/{speaker_id}/{file}``,
+  ``assets/{user_id}/outputs/projects/{project_id}/{file}``.
+- Demo: ``assets/demo/uploads/projects/{project_id}/{file}`` and
+  ``assets/demo/outputs/projects/{project_id}/{file}``.
+
+Public URLs remain ``/api/v1/files/{relative_path}`` and
+``/api/v1/outputs/{relative_path}``; the path itself now embeds the owning
+user/demo prefix so the file endpoint can enforce ownership.
+"""
 
 import base64
 import mimetypes
@@ -38,65 +51,92 @@ def _unique_path(directory: Path, filename: str) -> Path:
 
 
 def _relative_path(path: Path) -> str:
-    """Return path relative to upload_dir as a POSIX string."""
+    """Return path relative to asset_dir as a POSIX string."""
     try:
-        return path.relative_to(settings.upload_dir).as_posix()
+        return path.relative_to(settings.asset_dir).as_posix()
     except ValueError:
         return path.as_posix()
 
 
-def get_project_upload_dir(project_id: UUID) -> Path:
+def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> Path:
     """Get upload directory for a project."""
-    return settings.upload_dir / "projects" / str(project_id)
+    return settings.asset_dir / str(user_id) / "uploads" / "projects" / str(project_id)
 
 
-def get_speaker_upload_dir(speaker_id: UUID) -> Path:
+def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> Path:
     """Get upload directory for a speaker."""
-    return settings.upload_dir / "speakers" / str(speaker_id)
+    return settings.asset_dir / str(user_id) / "speakers" / str(speaker_id)
 
 
-def get_upload_path(project_id: UUID, filename: str) -> Path:
+def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> Path:
+    """Get output directory for a project."""
+    return settings.asset_dir / str(user_id) / "outputs" / "projects" / str(project_id)
+
+
+def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> Path:
     """Get upload file path for a project."""
-    directory = get_project_upload_dir(project_id)
+    directory = get_project_upload_dir(project_id, user_id)
     directory.mkdir(parents=True, exist_ok=True)
     return _unique_path(directory, filename)
 
 
-def get_speaker_upload_path(speaker_id: UUID, filename: str) -> Path:
+def get_speaker_upload_path(speaker_id: UUID, user_id: UUID | str, filename: str) -> Path:
     """Get upload file path for a speaker."""
-    directory = get_speaker_upload_dir(speaker_id)
+    directory = get_speaker_upload_dir(speaker_id, user_id)
     directory.mkdir(parents=True, exist_ok=True)
     return _unique_path(directory, filename)
 
 
-def get_output_path(project_id: UUID, filename: str) -> Path:
-    """Get output file path."""
-    directory = settings.output_dir / str(project_id)
+def get_output_path(project_id: UUID, user_id: UUID | str, filename: str) -> Path:
+    """Get output file path for a project."""
+    directory = get_project_output_dir(project_id, user_id)
     directory.mkdir(parents=True, exist_ok=True)
     return directory / _sanitize_filename(filename)
 
 
-async def save_upload(file_obj: BinaryIO, project_id: UUID, filename: str) -> str:
+async def save_upload(
+    file_obj: BinaryIO,
+    project_id: UUID,
+    user_id: UUID | str,
+    filename: str,
+) -> str:
     """Save uploaded file to project storage and return relative path string."""
-    destination = get_upload_path(project_id, filename)
+    destination = get_upload_path(project_id, user_id, filename)
     with destination.open("wb") as buffer:
         shutil.copyfileobj(file_obj, buffer)
     return _relative_path(destination)
 
 
-async def save_speaker_upload(file_obj: BinaryIO, speaker_id: UUID, filename: str) -> str:
+async def save_speaker_upload(
+    file_obj: BinaryIO,
+    speaker_id: UUID,
+    user_id: UUID | str,
+    filename: str,
+) -> str:
     """Save uploaded file to speaker storage and return relative path string."""
-    destination = get_speaker_upload_path(speaker_id, filename)
+    destination = get_speaker_upload_path(speaker_id, user_id, filename)
     with destination.open("wb") as buffer:
         shutil.copyfileobj(file_obj, buffer)
+    return _relative_path(destination)
+
+
+async def save_output(
+    project_id: UUID,
+    user_id: UUID | str,
+    filename: str,
+    content: bytes,
+) -> str:
+    """Save output bytes to project storage and return relative path string."""
+    destination = get_output_path(project_id, user_id, filename)
+    destination.write_bytes(content)
     return _relative_path(destination)
 
 
 def resolve_file_path(relative_path: str | None) -> Path | None:
-    """Resolve a stored relative path to an absolute Path."""
+    """Resolve a stored relative path to an absolute Path under asset_dir."""
     if not relative_path:
         return None
-    return settings.upload_dir / relative_path
+    return settings.asset_dir / relative_path
 
 
 def file_to_data_url(path: Path) -> str | None:
@@ -120,13 +160,13 @@ def file_to_data_url(path: Path) -> str | None:
 
 
 def resolve_safe(relative_path: str | None) -> Path | None:
-    """Resolve a relative upload path, refusing traversal escapes (None if unsafe)."""
-    return _resolve_within(settings.upload_dir, relative_path)
+    """Resolve a relative path under asset_dir, refusing traversal escapes."""
+    return _resolve_within(settings.asset_dir, relative_path)
 
 
 def resolve_output_safe(relative_path: str | None) -> Path | None:
-    """Resolve a relative output path (rendered MP4/SRT), refusing traversal."""
-    return _resolve_within(settings.output_dir, relative_path)
+    """Resolve a relative output path under asset_dir, refusing traversal."""
+    return _resolve_within(settings.asset_dir, relative_path)
 
 
 # Audio extensions the built-in mood library may use, in resolution priority.
@@ -169,7 +209,7 @@ def stream_url(relative_path: str | None) -> str | None:
 
 
 def output_url(relative_path: str | None) -> str | None:
-    """Browser-playable URL for a rendered output (MP4/SRT) under output_dir."""
+    """Browser-playable URL for a rendered output (MP4/SRT) under asset_dir."""
     if not relative_path:
         return None
     return f"/api/v1/outputs/{relative_path}"
@@ -189,15 +229,29 @@ def delete_file(relative_path: str | None) -> None:
         path.unlink()
 
 
-def delete_project_files(project_id: UUID) -> None:
+def delete_project_files(project_id: UUID, user_id: UUID | str) -> None:
     """Delete all files for a project."""
-    upload_dir = get_project_upload_dir(project_id)
+    upload_dir = get_project_upload_dir(project_id, user_id)
     if upload_dir.exists():
         shutil.rmtree(upload_dir)
+    output_dir = get_project_output_dir(project_id, user_id)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
 
 
-def delete_speaker_files(speaker_id: UUID) -> None:
+def delete_speaker_files(speaker_id: UUID, user_id: UUID | str) -> None:
     """Delete all files for a speaker."""
-    upload_dir = get_speaker_upload_dir(speaker_id)
+    upload_dir = get_speaker_upload_dir(speaker_id, user_id)
     if upload_dir.exists():
         shutil.rmtree(upload_dir)
+
+
+def owner_from_path(relative_path: str | None) -> str | None:
+    """Extract the owning user id (or 'demo') from a stored relative path.
+
+    Returns None for empty/malformed paths.
+    """
+    if not relative_path:
+        return None
+    first = relative_path.split("/", 1)[0]
+    return first if first else None

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"
 
     # Storage
+    asset_dir: Path = Path("./assets")
+    # Deprecated: upload_dir/output_dir are kept for compatibility during the
+    # migration to asset_dir; new code should use asset_dir directly.
     upload_dir: Path = Path("./data/uploads")
     output_dir: Path = Path("./data/outputs")
     music_dir: Path = Path("./data/music")  # built-in mood music library
@@ -47,6 +50,7 @@ class Settings(BaseSettings):
 
     def ensure_dirs(self) -> None:
         """Ensure storage directories exist."""
+        self.asset_dir.mkdir(parents=True, exist_ok=True)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.music_dir.mkdir(parents=True, exist_ok=True)

@@ -125,7 +125,7 @@ async def delete_speaker(
     await db.commit()
 
     # Remove speaker upload directory after DB commit
-    delete_speaker_files(speaker_id)
+    delete_speaker_files(speaker_id, current_user.id)
 
 
 @router.post("/{speaker_id}/persona/generate", response_model=SpeakerPersona)

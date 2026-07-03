@@ -6,7 +6,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import ClipScript, FeedbackRequest, Segment, SpeakerPersona
+from app.models.schemas import ClipScript, FeedbackRequest, FeedbackReason, FeedbackScope, Segment, SpeakerPersona
 
 logger = structlog.get_logger()
 
@@ -87,6 +87,27 @@ class ReviserAgent:
             virality_score=revised.virality_score,
         )
         return revised
+
+
+    async def revise_by_instruction(
+        self,
+        script: ClipScript,
+        segment: Segment,
+        instruction: str,
+        persona: SpeakerPersona | None,
+        scope: str = "full_script",
+    ) -> ClipScript:
+        """Revise a clip script from a free-text user instruction.
+
+        Converts the instruction into a FeedbackRequest and delegates to
+        :meth:`revise` so the same prompt template is reused.
+        """
+        feedback = FeedbackRequest(
+            scope=FeedbackScope(scope) if scope in FeedbackScope else FeedbackScope.FULL_SCRIPT,
+            reason=FeedbackReason.DIFFERENT_EXPRESSION,
+            detail=instruction,
+        )
+        return await self.revise(script, segment, feedback, persona)
 
 
 reviser_agent = ReviserAgent()

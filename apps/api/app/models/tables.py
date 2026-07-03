@@ -83,7 +83,12 @@ class Project(Base):
 
 
 class Asset(Base):
-    """Asset table."""
+    """Asset table.
+
+    Assets belong to a user and are optionally attached to a project or a
+    speaker. The user_id denormalisation lets the storage layer enforce
+    ownership without joining projects/speakers on every file read.
+    """
 
     __tablename__ = "assets"
 
@@ -99,6 +104,7 @@ class Asset(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
     type = Column(Enum(AssetType), nullable=False)
@@ -199,3 +205,31 @@ class HumanFeedback(Base):
     reason = Column(String(50), nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class Message(Base):
+    """Chat message thread for a project.
+
+    Persists the user/assistant conversation so the homepage can render a
+    durable, multi-turn chat interface. Metadata holds generation status
+    markers and result references; attachments holds uploaded file metadata.
+
+    asset_id / asset_type are optional and point to a clip or derivative when
+    the message is part of an asset-scoped chat session.
+    """
+
+    __tablename__ = "messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
+    content = Column(Text, nullable=True)
+    attachments = Column(JSON, default=list)
+    meta = Column(JSON, default=dict)
+    parent_message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
+    asset_id = Column(UUID(as_uuid=True), nullable=True)
+    asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)

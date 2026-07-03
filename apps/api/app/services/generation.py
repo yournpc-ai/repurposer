@@ -5,7 +5,9 @@ requested ``outputs``, tracking progress on a :class:`WorkflowRun`. Designed to
 run in a FastAPI ``BackgroundTask`` with its own database session.
 """
 
+import base64
 import mimetypes
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -13,19 +15,17 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.blog import blog_agent
-from app.agents.carousel import carousel_agent
-from app.agents.linkedin import linkedin_agent
 from app.agents.persona import persona_agent
 from app.agents.planner import planner_agent
-from app.agents.quote_card import quote_card_agent
-from app.agents.summary import summary_agent
+from app.agents.reviser import reviser_agent
+from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetType,
     DerivativeType,
     MediaInput,
     ProjectStatus,
+    RenderStatus,
     SpeakerPersona,
     ToneSettings,
     WorkflowStatus,
@@ -41,9 +41,69 @@ from app.models.tables import (
 )
 from app.services.brand import brand_from_template, music_from_mood, music_from_template
 from app.services.clip_spec import build_clip_spec
-from app.services.storage import file_to_data_url, resolve_file_path, stream_url
+from app.services.derivative_generation import generate_derivative
+from app.services.messages import (
+    add_result_refs,
+    append_message_marker,
+    update_message_meta,
+)
+from app.services.project_context import (
+    collect_materials,
+    resolve_clip_for_revision,
+    resolve_speaker_and_persona,
+)
+from app.services.storage import (
+    file_to_data_url,
+    output_url,
+    resolve_file_path,
+    save_output,
+    stream_url,
+)
 
 logger = structlog.get_logger()
+
+def _quote_image_prompt(quote: str, attribution: str, event_name: str | None = None) -> str:
+    """Build a visual prompt for MiniMax image-01 to illustrate a quote card."""
+    base = (
+        "A minimalist, elegant quote card design for social media. "
+        "Clean typography centered on a subtle gradient background. "
+        "The card prominently displays an inspiring quote. "
+        "Modern, professional, no clutter, high contrast readable text. "
+    )
+    quote_ctx = f'Quote: "{quote}" — {attribution}'
+    event_ctx = f" Event context: {event_name}." if event_name else ""
+    return base + quote_ctx + event_ctx
+
+
+async def _save_quote_card_image(
+    quote: str,
+    attribution: str,
+    derivative_id: UUID,
+    project: Project,
+) -> str | None:
+    """Generate and save a quote-card PNG; return the public URL or None on failure."""
+    try:
+        images = await minimax_client.generate_image(
+            prompt=_quote_image_prompt(quote, attribution, project.event_name),
+            aspect_ratio="1:1",
+            response_format="base64",
+        )
+        if not images:
+            return None
+        image_bytes = base64.b64decode(images[0])
+        relative_path = await save_output(
+            project.id,
+            project.user_id,
+            f"quote_{derivative_id}.png",
+            image_bytes,
+        )
+        return output_url(relative_path)
+    except MiniMaxError as e:
+        logger.warning("quote_card_image_failed", error=str(e))
+        return None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("quote_card_image_unexpected_error", error=str(e))
+        return None
 
 KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
 
@@ -202,6 +262,92 @@ async def _resolve_or_create_speaker(
     return speaker
 
 
+async def _run_targeted_revision(
+    db: AsyncSession,
+    run: WorkflowRun,
+    project: Project,
+    scope: str,
+    target_id: UUID | None,
+    operation: str,
+    instruction: str | None,
+    message_id: UUID | None,
+) -> None:
+    """Run a targeted revision/operation on a single clip or derivative.
+
+    Updates the assistant message with progress and result references.
+    """
+    if target_id is None:
+        raise ValueError(f"target_id is required for scope={scope}")
+
+    if scope in ("hook", "clip"):
+        clip, current_script, source_segment = await resolve_clip_for_revision(
+            db, target_id, project.id
+        )
+        speaker, persona = await resolve_speaker_and_persona(db, project)
+
+        if message_id:
+            await update_message_meta(db, message_id, status="running", current_step=scope)
+            await append_message_marker(
+                db, message_id, f"Revising {scope}...", "status"
+            )
+
+        revised = await reviser_agent.revise_by_instruction(
+            script=current_script,
+            segment=source_segment,
+            instruction=instruction or "Improve this clip",
+            persona=persona,
+            scope=scope,
+        )
+        clip.script = revised.model_dump()
+        clip.hook = revised.hook
+        clip.title_options = revised.title_options
+        clip.music_mood = revised.music_mood
+        clip.duration = revised.duration_seconds
+        await db.commit()
+
+        run.status = WorkflowStatus.COMPLETED
+        run.current_step = "done"
+        run.progress = 100
+        await db.commit()
+
+        if message_id:
+            await add_result_refs(db, message_id, clip_ids=[clip.id])
+            await update_message_meta(
+                db, message_id, status="completed", progress=100, current_step="done"
+            )
+            await append_message_marker(db, message_id, f"{scope.title()} revised", "status")
+        return
+
+    if scope == "render":
+        clip = await db.get(Clip, target_id)
+        if clip is None or clip.project_id != project.id:
+            raise ValueError("Target clip not found")
+        if not clip.render_spec:
+            raise ValueError("Clip has no render_spec")
+
+        clip.render_status = RenderStatus.PENDING
+        clip.render_error = None
+        await db.commit()
+
+        run.status = WorkflowStatus.COMPLETED
+        run.current_step = "done"
+        run.progress = 100
+        await db.commit()
+
+        if message_id:
+            await add_result_refs(db, message_id, clip_ids=[clip.id])
+            await update_message_meta(
+                db, message_id, status="completed", progress=100, current_step="done"
+            )
+            await append_message_marker(
+                db, message_id, "Video render queued", "status"
+            )
+        return
+
+    # Fallback: scope not yet supported as a targeted operation.
+    raise ValueError(f"Targeted scope not implemented: {scope}")
+
+
 async def run_generation(run_id: UUID) -> None:
     """Execute a queued generation run. Never raises — failures land on the run."""
     async with AsyncSessionLocal() as db:
@@ -220,25 +366,58 @@ async def run_generation(run_id: UUID) -> None:
             instruction = ctx.get("instruction")
             tone_raw = ctx.get("tone_settings")
             tone_settings = ToneSettings.model_validate(tone_raw) if tone_raw else None
+            scope = ctx.get("scope", "full")
+            operation = ctx.get("operation", "regenerate")
+            target_id: UUID | None = None
+            raw_target_id = ctx.get("target_id")
+            if raw_target_id:
+                try:
+                    target_id = UUID(str(raw_target_id))
+                except (ValueError, TypeError):
+                    target_id = None
+            message_id: UUID | None = None
+            raw_message_id = ctx.get("assistant_message_id")
+            if raw_message_id:
+                try:
+                    message_id = UUID(str(raw_message_id))
+                except (ValueError, TypeError):
+                    message_id = None
 
             run.status = WorkflowStatus.RUNNING
             run.progress = 0
             run.current_step = "loading"
             await db.commit()
 
+            if message_id:
+                await update_message_meta(
+                    db,
+                    message_id,
+                    status="running",
+                    progress=0,
+                    current_step="loading",
+                )
+                await append_message_marker(
+                    db,
+                    message_id,
+                    "Starting generation...",
+                    "status",
+                )
+
             project = await db.get(Project, run.project_id)
             if project is None:
                 raise ValueError("Project not found")
 
+            if scope != "full":
+                await _run_targeted_revision(
+                    db, run, project, scope, target_id, operation, instruction, message_id
+                )
+                return
+
+            materials = await collect_materials(db, project.id)
             asset_rows = await db.execute(
                 select(Asset).where(Asset.project_id == project.id)
             )
             assets = list(asset_rows.scalars().all())
-            materials = [
-                text
-                for a in assets
-                if (text := (a.extracted_text or a.transcript))
-            ]
             media_inputs = _collect_media_inputs(assets)
             if not materials and not media_inputs:
                 raise ValueError("No source material to analyze")
@@ -355,6 +534,13 @@ async def run_generation(run_id: UUID) -> None:
             if "clips" in outputs:
                 run.current_step = "clips"
                 await db.commit()
+                if message_id:
+                    await update_message_meta(
+                        db, message_id, current_step="clips"
+                    )
+                    await append_message_marker(
+                        db, message_id, "Generating clips...", "status"
+                    )
                 plans = await planner_agent.plan(
                     materials=materials,
                     media_inputs=media_inputs,
@@ -402,6 +588,7 @@ async def run_generation(run_id: UUID) -> None:
                 ttl_pos = cfg.get("titlePosition")
                 ttl_size_raw = cfg.get("titleSize")
                 ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
+                clip_ids: list[UUID] = []
                 for plan in plans.clips[:clip_count]:
                     segment = plan.to_segment()
                     script = plan.to_script()
@@ -434,152 +621,245 @@ async def run_generation(run_id: UUID) -> None:
                         if render_source is not None
                         else None
                     )
-                    db.add(
-                        Clip(
-                            project_id=project.id,
-                            hook=script.hook,
-                            script=script.model_dump(),
-                            title_options=script.title_options,
-                            music_mood=script.music_mood,
-                            duration=script.duration_seconds,
-                            language=target_language,
-                            source_segment=segment.model_dump(),
-                            render_spec=spec.model_dump(mode="json") if spec else None,
-                        )
+                    clip = Clip(
+                        project_id=project.id,
+                        hook=script.hook,
+                        script=script.model_dump(),
+                        title_options=script.title_options,
+                        music_mood=script.music_mood,
+                        duration=script.duration_seconds,
+                        language=target_language,
+                        source_segment=segment.model_dump(),
+                        render_spec=spec.model_dump(mode="json") if spec else None,
                     )
+                    db.add(clip)
+                    clip_ids.append(clip.id)
                 await db.commit()
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, clip_ids=clip_ids)
+                    await update_message_meta(
+                        db, message_id, progress=run.progress
+                    )
+                    await append_message_marker(
+                        db, message_id, f"Generated {len(clip_ids)} clips", "status"
+                    )
 
             if "linkedin" in outputs:
                 run.current_step = "linkedin"
                 await db.commit()
-                post = await linkedin_agent.generate(
+                if message_id:
+                    await update_message_meta(db, message_id, current_step="linkedin")
+                    await append_message_marker(
+                        db, message_id, "Generating LinkedIn post...", "status"
+                    )
+                content = await generate_derivative(
+                    project=project,
+                    derivative_type=DerivativeType.LINKEDIN_POST,
                     materials=materials,
-                    persona=persona,
-                    event_name=project.event_name,
                     target_language=target_language,
                     instruction=instruction,
+                    speaker=speaker,
+                    persona=persona,
                 )
-                db.add(
-                    Derivative(
-                        project_id=project.id,
-                        type=DerivativeType.LINKEDIN_POST,
-                        content=post.model_dump(),
-                        language=target_language,
-                    )
+                derivative = Derivative(
+                    project_id=project.id,
+                    type=DerivativeType.LINKEDIN_POST,
+                    content=content,
+                    language=target_language,
                 )
+                db.add(derivative)
                 await db.commit()
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
+                    await update_message_meta(db, message_id, progress=run.progress)
+                    await append_message_marker(
+                        db, message_id, "LinkedIn post ready", "status"
+                    )
 
             if "quote_cards" in outputs:
                 run.current_step = "quote_cards"
                 await db.commit()
-                result = await quote_card_agent.generate(
+                if message_id:
+                    await update_message_meta(db, message_id, current_step="quote_cards")
+                    await append_message_marker(
+                        db, message_id, "Generating quote cards...", "status"
+                    )
+                content = await generate_derivative(
+                    project=project,
+                    derivative_type=DerivativeType.QUOTE_CARD,
                     materials=materials,
-                    speaker_name=speaker.name if speaker is not None else "",
-                    speaker_title=speaker.title if speaker is not None else "",
-                    event_name=project.event_name,
-                    count=3,
                     target_language=target_language,
                     instruction=instruction,
+                    speaker=speaker,
+                    persona=persona,
                 )
-                db.add(
-                    Derivative(
-                        project_id=project.id,
-                        type=DerivativeType.QUOTE_CARD,
-                        content=result.model_dump(),
-                        language=target_language,
-                    )
+                derivative = Derivative(
+                    project_id=project.id,
+                    type=DerivativeType.QUOTE_CARD,
+                    content=content,
+                    language=target_language,
                 )
+                db.add(derivative)
                 await db.commit()
+                await db.refresh(derivative)
+
+                # Generate a PNG for the first quote card using MiniMax image-01.
+                quotes = content.get("quotes", []) if isinstance(content, dict) else []
+                if quotes:
+                    first_quote = quotes[0]
+                    image_url = await _save_quote_card_image(
+                        quote=first_quote.get("quote", ""),
+                        attribution=first_quote.get("attribution", ""),
+                        derivative_id=derivative.id,
+                        project=project,
+                    )
+                    if image_url:
+                        derivative.image_url = image_url
+                        await db.commit()
+
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
+                    await update_message_meta(db, message_id, progress=run.progress)
+                    await append_message_marker(
+                        db, message_id, "Quote cards ready", "status"
+                    )
 
             if "carousel" in outputs:
                 run.current_step = "carousel"
                 await db.commit()
-                carousel = await carousel_agent.generate(
+                if message_id:
+                    await update_message_meta(db, message_id, current_step="carousel")
+                    await append_message_marker(
+                        db, message_id, "Generating carousel...", "status"
+                    )
+                content = await generate_derivative(
+                    project=project,
+                    derivative_type=DerivativeType.CAROUSEL,
                     materials=materials,
-                    speaker_name=speaker.name if speaker is not None else "",
-                    speaker_title=speaker.title if speaker is not None else "",
-                    event_name=project.event_name,
-                    count=6,
                     target_language=target_language,
                     instruction=instruction,
+                    speaker=speaker,
+                    persona=persona,
                 )
-                db.add(
-                    Derivative(
-                        project_id=project.id,
-                        type=DerivativeType.CAROUSEL,
-                        content=carousel.model_dump(),
-                        language=target_language,
-                    )
+                derivative = Derivative(
+                    project_id=project.id,
+                    type=DerivativeType.CAROUSEL,
+                    content=content,
+                    language=target_language,
                 )
+                db.add(derivative)
                 await db.commit()
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
+                    await update_message_meta(db, message_id, progress=run.progress)
+                    await append_message_marker(
+                        db, message_id, "Carousel ready", "status"
+                    )
 
             if "summary" in outputs:
                 run.current_step = "summary"
                 await db.commit()
-                summary = await summary_agent.generate(
+                if message_id:
+                    await update_message_meta(db, message_id, current_step="summary")
+                    await append_message_marker(
+                        db, message_id, "Generating summary...", "status"
+                    )
+                content = await generate_derivative(
+                    project=project,
+                    derivative_type=DerivativeType.SUMMARY,
                     materials=materials,
-                    persona=persona,
-                    event_name=project.event_name,
                     target_language=target_language,
                     instruction=instruction,
+                    speaker=speaker,
+                    persona=persona,
                 )
-                db.add(
-                    Derivative(
-                        project_id=project.id,
-                        type=DerivativeType.SUMMARY,
-                        content=summary.model_dump(),
-                        language=target_language,
-                    )
+                derivative = Derivative(
+                    project_id=project.id,
+                    type=DerivativeType.SUMMARY,
+                    content=content,
+                    language=target_language,
                 )
+                db.add(derivative)
                 await db.commit()
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
+                    await update_message_meta(db, message_id, progress=run.progress)
+                    await append_message_marker(
+                        db, message_id, "Summary ready", "status"
+                    )
 
             if "blog" in outputs:
                 run.current_step = "blog"
                 await db.commit()
-                blog = await blog_agent.generate(
+                if message_id:
+                    await update_message_meta(db, message_id, current_step="blog")
+                    await append_message_marker(
+                        db, message_id, "Generating blog post...", "status"
+                    )
+                content = await generate_derivative(
+                    project=project,
+                    derivative_type=DerivativeType.BLOG,
                     materials=materials,
-                    persona=persona,
-                    event_name=project.event_name,
                     target_language=target_language,
                     instruction=instruction,
+                    speaker=speaker,
+                    persona=persona,
                 )
-                db.add(
-                    Derivative(
-                        project_id=project.id,
-                        type=DerivativeType.BLOG,
-                        content=blog.model_dump(),
-                        language=target_language,
-                    )
+                derivative = Derivative(
+                    project_id=project.id,
+                    type=DerivativeType.BLOG,
+                    content=content,
+                    language=target_language,
                 )
+                db.add(derivative)
                 await db.commit()
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
+                if message_id:
+                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
+                    await update_message_meta(db, message_id, progress=run.progress)
+                    await append_message_marker(
+                        db, message_id, "Blog post ready", "status"
+                    )
 
             run.status = WorkflowStatus.COMPLETED
             run.current_step = "done"
             run.progress = 100
             if project is not None:
                 project.status = ProjectStatus.REVIEW
+                project.updated_at = datetime.now(UTC)
             await db.commit()
+            if message_id:
+                await update_message_meta(
+                    db, message_id, status="completed", progress=100, current_step="done"
+                )
+                await append_message_marker(db, message_id, "All done!", "status")
             logger.info("generation_completed", run_id=str(run_id), outputs=outputs)
         except Exception as e:  # noqa: BLE001 — record any failure on the run
             logger.error("generation_failed", run_id=str(run_id), error=str(e))
             run.status = WorkflowStatus.FAILED
             run.error = str(e)
             await db.commit()
+            if message_id:
+                await update_message_meta(
+                    db, message_id, status="failed", error=str(e)
+                )
+                await append_message_marker(
+                    db, message_id, f"Generation failed: {e}", "error"
+                )

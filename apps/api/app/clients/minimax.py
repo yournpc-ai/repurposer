@@ -82,26 +82,52 @@ class MiniMaxClient:
             )
             raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
-    def _clean_json(self, text: str) -> str:
-        """Clean markdown code blocks and <think> preambles from a JSON response."""
-        text = _THINK_BLOCK.sub("", text).strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-        # If any prose still precedes the JSON (e.g. an unterminated think
-        # block), fall back to the first balanced {...} / [...] span.
-        if text and text[0] not in "{[":
-            start = min(
-                (i for i in (text.find("{"), text.find("[")) if i != -1),
-                default=-1,
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def generate_image(
+        self,
+        prompt: str,
+        aspect_ratio: str = "1:1",
+        response_format: str = "base64",
+    ) -> list[str]:
+        """Generate images with MiniMax image-01.
+
+        Returns a list of base64 strings or URLs depending on ``response_format``.
+        Defaults to ``base64`` so images can be persisted locally instead of
+        relying on MiniMax's expiring URLs.
+        """
+        if not self.api_key:
+            raise MiniMaxError("MINIMAX_API_KEY not configured")
+
+        payload = {
+            "model": "image-01",
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "n": 1,
+            "response_format": response_format,
+        }
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{self.base_url}/image_generation",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
             )
-            if start != -1:
-                text = text[start:]
-        return text.strip()
+            response.raise_for_status()
+            data = response.json()
 
+        base_resp = data.get("base_resp") or {}
+        if base_resp.get("status_code") != 0:
+            raise MiniMaxError(
+                f"MiniMax image generation failed: {base_resp.get('status_msg')}"
+            )
 
-minimax_client = MiniMaxClient()
+        if response_format == "base64":
+            return data.get("data", {}).get("image_base64", []) or []
+        return data.get("data", {}).get("image_urls", []) or []

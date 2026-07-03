@@ -10,17 +10,51 @@ Starlette's :class:`FileResponse` handles ``Range`` requests natively (206
 partial content), which is what video scrubbing needs.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import FileResponse
 
-from app.services.storage import resolve_music_safe, resolve_output_safe, resolve_safe
+from app.dependencies import get_current_user
+from app.models.tables import User
+from app.services.storage import (
+    owner_from_path,
+    resolve_music_safe,
+    resolve_output_safe,
+    resolve_safe,
+)
 
 router = APIRouter()
 
 
+def _authorize_path(file_path: str, current_user: User) -> None:
+    """Refuse access unless the path belongs to the current user or is demo."""
+    owner = owner_from_path(file_path)
+    if owner == "demo":
+        return
+    if owner is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
+    try:
+        if UUID(owner) == current_user.id:
+            return
+    except ValueError:
+        pass
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied",
+    )
+
+
 @router.get("/files/{file_path:path}")
-async def stream_upload(file_path: str) -> FileResponse:
+async def stream_upload(
+    file_path: str,
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
     """Stream an uploaded source file by relative path, with Range support."""
+    _authorize_path(file_path, current_user)
     path = resolve_safe(file_path)
     if path is None or not path.is_file():
         raise HTTPException(
@@ -48,8 +82,12 @@ async def stream_music(mood: str) -> FileResponse:
 
 
 @router.get("/outputs/{file_path:path}")
-async def stream_output(file_path: str) -> FileResponse:
+async def stream_output(
+    file_path: str,
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
     """Stream a rendered output (MP4/SRT) by relative path, with Range support."""
+    _authorize_path(file_path, current_user)
     path = resolve_output_safe(file_path)
     if path is None or not path.is_file():
         raise HTTPException(

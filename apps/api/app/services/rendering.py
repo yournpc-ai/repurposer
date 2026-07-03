@@ -13,11 +13,12 @@ from uuid import UUID
 
 import httpx
 import structlog
+from sqlalchemy import select
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Clip
+from app.models.tables import Clip, Project
 from app.services.storage import output_url
 
 logger = structlog.get_logger()
@@ -64,10 +65,16 @@ async def render_clip(clip_id: UUID) -> None:
     video_url/srt_url + COMPLETED; on any error writes FAILED with the message.
     """
     async with AsyncSessionLocal() as db:
-        clip = await db.get(Clip, clip_id)
-        if clip is None:
+        result = await db.execute(
+            select(Clip, Project.user_id)
+            .join(Project, Clip.project_id == Project.id)
+            .where(Clip.id == clip_id)
+        )
+        row = result.one_or_none()
+        if row is None:
             logger.warning("render_clip_missing", clip_id=str(clip_id))
             return
+        clip, user_id = row
         if not clip.render_spec:
             clip.render_status = RenderStatus.FAILED
             clip.render_error = "clip has no render_spec"
@@ -78,7 +85,7 @@ async def render_clip(clip_id: UUID) -> None:
             spec = _absolutize(copy.deepcopy(clip.render_spec))
             payload = {
                 "spec": spec,
-                "out_subdir": str(clip.project_id),
+                "out_subdir": f"{user_id}/outputs/projects/{clip.project_id}",
                 "basename": str(clip.id),
             }
             async with httpx.AsyncClient(timeout=900) as client:

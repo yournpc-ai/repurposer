@@ -13,11 +13,14 @@ from app.routers import (
     clips,
     derivatives,
     files,
+    library,
+    messages,
     projects,
     speaker_assets,
     speakers,
 )
 from app.services.brand import seed_default_brand_template
+from app.services.demo_seed import seed_demo_project
 
 
 @asynccontextmanager
@@ -26,6 +29,7 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     await init_db()
     await seed_default_brand_template()
+    await seed_demo_project()
     yield
 
 
@@ -46,10 +50,12 @@ app.add_middleware(
 
 app.include_router(speakers, prefix="/api/v1/speakers", tags=["speakers"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(messages, prefix="/api/v1/projects/{project_id}/messages", tags=["messages"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(clips, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(derivatives, prefix="/api/v1/derivatives", tags=["derivatives"])
+app.include_router(library, prefix="/api/v1/library", tags=["library"])
 app.include_router(files, prefix="/api/v1", tags=["files"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]

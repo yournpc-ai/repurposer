@@ -10,9 +10,10 @@ app.use(express.json({ limit: "8mb" }));
 
 const PORT = Number(process.env.RENDER_PORT ?? 3001);
 // Shared output dir — the api serves these files via its Range endpoint.
-// Defaults to the repo's data/outputs (relative to apps/render cwd).
+// Defaults to the repo's assets (relative to apps/render cwd) so rendered
+// outputs share the user-scoped layout with the API.
 const OUTPUT_DIR =
-  process.env.RENDER_OUTPUT_DIR ?? path.resolve(process.cwd(), "../../data/outputs");
+  process.env.RENDER_OUTPUT_DIR ?? path.resolve(process.cwd(), "../../assets");
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
