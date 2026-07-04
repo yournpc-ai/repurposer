@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from app.dependencies.auth import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import ClipBrand, ClipMusic
+from app.models.schemas import BrandContentStrategy, ClipBrand, ClipMusic
 from app.models.tables import BrandTemplate, User
 from app.services.storage import music_url
 
@@ -37,6 +37,9 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "musicMood": "calm",
     "removeFiller": False,
     "keywordHighlighter": True,
+    "voice": "professional",
+    "audience": "industry professionals",
+    "contentGuidelines": "",
 }
 
 
@@ -104,6 +107,26 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
         intro_text=intro,
         outro_text=outro,
         fill_mode=fill_mode,
+    )
+
+
+def content_strategy_from_template(
+    config: dict[str, Any] | None,
+) -> BrandContentStrategy:
+    """Extract brand content strategy (voice/audience/guidelines/cta) for agents."""
+    cfg = config or {}
+
+    def _clean(key: str) -> str | None:
+        val = cfg.get(key)
+        if isinstance(val, str):
+            val = val.strip()
+        return val or None
+
+    return BrandContentStrategy(
+        voice=_clean("voice"),
+        audience=_clean("audience"),
+        guidelines=_clean("contentGuidelines"),
+        cta=_clean("cta"),
     )
 
 
