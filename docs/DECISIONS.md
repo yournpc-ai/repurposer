@@ -517,3 +517,30 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `apps/api/app/routers/clips.py` (dub reads profile voiceprint + voice_id cached on profile)
 - `apps/web/src/routes/index.tsx`, `projects.tsx` (optional Speaker selection)
 - `apps/web/src/routes/speakers.tsx`, `speakers.$id.tsx` (per-user isolated multi-Speaker management page)
+
+## ADR-022: Music track library gets real backend CRUD, without touching the render-facing resolution path
+
+**Status**: Implemented
+
+**Context**: ADR-019 established a built-in mood music library resolved by filename convention (`data/music/{mood}.<ext>`, matched by stem via `resolve_music_safe`). That directory has stayed empty in practice, and a first frontend pass (brand-template Music panel redesign) built an Official/Personal browsing UI where Personal uploads were client-only (`URL.createObjectURL`, lost on refresh) and Official track title/duration/author were UI placeholders with no real data source. Meanwhile `apps/api` gained a `users` table and `get_current_user` dependency (ADR-021-adjacent work), making per-user scoping possible for the first time. Separately, there's a future desire to let background music be trimmed/offset against the video timeline — full multi-track editing is explicitly out of scope, but the schema should leave room.
+
+**Decision**:
+1. **New `music_tracks` table** (`apps/api/app/models/tables.py`) covers both official catalog entries (`user_id` NULL, tagged with `mood`) and user-uploaded personal tracks (`user_id` set, `mood` NULL): `title`, `filename`, `file_url`, `duration_seconds`, `source_note`, `created_at`.
+2. **The existing render-facing resolution path is untouched**: `services/storage.py:resolve_music_safe`, `services/brand.py:music_from_template`, and the mood-keyed `GET /api/v1/music/{mood}` streaming route in `routers/files.py` still read official tracks straight off disk by filename convention. `music_tracks` is a metadata/management layer only — it does not become the source of truth the renderer consumes. This keeps the change from touching code that feeds the Remotion render pipeline (owned separately).
+3. **New router `routers/music_tracks.py`**, mounted at `/api/v1/music` alongside (not replacing) the old mood-keyed route: `GET /api/v1/music` (list, `scope=official|personal`), `POST /api/v1/music` (multipart upload; `scope=official` writes to `data/music/{mood}.<ext>` — the same convention the renderer reads, replacing any prior file for that mood; `scope=personal` writes to a per-user directory never read by rendering), `DELETE /api/v1/music/{id}`, `GET /api/v1/music/track/{id}` (id-keyed streaming, needed since personal files aren't mood-named).
+4. **Duration captured client-side**: the frontend already probes track duration via `new Audio()` before upload; that value is sent as a form field (`duration_seconds`) rather than parsed server-side (no new Python audio-parsing dependency).
+5. **`SOURCES.md` file-editor endpoints (originally scoped in `docs/tasks/todo.md`) are deferred**; a per-track `source_note` text field is the lightweight substitute for now.
+6. **Audio-timeline trim fields are deliberately NOT added to `ClipMusic`** (`apps/api/app/models/schemas.py`, mirrored in `packages/clip/src/types.ts`) — only a code comment reserves the concept (where in the video this track starts; where in the track itself to start from/trim). The actual field shape depends on an audio-editing design discussion that hasn't happened yet; adding fields prematurely risks guessing wrong before the renderer owner weighs in.
+
+**Rationale**:
+- The riskiest part of "add a music library" is accidentally changing what the renderer actually plays. Keeping official-track resolution exactly as it was (file-convention based) means this entire change is additive and reviewable independent of the render pipeline.
+- A single table for both official and personal tracks avoids duplicating list/upload/delete logic for what is conceptually the same shape (a track with a title, a duration, a file); the `user_id` nullable column is enough of a discriminator.
+- Reserving audio-trim intent as a comment (not fields) avoids a second schema migration once the real design lands, while not blocking on a decision that isn't ready.
+
+**Related files**:
+- `apps/api/app/models/tables.py` (`MusicTrack`), `apps/api/migrations/versions/0026843ad9e7_add_music_tracks_table.py`
+- `apps/api/app/models/schemas.py` (`MusicTrackResponse`, `ClipMusic` reserved-fields comment)
+- `apps/api/app/services/storage.py` (`save_official_music_upload`, `save_personal_music_upload`, `music_track_url`, `resolve_music_track_file_safe`, `delete_music_track_file`)
+- `apps/api/app/routers/music_tracks.py`, `apps/api/app/main.py`
+- `packages/clip/src/types.ts` (`ClipMusic` reserved-fields comment)
+- `apps/web/src/components/brand-template/music-panel.tsx` (wired to the new endpoints)

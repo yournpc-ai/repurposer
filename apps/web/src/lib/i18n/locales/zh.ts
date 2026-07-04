@@ -347,6 +347,8 @@ const zh: Resources = {
         personal: "个人",
       },
       upload: "上传曲目",
+      uploading: "上传中…",
+      deleteConfirm: "确认删除这个曲目？",
       personalPreviewOnly: "仅试听，暂不影响生成结果",
     },
     preview: {

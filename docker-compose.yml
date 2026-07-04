@@ -21,12 +21,14 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - UPLOAD_DIR=/app/data/uploads
       - OUTPUT_DIR=/app/data/outputs
+      - MUSIC_DIR=/app/data/music
       # Absolute base the render service uses to fetch source clips back over HTTP.
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/outputs:/app/data/outputs
+      - ./data/music:/app/data/music
     depends_on:
       - db
 
@@ -42,11 +44,13 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - UPLOAD_DIR=/app/data/uploads
       - OUTPUT_DIR=/app/data/outputs
+      - MUSIC_DIR=/app/data/music
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/outputs:/app/data/outputs
+      - ./data/music:/app/data/music
     depends_on:
       - db
       - render

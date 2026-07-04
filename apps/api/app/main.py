@@ -13,6 +13,7 @@ from app.routers import (
     clips,
     derivatives,
     files,
+    music_tracks,
     projects,
     speaker_assets,
     speakers,
@@ -54,6 +55,7 @@ app.include_router(files, prefix="/api/v1", tags=["files"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )
+app.include_router(music_tracks, prefix="/api/v1/music", tags=["music"])
 
 
 @app.get("/health")

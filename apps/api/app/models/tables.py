@@ -9,6 +9,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -128,6 +129,31 @@ class BrandTemplate(Base):
     config = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class MusicTrack(Base):
+    """Background music library metadata (see ADR-022 in docs/DECISIONS.md).
+
+    Covers both the built-in "official" catalog (``user_id`` NULL, tagged with
+    a ``mood``) and user-uploaded "personal" tracks (``user_id`` set, ``mood``
+    NULL). This is a metadata/management layer only: official tracks' audio
+    still lives at ``data/music/{mood}.<ext>`` and is resolved for *rendering*
+    by ``services/storage.py:resolve_music_safe`` / ``services/brand.py``,
+    which this table does not change — it only adds real title/duration/
+    source_note for display and gives personal uploads a persisted home.
+    """
+
+    __tablename__ = "music_tracks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    mood = Column(String(50), nullable=True)
+    title = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=False)
+    file_url = Column(String(512), nullable=False)
+    duration_seconds = Column(Float, nullable=True)
+    source_note = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
 class Clip(Base):

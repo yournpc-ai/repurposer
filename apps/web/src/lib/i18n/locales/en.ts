@@ -345,6 +345,8 @@ const en = {
         personal: "Personal",
       },
       upload: "Upload track",
+      uploading: "Uploading…",
+      deleteConfirm: "Delete this track?",
       personalPreviewOnly: "Preview only — not used in rendering yet",
     },
     preview: {

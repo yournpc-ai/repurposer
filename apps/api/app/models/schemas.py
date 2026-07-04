@@ -484,6 +484,11 @@ class ClipMusic(BaseModel):
     url: str | None = None  # resolved track URL (storage seam); None = no track
     enabled: bool = False
     gain_db: float = -18.0
+    # Reserved for future audio-timeline editing (not yet designed or wired
+    # into the renderer): where in the VIDEO this track should start, and
+    # where in the TRACK ITSELF playback should begin (trim). Deliberately
+    # not modeled as fields yet, pending the audio-editing design — see
+    # ADR-022 in docs/DECISIONS.md.
 
 
 class ClipDub(BaseModel):
@@ -731,3 +736,25 @@ class BrandTemplateResponse(BrandTemplateBase):
     id: UUID
     created_at: datetime
     updated_at: datetime | None = None
+
+
+class MusicTrackResponse(BaseModel):
+    """Music library track (official catalog entry or personal upload). See ADR-022."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID | None = None  # None = official/built-in track
+    mood: str | None = None  # set for official tracks only
+    title: str
+    duration_seconds: float | None = None
+    source_note: str | None = None
+    created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def url(self) -> str:
+        """Browser-playable URL for this track, resolved through the storage seam."""
+        from app.services.storage import music_track_url
+
+        return music_track_url(self.id)

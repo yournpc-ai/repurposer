@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Pause, Play, Plus } from "lucide-react"
+import { Pause, Play, Plus, Trash2 } from "lucide-react"
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { apiFetch } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { Template } from "@/routes/brand-template"
 
@@ -13,11 +14,16 @@ type OfficialMood = (typeof OFFICIAL_MOODS)[number]
 type MoodFilter = "all" | OfficialMood
 type Source = "official" | "personal"
 
-type PersonalTrack = {
+// Mirrors MusicTrackResponse in apps/api/app/models/schemas.py (see ADR-022).
+type MusicTrackApi = {
   id: string
-  name: string
+  user_id: string | null
+  mood: string | null
+  title: string
+  duration_seconds: number | null
+  source_note: string | null
+  created_at: string
   url: string
-  duration: number | null
 }
 
 function formatDuration(seconds: number | null): string {
@@ -27,8 +33,13 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-function officialTrackUrl(mood: OfficialMood): string {
-  return `${API_URL}/api/v1/music/${mood}`
+/** Probe a local/blob URL's duration client-side (no server-side audio parsing). */
+function probeDuration(url: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const probe = new Audio(url)
+    probe.addEventListener("loadedmetadata", () => resolve(probe.duration))
+    probe.addEventListener("error", () => resolve(null))
+  })
 }
 
 export function MusicPanel({
@@ -41,28 +52,27 @@ export function MusicPanel({
   const { t } = useTranslation()
   const [source, setSource] = useState<Source>("official")
   const [moodFilter, setMoodFilter] = useState<MoodFilter>("all")
-  const [personalTracks, setPersonalTracks] = useState<PersonalTrack[]>([])
+  const [officialTracks, setOfficialTracks] = useState<MusicTrackApi[]>([])
+  const [personalTracks, setPersonalTracks] = useState<MusicTrackApi[]>([])
   const [selectedPersonalId, setSelectedPersonalId] = useState<string | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
-  const [officialDurations, setOfficialDurations] = useState<
-    Partial<Record<OfficialMood, number | null>>
-  >({})
+  const [uploading, setUploading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Lazily probe each built-in track's duration client-side (no backend
-  // metadata exists yet — see docs/tasks/todo.md).
-  useEffect(() => {
-    OFFICIAL_MOODS.forEach((mood) => {
-      const probe = new Audio(officialTrackUrl(mood))
-      probe.preload = "metadata"
-      probe.addEventListener("loadedmetadata", () => {
-        setOfficialDurations((d) => ({ ...d, [mood]: probe.duration }))
-      })
-      probe.addEventListener("error", () => {
-        setOfficialDurations((d) => ({ ...d, [mood]: null }))
-      })
-    })
+  const fetchOfficialTracks = useCallback(async () => {
+    const res = await apiFetch("/api/v1/music?scope=official")
+    if (res.ok) setOfficialTracks(await res.json())
   }, [])
+
+  const fetchPersonalTracks = useCallback(async () => {
+    const res = await apiFetch("/api/v1/music?scope=personal")
+    if (res.ok) setPersonalTracks(await res.json())
+  }, [])
+
+  useEffect(() => {
+    fetchOfficialTracks()
+    fetchPersonalTracks()
+  }, [fetchOfficialTracks, fetchPersonalTracks])
 
   const handleTogglePlay = (id: string, url: string) => {
     const audio = audioRef.current
@@ -77,22 +87,40 @@ export function MusicPanel({
     setPlayingId(id)
   }
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file) return
-    const id = crypto.randomUUID()
-    const url = URL.createObjectURL(file)
-    const name = file.name.replace(/\.[^/.]+$/, "")
-    setPersonalTracks((list) => [...list, { id, name, url, duration: null }])
-    const probe = new Audio(url)
-    probe.addEventListener("loadedmetadata", () => {
-      setPersonalTracks((list) =>
-        list.map((tr) => (tr.id === id ? { ...tr, duration: probe.duration } : tr))
-      )
-    })
+    setUploading(true)
+    try {
+      const objectUrl = URL.createObjectURL(file)
+      const duration = await probeDuration(objectUrl)
+      const title = file.name.replace(/\.[^/.]+$/, "")
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("title", title)
+      formData.append("scope", "personal")
+      if (duration != null) formData.append("duration_seconds", String(duration))
+      const res = await apiFetch("/api/v1/music", { method: "POST", body: formData })
+      if (!res.ok) throw new Error("Upload failed")
+      await fetchPersonalTracks()
+    } catch {
+      // Best-effort MVP surface; the track list simply won't gain an entry.
+    } finally {
+      setUploading(false)
+    }
   }
 
+  const handleDeletePersonal = async (id: string) => {
+    if (!confirm(t("brandTemplate.music.deleteConfirm"))) return
+    const res = await apiFetch(`/api/v1/music/${id}`, { method: "DELETE" })
+    if (res.ok) {
+      if (selectedPersonalId === id) setSelectedPersonalId(null)
+      await fetchPersonalTracks()
+    }
+  }
+
+  const officialByMood = new Map(officialTracks.filter((t) => t.mood).map((t) => [t.mood, t]))
   const visibleMoods = OFFICIAL_MOODS.filter((m) => moodFilter === "all" || moodFilter === m)
 
   return (
@@ -134,33 +162,51 @@ export function MusicPanel({
 
       <div className="space-y-1">
         {source === "official" ? (
-          visibleMoods.map((mood) => (
-            <TrackRow
-              key={mood}
-              name={t(`brandTemplate.music.moods.${mood}`)}
-              duration={officialDurations[mood] ?? null}
-              selected={template.musicMood === mood}
-              playing={playingId === mood}
-              onSelect={() => update("musicMood", mood)}
-              onTogglePlay={() => handleTogglePlay(mood, officialTrackUrl(mood))}
-            />
-          ))
+          visibleMoods.map((mood) => {
+            const track = officialByMood.get(mood)
+            const url = track ? `${API_URL}${track.url}` : `${API_URL}/api/v1/music/${mood}`
+            return (
+              <TrackRow
+                key={mood}
+                name={track?.title ?? t(`brandTemplate.music.moods.${mood}`)}
+                duration={track?.duration_seconds ?? null}
+                sourceNote={track?.source_note ?? null}
+                selected={template.musicMood === mood}
+                playing={playingId === mood}
+                onSelect={() => update("musicMood", mood)}
+                onTogglePlay={() => handleTogglePlay(mood, url)}
+              />
+            )
+          })
         ) : (
           <>
-            <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-accent">
+            <label
+              className={cn(
+                "flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-accent",
+                uploading && "pointer-events-none opacity-60"
+              )}
+            >
               <Plus className="h-4 w-4" />
-              {t("brandTemplate.music.upload")}
-              <input type="file" accept="audio/*" className="hidden" onChange={handleUpload} />
+              {uploading ? t("brandTemplate.music.uploading") : t("brandTemplate.music.upload")}
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={handleUpload}
+              />
             </label>
             {personalTracks.map((tr) => (
               <div key={tr.id}>
                 <TrackRow
-                  name={tr.name}
-                  duration={tr.duration}
+                  name={tr.title}
+                  duration={tr.duration_seconds}
+                  sourceNote={tr.source_note}
                   selected={selectedPersonalId === tr.id}
                   playing={playingId === tr.id}
                   onSelect={() => setSelectedPersonalId(tr.id)}
-                  onTogglePlay={() => handleTogglePlay(tr.id, tr.url)}
+                  onTogglePlay={() => handleTogglePlay(tr.id, `${API_URL}${tr.url}`)}
+                  onDelete={() => handleDeletePersonal(tr.id)}
                 />
                 {selectedPersonalId === tr.id && (
                   <p className="px-2 pt-0.5 text-xs text-muted-foreground">
@@ -182,17 +228,21 @@ export function MusicPanel({
 function TrackRow({
   name,
   duration,
+  sourceNote,
   selected,
   playing,
   onSelect,
   onTogglePlay,
+  onDelete,
 }: {
   name: string
   duration: number | null
+  sourceNote: string | null
   selected: boolean
   playing: boolean
   onSelect: () => void
   onTogglePlay: () => void
+  onDelete?: () => void
 }) {
   return (
     <div
@@ -215,8 +265,23 @@ function TrackRow({
         className="flex min-w-0 flex-1 flex-col items-start text-left"
       >
         <span className="w-full truncate text-sm">{name}</span>
-        <span className="text-xs text-muted-foreground">{formatDuration(duration)} · —</span>
+        <span className="text-xs text-muted-foreground">
+          {formatDuration(duration)} · {sourceNote || "—"}
+        </span>
       </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          aria-label="Delete"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
     </div>
   )
 }

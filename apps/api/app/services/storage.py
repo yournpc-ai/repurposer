@@ -150,6 +150,70 @@ def resolve_music_safe(name: str | None) -> Path | None:
     return None
 
 
+def _relative_to_music_dir(path: Path) -> str:
+    """Return path relative to music_dir as a POSIX string."""
+    try:
+        return path.relative_to(settings.music_dir).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+async def save_official_music_upload(file_obj: BinaryIO, mood: str, filename: str) -> str:
+    """Write an official track to ``data/music/{mood}.<ext>`` (ADR-022).
+
+    This is the exact on-disk convention ``resolve_music_safe`` already reads,
+    so uploading through here is how the render-facing library gets
+    populated — ``resolve_music_safe``/``music_from_template`` are untouched.
+    Replaces any existing file for the mood (matching the "one file per mood"
+    reality the resolver assumes), including under a different extension.
+    """
+    for ext in _MUSIC_EXTS:
+        stale = settings.music_dir / f"{mood}{ext}"
+        if stale.exists():
+            stale.unlink()
+    ext = Path(filename).suffix or ".mp3"
+    settings.music_dir.mkdir(parents=True, exist_ok=True)
+    destination = settings.music_dir / f"{mood}{ext}"
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(file_obj, buffer)
+    return _relative_to_music_dir(destination)
+
+
+def get_personal_music_dir(user_id: UUID) -> Path:
+    """Get the personal-uploads directory for a user (never read by rendering)."""
+    return settings.music_dir / "personal" / str(user_id)
+
+
+async def save_personal_music_upload(
+    file_obj: BinaryIO, user_id: UUID, track_id: UUID, filename: str
+) -> str:
+    """Save a personal track under ``data/music/personal/{user_id}/{track_id}.<ext>``."""
+    ext = Path(filename).suffix or ".mp3"
+    directory = get_personal_music_dir(user_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f"{track_id}{ext}"
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(file_obj, buffer)
+    return _relative_to_music_dir(destination)
+
+
+def resolve_music_track_file_safe(relative_path: str | None) -> Path | None:
+    """Resolve a ``MusicTrack.file_url`` (relative to music_dir), refusing traversal."""
+    return _resolve_within(settings.music_dir, relative_path)
+
+
+def music_track_url(track_id: UUID) -> str:
+    """Storage-seam URL for a DB-backed track, by id (ADR-022)."""
+    return f"/api/v1/music/track/{track_id}"
+
+
+def delete_music_track_file(relative_path: str | None) -> None:
+    """Delete a music track's file by its stored relative path (relative to music_dir)."""
+    path = resolve_music_track_file_safe(relative_path)
+    if path and path.exists():
+        path.unlink()
+
+
 def _resolve_within(base: Path, relative_path: str | None) -> Path | None:
     """Resolve ``relative_path`` under ``base``, or None if empty/escaping."""
     if not relative_path:

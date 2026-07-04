@@ -77,6 +77,11 @@ export interface ClipMusic {
   url?: string | null;
   enabled: boolean;
   gain_db: number;
+  // Reserved for future audio-timeline editing (not yet designed or wired
+  // into this renderer): where in the VIDEO this track should start, and
+  // where in the TRACK ITSELF playback should begin (trim). Deliberately
+  // not modeled as fields yet, pending the audio-editing design — see
+  // ADR-022 in docs/DECISIONS.md.
 }
 
 /** Cloned-voice dubbed speech in the target language (overrides the source audio). */
