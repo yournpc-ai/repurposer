@@ -5,8 +5,9 @@ from pathlib import Path
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.agents.base import _find_derivative_plan
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import BlogPost, SpeakerPersona
+from app.models.schemas import BlogPost, ContentPlan, GenerationContext
 
 logger = structlog.get_logger()
 
@@ -28,10 +29,8 @@ class BlogAgent:
     async def generate(
         self,
         materials: list[str],
-        persona: SpeakerPersona | None,
-        event_name: str | None = None,
-        target_language: str = "en",
-        instruction: str | None = None,
+        context: GenerationContext,
+        content_plan: ContentPlan,
     ) -> BlogPost:
         """Generate a title + markdown blog post in the target language."""
         if not materials:
@@ -43,13 +42,14 @@ class BlogAgent:
         if not trimmed_materials:
             raise MiniMaxError("No usable text found in materials")
 
+        derivative_plan = _find_derivative_plan(content_plan, "blog")
+
         template = _jinja_env.get_template("blog.j2")
         user_prompt = template.render(
             materials=trimmed_materials,
-            persona=persona,
-            event_name=event_name,
-            target_language=target_language,
-            instruction=(instruction or "").strip() or None,
+            context=context.model_dump(),
+            content_plan=content_plan.model_dump(),
+            derivative_plan=derivative_plan,
         )
 
         messages = [

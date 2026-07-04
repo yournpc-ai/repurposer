@@ -5,16 +5,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
+    ContentPlan,
+    DerivativePlan,
     DerivativeResponse,
     DerivativeUpdate,
+    GenerationContext,
     ToneSettings,
 )
-from app.models.tables import Derivative, Project, User
-from app.services.derivative_generation import generate_derivative
+from app.models.tables import BrandTemplate, Derivative, Project, User
+from app.services.brand import content_strategy_from_template
+from app.services.derivative_dispatch import generate_derivative
 from app.services.project_context import collect_materials, resolve_speaker_and_persona
 
 router = APIRouter()
@@ -85,16 +90,47 @@ async def regenerate_derivative(
     speaker, persona = await resolve_speaker_and_persona(db, project)
     instruction = data.instruction
     target_language = data.target_language or derivative.language or "en"
+    tone_settings = data.tone_settings
+
+    # Resolve the user's default brand template for brand strategy context.
+    bt = (
+        await db.execute(
+            select(BrandTemplate)
+            .where(BrandTemplate.user_id == project.user_id)
+            .order_by(BrandTemplate.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    content_strategy = content_strategy_from_template(bt.config if bt else None)
+
+    context = GenerationContext(
+        speaker_name=speaker.name if speaker else None,
+        speaker_title=speaker.title if speaker else None,
+        event_name=project.event_name,
+        persona=persona,
+        tone_settings=tone_settings,
+        brand_strategy=content_strategy,
+        target_language=target_language,
+        instruction=instruction,
+    )
+
+    # Build a minimal content plan focused on this single derivative.
+    content_plan = ContentPlan(
+        core_thesis="Regenerate this derivative faithfully to the source material",
+        derivatives=[
+            DerivativePlan(
+                derivative_type=derivative.type,
+                focus="Regenerate this derivative faithfully to the source material",
+            )
+        ],
+    )
 
     try:
         derivative.content = await generate_derivative(
-            project=project,
             derivative_type=derivative.type,
             materials=materials,
-            target_language=target_language,
-            instruction=instruction,
-            speaker=speaker,
-            persona=persona,
+            context=context,
+            content_plan=content_plan,
         )
     except MiniMaxError as e:
         raise HTTPException(

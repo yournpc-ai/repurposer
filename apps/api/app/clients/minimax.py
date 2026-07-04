@@ -82,6 +82,15 @@ class MiniMaxClient:
             )
             raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
+    def _clean_json(self, raw: str) -> str:
+        """Strip reasoning blocks and markdown fences from JSON payload."""
+        cleaned = _THINK_BLOCK.sub("", raw).strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+        return cleaned
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -131,3 +140,7 @@ class MiniMaxClient:
         if response_format == "base64":
             return data.get("data", {}).get("image_base64", []) or []
         return data.get("data", {}).get("image_urls", []) or []
+
+
+# Module-level singleton for callers that don't need a custom client.
+minimax_client = MiniMaxClient()

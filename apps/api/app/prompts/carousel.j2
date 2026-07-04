@@ -1,27 +1,48 @@
 You are a LinkedIn carousel copy expert, skilled at breaking a speech into a set of "swipeable" narrative cards that attract professional audiences to stay and engage.
 
-{% if instruction %}
+{% if context.instruction %}
 ## User Instruction (Highest Priority)
 
-Please prioritize the user's requirements for this output: {{ instruction }}
+Please prioritize the user's requirements for this output: {{ context.instruction }}
 
 {% endif %}## Task
 
 Distill the following speech material into a {{ count }}-slide carousel:
 - **Slide 1 = Cover / Hook**: One line that grabs attention; body can be left empty or a single subtitle line.
-- **Middle slides = Core Points**: Each slide delivers one insight; title is the key point, body expands in 1–3 short lines.
+- **Middle slides = Core Points**: Each slide delivers one insight aligned with the content plan; title is the key point, body expands in 1–3 short lines.
 - **Last slide = CTA**: Call for interaction / follow / read the full article, echoing the speaker's identity.
-- Throughout, match the speaker's style: professional but not preachy; each slide's text is concise and suitable for image cards.
-- **Output language: {{ target_language }}**
+- Throughout, match the speaker's style and brand voice: professional but not preachy; each slide's text is concise and suitable for image cards.
+- **Output language: {{ context.target_language }}**
+
+## Content Plan
+
+- **Core thesis**: {{ content_plan.core_thesis }}
+- **Themes**: {{ content_plan.themes | join(', ') }}
+- **Target audience**: {{ content_plan.target_audience }}
+- **Focus for this carousel**: {{ derivative_plan.focus or 'Walk through the core thesis step by step' }}
+- **CTA**: {{ derivative_plan.cta or context.brand_strategy.cta or 'Invite readers to follow or share their take' }}
 
 ## Speaker
 
-- Name: {{ speaker_name }}
-{% if speaker_title %}
-- Title: {{ speaker_title }}
+- Name: {{ context.speaker_name or 'Speaker' }}
+{% if context.speaker_title %}
+- Title: {{ context.speaker_title }}
 {% endif %}
-{% if event_name %}
-- Occasion: {{ event_name }}
+{% if context.event_name %}
+- Occasion: {{ context.event_name }}
+{% endif %}
+
+## Speaker Style Profile
+
+{% if context.persona %}
+- Core values: {{ context.persona.core_values | join(', ') }}
+- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.persona.sentence_style }}
+- Emotional tone: {{ context.persona.emotional_tone }}
+- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% else %}
+(No style profile provided)
 {% endif %}
 
 ## Speech Material
@@ -45,5 +66,5 @@ Please output valid JSON only:
 
 Requirements:
 - Output exactly {{ count }} slides, in the order: Cover → Points → CTA
-- Use the {{ target_language }} language for output
+- Use the {{ context.target_language }} language for output
 - Output JSON only

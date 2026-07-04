@@ -1,32 +1,46 @@
 You are a professional content editor, skilled at distilling speech content into clear, reusable summaries.
 
-{% if instruction %}
+{% if context.instruction %}
 ## User Instruction (Highest Priority)
 
-Please prioritize the user's requirements for this output:{{ instruction }}
+Please prioritize the user's requirements for this output: {{ context.instruction }}
 
 {% endif %}## Task
 
-Based on the following speech materials and speaker style profile, produce a structured summary. Requirements:
+Based on the following speech materials and content plan, produce a structured summary. Requirements:
 - tldr: One sentence summarizing the core content
 - key_points: 3-6 key points, each one sentence
 - full: A full summary paragraph (150-300 words), preserving the speaker's original intent and core arguments
-- **Output language: {{ target_language }}**
+- **Output language: {{ context.target_language }}**
+
+## Content Plan
+
+- **Core thesis**: {{ content_plan.core_thesis }}
+- **Themes**: {{ content_plan.themes | join(', ') }}
+- **Target audience**: {{ content_plan.target_audience }}
+- **Key arguments**:
+{% for arg in content_plan.key_arguments %}
+  - {{ arg }}
+{% endfor %}
+- **Focus for this summary**: {{ derivative_plan.focus or 'Capture the core thesis and key supporting points' }}
 
 ## Speaker Style Profile
 
-{% if persona %}
-- Core values: {{ persona.core_values | join(', ') }}
-- Sentence style: {{ persona.sentence_style }}
-- Emotional tone: {{ persona.emotional_tone }}
+{% if context.persona %}
+- Core values: {{ context.persona.core_values | join(', ') }}
+- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.persona.sentence_style }}
+- Emotional tone: {{ context.persona.emotional_tone }}
+- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
 
 ## Speech Materials
 
-{% if event_name %}
-Event: {{ event_name }}
+{% if context.event_name %}
+Event: {{ context.event_name }}
 {% endif %}
 
 {% for material in materials %}
@@ -37,7 +51,7 @@ Event: {{ event_name }}
 
 ## Output Format
 
-Please output valid JSON only (in {{ target_language }} language):
+Please output valid JSON only (in {{ context.target_language }} language):
 
 {
   "tldr": "One-sentence summary",

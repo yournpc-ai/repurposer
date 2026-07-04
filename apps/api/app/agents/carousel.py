@@ -5,8 +5,9 @@ from pathlib import Path
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.agents.base import _find_derivative_plan
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import CarouselResponse
+from app.models.schemas import CarouselResponse, ContentPlan, GenerationContext
 
 logger = structlog.get_logger()
 
@@ -28,22 +29,15 @@ class CarouselAgent:
     async def generate(
         self,
         materials: list[str],
-        speaker_name: str,
-        speaker_title: str | None,
-        event_name: str | None = None,
-        count: int = 6,
-        target_language: str = "en",
-        instruction: str | None = None,
+        context: GenerationContext,
+        content_plan: ContentPlan,
     ) -> CarouselResponse:
         """Generate a carousel from speech materials.
 
         Args:
             materials: Extracted text from project assets.
-            speaker_name: Speaker name for attribution.
-            speaker_title: Speaker title.
-            event_name: Optional event name.
-            count: Number of slides (cover + points + CTA).
-            target_language: ISO language code for the generated copy.
+            context: Shared generation context.
+            content_plan: Unified content plan.
 
         Returns:
             CarouselResponse model.
@@ -57,15 +51,16 @@ class CarouselAgent:
         if not trimmed_materials:
             raise MiniMaxError("No usable text found in materials")
 
+        derivative_plan = _find_derivative_plan(content_plan, "carousel")
+        count = derivative_plan.get("count") or 6
+
         template = _jinja_env.get_template("carousel.j2")
         user_prompt = template.render(
             materials=trimmed_materials,
-            speaker_name=speaker_name,
-            speaker_title=speaker_title,
-            event_name=event_name,
+            context=context.model_dump(),
+            content_plan=content_plan.model_dump(),
+            derivative_plan=derivative_plan,
             count=count,
-            target_language=target_language,
-            instruction=(instruction or "").strip() or None,
         )
 
         messages = [

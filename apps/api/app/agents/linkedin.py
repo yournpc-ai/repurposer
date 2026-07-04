@@ -5,8 +5,9 @@ from pathlib import Path
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.agents.base import _find_derivative_plan
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import LinkedInPost, SpeakerPersona
+from app.models.schemas import ContentPlan, GenerationContext, LinkedInPost
 
 logger = structlog.get_logger()
 
@@ -28,18 +29,15 @@ class LinkedInAgent:
     async def generate(
         self,
         materials: list[str],
-        persona: SpeakerPersona | None,
-        event_name: str | None = None,
-        target_language: str = "en",
-        instruction: str | None = None,
+        context: GenerationContext,
+        content_plan: ContentPlan,
     ) -> LinkedInPost:
         """Generate a LinkedIn post.
 
         Args:
             materials: Extracted text from project assets.
-            persona: Speaker style persona.
-            event_name: Optional event name for context.
-            target_language: ISO language code for the generated post.
+            context: Shared generation context.
+            content_plan: Unified content plan.
 
         Returns:
             LinkedInPost model.
@@ -53,13 +51,16 @@ class LinkedInAgent:
         if not trimmed_materials:
             raise MiniMaxError("No usable text found in materials")
 
+        derivative_plan = _find_derivative_plan(
+            content_plan, "linkedin_post"
+        )
+
         template = _jinja_env.get_template("linkedin.j2")
         user_prompt = template.render(
             materials=trimmed_materials,
-            persona=persona,
-            event_name=event_name,
-            target_language=target_language,
-            instruction=(instruction or "").strip() or None,
+            context=context.model_dump(),
+            content_plan=content_plan.model_dump(),
+            derivative_plan=derivative_plan,
         )
 
         messages = [

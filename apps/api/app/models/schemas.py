@@ -159,6 +159,53 @@ class ToneSettings(BaseModel):
     audience: Literal["academic", "industry", "general", "investor"] = "industry"
 
 
+class InferredIntent(BaseModel):
+    """AI-recognized user intent from a prompt and optional file metadata.
+
+    Returned by ``/infer-intent`` so the frontend can present a confirmation
+    layer before generation. All fields have sensible defaults; the user can
+    edit any of them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: str = Field(
+        default="en",
+        description="ISO language code for generated outputs (en/fr/de/es/it/zh).",
+    )
+    outputs: list[
+        Literal["clips", "linkedin", "quote_cards", "summary"]
+    ] = Field(
+        default_factory=lambda: ["clips", "linkedin", "quote_cards", "summary"],
+        description="Which asset types the user wants to generate.",
+    )
+    tone: Literal["professional", "thoughtLeadership", "conversational", "academic"] = (
+        Field(default="professional", description="Detected tone preset.")
+    )
+    specific_instruction: str | None = Field(
+        default=None,
+        description="Free-form instruction distilled from the prompt.",
+    )
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class InferIntentRequest(BaseModel):
+    """Request body for intent inference."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = Field(default="", description="User prompt or transcript paste.")
+    filename: str | None = Field(
+        default=None, description="Optional uploaded filename for extra context."
+    )
+
+
+class InferIntentResponse(BaseModel):
+    """Response from intent inference."""
+
+    intent: InferredIntent
+
+
 class SpeakerBase(BaseModel):
     """Base speaker model."""
 
@@ -541,6 +588,67 @@ class ClipMusic(BaseModel):
     url: str | None = None  # resolved track URL (storage seam); None = no track
     enabled: bool = False
     gain_db: float = -18.0
+
+
+class BrandContentStrategy(BaseModel):
+    """Content strategy derived from a brand template.
+
+    Passed to planning agents so hook/segment selection aligns with brand
+    voice, target audience, and content guidelines.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+
+
+class GenerationContext(BaseModel):
+    """Shared context passed to every content generation agent.
+
+    Assembled once per generation run from the resolved speaker, brand
+    template, tone settings, project metadata, and user instruction.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speaker_name: str | None = None
+    speaker_title: str | None = None
+    event_name: str | None = None
+    persona: SpeakerPersona | None = None
+    tone_settings: ToneSettings | None = None
+    brand_strategy: BrandContentStrategy | None = None
+    target_language: str = "en"
+    instruction: str | None = None
+
+
+class DerivativePlan(BaseModel):
+    """Per-output guidance produced by the Content Director."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    derivative_type: DerivativeType
+    focus: str = ""
+    cta: str | None = None
+    quote_candidates: list[str] = Field(default_factory=list)
+    tone_override: str | None = None
+    count: int | None = None
+
+
+class ContentPlan(BaseModel):
+    """Top-level content plan shared across all agent executors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    core_thesis: str
+    themes: list[str] = Field(default_factory=list)
+    target_audience: str = ""
+    key_arguments: list[str] = Field(default_factory=list)
+    derivatives: list[DerivativePlan] = Field(default_factory=list)
+    quote_candidates: list[str] = Field(default_factory=list)
+    overall_summary: str = ""
 
 
 class ClipDub(BaseModel):

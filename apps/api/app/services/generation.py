@@ -15,14 +15,18 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.clip_agent import clip_agent
+from app.agents.content_director import content_director_agent
 from app.agents.persona import persona_agent
-from app.agents.planner import planner_agent
 from app.agents.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetType,
+    ContentPlan,
+    DerivativePlan,
     DerivativeType,
+    GenerationContext,
     MediaInput,
     ProjectStatus,
     RenderStatus,
@@ -39,9 +43,14 @@ from app.models.tables import (
     Speaker,
     WorkflowRun,
 )
-from app.services.brand import brand_from_template, music_from_mood, music_from_template
+from app.services.brand import (
+    brand_from_template,
+    content_strategy_from_template,
+    music_from_mood,
+    music_from_template,
+)
 from app.services.clip_spec import build_clip_spec
-from app.services.derivative_generation import generate_derivative
+from app.services.derivative_dispatch import generate_derivative
 from app.services.messages import (
     add_result_refs,
     append_message_marker,
@@ -106,6 +115,14 @@ async def _save_quote_card_image(
         return None
 
 KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
+
+_OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
+    "linkedin": DerivativeType.LINKEDIN_POST,
+    "quote_cards": DerivativeType.QUOTE_CARD,
+    "carousel": DerivativeType.CAROUSEL,
+    "summary": DerivativeType.SUMMARY,
+    "blog": DerivativeType.BLOG,
+}
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. Limits are
@@ -433,6 +450,32 @@ async def run_generation(run_id: UUID) -> None:
             # guidance. This keeps the homepage UI free of speaker selection.
             speaker = await _resolve_or_create_speaker(db, project, materials)
 
+            # Resolve the brand template early so the planner can use its content
+            # strategy (voice/audience/cta/guidelines) when selecting segments.
+            bt_id = ctx.get("brand_template_id")
+            bt = None
+            if bt_id:
+                try:
+                    result = await db.execute(
+                        select(BrandTemplate).where(
+                            BrandTemplate.id == UUID(str(bt_id)),
+                            BrandTemplate.user_id == project.user_id,
+                        )
+                    )
+                    bt = result.scalar_one_or_none()
+                except (ValueError, TypeError):
+                    bt = None
+            if bt is None:
+                bt = (
+                    await db.execute(
+                        select(BrandTemplate)
+                        .where(BrandTemplate.user_id == project.user_id)
+                        .order_by(BrandTemplate.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            content_strategy = content_strategy_from_template(bt.config if bt else None)
+
             # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
             #   1. on-camera VIDEO (with ASR words)      -> video clip
             #   2. else speech AUDIO (with ASR words)    -> stills audiogram
@@ -487,39 +530,74 @@ async def run_generation(run_id: UUID) -> None:
                 else None
             )
 
+            # Assemble the shared generation context once. All agents receive this
+            # same object so that speaker style, brand voice, tone, and user
+            # instruction are applied consistently across every output.
+            generation_context = GenerationContext(
+                speaker_name=speaker.name if speaker else None,
+                speaker_title=speaker.title if speaker else None,
+                event_name=project.event_name,
+                persona=persona,
+                tone_settings=tone_settings,
+                brand_strategy=content_strategy,
+                target_language=target_language,
+                instruction=instruction,
+            )
+
+            requested_derivative_types = [
+                _OUTPUT_TO_DERIVATIVE_TYPE[o]
+                for o in outputs
+                if o in _OUTPUT_TO_DERIVATIVE_TYPE
+            ]
+
+            # Run the Content Director before any generation so that every agent
+            # works from the same core thesis, themes, and per-output focus.
+            # current_step remains "loading" during planning to preserve the
+            # legacy step sequence for frontend polling.
+            if message_id:
+                await append_message_marker(
+                    db, message_id, "Planning content...", "status"
+                )
+            content_plan: ContentPlan = await content_director_agent.plan(
+                materials=materials,
+                context=generation_context,
+                media_inputs=media_inputs,
+                requested_derivatives=requested_derivative_types,
+            )
+
             # Idempotency: clear prior outputs for the requested types so reruns
             # replace rather than accumulate.
             if "clips" in outputs:
                 await db.execute(delete(Clip).where(Clip.project_id == project.id))
-            if "linkedin" in outputs:
+            if DerivativeType.LINKEDIN_POST in requested_derivative_types:
                 await db.execute(
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.LINKEDIN_POST,
                     )
                 )
-            if "quote_cards" in outputs:
+            if DerivativeType.QUOTE_CARD in requested_derivative_types:
                 await db.execute(
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.QUOTE_CARD,
                     )
                 )
-            if "carousel" in outputs:
+            if DerivativeType.CAROUSEL in requested_derivative_types:
                 await db.execute(
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.CAROUSEL,
                     )
                 )
-            if "summary" in outputs:
+            if DerivativeType.SUMMARY in requested_derivative_types:
                 await db.execute(
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
                         Derivative.type == DerivativeType.SUMMARY,
                     )
                 )
-            if "blog" in outputs:
+            if DerivativeType.BLOG in requested_derivative_types:
                 await db.execute(
                     delete(Derivative).where(
                         Derivative.project_id == project.id,
@@ -541,44 +619,15 @@ async def run_generation(run_id: UUID) -> None:
                     await append_message_marker(
                         db, message_id, "Generating clips...", "status"
                     )
-                plans = await planner_agent.plan(
+                plans = await clip_agent.generate(
                     materials=materials,
+                    context=generation_context,
+                    content_plan=content_plan,
                     media_inputs=media_inputs,
                     clip_count=clip_count,
-                    event_name=project.event_name,
-                    target_language=target_language,
-                    instruction=instruction,
-                    persona=persona.model_dump() if persona is not None else None,
-                    tone_settings=tone_settings.model_dump()
-                    if tone_settings is not None
-                    else None,
                 )
                 # Bake the chosen brand template into each clip's render_spec so
                 # the renderer/preview show it without DB access (see ADR-016).
-                # Prefer the template the user selected at generate time; else the
-                # most recent (the seeded default guarantees at least one exists).
-                bt_id = ctx.get("brand_template_id")
-                bt = None
-                if bt_id:
-                    try:
-                        result = await db.execute(
-                            select(BrandTemplate).where(
-                                BrandTemplate.id == UUID(str(bt_id)),
-                                BrandTemplate.user_id == project.user_id,
-                            )
-                        )
-                        bt = result.scalar_one_or_none()
-                    except (ValueError, TypeError):
-                        bt = None
-                if bt is None:
-                    bt = (
-                        await db.execute(
-                            select(BrandTemplate)
-                            .where(BrandTemplate.user_id == project.user_id)
-                            .order_by(BrandTemplate.created_at.desc())
-                            .limit(1)
-                        )
-                    ).scalar_one_or_none()
                 brand = brand_from_template(bt.config) if bt is not None else None
                 brand_ref = bt.id if bt is not None else None
                 cfg = (bt.config or {}) if bt is not None else {}
@@ -647,81 +696,73 @@ async def run_generation(run_id: UUID) -> None:
                         db, message_id, f"Generated {len(clip_ids)} clips", "status"
                     )
 
-            if "linkedin" in outputs:
-                run.current_step = "linkedin"
-                await db.commit()
-                if message_id:
-                    await update_message_meta(db, message_id, current_step="linkedin")
-                    await append_message_marker(
-                        db, message_id, "Generating LinkedIn post...", "status"
+            # Generate each requested derivative in the original output order,
+            # preserving the legacy current_step values and progress tracking.
+            derivative_step_labels: dict[str, str] = {
+                "linkedin": "LinkedIn post",
+                "quote_cards": "quote cards",
+                "carousel": "carousel",
+                "summary": "summary",
+                "blog": "blog post",
+            }
+            for output in outputs:
+                if output == "clips":
+                    continue
+                derivative_type = _OUTPUT_TO_DERIVATIVE_TYPE.get(output)
+                if derivative_type is None:
+                    continue
+
+                derivative_plan = next(
+                    (p for p in content_plan.derivatives if p.derivative_type == derivative_type),
+                    None,
+                )
+                if derivative_plan is None:
+                    logger.warning(
+                        "missing_derivative_plan",
+                        output=output,
+                        derivative_type=derivative_type.value,
                     )
+                    derivative_plan = DerivativePlan(derivative_type=derivative_type)
+
+                run.current_step = output
+                await db.commit()
+                label = derivative_step_labels.get(output, output)
+                if message_id:
+                    await update_message_meta(db, message_id, current_step=output)
+                    await append_message_marker(
+                        db, message_id, f"Generating {label}...", "status"
+                    )
+
                 content = await generate_derivative(
-                    project=project,
-                    derivative_type=DerivativeType.LINKEDIN_POST,
+                    derivative_type=derivative_type,
                     materials=materials,
-                    target_language=target_language,
-                    instruction=instruction,
-                    speaker=speaker,
-                    persona=persona,
+                    context=generation_context,
+                    content_plan=content_plan,
                 )
                 derivative = Derivative(
                     project_id=project.id,
-                    type=DerivativeType.LINKEDIN_POST,
+                    type=derivative_type,
                     content=content,
                     language=target_language,
                 )
                 db.add(derivative)
                 await db.commit()
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
-                    await update_message_meta(db, message_id, progress=run.progress)
-                    await append_message_marker(
-                        db, message_id, "LinkedIn post ready", "status"
-                    )
 
-            if "quote_cards" in outputs:
-                run.current_step = "quote_cards"
-                await db.commit()
-                if message_id:
-                    await update_message_meta(db, message_id, current_step="quote_cards")
-                    await append_message_marker(
-                        db, message_id, "Generating quote cards...", "status"
-                    )
-                content = await generate_derivative(
-                    project=project,
-                    derivative_type=DerivativeType.QUOTE_CARD,
-                    materials=materials,
-                    target_language=target_language,
-                    instruction=instruction,
-                    speaker=speaker,
-                    persona=persona,
-                )
-                derivative = Derivative(
-                    project_id=project.id,
-                    type=DerivativeType.QUOTE_CARD,
-                    content=content,
-                    language=target_language,
-                )
-                db.add(derivative)
-                await db.commit()
-                await db.refresh(derivative)
-
-                # Generate a PNG for the first quote card using MiniMax image-01.
-                quotes = content.get("quotes", []) if isinstance(content, dict) else []
-                if quotes:
-                    first_quote = quotes[0]
-                    image_url = await _save_quote_card_image(
-                        quote=first_quote.get("quote", ""),
-                        attribution=first_quote.get("attribution", ""),
-                        derivative_id=derivative.id,
-                        project=project,
-                    )
-                    if image_url:
-                        derivative.image_url = image_url
-                        await db.commit()
+                # Quote cards get a generated PNG for the first quote.
+                if derivative_type == DerivativeType.QUOTE_CARD:
+                    await db.refresh(derivative)
+                    quotes = content.get("quotes", []) if isinstance(content, dict) else []
+                    if quotes:
+                        first_quote = quotes[0]
+                        image_url = await _save_quote_card_image(
+                            quote=first_quote.get("quote", ""),
+                            attribution=first_quote.get("attribution", ""),
+                            derivative_id=derivative.id,
+                            project=project,
+                        )
+                        if image_url:
+                            derivative.image_url = image_url
+                            await db.commit()
 
                 done += 1
                 run.progress = int(done / total * 100)
@@ -730,112 +771,7 @@ async def run_generation(run_id: UUID) -> None:
                     await add_result_refs(db, message_id, derivative_ids=[derivative.id])
                     await update_message_meta(db, message_id, progress=run.progress)
                     await append_message_marker(
-                        db, message_id, "Quote cards ready", "status"
-                    )
-
-            if "carousel" in outputs:
-                run.current_step = "carousel"
-                await db.commit()
-                if message_id:
-                    await update_message_meta(db, message_id, current_step="carousel")
-                    await append_message_marker(
-                        db, message_id, "Generating carousel...", "status"
-                    )
-                content = await generate_derivative(
-                    project=project,
-                    derivative_type=DerivativeType.CAROUSEL,
-                    materials=materials,
-                    target_language=target_language,
-                    instruction=instruction,
-                    speaker=speaker,
-                    persona=persona,
-                )
-                derivative = Derivative(
-                    project_id=project.id,
-                    type=DerivativeType.CAROUSEL,
-                    content=content,
-                    language=target_language,
-                )
-                db.add(derivative)
-                await db.commit()
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
-                    await update_message_meta(db, message_id, progress=run.progress)
-                    await append_message_marker(
-                        db, message_id, "Carousel ready", "status"
-                    )
-
-            if "summary" in outputs:
-                run.current_step = "summary"
-                await db.commit()
-                if message_id:
-                    await update_message_meta(db, message_id, current_step="summary")
-                    await append_message_marker(
-                        db, message_id, "Generating summary...", "status"
-                    )
-                content = await generate_derivative(
-                    project=project,
-                    derivative_type=DerivativeType.SUMMARY,
-                    materials=materials,
-                    target_language=target_language,
-                    instruction=instruction,
-                    speaker=speaker,
-                    persona=persona,
-                )
-                derivative = Derivative(
-                    project_id=project.id,
-                    type=DerivativeType.SUMMARY,
-                    content=content,
-                    language=target_language,
-                )
-                db.add(derivative)
-                await db.commit()
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
-                    await update_message_meta(db, message_id, progress=run.progress)
-                    await append_message_marker(
-                        db, message_id, "Summary ready", "status"
-                    )
-
-            if "blog" in outputs:
-                run.current_step = "blog"
-                await db.commit()
-                if message_id:
-                    await update_message_meta(db, message_id, current_step="blog")
-                    await append_message_marker(
-                        db, message_id, "Generating blog post...", "status"
-                    )
-                content = await generate_derivative(
-                    project=project,
-                    derivative_type=DerivativeType.BLOG,
-                    materials=materials,
-                    target_language=target_language,
-                    instruction=instruction,
-                    speaker=speaker,
-                    persona=persona,
-                )
-                derivative = Derivative(
-                    project_id=project.id,
-                    type=DerivativeType.BLOG,
-                    content=content,
-                    language=target_language,
-                )
-                db.add(derivative)
-                await db.commit()
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
-                    await update_message_meta(db, message_id, progress=run.progress)
-                    await append_message_marker(
-                        db, message_id, "Blog post ready", "status"
+                        db, message_id, f"{label.title()} ready", "status"
                     )
 
             run.status = WorkflowStatus.COMPLETED
