@@ -44,16 +44,16 @@
 
 | Days | Task | Deliverable | Owner |
 |:---|:---|:---|:---|
-| Day 1-2 | Analyzer Agent | Speech transcript segmentation, virality scoring | Backend |
-| Day 2-4 | Script Agent | Generate vertical clip scripts, storyboards, subtitles, titles | Backend |
-| Day 4-5 | Review Agent | Score against Speaker style, flag issues | Backend |
+| Day 1-2 | Content Director Agent | Unified content plan: thesis, themes, audience, per-output plans | Backend |
+| Day 2-4 | Clip Agent | Select segments and generate vertical clip scripts from the content plan | Backend |
+| Day 4-5 | Derivative Agents | LinkedIn / Quote / Summary agents wired to the shared ContentPlan | Backend |
 | Day 5 | Generation trigger API | `POST /api/v1/projects/{id}/generate` runs the workflow | Backend |
 
-**Week 3 Milestone**: After inputting a transcript, the system can generate 3 clip scripts.
+**Week 3 Milestone**: After inputting a transcript, the system can generate 3 clip scripts plus derivative copy.
 
 **Risks**:
-- Analyzer scoring criteria need human calibration
-- Script Agent quality for Chinese academic speech colloquialization
+- Director plan quality needs human calibration
+- Clip Agent quality for Chinese academic speech colloquialization
 
 ---
 
@@ -63,7 +63,7 @@
 |:---|:---|:---|:---|
 | Day 1-2 | Reviser Agent | Local regeneration of hook / script based on feedback | Backend |
 | Day 2-3 | LinkedIn Agent | Generate long-form post copy | Backend |
-| Day 3-4 | Quote Card Agent | Generate quote card copy | Backend |
+| Day 3-4 | Quote Agent | Generate quote card copy | Backend |
 | Day 4-5 | Review UI | Left clip list + right preview / editor + feedback buttons | Frontend |
 | Day 5 | Integration | Frontend can edit scripts, submit feedback, trigger regeneration | Frontend + Backend |
 

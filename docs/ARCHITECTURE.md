@@ -27,8 +27,9 @@
                     ↓
 ┌─────────────────────────────────────────────┐
 │  Agent Steps (pure Python functions)         │
-│  persona / analyze / script / review /       │
-│  revise / linkedin / quote_card / translate  │
+│  persona / content_director / clip /         │
+│  linkedin / quote / carousel / summary /     │
+│  blog / reviser / caption_translate          │
 └─────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────┐
@@ -51,17 +52,17 @@
 | Agent | Input | Output | Description |
 |:---|:---|:---|:---|
 | `persona` | Speaker's past materials | `SpeakerPersona` | Style portrait |
-| `analyzer` | Transcript + persona + target_language | `ContentAnalysis` | Content segmentation and scoring |
-| `script` | Segment + persona + tone + target_language | `ClipScript` | Vertical script |
-| `reviser` | Script + feedback + persona | `ClipScript` | Revised script |
-| `linkedin` | Material/segment + persona | `LinkedInPost` | LinkedIn long post |
-| `quote_card` | Material/segment + persona | `QuoteCards` | Quote card copy |
-| `carousel` | Material + persona | `CarouselResponse` | LinkedIn carousel (cover → points → CTA) |
-| `summary` | Material + persona | `Summary` | Multi-language summary |
-| `blog` | Material + persona | `BlogPost` | Blog article |
+| `content_director` | Materials + `GenerationContext` | `ContentPlan` | Unified analysis: core thesis, themes, audience, per-output plans |
+| `clip` | Materials + `GenerationContext` + `ContentPlan` | `ClipPlans` | Select segments and write vertical clip scripts |
+| `linkedin` | Materials + `GenerationContext` + `ContentPlan` | `LinkedInPost` | LinkedIn long post |
+| `quote` | Materials + `GenerationContext` + `ContentPlan` | `QuoteCardsResponse` | Quote card copy |
+| `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | LinkedIn carousel (cover → points → CTA) |
+| `summary` | Materials + `GenerationContext` + `ContentPlan` | `Summary` | Multi-language summary |
+| `blog` | Materials + `GenerationContext` + `ContentPlan` | `BlogPost` | Blog article |
+| `reviser` | Script + feedback + persona | `ClipScript` | Revised clip script from human feedback |
 | `caption_translate` | Word-level captions + target_language | `CaptionTranslation` | Caption language swap |
 
-> **Intent Channel**: `GenerateRequest.instruction` (homepage prompt) is additionally passed to analyzer/script/linkedin/quote_card/carousel/summary/blog as "the highest-priority directive for this output."
+> **Intent Channel**: `GenerateRequest.instruction` (homepage prompt) is folded into `GenerationContext` and passed to the Content Director and every derivative agent as "the highest-priority directive for this run."
 > **Vision/Voice**: `IMAGE` assets are processed through M3 multimodal (`services/vision.py`) to extract key points into materials; `POST /clips/{id}/dub` uses MiniMax voice_clone + T2A (`services/voice.py`) for voice-cloned dubbing.
 
 ### 3.2 Generation Flow
@@ -71,18 +72,15 @@ User uploads media + inputs prompt
     ↓
 Preprocessing (transcription / parsing / image processing)
     ↓
-Analyzer Agent → content segmentation + virality scoring
+Resolve Speaker (auto-create default persona if none selected)
     ↓
-Extract / update Speaker memory from task input (optional; if no Speaker is selected, auto-create)
+Resolve Brand template → content strategy
     ↓
-For each high-potential segment:
-    Script Agent → first draft (with Speaker memory style constraints)
-    Review Agent → scoring
-    If not passed:
-        Reviser Agent → correction
-    Repeat up to 2 times
+Content Director Agent → unified ContentPlan
     ↓
-LinkedIn Agent / Quote Card Agent → derivative content
+Clip Agent → segment selection + scripts
+    ↓
+Derivative Agents (LinkedIn / Quote / Carousel / Summary / Blog) → outputs
     ↓
 Save results, await user review
     ↓
@@ -130,7 +128,7 @@ Frontend makes three consecutive API calls:
   POST /api/v1/projects/{id}/generate → Create WorkflowRun, enter generation queue
             ↓
 Worker claims WorkflowRun and calls Agents in order:
-  analyzer → script → linkedin / quote_card / summary / blog
+  content_director → clip → linkedin / quote / carousel / summary / blog
             ↓
 Generate clip-spec (including brand, music) and save to Clip.render_spec
             ↓
@@ -180,15 +178,17 @@ apps/api/
 │   │   ├── schemas.py
 │   │   └── tables.py
 │   ├── agents/              # Agent steps
+│   │   ├── base.py          # Shared MiniMax agent base + derivative plan helper
 │   │   ├── persona.py
-│   │   ├── analyzer.py
-│   │   ├── script.py
+│   │   ├── content_director.py
+│   │   ├── clip_agent.py
 │   │   ├── reviser.py
 │   │   ├── linkedin.py
-│   │   ├── quote_card.py
+│   │   ├── quote_agent.py
 │   │   ├── carousel.py
 │   │   ├── summary.py
 │   │   ├── blog.py
+│   │   ├── intent.py        # /infer-intent helper
 │   │   └── caption_translate.py
 │   ├── prompts/             # Jinja2 templates
 │   └── clients/

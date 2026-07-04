@@ -219,14 +219,16 @@ Home composer
               ▼
         Worker 认领并执行
               │
-              ├─ 1. Planner Agent：基于材料、persona、instruction、target_language 规划 clips
-              ├─ 2. 对每个 output 调用对应 agent
-              │      ├─ clips → script + build_clip_spec + render_spec
+              ├─ 1. Content Director：基于材料、GenerationContext 产出统一 ContentPlan
+              │     （core thesis / themes / target audience / 每个 output 的 DerivativePlan）
+              ├─ 2. Clip Agent：基于 ContentPlan 规划 clips（选段 + script）
+              ├─ 3. 对每个非 clip output 调用对应 agent
+              │      ├─ clips → build_clip_spec + render_spec
               │      ├─ linkedin → LinkedIn agent
               │      ├─ quote_cards → Quote agent + MiniMax image-01
               │      └─ summary → Summary agent
-              ├─ 3. 保存 Clip / Derivative 到数据库 + assets/
-              └─ 4. WorkflowRun completed
+              ├─ 4. 保存 Clip / Derivative 到数据库 + assets/
+              └─ 5. WorkflowRun completed
               │
               ▼
     Results Page 轮询 /api/v1/projects/{id}/results
@@ -266,10 +268,10 @@ Brand template 不只是视觉皮肤，还承担**内容策略**角色。
 | 字段 | 用途 | 影响阶段 |
 |---|---|---|
 | 视觉（font / color / logo / position） | 渲染样式 | `render_spec` → Remotion |
-| CTA | 视频底部行动号召文案 | `render_spec` + Planner（作为转化目标） |
-| voice | 品牌语气 | Planner 选片段/写 hook |
-| audience | 目标受众 | Planner 选角度 |
-| contentGuidelines | 内容 guideline / 禁忌 | Planner 过滤片段 |
+| CTA | 视频底部行动号召文案 | `render_spec` + Content Director / Clip Agent（作为转化目标） |
+| voice | 品牌语气 | Content Director 定调 + Clip Agent 选片段/写 hook |
+| audience | 目标受众 | Content Director 定调 + Clip Agent 选角度 |
+| contentGuidelines | 内容 guideline / 禁忌 | Content Director + Clip Agent 过滤片段 |
 
 ### 为什么内容策略要放进 Brand template
 
@@ -279,15 +281,15 @@ Brand template 不只是视觉皮肤，还承担**内容策略**角色。
 - Brand A（大学官方）：voice = academic, audience = researchers
 - Brand B（个人 IP）：voice = provocative, audience = tech Twitter
 
-如果没有 Brand 内容策略，Planner 只能按 speaker persona 写 hook，无法体现“这是官方账号还是个人账号”的差异。
+如果没有 Brand 内容策略，Content Director 和 Clip Agent 只能按 speaker persona 定调，无法体现“这是官方账号还是个人账号”的差异。
 
 ### 实现
 
 - `/brand-template` 页面新增 **Content strategy** Tab
 - 用户填写 voice / audience / contentGuidelines / CTA
 - 生成时后端调用 `content_strategy_from_template()` 提取内容策略
-- Planner prompt 增加 `## Brand Content Strategy` 段落，并明确告知：
-  - “你正在为这个 speaker 的受众选 clip”
+- Content Director 和 Clip Agent prompt 增加 `## Brand Content Strategy` 段落，并明确告知：
+  - “你正在为这个 speaker 的受众定调和选 clip”
   - “hook 要符合 brand voice”
   - “CTA 是 {{ cta }}，尽量选能自然过渡到这个行动的片段”
 

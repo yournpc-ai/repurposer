@@ -583,34 +583,28 @@ P0 must have built-in Agent workflow, core reason being **users will inevitably 
 | Agent | Responsibility | Trigger Timing |
 |:---|:---|:---|
 | Persona Agent | Generate Speaker style persona based on past materials | After Speaker creation/update |
-| Content Analyzer | Analyze talk content, segment, score, extract quotes | After material preprocessing completes |
-| Hook Agent | Write attention-grabbing openers | During clip generation |
-| Script Agent | Generate highlight clip scripts | During clip generation |
+| Content Director | Analyze talk content once and produce a unified `ContentPlan` (thesis, themes, audience, per-output plans) | At the start of every full generation run |
+| Clip Agent | Select shareable segments and write vertical clip scripts from the `ContentPlan` | During clip generation |
 | LinkedIn Agent | Generate LinkedIn long-form posts | During derivative content generation |
-| Quote Card Agent | Generate quote card copy | During derivative content generation |
+| Quote Agent | Generate quote card copy | During derivative content generation |
 | Carousel Agent | Generate Carousel multi-page images + text | During derivative content generation (P1) |
+| Summary Agent | Generate multi-language summary | During derivative content generation |
+| Blog Agent | Generate blog article | During derivative content generation |
 | Translator Agent | Multi-language translation | During multi-language version generation |
-| Review Agent | Score by Speaker style and point out issues | After each generation |
-| Reviser Agent | Modify specified content based on feedback | After self-review fails or user feedback |
+| Reviser Agent | Modify specified content based on feedback | After user feedback |
 
 #### Generation Flow
 
 ```
 Upload materials and preprocess
     ↓
-Persona Agent → Speaker style persona
+Persona Agent → Speaker style persona (if no speaker selected)
     ↓
-Content Analyzer → content segmentation + virality scoring + quote extraction
+Content Director → unified ContentPlan
     ↓
-For each high-potential segment:
-    Hook Agent → alternative hooks
-    Script Agent → initial draft script
-    Review Agent → style score
-    If score < 7:
-        Reviser Agent → correction
-    Repeat up to 2 times
+Clip Agent → segment selection + scripts
     ↓
-LinkedIn Agent / Quote Card Agent / Carousel Agent → derivative content
+LinkedIn Agent / Quote Agent / Carousel Agent / Summary Agent / Blog Agent → derivative content
     ↓
 Translator Agent → multi-language versions (German/French/Spanish/Italian)
     ↓
@@ -1158,31 +1152,58 @@ Reasons:
 ### 20.5 Hand-rolled Architecture Recommendation
 
 ```
-speech-repurposer/
-├── api/                    # FastAPI routes
-│   └── routes.py
-├── core/                   # Business core
-│   ├── workflow.py         # Workflow orchestrator
-│   ├── agents/             # Agent steps
+apps/api/
+├── app/
+│   ├── main.py              # FastAPI entry point
+│   ├── config.py            # Configuration management
+│   ├── dependencies.py      # Dependency injection
+│   ├── worker.py            # Standalone worker process entry point
+│   ├── routers/             # API routes
+│   │   ├── speakers.py
+│   │   ├── projects.py      # Includes generation, export, jobs, clips, derivatives
+│   │   ├── assets.py
+│   │   ├── clips.py         # Review, render trigger, caption translation
+│   │   ├── derivatives.py
+│   │   ├── files.py         # Range streaming endpoints (uploads/outputs/music)
+│   │   ├── intent.py        # /infer-intent
+│   │   └── brand_templates.py
+│   ├── services/            # Business logic
+│   │   ├── jobs.py          # Queue claiming
+│   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision
+│   │   ├── generation.py    # Generation flow orchestration
+│   │   ├── derivative_dispatch.py # Thin registry for derivative agents
+│   │   ├── rendering.py     # Calls Remotion rendering service
+│   │   ├── clip_spec.py     # clip-spec construction
+│   │   ├── brand.py         # Brand template → ClipBrand/ClipMusic/BrandContentStrategy
+│   │   ├── extraction.py    # Text/PDF extraction + PyMuPDF per-page image rendering
+│   │   ├── vision.py        # M3 vision: image → key point text
+│   │   ├── voice.py         # Voice cloning + T2A synthesis + video audio track extraction
+│   │   ├── caption_translate.py  # Caption track translation
+│   │   ├── storage.py       # Storage seam
+│   │   └── asr.py           # faster-whisper
+│   ├── models/              # Database models + Pydantic schemas
+│   │   ├── database.py
+│   │   ├── schemas.py
+│   │   └── tables.py
+│   ├── agents/              # Agent steps
+│   │   ├── base.py          # Shared MiniMax agent base + helpers
 │   │   ├── persona.py
-│   │   ├── analyzer.py
-│   │   ├── script.py
-│   │   ├── reviewer.py
+│   │   ├── content_director.py
+│   │   ├── clip_agent.py
 │   │   ├── reviser.py
 │   │   ├── linkedin.py
-│   │   └── quote_card.py
-│   └── prompts/            # Jinja2 templates
-│       ├── persona.j2
-│       ├── script.j2
-│       ├── review.j2
-│       └── revise.j2
-├── clients/
-│   └── minimax.py          # MiniMax M3 wrapper
-├── models/
-│   └── schemas.py          # Pydantic models
-├── state/
-│   └── store.py            # Database/state management
-└── main.py
+│   │   ├── quote_agent.py
+│   │   ├── carousel.py
+│   │   ├── summary.py
+│   │   ├── blog.py
+│   │   ├── intent.py
+│   │   └── caption_translate.py
+│   ├── prompts/             # Jinja2 templates
+│   └── clients/
+│       └── minimax.py       # MiniMax M3 wrapper
+├── migrations/              # Alembic migration scripts
+├── pyproject.toml
+└── Dockerfile
 ```
 
 ### 20.6 Key Design Points
