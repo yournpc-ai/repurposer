@@ -16,7 +16,6 @@ import {
   Star,
 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
@@ -44,19 +43,16 @@ interface BrandTemplate {
   name: string
 }
 
-const OUTPUT_OPTIONS = ["clips", "linkedin", "quote_cards", "summary"] as const
-type OutputKey = (typeof OUTPUT_OPTIONS)[number]
-
 const tools = [
-  { icon: Linkedin, id: "linkedinPost", outputKey: "linkedin", isNew: false },
-  { icon: Quote, id: "quoteCard", outputKey: "quote_cards", isNew: false },
-  { icon: Languages, id: "multiLangSummary", outputKey: "summary", isNew: false },
-  { icon: Newspaper, id: "newsletter", outputKey: null, isNew: false },
-  { icon: Lightbulb, id: "keyInsights", outputKey: null, isNew: true },
-  { icon: FileText, id: "onePager", outputKey: null, isNew: false },
-  { icon: Presentation, id: "slides", outputKey: null, isNew: true },
-  { icon: PenTool, id: "blogPost", outputKey: null, isNew: false },
-  { icon: Images, id: "socialCarousel", outputKey: null, isNew: true },
+  { icon: Linkedin, id: "linkedinPost", isNew: false },
+  { icon: Quote, id: "quoteCard", isNew: false },
+  { icon: Languages, id: "multiLangSummary", isNew: false },
+  { icon: Newspaper, id: "newsletter", isNew: false },
+  { icon: Lightbulb, id: "keyInsights", isNew: true },
+  { icon: FileText, id: "onePager", isNew: false },
+  { icon: Presentation, id: "slides", isNew: true },
+  { icon: PenTool, id: "blogPost", isNew: false },
+  { icon: Images, id: "socialCarousel", isNew: true },
 ] as const
 
 export const Route = createFileRoute("/")({
@@ -69,11 +65,6 @@ function Home() {
   const [projects, setProjects] = useState<Project[]>([])
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
-  const [outputs, setOutputs] = useState<OutputKey[]>([
-    "linkedin",
-    "quote_cards",
-    "summary",
-  ])
   const [error, setError] = useState("")
   const [mounted, setMounted] = useState(false)
   const [autoSave, setAutoSave] = useState(true)
@@ -98,15 +89,7 @@ function Home() {
 
   const heroWords = t("home.heroWords", { returnObjects: true }) as string[]
 
-  const handleToolClick = (tool: (typeof tools)[number]) => {
-    if (tool.outputKey) {
-      setOutputs((prev) =>
-        prev.includes(tool.outputKey as OutputKey)
-          ? prev.filter((o) => o !== tool.outputKey)
-          : [...prev, tool.outputKey as OutputKey]
-      )
-      return
-    }
+  const handleToolClick = () => {
     setError(t("home.comingSoon"))
     setTimeout(() => setError(""), 2000)
   }
@@ -165,8 +148,6 @@ function Home() {
           <HomeComposer
             speakers={speakers}
             brandTemplates={brandTemplates}
-            outputs={outputs}
-            onOutputsChange={setOutputs}
             onGenerateStart={() => setError("")}
             onProjectCreated={() => setRefreshKey((k) => k + 1)}
             onError={setError}
@@ -177,38 +158,28 @@ function Home() {
 
         {/* Tool row */}
         <div className="mt-12 flex w-full max-w-5xl flex-wrap items-start justify-center gap-x-3 gap-y-6">
-          {tools.map((tool) => {
-            const active = tool.outputKey
-              ? outputs.includes(tool.outputKey as OutputKey)
-              : false
-            return (
-              <button
-                key={tool.id}
-                onClick={() => handleToolClick(tool)}
-                className="group relative flex w-[84px] flex-col items-center gap-2.5"
-              >
-                {tool.isNew && (
-                  <Badge
-                    variant="secondary"
-                    className="absolute -top-2 right-1 z-10 px-1.5 text-[10px]"
-                  >
-                    New
-                  </Badge>
-                )}
-                <div
-                  className={cn(
-                    "flex h-14 w-14 items-center justify-center rounded-lg bg-card text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground",
-                    active && "ring-2 ring-primary bg-primary/10"
-                  )}
+          {tools.map((tool) => (
+            <button
+              key={tool.id}
+              onClick={handleToolClick}
+              className="group relative flex w-[84px] flex-col items-center gap-2.5"
+            >
+              {tool.isNew && (
+                <Badge
+                  variant="secondary"
+                  className="absolute -top-2 right-1 z-10 px-1.5 text-[10px]"
                 >
-                  <tool.icon className="h-6 w-6" />
-                </div>
-                <span className="text-center text-xs leading-tight">
-                  {t(`home.tools.${tool.id}`)}
-                </span>
-              </button>
-            )
-          })}
+                  New
+                </Badge>
+              )}
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-card text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                <tool.icon className="h-6 w-6" />
+              </div>
+              <span className="text-center text-xs leading-tight">
+                {t(`home.tools.${tool.id}`)}
+              </span>
+            </button>
+          ))}
         </div>
       </section>
 

@@ -100,6 +100,9 @@ const zh: Resources = {
       blog: "博客文章",
     },
     toneLabel: "语气",
+    detectingIntent: "正在理解你的需求...",
+    aiDetected: "AI 已识别你的意图 — 生成前可修改",
+    aiWillDetect: "AI 将根据你的提示词推荐语言、输出类型和语气",
     tones: {
       professional: "专业",
       thoughtLeadership: "行业洞察",
@@ -302,6 +305,7 @@ const zh: Resources = {
       clipLayout: "片段版式",
       caption: "字幕",
       overlay: "叠加层（Logo、CTA）",
+      content: "内容策略",
       introOutro: "片头 / 片尾",
       music: "配乐",
       removeFiller: "去除口头禅",
@@ -323,6 +327,14 @@ const zh: Resources = {
       logoPlaceholder: "https://…/logo.png",
       cta: "行动号召",
       ctaPlaceholder: "查看完整演讲 →",
+    },
+    content: {
+      voice: "品牌语气",
+      voicePlaceholder: "如：挑衅、专业、温暖",
+      audience: "目标受众",
+      audiencePlaceholder: "如：CIO、研究者、大众",
+      guidelines: "内容 guideline",
+      guidelinesPlaceholder: "如：避免产品推销，聚焦原创观点",
     },
     introOutro: {
       intro: "片头",

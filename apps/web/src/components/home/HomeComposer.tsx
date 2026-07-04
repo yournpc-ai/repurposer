@@ -1,3 +1,5 @@
+"use client"
+
 import { Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -12,6 +14,7 @@ import {
   ChevronDown,
   Check,
   Languages,
+  Wand2,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -24,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -57,6 +61,14 @@ interface Project {
   id: string
   title: string
   status: string
+}
+
+interface InferredIntent {
+  language: string
+  outputs: OutputKey[]
+  tone: Tone
+  specific_instruction: string | null
+  confidence: number
 }
 
 const OUTPUT_OPTIONS = ["clips", "linkedin", "quote_cards", "summary"] as const
@@ -105,11 +117,17 @@ const TONE_MAP: Record<
   },
 }
 
+const DEFAULT_INTENT: InferredIntent = {
+  language: "en",
+  outputs: ["clips", "linkedin", "quote_cards", "summary"],
+  tone: "professional",
+  specific_instruction: null,
+  confidence: 1,
+}
+
 interface HomeComposerProps {
   speakers: Speaker[]
   brandTemplates: BrandTemplate[]
-  outputs?: OutputKey[]
-  onOutputsChange?: (outputs: OutputKey[]) => void
   onGenerateStart?: () => void
   onProjectCreated?: (projectId: string) => void
   onError?: (error: string) => void
@@ -118,8 +136,6 @@ interface HomeComposerProps {
 export function HomeComposer({
   speakers,
   brandTemplates,
-  outputs: controlledOutputs,
-  onOutputsChange,
   onGenerateStart,
   onProjectCreated,
   onError,
@@ -129,18 +145,17 @@ export function HomeComposer({
 
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState("")
-  const [tone, setTone] = useState<Tone>("professional")
-  const [internalOutputs, setInternalOutputs] = useState<OutputKey[]>([
-    "linkedin",
-    "quote_cards",
-    "summary",
-  ])
-  const outputs = controlledOutputs ?? internalOutputs
-  const setOutputs = onOutputsChange ?? setInternalOutputs
+  const [tone, setTone] = useState<Tone>(DEFAULT_INTENT.tone)
+  const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_INTENT.outputs)
   const [brandTemplateId, setBrandTemplateId] = useState("")
-  const [language, setLanguage] = useState("en")
+  const [language, setLanguage] = useState(DEFAULT_INTENT.language)
   const [fileName, setFileName] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+
+  const [inferred, setInferred] = useState<InferredIntent>(DEFAULT_INTENT)
+  const [isInferring, setIsInferring] = useState(false)
+  // Track params the user has manually edited so inference doesn't overwrite them.
+  const [lockedParams, setLockedParams] = useState<Set<string>>(new Set())
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -159,24 +174,41 @@ export function HomeComposer({
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`
   }, [prompt])
 
-  // Prompt keyword matching auto-checks outputs.
+  // Debounced intent inference.
   useEffect(() => {
-    const lower = prompt.toLowerCase()
-    const next = new Set(outputs)
-    const has = (keywords: string[]) => keywords.some((k) => lower.includes(k))
-
-    if (has(["linkedin", "post"])) next.add("linkedin")
-    if (has(["quote", "card"])) next.add("quote_cards")
-    if (has(["summary", "abstract", "tldr"])) next.add("summary")
-    // clips are always generated; no toggle needed.
-
-    const arr = Array.from(next).filter((o): o is OutputKey =>
-      OUTPUT_OPTIONS.includes(o as OutputKey)
-    )
-    if (arr.join(",") !== outputs.join(",")) {
-      setOutputs(arr)
+    if (!prompt.trim()) {
+      setInferred(DEFAULT_INTENT)
+      return
     }
-  }, [prompt])
+
+    const timer = setTimeout(async () => {
+      setIsInferring(true)
+      try {
+        const res = await apiFetch("/api/v1/infer-intent", {
+          method: "POST",
+          body: { prompt, filename: fileName || undefined },
+        })
+        if (!res.ok) throw new Error("Intent inference failed")
+        const data = (await res.json()) as { intent: InferredIntent }
+        setInferred(data.intent)
+
+        // Apply inferred values only to params the user hasn't locked.
+        setLanguage((prev) => (lockedParams.has("language") ? prev : data.intent.language))
+        setTone((prev) => (lockedParams.has("tone") ? prev : data.intent.tone))
+        setOutputs((prev) => (lockedParams.has("outputs") ? prev : data.intent.outputs))
+      } catch (e) {
+        // Silent fallback: leave current values.
+      } finally {
+        setIsInferring(false)
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [prompt, fileName])
+
+  const lockParam = (key: string) => {
+    setLockedParams((prev) => new Set(prev).add(key))
+  }
 
   const inferAssetType = (file: File): string => {
     if (file.type.startsWith("video/")) return "video"
@@ -209,6 +241,9 @@ export function HomeComposer({
     setIsGenerating(true)
     onGenerateStart?.()
     try {
+      const instruction =
+        inferred.specific_instruction?.trim() || (prompt.trim() ? prompt.trim() : undefined)
+
       const projectRes = await apiFetch("/api/v1/projects", {
         method: "POST",
         body: {
@@ -266,7 +301,7 @@ export function HomeComposer({
           },
           target_language: language,
           brand_template_id: brandTemplateId || undefined,
-          instruction: file && prompt.trim() ? prompt.trim() : undefined,
+          instruction,
         },
       })
       if (!generateRes.ok) {
@@ -287,6 +322,7 @@ export function HomeComposer({
   }
 
   const toggleOutput = (key: OutputKey) => {
+    lockParam("outputs")
     const next = outputs.includes(key)
       ? outputs.filter((o) => o !== key)
       : [...outputs, key]
@@ -296,6 +332,8 @@ export function HomeComposer({
   const selectedSpeakerName = speakerId
     ? speakers.find((s) => s.id === speakerId)?.name
     : t("composer.styleDefault")
+
+  const hasIntent = prompt.trim().length > 0
 
   return (
     <Card className="overflow-hidden py-0 ring-1 ring-border shadow-xl">
@@ -308,6 +346,7 @@ export function HomeComposer({
           onChange={handleFileChange}
         />
 
+        {/* Input area */}
         <div className="flex items-start gap-3">
           <Tooltip>
             <TooltipTrigger
@@ -351,35 +390,64 @@ export function HomeComposer({
           />
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Generate + confirmation layer */}
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Wand2 className={cn("h-3.5 w-3.5", isInferring && "animate-pulse")} />
+              <span>
+                {isInferring
+                  ? t("composer.detectingIntent")
+                  : hasIntent
+                    ? t("composer.aiDetected")
+                    : t("composer.aiWillDetect")}
+              </span>
+            </div>
+            <Button
+              className="h-9 w-9 rounded-full"
+              size="icon"
+              disabled={isGenerating}
+              onClick={handleGenerate}
+            >
+              {isGenerating ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+
+          {/* Editable intent chips */}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
             {/* Speaker */}
             {speakers.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                      className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
                     >
-                      <Mic2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="max-w-[140px] truncate">
+                      <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="max-w-[120px] truncate">
                         {selectedSpeakerName}
                       </span>
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
                     </Button>
                   }
                 />
                 <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
-                  {speakers.map((s) => (
-                    <DropdownMenuItem key={s.id} onClick={() => setSpeakerId(s.id)}>
-                      <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate">{s.name}</span>
-                      {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
-                    </DropdownMenuItem>
-                  ))}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
+                    {speakers.map((s) => (
+                      <DropdownMenuItem key={s.id} onClick={() => { lockParam("speaker"); setSpeakerId(s.id) }}>
+                        <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <span className="flex-1 truncate">{s.name}</span>
+                        {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -389,36 +457,40 @@ export function HomeComposer({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    <Palette className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="max-w-[120px] truncate">
                       {brandTemplates.find((b) => b.id === brandTemplateId)?.name ??
                         t("composer.brandDefault")}
                     </span>
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
               />
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>{t("composer.brandLabel")}</DropdownMenuLabel>
-                {brandTemplates.map((b) => (
-                  <DropdownMenuItem
-                    key={b.id}
-                    onClick={() => setBrandTemplateId(b.id)}
-                  >
-                    <Palette className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">{b.name}</span>
-                    {b.id === brandTemplateId && <Check className="ml-2 h-4 w-4" />}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t("composer.brandLabel")}</DropdownMenuLabel>
+                  {brandTemplates.map((b) => (
+                    <DropdownMenuItem
+                      key={b.id}
+                      onClick={() => { lockParam("brand"); setBrandTemplateId(b.id) }}
+                    >
+                      <Palette className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <span className="flex-1 truncate">{b.name}</span>
+                      {b.id === brandTemplateId && <Check className="ml-2 h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem render={<Link to="/brand-template" />}>
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    {t("composer.manageBrand")}
                   </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem render={<Link to="/brand-template" />}>
-                  <SlidersHorizontal className="mr-2 h-4 w-4" />
-                  {t("composer.manageBrand")}
-                </DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -427,29 +499,31 @@ export function HomeComposer({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{t(`composer.tones.${tone}`)}</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
               />
               <DropdownMenuContent align="start" className="w-60">
-                <DropdownMenuLabel>{t("composer.toneLabel")}</DropdownMenuLabel>
-                {tones.map((tn) => (
-                  <DropdownMenuItem key={tn} onClick={() => setTone(tn)}>
-                    <div className="flex-1">
-                      <p className="text-sm">{t(`composer.tones.${tn}`)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {t(`composer.toneDesc.${tn}`)}
-                      </p>
-                    </div>
-                    {tn === tone && <Check className="ml-2 h-4 w-4" />}
-                  </DropdownMenuItem>
-                ))}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t("composer.toneLabel")}</DropdownMenuLabel>
+                  {tones.map((tn) => (
+                    <DropdownMenuItem key={tn} onClick={() => { lockParam("tone"); setTone(tn) }}>
+                      <div className="flex-1">
+                        <p className="text-sm">{t(`composer.tones.${tn}`)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t(`composer.toneDesc.${tn}`)}
+                        </p>
+                      </div>
+                      {tn === tone && <Check className="ml-2 h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -458,27 +532,29 @@ export function HomeComposer({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Languages className="h-4 w-4 text-muted-foreground" />
+                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{t(`languages.${language as typeof LANGUAGES[number]["code"]}`)}</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
               />
               <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuLabel>{t("common.language")}</DropdownMenuLabel>
-                {LANGUAGES.map((lang) => (
-                  <DropdownMenuItem
-                    key={lang.code}
-                    onClick={() => setLanguage(lang.code)}
-                  >
-                    <span className="flex-1">{t(lang.labelKey)}</span>
-                    {lang.code === language && <Check className="ml-2 h-4 w-4" />}
-                  </DropdownMenuItem>
-                ))}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t("common.language")}</DropdownMenuLabel>
+                  {LANGUAGES.map((lang) => (
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => { lockParam("language"); setLanguage(lang.code) }}
+                    >
+                      <span className="flex-1">{t(lang.labelKey)}</span>
+                      {lang.code === language && <Check className="ml-2 h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -487,18 +563,18 @@ export function HomeComposer({
               <PopoverTrigger
                 render={
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-9 gap-1.5 rounded-md px-3 text-sm"
+                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{t("composer.outputs")}</span>
                     {outputs.length > 0 && (
                       <Badge variant="secondary" className="ml-1 px-1.5 text-[10px]">
                         {outputs.length + 1}
                       </Badge>
                     )}
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
               />
@@ -528,21 +604,6 @@ export function HomeComposer({
                 })}
               </PopoverContent>
             </Popover>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              className="h-9 w-9 rounded-full"
-              size="icon"
-              disabled={isGenerating}
-              onClick={handleGenerate}
-            >
-              {isGenerating ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <ArrowUp className="h-4 w-4" />
-              )}
-            </Button>
           </div>
         </div>
       </CardContent>

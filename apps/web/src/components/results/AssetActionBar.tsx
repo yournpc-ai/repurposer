@@ -1,14 +1,14 @@
-import { Copy, Download, MessageSquare, RefreshCw } from "lucide-react"
+import { Download, MessageSquare, Pencil, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 
 interface AssetActionBarProps {
-  onCopy?: () => void
+  onEdit?: () => void
   onDownload?: () => void
   onRegenerate?: () => void
   onChat?: () => void
-  copyDisabled?: boolean
+  editDisabled?: boolean
   downloadDisabled?: boolean
   regenerateDisabled?: boolean
   chatDisabled?: boolean
@@ -16,11 +16,11 @@ interface AssetActionBarProps {
 }
 
 export function AssetActionBar({
-  onCopy,
+  onEdit,
   onDownload,
   onRegenerate,
   onChat,
-  copyDisabled,
+  editDisabled,
   downloadDisabled,
   regenerateDisabled,
   chatDisabled,
@@ -30,15 +30,15 @@ export function AssetActionBar({
 
   return (
     <div className="flex items-center gap-1">
-      {onCopy && (
+      {onEdit && (
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={onCopy}
-          disabled={copyDisabled}
-          title={t("chat.resultActions.copy")}
+          onClick={onEdit}
+          disabled={editDisabled}
+          title={t("chat.resultActions.edit")}
         >
-          <Copy className="h-4 w-4" />
+          <Pencil className="h-4 w-4" />
         </Button>
       )}
       {onDownload && (

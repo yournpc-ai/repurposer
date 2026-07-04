@@ -25,6 +25,7 @@ import {
   Check,
   Trash2,
   Plus,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react"
 
@@ -33,6 +34,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
@@ -89,6 +91,9 @@ type Template = {
   musicMood: string
   removeFiller: boolean
   keywordHighlighter: boolean
+  voice: string
+  audience: string
+  contentGuidelines: string
 }
 
 type SavedTemplate = { id: string; name: string; config: Partial<Template> }
@@ -115,9 +120,12 @@ const DEFAULT_TEMPLATE: Template = {
   musicMood: "calm",
   removeFiller: false,
   keywordHighlighter: true,
+  voice: "professional",
+  audience: "industry professionals",
+  contentGuidelines: "",
 }
 
-type Section = null | "clipLayout" | "caption" | "overlay" | "introOutro" | "music"
+type Section = null | "clipLayout" | "caption" | "overlay" | "introOutro" | "music" | "content"
 
 // Fixed LATIN samples so the brand fonts (Lilita/Inter/Playfair/Source Serif —
 // all latin) actually render in the preview. Real text comes from the talk's
@@ -505,6 +513,10 @@ function BrandTemplatePage() {
                     <ImagePlus className="h-4.5 w-4.5 text-muted-foreground" />
                     {t("brandTemplate.rows.overlay")}
                   </TabsTrigger>
+                  <TabsTrigger value="content" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <Megaphone className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.content")}
+                  </TabsTrigger>
                   <TabsTrigger value="introOutro" className="justify-start gap-2.5 px-2 py-2 text-sm">
                     <Clapperboard className="h-4.5 w-4.5 text-muted-foreground" />
                     {t("brandTemplate.rows.introOutro")}
@@ -634,6 +646,31 @@ function BrandTemplatePage() {
                       value={template.cta}
                       onChange={(e) => update("cta", e.target.value)}
                       placeholder={t("brandTemplate.overlay.ctaPlaceholder")}
+                    />
+                  </Field>
+                </TabsContent>
+
+                <TabsContent value="content" className="space-y-4">
+                  <Field label={t("brandTemplate.content.voice")}>
+                    <Input
+                      value={template.voice}
+                      onChange={(e) => update("voice", e.target.value)}
+                      placeholder={t("brandTemplate.content.voicePlaceholder")}
+                    />
+                  </Field>
+                  <Field label={t("brandTemplate.content.audience")}>
+                    <Input
+                      value={template.audience}
+                      onChange={(e) => update("audience", e.target.value)}
+                      placeholder={t("brandTemplate.content.audiencePlaceholder")}
+                    />
+                  </Field>
+                  <Field label={t("brandTemplate.content.guidelines")}>
+                    <Textarea
+                      value={template.contentGuidelines}
+                      onChange={(e) => update("contentGuidelines", e.target.value)}
+                      placeholder={t("brandTemplate.content.guidelinesPlaceholder")}
+                      className="min-h-[100px] resize-none"
                     />
                   </Field>
                 </TabsContent>

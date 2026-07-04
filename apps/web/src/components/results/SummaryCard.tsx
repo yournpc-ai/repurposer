@@ -20,16 +20,6 @@ export function SummaryCard({ derivative, onRegenerate }: SummaryCardProps) {
   const keyPoints = content.key_points || []
   const [chatOpen, setChatOpen] = useState(false)
 
-  const handleCopy = async () => {
-    if (!navigator.clipboard) return
-    const text = [tldr, ...keyPoints].filter(Boolean).join("\n\n")
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // ignore
-    }
-  }
-
   const handleDownload = () => {
     const text = [tldr, ...keyPoints].filter(Boolean).join("\n\n")
     const blob = new Blob([text], { type: "text/markdown" })
@@ -59,7 +49,6 @@ export function SummaryCard({ derivative, onRegenerate }: SummaryCardProps) {
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
         <AssetActionBar
-          onCopy={handleCopy}
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
           onChat={() => setChatOpen(true)}

@@ -34,6 +34,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -183,25 +184,31 @@ export function AppSidebar() {
             align="start"
             sideOffset={8}
           >
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                {t("common.freePlan")}
-              </span>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              {t("common.profile")}
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              {t("common.settings")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOut className="mr-2 h-4 w-4" />
-              {t("common.logout")}
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                  {t("common.freePlan")}
+                </span>
+              </div>
+            </DropdownMenuGroup>
+            <DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <User className="mr-2 h-4 w-4" />
+                {t("common.profile")}
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                {t("common.settings")}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <LogOut className="mr-2 h-4 w-4" />
+                {t("common.logout")}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
 

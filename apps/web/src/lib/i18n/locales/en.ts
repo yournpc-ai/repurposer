@@ -98,6 +98,9 @@ const en = {
       blog: "Blog post",
     },
     toneLabel: "Tone",
+    detectingIntent: "Understanding your request...",
+    aiDetected: "AI detected your intent — edit below before generating",
+    aiWillDetect: "AI will suggest language, outputs and tone from your prompt",
     tones: {
       professional: "Professional",
       thoughtLeadership: "Thought leadership",
@@ -300,6 +303,7 @@ const en = {
       clipLayout: "Clip layout settings",
       caption: "Caption",
       overlay: "Overlay (logo, CTA)",
+      content: "Content strategy",
       introOutro: "Intro / outro",
       music: "Music",
       removeFiller: "Remove filler words",
@@ -321,6 +325,14 @@ const en = {
       logoPlaceholder: "https://…/logo.png",
       cta: "Call to action",
       ctaPlaceholder: "Read the full talk →",
+    },
+    content: {
+      voice: "Brand voice",
+      voicePlaceholder: "e.g. provocative, professional, warm",
+      audience: "Target audience",
+      audiencePlaceholder: "e.g. CIOs, researchers, general public",
+      guidelines: "Content guidelines",
+      guidelinesPlaceholder: "e.g. avoid product pitches; focus on original insights",
     },
     introOutro: {
       intro: "Intro",

@@ -22,16 +22,6 @@ export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
   const quotes = derivative.content?.quotes || []
   const firstQuote = quotes[0]
 
-  const handleCopy = async () => {
-    if (!firstQuote || !navigator.clipboard) return
-    const text = `“${firstQuote.quote}” — ${firstQuote.attribution}`
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // ignore
-    }
-  }
-
   const handleDownload = () => {
     if (!derivative.image_url) return
     const a = document.createElement("a")
@@ -88,7 +78,6 @@ export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
       <div className="flex items-center justify-between p-3">
         <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
         <AssetActionBar
-          onCopy={firstQuote ? handleCopy : undefined}
           onDownload={derivative.image_url ? handleDownload : undefined}
           onRegenerate={handleRegenerate}
           onChat={() => setChatOpen(true)}

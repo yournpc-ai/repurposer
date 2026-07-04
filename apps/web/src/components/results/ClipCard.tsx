@@ -1,10 +1,9 @@
 import { useState } from "react"
-import { Link } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import { Play } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { apiPost } from "@/lib/api"
 
@@ -20,6 +19,7 @@ interface ClipCardProps {
 
 export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [chatOpen, setChatOpen] = useState(false)
 
   const handleDownload = () => {
@@ -43,6 +43,13 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     }
   }
 
+  const handleEdit = () => {
+    navigate({
+      to: "/projects/$id/clips/$clipId",
+      params: { id: clip.project_id, clipId: clip.id },
+    })
+  }
+
   return (
     <Card className="overflow-hidden ring-1 ring-border shadow-xl">
       <div className="relative aspect-[9/16] bg-muted">
@@ -55,19 +62,9 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-12 w-12 rounded-full"
-              render={
-                <Link
-                  to="/projects/$id/clips/$clipId"
-                  params={{ id: clip.project_id, clipId: clip.id }}
-                />
-              }
-            >
-              <Play className="h-5 w-5" />
-            </Button>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border">
+              <Play className="h-5 w-5 text-muted-foreground" />
+            </div>
             <p className="text-sm text-muted-foreground">
               {t("results.clipNotRendered")}
             </p>
@@ -86,6 +83,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
             </div>
           </div>
           <AssetActionBar
+            onEdit={handleEdit}
             onDownload={clip.video_url ? handleDownload : undefined}
             onRegenerate={handleRegenerate}
             onChat={() => setChatOpen(true)}

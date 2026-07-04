@@ -19,16 +19,6 @@ export function LinkedInCard({ derivative, onRegenerate }: LinkedInCardProps) {
   const hashtags = derivative.content?.hashtags || []
   const [chatOpen, setChatOpen] = useState(false)
 
-  const handleCopy = async () => {
-    if (!content || !navigator.clipboard) return
-    const text = [content, hashtags.join(" ")].filter(Boolean).join("\n\n")
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // ignore
-    }
-  }
-
   const handleDownload = () => {
     if (!content) return
     const text = [content, hashtags.join(" ")].filter(Boolean).join("\n\n")
@@ -59,7 +49,6 @@ export function LinkedInCard({ derivative, onRegenerate }: LinkedInCardProps) {
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
         <AssetActionBar
-          onCopy={handleCopy}
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
           onChat={() => setChatOpen(true)}
