@@ -13,6 +13,7 @@ from app.routers import (
     clips,
     derivatives,
     files,
+    intent,
     library,
     messages,
     projects,
@@ -57,6 +58,7 @@ app.include_router(clips, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(derivatives, prefix="/api/v1/derivatives", tags=["derivatives"])
 app.include_router(library, prefix="/api/v1/library", tags=["library"])
 app.include_router(files, prefix="/api/v1", tags=["files"])
+app.include_router(intent, prefix="/api/v1", tags=["intent"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )

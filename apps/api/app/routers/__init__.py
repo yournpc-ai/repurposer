@@ -6,6 +6,7 @@ from app.routers.brand_templates import router as brand_templates
 from app.routers.clips import router as clips
 from app.routers.derivatives import router as derivatives
 from app.routers.files import router as files
+from app.routers.intent import router as intent
 from app.routers.library import router as library
 from app.routers.messages import router as messages
 from app.routers.projects import router as projects
@@ -17,6 +18,7 @@ __all__ = [
     "clips",
     "derivatives",
     "files",
+    "intent",
     "library",
     "messages",
     "projects",
