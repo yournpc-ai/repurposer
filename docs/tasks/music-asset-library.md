@@ -1,4 +1,4 @@
-# Task: AI-Generated Asset-Based Music Library
+# Task: AI-Generated Music Library
 
 > **Base branch**: `main` (current)  
 > **Architecture reference**: `docs/MUSIC_ARCHITECTURE.md`  
@@ -47,13 +47,14 @@ Read these in order before writing code:
 
 ### What does NOT work yet
 
-1. No actual audio files in `data/music/` (only `.gitkeep` and `README.md`).
-2. No `AssetType.MUSIC`.
-3. No music asset library UI beyond the simple mood dropdown.
-4. No MiniMax music generation integration.
+1. No actual audio files in `assets/music/` (legacy `data/music/` exists but is not the active storage convention on current `main`).
+2. No `music_tracks` table for the music library.
+3. No MiniMax music generation integration.
+4. No music library UI beyond the simple mood dropdown.
 5. No chat/editor-driven music regeneration.
 6. Clip Agent does not select music based on content.
-7. No concept of `musicAssetId` in brand template.
+7. No concept of `musicTrackId` in brand template.
+8. The existing `Asset` table requires every asset to belong to a `project_id` or `speaker_id`, which does not fit global/shared music library items.
 
 ---
 
@@ -61,21 +62,21 @@ Read these in order before writing code:
 
 After this task, the product should support:
 
-1. **3 pre-generated AI music assets** (`calm`, `uplifting`, `corporate`) seeded at startup.
+1. **3 pre-generated AI music tracks** (`calm`, `uplifting`, `corporate`) seeded at startup.
 2. **Brand Template Music panel**:
-   - List available music assets.
+   - List available music tracks.
    - Preview each track.
    - Select one as the brand default.
    - Toggle music on/off.
    - Generate a new custom track from a prompt (optional but desirable in this phase).
 3. **Clip Agent music selection**:
-   - Picks an existing music asset per clip based on content tone and brand default.
-   - Outputs `music_asset_id`, `music_enabled`, `music_gain_db` in `ClipPlan`.
+   - Picks an existing music track per clip based on content tone and brand default.
+   - Outputs `music_track_id`, `music_enabled`, `music_gain_db` in `ClipPlan`.
 4. **Generation orchestration**:
-   - Resolves selected asset → `ClipMusic` → `render_spec.music`.
+   - Resolves selected track → `ClipMusic` → `render_spec.music`.
    - No MiniMax API call during clip generation.
 5. **Result Editor music controls**:
-   - Switch to another existing asset.
+   - Switch to another existing track.
    - Toggle on/off.
    - Adjust gain.
    - *(Optional)* Generate new music from prompt.
@@ -88,43 +89,79 @@ After this task, the product should support:
 
 ### 4.1 Backend
 
-#### Step 1: Add `AssetType.MUSIC`
+#### Step 1: Add `MusicTrack` table
 
-**File**: `apps/api/app/models/schemas.py`
+**File**: `apps/api/app/models/tables.py`
+
+Why a dedicated table instead of `Asset`?
+- The existing `Asset` table requires every row to belong to either a `project_id` or a `speaker_id` (see its `CheckConstraint`).
+- Music library items are global/shared resources, not tied to a specific project or speaker.
+- Music has structured metadata (mood, prompt, license, duration, attribution, is_public, generated_by_user_id) that is awkward to store in `Asset.meta` JSON.
+
+**Binding model**:
+- **Platform/default tracks**: `generated_by_user_id = NULL`, `is_public = TRUE`. Owned by the platform, available to all users.
+- **User-generated tracks via MiniMax**: `generated_by_user_id = <user_id>`, `is_public = TRUE` by default. Enters the shared library.
+- **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` by default. Private until explicitly shared and reviewed.
 
 ```python
-class AssetType(StrEnum):
-    ...
-    MUSIC = "music"
+class MusicTrack(Base):
+    """Background music track (DB-backed; audio bytes stay under assets/)."""
+
+    __tablename__ = "music_tracks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    mood = Column(String(50), nullable=False, unique=True)
+    title = Column(String(255), nullable=False)
+    ext = Column(String(8), nullable=False)
+    file_path = Column(String(512), nullable=False)  # e.g. "music/{track_id}.mp3", relative to asset_dir
+    size_bytes = Column(Integer, nullable=False)
+    duration_seconds = Column(Integer, nullable=True)
+    prompt = Column(Text, nullable=True)
+    model = Column(String(100), nullable=True)
+    generation_id = Column(String(255), nullable=True)
+    license = Column(String(100), nullable=True)
+    source_url = Column(String(512), nullable=True)
+    attribution = Column(Text, nullable=True)
+    is_public = Column(Boolean, default=True, nullable=False)
+    generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 ```
 
-#### Step 2: Add music asset metadata schema
+**Also add**: Alembic migration `apps/api/migrations/versions/xxxx_add_music_tracks_table.py`.
+
+#### Step 2: Add request/response schemas
 
 **File**: `apps/api/app/models/schemas.py`
 
 ```python
-class MusicAssetKind(StrEnum):
-    AI_GENERATED = "ai-generated"
-    UPLOADED = "uploaded"
-
-
-class MusicAssetMeta(BaseModel):
-    """Metadata stored in Asset.meta for music assets."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: MusicAssetKind
+class MusicTrackResponse(BaseModel):
+    id: str
+    mood: str
     title: str
+    ext: str
+    url: str
+    size_bytes: int
+    duration_seconds: int | None
+    prompt: str | None
+    license: str | None
+    source_url: str | None
+    attribution: str | None
+    is_public: bool
+    created_at: datetime
+
+
+class MusicTrackGenerateRequest(BaseModel):
+    prompt: str
     mood: str | None = None
-    prompt: str | None = None
-    model: str | None = None
-    generation_id: str | None = None
-    duration_seconds: int | None = None
-    license: str = "ai-generated"
+
+
+class MusicTrackMetadataUpdate(BaseModel):
+    title: str | None = None
+    license: str | None = None
     source_url: str | None = None
     attribution: str | None = None
-    is_public: bool = True
-    generated_by_user_id: str | None = None
+    is_public: bool | None = None
 ```
 
 #### Step 3: Add music generation service
@@ -133,7 +170,7 @@ class MusicAssetMeta(BaseModel):
 
 Responsibilities:
 - Call MiniMax music generation API.
-- Save generated audio to `data/music/assets/{uuid}.mp3`.
+- Save generated audio to `assets/music/{track_id}.{ext}` (under `settings.asset_dir`).
 - Return file path + duration (if available from response).
 
 **Interface sketch**:
@@ -151,20 +188,23 @@ async def generate_music_track(
 
 **Important**: If MiniMax music API is async/callback-based, design accordingly. If it does not exist or terms are unclear, **stop and escalate** before proceeding.
 
-#### Step 4: Add music asset service
+#### Step 4: Add music track service
 
-**File**: `apps/api/app/services/music_assets.py` (new)
+**File**: `apps/api/app/services/music.py` (new)
 
 Responsibilities:
-- `list_music_assets(db)` — list all `Asset(type="music")`.
-- `get_music_asset(db, asset_id)` — get one.
-- `create_ai_generated_music_asset(db, user_id, prompt, mood, file_path, duration)` — create `Asset` row.
-- `seed_default_music_assets(db)` — create the 3 default tracks if missing.
-- `delete_music_asset(db, asset_id)` — delete row + file; guard if used by clips (see below).
+- `list_tracks(db)` — list all public + user's own tracks.
+- `get_track(db, track_id)` / `get_track_by_mood(db, mood)`.
+- `create_track_from_upload(db, file, filename, ...)` — for future uploads.
+- `create_track_from_generation(db, prompt, mood, file_path, duration, user_id)` — after MiniMax returns audio.
+- `update_track_metadata(db, track_id, updates)`.
+- `delete_track(db, track_id)` — delete row + file; guard if used by clips.
+- `seed_default_tracks(db)` — create the 3 default tracks if missing.
+- `is_track_in_use(db, track_id) -> bool`.
 
 #### Step 5: Guard deletion with Clip reference check
 
-In `delete_music_asset`, query:
+In `delete_track`, query:
 
 ```python
 from sqlalchemy import func, select
@@ -173,10 +213,10 @@ from app.models.tables import Clip
 count = await db.scalar(
     select(func.count())
     .select_from(Clip)
-    .where(Clip.render_spec["music"]["track_id"].as_string() == str(asset_id))
+    .where(Clip.render_spec["music"]["track_id"].as_string() == str(track_id))
 )
 if count and count > 0:
-    raise HTTPException(409, f"Asset is used by {count} clip(s)")
+    raise TrackInUseError(track_id, int(count))
 ```
 
 *Note*: JSON path indexing depends on your DB (Postgres supports it well). If testing on SQLite, adjust or skip the JSON query in tests.
@@ -186,32 +226,49 @@ if count and count > 0:
 **File**: `apps/api/app/routers/music.py` (new)
 
 Routes:
-- `GET /api/v1/music` — list music assets.
-- `GET /api/v1/music/{asset_id}` — get metadata.
+- `GET /api/v1/music` — list music tracks.
+- `GET /api/v1/music/{track_id}` — get metadata.
 - `POST /api/v1/music/generate` — generate new music from prompt. Accepts `{ "prompt": "...", "mood": "..." }`.
-- `DELETE /api/v1/music/{asset_id}` — delete asset (with clip reference guard).
+- `PUT /api/v1/music/{track_id}` — update metadata.
+- `DELETE /api/v1/music/{track_id}` — delete track (with clip reference guard).
 
 **File**: `apps/api/app/routers/__init__.py` — export `music` router.  
-**File**: `apps/api/app/main.py` — register router and call `seed_default_music_assets` on startup.
+**File**: `apps/api/app/main.py` — register router and call `seed_default_tracks` on startup.
 
-#### Step 7: Generate 3 default tracks
+#### Step 7: Add streaming endpoint for tracks
+
+**Option A** (recommended): Extend `GET /api/v1/music/{track_id}` to stream the audio file.
+
+**Option B**: Reuse the existing `/api/v1/music/{mood}` endpoint and map `mood` to a `MusicTrack`. This keeps legacy clips working but couples the URL to the mood natural key.
+
+**Recommended**: Keep `/api/v1/music/{mood}` for legacy, add `/api/v1/music/{track_id}/stream` for new tracks. Store the new stream URL in `render_spec.music.url`.
+
+#### Step 8: Generate 3 default tracks
 
 Options:
-- **A**: Generate via MiniMax once, commit the 3 MP3 files to `data/music/assets/`, and write a seed script that creates `Asset` rows pointing to them.
+- **A**: Generate via MiniMax once, commit the 3 MP3 files to `assets/music/`, and write a seed script that creates `MusicTrack` rows pointing to them.
 - **B**: If MP3 files are too large for git, generate them via a one-time script (`scripts/seed_default_music.py`) and run it in production.
 
 Recommended: **A** for reproducibility, **B** if files are >10MB each.
 
-#### Step 8: Update brand template config
+Default catalog:
+
+| Mood | Title | Suggested Prompt |
+|---|---|---|
+| `calm` | Calm Academic | "Minimal ambient piano, no vocals, calm and intellectual, background music for an academic speech, 60 seconds, seamless loop" |
+| `uplifting` | Inspiring Vision | "Inspiring orchestral strings with gentle piano, no vocals, uplifting and hopeful, cinematic, 60 seconds, seamless loop" |
+| `corporate` | Corporate Drive | "Modern corporate electronic beat, no vocals, confident and professional, steady mid-tempo, 60 seconds, seamless loop" |
+
+#### Step 9: Update brand template config
 
 **File**: `apps/api/app/models/schemas.py`
 
-Add to the brand template config schema (or wherever `BrandTemplateConfig` is defined):
+Add to the brand template config schema:
 
 ```python
 musicEnabled: bool = True
-musicAssetId: str | None = None
-musicGainDb: float = -18.0
+musicTrackId: str | None = None   # NEW: replaces musicMood
+musicGainDb: float = -18.0        # NEW
 ```
 
 **File**: `apps/api/app/services/brand.py`
@@ -219,42 +276,46 @@ musicGainDb: float = -18.0
 Update `music_from_template`:
 
 ```python
-def music_from_template(config: dict[str, Any] | None, default_asset_id: str | None = None) -> ClipMusic:
+async def music_from_template(
+    db: AsyncSession,
+    config: dict[str, Any] | None,
+    default_track_id: str | None = None,
+) -> ClipMusic:
     cfg = config or {}
     if not cfg.get("musicEnabled", True):
         return ClipMusic(enabled=False, gain_db=cfg.get("musicGainDb", -18.0))
 
-    asset_id = cfg.get("musicAssetId") or default_asset_id
-    if asset_id:
-        return ClipMusic(
-            track_id=asset_id,
-            url=f"/api/v1/music/{asset_id}",  # or use asset streaming URL
-            enabled=True,
-            gain_db=cfg.get("musicGainDb", -18.0),
-        )
-    return ClipMusic(enabled=False, ...)
+    track_id = cfg.get("musicTrackId") or default_track_id
+    if track_id:
+        track = await db.get(MusicTrack, UUID(track_id))
+        if track:
+            return ClipMusic(
+                track_id=str(track.id),
+                url=f"/api/v1/music/{track.id}/stream",  # resolves under asset_dir
+                enabled=True,
+                gain_db=cfg.get("musicGainDb", -18.0),
+            )
+    return ClipMusic(enabled=False, gain_db=cfg.get("musicGainDb", -18.0))
 ```
 
-*Note*: You may need to keep the old `/api/v1/music/{mood}` endpoint working for legacy clips, or migrate URLs to asset-based URLs. The render endpoint can remain `/api/v1/music/{mood}` and we add a new endpoint `/api/v1/music-assets/{asset_id}` for assets. Pick one convention and document it.
+*Note*: This becomes async because it queries the DB. Update callers accordingly.
 
-**Recommended**: Keep `/api/v1/music/{mood}` for legacy, add `/api/v1/files/{asset_file_path}` for asset streaming, and store the asset file URL in `render_spec.music.url`.
-
-#### Step 9: Update Clip Agent
+#### Step 10: Update Clip Agent
 
 **File**: `apps/api/app/agents/clip_agent.py`  
 **File**: `apps/api/app/prompts/clip_agent.j2`
 
-- Add `music_asset_id`, `music_enabled`, `music_gain_db` to `ClipPlan`.
-- Update prompt to include available music assets and brand default.
+- Add `music_track_id`, `music_enabled`, `music_gain_db` to `ClipPlan`.
+- Update prompt to include available music tracks and brand default.
 - Let agent select per clip.
 
-#### Step 10: Update generation orchestration
+#### Step 11: Update generation orchestration
 
 **File**: `apps/api/app/services/generation.py`
 
 When building clip spec:
-- Resolve `plan.music_asset_id` to an `Asset`.
-- Build `ClipMusic` from asset file URL.
+- Resolve `plan.music_track_id` to a `MusicTrack`.
+- Build `ClipMusic` from the track's stream URL (resolves under `asset_dir`).
 - Respect `plan.music_enabled` and `plan.music_gain_db`.
 
 ### 4.2 Frontend
@@ -265,8 +326,8 @@ When building clip spec:
 
 Features:
 - Fetch `/api/v1/music`.
-- List assets with title, mood, duration.
-- Play/pause preview (use `<audio>` with `src={asset.url}`).
+- List tracks with title, mood, duration.
+- Play/pause preview (use `<audio>` with `src={track.url}`).
 - Radio/select to set brand default.
 - Toggle `musicEnabled`.
 - *(Optional)* "Generate new" button with prompt input.
@@ -281,7 +342,7 @@ Icons from `lucide-react` only.
 - Add "Music" row to the left settings list.
 - Render `<MusicPanel />` in the right panel.
 - Replace `musicMood` Select with the new panel.
-- Persist `musicAssetId`, `musicEnabled`, `musicGainDb` instead of `musicMood`.
+- Persist `musicTrackId`, `musicEnabled`, `musicGainDb` instead of `musicMood`.
 
 #### Step 3: Add i18n keys
 
@@ -303,7 +364,7 @@ Add keys like:
 **File**: `apps/web/src/routes/projects.$id.clips.$clipId.tsx` (or wherever the clip editor lives)
 
 Add a Music section:
-- Dropdown to select from existing assets.
+- Dropdown to select from existing tracks.
 - Toggle enabled.
 - Gain slider.
 - *(Optional)* "Generate new" button.
@@ -315,10 +376,11 @@ On change, PUT/PATCH the clip's `render_spec.music` and trigger re-render.
 **File**: `apps/api/tests/test_music.py` (new)
 
 Cover:
-- List music assets.
+- List music tracks.
 - Generate new music (mock MiniMax if needed).
-- Delete asset with clip reference → 409.
+- Delete track with clip reference → 409.
 - Clip Agent selects music based on content.
+- Brand template resolves default track to `ClipMusic`.
 
 ---
 
@@ -331,7 +393,7 @@ Cover:
    - Adding an FK would break existing data and constrain the render contract.
 
 2. **Do NOT call MiniMax music generation during clip generation**.
-   - Music is selected from pre-generated assets during generation.
+   - Music is selected from pre-generated tracks during generation.
    - Generation API is only called on explicit user request via chat/editor.
 
 3. **Do NOT change the render contract**.
@@ -348,14 +410,17 @@ Cover:
    - Out of MVP scope. Defer to Phase 4.
 
 7. **Do NOT store audio files in the database**.
-   - Files go to disk; metadata goes to the `Asset` table.
+   - Files go to disk under `assets/music/`; metadata goes to the `music_tracks` table.
 
-8. **Do NOT create a separate `music_tracks` table**.
-   - Reuse the existing `Asset` table with `type="music"`.
+8. **Do NOT reuse the `Asset` table for music tracks without removing its project/speaker ownership constraints**.
+   - The existing `Asset` table requires `project_id` or `speaker_id`. Music tracks are global library items.
+   - If you really want to unify, modify the `Asset` constraints first and document it — but a dedicated `music_tracks` table is preferred.
 
 9. **Do NOT modify `packages/clip/src/Clip.tsx` or `services/clip_spec.py` unless absolutely necessary**.
    - The render contract already supports music.
 
+10. **Do NOT base this work on the old `feat/music-template-ui` or `feat/music-library-Dushyant` branches**.
+    - Those branches are stale and diverged from `main`. Start fresh from `main` and cherry-pick useful ideas only.
 10. **Do NOT base this work on the old `feat/music-template-ui` or `feat/music-library-Dushyant` branches**.
     - Those branches are stale and diverged from `main`. Start fresh from `main` and cherry-pick useful ideas only.
 
@@ -365,33 +430,33 @@ Cover:
 
 ### Backend
 
-- [ ] `AssetType.MUSIC` exists.
-- [ ] `GET /api/v1/music` returns the 3 default assets on a fresh startup.
-- [ ] `POST /api/v1/music/generate` creates a new music asset (MiniMax integration works or is mocked with a clear path forward).
-- [ ] `DELETE /api/v1/music/{asset_id}` returns 409 if the asset is referenced by any clip.
-- [ ] `BrandTemplate.config` supports `musicAssetId`, `musicEnabled`, `musicGainDb`.
-- [ ] `services/brand.py:music_from_template` resolves by asset id.
-- [ ] `ClipPlan` includes `music_asset_id`, `music_enabled`, `music_gain_db`.
-- [ ] Clip Agent prompt includes available music assets and selects per clip.
-- [ ] `services/generation.py` bakes selected asset into `render_spec.music`.
+- [ ] `MusicTrack` table exists with migration.
+- [ ] `GET /api/v1/music` returns the 3 default tracks on a fresh startup.
+- [ ] `POST /api/v1/music/generate` creates a new music track (MiniMax integration works or is mocked with a clear path forward).
+- [ ] `DELETE /api/v1/music/{track_id}` returns 409 if the track is referenced by any clip.
+- [ ] `BrandTemplate.config` supports `musicTrackId`, `musicEnabled`, `musicGainDb`.
+- [ ] `services/brand.py:music_from_template` resolves by track id.
+- [ ] `ClipPlan` includes `music_track_id`, `music_enabled`, `music_gain_db`.
+- [ ] Clip Agent prompt includes available music tracks and selects per clip.
+- [ ] `services/generation.py` bakes selected track into `render_spec.music`.
 - [ ] All existing backend tests still pass: `uv run pytest -q`.
 
 ### Frontend
 
-- [ ] `/brand-template` has a Music panel with asset list, preview, selection, and toggle.
-- [ ] Music selection is persisted as `musicAssetId`.
-- [ ] Clip editor allows switching music asset, toggling, and adjusting gain.
+- [ ] `/brand-template` has a Music panel with track list, preview, selection, and toggle.
+- [ ] Music selection is persisted as `musicTrackId`.
+- [ ] Clip editor allows switching music track, toggling, and adjusting gain.
 - [ ] i18n keys added to both `en.ts` and `zh.ts`.
 - [ ] No hard-coded strings in components.
 
 ### Assets
 
-- [ ] 3 default MP3 files exist under `data/music/assets/` (or generated by seed script).
-- [ ] Default assets are created at startup if missing.
+- [ ] 3 default MP3 files exist under `assets/music/` (or generated by seed script).
+- [ ] Default tracks are created at startup if missing.
 
 ### Integration
 
-- [ ] A full generation run produces clips with `render_spec.music.url` pointing to a real music asset.
+- [ ] A full generation run produces clips with `render_spec.music.url` pointing to a real music track stream URL.
 - [ ] Remotion preview and final render play the selected music.
 
 ---
@@ -402,7 +467,7 @@ Cover:
 - Audio timeline editing (trim, offset, fade).
 - Multi-track music.
 - Artist revenue sharing.
-- Public asset library moderation UI.
+- Public music library moderation UI.
 - Standalone `/library/music` page.
 
 These are documented in `docs/MUSIC_ARCHITECTURE.md` Phase 2–4 and should not be attempted in this task.
@@ -420,13 +485,13 @@ feat/music-asset-library
 ## 9. Commit Message Examples
 
 ```
-feat(api): add AssetType.MUSIC and default AI-generated tracks
+feat(api): add music_tracks table and default AI-generated tracks
 feat(api): add MiniMax music generation service
 feat(api): add /api/v1/music endpoints
 feat(web): add MusicPanel to brand-template
 feat(web): add music controls to clip editor
-feat(agent): select music asset per clip in Clip Agent
-test(api): add music asset lifecycle tests
+feat(agent): select music track per clip in Clip Agent
+test(api): add music track lifecycle tests
 ```
 
 ---

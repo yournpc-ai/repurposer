@@ -486,21 +486,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: ADR-019 established a filesystem-only mood music library (`data/music/{mood}.<ext>`), and ADR-022 later added a management CRUD layer on top of it. Both approaches share a fundamental limitation: they rely on manually sourced audio files with uncertain copyright status. Opus Pro and similar tools frequently show "license expiry" warnings, and user-uploaded tracks introduce legal liability. Meanwhile, MiniMax (and other providers) now offer music generation APIs, making it possible to produce original, platform-safe background music on demand.
 
 **Decision**:
-1. **Default music is AI-generated and stored as assets**: three pre-generated tracks (`calm`, `uplifting`, `corporate`) are seeded as `Asset(type="music", kind="ai-generated")` at application startup. Audio files live on disk; metadata lives in the `Asset` table.
-2. **Brand template selects by asset id**: `BrandTemplate.config.musicAssetId` replaces `musicMood`. The template only picks a default track; it does not store a generation prompt or a mood string.
-3. **Clip Agent selects music per clip**: based on the brand default, the Content Director's mood suggestion, and the clip's content tone, the Clip Agent picks an existing music asset. No music generation API is called during clip generation.
-4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `Asset` and updating `Clip.render_spec.music`. The clip is then re-rendered.
+1. **Default music is AI-generated and stored in a dedicated `music_tracks` table**: three pre-generated tracks (`calm`, `uplifting`, `corporate`) are seeded as `MusicTrack` rows at application startup. Audio files live under `assets/music/` (consistent with current `main`, which stores uploads/outputs under `assets/`); structured metadata lives in the `music_tracks` table.
+2. **Brand template selects by track id**: `BrandTemplate.config.musicTrackId` replaces `musicMood`. The template only picks a default track; it does not store a generation prompt or a mood string.
+3. **Clip Agent selects music per clip**: based on the brand default, the Content Director's mood suggestion, and the clip's content tone, the Clip Agent picks an existing music track. No music generation API is called during clip generation.
+4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `MusicTrack` and updating `Clip.render_spec.music`. The clip is then re-rendered.
 5. **Render contract unchanged**: Remotion still consumes `spec.music.url` and `spec.music.enabled`.
 6. **User uploads deferred**: AI-generated music covers MVP needs. Uploaded music may be added later with explicit rights attestation, private-by-default visibility, and a takedown process.
 
 **Rationale**:
 - Eliminates platform copyright risk for default and chat-generated music.
-- Keeps generation fast and cheap by selecting from pre-generated assets instead of generating per clip.
+- Keeps generation fast and cheap by selecting from pre-generated tracks instead of generating per clip.
 - Makes music a clip-level creative decision rather than a static brand setting.
-- Reuses the existing `Asset` infrastructure instead of introducing a dedicated `music_tracks` table.
+- Uses a dedicated `music_tracks` table because the existing `Asset` table requires every row to belong to a `project_id` or `speaker_id`, which does not fit global/shared music library items.
 
 **Consequences**:
 - `musicMood` and the filesystem-only resolver become legacy; existing templates and clips need migration or graceful fallback.
+- A new `music_tracks` table and Alembic migration are required.
 - Custom music generation is more expensive than selection, so quotas or paid tiers may be needed.
 - MiniMax (or chosen provider) usage terms must explicitly allow commercial use and redistribution.
 
@@ -510,9 +511,10 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `docs/AGENT_ARCHITECTURE.md` (4-layer agent integration)
 
 **Related files**:
-- `apps/api/app/models/schemas.py` (`AssetType.MUSIC`, `ClipMusic`, `BrandTemplateConfig`)
-- `apps/api/app/models/tables.py` (`Asset`)
+- `apps/api/app/models/schemas.py` (`MusicTrackResponse`, `MusicTrackGenerateRequest`, `MusicTrackMetadataUpdate`, `ClipMusic`, `BrandTemplateConfig`)
+- `apps/api/app/models/tables.py` (`MusicTrack`)
 - `apps/api/app/services/music_generation.py` (future)
+- `apps/api/app/services/music.py` (future)
 - `apps/api/app/agents/clip_agent.py` (music selection)
 - `apps/web/src/components/brand-template/music-panel.tsx` (future)
 - `packages/clip/src/types.ts` (`ClipMusic`)

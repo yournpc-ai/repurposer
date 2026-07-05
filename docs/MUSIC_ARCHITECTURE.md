@@ -19,7 +19,9 @@ Historically, Repurposer treated music as a static brand-template setting (`musi
 4. **No user-driven refinement**: Chat and editor could not regenerate or fine-tune music.
 5. **Upload ambiguity**: User-uploaded music introduced unclear copyright liability.
 
-This document proposes a unified architecture that replaces the static mood-file approach with an **AI-generated, asset-based music library**.
+This document proposes a unified architecture that replaces the static mood-file approach with an **AI-generated music library backed by a dedicated `MusicTrack` table**.
+
+> **Naming note**: `MusicTrack` is the internal table/entity name for a music library item. User-facing language and API paths use "music" (e.g., `/api/v1/music`, "Music panel"). A `MusicTrack` is **not** an audio track in the video-editing timeline sense; it is one piece of background music stored in the library.
 
 ---
 
@@ -46,9 +48,9 @@ This document proposes a unified architecture that replaces the static mood-file
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Music Asset Library                                 │
+│                         Music Library                                       │
 │  (pre-generated AI tracks + user-generated tracks in future)                │
-│  Stored as: Asset(type="music") + audio file on disk                        │
+│  Stored as: MusicTrack row + audio file under assets/                     │
 └───────────────────────────────┬─────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -95,48 +97,86 @@ This document proposes a unified architecture that replaces the static mood-file
 
 | Data | Source of Truth | Rationale |
 |---|---|---|
-| **Audio bytes** | File on disk (`data/music/assets/{asset_id}.mp3`) | The render pipeline streams files; the DB should not hold blobs. |
-| **Music metadata** | `Asset` table + `Asset.meta` JSON | Reuses existing asset infrastructure; supports title, mood, prompt, license, generation model. |
-| **Brand default music** | `BrandTemplate.config.musicAssetId` | Explicit reference, not a mood string that may resolve differently later. |
+| **Audio bytes** | File on disk (`assets/music/{track_id}.{ext}`) | Current `main` stores uploads/outputs under `assets/`. Music follows the same convention; legacy `data/music/` is deprecated. |
+| **Music metadata** | `music_tracks` table (`MusicTrack` model) | Dedicated table for music-specific fields (mood, prompt, license, duration, attribution, is_public, generated_by_user_id). |
+| **Brand default music** | `BrandTemplate.config.musicTrackId` | Explicit reference to a `MusicTrack.id`. User-facing: "default music". |
 | **Per-clip music choice** | `Clip.render_spec.music` | The render contract is the runtime source of truth. |
-| **Which music is available** | `Asset` table filtered by `type="music"` | DB queries are fast and support search/filter in the UI. |
+| **Which music is available** | `music_tracks` table | DB queries are fast and support search/filter in the UI. |
 
 ---
 
 ## 6. Data Model
 
-### 6.1 Asset Type Extension
+### 6.1 MusicTrack Table
+
+**File**: `apps/api/app/models/tables.py`
+
+Why a dedicated table instead of `Asset`?
+- The existing `Asset` table requires every row to belong to either a `project_id` or a `speaker_id`. Music library items are global/shared resources, not tied to a specific project or speaker.
+- Music has structured metadata (mood, prompt, license, duration, attribution, is_public) that deserves typed columns rather than a JSON blob.
+
+**Binding model**:
+- **Platform/default tracks**: `generated_by_user_id = NULL`, `is_public = TRUE`. Owned by the platform, available to all users.
+- **User-generated tracks via MiniMax**: `generated_by_user_id = <user_id>`, `is_public = TRUE` by default. The user generated it, but it enters the shared library.
+- **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` by default. Private until explicitly shared and reviewed.
 
 ```python
-class AssetType(StrEnum):
-    VIDEO = "video"
-    AUDIO = "audio"
-    TRANSCRIPT = "transcript"
-    SLIDES = "slides"
-    IMAGE = "image"
-    VOICE_SAMPLE = "voice_sample"
-    PAST_MATERIAL = "past_material"
-    MUSIC = "music"          # NEW
+class MusicTrack(Base):
+    """Background music track (DB-backed; audio bytes stay under assets/)."""
+
+    __tablename__ = "music_tracks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    mood = Column(String(50), nullable=False, unique=True)
+    title = Column(String(255), nullable=False)
+    ext = Column(String(8), nullable=False)
+    file_path = Column(String(512), nullable=False)  # relative to asset_dir, e.g. "music/{track_id}.mp3"
+    size_bytes = Column(Integer, nullable=False)
+    duration_seconds = Column(Integer, nullable=True)
+    prompt = Column(Text, nullable=True)
+    model = Column(String(100), nullable=True)
+    generation_id = Column(String(255), nullable=True)
+    license = Column(String(100), nullable=True)
+    source_url = Column(String(512), nullable=True)
+    attribution = Column(Text, nullable=True)
+    is_public = Column(Boolean, default=True, nullable=False)
+    generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 ```
 
-### 6.2 Music Asset Meta Schema
+### 6.2 Response Schemas
+
+**File**: `apps/api/app/models/schemas.py`
 
 ```python
-class MusicAssetMeta(BaseModel):
-    """Metadata stored in Asset.meta for music assets."""
-
-    kind: Literal["ai-generated", "uploaded"]
+class MusicTrackResponse(BaseModel):
+    id: str
+    mood: str
     title: str
-    mood: str | None = None                    # e.g. calm, uplifting, corporate
-    prompt: str | None = None                  # generation prompt, if ai-generated
-    model: str | None = None                   # e.g. "minimax-music-v1"
-    generation_id: str | None = None           # provider-specific generation id
-    duration_seconds: int | None = None
-    license: str = "ai-generated"              # or "user-uploaded", "royalty-free", etc.
-    source_url: str | None = None              # original source, if applicable
-    attribution: str | None = None             # required attribution text
-    is_public: bool = True                     # visible to other users (future)
-    generated_by_user_id: str | None = None    # for attribution/auditing
+    ext: str
+    url: str
+    size_bytes: int
+    duration_seconds: int | None
+    prompt: str | None
+    license: str | None
+    source_url: str | None
+    attribution: str | None
+    is_public: bool
+    created_at: datetime
+
+
+class MusicTrackGenerateRequest(BaseModel):
+    prompt: str
+    mood: str | None = None
+
+
+class MusicTrackMetadataUpdate(BaseModel):
+    title: str | None = None
+    license: str | None = None
+    source_url: str | None = None
+    attribution: str | None = None
+    is_public: bool | None = None
 ```
 
 ### 6.3 Brand Template Config
@@ -145,18 +185,18 @@ class MusicAssetMeta(BaseModel):
 class BrandTemplateConfig(BaseModel):
     ...
     musicEnabled: bool = True
-    musicAssetId: str | None = None            # NEW: replaces musicMood
+    musicTrackId: str | None = None            # NEW: replaces musicMood
     musicGainDb: float = -18.0                 # NEW
 ```
 
-**Migration note**: Existing templates with `musicMood` should be migrated to point to the corresponding pre-generated AI asset, or left as `musicAssetId=None` and resolved by the Clip Agent.
+**Migration note**: Existing templates with `musicMood` should be migrated to point to the corresponding pre-generated AI track, or left as `musicTrackId=None` and resolved by the Clip Agent.
 
 ### 6.4 Clip Plan Extension
 
 ```python
 class ClipPlan(BaseModel):
     ...
-    music_asset_id: str | None = None
+    music_track_id: str | None = None
     music_enabled: bool = True
     music_gain_db: float = -18.0
 ```
@@ -178,11 +218,11 @@ interface ClipMusic {
 }
 ```
 
-The renderer does not know about assets, moods, or the music library. It only plays `url` when `enabled` is true.
+The renderer does not know about tracks, moods, or the music library. It only plays `url` when `enabled` is true.
 
 ---
 
-## 7. Music Library: Pre-Generated Default Assets
+## 7. Music Library: Pre-Generated Default Tracks
 
 ### 7.1 Rationale
 
@@ -195,7 +235,7 @@ Users who want custom music can trigger generation later via chat/editor.
 
 ### 7.2 Default Catalog
 
-| Asset ID | Title | Mood | Target Content | Suggested Prompt |
+| Track ID | Title | Mood | Target Content | Suggested Prompt |
 |---|---|---|---|---|
 | `{calm-uuid}` | Calm Academic | calm | Thoughtful analysis, data explanation, reflective moments | "Minimal ambient piano, no vocals, calm and intellectual, background music for an academic speech, 60 seconds, seamless loop" |
 | `{uplifting-uuid}` | Inspiring Vision | uplifting | Call-to-action, emotional climax, vision statements | "Inspiring orchestral strings with gentle piano, no vocals, uplifting and hopeful, cinematic, 60 seconds, seamless loop" |
@@ -203,29 +243,26 @@ Users who want custom music can trigger generation later via chat/editor.
 
 ### 7.3 Seeding
 
-Default assets are created at application startup if they do not exist:
+Default tracks are created at application startup if they do not exist:
 
 ```python
-async def seed_default_music_assets(db: AsyncSession) -> None:
-    """Ensure the 3 default AI-generated music assets exist."""
+async def seed_default_music_tracks(db: AsyncSession) -> None:
+    """Ensure the 3 default AI-generated music tracks exist."""
     for spec in DEFAULT_MUSIC_SPECS:
         existing = await db.scalar(
-            select(Asset).where(
-                Asset.type == AssetType.MUSIC,
-                Asset.meta["mood"].as_string() == spec.mood
-            )
+            select(MusicTrack).where(MusicTrack.mood == spec.mood)
         )
         if existing is None:
-            await create_music_asset_from_file(db, spec)
+            await create_music_track_from_file(db, spec)
 ```
 
-Audio files live at `data/music/assets/{asset_id}.mp3`.
+Audio files live at `assets/music/{track_id}.{ext}` (relative to `settings.asset_dir`).
 
 ### 7.4 Artist-Generated Tracks (Future)
 
 When the platform has artists or power users, their generated tracks can also be seeded into the library:
 
-- `kind: "ai-generated"`
+- `kind` is implied by the `prompt` / `model` fields being present.
 - `generated_by_user_id: <user_id>`
 - `is_public: true` (after review) or `false` (private)
 - Artists may receive attribution or revenue share (business decision TBD).
@@ -241,8 +278,8 @@ async def build_generation_context(...) -> GenerationContext:
     ...
     return GenerationContext(
         ...
-        music_prompt=None,              # Not used as default; brand default is explicit asset
-        brand_music_asset_id=bt.config.get("musicAssetId") if bt else None,
+        music_prompt=None,              # Not used as default; brand default is explicit track
+        brand_music_track_id=bt.config.get("musicTrackId") if bt else None,
     )
 ```
 
@@ -263,23 +300,23 @@ This is a hint, not a binding selection.
 The Clip Agent prompt receives:
 
 ```jinja2
-Available music assets in the library:
+Available music tracks in the library:
 - calm: minimal ambient piano, suitable for academic/reflective content
 - uplifting: inspiring strings, suitable for emotional peaks and calls to action
 - corporate: modern electronic beat, suitable for business/data content
 
-Brand template default music: {{ context.brand_music_asset_id or "none" }}
+Brand template default music: {{ context.brand_music_track_id or "none" }}
 Content director suggests mood: {{ derivative_plan.music_mood or "none" }}
 
 For this clip, choose:
-- music_asset_id: the UUID of the best-fitting track
+- music_track_id: the UUID of the best-fitting track
 - music_enabled: true/false
 - music_gain_db: default -18.0
 ```
 
 Selection logic:
-1. If the brand template has a default asset and it fits the clip mood, use it.
-2. If the Director suggested a mood, pick the asset with that mood.
+1. If the brand template has a default track and it fits the clip mood, use it.
+2. If the Director suggested a mood, pick the track with that mood.
 3. Otherwise, infer from clip content tone.
 
 ### 8.4 Baking into Render Spec
@@ -287,12 +324,12 @@ Selection logic:
 ```python
 async def build_clip_spec(..., plan: ClipPlan, ...):
     music = ClipMusic(enabled=False, gain_db=-18.0)
-    if plan.music_enabled and plan.music_asset_id:
-        asset = await db.get(Asset, UUID(plan.music_asset_id))
-        if asset and asset.type == AssetType.MUSIC:
+    if plan.music_enabled and plan.music_track_id:
+        track = await db.get(MusicTrack, UUID(plan.music_track_id))
+        if track and track.file_path:
             music = ClipMusic(
-                track_id=str(asset.id),
-                url=stream_url(asset.file_url),
+                track_id=str(track.id),
+                url=stream_url(track.file_path),  # resolves under asset_dir
                 enabled=True,
                 gain_db=plan.music_gain_db,
             )
@@ -346,16 +383,16 @@ Or:
 For `regenerate_music`:
 
 1. Call `services/music_generation.generate_track(prompt, mood)`.
-2. Save audio file to `data/music/assets/{new_uuid}.mp3`.
-3. Create `Asset(type="music", kind="ai-generated", meta={...})`.
+2. Save audio file to `assets/music/{new_track_id}.{ext}` (under `settings.asset_dir`).
+3. Create `MusicTrack(...)` row with `file_path="music/{new_track_id}.{ext}"`.
 4. Update `clip.render_spec.music` with new `track_id` and `url`.
 5. Set `clip.render_status = RenderStatus.PENDING`.
 6. Worker picks up and re-renders.
-7. New asset enters the shared library (if `is_public=True`).
+7. New track enters the shared library (if `is_public=True`).
 
-For `select_music_asset`:
+For `select_music_track`:
 
-1. Resolve asset from library.
+1. Resolve track from library.
 2. Update `clip.render_spec.music`.
 3. Re-render.
 
@@ -368,28 +405,28 @@ Music generation is more expensive than selection. To avoid runaway costs:
 
 ---
 
-## 10. Asset Library UI
+## 10. Music Library UI
 
 ### 10.1 In Brand Template
 
 The `/brand-template` page has a **Music** section in the left settings list. Opening it shows:
 
-- A list of available music assets.
+- A list of available music tracks.
 - Each row: title, mood tag, duration, play/pause button, select radio.
 - A "Generate new" button that opens a prompt input + generate button.
 - A toggle for `musicEnabled`.
 
 ### 10.2 In Result Editor
 
-The clip editor shows the current music asset and allows:
-- Switch to another asset from the library.
+The clip editor shows the current music track and allows:
+- Switch to another track from the library.
 - Toggle on/off.
 - Adjust gain (slider).
 - "Generate new" for custom music.
 
 ### 10.3 Future: Standalone Music Library
 
-A dedicated `/library/music` page for browsing, searching, and managing all music assets. Deferred to Phase 2.
+A dedicated `/library/music` page for browsing, searching, and managing all music tracks. Deferred to Phase 2.
 
 ---
 
@@ -456,12 +493,12 @@ If MiniMax does not grant adequate rights:
 2. Or commission original royalty-free tracks and own them outright.
 3. Or remove music from clips entirely until a clean solution is found.
 
-### 12.3 Public Asset Library
+### 12.3 Public Music Library
 
 When user-generated music becomes public:
 
-- Only `ai-generated` tracks are public by default.
-- `uploaded` tracks require explicit rights proof before public sharing.
+- Tracks with a `prompt` / `model` (AI-generated) are public by default.
+- Uploaded tracks require explicit rights proof before public sharing.
 - Platform may watermark or tag public tracks for auditability.
 
 ---
@@ -472,9 +509,9 @@ When user-generated music becomes public:
 
 The music layer integrates with the 4-layer agent architecture:
 
-- **Layer 1 (GenerationContext)**: carries `brand_music_asset_id`.
+- **Layer 1 (GenerationContext)**: carries `brand_music_track_id`.
 - **Layer 2 (Content Director)**: may output `music_mood` in `DerivativePlan`.
-- **Layer 3 (Clip Agent)**: selects `music_asset_id`, `music_enabled`, `music_gain_db`.
+- **Layer 3 (Clip Agent)**: selects `music_track_id`, `music_enabled`, `music_gain_db`.
 - **Layer 4 (Consistency Reviser, future)**: may verify that music matches brand voice.
 
 ### 13.2 Task Queue
@@ -497,15 +534,17 @@ No changes to `packages/clip/src/Clip.tsx` or `apps/render`. Remotion continues 
 
 ### Phase 1: MVP — AI-Generated Defaults + Selection
 
-1. Add `AssetType.MUSIC`.
-2. Implement `services/music_generation.py` (MiniMax integration).
-3. Generate 3 default tracks and seed as assets.
-4. Add `/api/v1/music` endpoints (list, generate, get metadata).
-5. Update `BrandTemplate.config` to use `musicAssetId`.
-6. Update `services/brand.py:music_from_template` to resolve assets.
-7. Update Clip Agent prompt and `ClipPlan` to select music.
-8. Add Music panel to `/brand-template`.
-9. Add music switch/gain control to clip editor.
+1. Add `MusicTrack` table and Alembic migration.
+2. Update `settings.music_dir` (or storage helpers) so music files live under `assets/music/`.
+3. Implement `services/music_generation.py` (MiniMax integration).
+4. Generate 3 default tracks and seed as `MusicTrack` rows.
+5. Add `/api/v1/music` endpoints (list, generate, get metadata, update metadata, delete).
+6. Add streaming endpoint for tracks.
+7. Update `BrandTemplate.config` to use `musicTrackId`.
+8. Update `services/brand.py:music_from_template` to resolve tracks.
+9. Update Clip Agent prompt and `ClipPlan` to select music.
+10. Add Music panel to `/brand-template`.
+11. Add music switch/gain control to clip editor.
 
 ### Phase 2: Chat-Driven Regeneration
 
@@ -545,20 +584,22 @@ No changes to `packages/clip/src/Clip.tsx` or `apps/render`. Remotion continues 
 
 - `docs/DECISIONS.md` ADR-019: Built-in mood music library (filesystem-only, superseded by this doc).
 - `docs/DECISIONS.md` ADR-022: Music track library CRUD (management layer, partial overlap).
-- `docs/VIDEO_EDITOR.md`: Clip-spec contract and renderer-agnostic design.
-- `docs/AGENT_ARCHITECTURE.md`: 4-layer agent architecture.
+- `docs/DECISIONS.md` ADR-023: Music becomes an AI-generated, asset-based library.
+- `docs/VIDEO_EDITOR.md` (`render_spec.music` contract).
+- `docs/AGENT_ARCHITECTURE.md` (4-layer agent integration).
 - `docs/tasks/todo.md`: Original narrow task brief.
+- `docs/tasks/music-asset-library.md`: Implementation todo for this architecture.
 
 ---
 
 ## 17. Summary
 
-Repurposer’s music architecture moves from a **static, file-based mood library** to an **AI-generated, asset-based music system**:
+Repurposer’s music architecture moves from a **static, file-based mood library** to an **AI-generated music library backed by a dedicated `music_tracks` table**:
 
 - **Default**: 3 pre-generated AI tracks (`calm`, `uplifting`, `corporate`) cover most speech/conference clips.
 - **Selection**: Clip Agent picks the best existing track per clip, influenced by brand defaults and content mood.
 - **Refinement**: Users can switch tracks or generate custom music via chat/editor.
-- **Reusability**: All generated music becomes an Asset in the library, shareable across projects and eventually users.
+- **Reusability**: All generated music becomes a `MusicTrack` in the library, shareable across projects and eventually users.
 - **Copyright**: Platform defaults to AI-generated music to avoid licensing fragility; user uploads are deferred and will require explicit rights management.
 
 This design keeps the render contract stable, integrates cleanly with the 4-layer agent architecture, and gives the product a scalable path from MVP to a community-driven music library.
