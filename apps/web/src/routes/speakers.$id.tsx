@@ -205,7 +205,7 @@ function SpeakerDetailPage() {
   return (
     <div className="flex min-h-screen flex-col p-8">
       <div className="mb-6 flex items-center gap-4">
-        <Button variant="ghost" size="icon" render={<Link to="/speakers" />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/speakers" />}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>

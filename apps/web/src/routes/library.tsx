@@ -242,6 +242,7 @@ function LibraryCard({ item }: { item: LibraryItem }) {
         <Button
           variant="ghost"
           size="icon-sm"
+          nativeButton={false}
           render={<Link to="/projects/$id" params={{ id: item.project_id }} />}
           title={t("library.viewProject")}
         >

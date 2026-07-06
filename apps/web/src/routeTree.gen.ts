@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SpeakersRouteImport } from './routes/speakers'
-import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as BrandTemplateRouteImport } from './routes/brand-template'
 import { Route as IndexRouteImport } from './routes/index'
@@ -21,11 +20,6 @@ import { Route as ProjectsIdClipsClipIdRouteImport } from './routes/projects.$id
 const SpeakersRoute = SpeakersRouteImport.update({
   id: '/speakers',
   path: '/speakers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryRoute = LibraryRouteImport.update({
@@ -49,9 +43,9 @@ const SpeakersIdRoute = SpeakersIdRouteImport.update({
   getParentRoute: () => SpeakersRoute,
 } as any)
 const ProjectsIdRoute = ProjectsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ProjectsRoute,
+  id: '/projects/$id',
+  path: '/projects/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIdClipsClipIdRoute = ProjectsIdClipsClipIdRouteImport.update({
   id: '/clips/$clipId',
@@ -63,7 +57,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
-  '/projects': typeof ProjectsRouteWithChildren
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -73,7 +66,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
-  '/projects': typeof ProjectsRouteWithChildren
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -84,7 +76,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
-  '/projects': typeof ProjectsRouteWithChildren
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -96,7 +87,6 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
-    | '/projects'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -106,7 +96,6 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
-    | '/projects'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -116,7 +105,6 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
-    | '/projects'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -127,8 +115,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BrandTemplateRoute: typeof BrandTemplateRoute
   LibraryRoute: typeof LibraryRoute
-  ProjectsRoute: typeof ProjectsRouteWithChildren
   SpeakersRoute: typeof SpeakersRouteWithChildren
+  ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -138,13 +126,6 @@ declare module '@tanstack/react-router' {
       path: '/speakers'
       fullPath: '/speakers'
       preLoaderRoute: typeof SpeakersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library': {
@@ -177,10 +158,10 @@ declare module '@tanstack/react-router' {
     }
     '/projects/$id': {
       id: '/projects/$id'
-      path: '/$id'
+      path: '/projects/$id'
       fullPath: '/projects/$id'
       preLoaderRoute: typeof ProjectsIdRouteImport
-      parentRoute: typeof ProjectsRoute
+      parentRoute: typeof rootRouteImport
     }
     '/projects/$id/clips/$clipId': {
       id: '/projects/$id/clips/$clipId'
@@ -191,30 +172,6 @@ declare module '@tanstack/react-router' {
     }
   }
 }
-
-interface ProjectsIdRouteChildren {
-  ProjectsIdClipsClipIdRoute: typeof ProjectsIdClipsClipIdRoute
-}
-
-const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
-  ProjectsIdClipsClipIdRoute: ProjectsIdClipsClipIdRoute,
-}
-
-const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
-  ProjectsIdRouteChildren,
-)
-
-interface ProjectsRouteChildren {
-  ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
-}
-
-const ProjectsRouteChildren: ProjectsRouteChildren = {
-  ProjectsIdRoute: ProjectsIdRouteWithChildren,
-}
-
-const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
-  ProjectsRouteChildren,
-)
 
 interface SpeakersRouteChildren {
   SpeakersIdRoute: typeof SpeakersIdRoute
@@ -228,12 +185,24 @@ const SpeakersRouteWithChildren = SpeakersRoute._addFileChildren(
   SpeakersRouteChildren,
 )
 
+interface ProjectsIdRouteChildren {
+  ProjectsIdClipsClipIdRoute: typeof ProjectsIdClipsClipIdRoute
+}
+
+const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
+  ProjectsIdClipsClipIdRoute: ProjectsIdClipsClipIdRoute,
+}
+
+const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
+  ProjectsIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BrandTemplateRoute: BrandTemplateRoute,
   LibraryRoute: LibraryRoute,
-  ProjectsRoute: ProjectsRouteWithChildren,
   SpeakersRoute: SpeakersRouteWithChildren,
+  ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

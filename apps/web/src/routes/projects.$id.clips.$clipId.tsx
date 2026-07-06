@@ -262,6 +262,7 @@ function ClipEditorPage() {
           <Button
             variant="ghost"
             size="icon"
+            nativeButton={false}
             aria-label={t('clipEditor.back')}
             render={<Link to="/projects/$id" params={{ id }} />}
           >
