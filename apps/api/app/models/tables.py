@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -232,5 +233,47 @@ class Message(Base):
     attachments = Column(JSON, default=list)
     workflow_run_id = Column(UUID(as_uuid=True), ForeignKey("workflow_runs.id"), nullable=True)
     intent = Column(JSON, nullable=True)  # parsed LLM intent for this turn
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class Music(Base):
+    """Background music piece (DB-backed; audio bytes stay under ``assets/``).
+
+    A dedicated table — not the ``Asset`` table — because music library items are
+    global/shared resources: they don't belong to a single project or speaker
+    (``Asset`` enforces ``project_id IS NOT NULL OR speaker_id IS NOT NULL``).
+
+    Binding:
+    - Platform/default pieces: ``generated_by_user_id = NULL``, ``is_public = True``.
+    - User-generated pieces (MiniMax): ``generated_by_user_id = <user_id>``,
+      ``is_public = True`` (enter the shared library).
+    - Future user uploads (Phase 3): ``generated_by_user_id = <user_id>``,
+      ``is_public = False`` until reviewed.
+
+    ``file_path`` is relative to ``settings.asset_dir`` (e.g.
+    ``"music/{music_id}.mp3"``). Audio bytes never live in the DB (ADR-011).
+
+    ``mood`` is a unique natural key (``calm`` / ``uplifting`` / ``corporate``)
+    kept for legacy compatibility — new code references pieces by ``id``.
+    """
+
+    __tablename__ = "music"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    mood = Column(String(50), nullable=False, unique=True)
+    title = Column(String(255), nullable=False)
+    ext = Column(String(8), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    duration_seconds = Column(Integer, nullable=True)
+    prompt = Column(Text, nullable=True)
+    model = Column(String(100), nullable=True)
+    generation_id = Column(String(255), nullable=True)
+    license = Column(String(100), nullable=True)
+    source_url = Column(String(512), nullable=True)
+    attribution = Column(Text, nullable=True)
+    is_public = Column(Boolean, default=True, nullable=False)
+    generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
