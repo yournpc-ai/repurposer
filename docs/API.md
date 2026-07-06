@@ -30,11 +30,18 @@ POST /api/v1/projects/{project_id}/generate
 After that, the frontend navigates to the project detail page and polls the following endpoints to check results:
 
 ```
+GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt + clips + derivatives + latest job
+GET /api/v1/projects/{project_id}/jobs/{job_id}
+```
+
+The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The legacy single-resource endpoints are still available:
+
+```
 GET /api/v1/projects/{project_id}
 GET /api/v1/projects/{project_id}/assets
 GET /api/v1/projects/{project_id}/clips
 GET /api/v1/projects/{project_id}/derivatives
-GET /api/v1/projects/{project_id}/jobs/{job_id}
+GET /api/v1/projects/{project_id}/jobs
 ```
 
 When rendering a video, call:
@@ -120,14 +127,14 @@ PUT /api/v1/speakers/{speaker_id}
 ### Upload Speaker Past Material
 
 ```http
-POST /api/v1/speakers/{speaker_id}/materials
+POST /api/v1/speakers/{speaker_id}/assets
 Content-Type: multipart/form-data
 ```
 
 Fields:
 
 - `file`: File
-- `type`: `book` | `article` | `speech` | `social_media`
+- `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample` | `past_material`
 
 ### Generate / Update Speaker Style Persona
 
@@ -150,7 +157,7 @@ Response:
 
 ## 4. Project Management
 
-> **Evolution Note**: The `speaker_id` field in project creation is planned to become optional. When omitted, the system will automatically create a Speaker memory and associate it with the project after task processing completes. The current implementation may still require it; refactoring is in progress.
+> **Current state**: `speaker_id` is optional at project creation. When omitted, the system uses the project's own `tone_snapshot` and the default speaker profile for generation; a dedicated `Speaker` row can still be created and selected manually.
 
 ### Create Project
 
@@ -162,7 +169,7 @@ Request:
 
 ```json
 {
-  "speaker_id": "uuid",
+  "speaker_id": "uuid | null",
   "title": "2026世界未来科技发展峰会演讲",
   "event_name": "2026世界未来科技发展峰会",
   "language": "zh"
@@ -268,36 +275,35 @@ GET /api/v1/projects/{project_id}/clips
 GET /api/v1/clips/{clip_id}
 ```
 
-### Edit Clip
+### Edit / Revise Clip
+
+Clips are not edited via a single `PUT`. Instead, use the action-specific endpoints below.
+
+### Regenerate Clip
 
 ```http
-PUT /api/v1/clips/{clip_id}
+POST /api/v1/clips/{clip_id}/regenerate
+```
+
+Request: `{ "instruction": "make the hook shorter" }`. Response: updated `Clip`.
+
+### Revise Based on Feedback
+
+```http
+POST /api/v1/clips/{clip_id}/revise
 ```
 
 Request:
 
 ```json
 {
-  "hook": "Your keynote reached 300 people...",
-  "script": { "hook": "...", "shots": [...], ... },
-  "title_options": ["...", "..."],
-  "music_mood": "corporate",
-  "render_spec": {
-    "source": { "asset_id": "uuid", "kind": "video", "url": "...", "image_urls": [], "fps": 30 },
-    "aspect": "9:16",
-    "segments": [{ "start": 0, "end": 30, "hidden": false }],
-    "caption_track": [{ "start": 0, "end": 1.2, "text": "Hello", "lang": "en" }],
-    "caption_style_preset": "clean-bottom",
-    "caption_position": { "x": 0.5, "y": 0.84 },
-    "title": { "text": "...", "enabled": true, "size": 56, "position": { "x": 0.5, "y": 0.12 } },
-    "music": { "track_id": "calm", "url": "...", "enabled": true, "gain_db": -18 },
-    "dub": { "url": "...", "enabled": false, "gain_db": 0 },
-    "brand": { "logo_url": "...", "cta": "...", "cta_position": { "x": 0.5, "y": 0.92 }, "caption_color": "#ffffff", "fill_mode": "fill" }
-  }
+  "scope": "hook",
+  "reason": "hook_not_catchy",
+  "detail": "太平淡了，没有冲突感"
 }
 ```
 
-> `source.kind`: `video` (real-person recording) | `stills` (image-audio montage, `image_urls` as base layer + optional `url` for voice). Position points `caption_position`/`title.position`/`brand.cta_position` are normalized `{x,y}`; null means default.
+Response: revised `Clip`.
 
 ### Trigger Render
 
@@ -322,32 +328,6 @@ POST /api/v1/clips/{clip_id}/dub
 ```
 
 Request: `{ "target_language": "fr" }`. Uses the speaker's voice (from persona VOICE_SAMPLE / this session's AUDIO / VIDEO extracted track) via MiniMax voice_clone + T2A to dub the (translated) captions into the target language. Response: updated `Clip`, `render_spec.dub` written (original audio is muted during render, dubbed audio plays).
-
-### Revise Based on Feedback
-
-```http
-POST /api/v1/clips/{clip_id}/revise
-```
-
-Request: same as `FeedbackRequest`. Response: revised `Clip`.
-
-### Submit Feedback
-
-```http
-POST /api/v1/clips/{clip_id}/feedback
-```
-
-Request:
-
-```json
-{
-  "scope": "hook",
-  "reason": "hook_not_catchy",
-  "detail": "太平淡了，没有冲突感"
-}
-```
-
-## 8. Derivative Content
 
 ### List Derivatives
 
@@ -377,16 +357,62 @@ Request:
 }
 ```
 
-Response:
+Response: a `application/zip` file download with `Content-Disposition: attachment; filename={project_title}.zip`. The archive contains Markdown files for clips, LinkedIn posts, quote cards, summaries, and blog posts. There is no presigned URL; the ZIP is generated on the fly.
+
+## 10. Chat
+
+Project-scoped and asset-scoped chat sessions persist the original prompt and all follow-up instructions. The `/generate` endpoint automatically creates a project-scoped session and stores the user's `instruction` as the first user message.
+
+### Get or Create Session
+
+```http
+GET /api/v1/chat/session?project_id={project_id}&asset_id={asset_id}&asset_type={asset_type}
+```
+
+Returns the existing session or creates one. `asset_type` is `clip` or `derivative` when the chat is tied to a specific asset.
+
+### Send a Message
+
+```http
+POST /api/v1/chat
+```
+
+Request:
 
 ```json
 {
-  "download_url": "https://storage.example.com/exports/uuid.zip",
-  "expires_at": "2026-06-22T12:00:00Z"
+  "project_id": "uuid",
+  "asset_id": "uuid | null",
+  "asset_type": "clip | derivative | null",
+  "message": "make the hook shorter",
+  "attachments": []
 }
 ```
 
-## 10. Brand Template
+Response: `{ session_id, user_message, assistant_message, job_id }`. The assistant message parses the user's intent (translate, revise, render, select music, etc.) and may dispatch a `WorkflowRun` returned as `job_id`.
+
+### List Session Messages
+
+```http
+GET /api/v1/chat/sessions/{session_id}/messages
+```
+
+## 11. Library
+
+The library lists all downloadable outputs across projects (clips and derivatives) for quick access.
+
+### List Library Items
+
+```http
+GET /api/v1/library
+```
+
+Query params:
+
+- `type`: `clip` | `derivative` (optional)
+- `derivative_type`: `linkedin_post` | `quote_card` | `carousel` | `summary` | `blog` (optional)
+
+## 12. Brand Template
 
 Brand templates determine the brand overlay elements in the final video. **Full CRUD**; a default is seeded on startup. At generation time, `GenerateRequest.brand_template_id` selects one (defaults to latest), baking `aspect` / caption·title·CTA styles and **position points** / intro/outro / music mood into `render_spec`.
 
@@ -442,20 +468,26 @@ GET /api/v1/brand-templates/{template_id}
 DELETE /api/v1/brand-templates/{template_id}
 ```
 
-## 11. Data Models
+## 13. Data Models
 
 See the Data Models section in [Architecture Design](./ARCHITECTURE.md).
 
 Core models:
 
-- `Speaker` (= user profile: persona style + voiceprint; see ADR-021)
+- `Speaker` (= user profile: style memory + voiceprint; see ADR-021)
 - `Project`
 - `Asset`
 - `Clip`
 - `Derivative`
 - `WorkflowRun`
-- `HumanFeedback`
+- `ChatSession` (project-scoped or asset-scoped chat container)
+- `Message` (chat messages, referenced by `session_id`)
 - `BrandTemplate`
+
+Removed / not yet implemented:
+
+- `HumanFeedback` (feedback is now handled by the `/clips/{id}/revise` endpoint and stored on the revised `Clip`)
+- `WorkflowStep` (dropped; `WorkflowRun.current_step` tracks progress as a string)
 
 Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(cta_position) / `Point`.
 Requests/derivatives: `GenerateRequest`(carousel/brand_template_id/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.

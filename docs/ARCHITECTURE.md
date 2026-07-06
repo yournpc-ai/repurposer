@@ -27,7 +27,7 @@
                     ↓
 ┌─────────────────────────────────────────────┐
 │  Agent Steps (pure Python functions)         │
-│  persona / content_director / clip /         │
+│  memory / content_director / clip /          │
 │  linkedin / quote / carousel / summary /     │
 │  blog / reviser / caption_translate          │
 └─────────────────────────────────────────────┘
@@ -51,7 +51,7 @@
 
 | Agent | Input | Output | Description |
 |:---|:---|:---|:---|
-| `persona` | Speaker's past materials | `SpeakerPersona` | Style portrait |
+| `memory` (persona extraction) | Task materials | `SpeakerPersona` | Speaker style memory / portrait |
 | `content_director` | Materials + `GenerationContext` | `ContentPlan` | Unified analysis: core thesis, themes, audience, per-output plans |
 | `clip` | Materials + `GenerationContext` + `ContentPlan` | `ClipPlans` | Select segments and write vertical clip scripts |
 | `linkedin` | Materials + `GenerationContext` + `ContentPlan` | `LinkedInPost` | LinkedIn long post |
@@ -59,7 +59,7 @@
 | `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | LinkedIn carousel (cover → points → CTA) |
 | `summary` | Materials + `GenerationContext` + `ContentPlan` | `Summary` | Multi-language summary |
 | `blog` | Materials + `GenerationContext` + `ContentPlan` | `BlogPost` | Blog article |
-| `reviser` | Script + feedback + persona | `ClipScript` | Revised clip script from human feedback |
+| `reviser` | Clip metadata + feedback + persona | `ClipRevision` | Revised clip metadata (hook, duration, titles, music) |
 | `caption_translate` | Word-level captions + target_language | `CaptionTranslation` | Caption language swap |
 
 > **Intent Channel**: `GenerateRequest.instruction` (homepage prompt) is folded into `GenerationContext` and passed to the Content Director and every derivative agent as "the highest-priority directive for this run."
@@ -72,7 +72,7 @@ User uploads media + inputs prompt
     ↓
 Preprocessing (transcription / parsing / image processing)
     ↓
-Resolve Speaker (auto-create default persona if none selected)
+Resolve Speaker (auto-create default memory if none selected)
     ↓
 Resolve Brand template → content strategy
     ↓
@@ -126,6 +126,7 @@ Frontend makes three consecutive API calls:
   POST /api/v1/projects              → Create Project
   POST /api/v1/projects/{id}/assets  → Upload Asset (file or prompt text)
   POST /api/v1/projects/{id}/generate → Create WorkflowRun, enter generation queue
+                                            (also creates a project-scoped ChatSession and stores the prompt)
             ↓
 Worker claims WorkflowRun and calls Agents in order:
   content_director → clip → linkedin / quote / carousel / summary / blog
@@ -154,12 +155,14 @@ apps/api/
 │   ├── worker.py            # Standalone worker process entry point
 │   ├── routers/             # API routes
 │   │   ├── speakers.py
-│   │   ├── projects.py      # Includes generation, export, jobs, clips, derivatives
+│   │   ├── projects.py      # Includes generation, export, jobs, clips, derivatives, results
 │   │   ├── assets.py
-│   │   ├── clips.py         # Review, render trigger, caption translation
+│   │   ├── clips.py         # Review, render trigger, caption translation, dub, regenerate, revise
 │   │   ├── derivatives.py
 │   │   ├── files.py         # Range streaming endpoints (uploads/outputs/music)
-│   │   └── brand_templates.py
+│   │   ├── brand_templates.py
+│   │   ├── chat.py          # Project/asset-scoped chat sessions and intent dispatch
+│   │   └── library.py       # Cross-project output library
 │   ├── services/            # Business logic
 │   │   ├── jobs.py          # Queue claiming
 │   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision
@@ -171,6 +174,8 @@ apps/api/
 │   │   ├── vision.py        # M3 vision: image → key point text
 │   │   ├── voice.py         # Voice cloning + T2A synthesis + video audio track extraction
 │   │   ├── caption_translate.py  # Caption track translation
+│   │   ├── chat.py          # Chat session logic and intent parsing/dispatch
+│   │   ├── project_context.py    # Project ownership helpers
 │   │   ├── storage.py       # Storage seam
 │   │   └── asr.py           # faster-whisper
 │   ├── models/              # Database models + Pydantic schemas
@@ -257,7 +262,7 @@ class RenderStatus(StrEnum):
 - **Hand-Rolled Agents**: Single model, fixed workflow; framework abstraction adds little value
 - **Pydantic Strong Typing**: All agent inputs and outputs use Pydantic models
 - **Structured Feedback**: User feedback must select a reason, not just free text
-- **Version History**: Every regeneration saves the old version, supporting comparison and rollback
+- **Version History**: Every regeneration currently overwrites the existing clip/derivative. Full version history (save old versions, comparison, rollback) is a future feature.
 
 ## 8. Extension Points
 

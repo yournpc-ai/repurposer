@@ -210,9 +210,8 @@ Home composer
     ├─ 创建 Project ── POST /api/v1/projects
     ├─ 上传 Asset ───── POST /api/v1/projects/{id}/assets
     │      └─ Worker: ASR / 文本提取 / PDF 转图片
-    ├─ 创建 Message ─── POST /api/v1/projects/{id}/messages
     └─ 触发 Generation ─ POST /api/v1/projects/{id}/generate
-              │
+              │              └─ 同时创建 project-scoped ChatSession，prompt 存为第一条 user message
               ▼
         WorkflowRun (PENDING)
               │
@@ -226,13 +225,15 @@ Home composer
               │      ├─ clips → build_clip_spec + render_spec
               │      ├─ linkedin → LinkedIn agent
               │      ├─ quote_cards → Quote agent + MiniMax image-01
-              │      └─ summary → Summary agent
+              │      ├─ carousel → Carousel agent
+              │      ├─ summary → Summary agent
+              │      └─ blog → Blog agent
               ├─ 4. 保存 Clip / Derivative 到数据库 + assets/
               └─ 5. WorkflowRun completed
               │
               ▼
     Results Page 轮询 /api/v1/projects/{id}/results
-        展示 Clips / LinkedIn / Quotes / Summary Tabs
+        展示 Clips / LinkedIn / Quotes / Summary Tabs（Carousel / Blog 后端已生成，前端待补充）
 ```
 
 #### 参数在链路中的作用
@@ -650,7 +651,9 @@ MVP 阶段允许“破坏性”迁移（因为是 demo 环境）：
 - `POST /api/v1/infer-intent` — 根据 prompt 推断生成参数（language/outputs/tone/instruction）
 - `POST /api/v1/projects` — 创建 project
 - `POST /api/v1/projects/{id}/assets` — 上传 asset
-- `POST /api/v1/projects/{id}/messages` — 创建 message / 触发 generation
+- `POST /api/v1/projects/{id}/generate` — 触发 generation（同时创建 ChatSession 并保存 prompt）
+- `POST /api/v1/chat` — 产物级 chat：发送 message，解析意图并触发 background run
+- `GET /api/v1/chat/session` — 获取或创建 project/asset chat session
 - `GET /api/v1/projects/{id}` — 获取 project 元数据
 - `GET /api/v1/projects/{id}/results` — 聚合查询：project + prompt + clips + derivatives + latest job
 - `GET /api/v1/projects/{id}/assets/{asset_id}` — 查询 asset 处理状态
@@ -688,16 +691,38 @@ ALTER TABLE assets ADD COLUMN user_id UUID REFERENCES users(id);
 确认已有 `project_id`、`target_language`、`derivative_type` 等字段。
 Library 查询主要基于这两张表 + `assets`。
 
-### 12.3 Message
+### 12.3 ChatSession & Message
 
-MVP 阶段不展示全局 chat thread，`Message` 表主要用于记录创作历史，并支撑产物级 chat：
+MVP 阶段不展示全局 chat thread，但后端使用 `ChatSession` + `Message` 记录创作历史，并支撑产物级 chat：
 
 ```sql
-ALTER TABLE messages ADD COLUMN asset_id UUID NULL;
-ALTER TABLE messages ADD COLUMN asset_type VARCHAR(50) NULL; -- 'clip' | 'derivative'
+-- ChatSession: project-scoped 或 asset-scoped 的聊天容器
+CREATE TABLE chat_sessions (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    project_id UUID REFERENCES projects(id),
+    asset_id UUID NULL,
+    asset_type VARCHAR(50) NULL, -- 'clip' | 'derivative'
+    title VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ
+);
+
+-- Message: 归属于一个 ChatSession
+CREATE TABLE messages (
+    id UUID PRIMARY KEY,
+    session_id UUID REFERENCES chat_sessions(id),
+    role VARCHAR(50), -- 'user' | 'assistant' | 'system'
+    content TEXT,
+    attachments JSONB DEFAULT '[]',
+    workflow_run_id UUID REFERENCES workflow_runs(id),
+    intent JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ
+);
 ```
 
-`AssetChatModal` 读取/写入关联到 `asset_id` 的 message 记录，使每个产物拥有独立的 chat 上下文。
+`/api/v1/projects/{id}/generate` 会自动创建 project-scoped `ChatSession`，并把用户的 prompt 存为第一条 `Message`。`AssetChatModal` 读取/写入关联到 `asset_id` 的 session/message 记录，使每个产物拥有独立的 chat 上下文。
 
 ---
 

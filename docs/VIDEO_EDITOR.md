@@ -171,11 +171,7 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 
 **In the same migration, clean up dead columns from the old ADR-008 image-slideshow model** (verified never written/read in practice): `Asset.keyframes`, `Clip.subtitles` (subtitles now carried by `render_spec.caption_track`). `Asset.slide_pages` is now active: SLIDES uploads are rendered page-by-page by PyMuPDF into images and stored, fed into stills `image_urls` (see ADR-020).
 
-**Old-new model coordination (critical design decision, do not miss)**: the existing `Clip.script` (ADR-008 shot script: `time_range`/`visual`/`mood`) and `music_mood` follow a "image slideshow + visual suggestion" paradigm, which partially conflicts with the new "real video segments + ASR subtitles" paradigm. When landing clip-spec, it must be clear:
-- Does `render_spec` **replace** `script`, or does `script` degrade to "AI suggestion" used to **seed** `render_spec`?
-- `visual` (visual suggestion) corresponds to B-roll, which is L3, not entering render_spec.
-- The generation flow (`services/generation.py`) must produce clip-spec, not just the old shots.
-- `virality_score` and the cleanup of the "anti-viral, knowledge asset" positioning is a **separate topic**, out of scope for this editor.
+**Model coordination**: the `Clip` table stores the render contract in `render_spec` and the analyzer's creative output directly on `Clip` fields (`hook`, `title_options`, `music_mood`, `duration`, `source_segment`). The old ADR-008 shot-script model (`time_range`/`visual`/`mood`) has been removed; `render_spec` is the single source of truth for the renderer.
 
 ## 9. Future Replaceable Paths (spec unchanged)
 
@@ -197,6 +193,11 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
    Brand (logo/CTA/color/font size/font/fill/intro/outro) and music baked into clip-spec  ✅
 4. Editor UI: <Player> preview + transcript editing (delete sentence = trim segment / non-destructive) + single-track trim + styling/title/music + subtitle language switch  ✅
 ```
+
+## 12. Current Implementation Notes
+
+- The backend generates `carousel` and `blog` derivative types alongside clips, LinkedIn posts, quote cards, and summaries. As of the current build, the project results page (`/projects/$id`) only renders tabs for **clips, LinkedIn, quote cards, and summaries**; carousel and blog outputs exist in the API but are not yet surfaced in the UI or the library endpoint.
+- The clip editor route (`/projects/$id/clips/$clipId`) uses the shared `@repurposer/clip` component inside a Remotion `<Player>` and supports caption editing, language switching, render triggering, and export. The full Descript-style single-track trim strip described in §7 is partially wired through `trimBounds`/`removeRange` helpers but not yet fully exposed in the UI.
 
 ## 11. Validation
 

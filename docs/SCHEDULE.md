@@ -13,7 +13,7 @@
 | Days | Task | Deliverable | Owner |
 |:---|:---|:---|:---|
 | Day 1-2 | Project environment setup | `apps/api/` and `apps/web/` runnable, Docker Compose launches PostgreSQL | Backend / Frontend |
-| Day 2-3 | Database schema design | SQLAlchemy models: `User`, `Speaker`, `Project`, `Asset`, `Clip`, `Derivative`, `WorkflowRun`, `WorkflowStep` | Backend |
+| Day 2-3 | Database schema design | SQLAlchemy models: `User`, `Speaker`, `Project`, `Asset`, `Clip`, `Derivative`, `WorkflowRun` | Backend |
 | Day 3-4 | File upload API | `POST /api/v1/projects/{id}/assets`, local filesystem storage | Backend |
 | Day 4-5 | Speaker / Project CRUD | Speaker creation, project creation, list / detail APIs | Backend |
 | Day 5 | Frontend foundation pages | TanStack Start routing, Speaker list page, Project list page | Frontend |
@@ -29,7 +29,7 @@
 | Days | Task | Deliverable | Owner |
 |:---|:---|:---|:---|
 | Day 1-2 | MiniMax Client wrapper | `clients/minimax.py`: calls, JSON parsing, retry, error handling | Backend |
-| Day 2-3 | Pydantic schemas | `SpeakerPersona`, `ClipScript`, `StyleReview`, etc. | Backend |
+| Day 2-3 | Pydantic schemas | `SpeakerPersona`, `ClipRevision`, `StyleReview`, etc. | Backend |
 | Day 3-4 | Persona Agent + prompt | Generate style persona from past materials, Jinja2 templates | Backend |
 | Day 4-5 | Speaker material upload UI | Text / PDF upload, style persona display / edit page | Frontend |
 | Day 5 | API integration | Frontend can call persona generation endpoint | Frontend + Backend |
@@ -77,16 +77,16 @@
 
 | Days | Task | Deliverable | Owner |
 |:---|:---|:---|:---|
-| Day 1-2 | Video rendering | MoviePy image slideshow + subtitles + BGM -> MP4 | Backend |
-| Day 2-3 | Quote card rendering | HTML/CSS + Puppeteer -> PNG | Backend |
-| Day 3-4 | Export API | `POST /api/v1/projects/{id}/export` | Backend |
+| Day 1-2 | Video rendering | Remotion render service: `clip-spec(JSON) → MP4 + SRT` | Backend |
+| Day 2-3 | Quote card rendering | MiniMax `generate_image` → PNG (or fallback HTML/CSS placeholder) | Backend |
+| Day 3-4 | Export API | `POST /api/v1/projects/{id}/export` returns a ZIP archive | Backend |
 | Day 4-5 | Export UI | Frontend download video, copy, images | Frontend |
 | Day 5 | End-to-end test | One complete project from upload to export | Whole team |
 
 **Week 5 Milestone**: Can go from uploaded transcript to exported video / copy / quote card.
 
 **Risks**:
-- MoviePy Chinese fonts, subtitle styling may need debugging
+- Remotion font/subtitle styling may need debugging
 - Video rendering performance (acceptable to be slow in P0)
 
 ---
@@ -153,7 +153,7 @@
 | Brand kit | Subtitle font / color / logo templates |
 | Batch export | Packaged download of all project outputs |
 | Object storage | Migrate to MinIO / cloud storage |
-| Task queue | Introduce Celery + Redis |
+| Task queue | Postgres queue already implemented (`FOR UPDATE SKIP LOCKED`); Redis/Celery only for horizontal scaling |
 
 ---
 

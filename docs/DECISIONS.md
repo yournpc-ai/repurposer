@@ -207,13 +207,13 @@ repurposer/
 | Item | Recommendation | Decision maker |
 |:---|:---|:---|
 | Product name | TBD | CEO Zuo |
-| Task queue | Pure asyncio (sufficient for P0) | Engineering |
-| Speech recognition | Not in P0; evaluate FunASR / iFlytek in P1 | Engineering |
-| Video rendering engine | MoviePy + FFmpeg | Engineering |
-| Speech synthesis service | Not in P0; evaluate MiniMax TTS / iFlytek in P1 | Engineering |
-| Music assets | Uppbeat / Artlist | Product / Engineering |
+| Task queue | Postgres `FOR UPDATE SKIP LOCKED` + standalone worker process | Engineering |
+| Speech recognition | faster-whisper self-hosted for P0 | Engineering |
+| Video rendering engine | Remotion (server-side headless Chrome + FFmpeg) as first renderer; clip-spec(JSON) contract preserves future swap to hand-rolled FFmpeg | Engineering |
+| Speech synthesis service | MiniMax voice_clone + T2A for dubbing in P0 | Engineering |
+| Music assets | Built-in mood music library (`/api/v1/music/<mood>`) + optional custom upload | Product / Engineering |
 | URL input support | Not in this phase | Product |
-| Languages supported in first phase | Chinese and English | Product |
+| Languages supported in first phase | Chinese/English + German/French/Spanish/Italian | Product |
 | Pricing model | Not designed in this phase | CEO Zuo |
 
 ## ADR-013: Internationalization, theme switching, and European market positioning

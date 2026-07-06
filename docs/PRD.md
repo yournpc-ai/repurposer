@@ -4,8 +4,8 @@
 
 | Item | Content |
 |:---|:---|
-| Document Version | v0.3 (Europe Edition) |
-| Date | 2026/06/24 |
+| Document Version | v0.4 (Europe Edition, aligned with current implementation) |
+| Date | 2026/07/06 |
 | Product Name | TBD (internal codename: SpeechRepurposer) |
 | Target Audience | Product managers, tech leads, designers, Zuo, European market team |
 | Status | Draft |
@@ -200,40 +200,31 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
   - 3-5 highlight clip scripts (with Hook + subtitles + visual suggestions)
   - LinkedIn long-form post (matching Speaker voice)
   - Quote cards / Carousel
-  - **Multi-language versions (P0 accelerated):** Chinese/English + German/French/Spanish/Italian, M3 native translation
+  - Multi-language summary / Blog article
+  - **Multi-language versions:** Chinese/English + German/French/Spanish/Italian, M3 native translation
+- **Video rendering (P0, hard prerequisite):** vertical 9:16 MP4 + SRT via Remotion, driven by a declarative `clip-spec(JSON)` contract
+- **ASR (word-level timestamps):** faster-whisper self-hosted processing for audio/video uploads
+- **Voice-clone dubbing:** MiniMax voice_clone + T2A for translating clip audio into target languages
 - Human review interface (script editing, hook selection, visual replacement, feedback regeneration)
-- Export: copy (Markdown/TXT), quote card images (PNG/JPG)
-- **EU data residency option (P0):** GDPR-compliant deployment via Cast AI Kimchi
-- GDPR compliance documentation and data deletion features
+- Export: copy (Markdown/TXT), quote card images (PNG), ZIP archive
+- Project-scoped chat: natural-language instructions (translate, revise, render, music) dispatch to background runs
 
-**P1 Features:**
+**Deferred / Future Features:**
 
-- Paste link auto-fetch (YouTube / Vimeo / Zoom / Loom / Drive / podcasts, etc., yt-dlp-style) — key entry point for lowering input barrier
-- Video/audio auto-transcription (ASR) — mandatory prerequisite for non-text input (see 7.3); if P0 supports audio/video/link input, must be elevated to P0
-- Slide parsing (PDF/PPT/PPTX → images + text)
-- Voice sample upload + cloning (general TTS first, cloning as premium)
-- Simple video rendering (image carousel + subtitles + BGM)
-- Brand kit (unified fonts/colors/logo)
-- Carousel generation
-- Batch export
-- Multi-language UI (English/German/French/Spanish/Italian)
+- **EU data residency option:** GDPR-compliant deployment via Cast AI Kimchi or EU cloud region — product differentiator, not implemented in MVP
+- **GDPR compliance documentation and data deletion features:** future procurement requirement
+- **Link auto-fetch (YouTube / Vimeo / podcasts):** yt-dlp-style fetch to lower input barrier
+- **Multi-language UI:** English/German/French/Spanish/Italian interface localization
+- **Direct social publishing:** LinkedIn API integration
+- **Team collaboration, analytics, billing**
 
-**P2 Features:**
-
-- Multi-language dubbing (voice cloning)
-- Direct publishing to social platforms (LinkedIn API)
-- Analytics (virality tracking)
-- Team collaboration permissions
-- Billing system
-
-### 5.2 Out of Scope (This Cycle)
+**Out of Scope (This Cycle):**
 
 - Real-time live streaming processing
 - AI-generated virtual avatars
 - Complex team collaboration permissions (single-user first)
 - Entertainment/influencer viral short-form videos (we focus on knowledge content)
 - TikTok/Douyin/Xiaohongshu formats (not core channels in Europe)
-- Direct publishing to social platforms (export only, no platform API integration)
 - Paid subscriptions and billing system
 
 ### 5.3 Main Flow Finalized (v0.4 Update): Vertical Clip Output + Editable
@@ -307,7 +298,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | FR-008 | View project list | P0 | Filter by Speaker/status/date |
 | FR-009 | Delete project | P1 | Soft delete |
 | FR-010 | Project status tracking | P0 | Uploading/processing/review/completed |
-| FR-011 | Select EU data residency | P0 | During project creation: Default (Global) / EU data residency (via Cast AI Kimchi) |
+| FR-011 | Select EU data residency | P2 | During project creation: Default (Global) / EU data residency (via Cast AI Kimchi); future procurement differentiator, not in MVP |
 
 ### 7.3 Material Upload & Input Sources
 
@@ -331,7 +322,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | FR-016 | Upload speaker past materials | P0 | Books, articles, old talk transcripts, social content |
 | FR-017 | Material preprocessing status display | P0 | Fetching/transcribing/parsing/completed |
 | FR-018 | Paste link auto-fetch | P1 | YouTube / Vimeo / Zoom / Loom / Google Drive / podcast links, fetched via yt-dlp-style tool to get video/audio, eliminating manual download-then-upload; after fetch, enters ASR transcription |
-| FR-019 | Non-text input auto-transcription (ASR) | P1 | Video/audio/link → timestamped transcript; multi-language; prerequisite for subsequent segment selection/subtitles/generation; depends on external ASR (Whisper-style, MiniMax doesn't provide). **If input entry needs to support audio/video/link in P0, this item must be elevated to P0** |
+| FR-019 | Non-text input auto-transcription (ASR) | P0 | Video/audio → timestamped transcript; multi-language; prerequisite for segment selection/subtitles/generation; implemented with faster-whisper |
 
 ### 7.4 Persona Understanding & Style Persona
 
@@ -387,7 +378,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > | Change quote card template / subtitle style | Change Brand template settings | No |
 >
 > **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
-> When dialogue fallback is used, agent context = talk materials + Speaker persona + current output + necessary history.
+> When dialogue fallback is used, agent context = talk materials + Speaker memory + current output + necessary history.
 > (Chapter 20 is **internal agent orchestration**, separate from the user-facing iteration interaction here.)
 >
 > **Current gap:** Output is currently read-only display, missing "direct edit" and "local regeneration/quick action" entry points; Reviser endpoint exists but frontend not yet connected (home page "New chat" is just a dialogue-suggesting UI hint).
@@ -408,10 +399,10 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|:---|:---|
 | FR-046 | Export copy | P0 | Markdown/TXT, including all language versions |
 | FR-047 | Export quote card images | P0 | PNG/JPG, multiple templates available |
-| FR-048 | Export video | P1 | MP4 (simple rendering: image carousel + subtitles + BGM) |
-| FR-049 | Export subtitle files | P1 | SRT/VTT |
-| FR-050 | Batch export | P1 | Package download all outputs of a project |
-| FR-051 | Export EU compliance certificate | P0 | Generate GDPR data processing statement PDF (if EU residency selected) |
+| FR-048 | Export video | P0 | MP4 via Remotion renderer, preview = output pixel parity |
+| FR-049 | Export subtitle files | P0 | SRT export per clip |
+| FR-050 | Batch export | P0 | ZIP archive with all project outputs |
+| FR-051 | Export EU compliance certificate | P2 | Generate GDPR data processing statement PDF; future procurement feature, not in MVP |
 
 ### 7.10 European Localization Features
 
@@ -443,9 +434,9 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | NFR-006 | Material secure storage | P0 | Uploaded files encrypted at rest |
 | NFR-007 | Voice sample authorization | P1 | Clearly inform users voice samples are only used for their own content generation |
 | NFR-008 | Copyright compliance notice | P1 | Provide copyright reminders for music, images, and other materials |
-| NFR-009 | EU data residency | P0 | For EU-selected projects, data storage and processing within EU region |
-| NFR-010 | GDPR compliance | P0 | Provide data processing statements, user data deletion, export features |
-| NFR-011 | Cross-border data control | P0 | EU project data must not be transferred to non-EU regions for processing |
+| NFR-009 | EU data residency | P2 | For EU-selected projects, data storage and processing within EU region; future deployment differentiator |
+| NFR-010 | GDPR compliance | P2 | Provide data processing statements, user data deletion, export features; future procurement requirement |
+| NFR-011 | Cross-border data control | P2 | EU project data must not be transferred to non-EU regions for processing; future procurement requirement |
 
 ### 8.3 Usability
 
@@ -536,42 +527,41 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Layer | Confirmed Technology | Responsibility |
 |:---|:---|:---|
 | Client Layer | **TanStack Start** | User material upload, voice configuration, review generation results, export content; supports multi-language UI |
-| Application Layer | **FastAPI** | Receive uploads, manage Speaker/project/tasks, expose REST API, coordinate layers; choose Global or EU deployment by project |
+| Application Layer | **FastAPI** | Receive uploads, manage Speaker/project/tasks, expose REST API, coordinate layers |
 | Core Intelligence Layer | **MiniMax M3** | Understand all input materials, generate persona, extract quotes, generate scripts and social copy, multi-language translation |
-| Async Task Scheduling Layer | **asyncio + background tasks** | Execute time-consuming tasks (rendering) asynchronously; no Celery/Redis in P0 |
-| Media Processing Layer | TBD | Handle audio/video transcription/frame extraction/rendering, document parsing, image processing, voice cloning and synthesis, music matching |
-| Data Persistence Layer | **PostgreSQL + local filesystem** | PostgreSQL for metadata, local filesystem for uploaded files and generated results; EU projects via Cast AI in EU region |
+| Async Task Scheduling Layer | **Postgres queue + standalone worker** | `FOR UPDATE SKIP LOCKED` claim rows; worker process runs ASR, generation, and rendering; no Celery/Redis in MVP |
+| Media Processing Layer | **faster-whisper, PyMuPDF, Remotion, MiniMax voice_clone/T2A** | ASR transcription, document/slide parsing, video rendering, voice-clone dubbing, music |
+| Data Persistence Layer | **PostgreSQL + local filesystem** | PostgreSQL for metadata, local filesystem for uploaded files and generated results; object storage deferred to scale |
 
 ### 9.3 Data Flow
 
 ```
-User input materials (two entry points)
+User input materials
     ├── Upload files (video/audio/transcript/slides/images)
-    └── Paste links (YouTube/Vimeo/Zoom/Loom/Drive/podcasts…) → yt-dlp-style fetch video/audio
+    └── Paste text or prompt in input box
     ↓
-FastAPI receives → store in local filesystem → write to PostgreSQL
+FastAPI receives → store in local filesystem → write Asset(PENDING) to PostgreSQL
     ↓
-asyncio background task dispatch (preprocessing)
-    ├── Video/audio → ASR transcription (Whisper-style, multi-language) → timestamped transcript ← mandatory prerequisite for non-text input
-    ├── Event photos → image processing → compression
-    └── Slides/PDF → document parsing → images + text (P0 optional)
+Worker process claims Asset rows and preprocesses:
+    ├── Video/audio → ASR transcription (faster-whisper, multi-language) → word-level timestamps
+    ├── Images → M3 vision key-point extraction
+    └── Slides/PDF → PyMuPDF page rendering + text extraction
     ↓
-MiniMax M3 unified understanding:
-    talk content + past materials + event photos + voice settings (Speaker persona)
+User clicks Generate → WorkflowRun(PENDING) created
     ↓
-MiniMax M3 outputs structured plan:
-    clip scripts / LinkedIn copy / quote cards / multi-language versions
+Worker claims WorkflowRun and runs agents:
+    content_director → clip → linkedin / quote / carousel / summary / blog
     ↓
-asyncio background task dispatch rendering
-    ├── video rendering engine → vertical clip
-    ├── graphics generation engine → quote card
-    └── music resource service → BGM
+Clip render_spec written; Derivative rows written
     ↓
-FastAPI returns results → TanStack Start frontend review
+User reviews; chat/revise/translate/dub requests create new WorkflowRun rows
     ↓
-Iteration loop (around output):
-    direct edit (local save) / local regeneration (Reviser) / quick actions (shorten·formal·casual) / dialogue fallback
-    └── regeneration carries context: materials + persona + current output → back to generation
+Render trigger → worker calls Remotion render service → MP4 + SRT
+    ↓
+TanStack Start frontend review
+    ↓
+Iteration loop:
+    chat instruction → intent parsing → background run → updated clip/derivative
 ```
 
 ### 9.4 Agent Workflow Design
@@ -636,9 +626,10 @@ User feedback needs to be structured for the system to process effectively:
 | id | UUID | Primary key |
 | email | string | Login email |
 | name | string | Username |
-| language | string | UI language preference (en/de/fr/es/it/zh) |
-| region | string | Region (Global / EU) |
 | created_at | datetime | Creation time |
+| updated_at | datetime | Update time |
+
+> **Note**: Real authentication, UI language preference, and EU-region residency are future features. The current MVP uses a single seeded default user.
 
 ### 10.2 Speaker / Memory
 
@@ -650,38 +641,46 @@ User feedback needs to be structured for the system to process effectively:
 | title | string | Title/position |
 | avatar_url | string | Avatar |
 | language | string | Primary language |
-| memory | JSON | AI-extracted style persona from task input (formerly `persona`, naming converging) |
-| tone_settings | JSON | Voice slider settings |
+| persona | JSON | AI-extracted speaker style memory from task input or past materials |
 | created_at | datetime | Creation time |
-| source | enum | `auto` (auto-created from task) / `manual` (user manually created) |
+| updated_at | datetime | Update time |
 
 ### 10.3 Project
 
 | Field | Type | Description |
 |:---|:---|:---|
 | id | UUID | Primary key |
-| speaker_id | UUID | Associated speaker, **optional**; auto-created after task if empty |
+| user_id | UUID | Associated user |
+| speaker_id | UUID | Associated speaker, **optional** |
 | title | string | Project title |
 | event_name | string | Event name |
 | language | string | Content language |
 | status | enum | draft/uploading/processing/review/completed |
-| data_region | enum | global / eu (EU data residency option) |
 | tone_snapshot | JSON | Voice settings snapshot at generation time |
 | created_at | datetime | Creation time |
+| updated_at | datetime | Update time |
+
+> **Note**: Project-level EU data residency (`data_region`) is a future differentiator, not implemented in the MVP.
 
 ### 10.4 Asset
 
 | Field | Type | Description |
 |:---|:---|:---|
 | id | UUID | Primary key |
-| project_id | UUID | Associated project |
+| user_id | UUID | Associated user (denormalized for ownership checks) |
+| project_id | UUID | Associated project (nullable when attached to speaker) |
+| speaker_id | UUID | Associated speaker (nullable when attached to project) |
 | type | enum | video/audio/transcript/slides/image/voice_sample/past_material |
 | file_url | string | File URL |
 | transcript | text | Transcription text (audio/video) |
-| extracted_text | text | Extracted text (documents) |
-| keyframes | JSON | Keyframe list (video) |
+| extracted_text | text | Extracted text (documents/images) |
 | slide_pages | JSON | Slide page list |
+| meta | JSON | Processor extras (ASR word-level timestamps, detected language, etc.) |
+| processing_status | enum | pending/processing/completed/failed |
+| processing_error | text | Failure reason |
+| duration_seconds | int | Duration (audio/video) |
 | processed_at | datetime | Processing completion time |
+| created_at | datetime | Creation time |
 
 ### 10.5 Clip
 
@@ -690,14 +689,19 @@ User feedback needs to be structured for the system to process effectively:
 | id | UUID | Primary key |
 | project_id | UUID | Associated project |
 | hook | string | Opening hook |
-| script | JSON | Shot list script |
 | title_options | JSON | Alternative titles |
-| subtitles | JSON | Subtitle timestamps |
 | music_mood | string | Music mood |
-| status | enum | generated/rendering/completed |
+| status | string | `generated` / `rendering` / `completed` / `failed` (legacy field) |
 | video_url | string | Generated video URL |
+| srt_url | string | Exported subtitles URL |
 | duration | int | Duration (seconds) |
 | language | string | Language |
+| source_segment | JSON | Selected source segment metadata |
+| render_spec | JSON | Renderer-agnostic clip-spec contract (source, segments, captions, brand, music, dub) |
+| render_status | enum | pending/rendering/completed/failed |
+| render_error | text | Render failure reason |
+| created_at | datetime | Creation time |
+| updated_at | datetime | Update time |
 
 ### 10.6 Derivative
 
@@ -705,11 +709,46 @@ User feedback needs to be structured for the system to process effectively:
 |:---|:---|:---|
 | id | UUID | Primary key |
 | project_id | UUID | Associated project |
-| type | enum | linkedin_post/quote_card/carousel/multilingual_script |
+| type | enum | linkedin_post / quote_card / carousel / summary / blog |
 | content | text/JSON | Content |
 | language | string | Language |
-| image_url | string | Image URL (quote card) |
-| status | enum | generated/edited |
+| image_url | string | Image URL (quote card / carousel) |
+| status | string | `generated` / `edited` (legacy string field) |
+| created_at | datetime | Creation time |
+| updated_at | datetime | Update time |
+
+### 10.7 WorkflowRun
+
+| Field | Type | Description |
+|:---|:---|:---|
+| id | UUID | Primary key |
+| project_id | UUID | Associated project |
+| status | enum | pending/running/waiting_human/completed/failed |
+| current_step | string | Current step description |
+| progress | int | Progress percentage |
+| error | text | Failure reason |
+| context | JSON | Generation inputs and outputs |
+| created_at | datetime | Creation time |
+| updated_at | datetime | Update time |
+
+### 10.8 ChatSession & Message
+
+| Field | Type | Description |
+|:---|:---|:---|
+| ChatSession.id | UUID | Primary key |
+| ChatSession.user_id | UUID | Associated user |
+| ChatSession.project_id | UUID | Associated project |
+| ChatSession.asset_id | UUID | Associated asset (for asset-scoped chat) |
+| ChatSession.asset_type | string | `clip` / `derivative` (when asset_id is set) |
+| ChatSession.title | string | Session title |
+| Message.id | UUID | Primary key |
+| Message.session_id | UUID | Associated chat session |
+| Message.role | enum | user / assistant / system |
+| Message.content | text | Message content |
+| Message.attachments | JSON | Attached files |
+| Message.workflow_run_id | UUID | Related generation job |
+| Message.intent | JSON | Parsed assistant intent |
+| Message.created_at | datetime | Creation time |
 
 ---
 
@@ -771,8 +810,8 @@ User feedback needs to be structured for the system to process effectively:
 8. Confirm and export
    ├── Copy (Markdown/TXT, including all language versions)
    ├── Quote card images (PNG/JPG)
-   ├── Video (P1: MP4, image carousel + subtitles + BGM)
-   └── EU compliance certificate (PDF, if EU residency selected)
+   ├── Video (MP4 + SRT)
+   └── ZIP archive with all project outputs
 ```
 
 ---
@@ -834,57 +873,22 @@ User feedback needs to be structured for the system to process effectively:
 | Translation quality | M3 native translation, preserves original meaning, impact, and Speaker style |
 | Review support | Source + translation side-by-side, sentence-by-sentence editing |
 | Translation confidence | Low-confidence content highlighted for attention |
-| Dubbing | P1: general TTS; P2: voice cloning |
+| Dubbing | Voice-clone dubbing via MiniMax voice_clone + T2A (P0 implemented); general TTS fallback available |
 
 ---
 
-## 13. API Overview (Illustrative Only)
+## 13. API Overview
 
-### 13.1 Speaker Management
+The detailed API specification is maintained in [API.md](./API.md). At a high level the backend exposes:
 
-```
-POST   /speakers              # Manual creation (optional)
-GET    /speakers              # Current user's Speaker list (isolated by user_id)
-GET    /speakers/{id}
-PUT    /speakers/{id}
-DELETE /speakers/{id}
-```
-
-> When user doesn't select a Speaker during project creation, the system will auto-create a Speaker record after task processing and associate it with the project.
-
-### 13.2 Project Management
-
-```
-POST   /projects
-GET    /projects
-GET    /projects/{id}
-PUT    /projects/{id}
-DELETE /projects/{id}
-```
-
-### 13.3 Material Upload
-
-```
-POST /projects/{id}/assets
-GET  /projects/{id}/assets
-DELETE /projects/{id}/assets/{asset_id}
-```
-
-### 13.4 Generation Tasks
-
-```
-POST /projects/{id}/generate          # Trigger generation task
-GET  /projects/{id}/generate/status   # Query generation status
-POST /projects/{id}/clips/{id}/regenerate
-```
-
-### 13.5 Review & Export
-
-```
-PUT  /clips/{id}                      # Edit clip
-PUT  /derivatives/{id}                # Edit derivative content
-POST /projects/{id}/export            # Batch export
-```
+- **Speaker management** (`/speakers`)
+- **Project management** (`/projects`, including `/generate`, `/jobs`, `/results`, `/export`)
+- **Asset upload** (`/projects/{id}/assets` and `/speakers/{id}/assets`)
+- **Clip actions** (`/clips/{id}`: regenerate, revise, translate-captions, dub, render)
+- **Derivative editing** (`/derivatives/{id}`)
+- **Chat** (`/chat`, `/chat/session`, `/chat/sessions/{id}/messages`)
+- **Library** (`/library`)
+- **File streaming** (`/files`, `/outputs`, `/music`)
 
 ---
 
@@ -896,7 +900,6 @@ POST /projects/{id}/export            # Batch export
 - Drag-and-drop upload + click upload
 - Display processing status for each material (transcribing/parsing/completed)
 - **Hint copy**: "Upload at least one type, more is better. Transcript + event photos can produce a first draft."
-- **EU data residency option**: Explicitly selectable during project creation, displays GDPR compliance notice when checked
 
 ### 14.2 Speaker Style Persona Page
 
@@ -967,7 +970,7 @@ Reference Descript's text-editing experience:
 | European seed customers (Q3) | 5-10 paid trials |
 | Monthly projects per user | > 3 |
 | Multi-language feature usage | > 60% |
-| EU data residency selection rate | > 40% (European users) |
+| Revision/chat feature usage | > 30% |
 | NPS | > 40 |
 
 ---
@@ -985,8 +988,8 @@ Reference Descript's text-editing experience:
 | **ASR is external dependency (Whisper-style, MiniMax doesn't provide)** | Adds service/cost layer; multi-language accuracy fluctuation | Transcript input bypasses ASR; choose mature ASR service; dirty transcripts go through manual/Agent correction |
 | Copyright issues (music/images) | Legal risk | Use royalty-free materials, clarify user responsibility |
 | Users can't write voice settings | Output doesn't meet expectations | Provide default templates and preview features |
-| GDPR compliance audit | Legal risk | EU deployment via Cast AI Kimchi; prepare compliance docs; regular audits |
-| Cross-border data transfer risk (Schrems II) | European institutional procurement blocked | EU project data stays in EU; provide data processing proof |
+| GDPR compliance audit | Legal risk (future) | Plan EU deployment via Cast AI Kimchi or EU cloud region; prepare compliance docs before institutional sales |
+| Cross-border data transfer risk (Schrems II) | European institutional procurement blocked (future) | EU project data stays in EU; provide data processing proof; not required for MVP seed customers |
 | European institutional procurement cycle is long | Slow commercialization | Early focus on seed customers and academic conference organizers |
 
 ### 16.2 Assumptions
@@ -996,7 +999,7 @@ Reference Descript's text-editing experience:
 - User is willing to spend 5-10 minutes on final review
 - MiniMax M3 stably outputs structured JSON within 512K context
 - European institutional users accept the "AI generate + human review" workflow
-- Cast AI Kimchi's EU deployment stability and performance meet production needs
+- For future EU institutional customers, an EU deployment option (e.g. Cast AI Kimchi or EU cloud region) will be available before sales engagement
 
 ---
 
@@ -1012,15 +1015,17 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 
 **Includes**:
 - Speaker Profile creation + style persona (Persona Agent)
-- Transcript + image upload (P0 core input)
-- MiniMax M3 generation: 3 clip scripts + LinkedIn long-form post + quote cards + multi-language versions (German/French/Spanish/Italian)
+- Video/audio/transcript/slides/image upload
+- ASR transcription (faster-whisper, word-level timestamps)
+- MiniMax M3 generation: 3-5 clip scripts + LinkedIn long-form post + quote cards + carousel + summary + blog + multi-language versions (German/French/Spanish/Italian)
 - Agent closed loop: Script → Review → Reviser (self-review iteration)
 - Human review + feedback regeneration (HITL)
-- Export copy, quote card images
-- EU data residency option (via Cast AI Kimchi)
-- GDPR compliance documentation
+- Vertical clip rendering via Remotion (MP4 + SRT)
+- Voice-clone dubbing via MiniMax voice_clone + T2A
+- Export copy, quote card images, ZIP archive
+- Project-scoped chat for natural-language revisions
 
-**Excludes**: slide parsing, voice cloning, complex multi-track editing, social media publishing.
+**Excludes**: link auto-fetch, slide OCR, multi-language UI, complex multi-track editing, social media publishing, EU data residency, GDPR compliance docs.
 
 > **v0.4 adjustment**: Vertical clip output + editor (including ASR + Range streaming endpoint + Remotion rendering + Descript-style transcript editor) has been **elevated to MVP mandatory main flow**, no longer in Phase 2. Object storage still deferred to scale per ADR-011. See ADR-016 / VIDEO_EDITOR.md.
 
@@ -1028,16 +1033,12 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 
 **Goal**: Productization preparation, expand input and output capabilities, improve UX.
 
-- Video/audio upload + auto-transcription (ASR)
-- Slide parsing (PDF/PPT/PPTX → images + text)
-- Simple video rendering (image carousel + subtitles + BGM)
-- Voice sample upload + general TTS dubbing
-- More subtitle styles, B-roll, format switching
-- Brand kit
-- Carousel generation
-- Batch export
-- Object storage migration (S3/R2)
+- Paste link auto-fetch (YouTube / Vimeo / podcasts, yt-dlp-style)
+- Slide OCR (PDF/PPT/PPTX → images + searchable text)
+- More subtitle styles and brand template options
+- Object storage migration (S3/R2/MinIO)
 - Multi-language UI (English/German/French/Spanish/Italian)
+- Analytics and user system foundations
 
 ### Phase 3: P2 (8-12 weeks)
 
@@ -1046,10 +1047,11 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 - User system and permissions (multi-tenant)
 - Billing system (European pricing 20-30% higher than US)
 - Direct publishing to LinkedIn (API integration)
-- Voice cloning (P2 cautious rollout, European users are sensitive)
 - AI-generated dynamic B-roll
 - Analytics (virality tracking)
 - More platform formats
+- EU data residency option (via Cast AI Kimchi or EU cloud region)
+- GDPR compliance documentation
 - European local sales team (London/Berlin)
 - Partnership with academic conference organizers (batch customer acquisition)
 
@@ -1068,7 +1070,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 | Persona | Persona style profile |
 | B-roll | Supplementary visual material |
 | HITL | Human-in-the-Loop, human feedback closed loop |
-| EU data residency | Deployment in EU region via Cast AI Kimchi, data stays in EU |
+| EU data residency | Deployment in EU region (e.g. Cast AI Kimchi or EU cloud region), data stays in EU; future differentiator, not in MVP |
 | GDPR | EU General Data Protection Regulation |
 | GPAI | General Purpose AI, general AI model (EU AI Act term) |
 | Virality Score | Virality potential score (0-100), predicts content's viral potential |
@@ -1083,8 +1085,8 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 | Agent framework selection | **Decided: P0 hand-rolled** | Tech | **Decided** |
 | URL input support | Not this cycle, can be added later | Product/Tech | TBD |
 | First-phase supported languages | Chinese/English + German/French/Spanish/Italian (P0) | Product | **Decided** |
-| EU data residency | Via Cast AI Kimchi (P0) | Tech | **Decided** |
-| Voice cloning | P1 general TTS, P2 cloning (Europe-sensitive) | Product | **Decided** |
+| EU data residency | Via Cast AI Kimchi or EU cloud region (P2) | Tech | **Decided** |
+| Voice cloning | P0 implemented via MiniMax voice_clone + T2A; general TTS fallback available | Product | **Decided** |
 | Social media publishing API integration | Consider in P2 | Product | TBD |
 | Pricing model | Not designed this cycle | Zuo | TBD |
 | European company registration | Q3 launch UK Limited Company | Operations | TBD |
