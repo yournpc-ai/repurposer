@@ -1,4 +1,4 @@
-"""Reviser Agent: regenerate a clip script based on human feedback."""
+"""Reviser Agent: regenerate clip metadata based on human feedback."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import ClipScript, FeedbackRequest, FeedbackReason, FeedbackScope, Segment, SpeakerPersona
+from app.models.schemas import ClipRevision, FeedbackRequest, FeedbackReason, FeedbackScope, Segment, SpeakerPersona
 
 logger = structlog.get_logger()
 
@@ -18,32 +18,41 @@ _jinja_env = Environment(
 
 
 class ReviserAgent:
-    """Agent that revises clip scripts based on human feedback."""
+    """Agent that revises clip metadata based on feedback."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
 
     async def revise(
         self,
-        script: ClipScript,
+        clip_hook: str,
+        clip_duration: int,
+        clip_title_options: list[str],
+        clip_music_mood: str,
         segment: Segment,
         feedback: FeedbackRequest,
         persona: SpeakerPersona | None,
-    ) -> ClipScript:
-        """Revise a clip script based on feedback.
+    ) -> ClipRevision:
+        """Revise clip metadata based on feedback.
 
         Args:
-            script: Original generated clip script.
+            clip_hook: Current hook text.
+            clip_duration: Current duration in seconds.
+            clip_title_options: Current title options.
+            clip_music_mood: Current music mood.
             segment: Source segment for context.
             feedback: Human feedback.
             persona: Speaker style persona.
 
         Returns:
-            Revised ClipScript model.
+            Revised ClipRevision model.
         """
         template = _jinja_env.get_template("reviser.j2")
         user_prompt = template.render(
-            script=script,
+            hook=clip_hook,
+            duration=clip_duration,
+            title_options=clip_title_options,
+            music_mood=clip_music_mood,
             segment=segment,
             feedback=feedback,
             persona=persona,
@@ -53,7 +62,7 @@ class ReviserAgent:
             {
                 "role": "system",
                 "content": (
-                    "You are a short-form video script revision specialist."
+                    "You are a short-form video clip revision specialist."
                     "You only output valid JSON with no additional explanation."
                 ),
             },
@@ -61,7 +70,7 @@ class ReviserAgent:
         ]
 
         logger.info(
-            "script_revision_started",
+            "clip_revision_started",
             scope=feedback.scope,
             reason=feedback.reason,
         )
@@ -69,35 +78,34 @@ class ReviserAgent:
         try:
             revised = await self.client.generate(
                 messages=messages,
-                response_model=ClipScript,
+                response_model=ClipRevision,
                 temperature=0.4,
             )
         except MiniMaxError:
             raise
         except Exception as e:
-            logger.error("script_revision_failed", error=str(e))
-            raise MiniMaxError(f"Script revision failed: {e}") from e
-
-        if revised.virality_score is None:
-            revised.virality_score = script.virality_score
+            logger.error("clip_revision_failed", error=str(e))
+            raise MiniMaxError(f"Clip revision failed: {e}") from e
 
         logger.info(
-            "script_revision_completed",
+            "clip_revision_completed",
             hook=revised.hook,
             virality_score=revised.virality_score,
         )
         return revised
 
-
     async def revise_by_instruction(
         self,
-        script: ClipScript,
+        clip_hook: str,
+        clip_duration: int,
+        clip_title_options: list[str],
+        clip_music_mood: str,
         segment: Segment,
         instruction: str,
         persona: SpeakerPersona | None,
         scope: str = "full_script",
-    ) -> ClipScript:
-        """Revise a clip script from a free-text user instruction.
+    ) -> ClipRevision:
+        """Revise clip metadata from a free-text user instruction.
 
         Converts the instruction into a FeedbackRequest and delegates to
         :meth:`revise` so the same prompt template is reused.
@@ -107,7 +115,15 @@ class ReviserAgent:
             reason=FeedbackReason.DIFFERENT_EXPRESSION,
             detail=instruction,
         )
-        return await self.revise(script, segment, feedback, persona)
+        return await self.revise(
+            clip_hook,
+            clip_duration,
+            clip_title_options,
+            clip_music_mood,
+            segment,
+            feedback,
+            persona,
+        )
 
 
 reviser_agent = ReviserAgent()

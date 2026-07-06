@@ -6,7 +6,7 @@ from typing import Any
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from app.clients.minimax import MiniMaxClient, MiniMaxError
+from app.clients.minimax import MiniMaxClient
 from app.models.schemas import ContentPlan, DerivativeType, MediaInput
 
 logger = structlog.get_logger()

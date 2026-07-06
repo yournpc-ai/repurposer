@@ -1,6 +1,5 @@
 """Library router: aggregates all user assets, clips, and derivatives."""
 
-from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -8,7 +7,6 @@ from sqlalchemy import select
 from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
     AssetResponse,
-    ClipResponse,
     DerivativeResponse,
     DerivativeType,
     LibraryItemResponse,

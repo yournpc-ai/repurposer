@@ -22,7 +22,6 @@ interface WorkflowRun {
   current_step: string | null
   progress: number
   error: string | null
-  message_id: string | null
   created_at: string
   updated_at: string | null
 }

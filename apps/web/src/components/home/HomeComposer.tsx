@@ -271,25 +271,6 @@ export function HomeComposer({
 
       await waitForAssetProcessed(project.id, asset.id)
 
-      const messageRes = await apiFetch(`/api/v1/projects/${project.id}/messages`, {
-        method: "POST",
-        body: {
-          role: "user",
-          content: prompt,
-          attachments: [],
-          meta: {
-            params: {
-              outputs: ["clips", ...outputs],
-              tone,
-              speakerId,
-              brandTemplateId,
-              language,
-            },
-          },
-        },
-      })
-      if (!messageRes.ok) throw new Error("Failed to create message")
-
       const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
         method: "POST",
         body: {

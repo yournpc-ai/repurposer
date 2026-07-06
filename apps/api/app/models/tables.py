@@ -144,7 +144,6 @@ class Clip(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     hook = Column(String(500), nullable=False)
-    script = Column(JSON, nullable=False)
     title_options = Column(JSON, default=list)
     music_mood = Column(String(50), default="calm")
     status = Column(String(50), default="generated")
@@ -194,42 +193,44 @@ class WorkflowRun(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
-class HumanFeedback(Base):
-    """Human feedback table."""
+class ChatSession(Base):
+    """A chat session scoped to a project or a specific result asset.
 
-    __tablename__ = "human_feedback"
+    Provides a unified conversation container for multi-turn editing. The same
+    table supports project-level brainstorming and asset-level (clip/derivative)
+    quick revisions.
+    """
+
+    __tablename__ = "chat_sessions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    clip_id = Column(UUID(as_uuid=True), ForeignKey("clips.id"), nullable=False)
-    scope = Column(String(50), nullable=False)
-    reason = Column(String(50), nullable=False)
-    detail = Column(Text, nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
+    title = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
 class Message(Base):
-    """Chat message thread for a project.
+    """A single message inside a chat session.
 
-    Persists the user/assistant conversation so the homepage can render a
-    durable, multi-turn chat interface. Metadata holds generation status
-    markers and result references; attachments holds uploaded file metadata.
-
-    asset_id / asset_type are optional and point to a clip or derivative when
-    the message is part of an asset-scoped chat session.
+    Keeps chat history minimal: role, content, optional attachments, and a
+    link to the workflow run that was triggered by this message (if any).
+    Generation progress/status lives on WorkflowRun, not duplicated here.
     """
 
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    session_id = Column(
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=True)
     attachments = Column(JSON, default=list)
-    meta = Column(JSON, default=dict)
-    parent_message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
-    asset_id = Column(UUID(as_uuid=True), nullable=True)
-    asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
+    workflow_run_id = Column(UUID(as_uuid=True), ForeignKey("workflow_runs.id"), nullable=True)
+    intent = Column(JSON, nullable=True)  # parsed LLM intent for this turn
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)

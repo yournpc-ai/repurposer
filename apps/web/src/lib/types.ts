@@ -88,27 +88,10 @@ export interface Asset {
   created_at: string
 }
 
-export interface Shot {
-  time_range: string
-  visual: string
-  subtitle: string
-  mood: string
-}
-
-export interface ClipScript {
-  hook: string
-  duration_seconds: number
-  shots: Shot[]
-  title_options: string[]
-  music_mood: string
-  virality_score: number | null
-}
-
 export interface Clip {
   id: string
   project_id: string
   hook: string
-  script: ClipScript
   title_options: string[]
   music_mood: string
   status: string
@@ -146,7 +129,6 @@ export interface Job {
   current_step: string | null
   progress: number
   error: string | null
-  message_id: string | null
 }
 
 export interface BrandTemplate {

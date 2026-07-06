@@ -10,12 +10,12 @@ from app.models.database import init_db
 from app.routers import (
     assets,
     brand_templates,
+    chat,
     clips,
     derivatives,
     files,
     intent,
     library,
-    messages,
     projects,
     speaker_assets,
     speakers,
@@ -51,7 +51,7 @@ app.add_middleware(
 
 app.include_router(speakers, prefix="/api/v1/speakers", tags=["speakers"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(messages, prefix="/api/v1/projects/{project_id}/messages", tags=["messages"])
+app.include_router(chat, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(clips, prefix="/api/v1/clips", tags=["clips"])

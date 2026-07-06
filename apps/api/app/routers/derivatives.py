@@ -5,24 +5,41 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
-    ContentPlan,
-    DerivativePlan,
+    ChatRequest,
     DerivativeResponse,
     DerivativeUpdate,
-    GenerationContext,
     ToneSettings,
+    validate_derivative_content,
 )
-from app.models.tables import BrandTemplate, Derivative, Project, User
-from app.services.brand import content_strategy_from_template
-from app.services.derivative_dispatch import generate_derivative
-from app.services.project_context import collect_materials, resolve_speaker_and_persona
+from app.models.tables import Derivative, Project, User
+from app.services.chat import chat
 
 router = APIRouter()
+
+
+async def _get_derivative_for_user(
+    db: AsyncSession,
+    derivative_id: UUID,
+    user_id: UUID,
+) -> Derivative:
+    """Fetch a derivative and ensure it belongs to the given user."""
+    derivative = await db.get(Derivative, derivative_id)
+    if derivative is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Derivative not found",
+        )
+    project = await db.get(Project, derivative.project_id)
+    if project is None or project.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    return derivative
 
 
 class DerivativeRegenerateRequest(BaseModel):
@@ -44,16 +61,19 @@ async def update_derivative(
     derivative_id: UUID,
     data: DerivativeUpdate,
     db: DBDep,
+    current_user: User = Depends(get_current_user),
 ) -> Derivative:
     """Directly edit a derivative's content or status."""
-    derivative = await db.get(Derivative, derivative_id)
-    if not derivative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Derivative not found",
-        )
+    derivative = await _get_derivative_for_user(
+        db, derivative_id, UUID(str(current_user.id))
+    )
 
     update_data = data.model_dump(exclude_unset=True)
+    if "content" in update_data:
+        update_data["content"] = validate_derivative_content(
+            derivative.type, update_data["content"]
+        )
+
     for field, value in update_data.items():
         if value is not None:
             setattr(derivative, field, value)
@@ -64,88 +84,38 @@ async def update_derivative(
     return derivative
 
 
-@router.post("/{derivative_id}/regenerate", response_model=DerivativeResponse)
+@router.post("/{derivative_id}/regenerate", response_model=dict)
 async def regenerate_derivative(
     derivative_id: UUID,
     data: DerivativeRegenerateRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user),
-) -> Derivative:
-    """Regenerate a single derivative with an optional instruction."""
-    derivative = await db.get(Derivative, derivative_id)
-    if not derivative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Derivative not found",
-        )
+) -> dict:
+    """Queue regeneration of a single derivative through the generic chat layer."""
+    derivative = await _get_derivative_for_user(
+        db, derivative_id, UUID(str(current_user.id))
+    )
 
     project = await db.get(Project, derivative.project_id)
-    if project is None or project.user_id != current_user.id:
+    if project is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
         )
 
-    materials = await collect_materials(db, project.id)
-    speaker, persona = await resolve_speaker_and_persona(db, project)
-    instruction = data.instruction
-    target_language = data.target_language or derivative.language or "en"
-    tone_settings = data.tone_settings
-
-    # Resolve the user's default brand template for brand strategy context.
-    bt = (
-        await db.execute(
-            select(BrandTemplate)
-            .where(BrandTemplate.user_id == project.user_id)
-            .order_by(BrandTemplate.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    content_strategy = content_strategy_from_template(bt.config if bt else None)
-
-    context = GenerationContext(
-        speaker_name=speaker.name if speaker else None,
-        speaker_title=speaker.title if speaker else None,
-        event_name=project.event_name,
-        persona=persona,
-        tone_settings=tone_settings,
-        brand_strategy=content_strategy,
-        target_language=target_language,
-        instruction=instruction,
+    result = await chat(
+        db,
+        UUID(str(current_user.id)),
+        ChatRequest(
+            project_id=UUID(str(project.id)),
+            asset_id=derivative_id,
+            asset_type="derivative",
+            message=data.instruction or "Regenerate this derivative",
+        ),
     )
 
-    # Build a minimal content plan focused on this single derivative.
-    content_plan = ContentPlan(
-        core_thesis="Regenerate this derivative faithfully to the source material",
-        derivatives=[
-            DerivativePlan(
-                derivative_type=derivative.type,
-                focus="Regenerate this derivative faithfully to the source material",
-            )
-        ],
-    )
-
-    try:
-        derivative.content = await generate_derivative(
-            derivative_type=derivative.type,
-            materials=materials,
-            context=context,
-            content_plan=content_plan,
-        )
-    except MiniMaxError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
-
-    derivative.language = target_language
-    derivative.status = "generated"
-    derivative.updated_at = datetime.now(UTC)
-    await db.commit()
-    await db.refresh(derivative)
-    return derivative
+    return {
+        "job_id": str(result.job_id) if result.job_id else None,
+        "message_id": str(result.assistant_message.id),
+        "session_id": str(result.session_id),
+    }

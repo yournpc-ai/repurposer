@@ -127,14 +127,6 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "duration_seconds": 45,
       "music_mood": "calm | uplifting | corporate",
       "visual_notes": "Optional notes on visual emphasis, gestures, or slide content to highlight",
-      "shots": [
-        {
-          "time_range": "0-5s",
-          "visual": "Visual description for this shot",
-          "subtitle": "Subtitle copy for this 5-second segment",
-          "mood": "steady | passionate | warm | tense | relaxed"
-        }
-      ],
       "title_options": [
         "Title option 1",
         "Title option 2"
@@ -148,7 +140,6 @@ Requirements:
 - Each clip's id must be in the format clip_001, clip_002, etc.
 - virality_score is an integer from 1-100
 - duration_seconds is an integer from 15 to 120
-- shots: 3-8 per clip, each 5-15 seconds
 - music_mood must be one of: calm, uplifting, corporate
 - Output JSON only, no other content
 - All fields not in the clips array may be omitted; if present, they must align with the Content Plan above

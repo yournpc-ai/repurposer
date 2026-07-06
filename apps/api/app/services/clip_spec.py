@@ -5,9 +5,9 @@ The analyzer picks segments by *text* (``source_text`` + ``start_marker`` /
 text in the source video's ASR word-level timestamps (``Asset.meta["words"]``)
 to get precise start/end seconds and the per-word ``caption_track``.
 
-This is the seam between the old ADR-008 text-script model and the new
-render-contract model (see docs/VIDEO_EDITOR.md §8): ``Clip.script`` stays as the
-AI's creative suggestion; ``Clip.render_spec`` is what actually gets rendered.
+``Clip.render_spec`` is the sole renderer contract; the analyzer's creative
+output lives directly on ``Clip`` fields (hook, title_options, music_mood,
+duration) and in ``Clip.source_segment``.
 """
 
 import re

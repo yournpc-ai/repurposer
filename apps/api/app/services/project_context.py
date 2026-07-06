@@ -15,7 +15,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import ClipScript, Segment, SpeakerPersona
+from app.models.schemas import Segment, SpeakerPersona
 from app.models.tables import Asset, Clip, Project, Speaker
 
 
@@ -86,12 +86,11 @@ async def resolve_clip_for_revision(
     db: AsyncSession,
     clip_id: UUID,
     project_id: UUID,
-) -> tuple[Clip, ClipScript, Segment]:
+) -> tuple[Clip, Segment]:
     """Load and validate a clip for revision.
 
-    Returns the clip, its parsed script, and its source segment. Raises
-    ``ValueError`` if the clip is missing, belongs to another project, has no
-    source segment, or contains invalid persisted data.
+    Returns the clip and its source segment. Raises ``ValueError`` if the clip
+    is missing, belongs to another project, or has no source segment.
 
     Callers in routers should convert the ``ValueError`` to an HTTPException.
     """
@@ -99,17 +98,12 @@ async def resolve_clip_for_revision(
     if clip is None or clip.project_id != project_id:
         raise ValueError("Clip not found")
 
+    if not clip.source_segment:
+        raise ValueError("Clip has no source segment to revise from")
+
     try:
-        current_script = ClipScript.model_validate(clip.script)
-        source_segment = (
-            Segment.model_validate(clip.source_segment)
-            if clip.source_segment
-            else None
-        )
+        source_segment = Segment.model_validate(clip.source_segment)
     except Exception as e:
         raise ValueError(f"Invalid clip data: {e}") from e
 
-    if source_segment is None:
-        raise ValueError("Clip has no source segment to revise from")
-
-    return clip, current_script, source_segment
+    return clip, source_segment

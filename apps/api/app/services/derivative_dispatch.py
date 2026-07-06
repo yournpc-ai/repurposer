@@ -11,7 +11,7 @@ from app.agents.carousel import carousel_agent
 from app.agents.linkedin import linkedin_agent
 from app.agents.quote_agent import quote_agent
 from app.agents.summary import summary_agent
-from app.models.schemas import ContentPlan, DerivativeType, GenerationContext
+from app.models.schemas import ContentPlan, DerivativeType, GenerationContext, validate_derivative_content
 
 _AGENTS = {
     DerivativeType.LINKEDIN_POST: linkedin_agent,
@@ -49,4 +49,4 @@ async def generate_derivative(
         context=context,
         content_plan=content_plan,
     )
-    return result.model_dump()
+    return validate_derivative_content(derivative_type, result.model_dump())

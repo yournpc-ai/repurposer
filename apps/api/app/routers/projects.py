@@ -14,7 +14,6 @@ from app.models.schemas import (
     DerivativeType,
     ExportRequest,
     GenerateRequest,
-    MessageRole,
     ProjectCreate,
     ProjectResponse,
     ProjectResultsResponse,
@@ -27,14 +26,12 @@ from app.models.tables import (
     Asset,
     Clip,
     Derivative,
-    HumanFeedback,
-    Message,
     Project,
     Speaker,
     User,
     WorkflowRun,
 )
-from app.services.messages import create_assistant_message
+from app.services.chat import get_project_prompt, seed_project_prompt
 from app.services.project_context import get_project_for_user
 from app.services.storage import delete_file, delete_project_files
 
@@ -109,15 +106,8 @@ async def get_project_results(
     """Aggregate project results: metadata, prompt, clips, derivatives, latest job."""
     project = await get_project_for_user(db, project_id, current_user.id)
 
-    # Latest user message content as the original prompt.
-    prompt_result = await db.execute(
-        select(Message)
-        .where(Message.project_id == project_id, Message.role == MessageRole.USER)
-        .order_by(Message.created_at.desc())
-        .limit(1)
-    )
-    latest_user_message = prompt_result.scalar_one_or_none()
-    prompt = latest_user_message.content if latest_user_message else None
+    # The original prompt is the first user message in the project-scoped chat session.
+    prompt = await get_project_prompt(db, project_id)
 
     clips_result = await db.execute(
         select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
@@ -182,8 +172,6 @@ async def delete_project(
     for asset in result.scalars().all():
         delete_file(asset.file_url)
 
-    clip_ids = select(Clip.id).where(Clip.project_id == project_id)
-    await db.execute(delete(HumanFeedback).where(HumanFeedback.clip_id.in_(clip_ids)))
     await db.execute(delete(Clip).where(Clip.project_id == project_id))
     await db.execute(delete(Derivative).where(Derivative.project_id == project_id))
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
@@ -204,25 +192,16 @@ async def generate_content(
 ) -> dict:
     """Queue background generation for a project.
 
-    Creates a PENDING WorkflowRun and a matching assistant chat message, then
-    returns immediately with a job id to poll; the background worker claims and
-    runs it (see app.worker).
+    Ensures the project-scoped chat session exists so the original prompt is
+    persisted, then creates a PENDING WorkflowRun. The background worker claims
+    and runs it (see app.worker).
     """
-    project = await get_project_for_user(db, project_id, current_user.id)
+    project = await get_project_for_user(db, project_id, UUID(str(current_user.id)))
 
-    assistant_message = await create_assistant_message(
-        db,
-        project_id,
-        params={
-            "outputs": request.outputs,
-            "clip_count": request.clip_count,
-            "target_language": request.target_language,
-            "instruction": request.instruction,
-            "scope": request.scope,
-            "target_id": str(request.target_id) if request.target_id else None,
-            "operation": request.operation,
-        },
-    )
+    # Persist the original prompt in the project-scoped chat session if it is
+    # not already there. This is a no-op when the session already has messages.
+    prompt_text = request.instruction or "Generate content from the uploaded materials."
+    await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
 
     run = WorkflowRun(
         project_id=project_id,
@@ -243,7 +222,6 @@ async def generate_content(
             "scope": request.scope,
             "target_id": str(request.target_id) if request.target_id else None,
             "operation": request.operation,
-            "assistant_message_id": str(assistant_message.id),
         },
     )
     db.add(run)
@@ -254,7 +232,6 @@ async def generate_content(
     return {
         "job_id": str(run.id),
         "status": run.status.value,
-        "message_id": str(assistant_message.id),
     }
 
 
@@ -351,16 +328,10 @@ async def export_project(
         if clips:
             lines: list[str] = [f"# Clips for {project.title}\n"]
             for idx, clip in enumerate(clips, start=1):
-                script = clip.script
                 lines.append(f"\n## Clip {idx}: {clip.hook}\n")
                 lines.append(f"- Duration: {clip.duration}s\n")
                 lines.append(f"- Mood: {clip.music_mood}\n")
                 lines.append(f"- Title options: {', '.join(clip.title_options or [])}\n")
-                lines.append("\n### Script\n")
-                for shot in script.get("shots", []):
-                    lines.append(f"**{shot.get('time_range', '')}** — {shot.get('mood', '')}\n")
-                    lines.append(f"> {shot.get('subtitle', '')}\n\n")
-                    lines.append(f"Visual: {shot.get('visual', '')}\n\n")
             zf.writestr("clips.md", "".join(lines))
 
         # Derivatives grouped by type

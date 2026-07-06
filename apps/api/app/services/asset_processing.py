@@ -56,9 +56,9 @@ def _extract_text_processor(asset: Asset) -> ProcessResult:
 def _slides_processor(asset: Asset) -> ProcessResult:
     """Slides: render PDF pages to images for stills backing.
 
-    The multimodal planner reads slide images directly, so we no longer extract
-    OCR text here. Keep the page renders so they can be used as visual backing
-    for stills/audiogram clips.
+    The generation agents (content director / clip agent) read slide images
+    directly, so we no longer extract OCR text here. Keep the page renders so
+    they can be used as visual backing for stills/audiogram clips.
     """
     if not asset.file_url:
         return ProcessResult()
@@ -90,7 +90,7 @@ def _asr_processor(asset: Asset) -> ProcessResult:
 def _noop_processor(asset: Asset) -> ProcessResult:
     """Placeholder for types with no text/transcript processor.
 
-    IMAGE assets are consumed directly by the multimodal planner as raw media,
+    IMAGE assets are consumed directly by the generation agents as raw media,
     so no preprocessing is needed here. VOICE_SAMPLE is only used for voice
     cloning.
     """
@@ -104,7 +104,7 @@ PROCESSORS: dict[AssetType, Processor] = {
     AssetType.VIDEO: _asr_processor,
     AssetType.AUDIO: _asr_processor,
     AssetType.VOICE_SAMPLE: _noop_processor,
-    AssetType.IMAGE: _noop_processor,  # planner consumes the original image
+    AssetType.IMAGE: _noop_processor,  # agents consume the original image
 }
 
 

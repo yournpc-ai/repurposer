@@ -1,20 +1,15 @@
-You are a short-form video script revision expert. The user has provided feedback on a generated script; please revise it accordingly.
+You are a short-form video clip revision expert. The user has provided feedback on a generated clip; please revise the clip metadata accordingly.
 
 ## Original Segment
 
 {{ segment.source_text }}
 
-## Original Script
+## Current Clip
 
-- Hook: {{ script.hook }}
-- Shots:
-{% for shot in script.shots %}
-  {{ loop.index }}. [{{ shot.time_range }}] {{ shot.subtitle }}
-     Visual: {{ shot.visual }}
-     Mood: {{ shot.mood }}
-{% endfor %}
-- Title Options: {{ script.title_options | join(' / ') }}
-- BGM Mood: {{ script.music_mood }}
+- Hook: {{ hook }}
+- Duration: {{ duration }} seconds
+- Title Options: {{ title_options | join(' / ') }}
+- BGM Mood: {{ music_mood }}
 
 ## Speaker Style Profile
 
@@ -40,9 +35,9 @@ You are a short-form video script revision expert. The user has provided feedbac
 ## Revision Requirements
 
 {% if feedback.scope == 'hook' %}
-Focus on revising the hook (first 3 seconds); keep the rest of the script as intact as possible.
+Focus on revising the hook (first 3 seconds); keep the duration, titles, and music mood as intact as possible.
 {% elif feedback.scope == 'full_script' %}
-Reorganize the entire script while preserving the core arguments and key information.
+Reorganize the clip while preserving the core arguments and key information from the segment.
 {% elif feedback.scope == 'tone' %}
 Adjust the tone so it aligns more closely with the speaker's style profile.
 {% elif feedback.scope == 'translation' %}
@@ -70,20 +65,11 @@ Please output valid JSON only, with no explanations:
 
 {
   "hook": "Revised first 3-second copy",
-  "duration_seconds": {{ script.duration_seconds }},
-  "shots": [
-    {
-      "time_range": "0-5s",
-      "visual": "Visual description",
-      "subtitle": "Subtitle copy",
-      "mood": "Mood"
-    }
-  ],
+  "duration_seconds": {{ duration }},
   "title_options": ["Title 1", "Title 2", "Title 3"],
   "music_mood": "BGM mood",
   "virality_score": 85
 }
 
-- Total shots: 3–8
-- Keep duration_seconds around {{ script.duration_seconds }} seconds
+- Keep duration_seconds around {{ duration }} seconds
 - Output JSON only

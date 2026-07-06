@@ -20,7 +20,6 @@ import { apiFetch } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
@@ -67,8 +66,6 @@ function Home() {
   const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
   const [error, setError] = useState("")
   const [mounted, setMounted] = useState(false)
-  const [autoSave, setAutoSave] = useState(true)
-  const [autoImport, setAutoImport] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -187,32 +184,9 @@ function Home() {
       <section className="px-6 pb-16">
         <div className="mx-auto w-full max-w-6xl">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
-            <div className="flex items-center gap-6 text-sm">
-              <span className="font-medium text-foreground">
-                {t("home.allProjects", { count: projects.length })}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-muted-foreground">{t("home.storage")}</span>
-
-              <label className="flex items-center gap-2 rounded-md px-3 py-1.5">
-                <Switch size="sm" checked={autoSave} onCheckedChange={setAutoSave} />
-                <span className="text-xs">{t("home.autoSave")}</span>
-              </label>
-
-              <label className="flex items-center gap-2 rounded-md px-3 py-1.5">
-                <Switch
-                  size="sm"
-                  checked={autoImport}
-                  onCheckedChange={setAutoImport}
-                />
-                <span className="text-xs">{t("home.autoImport")}</span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {t("home.beta")}
-                </Badge>
-              </label>
-            </div>
+            <span className="text-sm font-medium text-foreground">
+              {t("home.allProjects", { count: projects.length })}
+            </span>
           </div>
 
           <RecentProjects refreshKey={refreshKey} />

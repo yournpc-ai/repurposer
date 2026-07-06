@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, computed_field, field_validator
 
 
 class MediaInputType(StrEnum):
@@ -79,15 +79,7 @@ class WorkflowStatus(StrEnum):
     FAILED = "failed"
 
 
-class MessageRole(StrEnum):
-    """Chat message roles."""
-
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-
-
-class MessageAttachment(BaseModel):
+class ChatAttachment(BaseModel):
     """File attached to a chat message."""
 
     model_config = ConfigDict(extra="forbid")
@@ -100,39 +92,101 @@ class MessageAttachment(BaseModel):
     status: Literal["uploading", "uploaded", "failed"] = "uploaded"
 
 
-class MessageMarker(BaseModel):
-    """Inline status marker inside an assistant message."""
+class ChatSessionResponse(BaseModel):
+    """Chat session response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID | None = None
+    asset_id: UUID | None = None
+    asset_type: Literal["clip", "derivative"] | None = None
+    title: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class MessageRole(StrEnum):
+    """Chat message roles."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
+class ChatMessageResponse(BaseModel):
+    """A single chat message returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    session_id: UUID
+    role: MessageRole
+    content: str | None = None
+    attachments: list[ChatAttachment] = Field(default_factory=list)
+    workflow_run_id: UUID | None = None
+    intent: dict | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class MessageListResponse(BaseModel):
+    """List of chat messages in a session."""
+
+    items: list[ChatMessageResponse]
+
+
+class ChatIntent(BaseModel):
+    """Parsed intent from a user chat message.
+
+    The chat model extracts a structured action so the backend can dispatch to
+    the right reviser/translator/renderer workflow.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    type: Literal["status", "tool", "separator", "error"]
-    label: str
-    timestamp: datetime | None = None
-    meta: dict | None = None
+    action: Literal[
+        "revise",
+        "translate",
+        "regenerate",
+        "render",
+        "select_music",
+        "generate_music",
+        "toggle_music",
+        "adjust_gain",
+        "unknown",
+    ]
+    scope: Literal["clip", "derivative", "project"] | None = None
+    target_id: UUID | None = None
+    target_language: str | None = None
+    operation: str | None = None
+    instruction: str | None = None
+    parameters: dict = Field(default_factory=dict)
 
 
-class MessageResults(BaseModel):
-    """Result references stored in an assistant message."""
+class ChatRequest(BaseModel):
+    """Send a message to a project or asset chat.
+
+    The backend locates or creates the appropriate session, builds the right
+    context (project-level vs asset-level), and dispatches any background work.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    clip_ids: list[UUID] = Field(default_factory=list)
-    derivative_ids: list[UUID] = Field(default_factory=list)
+    project_id: UUID
+    asset_id: UUID | None = None
+    asset_type: Literal["clip", "derivative"] | None = None
+    message: str
+    attachments: list[ChatAttachment] = Field(default_factory=list)
 
 
-class MessageMetadata(BaseModel):
-    """Mutable metadata for a chat message."""
+class ChatResponse(BaseModel):
+    """Result of sending a chat message."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal["pending", "running", "completed", "failed"] | None = None
-    progress: int | None = Field(default=None, ge=0, le=100)
-    current_step: str | None = None
-    markers: list[MessageMarker] = Field(default_factory=list)
-    results: MessageResults | None = None
-    error: str | None = None
-    params: dict | None = None
+    session_id: UUID
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse
+    job_id: UUID | None = None
 
 
 class SpeakerPersona(BaseModel):
@@ -307,25 +361,18 @@ class AssetResponse(BaseModel):
         return stream_url(self.file_url)
 
 
-class Shot(BaseModel):
-    """A single shot in a clip script."""
+class ClipRevision(BaseModel):
+    """Revised clip metadata returned by the reviser agent.
 
-    model_config = ConfigDict(extra="forbid")
-
-    time_range: str
-    visual: str
-    subtitle: str
-    mood: str
-
-
-class ClipScript(BaseModel):
-    """Generated clip script."""
+    Replaces the old ``ClipScript`` / ``Shot`` model: the renderer now drives
+    from ``render_spec`` and ASR captions, so revision only needs the hook,
+    duration, titles, and music mood.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     hook: str
-    duration_seconds: int = Field(default=30, ge=15, le=60)
-    shots: list[Shot] = Field(default_factory=list)
+    duration_seconds: int = Field(default=30, ge=15, le=120)
     title_options: list[str] = Field(default_factory=list)
     music_mood: str = "calm"
     virality_score: int | None = Field(default=None, ge=1, le=100)
@@ -348,12 +395,12 @@ class Segment(BaseModel):
 
 
 class ClipPlan(BaseModel):
-    """A complete clip plan produced by the multimodal planner.
+    """A complete clip plan produced by the clip agent.
 
     Combines segment selection and script writing into one structure so that a
     single multimodal call can produce everything needed for ``Clip`` creation
-    and ``render_spec`` building. ``to_segment`` / ``to_script`` adapters keep
-    the existing ``clip_spec`` and renderer paths unchanged.
+    and ``render_spec`` building. ``to_segment`` keeps the existing segment
+    path unchanged.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -370,7 +417,6 @@ class ClipPlan(BaseModel):
     duration_seconds: int = Field(default=30, ge=15, le=120)
     music_mood: str = "calm"
     visual_notes: str = ""
-    shots: list[Shot] = Field(default_factory=list)
     title_options: list[str] = Field(default_factory=list)
 
     def to_segment(self) -> "Segment":
@@ -386,20 +432,9 @@ class ClipPlan(BaseModel):
             duration_seconds=self.duration_seconds,
         )
 
-    def to_script(self) -> "ClipScript":
-        return ClipScript(
-            hook=self.hook,
-            duration_seconds=self.duration_seconds,
-            shots=self.shots,
-            title_options=self.title_options
-            or ([self.title] if self.title else []),
-            music_mood=self.music_mood,
-            virality_score=self.virality_score,
-        )
-
 
 class ClipPlans(BaseModel):
-    """Multimodal planner output: analysis + a list of ready-to-render clip plans."""
+    """Clip agent output: analysis + a list of ready-to-render clip plans."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -490,9 +525,33 @@ class DerivativeType(StrEnum):
     LINKEDIN_POST = "linkedin_post"
     QUOTE_CARD = "quote_card"
     CAROUSEL = "carousel"
-    MULTILINGUAL_SCRIPT = "multilingual_script"
     SUMMARY = "summary"
     BLOG = "blog"
+
+
+DerivativeContent = LinkedInPost | QuoteCardsResponse | CarouselResponse | Summary | BlogPost
+
+
+def validate_derivative_content(
+    derivative_type: DerivativeType,
+    content: dict,
+) -> dict:
+    """Validate and normalize derivative content against its type schema.
+
+    Returns a plain dict so it can be stored in the JSON column, but raises
+    ``ValueError`` if the shape does not match the declared type.
+    """
+    mapping: dict[DerivativeType, type[BaseModel]] = {
+        DerivativeType.LINKEDIN_POST: LinkedInPost,
+        DerivativeType.QUOTE_CARD: QuoteCardsResponse,
+        DerivativeType.CAROUSEL: CarouselResponse,
+        DerivativeType.SUMMARY: Summary,
+        DerivativeType.BLOG: BlogPost,
+    }
+    model = mapping.get(derivative_type)
+    if model is None:
+        return content
+    return model.model_validate(content).model_dump(mode="json")
 
 
 class RenderStatus(StrEnum):
@@ -712,7 +771,6 @@ class ClipResponse(BaseModel):
     id: UUID
     project_id: UUID
     hook: str
-    script: ClipScript
     title_options: list[str]
     music_mood: str
     status: str
@@ -732,7 +790,6 @@ class ClipUpdate(BaseModel):
     """Partial update for a clip."""
 
     hook: str | None = None
-    script: ClipScript | None = None
     title_options: list[str] | None = None
     music_mood: str | None = None
     status: str | None = None
@@ -774,56 +831,20 @@ class DerivativeResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
 
+    @field_validator("content", mode="before")
+    @classmethod
+    def _validate_content(cls, value: Any, info: ValidationInfo) -> Any:
+        derivative_type = info.data.get("type")
+        if derivative_type is None or not isinstance(value, dict):
+            return value
+        return validate_derivative_content(derivative_type, value)
+
 
 class DerivativeUpdate(BaseModel):
     """Partial update for a derivative."""
 
     content: dict | None = None
     status: str | None = None
-
-
-class MessageCreate(BaseModel):
-    """Create a chat message."""
-
-    role: MessageRole
-    content: str | None = None
-    attachments: list[MessageAttachment] = Field(default_factory=list)
-    meta: MessageMetadata | None = None
-    parent_message_id: UUID | None = None
-    asset_id: UUID | None = None
-    asset_type: Literal["clip", "derivative"] | None = None
-
-
-class MessageUpdate(BaseModel):
-    """Partial update for a chat message (used to append markers/results)."""
-
-    content: str | None = None
-    attachments: list[MessageAttachment] | None = None
-    meta: MessageMetadata | None = None
-
-
-class MessageResponse(BaseModel):
-    """Chat message response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    project_id: UUID
-    role: MessageRole
-    content: str | None = None
-    attachments: list[MessageAttachment] = Field(default_factory=list)
-    meta: MessageMetadata = Field(default_factory=MessageMetadata)
-    parent_message_id: UUID | None = None
-    asset_id: UUID | None = None
-    asset_type: Literal["clip", "derivative"] | None = None
-    created_at: datetime
-    updated_at: datetime | None = None
-
-
-class MessageListResponse(BaseModel):
-    """List of chat messages for a project."""
-
-    items: list[MessageResponse]
 
 
 class GenerateRequest(BaseModel):
@@ -901,20 +922,6 @@ class FeedbackRequest(BaseModel):
     detail: str | None = None
 
 
-class ReviewResult(BaseModel):
-    """Review result for a generated clip script."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    persona_match_score: int = Field(default=70, ge=1, le=100)
-    hook_score: int = Field(default=70, ge=1, le=100)
-    clarity_score: int = Field(default=70, ge=1, le=100)
-    viral_potential_score: int = Field(default=70, ge=1, le=100)
-    issues: list[str] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list)
-    overall_verdict: Literal["pass", "revise", "reject"] = "pass"
-
-
 class WorkflowRunResponse(BaseModel):
     """Workflow run response."""
 
@@ -929,18 +936,6 @@ class WorkflowRunResponse(BaseModel):
     context: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
-
-    @computed_field
-    @property
-    def message_id(self) -> UUID | None:
-        """Assistant chat message tracking this run, if any."""
-        raw = self.context.get("assistant_message_id") if self.context else None
-        if raw:
-            try:
-                return UUID(str(raw))
-            except (ValueError, TypeError):
-                return None
-        return None
 
 
 class ProjectResultsResponse(BaseModel):

@@ -51,11 +51,6 @@ from app.services.brand import (
 )
 from app.services.clip_spec import build_clip_spec
 from app.services.derivative_dispatch import generate_derivative
-from app.services.messages import (
-    add_result_refs,
-    append_message_marker,
-    update_message_meta,
-)
 from app.services.project_context import (
     collect_materials,
     resolve_clip_for_revision,
@@ -224,7 +219,7 @@ async def _resolve_or_create_speaker(
 
     The homepage no longer forces the user to pick/create a speaker. When a
     project has no speaker, we derive a default persona from the transcript so
-    the planner still receives style guidance.
+    the content director and clip agent still receive style guidance.
     """
     if project.speaker_id:
         result = await db.execute(
@@ -287,35 +282,27 @@ async def _run_targeted_revision(
     target_id: UUID | None,
     operation: str,
     instruction: str | None,
-    message_id: UUID | None,
 ) -> None:
-    """Run a targeted revision/operation on a single clip or derivative.
-
-    Updates the assistant message with progress and result references.
-    """
+    """Run a targeted revision/operation on a single clip or derivative."""
     if target_id is None:
         raise ValueError(f"target_id is required for scope={scope}")
 
     if scope in ("hook", "clip"):
-        clip, current_script, source_segment = await resolve_clip_for_revision(
+        clip, source_segment = await resolve_clip_for_revision(
             db, target_id, project.id
         )
         speaker, persona = await resolve_speaker_and_persona(db, project)
 
-        if message_id:
-            await update_message_meta(db, message_id, status="running", current_step=scope)
-            await append_message_marker(
-                db, message_id, f"Revising {scope}...", "status"
-            )
-
         revised = await reviser_agent.revise_by_instruction(
-            script=current_script,
+            clip_hook=clip.hook,
+            clip_duration=clip.duration,
+            clip_title_options=clip.title_options or [],
+            clip_music_mood=clip.music_mood,
             segment=source_segment,
             instruction=instruction or "Improve this clip",
             persona=persona,
             scope=scope,
         )
-        clip.script = revised.model_dump()
         clip.hook = revised.hook
         clip.title_options = revised.title_options
         clip.music_mood = revised.music_mood
@@ -326,13 +313,6 @@ async def _run_targeted_revision(
         run.current_step = "done"
         run.progress = 100
         await db.commit()
-
-        if message_id:
-            await add_result_refs(db, message_id, clip_ids=[clip.id])
-            await update_message_meta(
-                db, message_id, status="completed", progress=100, current_step="done"
-            )
-            await append_message_marker(db, message_id, f"{scope.title()} revised", "status")
         return
 
     if scope == "render":
@@ -350,15 +330,66 @@ async def _run_targeted_revision(
         run.current_step = "done"
         run.progress = 100
         await db.commit()
+        return
 
-        if message_id:
-            await add_result_refs(db, message_id, clip_ids=[clip.id])
-            await update_message_meta(
-                db, message_id, status="completed", progress=100, current_step="done"
+    if scope == "derivative":
+        derivative = await db.get(Derivative, target_id)
+        if derivative is None or derivative.project_id != project.id:
+            raise ValueError("Target derivative not found")
+
+        materials = await collect_materials(db, project.id)
+        speaker, persona = await resolve_speaker_and_persona(db, project)
+        target_language = run.context.get("target_language", derivative.language or "en")
+
+        bt = (
+            await db.execute(
+                select(BrandTemplate)
+                .where(BrandTemplate.user_id == project.user_id)
+                .order_by(BrandTemplate.created_at.desc())
+                .limit(1)
             )
-            await append_message_marker(
-                db, message_id, "Video render queued", "status"
+        ).scalar_one_or_none()
+        content_strategy = content_strategy_from_template(bt.config if bt else None)
+
+        context = GenerationContext(
+            speaker_name=speaker.name if speaker else None,
+            speaker_title=speaker.title if speaker else None,
+            event_name=project.event_name,
+            persona=persona,
+            tone_settings=None,
+            brand_strategy=content_strategy,
+            target_language=target_language,
+            instruction=instruction,
+        )
+        content_plan = ContentPlan(
+            core_thesis="Regenerate this derivative faithfully to the source material",
+            derivatives=[
+                DerivativePlan(
+                    derivative_type=derivative.type,
+                    focus="Regenerate this derivative faithfully to the source material",
+                )
+            ],
+        )
+
+        try:
+            derivative.content = await generate_derivative(
+                derivative_type=derivative.type,
+                materials=materials,
+                context=context,
+                content_plan=content_plan,
             )
+        except MiniMaxError as e:
+            raise ValueError(f"Derivative generation failed: {e}") from e
+
+        derivative.language = target_language
+        derivative.status = "generated"
+        derivative.updated_at = datetime.now(UTC)
+        await db.commit()
+
+        run.status = WorkflowStatus.COMPLETED
+        run.current_step = "done"
+        run.progress = 100
+        await db.commit()
         return
 
     # Fallback: scope not yet supported as a targeted operation.
@@ -392,33 +423,10 @@ async def run_generation(run_id: UUID) -> None:
                     target_id = UUID(str(raw_target_id))
                 except (ValueError, TypeError):
                     target_id = None
-            message_id: UUID | None = None
-            raw_message_id = ctx.get("assistant_message_id")
-            if raw_message_id:
-                try:
-                    message_id = UUID(str(raw_message_id))
-                except (ValueError, TypeError):
-                    message_id = None
-
             run.status = WorkflowStatus.RUNNING
             run.progress = 0
             run.current_step = "loading"
             await db.commit()
-
-            if message_id:
-                await update_message_meta(
-                    db,
-                    message_id,
-                    status="running",
-                    progress=0,
-                    current_step="loading",
-                )
-                await append_message_marker(
-                    db,
-                    message_id,
-                    "Starting generation...",
-                    "status",
-                )
 
             project = await db.get(Project, run.project_id)
             if project is None:
@@ -426,7 +434,7 @@ async def run_generation(run_id: UUID) -> None:
 
             if scope != "full":
                 await _run_targeted_revision(
-                    db, run, project, scope, target_id, operation, instruction, message_id
+                    db, run, project, scope, target_id, operation, instruction
                 )
                 return
 
@@ -446,12 +454,14 @@ async def run_generation(run_id: UUID) -> None:
             )
 
             # Resolve the project's speaker. If none is assigned, generate a
-            # default persona from the materials so the planner still has style
-            # guidance. This keeps the homepage UI free of speaker selection.
+            # default persona from the materials so the content director and
+            # clip agent have style guidance. This keeps the homepage UI free
+            # of speaker selection.
             speaker = await _resolve_or_create_speaker(db, project, materials)
 
-            # Resolve the brand template early so the planner can use its content
-            # strategy (voice/audience/cta/guidelines) when selecting segments.
+            # Resolve the brand template early so the content director can use
+            # its content strategy (voice/audience/cta/guidelines) when
+            # selecting segments.
             bt_id = ctx.get("brand_template_id")
             bt = None
             if bt_id:
@@ -554,10 +564,6 @@ async def run_generation(run_id: UUID) -> None:
             # works from the same core thesis, themes, and per-output focus.
             # current_step remains "loading" during planning to preserve the
             # legacy step sequence for frontend polling.
-            if message_id:
-                await append_message_marker(
-                    db, message_id, "Planning content...", "status"
-                )
             content_plan: ContentPlan = await content_director_agent.plan(
                 materials=materials,
                 context=generation_context,
@@ -612,13 +618,6 @@ async def run_generation(run_id: UUID) -> None:
             if "clips" in outputs:
                 run.current_step = "clips"
                 await db.commit()
-                if message_id:
-                    await update_message_meta(
-                        db, message_id, current_step="clips"
-                    )
-                    await append_message_marker(
-                        db, message_id, "Generating clips...", "status"
-                    )
                 plans = await clip_agent.generate(
                     materials=materials,
                     context=generation_context,
@@ -640,7 +639,6 @@ async def run_generation(run_id: UUID) -> None:
                 clip_ids: list[UUID] = []
                 for plan in plans.clips[:clip_count]:
                     segment = plan.to_segment()
-                    script = plan.to_script()
                     # Music: a brand template (if any) is the source of truth —
                     # respect it fully, including an explicit "off". With no
                     # template, fall back to the clip's own mood suggestion so a
@@ -648,10 +646,10 @@ async def run_generation(run_id: UUID) -> None:
                     music = (
                         music_from_template(bt.config)
                         if bt is not None
-                        else music_from_mood(script.music_mood)
+                        else music_from_mood(plan.music_mood)
                     )
                     # render_spec = the actual render contract (None for
-                    # text-only projects). script stays as the AI suggestion.
+                    # text-only projects).
                     spec = (
                         build_clip_spec(
                             render_source,
@@ -672,11 +670,11 @@ async def run_generation(run_id: UUID) -> None:
                     )
                     clip = Clip(
                         project_id=project.id,
-                        hook=script.hook,
-                        script=script.model_dump(),
-                        title_options=script.title_options,
-                        music_mood=script.music_mood,
-                        duration=script.duration_seconds,
+                        hook=plan.hook,
+                        title_options=plan.title_options
+                        or ([plan.title] if plan.title else []),
+                        music_mood=plan.music_mood,
+                        duration=plan.duration_seconds,
                         language=target_language,
                         source_segment=segment.model_dump(),
                         render_spec=spec.model_dump(mode="json") if spec else None,
@@ -687,24 +685,9 @@ async def run_generation(run_id: UUID) -> None:
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, clip_ids=clip_ids)
-                    await update_message_meta(
-                        db, message_id, progress=run.progress
-                    )
-                    await append_message_marker(
-                        db, message_id, f"Generated {len(clip_ids)} clips", "status"
-                    )
 
             # Generate each requested derivative in the original output order,
             # preserving the legacy current_step values and progress tracking.
-            derivative_step_labels: dict[str, str] = {
-                "linkedin": "LinkedIn post",
-                "quote_cards": "quote cards",
-                "carousel": "carousel",
-                "summary": "summary",
-                "blog": "blog post",
-            }
             for output in outputs:
                 if output == "clips":
                     continue
@@ -726,12 +709,6 @@ async def run_generation(run_id: UUID) -> None:
 
                 run.current_step = output
                 await db.commit()
-                label = derivative_step_labels.get(output, output)
-                if message_id:
-                    await update_message_meta(db, message_id, current_step=output)
-                    await append_message_marker(
-                        db, message_id, f"Generating {label}...", "status"
-                    )
 
                 content = await generate_derivative(
                     derivative_type=derivative_type,
@@ -767,12 +744,6 @@ async def run_generation(run_id: UUID) -> None:
                 done += 1
                 run.progress = int(done / total * 100)
                 await db.commit()
-                if message_id:
-                    await add_result_refs(db, message_id, derivative_ids=[derivative.id])
-                    await update_message_meta(db, message_id, progress=run.progress)
-                    await append_message_marker(
-                        db, message_id, f"{label.title()} ready", "status"
-                    )
 
             run.status = WorkflowStatus.COMPLETED
             run.current_step = "done"
@@ -781,21 +752,9 @@ async def run_generation(run_id: UUID) -> None:
                 project.status = ProjectStatus.REVIEW
                 project.updated_at = datetime.now(UTC)
             await db.commit()
-            if message_id:
-                await update_message_meta(
-                    db, message_id, status="completed", progress=100, current_step="done"
-                )
-                await append_message_marker(db, message_id, "All done!", "status")
             logger.info("generation_completed", run_id=str(run_id), outputs=outputs)
         except Exception as e:  # noqa: BLE001 — record any failure on the run
             logger.error("generation_failed", run_id=str(run_id), error=str(e))
             run.status = WorkflowStatus.FAILED
             run.error = str(e)
             await db.commit()
-            if message_id:
-                await update_message_meta(
-                    db, message_id, status="failed", error=str(e)
-                )
-                await append_message_marker(
-                    db, message_id, f"Generation failed: {e}", "error"
-                )

@@ -49,6 +49,39 @@ interface ChatTurn {
   status?: "pending" | "running" | "completed" | "failed"
 }
 
+interface ChatMessage {
+  id: string
+  role: "user" | "assistant" | "system"
+  content: string | null
+}
+
+interface ChatSession {
+  id: string
+  project_id: string
+  asset_id: string | null
+  asset_type: string | null
+  title: string | null
+}
+
+interface ChatResponse {
+  session_id: string
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+  job_id: string | null
+}
+
+const pollJob = async (projectId: string, jobId: string) => {
+  for (let i = 0; i < 60; i++) {
+    const res = await apiFetch(`/api/v1/projects/${projectId}/jobs/${jobId}`)
+    if (!res.ok) continue
+    const job = await res.json()
+    if (job.status === "completed") return true
+    if (job.status === "failed") return false
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  return false
+}
+
 export function AssetChatModal({
   open,
   onOpenChange,
@@ -61,19 +94,8 @@ export function AssetChatModal({
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [input, setInput] = useState("")
   const [isWorking, setIsWorking] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    setTurns([
-      {
-        id: "intro",
-        role: "assistant",
-        content: t("assetChat.intro"),
-      },
-    ])
-    setInput("")
-  }, [open, t])
 
   useEffect(() => {
     const viewport = scrollerRef.current
@@ -81,44 +103,85 @@ export function AssetChatModal({
     viewport.scrollTop = viewport.scrollHeight
   }, [turns])
 
+  useEffect(() => {
+    if (!open || !asset) return
+
+    let cancelled = false
+    setInput("")
+    setIsWorking(false)
+    setIsLoadingHistory(true)
+
+    const loadHistory = async () => {
+      try {
+        const params = new URLSearchParams({
+          project_id: projectId,
+          asset_id: asset.id,
+          asset_type: assetType,
+        })
+        const sessionRes = await apiFetch(`/api/v1/chat/session?${params.toString()}`)
+        if (!sessionRes.ok) {
+          if (sessionRes.status === 404) {
+            if (!cancelled) {
+                            setTurns([
+                {
+                  id: "intro",
+                  role: "assistant",
+                  content: t("assetChat.intro"),
+                },
+              ])
+            }
+            return
+          }
+          throw new Error("Failed to load chat session")
+        }
+
+        const session = (await sessionRes.json()) as ChatSession
+        const messagesRes = await apiFetch(
+          `/api/v1/chat/sessions/${session.id}/messages`
+        )
+        if (!messagesRes.ok) throw new Error("Failed to load messages")
+        const messages = (await messagesRes.json()) as { items: ChatMessage[] }
+
+        if (cancelled) return
+                setTurns([
+          {
+            id: "intro",
+            role: "assistant",
+            content: t("assetChat.intro"),
+          },
+          ...messages.items.map((m) => ({
+            id: m.id,
+            role: m.role === "system" ? "assistant" : m.role,
+            content: m.content ?? "",
+          })),
+        ])
+      } catch {
+        if (!cancelled) {
+                    setTurns([
+            {
+              id: "intro",
+              role: "assistant",
+              content: t("assetChat.intro"),
+            },
+          ])
+        }
+      } finally {
+        if (!cancelled) setIsLoadingHistory(false)
+      }
+    }
+
+    loadHistory()
+    return () => {
+      cancelled = true
+    }
+  }, [open, asset?.id, assetType, projectId, t])
+
   if (!asset) return null
 
   const assetTitle =
     assetType === "clip"
       ? (asset as Clip).hook
       : t(`assetChat.derivativeTypes.${(asset as Derivative).type}`)
-
-  const persistMessage = async (role: "user" | "assistant", content: string) => {
-    try {
-      await apiFetch(`/api/v1/projects/${projectId}/messages`, {
-        method: "POST",
-        body: {
-          role,
-          content,
-          asset_id: asset?.id,
-          asset_type: assetType,
-          attachments: [],
-          meta: {},
-        },
-      })
-    } catch {
-      // Persistence is best-effort; the chat still works if it fails.
-    }
-  }
-
-  const pollJob = async (jobId: string) => {
-    for (let i = 0; i < 60; i++) {
-      const res = await apiFetch(
-        `/api/v1/projects/${projectId}/jobs/${jobId}`
-      )
-      if (!res.ok) continue
-      const job = await res.json()
-      if (job.status === "completed") return true
-      if (job.status === "failed") return false
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    }
-    return false
-  }
 
   const handleSend = async () => {
     if (!input.trim() || isWorking || !asset) return
@@ -140,17 +203,23 @@ export function AssetChatModal({
     setInput("")
     setIsWorking(true)
 
-    await persistMessage("user", instruction)
-
     try {
-      if (assetType === "clip") {
-        const res = await apiFetch(`/api/v1/clips/${asset.id}/regenerate`, {
-          method: "POST",
-          body: { instruction },
-        })
-        if (!res.ok) throw new Error("Regenerate failed")
-        const { job_id } = (await res.json()) as { job_id: string }
-        const ok = await pollJob(job_id)
+      const res = await apiFetch("/api/v1/chat", {
+        method: "POST",
+        body: {
+          project_id: projectId,
+          asset_id: asset.id,
+          asset_type: assetType,
+          message: instruction,
+        },
+      })
+      if (!res.ok) throw new Error("Chat failed")
+
+      const data = (await res.json()) as ChatResponse
+      const { job_id } = data
+
+      if (job_id) {
+        const ok = await pollJob(projectId, job_id)
         const finalContent = ok ? t("assetChat.done") : t("assetChat.failed")
         setTurns((prev) =>
           prev.map((turn) =>
@@ -159,30 +228,15 @@ export function AssetChatModal({
               : turn
           )
         )
-        await persistMessage("assistant", finalContent)
         if (ok) onUpdated?.()
       } else {
-        const derivative = asset as Derivative
-        const res = await apiFetch(
-          `/api/v1/derivatives/${derivative.id}/regenerate`,
-          {
-            method: "POST",
-            body: {
-              instruction,
-              target_language: derivative.language || "en",
-            },
-          }
-        )
-        if (!res.ok) throw new Error("Regenerate failed")
-        const finalContent = t("assetChat.done")
         setTurns((prev) =>
           prev.map((turn) =>
             turn.id === assistantTurn.id
-              ? { ...turn, content: finalContent, status: "completed" }
+              ? { ...turn, content: t("assetChat.done"), status: "completed" }
               : turn
           )
         )
-        await persistMessage("assistant", finalContent)
         onUpdated?.()
       }
     } catch (e) {
@@ -195,7 +249,6 @@ export function AssetChatModal({
             : turn
         )
       )
-      await persistMessage("assistant", errorContent)
     } finally {
       setIsWorking(false)
     }
@@ -212,11 +265,9 @@ export function AssetChatModal({
         </DialogHeader>
 
         <MessageScrollerProvider autoScroll={false}>
-          <MessageScroller className="min-h-0 flex-1 px-4"
-          >
+          <MessageScroller className="min-h-0 flex-1 px-4">
             <MessageScrollerViewport ref={scrollerRef}>
-              <MessageScrollerContent className="gap-3 pb-2"
-                >
+              <MessageScrollerContent className="gap-3 pb-2">
                 {turns.map((turn) => {
                   if (turn.role === "marker") {
                     return (
@@ -232,10 +283,8 @@ export function AssetChatModal({
                   return (
                     <MessageScrollerItem key={turn.id}>
                       <Message align={isUser ? "end" : "start"}>
-                        <MessageContent className={isUser ? "items-end" : "items-start"}
-                        >
-                          <BubbleGroup className={isUser ? "items-end" : "items-start"}
-                          >
+                        <MessageContent className={isUser ? "items-end" : "items-start"}>
+                          <BubbleGroup className={isUser ? "items-end" : "items-start"}>
                             <Bubble
                               variant={isUser ? "default" : "muted"}
                               align={isUser ? "end" : "start"}
@@ -253,6 +302,21 @@ export function AssetChatModal({
                     </MessageScrollerItem>
                   )
                 })}
+                {isLoadingHistory && (
+                  <MessageScrollerItem key="loading">
+                    <Message align="start">
+                      <MessageContent className="items-start">
+                        <BubbleGroup className="items-start">
+                          <Bubble variant="muted" align="start">
+                            <BubbleContent className="text-sm">
+                              {t("assetChat.loadingHistory")}
+                            </BubbleContent>
+                          </Bubble>
+                        </BubbleGroup>
+                      </MessageContent>
+                    </Message>
+                  </MessageScrollerItem>
+                )}
               </MessageScrollerContent>
             </MessageScrollerViewport>
           </MessageScroller>
@@ -270,12 +334,12 @@ export function AssetChatModal({
             }}
             placeholder={t("assetChat.placeholder")}
             className="h-10 flex-1"
-            disabled={isWorking}
+            disabled={isWorking || isLoadingHistory}
           />
           <Button
             size="icon"
             className="h-10 w-10 rounded-full"
-            disabled={!input.trim() || isWorking}
+            disabled={!input.trim() || isWorking || isLoadingHistory}
             onClick={handleSend}
           >
             <Send className="h-4 w-4" />
