@@ -16,6 +16,7 @@ The seed function creates placeholder quote-card PNGs from the app logo if they
 do not already exist. Demo video files must be supplied manually (see README).
 """
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -26,7 +27,7 @@ from sqlalchemy import select
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType, DerivativeType, MessageRole, ProjectStatus
-from app.models.tables import Asset, BrandTemplate, Clip, Derivative, Message, Project, Speaker, User
+from app.models.tables import Asset, BrandTemplate, ChatSession, Clip, Derivative, Message, Project, Speaker, User
 from app.services.brand import DEFAULT_BRAND_CONFIG
 from app.services.storage import get_project_output_dir, get_project_upload_dir, output_url, stream_url
 
@@ -115,7 +116,6 @@ DEMO_CLIPS = [
 
 def _demo_paths() -> tuple[Path, Path]:
     """Return upload and output directories for the demo project."""
-    from app.config import settings
 
     upload_dir = get_project_upload_dir(DEMO_PROJECT_ID, "demo")
     output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
@@ -134,6 +134,45 @@ def _ensure_quote_placeholders(output_dir: Path) -> None:
             target.write_bytes(logo_path.read_bytes())
 
 
+async def _repair_demo_clips(db) -> bool:
+    """Repair demo clips whose render_spec has a string 'None' asset_id.
+
+    Early seeds stored the literal string 'None' when the asset id was not yet
+    resolved. This updates those clips to point at the demo video asset so the
+    ProjectResultsResponse serializer can validate the render_spec.
+    """
+    asset_result = await db.execute(
+        select(Asset).where(
+            Asset.project_id == DEMO_PROJECT_ID,
+            Asset.type == AssetType.VIDEO,
+        )
+    )
+    asset = asset_result.scalar_one_or_none()
+    if asset is None:
+        return False
+
+    clip_result = await db.execute(
+        select(Clip).where(Clip.project_id == DEMO_PROJECT_ID)
+    )
+    clips = clip_result.scalars().all()
+    repaired = False
+    for clip in clips:
+        spec = clip.render_spec
+        if not spec:
+            continue
+        source = spec.get("source") or {}
+        if source.get("asset_id") == "None":
+            new_spec = deepcopy(spec)
+            new_spec["source"]["asset_id"] = str(asset.id)
+            clip.render_spec = new_spec
+            repaired = True
+            logger.info("demo_clip_repaired", clip_id=str(clip.id))
+
+    if repaired:
+        await db.commit()
+    return repaired
+
+
 async def seed_demo_project() -> None:
     """Create the demo project and its data if it does not already exist."""
     async with AsyncSessionLocal() as db:
@@ -144,7 +183,12 @@ async def seed_demo_project() -> None:
 
         existing = await db.get(Project, DEMO_PROJECT_ID)
         if existing is not None:
-            logger.debug("demo_project_already_seeded")
+            # Existing seeds may contain malformed clip render_specs; repair them
+            # idempotently without recreating the whole demo project.
+            if await _repair_demo_clips(db):
+                logger.info("demo_project_clips_repaired")
+            else:
+                logger.debug("demo_project_already_seeded")
             return
 
         upload_dir, output_dir = _demo_paths()
@@ -169,6 +213,7 @@ async def seed_demo_project() -> None:
             },
         )
         db.add(speaker)
+        await db.flush()
 
         # Demo brand template.
         brand_config = dict(DEFAULT_BRAND_CONFIG)
@@ -180,6 +225,7 @@ async def seed_demo_project() -> None:
             config=brand_config,
         )
         db.add(brand_template)
+        await db.flush()
 
         # Demo project.
         project = Project(
@@ -200,6 +246,7 @@ async def seed_demo_project() -> None:
             updated_at=datetime.now(UTC),
         )
         db.add(project)
+        await db.flush()
 
         # Demo upload asset.
         demo_video_rel = "demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4"
@@ -213,6 +260,7 @@ async def seed_demo_project() -> None:
             processed_at=datetime.now(UTC),
         )
         db.add(asset)
+        await db.flush()
 
         # Demo clips.
         for idx, clip_data in enumerate(DEMO_CLIPS, start=1):
@@ -220,13 +268,6 @@ async def seed_demo_project() -> None:
             clip = Clip(
                 project_id=DEMO_PROJECT_ID,
                 hook=clip_data["hook"],
-                script={
-                    "hook": clip_data["hook"],
-                    "duration_seconds": clip_data["duration"],
-                    "shots": [],
-                    "title_options": clip_data["title_options"],
-                    "music_mood": clip_data["music_mood"],
-                },
                 title_options=clip_data["title_options"],
                 music_mood=clip_data["music_mood"],
                 status="generated",
@@ -287,9 +328,18 @@ async def seed_demo_project() -> None:
         for derivative in derivative_rows:
             db.add(derivative)
 
-        # Demo messages.
-        user_message = Message(
+        # Demo chat session and messages.
+        chat_session = ChatSession(
+            user_id=user.id,
             project_id=DEMO_PROJECT_ID,
+            title="Demo project chat",
+            created_at=datetime.now(UTC),
+        )
+        db.add(chat_session)
+        await db.flush()
+
+        user_message = Message(
+            session_id=chat_session.id,
             role=MessageRole.USER,
             content=DEMO_USER_MESSAGE,
             created_at=datetime.now(UTC),
@@ -297,16 +347,9 @@ async def seed_demo_project() -> None:
         db.add(user_message)
 
         assistant_message = Message(
-            project_id=DEMO_PROJECT_ID,
+            session_id=chat_session.id,
             role=MessageRole.ASSISTANT,
             content="Here are the repurposed assets from your keynote.",
-            meta={
-                "status": "completed",
-                "results": {
-                    "clip_ids": [],
-                    "derivative_ids": [],
-                },
-            },
             created_at=datetime.now(UTC),
         )
         db.add(assistant_message)
