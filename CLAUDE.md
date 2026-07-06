@@ -2,6 +2,17 @@
 
 > This document records the frontend conventions and common pitfalls of the Repurposer project, to be followed by AI collaborators.
 
+## Key Docs
+
+Read these before touching a subsystem (check each doc's own status line — some describe proposed work not yet landed on `main`):
+
+- `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`; the canonical map of `services/generation.py` orchestration and the `app/agents/` registry.
+- `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table; supersedes ADR-019's filesystem-only mood library. Proposed; implementation task in `docs/tasks/music-asset-library.md`.
+- `docs/VIDEO_EDITOR.md` + ADR-016 — clip-spec is the **sole render contract**; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec.
+- `docs/DECISIONS.md` — ADRs (ADR-011 local FS + Range, ADR-016 renderer, ADR-017 Postgres `FOR UPDATE SKIP LOCKED` queue, ADR-021 Speaker, ADR-023 music asset library).
+- `docs/DATABASE_MIGRATIONS.md` — Alembic workflow; `migrations/versions/*.py` is part of the codebase and must be committed.
+- `docs/tasks/` — per-feature implementation briefs with acceptance criteria and explicit "Prohibited Behaviors"; read the relevant task before starting and respect its prohibitions.
+
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
 - UI components: shadcn/ui (base-ui version)
