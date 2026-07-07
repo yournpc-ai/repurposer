@@ -25,6 +25,7 @@ from app.config import settings
 # The seeded default user shares the "demo" storage prefix so MVP assets live
 # under the short, readable `assets/demo/` tree instead of a long UUID path.
 _DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+_DEMO_PROJECT_ID = "11111111-1111-1111-1111-111111111111"
 
 
 def _storage_prefix(user_id: UUID | str) -> str:
@@ -32,6 +33,10 @@ def _storage_prefix(user_id: UUID | str) -> str:
     if str(user_id) == _DEFAULT_USER_ID:
         return "demo"
     return str(user_id)
+
+
+def _is_demo_project(project_id: UUID | str) -> bool:
+    return str(project_id) == _DEMO_PROJECT_ID
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -70,8 +75,16 @@ def _relative_path(path: Path) -> str:
 
 
 def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> Path:
-    """Get upload directory for a project."""
-    return settings.asset_dir / _storage_prefix(user_id) / "uploads" / "projects" / str(project_id)
+    """Get upload directory for a project.
+
+    Demo project uses a flat ``uploads/`` directory without a ``projects/``
+    subfolder, matching cloud-storage conventions where source uploads are
+    independent objects rather than nested under a project.
+    """
+    prefix = _storage_prefix(user_id)
+    if _is_demo_project(project_id):
+        return settings.asset_dir / prefix / "uploads"
+    return settings.asset_dir / prefix / "uploads" / "projects" / str(project_id)
 
 
 def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> Path:
@@ -80,8 +93,16 @@ def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> Path:
 
 
 def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> Path:
-    """Get output directory for a project."""
-    return settings.asset_dir / _storage_prefix(user_id) / "outputs" / "projects" / str(project_id)
+    """Get output directory for a project.
+
+    Demo project uses a flat ``outputs/`` directory without a ``projects/``
+    subfolder so rendered clips and derivatives sit directly under
+    ``assets/demo/outputs/``.
+    """
+    prefix = _storage_prefix(user_id)
+    if _is_demo_project(project_id):
+        return settings.asset_dir / prefix / "outputs"
+    return settings.asset_dir / prefix / "outputs" / "projects" / str(project_id)
 
 
 def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> Path:

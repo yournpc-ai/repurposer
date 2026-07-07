@@ -28,6 +28,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetStatus,
     AssetType,
+    DerivativeType,
     ProjectStatus,
     WorkflowStatus,
 )
@@ -48,7 +49,13 @@ from app.services.brand import DEFAULT_BRAND_CONFIG
 from app.services.chat import seed_project_prompt
 from app.services.generation import run_generation
 from app.services.rendering import render_clip
-from app.services.storage import get_project_output_dir, get_project_upload_dir
+from app.services.storage import (
+    _relative_path,
+    get_project_output_dir,
+    get_project_upload_dir,
+    output_url,
+    resolve_file_path,
+)
 
 logger = structlog.get_logger()
 
@@ -153,9 +160,7 @@ async def _get_or_create_demo_asset(db, user_id: UUID, project_id: UUID) -> Asse
     )
     asset = result.scalar_one_or_none()
     if asset is None:
-        demo_video_rel = (
-            "demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4"
-        )
+        demo_video_rel = "demo/uploads/demo_talk.mp4"
         asset = Asset(
             user_id=user_id,
             project_id=project_id,
@@ -205,6 +210,53 @@ async def _render_demo_clips(db) -> None:
         await render_clip(clip.id)
         # render_clip uses its own session; refresh to see updated video_url.
         await db.refresh(clip)
+
+
+async def _rename_demo_outputs(db) -> None:
+    """Give demo rendered files human-readable names instead of UUIDs.
+
+    Demo outputs live flat under ``demo/outputs/projects/``; rename clips to
+    ``clip_1.mp4`` / ``clip_1.srt`` and the quote card to ``quote_1.png``.
+    """
+    output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
+
+    clip_result = await db.execute(
+        select(Clip).where(Clip.project_id == DEMO_PROJECT_ID).order_by(Clip.created_at)
+    )
+    for idx, clip in enumerate(clip_result.scalars().all(), start=1):
+        renamed = False
+        if clip.video_url:
+            old_path = resolve_file_path(clip.video_url.replace("/api/v1/outputs/", ""))
+            if old_path and old_path.is_file():
+                new_path = output_dir / f"clip_{idx}.mp4"
+                old_path.rename(new_path)
+                clip.video_url = output_url(_relative_path(new_path))
+                renamed = True
+        if clip.srt_url:
+            old_path = resolve_file_path(clip.srt_url.replace("/api/v1/outputs/", ""))
+            if old_path and old_path.is_file():
+                new_path = output_dir / f"clip_{idx}.srt"
+                old_path.rename(new_path)
+                clip.srt_url = output_url(_relative_path(new_path))
+                renamed = True
+        if renamed:
+            await db.commit()
+            logger.info("demo_clip_renamed", clip_id=str(clip.id), index=idx)
+
+    derivative_result = await db.execute(
+        select(Derivative)
+        .where(Derivative.project_id == DEMO_PROJECT_ID)
+        .where(Derivative.type == DerivativeType.QUOTE_CARD)
+    )
+    quote = derivative_result.scalar_one_or_none()
+    if quote and quote.image_url:
+        old_path = resolve_file_path(quote.image_url.replace("/api/v1/outputs/", ""))
+        if old_path and old_path.is_file():
+            new_path = output_dir / "quote_1.png"
+            old_path.rename(new_path)
+            quote.image_url = output_url(_relative_path(new_path))
+            await db.commit()
+            logger.info("demo_quote_renamed", derivative_id=str(quote.id))
 
 
 async def seed_demo_project() -> None:
@@ -313,6 +365,9 @@ async def seed_demo_project() -> None:
 
         # Render every generated clip so the results page is immediately playable.
         await _render_demo_clips(db)
+
+        # Rename demo outputs from UUIDs to human-readable names.
+        await _rename_demo_outputs(db)
 
         # Log final state.
         final_clips = await _count_clips(db)
