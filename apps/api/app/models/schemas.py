@@ -1018,3 +1018,54 @@ class LibraryItemResponse(BaseModel):
     created_at: datetime
     preview: str | None = None
     download_url: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Music library (DB-backed AI-generated pieces; see docs/MUSIC_ARCHITECTURE.md).
+# Audio bytes stay on disk under assets/music/{id}.<ext>; these schemas cover
+# the metadata API surface only.
+# ---------------------------------------------------------------------------
+
+
+class MusicResponse(BaseModel):
+    """A music library piece (metadata + stream URL; no audio bytes)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    mood: str
+    title: str
+    ext: str
+    url: str
+    size_bytes: int
+    duration_seconds: int | None = None
+    prompt: str | None = None
+    model: str | None = None
+    license: str | None = None
+    source_url: str | None = None
+    attribution: str | None = None
+    is_public: bool
+    created_at: datetime
+
+
+class MusicGenerateRequest(BaseModel):
+    """Request body for on-demand music generation from a prompt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str
+    mood: str | None = None
+    title: str | None = None
+    is_instrumental: bool = True
+
+
+class MusicMetadataUpdate(BaseModel):
+    """Editable metadata fields for a music piece (PUT)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    license: str | None = None
+    source_url: str | None = None
+    attribution: str | None = None
+    is_public: bool | None = None

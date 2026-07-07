@@ -1,6 +1,7 @@
 """MiniMax M3 client."""
 
 import re
+from dataclasses import dataclass
 from typing import TypeVar
 
 import httpx
@@ -13,6 +14,25 @@ from app.config import settings
 logger = structlog.get_logger()
 
 T = TypeVar("T", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class MusicGenerationResult:
+    """Result of a MiniMax music_generation call.
+
+    ``audio_url`` is set when ``output_format="url"`` (expires after ~24h, so the
+    caller must download the bytes immediately); ``audio_hex`` is set when
+    ``output_format="hex"``. ``duration_ms`` / ``size_bytes`` come from
+    ``extra_info`` when the API populates them.
+    """
+
+    audio_url: str | None
+    audio_hex: str | None
+    duration_ms: int | None
+    size_bytes: int | None
+    sample_rate: int | None
+    generation_id: str | None  # MiniMax trace_id
+    status: int  # 1 = in progress, 2 = completed
 
 # M3 may emit a <think>...</think> reasoning preamble before the JSON payload,
 # even with thinking disabled. Strip it so JSON parsing doesn't choke on it.
@@ -140,6 +160,77 @@ class MiniMaxClient:
         if response_format == "base64":
             return data.get("data", {}).get("image_base64", []) or []
         return data.get("data", {}).get("image_urls", []) or []
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def generate_music(
+        self,
+        prompt: str,
+        *,
+        model: str = "music-2.6-free",
+        is_instrumental: bool = True,
+        output_format: str = "url",
+        audio_format: str = "mp3",
+    ) -> MusicGenerationResult:
+        """Generate a music piece with MiniMax (``/v1/music_generation``).
+
+        The native API is synchronous: the request blocks until the audio is
+        ready (``data.status == 2``). ``output_format="url"`` returns a
+        short-lived (~24h) URL the caller must download immediately; ``"hex"``
+        returns the audio bytes inline. Defaults to ``url`` so bytes stay out
+        of the JSON response, then ``services/music_generation`` downloads and
+        persists them under ``assets/music/``.
+        """
+        if not self.api_key:
+            raise MiniMaxError("MINIMAX_API_KEY not configured")
+
+        payload: dict = {
+            "model": model,
+            "prompt": prompt,
+            "is_instrumental": is_instrumental,
+            "output_format": output_format,
+            "audio_setting": {"format": audio_format},
+        }
+
+        async with httpx.AsyncClient(timeout=180) as client:
+            response = await client.post(
+                f"{self.base_url}/music_generation",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        base_resp = data.get("base_resp") or {}
+        if base_resp.get("status_code") != 0:
+            raise MiniMaxError(
+                f"MiniMax music generation failed: {base_resp.get('status_msg')}"
+            )
+
+        inner = data.get("data") or {}
+        extra = data.get("extra_info") or {}
+        status = int(inner.get("status", 0))
+        if status != 2:
+            raise MiniMaxError(
+                f"MiniMax music generation did not complete (status={status})"
+            )
+
+        audio = inner.get("audio")
+        return MusicGenerationResult(
+            audio_url=audio if output_format == "url" else None,
+            audio_hex=audio if output_format == "hex" else None,
+            duration_ms=extra.get("music_duration"),
+            size_bytes=extra.get("music_size"),
+            sample_rate=extra.get("music_sample_rate"),
+            generation_id=data.get("trace_id"),
+            status=status,
+        )
 
 
 # Module-level singleton for callers that don't need a custom client.
