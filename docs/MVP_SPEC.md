@@ -82,7 +82,7 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 /projects/$id/clips/$clipId → Clip editor（transcript/trim/caption 精修）
 ```
 
-`/projects`（列表页）重定向到 `/library`。
+`/projects`（不带参数的列表页）**不在 MVP 路由内**；项目入口通过 Home 的 Recent projects 和 Library 覆盖。
 `/c/$projectId` 之前已删除，确认不存在。
 
 ---
