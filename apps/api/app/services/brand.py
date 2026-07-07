@@ -7,14 +7,17 @@ bake it into the clip-spec, so the render service / preview never touch the DB.
 """
 
 from typing import Any, Literal
+from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import BrandContentStrategy, ClipBrand, ClipMusic
-from app.models.tables import BrandTemplate, User
-from app.services.storage import music_url
+from app.models.tables import BrandTemplate, Music, User
+from app.services.music import get_music, get_music_by_mood
+from app.services.storage import music_stream_url
 
 # Seeded when the DB has no brand templates so generation/preview always have a
 # usable default. Mirrors the brand-template UI's PRESET_1.
@@ -35,6 +38,8 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "outroText": "",
     "musicEnabled": False,
     "musicMood": "calm",
+    "musicId": None,
+    "musicGainDb": -18.0,
     "removeFiller": False,
     "keywordHighlighter": True,
     "voice": "professional",
@@ -130,26 +135,36 @@ def content_strategy_from_template(
     )
 
 
-def music_from_template(config: dict[str, Any] | None) -> ClipMusic:
-    """Map a BrandTemplate.config's music settings to a ClipMusic block.
+async def music_from_template(
+    db: AsyncSession,
+    config: dict[str, Any] | None,
+) -> ClipMusic:
+    """Resolve a BrandTemplate's default music into a ClipMusic block (DB-backed).
 
-    ``musicMood`` (calm/uplifting/corporate/none) resolves to a built-in track
-    URL via the storage seam; ``musicEnabled`` toggles playback. ``none`` or a
-    missing mood yields a disabled, track-less block (renderer plays no audio).
+    Reads ``musicId`` (a Music row UUID string) first, falling back to the
+    legacy ``musicMood`` key (calm/uplifting/corporate/none) for templates saved
+    before the rename. ``musicEnabled`` toggles playback; ``musicGainDb`` sets
+    the gain. A missing/unknown piece yields a disabled, track-less block.
     """
     cfg = config or {}
-    mood = cfg.get("musicMood")
-    if not isinstance(mood, str) or mood in ("", "none"):
-        return ClipMusic()
+    gain = _gain_db(cfg.get("musicGainDb"))
+    enabled = bool(cfg.get("musicEnabled"))
+    piece = await resolve_music_ref(db, cfg.get("musicId")) or await resolve_music_ref(
+        db, cfg.get("musicMood")
+    )
+    if piece is None:
+        return ClipMusic(enabled=enabled, gain_db=gain)
     return ClipMusic(
-        track_id=mood,
-        url=music_url(mood),
-        enabled=bool(cfg.get("musicEnabled")),
+        music_id=str(piece.id),
+        url=music_stream_url(piece.id),
+        enabled=enabled,
+        gain_db=gain,
     )
 
 
-# Built-in mood library keys (data/music/<mood>.<ext>). Kept in sync with the
-# brand-template UI's MOODS and data/music/README.md.
+# Built-in mood library keys (the 3 default-catalog moods). The DB ``music``
+# table is the source of truth for which pieces exist; this set is the
+# free-text normalization layer (the Clip Agent may emit a synonym).
 _LIBRARY_MOODS = {"calm", "uplifting", "corporate"}
 
 # Normalize a free-text mood (e.g. the script agent's suggestion, which may be
@@ -184,14 +199,72 @@ def normalize_mood(mood: str | None) -> str | None:
     return _MOOD_SYNONYMS.get(key) or _MOOD_SYNONYMS.get(mood.strip())
 
 
-def music_from_mood(mood: str | None) -> ClipMusic:
-    """ClipMusic from a clip's own mood suggestion (fallback when no brand template).
+def _gain_db(raw: Any) -> float:
+    """Coerce a config gain value to a float, defaulting to -18 dB."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return float(raw)
+    return -18.0
 
-    Normalizes to a library key and enables playback; unknown moods yield a
-    disabled, track-less block. Playback still requires a track file present
-    (see data/music/README.md) — otherwise the endpoint 404s and it's silent.
+
+async def resolve_music_ref(db: AsyncSession, ref: Any) -> Music | None:
+    """Resolve a music reference (UUID string or mood key) to a Music row.
+
+    Tries ``ref`` as a UUID first (the new contract), then as a mood key (legacy
+    / agent-friendly). ``None``/empty/unknown -> None.
+    """
+    if not isinstance(ref, str) or not ref.strip():
+        return None
+    ref = ref.strip()
+    if ref.lower() == "none":
+        return None
+    try:
+        return await get_music(db, UUID(ref))
+    except ValueError:
+        pass
+    key = normalize_mood(ref)
+    if key is None:
+        return None
+    return await get_music_by_mood(db, key)
+
+
+async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
+    """ClipMusic from a clip's own mood suggestion (fallback when no template).
+
+    Resolves the mood to a Music row and enables playback; unknown moods (or no
+    matching row) yield a disabled, track-less block.
     """
     key = normalize_mood(mood)
     if key is None:
         return ClipMusic()
-    return ClipMusic(track_id=key, url=music_url(key), enabled=True)
+    piece = await get_music_by_mood(db, key)
+    if piece is None:
+        return ClipMusic()
+    return ClipMusic(
+        music_id=str(piece.id), url=music_stream_url(piece.id), enabled=True
+    )
+
+
+async def music_from_plan(
+    db: AsyncSession,
+    plan: Any,
+    brand_config: dict[str, Any] | None,
+) -> ClipMusic:
+    """Per-clip music: the Clip Agent's pick wins, else the brand default.
+
+    Selection (see docs/MUSIC_ARCHITECTURE.md §8.3):
+    1. ``plan.music_id`` (UUID or mood key) when ``plan.music_enabled`` — the
+       agent's per-clip choice, with ``plan.music_gain_db`` applied.
+    2. Otherwise the brand template default (``music_from_template``), which
+       honors ``musicEnabled``/``musicId``/``musicGainDb`` (and legacy musicMood).
+    3. If neither resolves, a disabled, track-less block is returned.
+    """
+    if getattr(plan, "music_enabled", True) and getattr(plan, "music_id", None):
+        piece = await resolve_music_ref(db, plan.music_id)
+        if piece is not None:
+            return ClipMusic(
+                music_id=str(piece.id),
+                url=music_stream_url(piece.id),
+                enabled=True,
+                gain_db=float(getattr(plan, "music_gain_db", -18.0) or -18.0),
+            )
+    return await music_from_template(db, brand_config)

@@ -9,6 +9,7 @@ import base64
 import mimetypes
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -39,6 +40,7 @@ from app.models.tables import (
     BrandTemplate,
     Clip,
     Derivative,
+    Music,
     Project,
     Speaker,
     WorkflowRun,
@@ -46,8 +48,8 @@ from app.models.tables import (
 from app.services.brand import (
     brand_from_template,
     content_strategy_from_template,
-    music_from_mood,
-    music_from_template,
+    music_from_plan,
+    resolve_music_ref,
 )
 from app.services.clip_spec import build_clip_spec
 from app.services.derivative_dispatch import generate_derivative
@@ -540,6 +542,16 @@ async def run_generation(run_id: UUID) -> None:
                 else None
             )
 
+            # Resolve the brand template's default music piece (if any) to its
+            # UUID so the Clip Agent can reference it by id alongside the library.
+            brand_music_id: str | None = None
+            if bt is not None:
+                bt_cfg: dict[str, Any] = bt.config or {}
+                brand_piece = await resolve_music_ref(
+                    db, bt_cfg.get("musicId") or bt_cfg.get("musicMood")
+                )
+                brand_music_id = str(brand_piece.id) if brand_piece is not None else None
+
             # Assemble the shared generation context once. All agents receive this
             # same object so that speaker style, brand voice, tone, and user
             # instruction are applied consistently across every output.
@@ -552,6 +564,7 @@ async def run_generation(run_id: UUID) -> None:
                 brand_strategy=content_strategy,
                 target_language=target_language,
                 instruction=instruction,
+                brand_music_id=brand_music_id,
             )
 
             requested_derivative_types = [
@@ -618,6 +631,24 @@ async def run_generation(run_id: UUID) -> None:
             if "clips" in outputs:
                 run.current_step = "clips"
                 await db.commit()
+                # Surface the public music library to the Clip Agent so it can
+                # select a piece per clip by id (no MiniMax call here — see
+                # docs/MUSIC_ARCHITECTURE.md §7.1 / §8.3).
+                music_rows = (
+                    await db.execute(
+                        select(Music)
+                        .where(Music.is_public.is_(True))
+                        .order_by(Music.created_at.desc())
+                    )
+                ).scalars().all()
+                music_pieces: list[dict[str, str]] = [
+                    {
+                        "id": str(m.id),
+                        "mood": str(m.mood),
+                        "title": str(m.title),
+                    }
+                    for m in music_rows
+                ]
                 plans = await clip_agent.generate(
                     materials=materials,
                     context=generation_context,
@@ -629,6 +660,7 @@ async def run_generation(run_id: UUID) -> None:
                         if render_source is not None
                         else None
                     ),
+                    music_pieces=music_pieces,
                 )
                 # Bake the chosen brand template into each clip's render_spec so
                 # the renderer/preview show it without DB access (see ADR-016).
@@ -644,15 +676,10 @@ async def run_generation(run_id: UUID) -> None:
                 clip_ids: list[UUID] = []
                 for plan in plans.clips[:clip_count]:
                     segment = plan.to_segment()
-                    # Music: a brand template (if any) is the source of truth —
-                    # respect it fully, including an explicit "off". With no
-                    # template, fall back to the clip's own mood suggestion so a
-                    # generated clip still carries music (track file permitting).
-                    music = (
-                        music_from_template(bt.config)
-                        if bt is not None
-                        else music_from_mood(plan.music_mood)
-                    )
+                    # Music: the Clip Agent's per-clip pick (plan.music_id) wins;
+                    # otherwise fall back to the brand template's default. No
+                    # MiniMax call — pieces are pre-generated library assets.
+                    music = await music_from_plan(db, plan, bt.config if bt else None)
                     # render_spec = the actual render contract (None for
                     # text-only projects).
                     spec = (

@@ -5,7 +5,15 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, computed_field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    computed_field,
+    field_validator,
+)
 
 
 class MediaInputType(StrEnum):
@@ -432,6 +440,14 @@ class ClipPlan(BaseModel):
     virality_score: int = Field(default=50, ge=1, le=100)
     duration_seconds: int = Field(default=30, ge=5, le=120)
     music_mood: str = "calm"
+    # Music selection (see docs/MUSIC_ARCHITECTURE.md §8.3): the Clip Agent picks
+    # one piece per clip. ``music_id`` is the Music row's UUID (string) — or, as a
+    # robust fallback, a mood key (calm/uplifting/corporate) the orchestrator
+    # resolves server-side. ``music_enabled``/``music_gain_db`` are per-clip
+    # overrides; when ``music_id`` is unset the brand template default is used.
+    music_id: str | None = None
+    music_enabled: bool = True
+    music_gain_db: float = -18.0
     visual_notes: str = ""
     title_options: list[str] = Field(default_factory=list)
 
@@ -659,9 +675,14 @@ class ClipTitle(BaseModel):
 class ClipMusic(BaseModel):
     """Optional background music."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    track_id: str | None = None  # mood key / provenance (e.g. "calm")
+    # The Music row's UUID (string). Accepts a legacy ``track_id`` key on input so
+    # existing render_spec JSON (pre-rename) still deserializes, but the init
+    # param and serialized field are both ``music_id`` (see docs/MUSIC_ARCHITECTURE.md).
+    music_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("music_id", "track_id")
+    )
     url: str | None = None  # resolved track URL (storage seam); None = no track
     enabled: bool = False
     gain_db: float = -18.0
@@ -699,6 +720,9 @@ class GenerationContext(BaseModel):
     brand_strategy: BrandContentStrategy | None = None
     target_language: str = "en"
     instruction: str | None = None
+    # Brand template's default music piece (Music.id as string); the Clip Agent
+    # uses this as the default unless a clip's content suggests otherwise.
+    brand_music_id: str | None = None
 
 
 class DerivativePlan(BaseModel):

@@ -17,7 +17,7 @@ export const DEFAULT_SPEC: ClipSpec = {
   caption_track: [],
   caption_style_preset: "clean-bottom",
   title: { text: "", enabled: false },
-  music: { track_id: null, enabled: false, gain_db: -18 },
+  music: { music_id: null, enabled: false, gain_db: -18 },
   brand_ref: null,
   target_language: "en",
 };

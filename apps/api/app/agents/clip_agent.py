@@ -27,6 +27,7 @@ class ClipAgent(MiniMaxAgentBase):
         media_inputs: list[MediaInput] | None = None,
         clip_count: int = 3,
         source_words: list[dict[str, Any]] | None = None,
+        music_pieces: list[dict[str, str]] | None = None,
     ) -> ClipPlans:
         """Plan clips from text materials and/or raw media.
 
@@ -38,6 +39,8 @@ class ClipAgent(MiniMaxAgentBase):
             clip_count: Number of clips to plan.
             source_words: Optional ASR word-level timestamps for the primary source
                 so the agent can output exact ``start_seconds`` / ``end_seconds``.
+            music_pieces: Available music library pieces (``id``/``mood``/
+                ``title``/``description``) the agent selects from per clip.
 
         Returns:
             ClipPlans containing analysis and a list of ClipPlan objects.
@@ -57,6 +60,7 @@ class ClipAgent(MiniMaxAgentBase):
             context=context.model_dump(),
             content_plan=content_plan.model_dump(),
             source_words=source_words or [],
+            music_pieces=music_pieces or [],
         )
 
         messages: list[dict[str, Any]] = [

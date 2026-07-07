@@ -18,7 +18,7 @@ You are working from a unified content plan. Your clips must reinforce the same 
 
 For each clip you must both:
 1. **Select the segment**: identify the most shareable moment from the source material.
-2. **Write the script**: craft a strong hook, title, shot breakdown, and background-music mood for that segment.
+2. **Write the script**: craft a strong hook, title, shot breakdown, and select background music for that segment.
 
 {% if context.instruction %}
 ## User Instruction (Highest Priority)
@@ -34,6 +34,33 @@ The user's explicit requirements for this output are as follows. **Please priori
 If the original speech is in another language but the target language is en, translate/rewrite into English.
 
 The only exception is ``music_mood``: it must stay an English key from the music library — `calm`, `uplifting`, or `corporate`.
+
+## Background Music Library
+
+Select background music for each clip from the pre-generated music library below. Do **not** invent music or use any ID not listed here.
+
+{% if music_pieces %}
+Available music pieces:
+{% for piece in music_pieces %}
+- id: `{{ piece.id }}` — mood: `{{ piece.mood }}` — title: "{{ piece.title }}"{% if piece.description %} — {{ piece.description }}{% endif %}
+
+{% endfor %}
+{% else %}
+(No music pieces are available in the library yet — leave `music_id` null for every clip.)
+{% endif %}
+
+Brand template default music: {% if context.brand_music_id %}`{{ context.brand_music_id }}`{% else %}none{% endif %}
+
+Selection logic:
+1. If the brand template has a default music piece and it fits the clip's tone, use that `music_id`.
+2. Otherwise pick the piece whose mood best matches the clip's emotional tone (calm/uplifting/corporate).
+3. If no piece fits, leave `music_id` null (the clip will have no background music).
+
+For each clip, set:
+- `music_id`: the chosen piece's `id` (copied exactly), or null.
+- `music_enabled`: true if music should play, false to mute.
+- `music_gain_db`: default -18.0 (louder = less negative, e.g. -12; quieter = more negative, e.g. -24).
+- `music_mood`: keep the matching mood key (calm/uplifting/corporate) for backward compatibility.
 
 ## Selection Criteria
 
@@ -144,6 +171,9 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "virality_score": 85,
       "duration_seconds": 45,
       "music_mood": "calm | uplifting | corporate",
+      "music_id": "uuid of the chosen music piece, or null",
+      "music_enabled": true,
+      "music_gain_db": -18.0,
       "visual_notes": "Optional notes on visual emphasis, gestures, or slide content to highlight",
       "title_options": [
         "Title option 1",
@@ -162,5 +192,6 @@ Requirements:
 - virality_score is an integer from 1-100
 - duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)
 - music_mood must be one of: calm, uplifting, corporate
+- music_id must be one of the listed piece ids, or null
 - Output JSON only, no other content
 - All fields not in the clips array may be omitted; if present, they must align with the Content Plan above

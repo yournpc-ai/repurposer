@@ -73,7 +73,10 @@ export interface Point {
 }
 
 export interface ClipMusic {
-  track_id: string | null;
+  /** The Music row's UUID (string). */
+  music_id?: string | null;
+  /** @deprecated use music_id; kept so old render_spec JSON still type-checks. */
+  track_id?: string | null;
   url?: string | null;
   enabled: boolean;
   gain_db: number;

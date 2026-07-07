@@ -176,7 +176,7 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
     // Music is intentionally OFF in the preview: the mood still saves to the
     // template (and drives real renders), but a missing track file would 404 in
     // the browser <Player>. MVP renders are silent anyway (no bundled tracks).
-    music: { track_id: null, url: null, enabled: false, gain_db: -18 },
+    music: { music_id: null, url: null, enabled: false, gain_db: -18 },
     brand: templateToBrand(tpl),
     brand_ref: null,
     target_language: "en",

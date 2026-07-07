@@ -254,6 +254,13 @@ def music_url(mood: str | None) -> str | None:
     return f"/api/v1/music/{mood}"
 
 
+def music_stream_url(music_id: UUID | str | None) -> str | None:
+    """Storage-seam URL for a Music row's audio (stream-by-UUID endpoint)."""
+    if music_id is None or str(music_id) == "":
+        return None
+    return f"/api/v1/music/{music_id}/stream"
+
+
 def delete_file(relative_path: str | None) -> None:
     """Delete a file by its stored relative path."""
     path = resolve_file_path(relative_path)
