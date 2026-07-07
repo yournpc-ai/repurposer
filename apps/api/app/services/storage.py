@@ -22,6 +22,17 @@ from uuid import UUID
 
 from app.config import settings
 
+# The seeded default user shares the "demo" storage prefix so MVP assets live
+# under the short, readable `assets/demo/` tree instead of a long UUID path.
+_DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def _storage_prefix(user_id: UUID | str) -> str:
+    """Return the top-level directory name for a user's assets."""
+    if str(user_id) == _DEFAULT_USER_ID:
+        return "demo"
+    return str(user_id)
+
 
 def _sanitize_filename(filename: str) -> str:
     """Sanitize upload filename to prevent path traversal.
@@ -60,17 +71,17 @@ def _relative_path(path: Path) -> str:
 
 def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> Path:
     """Get upload directory for a project."""
-    return settings.asset_dir / str(user_id) / "uploads" / "projects" / str(project_id)
+    return settings.asset_dir / _storage_prefix(user_id) / "uploads" / "projects" / str(project_id)
 
 
 def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> Path:
     """Get upload directory for a speaker."""
-    return settings.asset_dir / str(user_id) / "speakers" / str(speaker_id)
+    return settings.asset_dir / _storage_prefix(user_id) / "speakers" / str(speaker_id)
 
 
 def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> Path:
     """Get output directory for a project."""
-    return settings.asset_dir / str(user_id) / "outputs" / "projects" / str(project_id)
+    return settings.asset_dir / _storage_prefix(user_id) / "outputs" / "projects" / str(project_id)
 
 
 def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> Path:

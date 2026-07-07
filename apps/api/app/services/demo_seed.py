@@ -1,35 +1,54 @@
-"""Idempotent demo project seeding.
+"""Idempotent demo project seeding using the real generation pipeline.
 
 The demo project lets first-time visitors see a fully populated results page
 without uploading their own media. It reuses the default user and a fixed
 project UUID so it can be safely re-run on every app startup.
 
-Media files are expected at:
-  assets/demo/uploads/projects/{DEMO_PROJECT_ID}/demo_talk.mp4
-  assets/demo/outputs/projects/{DEMO_PROJECT_ID}/clip_1.mp4
-  assets/demo/outputs/projects/{DEMO_PROJECT_ID}/clip_2.mp4
-  assets/demo/outputs/projects/{DEMO_PROJECT_ID}/clip_3.mp4
-  assets/demo/outputs/projects/{DEMO_PROJECT_ID}/quote_1.png
-  assets/demo/outputs/projects/{DEMO_PROJECT_ID}/quote_2.png
+On first run the seed:
+  1. Creates a demo speaker, brand template, project and video asset.
+  2. Runs ASR on ``assets/demo/uploads/projects/{uuid}/demo_talk.mp4``.
+  3. Seeds the original prompt into a project-scoped chat session.
+  4. Runs the same ``run_generation`` orchestrator the worker uses to create
+     clips, LinkedIn post, quote cards and summary.
+  5. Renders each clip through the Remotion render service so the results page
+     is immediately playable.
 
-The seed function creates placeholder quote-card PNGs from the app logo if they
-do not already exist. Demo video files must be supplied manually (see README).
+Subsequent startups are no-ops unless the outputs were deleted, in which case
+the seed regenerates them.
 """
 
-from copy import deepcopy
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import AssetStatus, AssetType, DerivativeType, MessageRole, ProjectStatus
-from app.models.tables import Asset, BrandTemplate, ChatSession, Clip, Derivative, Message, Project, Speaker, User
+from app.models.schemas import (
+    AssetStatus,
+    AssetType,
+    ProjectStatus,
+    WorkflowStatus,
+)
+from app.models.tables import (
+    Asset,
+    BrandTemplate,
+    ChatSession,
+    Clip,
+    Derivative,
+    Message,
+    Project,
+    Speaker,
+    User,
+    WorkflowRun,
+)
+from app.services.asset_processing import process_asset
 from app.services.brand import DEFAULT_BRAND_CONFIG
-from app.services.storage import get_project_output_dir, get_project_upload_dir, output_url, stream_url
+from app.services.chat import seed_project_prompt
+from app.services.generation import run_generation
+from app.services.rendering import render_clip
+from app.services.storage import get_project_output_dir, get_project_upload_dir
 
 logger = structlog.get_logger()
 
@@ -38,85 +57,13 @@ DEMO_SPEAKER_ID = UUID("22222222-2222-2222-2222-222222222222")
 DEMO_BRAND_TEMPLATE_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 DEMO_USER_MESSAGE = (
-    "Turn this AI ethics keynote into a LinkedIn post, quote cards, "
-    "a multi-language summary, and three short clips."
+    "Turn this resilience talk into three short vertical clips, a LinkedIn post, "
+    "quote cards, and a multi-language summary."
 )
 
-DEMO_LINKEDIN_POST = {
-    "content": (
-        "AI ethics is not just about regulation—it's about designing systems that "
-        "respect human agency from day one.\n\n"
-        "Three questions every research team should ask before shipping:\n"
-        "1. Who is harmed if this model fails silently?\n"
-        "2. Can affected people contest the decision?\n"
-        "3. Have we documented the trade-offs in plain language?\n\n"
-        "The best technical work embeds accountability by default."
-    ),
-    "hashtags": ["#AIEthics", "#ResponsibleAI", "#ResearchLeadership"],
-}
 
-DEMO_SUMMARY = {
-    "tldr": (
-        "This keynote argues that AI ethics should be treated as a first-class "
-        "engineering constraint, not a post-hoc compliance check."
-    ),
-    "key_points": [
-        "Regulation is necessary but insufficient for trustworthy systems.",
-        "Human agency and contestability must be designed in from the start.",
-        "Documentation of trade-offs should be written for non-technical audiences.",
-        "Research teams benefit from treating ethics as a creative constraint.",
-    ],
-    "full": (
-        "The speaker opens by contrasting two historical framings of technology "
-        "risk: reactive regulation after harm, and proactive design that embeds "
-        "values. The talk argues that contemporary AI systems are too complex and "
-        "too consequential for the former.\n\n"
-        "Instead, the speaker proposes three operational principles for research "
-        "teams: identify silent-failure harms, build contestability into model "
-        "outputs, and document trade-offs in plain language. Each principle is "
-        "illustrated with concrete examples from public-sector deployments.\n\n"
-        "The closing call to action invites institutions to publish lightweight "
-        "ethics impact statements alongside technical papers, turning accountability "
-        "into a reproducible habit rather than a one-off review."
-    ),
-}
-
-DEMO_QUOTES = [
-    {
-        "quote": "AI ethics is not a compliance checkbox. It is a design constraint.",
-        "attribution": "Dr. Elena Rossi",
-    },
-    {
-        "quote": "The hardest failures are the ones that make no sound.",
-        "attribution": "Dr. Elena Rossi",
-    },
-]
-
-DEMO_CLIPS = [
-    {
-        "hook": "AI ethics is not just about regulation",
-        "duration": 37,
-        "title_options": ["Regulation is not enough", "Design ethics in"],
-        "music_mood": "calm",
-    },
-    {
-        "hook": "Who is harmed if this model fails silently?",
-        "duration": 52,
-        "title_options": ["Silent failures", "Ask this before shipping"],
-        "music_mood": "calm",
-    },
-    {
-        "hook": "The best technical work embeds accountability",
-        "duration": 28,
-        "title_options": ["Accountability by default", "Engineer for agency"],
-        "music_mood": "calm",
-    },
-]
-
-
-def _demo_paths() -> tuple[Path, Path]:
+def _demo_paths() -> tuple:
     """Return upload and output directories for the demo project."""
-
     upload_dir = get_project_upload_dir(DEMO_PROJECT_ID, "demo")
     output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -124,235 +71,257 @@ def _demo_paths() -> tuple[Path, Path]:
     return upload_dir, output_dir
 
 
-def _ensure_quote_placeholders(output_dir: Path) -> None:
-    """Copy the web app logo as a placeholder quote-card PNG if none exists."""
-    repo_root = Path(__file__).resolve().parents[3]
-    logo_path = repo_root / "apps" / "web" / "public" / "logo512.png"
-    for idx in range(1, len(DEMO_QUOTES) + 1):
-        target = output_dir / f"quote_{idx}.png"
-        if not target.exists() and logo_path.exists():
-            target.write_bytes(logo_path.read_bytes())
+async def _get_or_create_demo_user(db) -> User | None:
+    user = await db.get(User, UUID(DEFAULT_USER_ID))
+    if user is None:
+        logger.warning("demo_seed_default_user_missing")
+    return user
 
 
-async def _repair_demo_clips(db) -> bool:
-    """Repair demo clips whose render_spec has a string 'None' asset_id.
-
-    Early seeds stored the literal string 'None' when the asset id was not yet
-    resolved. This updates those clips to point at the demo video asset so the
-    ProjectResultsResponse serializer can validate the render_spec.
-    """
-    asset_result = await db.execute(
-        select(Asset).where(
-            Asset.project_id == DEMO_PROJECT_ID,
-            Asset.type == AssetType.VIDEO,
-        )
-    )
-    asset = asset_result.scalar_one_or_none()
-    if asset is None:
-        return False
-
-    clip_result = await db.execute(
-        select(Clip).where(Clip.project_id == DEMO_PROJECT_ID)
-    )
-    clips = clip_result.scalars().all()
-    repaired = False
-    for clip in clips:
-        spec = clip.render_spec
-        if not spec:
-            continue
-        source = spec.get("source") or {}
-        if source.get("asset_id") == "None":
-            new_spec = deepcopy(spec)
-            new_spec["source"]["asset_id"] = str(asset.id)
-            clip.render_spec = new_spec
-            repaired = True
-            logger.info("demo_clip_repaired", clip_id=str(clip.id))
-
-    if repaired:
-        await db.commit()
-    return repaired
-
-
-async def seed_demo_project() -> None:
-    """Create the demo project and its data if it does not already exist."""
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, UUID(DEFAULT_USER_ID))
-        if user is None:
-            logger.warning("demo_seed_default_user_missing")
-            return
-
-        existing = await db.get(Project, DEMO_PROJECT_ID)
-        if existing is not None:
-            # Existing seeds may contain malformed clip render_specs; repair them
-            # idempotently without recreating the whole demo project.
-            if await _repair_demo_clips(db):
-                logger.info("demo_project_clips_repaired")
-            else:
-                logger.debug("demo_project_already_seeded")
-            return
-
-        upload_dir, output_dir = _demo_paths()
-        _ensure_quote_placeholders(output_dir)
-
-        # Demo speaker.
+async def _get_or_create_demo_speaker(db, user_id: UUID) -> Speaker:
+    speaker = await db.get(Speaker, DEMO_SPEAKER_ID)
+    if speaker is None:
         speaker = Speaker(
             id=DEMO_SPEAKER_ID,
-            user_id=user.id,
-            name="Dr. Elena Rossi",
-            title="Professor of AI Ethics, University of Geneva",
+            user_id=user_id,
+            name="Alex Morgan",
+            title="Leadership Coach & Resilience Speaker",
             language="en",
             persona={
-                "core_values": ["accountability", "human agency", "clarity"],
-                "sentence_style": "concise, declarative, academic but accessible",
-                "emotional_tone": "rational",
+                "core_values": ["resilience", "clarity", "decisive action"],
+                "sentence_style": "direct, conversational, story-driven",
+                "emotional_tone": "passionate",
                 "typical_hooks": [
-                    "AI ethics is not just about regulation",
-                    "The hardest failures are silent",
+                    "How hard can it be?",
+                    "Move on, keep moving",
                 ],
                 "avoid_words": ["leverage", "synergy", "disrupt"],
             },
         )
         db.add(speaker)
         await db.flush()
+    return speaker
 
-        # Demo brand template.
+
+async def _get_or_create_demo_brand(db, user_id: UUID) -> BrandTemplate:
+    brand = await db.get(BrandTemplate, DEMO_BRAND_TEMPLATE_ID)
+    if brand is None:
         brand_config = dict(DEFAULT_BRAND_CONFIG)
-        brand_config["cta"] = "Read the full keynote →"
-        brand_template = BrandTemplate(
+        brand_config["cta"] = "Watch the full talk →"
+        brand = BrandTemplate(
             id=DEMO_BRAND_TEMPLATE_ID,
-            user_id=user.id,
+            user_id=user_id,
             name="Demo Brand",
             config=brand_config,
         )
-        db.add(brand_template)
+        db.add(brand)
         await db.flush()
+    return brand
 
-        # Demo project.
+
+async def _get_or_create_demo_project(db, user_id: UUID, speaker_id: UUID) -> Project:
+    project = await db.get(Project, DEMO_PROJECT_ID)
+    if project is None:
         project = Project(
             id=DEMO_PROJECT_ID,
-            user_id=user.id,
-            speaker_id=DEMO_SPEAKER_ID,
-            title="Example: AI Ethics Keynote",
-            event_name="AI Ethics Summit 2026",
+            user_id=user_id,
+            speaker_id=speaker_id,
+            title="Example: Resilience Talk",
+            event_name="Resilience Summit 2026",
             language="en",
-            status=ProjectStatus.COMPLETED,
+            status=ProjectStatus.DRAFT,
             tone_snapshot={
-                "academic_vs_casual": 0.7,
+                "academic_vs_casual": 0.3,
                 "rational_vs_passionate": 0.6,
                 "concise_vs_detailed": 0.5,
-                "audience": "academic",
+                "audience": "industry",
             },
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
         db.add(project)
         await db.flush()
+    return project
 
-        # Demo upload asset.
-        demo_video_rel = "demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4"
+
+async def _get_or_create_demo_asset(db, user_id: UUID, project_id: UUID) -> Asset:
+    result = await db.execute(
+        select(Asset).where(
+            Asset.project_id == DEMO_PROJECT_ID,
+            Asset.type == AssetType.VIDEO,
+        )
+    )
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        demo_video_rel = (
+            "demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4"
+        )
         asset = Asset(
-            user_id=user.id,
-            project_id=DEMO_PROJECT_ID,
+            user_id=user_id,
+            project_id=project_id,
             type=AssetType.VIDEO,
             file_url=demo_video_rel,
-            processing_status=AssetStatus.COMPLETED,
-            duration_seconds=480,
-            processed_at=datetime.now(UTC),
+            processing_status=AssetStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         db.add(asset)
         await db.flush()
+    return asset
 
-        # Demo clips.
-        for idx, clip_data in enumerate(DEMO_CLIPS, start=1):
-            video_rel = f"demo/outputs/projects/{DEMO_PROJECT_ID}/clip_{idx}.mp4"
-            clip = Clip(
-                project_id=DEMO_PROJECT_ID,
-                hook=clip_data["hook"],
-                title_options=clip_data["title_options"],
-                music_mood=clip_data["music_mood"],
-                status="generated",
-                video_url=output_url(video_rel),
-                duration=clip_data["duration"],
-                language="en",
-                render_spec={
-                    "source": {
-                        "asset_id": str(asset.id),
-                        "kind": "video",
-                        "url": stream_url(demo_video_rel),
-                    },
-                    "aspect": "9:16",
-                    "segments": [],
-                    "caption_track": [],
-                    "caption_style_preset": "clean-bottom",
-                },
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-            )
-            db.add(clip)
 
-        # Demo derivatives.
-        derivative_rows = [
-            Derivative(
-                project_id=DEMO_PROJECT_ID,
-                type=DerivativeType.LINKEDIN_POST,
-                content=DEMO_LINKEDIN_POST,
-                language="en",
-                status="generated",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-            ),
-            Derivative(
-                project_id=DEMO_PROJECT_ID,
-                type=DerivativeType.SUMMARY,
-                content=DEMO_SUMMARY,
-                language="en",
-                status="generated",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-            ),
-        ]
-        for idx, quote in enumerate(DEMO_QUOTES, start=1):
-            image_rel = f"demo/outputs/projects/{DEMO_PROJECT_ID}/quote_{idx}.png"
-            derivative_rows.append(
-                Derivative(
-                    project_id=DEMO_PROJECT_ID,
-                    type=DerivativeType.QUOTE_CARD,
-                    content={"quotes": [quote]},
-                    language="en",
-                    image_url=output_url(image_rel),
-                    status="generated",
-                    created_at=datetime.now(UTC),
-                    updated_at=datetime.now(UTC),
+async def _count_clips(db) -> int:
+    return await db.scalar(
+        select(func.count()).where(Clip.project_id == DEMO_PROJECT_ID)
+    ) or 0
+
+
+async def _count_derivatives(db) -> int:
+    return await db.scalar(
+        select(func.count()).where(Derivative.project_id == DEMO_PROJECT_ID)
+    ) or 0
+
+
+async def _count_rendered_clips(db) -> int:
+    return await db.scalar(
+        select(func.count())
+        .where(Clip.project_id == DEMO_PROJECT_ID)
+        .where(Clip.video_url.is_not(None))
+    ) or 0
+
+
+async def _render_demo_clips(db) -> None:
+    """Render every generated demo clip that does not yet have a video_url."""
+    clip_result = await db.execute(
+        select(Clip).where(
+            Clip.project_id == DEMO_PROJECT_ID,
+            Clip.video_url.is_(None),
+        )
+    )
+    clips = list(clip_result.scalars().all())
+    if not clips:
+        return
+    logger.info("demo_rendering_clips", count=len(clips))
+    for clip in clips:
+        await render_clip(clip.id)
+        # render_clip uses its own session; refresh to see updated video_url.
+        await db.refresh(clip)
+
+
+async def seed_demo_project() -> None:
+    """Create or refresh the demo project using the real generation pipeline."""
+    async with AsyncSessionLocal() as db:
+        user = await _get_or_create_demo_user(db)
+        if user is None:
+            return
+
+        existing_project = await db.get(Project, DEMO_PROJECT_ID)
+        if existing_project is not None:
+            clip_count = await _count_clips(db)
+            derivative_count = await _count_derivatives(db)
+            rendered_count = await _count_rendered_clips(db)
+            if clip_count > 0 and derivative_count > 0 and rendered_count == clip_count:
+                logger.debug(
+                    "demo_project_already_seeded",
+                    clips=clip_count,
+                    derivatives=derivative_count,
+                    rendered=rendered_count,
                 )
+                return
+            logger.info(
+                "demo_project_partial_seed",
+                clips=clip_count,
+                derivatives=derivative_count,
+                rendered=rendered_count,
             )
-        for derivative in derivative_rows:
-            db.add(derivative)
 
-        # Demo chat session and messages.
-        chat_session = ChatSession(
-            user_id=user.id,
-            project_id=DEMO_PROJECT_ID,
-            title="Demo project chat",
-            created_at=datetime.now(UTC),
+        _demo_paths()
+
+        speaker = await _get_or_create_demo_speaker(db, user.id)
+        brand = await _get_or_create_demo_brand(db, user.id)
+        project = await _get_or_create_demo_project(db, user.id, speaker.id)
+        asset = await _get_or_create_demo_asset(db, user.id, project.id)
+
+        # Run ASR if the demo video has not been processed yet. This is the same
+        # processor the worker calls for any uploaded video.
+        if asset.processing_status != AssetStatus.COMPLETED:
+            logger.info("demo_asset_processing", asset_id=str(asset.id))
+            asset.processing_status = AssetStatus.PENDING
+            await db.commit()
+            await process_asset(asset.id)
+            # process_asset uses its own session; refresh to read transcript/meta.
+            await db.refresh(asset)
+            if asset.processing_status != AssetStatus.COMPLETED:
+                logger.error(
+                    "demo_asset_processing_failed",
+                    status=asset.processing_status.value,
+                    error=asset.processing_error,
+                )
+                return
+
+        # Use the language detected by ASR as the generation target language so
+        # outputs match the spoken content. Fallback to English if unavailable.
+        target_language = (asset.meta or {}).get("language", "en") or "en"
+        logger.info(
+            "demo_target_language",
+            language=target_language,
+            duration=asset.duration_seconds,
         )
-        db.add(chat_session)
-        await db.flush()
 
-        user_message = Message(
-            session_id=chat_session.id,
-            role=MessageRole.USER,
-            content=DEMO_USER_MESSAGE,
-            created_at=datetime.now(UTC),
+        # Persist the original prompt just like a real user request would.
+        await seed_project_prompt(db, user.id, DEMO_PROJECT_ID, DEMO_USER_MESSAGE)
+
+        clip_count = await _count_clips(db)
+        derivative_count = await _count_derivatives(db)
+
+        if clip_count == 0 or derivative_count == 0:
+            # Queue and immediately run the real generation orchestrator.
+            run = WorkflowRun(
+                project_id=DEMO_PROJECT_ID,
+                status=WorkflowStatus.PENDING,
+                current_step="queued",
+                progress=0,
+                context={
+                    "outputs": ["clips", "linkedin", "quote_cards", "summary"],
+                    "clip_count": 3,
+                    "target_language": target_language,
+                    "brand_template_id": str(brand.id),
+                    "instruction": DEMO_USER_MESSAGE,
+                    "scope": "full",
+                    "target_id": None,
+                    "operation": "generate",
+                    "tone_settings": None,
+                },
+            )
+            db.add(run)
+            project.status = ProjectStatus.PROCESSING
+            await db.commit()
+            await db.refresh(run)
+
+            logger.info("demo_generation_started", run_id=str(run.id))
+            await run_generation(run.id)
+
+            # Refresh the run to check success (run_generation uses its own session).
+            await db.refresh(run)
+            if run.status != WorkflowStatus.COMPLETED:
+                logger.error(
+                    "demo_generation_failed",
+                    run_id=str(run.id),
+                    status=run.status.value,
+                    error=run.error,
+                )
+                return
+
+        # Render every generated clip so the results page is immediately playable.
+        await _render_demo_clips(db)
+
+        # Log final state.
+        final_clips = await _count_clips(db)
+        final_derivatives = await _count_derivatives(db)
+        rendered_clips = await _count_rendered_clips(db)
+        logger.info(
+            "demo_project_seeded",
+            project_id=str(DEMO_PROJECT_ID),
+            clips=final_clips,
+            derivatives=final_derivatives,
+            rendered=rendered_clips,
         )
-        db.add(user_message)
-
-        assistant_message = Message(
-            session_id=chat_session.id,
-            role=MessageRole.ASSISTANT,
-            content="Here are the repurposed assets from your keynote.",
-            created_at=datetime.now(UTC),
-        )
-        db.add(assistant_message)
-
-        await db.commit()
-        logger.info("demo_project_seeded", project_id=str(DEMO_PROJECT_ID))

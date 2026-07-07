@@ -5,6 +5,9 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
@@ -23,7 +26,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"
 
     # Storage
-    asset_dir: Path = Path("./assets")
+    # Default to the repo-root assets/ directory so scripts and the API behave
+    # the same regardless of the current working directory.
+    asset_dir: Path = _REPO_ROOT / "assets"
     # Deprecated: upload_dir/output_dir are kept for compatibility during the
     # migration to asset_dir; new code should use asset_dir directly.
     upload_dir: Path = Path("./data/uploads")

@@ -19,7 +19,7 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Clip, Project
-from app.services.storage import output_url
+from app.services.storage import _storage_prefix, output_url
 
 logger = structlog.get_logger()
 
@@ -85,7 +85,7 @@ async def render_clip(clip_id: UUID) -> None:
             spec = _absolutize(copy.deepcopy(clip.render_spec))
             payload = {
                 "spec": spec,
-                "out_subdir": f"{user_id}/outputs/projects/{clip.project_id}",
+                "out_subdir": f"{_storage_prefix(user_id)}/outputs/projects/{clip.project_id}",
                 "basename": str(clip.id),
             }
             async with httpx.AsyncClient(timeout=900) as client:
