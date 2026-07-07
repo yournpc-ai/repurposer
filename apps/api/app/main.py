@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.models.database import init_db
+from app.models.database import AsyncSessionLocal, init_db
 from app.routers import (
     assets,
     brand_templates,
@@ -16,12 +16,14 @@ from app.routers import (
     files,
     intent,
     library,
+    music,
     projects,
     speaker_assets,
     speakers,
 )
 from app.services.brand import seed_default_brand_template
 from app.services.demo_seed import seed_demo_project
+from app.services.music import seed_default_music
 
 
 @asynccontextmanager
@@ -30,6 +32,8 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     await init_db()
     await seed_default_brand_template()
+    async with AsyncSessionLocal() as db:
+        await seed_default_music(db)
     await seed_demo_project()
     yield
 
@@ -58,6 +62,7 @@ app.include_router(clips, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(derivatives, prefix="/api/v1/derivatives", tags=["derivatives"])
 app.include_router(library, prefix="/api/v1/library", tags=["library"])
 app.include_router(files, prefix="/api/v1", tags=["files"])
+app.include_router(music, prefix="/api/v1/music", tags=["music"])
 app.include_router(intent, prefix="/api/v1", tags=["intent"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]

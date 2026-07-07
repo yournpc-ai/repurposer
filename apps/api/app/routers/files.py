@@ -19,7 +19,6 @@ from app.dependencies import get_current_user
 from app.models.tables import User
 from app.services.storage import (
     owner_from_path,
-    resolve_music_safe,
     resolve_output_safe,
     resolve_safe,
 )
@@ -60,23 +59,6 @@ async def stream_upload(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
-        )
-    return FileResponse(path)
-
-
-@router.get("/music/{mood}")
-async def stream_music(mood: str) -> FileResponse:
-    """Stream a built-in mood track (e.g. ``calm``), with Range support.
-
-    The mood is extension-less; the resolver finds ``{mood}.<ext>`` under the
-    music library so dropping in ``calm.mp3`` just works. 404 until a track for
-    that mood is provided.
-    """
-    path = resolve_music_safe(mood)
-    if path is None or not path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Music track not found",
         )
     return FileResponse(path)
 
