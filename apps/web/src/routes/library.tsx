@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 
 type LibraryType = "upload" | "clip" | "linkedin" | "quote" | "summary"
 
@@ -208,9 +208,10 @@ function LibraryCard({ item }: { item: LibraryItem }) {
   const Icon = TYPE_ICONS[item.type]
 
   const handleDownload = () => {
-    if (!item.download_url) return
+    const url = toAbsoluteUrl(item.download_url)
+    if (!url) return
     const a = document.createElement("a")
-    a.href = item.download_url
+    a.href = url
     a.download = item.title
     document.body.appendChild(a)
     a.click()

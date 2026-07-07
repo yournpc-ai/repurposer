@@ -8,6 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -36,6 +43,7 @@ function SpeakersPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
+  const [language, setLanguage] = useState("en")
   const [open, setOpen] = useState(false)
 
   const fetchSpeakers = async () => {
@@ -51,10 +59,11 @@ function SpeakersPage() {
     e.preventDefault()
     await apiFetch("/api/v1/speakers", {
       method: "POST",
-      body: { name, title, language: "zh" },
+      body: { name, title, language },
     })
     setName("")
     setTitle("")
+    setLanguage("en")
     setOpen(false)
     fetchSpeakers()
   }
@@ -89,6 +98,21 @@ function SpeakersPage() {
                 <div className="grid gap-2">
                   <Label htmlFor="title">{t("speakers.labelTitle")}</Label>
                   <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="language">{t("common.language")}</Label>
+                  <Select value={language} onValueChange={(v) => setLanguage(v || "en")}>
+                    <SelectTrigger id="language">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["en", "fr", "de", "es", "it", "zh"] as const).map((lang) => (
+                        <SelectItem key={lang} value={lang}>
+                          {t(`languages.${lang}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <DialogFooter>

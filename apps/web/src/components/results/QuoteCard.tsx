@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { apiPost } from "@/lib/api"
+import { apiPost, toAbsoluteUrl } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
@@ -23,9 +23,10 @@ export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
   const firstQuote = quotes[0]
 
   const handleDownload = () => {
-    if (!derivative.image_url) return
+    const url = toAbsoluteUrl(derivative.image_url)
+    if (!url) return
     const a = document.createElement("a")
-    a.href = derivative.image_url
+    a.href = url
     a.download = `quote-${derivative.id}.png`
     document.body.appendChild(a)
     a.click()
@@ -48,7 +49,7 @@ export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
       {derivative.image_url ? (
         <div className="relative aspect-square bg-muted">
           <img
-            src={derivative.image_url}
+            src={toAbsoluteUrl(derivative.image_url) || undefined}
             alt={firstQuote?.quote || "Quote card"}
             className="h-full w-full object-cover"
           />

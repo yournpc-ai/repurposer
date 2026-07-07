@@ -68,3 +68,16 @@ export async function apiPut(
 export async function apiDelete(path: string, options: RequestInit = {}) {
   return apiFetch(path, { method: "DELETE", ...options })
 }
+
+/** Prefix a storage-relative URL (e.g. `/api/v1/outputs/...`) with the API origin.
+ *
+ * Leaves absolute URLs and empty values untouched.
+ */
+export function toAbsoluteUrl(
+  url: string | null | undefined
+): string | null | undefined {
+  if (!url) return url
+  if (url.startsWith("http://") || url.startsWith("https://")) return url
+  return `${API_URL}${url.startsWith("/") ? url : `/${url}`}`
+}
+

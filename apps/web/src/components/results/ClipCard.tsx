@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { apiPost } from "@/lib/api"
+import { apiPost, toAbsoluteUrl } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
@@ -23,9 +23,10 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
   const [chatOpen, setChatOpen] = useState(false)
 
   const handleDownload = () => {
-    if (!clip.video_url) return
+    const url = toAbsoluteUrl(clip.video_url)
+    if (!url) return
     const a = document.createElement("a")
-    a.href = clip.video_url
+    a.href = url
     a.download = `${clip.hook || "clip"}.mp4`
     document.body.appendChild(a)
     a.click()
@@ -55,7 +56,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
       <div className="relative aspect-[9/16] bg-muted">
         {clip.video_url ? (
           <video
-            src={clip.video_url}
+            src={toAbsoluteUrl(clip.video_url) || undefined}
             className="h-full w-full object-cover"
             controls
             preload="metadata"
