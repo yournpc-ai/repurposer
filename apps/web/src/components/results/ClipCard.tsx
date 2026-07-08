@@ -52,13 +52,14 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden ring-1 ring-border shadow-xl">
-      <div className="relative aspect-[9/16] bg-muted">
+    <Card className="flex h-full overflow-hidden ring-1 ring-border shadow-xl">
+      <div className="relative aspect-[9/16] overflow-hidden bg-muted">
         {clip.video_url ? (
           <video
             src={toAbsoluteUrl(clip.video_url) || undefined}
-            className="h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
             controls
+            playsInline
             preload="metadata"
           />
         ) : (
