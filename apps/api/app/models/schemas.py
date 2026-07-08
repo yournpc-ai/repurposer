@@ -372,7 +372,7 @@ class ClipRevision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     hook: str
-    duration_seconds: int = Field(default=30, ge=15, le=120)
+    duration_seconds: int = Field(default=30, ge=5, le=120)
     title_options: list[str] = Field(default_factory=list)
     music_mood: str = "calm"
     virality_score: int | None = Field(default=None, ge=1, le=100)
@@ -387,11 +387,19 @@ class Segment(BaseModel):
     source_text: str = Field(description="Original text of the segment")
     start_marker: str = Field(description="Approximate start location in source")
     end_marker: str = Field(description="Approximate end location in source")
+    start_seconds: float | None = Field(
+        default=None,
+        description="Exact start time in seconds (preferred over text markers)",
+    )
+    end_seconds: float | None = Field(
+        default=None,
+        description="Exact end time in seconds (preferred over text markers)",
+    )
     summary: str = ""
     hook: str = ""
     virality_score: int = Field(default=50, ge=1, le=100)
     golden_quote: str = ""
-    duration_seconds: int = Field(default=30, ge=15, le=120)
+    duration_seconds: int = Field(default=30, ge=5, le=120)
 
 
 class ClipPlan(BaseModel):
@@ -409,12 +417,20 @@ class ClipPlan(BaseModel):
     source_text: str = Field(description="Original segment text from the talk")
     start_marker: str = Field(description="Approximate start location in source")
     end_marker: str = Field(description="Approximate end location in source")
+    start_seconds: float | None = Field(
+        default=None,
+        description="Exact start time in seconds (preferred over text markers)",
+    )
+    end_seconds: float | None = Field(
+        default=None,
+        description="Exact end time in seconds (preferred over text markers)",
+    )
     summary: str = ""
     hook: str = ""
     title: str = ""
     golden_quote: str = ""
     virality_score: int = Field(default=50, ge=1, le=100)
-    duration_seconds: int = Field(default=30, ge=15, le=120)
+    duration_seconds: int = Field(default=30, ge=5, le=120)
     music_mood: str = "calm"
     visual_notes: str = ""
     title_options: list[str] = Field(default_factory=list)
@@ -425,6 +441,8 @@ class ClipPlan(BaseModel):
             source_text=self.source_text,
             start_marker=self.start_marker,
             end_marker=self.end_marker,
+            start_seconds=self.start_seconds,
+            end_seconds=self.end_seconds,
             summary=self.summary,
             hook=self.hook,
             virality_score=self.virality_score,

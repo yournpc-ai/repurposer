@@ -624,6 +624,11 @@ async def run_generation(run_id: UUID) -> None:
                     content_plan=content_plan,
                     media_inputs=media_inputs,
                     clip_count=clip_count,
+                    source_words=(
+                        (render_source.meta or {}).get("words")
+                        if render_source is not None
+                        else None
+                    ),
                 )
                 # Bake the chosen brand template into each clip's render_spec so
                 # the renderer/preview show it without DB access (see ADR-016).

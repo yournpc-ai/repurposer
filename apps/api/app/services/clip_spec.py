@@ -61,11 +61,33 @@ def _locate(haystack: list[str], needle: list[str], *, want: str) -> int | None:
 def locate_span(words: list[dict[str, Any]], segment: Segment) -> tuple[float, float]:
     """Locate a segment's [start, end] seconds within ASR word timestamps.
 
-    Falls back progressively: start/end markers -> source_text ends -> the whole
-    transcript. Never raises; returns a best-effort span.
+    Prefer exact ``start_seconds`` / ``end_seconds`` when the agent provided them.
+    Otherwise fall back to text matching via start/end markers -> source_text
+    ends -> the whole transcript. Never raises; returns a best-effort span.
     """
     if not words:
         return (0.0, float(segment.duration_seconds))
+
+    # If the agent produced numeric timestamps, use them directly but snap to the
+    # nearest word boundaries so cues stay in sync with the audio.
+    if segment.start_seconds is not None and segment.end_seconds is not None:
+        start_sec = max(0.0, float(segment.start_seconds))
+        end_sec = max(start_sec, float(segment.end_seconds))
+        start_idx = next(
+            (i for i, w in enumerate(words) if float(w.get("start", 0)) >= start_sec),
+            0,
+        )
+        end_idx = next(
+            (
+                i
+                for i in range(len(words) - 1, -1, -1)
+                if float(words[i].get("end", 0)) <= end_sec
+            ),
+            len(words) - 1,
+        )
+        if end_idx < start_idx:
+            end_idx = len(words) - 1
+        return (float(words[start_idx]["start"]), float(words[end_idx]["end"]))
 
     flat = [(_norm(w.get("word", "")) or [""])[0] for w in words]
 

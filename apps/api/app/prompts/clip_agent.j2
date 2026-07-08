@@ -106,6 +106,22 @@ Event Name: {{ context.event_name }}
 
 {% endfor %}
 
+{% if source_words %}
+## Source Word-Level Timestamps
+
+Use the following ASR output to pick precise clip boundaries. Each entry gives the exact word and its start/end time in seconds.
+
+```json
+[
+{% for w in source_words[:400] %}
+  {"word": {{ w.word | tojson }}, "start": {{ w.start | default(0) }}, "end": {{ w.end | default(0) }} }{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+```
+
+When selecting a segment, copy the **first word's `start`** into `start_seconds` and the **last word's `end`** into `end_seconds`. These timestamps take priority over text markers. Make sure each clip's `start_seconds` is **after** the previous clip's `end_seconds` so clips do not overlap.
+
+{% endif %}
 ## Output Format
 
 The Content Plan above already provides the overall analysis, themes, and target audience. Reuse and reinforce it — do not reinvent a conflicting interpretation.
@@ -119,6 +135,8 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "source_text": "Original segment text, about 100-200 words",
       "start_marker": "Segment start position (e.g., 'first paragraph' or 'beginning of paragraph 3')",
       "end_marker": "Segment end position",
+      "start_seconds": 12.34,
+      "end_seconds": 28.91,
       "summary": "What this segment is about, in one sentence",
       "hook": "The eye-catching text or opening line for the first 3 seconds",
       "title": "Primary title for this clip",
@@ -138,8 +156,11 @@ Please output valid JSON only, with no explanations or markdown code blocks.
 Requirements:
 - Produce exactly {{ clip_count }} clips
 - Each clip's id must be in the format clip_001, clip_002, etc.
+- **start_seconds and end_seconds are required** and must be copied from the Source Word-Level Timestamps above
+- start_seconds must be strictly less than end_seconds
+- Each subsequent clip must start after the previous clip ends (no overlap)
 - virality_score is an integer from 1-100
-- duration_seconds is an integer from 15 to 120
+- duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)
 - music_mood must be one of: calm, uplifting, corporate
 - Output JSON only, no other content
 - All fields not in the clips array may be omitted; if present, they must align with the Content Plan above
