@@ -17,6 +17,7 @@ from app.models.schemas import (
     AssetType,
     ChatRequest,
     ClipResponse,
+    ClipUpdate,
     DubRequest,
     FeedbackRequest,
     RenderStatus,
@@ -61,6 +62,27 @@ async def get_clip(
 ) -> Clip:
     """Get a single clip (editor load + render-status polling)."""
     return await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+
+
+@router.put("/{clip_id}", response_model=ClipResponse)
+async def update_clip(
+    clip_id: UUID,
+    data: ClipUpdate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Clip:
+    """Update a clip's editable fields (editor save: render_spec, hook, etc.)."""
+    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+
+    updates = data.model_dump(exclude_unset=True, exclude={"render_spec"})
+    for key, value in updates.items():
+        setattr(clip, key, value)
+    if data.render_spec is not None:
+        clip.render_spec = data.render_spec.model_dump(mode="json")
+
+    await db.commit()
+    await db.refresh(clip)
+    return clip
 
 
 @router.post("/{clip_id}/revise", response_model=ClipResponse)

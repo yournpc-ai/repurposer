@@ -281,3 +281,7 @@ assets/music/*
 data/music/*
 !data/music/.gitkeep
 !data/music/README.md
+
+# Local tool caches (Playwright MCP snapshots/logs, Remotion Chrome download)
+.playwright-mcp/
+.remotion/

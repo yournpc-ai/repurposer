@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -35,8 +35,19 @@ interface ProjectResults {
 }
 
 export const Route = createFileRoute("/projects/$id")({
-  component: ProjectDetailPage,
+  component: ProjectRouteComponent,
 })
+
+/**
+ * This route has a child (the clip editor, `projects.$id.clips.$clipId`), so
+ * it must render an <Outlet /> when that child is active instead of always
+ * showing its own results content.
+ */
+function ProjectRouteComponent() {
+  const matches = useMatches()
+  const isLeaf = matches[matches.length - 1]?.routeId === Route.id
+  return isLeaf ? <ProjectDetailPage /> : <Outlet />
+}
 
 function ProjectDetailPage() {
   const { id } = Route.useParams()

@@ -46,10 +46,13 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { MusicPanel } from "@/components/brand-template/music-panel"
 
 export const Route = createFileRoute("/brand-template")({
   component: BrandTemplatePage,
 })
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 // ---------------------------------------------------------------------------
 // Options
@@ -66,7 +69,6 @@ const FONTS = [
 const ASPECTS = ["9:16", "1:1"] as const
 const CAPTION_SIZES = [32, 40, 44, 56] as const
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
-const MOODS = ["calm", "uplifting", "corporate", "none"] as const
 
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
@@ -88,7 +90,8 @@ type Template = {
   outroEnabled: boolean
   outroText: string
   musicEnabled: boolean
-  musicMood: string
+  musicId: string | null
+  musicGainDb: number
   removeFiller: boolean
   keywordHighlighter: boolean
   voice: string
@@ -117,7 +120,8 @@ const DEFAULT_TEMPLATE: Template = {
   outroEnabled: false,
   outroText: "",
   musicEnabled: false,
-  musicMood: "calm",
+  musicId: null,
+  musicGainDb: -18,
   removeFiller: false,
   keywordHighlighter: true,
   voice: "professional",
@@ -173,10 +177,17 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
     caption_style_preset: tpl.keywordHighlighter ? "karaoke-highlight" : "clean-bottom",
     caption_position: tpl.captionPosition,
     title: { text: DEMO_TITLE, enabled: true, size: tpl.titleSize, position: tpl.titlePosition },
-    // Music is intentionally OFF in the preview: the mood still saves to the
-    // template (and drives real renders), but a missing track file would 404 in
-    // the browser <Player>. MVP renders are silent anyway (no bundled tracks).
-    music: { music_id: null, url: null, enabled: false, gain_db: -18 },
+    // Preview plays the selected music piece via its real stream URL so the
+    // brand-template preview matches the actual render (see services/brand.py
+    // music_from_template).
+    music: tpl.musicId
+      ? {
+          music_id: tpl.musicId,
+          url: `${API_URL}/api/v1/music/${tpl.musicId}/stream`,
+          enabled: tpl.musicEnabled,
+          gain_db: tpl.musicGainDb,
+        }
+      : { music_id: null, url: null, enabled: false, gain_db: tpl.musicGainDb },
     brand: templateToBrand(tpl),
     brand_ref: null,
     target_language: "en",
@@ -711,30 +722,14 @@ function BrandTemplatePage() {
                 </TabsContent>
 
                 <TabsContent value="music" className="space-y-4">
-                  <label className="flex items-center justify-between">
-                    <span className="text-sm">{t("brandTemplate.music.enable")}</span>
-                    <Switch
-                      checked={template.musicEnabled}
-                      onCheckedChange={(v) => update("musicEnabled", v)}
-                    />
-                  </label>
-                  {template.musicEnabled && (
-                    <Field label={t("brandTemplate.music.mood")}>
-                      <ToggleGroup
-                        variant="outline"
-                        spacing={0}
-                        value={[template.musicMood]}
-                        onValueChange={(v) => v[0] && update("musicMood", v[0])}
-                        className="w-full"
-                      >
-                        {MOODS.filter((m) => m !== "none").map((m) => (
-                          <ToggleGroupItem key={m} value={m} className="flex-1 text-xs">
-                            {t(`brandTemplate.music.moods.${m}`)}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    </Field>
-                  )}
+                  <MusicPanel
+                    enabled={template.musicEnabled}
+                    onEnabledChange={(v) => update("musicEnabled", v)}
+                    musicId={template.musicId}
+                    onSelect={(id) => update("musicId", id)}
+                    gainDb={template.musicGainDb}
+                    onGainChange={(v) => update("musicGainDb", v)}
+                  />
                 </TabsContent>
               </CardContent>
             </Card>

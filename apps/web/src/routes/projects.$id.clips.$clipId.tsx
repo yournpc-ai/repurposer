@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { apiFetch } from '@/lib/api'
+import type { MusicPiece } from '@/components/brand-template/music-panel'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const WORDS_PER_LINE = 7
@@ -104,9 +105,17 @@ function ClipEditorPage() {
   const [error, setError] = useState('')
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [musicPieces, setMusicPieces] = useState<MusicPiece[]>([])
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    apiFetch('/api/v1/music')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: MusicPiece[]) => setMusicPieces(list))
+      .catch(() => setMusicPieces([]))
   }, [])
 
   const loadClip = () =>
@@ -423,6 +432,56 @@ function ClipEditorPage() {
                   onCheckedChange={(v) => patchSpec({ music: { ...spec.music, enabled: v } })}
                 />
               </label>
+
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{t('clipEditor.musicTrack')}</span>
+                <Select
+                  value={spec.music.music_id ?? ''}
+                  onValueChange={(v) => {
+                    const piece = musicPieces.find((p) => p.id === v)
+                    patchSpec({
+                      music: {
+                        ...spec.music,
+                        music_id: v || null,
+                        url: piece ? piece.url : null,
+                      },
+                    })
+                  }}
+                  disabled={!spec.music.enabled || musicPieces.length === 0}
+                >
+                  <SelectTrigger className="h-9 w-36 rounded-md text-sm">
+                    <SelectValue placeholder={t('clipEditor.musicTrackNone')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {musicPieces.map((piece) => (
+                      <SelectItem key={piece.id} value={piece.id}>
+                        {piece.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{t('clipEditor.musicGain')}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {spec.music.gain_db.toFixed(0)} dB
+                  </span>
+                </div>
+                <Slider
+                  min={-30}
+                  max={0}
+                  step={1}
+                  value={[spec.music.gain_db]}
+                  onValueChange={(v) =>
+                    patchSpec({
+                      music: { ...spec.music, gain_db: Array.isArray(v) ? v[0] : v },
+                    })
+                  }
+                  disabled={!spec.music.enabled}
+                />
+              </div>
 
               <div className="flex items-center gap-2 sm:col-span-2">
                 <Switch
