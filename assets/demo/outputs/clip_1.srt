@@ -23,9 +23,5 @@ into that mode, how hard could it
 be? So you gotta get yourself into
 
 7
-00:00:12,040 --> 00:00:13,920
-that state of mind. You don't wanna
-
-8
-00:00:13,920 --> 00:00:16,900
-actually over simulate
+00:00:12,040 --> 00:00:12,900
+that state of mind.
