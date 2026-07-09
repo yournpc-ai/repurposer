@@ -351,6 +351,7 @@ const en = {
       generate: "Generate new music",
       generatePrompt: "e.g. cinematic strings, hopeful, no vocals",
       generateFailed: "Music generation failed",
+      titlePlaceholder: "Track title (optional)",
       moods: {
         calm: "Calm",
         uplifting: "Uplifting",

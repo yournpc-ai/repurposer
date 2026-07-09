@@ -64,6 +64,7 @@ export function MusicPanel({
   const [loading, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [prompt, setPrompt] = useState("")
+  const [title, setTitle] = useState("")
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState("")
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -109,9 +110,11 @@ export function MusicPanel({
     setGenerating(true)
     setError("")
     try {
+      const body: { prompt: string; title?: string } = { prompt: prompt.trim() }
+      if (title.trim()) body.title = title.trim()
       const res = await apiFetch("/api/v1/music/generate", {
         method: "POST",
-        body: { prompt: prompt.trim() },
+        body,
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
@@ -121,6 +124,7 @@ export function MusicPanel({
       setPieces((prev) => [piece, ...prev])
       onSelect(piece.id)
       setPrompt("")
+      setTitle("")
     } catch (e) {
       setError(e instanceof Error ? e.message : t("brandTemplate.music.generateFailed"))
     } finally {
@@ -216,6 +220,13 @@ export function MusicPanel({
             <p className="px-0.5 text-xs text-muted-foreground">
               {t("brandTemplate.music.generate")}
             </p>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("brandTemplate.music.titlePlaceholder")}
+              className="h-9"
+              disabled={generating}
+            />
             <div className="flex items-center gap-2">
               <Input
                 value={prompt}

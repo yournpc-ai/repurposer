@@ -353,6 +353,7 @@ const zh: Resources = {
       generate: "生成新配乐",
       generatePrompt: "如：电影感弦乐，充满希望，无人声",
       generateFailed: "配乐生成失败",
+      titlePlaceholder: "曲目名称（可选）",
       moods: {
         calm: "舒缓",
         uplifting: "激励",
