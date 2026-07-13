@@ -98,6 +98,7 @@ export interface Clip {
   video_url: string | null
   render_spec: unknown | null
   render_status: string | null
+  render_error: string | null
   duration: number
   created_at: string
   updated_at: string | null

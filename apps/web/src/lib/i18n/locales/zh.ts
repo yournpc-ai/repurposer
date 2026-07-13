@@ -400,7 +400,7 @@ const zh: Resources = {
       quotes: "尚未生成名言卡片。",
       summary: "尚未生成摘要。",
     },
-    clipNotRendered: "渲染后即可在此观看。",
+    clipNotRendered: "点击渲染此片段。",
     noQuote: "暂无名言文本。",
     generating: "正在生成资产...",
     polling: "正在检查生成状态...",

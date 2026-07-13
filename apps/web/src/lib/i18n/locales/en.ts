@@ -398,7 +398,7 @@ const en = {
       quotes: "No quote cards generated yet.",
       summary: "No summary generated yet.",
     },
-    clipNotRendered: "Render the clip to watch it here.",
+    clipNotRendered: "Click to render this clip.",
     noQuote: "No quote text available.",
     generating: "Generating assets...",
     polling: "Checking generation status...",
