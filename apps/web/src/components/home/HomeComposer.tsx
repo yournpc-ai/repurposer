@@ -405,13 +405,15 @@ export function HomeComposer({
             </Tooltip>
           ) : (
             <div className="relative h-20 w-14 flex-shrink-0">
-              <Stack
-                cards={fileCards}
-                className="h-full w-full"
-                randomRotation
-                sendToBackOnClick
-                sensitivity={60}
-              />
+              <div className="h-full w-full overflow-hidden rounded-lg">
+                <Stack
+                  cards={fileCards}
+                  className="h-full w-full"
+                  randomRotation
+                  sendToBackOnClick
+                  sensitivity={60}
+                />
+              </div>
               {files.length > 1 && (
                 <Badge
                   variant="secondary"

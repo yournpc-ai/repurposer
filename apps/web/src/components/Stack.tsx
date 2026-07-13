@@ -95,6 +95,8 @@ export function Stack({
   return (
     <div className={cn("relative", className)} style={{ perspective: 600 }}>
       {stack.map((card, index) => {
+        // How many positions back from the front (top) card this one sits.
+        const depth = stack.length - index - 1
         const randomRotate = randomRotation ? Math.random() * 10 - 5 : 0
         return (
           <CardRotate key={card.id} onSendToBack={() => sendToBack(card.id)} sensitivity={sensitivity}>
@@ -102,7 +104,12 @@ export function Stack({
               className="absolute inset-0"
               onClick={() => sendToBackOnClick && sendToBack(card.id)}
               animate={{
-                rotateZ: (stack.length - index - 1) * 4 + randomRotate,
+                // Fan cards toward the top-left as they go back — rotation
+                // alone doesn't move a centered label far enough to keep it
+                // from overlapping the card in front at this card size.
+                x: depth * -5,
+                y: depth * -5,
+                rotateZ: depth * 4 + randomRotate,
                 scale: 1 + index * 0.06 - stack.length * 0.06,
                 transformOrigin: "90% 90%",
               }}
