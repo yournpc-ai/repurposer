@@ -9,12 +9,17 @@ import {
   FileText,
   Mic2,
   Palette,
-  Sparkles,
   SlidersHorizontal,
   ChevronDown,
   Check,
   Languages,
   Wand2,
+  Users,
+  Video,
+  Linkedin,
+  Quote,
+  Image as ImageIcon,
+  X,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -24,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Stack, type StackCardData } from "@/components/Stack"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,7 +74,6 @@ interface InferredIntent {
   answer: string | null
   language: string
   outputs: OutputKey[]
-  tone: Tone
   specific_instruction: string | null
   confidence: number
 }
@@ -76,8 +81,12 @@ interface InferredIntent {
 const OUTPUT_OPTIONS = ["clips", "linkedin", "quote_cards", "summary"] as const
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]
 
-const tones = ["professional", "thoughtLeadership", "conversational", "academic"] as const
-type Tone = (typeof tones)[number]
+const OUTPUT_ICONS = {
+  clips: Video,
+  linkedin: Linkedin,
+  quote_cards: Quote,
+  summary: Languages,
+} as const
 
 const LANGUAGES = [
   { code: "en", labelKey: "languages.en" },
@@ -88,46 +97,16 @@ const LANGUAGES = [
   { code: "zh", labelKey: "languages.zh" },
 ] as const
 
-// Maps the composer's tone onto the backend ToneSettings schema.
-const TONE_MAP: Record<
-  Tone,
-  {
-    academic_vs_casual: number
-    rational_vs_passionate: number
-    audience: "academic" | "industry" | "general" | "investor"
-  }
-> = {
-  professional: {
-    academic_vs_casual: 0.35,
-    rational_vs_passionate: 0.45,
-    audience: "industry",
-  },
-  thoughtLeadership: {
-    academic_vs_casual: 0.45,
-    rational_vs_passionate: 0.4,
-    audience: "industry",
-  },
-  conversational: {
-    academic_vs_casual: 0.7,
-    rational_vs_passionate: 0.6,
-    audience: "general",
-  },
-  academic: {
-    academic_vs_casual: 0.15,
-    rational_vs_passionate: 0.3,
-    audience: "academic",
-  },
-}
-
 const DEFAULT_INTENT: InferredIntent = {
   action: "generate",
   answer: null,
   language: "en",
   outputs: ["clips", "linkedin", "quote_cards", "summary"],
-  tone: "professional",
   specific_instruction: null,
   confidence: 1,
 }
+
+const DEFAULT_CLIP_COUNT = 3
 
 interface HomeComposerProps {
   speakers: Speaker[]
@@ -151,11 +130,10 @@ export function HomeComposer({
 
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
-  const [tone, setTone] = useState<Tone>(DEFAULT_INTENT.tone)
   const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_INTENT.outputs)
   const [brandTemplateId, setBrandTemplateId] = useState("")
   const [language, setLanguage] = useState(DEFAULT_INTENT.language)
-  const [fileName, setFileName] = useState("")
+  const [files, setFiles] = useState<File[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
 
   const [inferred, setInferred] = useState<InferredIntent>(DEFAULT_INTENT)
@@ -165,6 +143,9 @@ export function HomeComposer({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Last prompt text we auto-filled from pill selection, so a later pill
+  // toggle can keep regenerating it without clobbering hand-typed text.
+  const autofilledPromptRef = useRef("")
 
   // Sync defaults once data is loaded.
   useEffect(() => {
@@ -191,7 +172,7 @@ export function HomeComposer({
       try {
         const res = await apiFetch("/api/v1/infer-intent", {
           method: "POST",
-          body: { prompt, filename: fileName || undefined },
+          body: { prompt, filename: files[0]?.name || undefined },
         })
         if (!res.ok) throw new Error("Intent inference failed")
         const data = (await res.json()) as { intent: InferredIntent }
@@ -199,7 +180,6 @@ export function HomeComposer({
 
         // Apply inferred values only to params the user hasn't locked.
         setLanguage((prev) => (lockedParams.has("language") ? prev : data.intent.language))
-        setTone((prev) => (lockedParams.has("tone") ? prev : data.intent.tone))
         setOutputs((prev) => (lockedParams.has("outputs") ? prev : data.intent.outputs))
       } catch (e) {
         // Silent fallback: leave current values.
@@ -209,7 +189,7 @@ export function HomeComposer({
     }, 600)
 
     return () => clearTimeout(timer)
-  }, [prompt, fileName])
+  }, [prompt, files])
 
   const lockParam = (key: string) => {
     setLockedParams((prev) => new Set(prev).add(key))
@@ -237,8 +217,7 @@ export function HomeComposer({
   }
 
   const handleGenerate = async () => {
-    const file = fileInputRef.current?.files?.[0]
-    const hasContent = file || prompt.trim()
+    const hasContent = files.length > 0 || prompt.trim()
     if (!hasContent) {
       onError?.(t("home.noContentError"))
       return
@@ -252,7 +231,7 @@ export function HomeComposer({
       const projectRes = await apiFetch("/api/v1/projects", {
         method: "POST",
         body: {
-          title: file?.name || prompt.slice(0, 60) || t("common.untitled"),
+          title: files[0]?.name || prompt.slice(0, 60) || t("common.untitled"),
           event_name: "",
           language,
           speaker_id:
@@ -262,30 +241,29 @@ export function HomeComposer({
       if (!projectRes.ok) throw new Error("Failed to create project")
       const project = (await projectRes.json()) as Project
 
-      const form = new FormData()
-      form.append("type", file ? inferAssetType(file) : "transcript")
-      form.append(
-        "file",
-        file ?? new File([prompt], "prompt.txt", { type: "text/plain" })
+      const materials =
+        files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
+      const uploaded = await Promise.all(
+        materials.map(async (material) => {
+          const form = new FormData()
+          form.append("type", files.length > 0 ? inferAssetType(material) : "transcript")
+          form.append("file", material)
+          const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
+            method: "POST",
+            body: form,
+          })
+          if (!assetRes.ok) throw new Error("Failed to upload material")
+          return (await assetRes.json()) as Asset
+        })
       )
-      const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
-        method: "POST",
-        body: form,
-      })
-      if (!assetRes.ok) throw new Error("Failed to upload material")
-      const asset = (await assetRes.json()) as Asset
 
-      await waitForAssetProcessed(project.id, asset.id)
+      await Promise.all(uploaded.map((asset) => waitForAssetProcessed(project.id, asset.id)))
 
       const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
         method: "POST",
         body: {
-          clip_count: 3,
+          clip_count: DEFAULT_CLIP_COUNT,
           outputs: ["clips", ...outputs],
-          tone_settings: {
-            ...TONE_MAP[tone],
-            concise_vs_detailed: 0.5,
-          },
           target_language: language,
           brand_template_id: brandTemplateId || undefined,
           instruction,
@@ -305,7 +283,49 @@ export function HomeComposer({
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileName(e.target.files?.[0]?.name ?? "")
+    const picked = Array.from(e.target.files ?? [])
+    if (picked.length > 0) {
+      setFiles((prev) => {
+        const existing = new Set(prev.map((f) => `${f.name}:${f.size}`))
+        const additions = picked.filter((f) => !existing.has(`${f.name}:${f.size}`))
+        return [...prev, ...additions]
+      })
+    }
+    // Reset so picking the same file again after removal still fires onChange.
+    e.target.value = ""
+  }
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const fileIconFor = (file: File) => {
+    if (file.type.startsWith("video/")) return Video
+    if (file.type.startsWith("audio/")) return Mic2
+    if (file.type.startsWith("image/")) return ImageIcon
+    return FileText
+  }
+
+  // Template-splice a prompt sentence from the selected output pills, e.g.
+  // "generate 3 short clips, write a LinkedIn long-form post and create
+  // shareable quote cards from this talk". Language-aware via i18n.
+  const buildPrefillPrompt = (selected: OutputKey[], lang: string): string => {
+    if (selected.length === 0) return ""
+    const fragments = selected.map((key) =>
+      t(
+        `composer.promptFragments.${key}`,
+        key === "clips" ? { count: DEFAULT_CLIP_COUNT } : undefined
+      )
+    )
+    const last = fragments.pop() as string
+    const base =
+      fragments.length > 0
+        ? `${fragments.join(", ")} ${t("composer.promptJoinAnd")} ${last} ${t("composer.promptFromTalk")}`
+        : `${last} ${t("composer.promptFromTalk")}`
+    if (lang === "en" || lang === "auto") return base
+    const langOption = LANGUAGES.find((l) => l.code === lang)
+    const langName = langOption ? t(langOption.labelKey) : lang
+    return `${base} ${t("composer.promptInLanguage", { language: langName })}`
   }
 
   const toggleOutput = (key: OutputKey) => {
@@ -314,14 +334,48 @@ export function HomeComposer({
       ? outputs.filter((o) => o !== key)
       : [...outputs, key]
     setOutputs(next)
+
+    // Only autofill an empty box, or one we generated ourselves earlier —
+    // never overwrite text the user actually typed.
+    const canAutofill = prompt.trim() === "" || prompt === autofilledPromptRef.current
+    if (canAutofill) {
+      const filled = buildPrefillPrompt(next, language)
+      autofilledPromptRef.current = filled
+      setPrompt(filled)
+    }
   }
 
   const selectedSpeakerName =
     speakerId === EXTRACT_FROM_MATERIALS
       ? t("composer.extractFromMaterials")
-      : speakers.find((s) => s.id === speakerId)?.name ?? t("composer.styleDefault")
+      : speakers.find((s) => s.id === speakerId)?.name ?? t("composer.speaker")
 
   const hasIntent = prompt.trim().length > 0
+
+  const fileCards: StackCardData[] = files.map((file, index) => {
+    const Icon = fileIconFor(file)
+    return {
+      id: `${file.name}:${file.size}`,
+      content: (
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-lg bg-card p-1.5 text-center ring-1 ring-border shadow-md">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              removeFile(index)
+            }}
+            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="line-clamp-2 px-1 text-[8px] leading-tight text-muted-foreground">
+            {file.name}
+          </span>
+        </div>
+      ),
+    }
+  })
 
   return (
     <Card className="overflow-hidden py-0 ring-1 ring-border shadow-xl">
@@ -329,6 +383,7 @@ export function HomeComposer({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           accept=".txt,.md,.pdf,.doc,.docx,.srt,.vtt,.mp3,.mp4,.wav,.m4a"
           onChange={handleFileChange}
@@ -336,32 +391,55 @@ export function HomeComposer({
 
         {/* Input area */}
         <div className="flex items-start gap-3">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="relative flex h-20 w-14 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                />
-              }
-            >
-              {fileName ? (
-                <>
-                  <FileText className="h-5 w-5" />
-                  <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight">
-                    {fileName}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Plus className="h-5 w-5" />
-                  <span className="text-[10px]">{t("home.uploadSource")}</span>
-                </>
+          {files.length === 0 ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="relative flex h-20 w-14 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  />
+                }
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-[10px]">{t("home.uploadSource")}</span>
+              </TooltipTrigger>
+              <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <div className="relative h-20 w-14 flex-shrink-0">
+              <Stack
+                cards={fileCards}
+                className="h-full w-full"
+                randomRotation
+                sendToBackOnClick
+                sensitivity={60}
+              />
+              {files.length > 1 && (
+                <Badge
+                  variant="secondary"
+                  className="pointer-events-none absolute -left-2 -top-2 z-10 px-1.5 text-[10px]"
+                >
+                  {files.length}
+                </Badge>
               )}
-            </TooltipTrigger>
-            <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
-          </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute -bottom-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+                    />
+                  }
+                >
+                  <Plus className="h-3 w-3" />
+                </TooltipTrigger>
+                <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
 
           <Textarea
             ref={textareaRef}
@@ -454,6 +532,13 @@ export function HomeComposer({
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuGroup>
+                <DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem render={<Link to="/speakers" />}>
+                    <Users className="mr-2 h-4 w-4" />
+                    {t("composer.manageSpeakers")}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -495,39 +580,6 @@ export function HomeComposer({
                     <SlidersHorizontal className="mr-2 h-4 w-4" />
                     {t("composer.manageBrand")}
                   </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Tone */}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{t(`composer.tones.${tone}`)}</span>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-60">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("composer.toneLabel")}</DropdownMenuLabel>
-                  {tones.map((tn) => (
-                    <DropdownMenuItem key={tn} onClick={() => { lockParam("tone"); setTone(tn) }}>
-                      <div className="flex-1">
-                        <p className="text-sm">{t(`composer.tones.${tn}`)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t(`composer.toneDesc.${tn}`)}
-                        </p>
-                      </div>
-                      {tn === tone && <Check className="ml-2 h-4 w-4" />}
-                    </DropdownMenuItem>
-                  ))}
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -587,11 +639,21 @@ export function HomeComposer({
                 <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                   {t("composer.outputsLabel")}
                 </p>
-                <div className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
-                  {t("composer.outputOptions.clips")} — {t("home.alwaysIncluded")}
+                <div className="flex w-full items-center justify-between rounded-md bg-accent px-2 py-1.5 text-sm text-foreground">
+                  <span className="flex items-center gap-2">
+                    <Video className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex flex-col">
+                      <span>{t("composer.outputOptions.clips")}</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {t("home.alwaysIncluded")}
+                      </span>
+                    </span>
+                  </span>
+                  <Check className="h-4 w-4 flex-shrink-0" />
                 </div>
                 {OUTPUT_OPTIONS.filter((o) => o !== "clips").map((key) => {
                   const active = outputs.includes(key)
+                  const Icon = OUTPUT_ICONS[key]
                   return (
                     <button
                       key={key}
@@ -602,7 +664,10 @@ export function HomeComposer({
                         active ? "bg-accent text-foreground" : "hover:bg-accent/50"
                       )}
                     >
-                      {t(`composer.outputOptions.${key}`)}
+                      <span className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                        {t(`composer.outputOptions.${key}`)}
+                      </span>
                       {active && <Check className="h-4 w-4" />}
                     </button>
                   )
