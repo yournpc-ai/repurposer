@@ -280,7 +280,7 @@ const zh: Resources = {
     untitled: "未命名",
     namePlaceholder: "模板名称",
     delete: "删除模板",
-    previewHint: "拖动 Title / Caption / CTA 标记调整位置。文字来自你的演讲；样式在左侧设置。",
+    previewHint: "拖动 Title / Caption 标记调整位置。文字来自你的演讲；样式在左侧设置。",
     save: "保存模板",
     undo: "撤销",
     redo: "重做",
@@ -295,10 +295,11 @@ const zh: Resources = {
     },
     rows: {
       clipLayout: "片段版式",
+      title: "标题",
       caption: "字幕",
-      overlay: "叠加层（Logo、CTA）",
       content: "内容策略",
-      introOutro: "片头 / 片尾",
+      intro: "片头",
+      outro: "片尾",
       music: "配乐",
       removeFiller: "去除口头禅",
       keywordHighlighter: "AI 关键词高亮",
@@ -309,16 +310,14 @@ const zh: Resources = {
       fill: "填满",
       fit: "适应",
     },
+    titleCard: {
+      size: "字号",
+      hint: "标题（钩子句）按片段自动生成；在预览中拖动 Title 标记调整位置。",
+    },
     caption: {
       font: "字体",
       size: "字号",
       color: "颜色",
-    },
-    overlay: {
-      logo: "Logo 链接",
-      logoPlaceholder: "https://…/logo.png",
-      cta: "行动号召",
-      ctaPlaceholder: "查看完整演讲 →",
     },
     content: {
       voice: "品牌语气",
@@ -335,6 +334,14 @@ const zh: Resources = {
       outro: "片尾",
       outroText: "片尾文字",
       outroPlaceholder: "关注获取更多洞察",
+      type: "类型",
+      kinds: {
+        text: "文字",
+        image: "图片",
+        video: "视频",
+      },
+      uploadImage: "上传图片",
+      uploadVideo: "上传视频",
     },
     music: {
       enable: "背景配乐",
@@ -358,6 +365,10 @@ const zh: Resources = {
     preview: {
       caption: "你的字幕会显示在这里",
       keyword: "字幕",
+    },
+    summary: {
+      musicOn: "配乐已开启",
+      musicOff: "配乐已关闭",
     },
   },
   languages: {

@@ -89,17 +89,22 @@ export interface ClipDub {
   gain_db: number;
 }
 
+/** Intro/outro brand card: text, image, or a short video. */
+export interface IntroOutroCard {
+  kind: "text" | "image" | "video";
+  /** kind === "text" */
+  text?: string | null;
+  /** kind === "image" | "video" (storage-seam URL) */
+  media_url?: string | null;
+}
+
 /** Resolved brand values baked into the spec by the API (renderer-agnostic). */
 export interface ClipBrand {
-  logo_url?: string | null;
-  cta?: string | null;
-  /** Normalized center point of the CTA. Null -> default (bottom). */
-  cta_position?: Point | null;
   caption_color?: string | null;
   caption_size?: number | null;
   caption_font?: string | null;
-  intro_text?: string | null;
-  outro_text?: string | null;
+  intro?: IntroOutroCard | null;
+  outro?: IntroOutroCard | null;
   fill_mode?: "fill" | "fit";
 }
 
@@ -133,13 +138,13 @@ export const COMPOSITION_FPS = 30;
 export const INTRO_SECONDS = 2;
 export const OUTRO_SECONDS = 2;
 
-/** Intro card duration for this spec (0 when no brand intro text). */
+/** Intro card duration for this spec (0 when no brand intro card). */
 export const introSeconds = (spec: ClipSpec): number =>
-  spec.brand?.intro_text ? INTRO_SECONDS : 0;
+  spec.brand?.intro ? INTRO_SECONDS : 0;
 
-/** Outro card duration for this spec (0 when no brand outro text). */
+/** Outro card duration for this spec (0 when no brand outro card). */
 export const outroSeconds = (spec: ClipSpec): number =>
-  spec.brand?.outro_text ? OUTRO_SECONDS : 0;
+  spec.brand?.outro ? OUTRO_SECONDS : 0;
 
 /** Non-hidden segments in order. */
 export const keptSegments = (spec: ClipSpec): ClipSegment[] =>

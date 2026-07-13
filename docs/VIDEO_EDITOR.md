@@ -66,14 +66,11 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
   "dub": { "url": "/api/v1/outputs/.../dub_fr.mp3", "enabled": false, "gain_db": 0 }, // voice-clone dubbing; when enabled, original audio is muted
   // brand block is baked by the API from the selected BrandTemplate (brand_template_id, defaults to latest) at generation time; renderer does not read DB
   "brand": {
-    "logo_url": "https://example.com/logo.png",
-    "cta": "Read the full talk →",
-    "cta_position": { "x": 0.5, "y": 0.92 },  // normalized center point (drag to position)
     "caption_color": "#22c55e",
     "caption_size": 56,
     "caption_font": "lilita",                 // lilita | inter | playfair | source-serif
-    "intro_text": "From the keynote",
-    "outro_text": "Follow for more insights",
+    "intro": { "kind": "text", "text": "From the keynote" },
+    "outro": { "kind": "video", "media_url": "/api/v1/files/.../outro.mp4" },
     "fill_mode": "fill"                       // fill (cover) | fit (contain)
   },
   "brand_ref": "brand_template_uuid",       // provenance: which brand template
@@ -86,9 +83,9 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
 - Styles go through `caption_style_preset` enum (e.g. `clean-bottom` / `karaoke-highlight`), **no free-form layout** — this is the prerequisite for "what you see is what you get" and future libass swapability.
 - **Brand enters rendering**: the `brand` block is baked into the spec by the API parsing `BrandTemplate` at **generation time**; the render service / preview only reads the spec, not the DB, guaranteeing parity and keeping the renderer a black box.
 - **Music enters rendering**: `music.url` points to the built-in mood music library (`/api/v1/music/<mood>`) or any absolute URL; `<Audio>` loops and mixes, gain controlled by `gain_db`.
-- **Intro/outro**: when `brand.intro_text` / `brand.outro_text` are present, a 2-second title card is inserted before and after the main video timeline; the video body `<Sequence>` shifts backward, and subtitle remapping auto-aligns.
+- **Intro/outro**: when `brand.intro` / `brand.outro` are present, a 2-second card is inserted before and after the main video timeline; each card is `{kind: "text"|"image"|"video", text?, media_url?}` — text renders the existing title-card look, image/video fill the frame (cut at the 2s window edge if longer, no per-card duration editing). The video body `<Sequence>` shifts backward, and subtitle remapping auto-aligns.
 - **Two source kinds (output is not limited to real-person recordings)**: `source.kind="video"` uses `<OffthreadVideo>` (current state); `source.kind="stills"` is an **image audio slideshow** — `image_urls` serve as the background visual (1 image = full screen / N images = evenly split hard-cut slideshow / 0 images = solid color fallback), `url` is the optional audio track. When audio is present, reuse ASR word-level `caption_track`; when no audio, it becomes a fixed-duration slideshow (each image `SECS_PER_IMAGE` seconds). Background visual source priority: **slideshow PDF page renders (`Asset.slide_pages`) first** + uploaded photos after; source selection priority VIDEO→AUDIO→SLIDES/IMAGE. **Deliberately not doing** transitions / Ken-Burns / multi-sentence animated text tracks / B-roll (staying at L2, see ADR-020).
-- **Text drag positioning**: `caption_position` / `title.position` / `brand.cta_position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` is the composite pixel font size. The brand page overlays a transparent layer on the preview for dragging these three text overlays (safe-zone + clamp). **Only move; no scaling / keyframe animation.**
+- **Text drag positioning**: `caption_position` / `title.position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` is the composite pixel font size. The brand page overlays a transparent layer on the preview for dragging these text overlays (safe-zone + clamp), shown only while its setting row is hovered or active. **Only move; no scaling / keyframe animation.**
 - **Voice-clone dubbing (dub)**: `POST /clips/{id}/dub` uses the speaker's voice (VOICE_SAMPLE / AUDIO / VIDEO track extraction) via MiniMax voice_clone + T2A to dub the (translated) subtitles into the target language, baked into the `dub` track; when rendering, if `dub.enabled`, **mute original audio** and play the dub instead (overlay, no lip-sync, see ADR-021 and memory).
 - **Image visual understanding**: IMAGE assets are processed by M3 multimodal (`services/vision.py:describe_image`) to extract key information into `Asset.extracted_text`, feeding into the analyzer's materials like any other asset.
 - **Intent channel**: homepage prompt = `GenerateRequest.instruction`, folded into `GenerationContext` and passed to the Content Director and every derivative agent, used to shape the content plan, select clips, determine hook/title, and bias output focus.

@@ -92,6 +92,16 @@ def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> Path:
     return settings.asset_dir / _storage_prefix(user_id) / "speakers" / str(speaker_id)
 
 
+def get_brand_media_dir(user_id: UUID | str) -> Path:
+    """Get upload directory for brand-template intro/outro media.
+
+    Flat, not scoped by brand_template_id: a template being edited may not
+    have an id yet (new/unsaved draft), so uploads are independent objects —
+    same convention as the demo project's flat uploads directory.
+    """
+    return settings.asset_dir / _storage_prefix(user_id) / "brand-media"
+
+
 def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> Path:
     """Get output directory for a project.
 
@@ -115,6 +125,13 @@ def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> Pat
 def get_speaker_upload_path(speaker_id: UUID, user_id: UUID | str, filename: str) -> Path:
     """Get upload file path for a speaker."""
     directory = get_speaker_upload_dir(speaker_id, user_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    return _unique_path(directory, filename)
+
+
+def get_brand_media_path(user_id: UUID | str, filename: str) -> Path:
+    """Get upload file path for brand-template intro/outro media."""
+    directory = get_brand_media_dir(user_id)
     directory.mkdir(parents=True, exist_ok=True)
     return _unique_path(directory, filename)
 
@@ -147,6 +164,18 @@ async def save_speaker_upload(
 ) -> str:
     """Save uploaded file to speaker storage and return relative path string."""
     destination = get_speaker_upload_path(speaker_id, user_id, filename)
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(file_obj, buffer)
+    return _relative_path(destination)
+
+
+async def save_brand_media_upload(
+    file_obj: BinaryIO,
+    user_id: UUID | str,
+    filename: str,
+) -> str:
+    """Save an intro/outro image or video and return its relative path string."""
+    destination = get_brand_media_path(user_id, filename)
     with destination.open("wb") as buffer:
         shutil.copyfileobj(file_obj, buffer)
     return _relative_path(destination)

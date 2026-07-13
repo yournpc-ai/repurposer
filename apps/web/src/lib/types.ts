@@ -137,7 +137,5 @@ export interface BrandTemplate {
   name: string
   config: {
     captionColor?: string
-    logoUrl?: string
-    cta?: string
   }
 }

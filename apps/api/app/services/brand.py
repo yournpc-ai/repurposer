@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import ClipBrand, ClipMusic
+from app.models.schemas import ClipBrand, ClipMusic, IntroOutroCard
 from app.models.tables import BrandTemplate, Music, User
 from app.services.music import get_music, get_music_by_mood
 from app.services.storage import music_stream_url
@@ -27,15 +27,16 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "captionFont": "lilita",
     "captionSize": 44,
     "captionColor": "#facc15",
-    "logoUrl": "",
-    "cta": "Read the full talk →",
     "captionPosition": {"x": 0.5, "y": 0.84},
     "titlePosition": {"x": 0.5, "y": 0.12},
-    "ctaPosition": {"x": 0.5, "y": 0.92},
     "introEnabled": False,
+    "introKind": "text",
     "introText": "",
+    "introMediaUrl": None,
     "outroEnabled": False,
+    "outroKind": "text",
     "outroText": "",
+    "outroMediaUrl": None,
     "musicEnabled": False,
     "musicMood": "calm",
     "musicId": None,
@@ -96,20 +97,29 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
     fill = cfg.get("fillMode")
     fill_mode: Literal["fill", "fit"] = "fit" if fill == "fit" else "fill"
 
-    intro = _clean("introText") if cfg.get("introEnabled") else None
-    outro = _clean("outroText") if cfg.get("outroEnabled") else None
-
     return ClipBrand(
-        logo_url=_clean("logoUrl"),
-        cta=_clean("cta"),
-        cta_position=cfg.get("ctaPosition"),
         caption_color=_clean("captionColor"),
         caption_size=caption_size,
         caption_font=_clean("captionFont"),
-        intro_text=intro,
-        outro_text=outro,
+        intro=_intro_outro_card(cfg, "intro"),
+        outro=_intro_outro_card(cfg, "outro"),
         fill_mode=fill_mode,
     )
+
+
+def _intro_outro_card(cfg: dict[str, Any], prefix: str) -> IntroOutroCard | None:
+    """Build an intro/outro card from ``{prefix}Enabled/Kind/Text/MediaUrl`` config keys."""
+    if not cfg.get(f"{prefix}Enabled"):
+        return None
+    raw_kind = cfg.get(f"{prefix}Kind") or "text"
+    if raw_kind == "text":
+        text = cfg.get(f"{prefix}Text")
+        text = text.strip() if isinstance(text, str) else ""
+        return IntroOutroCard(kind="text", text=text) if text else None
+    kind: Literal["image", "video"] = "video" if raw_kind == "video" else "image"
+    media_url = cfg.get(f"{prefix}MediaUrl")
+    media_url = media_url.strip() if isinstance(media_url, str) else ""
+    return IntroOutroCard(kind=kind, media_url=media_url) if media_url else None
 
 
 async def music_from_template(

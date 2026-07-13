@@ -437,13 +437,14 @@ Request:
     "captionPosition": { "x": 0.5, "y": 0.84 },
     "titleSize": 58,
     "titlePosition": { "x": 0.5, "y": 0.12 },
-    "ctaPosition": { "x": 0.5, "y": 0.92 },
-    "logoUrl": "https://.../logo.png",
-    "cta": "Read the full talk →",
     "introEnabled": true,
+    "introKind": "text",
     "introText": "This talk is from…",
+    "introMediaUrl": null,
     "outroEnabled": true,
-    "outroText": "Follow for more insights",
+    "outroKind": "video",
+    "outroText": "",
+    "outroMediaUrl": "/api/v1/files/.../outro.mp4",
     "musicEnabled": true,
     "musicMood": "corporate"
   }
@@ -468,6 +469,16 @@ GET /api/v1/brand-templates/{template_id}
 DELETE /api/v1/brand-templates/{template_id}
 ```
 
+### Upload Intro/Outro Media
+
+```http
+POST /api/v1/brand-templates/media
+```
+
+Multipart `file` (image or video). Not scoped by `template_id` — a draft may
+not have one yet. Returns `{"url": "/api/v1/files/..."}`, a storage-seam URL
+to store in `config.introMediaUrl` / `config.outroMediaUrl`.
+
 ## 13. Data Models
 
 See the Data Models section in [Architecture Design](./ARCHITECTURE.md).
@@ -489,5 +500,5 @@ Removed / not yet implemented:
 - `HumanFeedback` (feedback is now handled by the `/clips/{id}/revise` endpoint and stored on the revised `Clip`)
 - `WorkflowStep` (dropped; `WorkflowRun.current_step` tracks progress as a string)
 
-Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(cta_position) / `Point`.
+Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(intro/outro) / `IntroOutroCard`(kind/text/media_url) / `Point`.
 Requests/derivatives: `GenerateRequest`(carousel/brand_template_id/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.

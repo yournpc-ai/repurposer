@@ -37,13 +37,16 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
         src["image_urls"] = [
             base + u if isinstance(u, str) and u.startswith("/") else u for u in images
         ]
-    # Brand logo may be a relative storage URL too (usually an external absolute
-    # URL, in which case this is a no-op).
+    # Brand intro/outro media may be a relative storage URL too (usually an
+    # external absolute URL, in which case this is a no-op).
     brand = spec.get("brand")
     if isinstance(brand, dict):
-        logo = brand.get("logo_url") or ""
-        if logo.startswith("/"):
-            brand["logo_url"] = base + logo
+        for card_key in ("intro", "outro"):
+            card = brand.get(card_key)
+            if isinstance(card, dict):
+                media_url = card.get("media_url") or ""
+                if media_url.startswith("/"):
+                    card["media_url"] = base + media_url
     # Background music track URL (built-in mood library is storage-relative).
     music = spec.get("music")
     if isinstance(music, dict):

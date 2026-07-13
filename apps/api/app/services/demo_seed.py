@@ -110,7 +110,6 @@ async def _get_or_create_demo_brand(db, user_id: UUID) -> BrandTemplate:
     brand = await db.get(BrandTemplate, DEMO_BRAND_TEMPLATE_ID)
     if brand is None:
         brand_config = dict(DEFAULT_BRAND_CONFIG)
-        brand_config["cta"] = "Watch the full talk →"
         brand = BrandTemplate(
             id=DEMO_BRAND_TEMPLATE_ID,
             user_id=user_id,

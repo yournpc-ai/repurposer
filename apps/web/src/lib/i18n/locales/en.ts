@@ -278,7 +278,7 @@ const en = {
     untitled: "Untitled",
     namePlaceholder: "Template name",
     delete: "Delete template",
-    previewHint: "Drag the Title / Caption / CTA markers to position them. Text comes from your talk; set the style on the left.",
+    previewHint: "Drag the Title / Caption markers to position them. Text comes from your talk; set the style on the left.",
     save: "Save template",
     undo: "Undo",
     redo: "Redo",
@@ -293,10 +293,11 @@ const en = {
     },
     rows: {
       clipLayout: "Clip layout settings",
+      title: "Title",
       caption: "Caption",
-      overlay: "Overlay (logo, CTA)",
       content: "Content strategy",
-      introOutro: "Intro / outro",
+      intro: "Intro",
+      outro: "Outro",
       music: "Music",
       removeFiller: "Remove filler words",
       keywordHighlighter: "AI keywords highlighter",
@@ -307,16 +308,14 @@ const en = {
       fill: "Fill",
       fit: "Fit",
     },
+    titleCard: {
+      size: "Size",
+      hint: "The hook line is generated per clip; position it by dragging the Title marker in the preview.",
+    },
     caption: {
       font: "Font",
       size: "Size",
       color: "Color",
-    },
-    overlay: {
-      logo: "Logo URL",
-      logoPlaceholder: "https://…/logo.png",
-      cta: "Call to action",
-      ctaPlaceholder: "Read the full talk →",
     },
     content: {
       voice: "Brand voice",
@@ -333,6 +332,14 @@ const en = {
       outro: "Outro",
       outroText: "Outro text",
       outroPlaceholder: "Follow for more insights",
+      type: "Type",
+      kinds: {
+        text: "Text",
+        image: "Image",
+        video: "Video",
+      },
+      uploadImage: "Upload image",
+      uploadVideo: "Upload video",
     },
     music: {
       enable: "Background music",
@@ -356,6 +363,10 @@ const en = {
     preview: {
       caption: "Your captions show up right here",
       keyword: "captions",
+    },
+    summary: {
+      musicOn: "Music on",
+      musicOff: "Music off",
     },
   },
   languages: {

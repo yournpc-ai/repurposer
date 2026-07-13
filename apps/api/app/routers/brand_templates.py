@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.dependencies import DBDep, get_current_user
@@ -12,6 +12,7 @@ from app.models.schemas import (
     BrandTemplateUpdate,
 )
 from app.models.tables import BrandTemplate, User
+from app.services.storage import save_brand_media_upload, stream_url
 
 router = APIRouter()
 
@@ -61,6 +62,24 @@ async def list_brand_templates(
         .order_by(BrandTemplate.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.post("/media", status_code=status.HTTP_201_CREATED)
+async def upload_brand_media(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str | None]:
+    """Upload an intro/outro image or video; returns its storage-seam URL.
+
+    Not scoped by template_id (a draft may not have one yet) — placed before
+    the ``/{template_id}`` routes so ``media`` is never parsed as a UUID.
+    """
+    if not (file.content_type or "").startswith(("image/", "video/")):
+        raise HTTPException(status_code=422, detail="File must be an image or video")
+    relative_path = await save_brand_media_upload(
+        file.file, current_user.id, file.filename or "upload"
+    )
+    return {"url": stream_url(relative_path)}
 
 
 @router.get("/{template_id}", response_model=BrandTemplateResponse)

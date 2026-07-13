@@ -775,6 +775,16 @@ class ClipDub(BaseModel):
     gain_db: float = 0.0
 
 
+class IntroOutroCard(BaseModel):
+    """Intro/outro brand card: text, image, or a short video."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["text", "image", "video"] = "text"
+    text: str | None = None  # kind == "text"
+    media_url: str | None = None  # kind == "image" | "video" (storage-seam URL)
+
+
 class ClipBrand(BaseModel):
     """Resolved brand values baked into the spec at generation time.
 
@@ -785,14 +795,11 @@ class ClipBrand(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    logo_url: str | None = None  # corner logo overlay (absolute or storage URL)
-    cta: str | None = None  # call-to-action text shown near the bottom
-    cta_position: Point | None = None  # normalized center; None -> default (bottom)
     caption_color: str | None = None  # hex; overrides the default white caption
     caption_size: int | None = None  # px; overrides the default caption size
     caption_font: str | None = None  # font key: lilita/inter/playfair/source-serif
-    intro_text: str | None = None  # opening title card (None = no intro)
-    outro_text: str | None = None  # closing title card (None = no outro)
+    intro: IntroOutroCard | None = None  # opening card (None = no intro)
+    outro: IntroOutroCard | None = None  # closing card (None = no outro)
     fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
 
 

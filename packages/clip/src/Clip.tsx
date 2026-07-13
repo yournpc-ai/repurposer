@@ -10,7 +10,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import type { CaptionCue, ClipSpec, Point } from "./types";
+import type { CaptionCue, ClipSpec, IntroOutroCard, Point } from "./types";
 import {
   COMPOSITION_FPS,
   introSeconds,
@@ -34,7 +34,6 @@ function pointStyle(p: Point | null | undefined, fallback: Point): React.CSSProp
 
 const DEFAULT_TITLE_POS: Point = { x: 0.5, y: 0.12 };
 const DEFAULT_CAPTION_POS: Point = { x: 0.5, y: 0.84 };
-const DEFAULT_CTA_POS: Point = { x: 0.5, y: 0.92 };
 
 /**
  * The single source of truth for how a clip looks — consumed by BOTH the
@@ -67,6 +66,58 @@ function splitFrames(count: number, total: number): number[] {
   );
 }
 
+/**
+ * An intro/outro brand card: text, image, or a short video, filling the fixed
+ * INTRO_SECONDS/OUTRO_SECONDS window. Image/video are simply cut at the
+ * window edge if longer — no per-card duration editing (see docs/VIDEO_EDITOR.md).
+ */
+function IntroOutroCardView({
+  card,
+  fontFamily,
+}: {
+  card: IntroOutroCard;
+  fontFamily: string;
+}) {
+  if (card.kind === "image" && card.media_url) {
+    return (
+      <AbsoluteFill>
+        <Img
+          src={card.media_url}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </AbsoluteFill>
+    );
+  }
+  if (card.kind === "video" && card.media_url) {
+    return (
+      <AbsoluteFill>
+        <OffthreadVideo
+          src={card.media_url}
+          muted
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: 96 }}>
+      <div
+        style={{
+          textAlign: "center",
+          color: "#ffffff",
+          fontFamily,
+          fontSize: 68,
+          fontWeight: 700,
+          lineHeight: 1.2,
+          textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+        }}
+      >
+        {card.text}
+      </div>
+    </AbsoluteFill>
+  );
+}
+
 export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -87,12 +138,11 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const outroDur = outroSeconds(spec);
   const introFrames = Math.round(introDur * fpsv);
   const videoFrames = Math.max(1, Math.round(videoTotal * fpsv));
+  const outroFrames = Math.round(outroDur * fpsv);
 
   const outputTime = frame / fpsv;
   const localOutput = outputTime - introDur; // time within the video portion
   const inVideo = localOutput >= 0 && localOutput < videoTotal;
-  const inIntro = introDur > 0 && outputTime < introDur;
-  const inOutro = outroDur > 0 && outputTime >= introDur + videoTotal;
 
   // Concatenated video timeline of kept segments (local time; gaps for cuts).
   const kept = keptSegments(spec);
@@ -135,8 +185,6 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   // the video portion. Rough overlay — no lip-sync (see docs/VIDEO_EDITOR.md).
   const dubUrl = spec.dub?.enabled ? spec.dub.url ?? null : null;
   const dubVolume = Math.min(1, Math.pow(10, (spec.dub?.gain_db ?? 0) / 20));
-
-  const cardText = inIntro ? brand?.intro_text : inOutro ? brand?.outro_text : null;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -200,37 +248,15 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </Sequence>
       ) : null}
 
-      {cardText ? (
-        <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: 96 }}>
-          <div
-            style={{
-              textAlign: "center",
-              color: "#ffffff",
-              fontFamily: captionFont,
-              fontSize: 68,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              textShadow: "0 2px 12px rgba(0,0,0,0.6)",
-            }}
-          >
-            {cardText}
-          </div>
-        </AbsoluteFill>
+      {brand?.intro ? (
+        <Sequence from={0} durationInFrames={introFrames} layout="none">
+          <IntroOutroCardView card={brand.intro} fontFamily={captionFont} />
+        </Sequence>
       ) : null}
-
-      {brand?.logo_url ? (
-        <Img
-          src={brand.logo_url}
-          style={{
-            position: "absolute",
-            top: 40,
-            right: 40,
-            height: 72,
-            width: "auto",
-            objectFit: "contain",
-            filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
-          }}
-        />
+      {brand?.outro ? (
+        <Sequence from={introFrames + videoFrames} durationInFrames={outroFrames} layout="none">
+          <IntroOutroCardView card={brand.outro} fontFamily={captionFont} />
+        </Sequence>
       ) : null}
 
       {inVideo && spec.title.enabled && spec.title.text ? (
@@ -278,31 +304,6 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
               </span>
             );
           })}
-        </div>
-      ) : null}
-
-      {inVideo && brand?.cta ? (
-        <div
-          style={{
-            textAlign: "center",
-            fontFamily: "sans-serif",
-            fontSize: 34,
-            fontWeight: 700,
-            color: "#ffffff",
-            textShadow: "0 2px 10px rgba(0,0,0,0.7)",
-            ...pointStyle(brand.cta_position, DEFAULT_CTA_POS),
-          }}
-        >
-          <span
-            style={{
-              display: "inline-block",
-              padding: "10px 28px",
-              borderRadius: 9999,
-              backgroundColor: "rgba(0,0,0,0.55)",
-            }}
-          >
-            {brand.cta}
-          </span>
         </div>
       ) : null}
     </AbsoluteFill>

@@ -66,10 +66,20 @@ function withAbsoluteSource(spec: ClipSpec): ClipSpec {
       },
     }
   }
-  // Brand logo may also be a relative storage URL (external URLs are untouched).
-  const logo = next.brand?.logo_url
-  if (logo && logo.startsWith('/')) {
-    next = { ...next, brand: { ...next.brand, logo_url: API_URL + logo } }
+  // Brand intro/outro media may be a relative storage URL too.
+  const introUrl = next.brand?.intro?.media_url
+  if (introUrl && introUrl.startsWith('/') && next.brand?.intro) {
+    next = {
+      ...next,
+      brand: { ...next.brand, intro: { ...next.brand.intro, media_url: API_URL + introUrl } },
+    }
+  }
+  const outroUrl = next.brand?.outro?.media_url
+  if (outroUrl && outroUrl.startsWith('/') && next.brand?.outro) {
+    next = {
+      ...next,
+      brand: { ...next.brand, outro: { ...next.brand.outro, media_url: API_URL + outroUrl } },
+    }
   }
   // Background music track is a storage-relative URL too.
   const track = next.music?.url

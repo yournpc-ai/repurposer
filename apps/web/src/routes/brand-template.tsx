@@ -10,12 +10,14 @@ import {
   type CaptionCue,
   type ClipBrand,
   type ClipSpec,
+  type IntroOutroCard,
 } from "@repurposer/clip"
 import {
   LayoutTemplate,
+  Heading,
   Captions,
-  ImagePlus,
   Clapperboard,
+  Flag,
   Music,
   Eraser,
   Highlighter,
@@ -25,6 +27,8 @@ import {
   Check,
   Trash2,
   Plus,
+  Upload,
+  X,
   type LucideIcon,
 } from "lucide-react"
 
@@ -66,10 +70,13 @@ const FONTS = [
 // Renderer supports 9:16 / 1:1 only (vertical-first positioning).
 const ASPECTS = ["9:16", "1:1"] as const
 const CAPTION_SIZES = [32, 40, 44, 56] as const
+const TITLE_SIZES = [40, 48, 58, 72] as const
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
 
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
+
+type IntroOutroKind = "text" | "image" | "video"
 
 type Template = {
   aspect: (typeof ASPECTS)[number]
@@ -80,13 +87,14 @@ type Template = {
   captionPosition: Pt
   titleSize: number
   titlePosition: Pt
-  ctaPosition: Pt
-  logoUrl: string
-  cta: string
   introEnabled: boolean
+  introKind: IntroOutroKind
   introText: string
+  introMediaUrl: string | null
   outroEnabled: boolean
+  outroKind: IntroOutroKind
   outroText: string
+  outroMediaUrl: string | null
   musicEnabled: boolean
   musicId: string | null
   musicGainDb: number
@@ -107,13 +115,14 @@ const DEFAULT_TEMPLATE: Template = {
   captionPosition: { x: 0.5, y: 0.84 },
   titleSize: 58,
   titlePosition: { x: 0.5, y: 0.12 },
-  ctaPosition: { x: 0.5, y: 0.92 },
-  logoUrl: "",
-  cta: "Read the full talk →",
   introEnabled: false,
+  introKind: "text",
   introText: "",
+  introMediaUrl: null,
   outroEnabled: false,
+  outroKind: "text",
   outroText: "",
+  outroMediaUrl: null,
   musicEnabled: false,
   musicId: null,
   musicGainDb: -18,
@@ -121,7 +130,7 @@ const DEFAULT_TEMPLATE: Template = {
   keywordHighlighter: true,
 }
 
-type Section = null | "clipLayout" | "caption" | "overlay" | "introOutro" | "music"
+type Section = null | "clipLayout" | "title" | "caption" | "intro" | "outro" | "music"
 
 // Fixed LATIN samples so the brand fonts (Lilita/Inter/Playfair/Source Serif —
 // all latin) actually render in the preview. Real text comes from the talk's
@@ -135,16 +144,28 @@ const DEMO_TITLE = "The hook line"
 // services/brand.py mapping).
 // ---------------------------------------------------------------------------
 
+function introOutroCard(
+  enabled: boolean,
+  kind: IntroOutroKind,
+  text: string,
+  mediaUrl: string | null
+): IntroOutroCard | null {
+  if (!enabled) return null
+  if (kind === "text") return text.trim() ? { kind, text: text.trim() } : null
+  if (!mediaUrl) return null
+  // Preview-only: the <Player> renders in the browser, so relative storage-seam
+  // URLs need the API origin (mirrors the music.url handling below).
+  const url = mediaUrl.startsWith("/") ? API_URL + mediaUrl : mediaUrl
+  return { kind, media_url: url }
+}
+
 function templateToBrand(tpl: Template): ClipBrand {
   return {
-    logo_url: tpl.logoUrl || null,
-    cta: tpl.cta || null,
-    cta_position: tpl.ctaPosition,
     caption_color: tpl.captionColor || null,
     caption_size: tpl.captionSize || null,
     caption_font: tpl.captionFont || null,
-    intro_text: tpl.introEnabled ? tpl.introText || null : null,
-    outro_text: tpl.outroEnabled ? tpl.outroText || null : null,
+    intro: introOutroCard(tpl.introEnabled, tpl.introKind, tpl.introText, tpl.introMediaUrl),
+    outro: introOutroCard(tpl.outroEnabled, tpl.outroKind, tpl.outroText, tpl.outroMediaUrl),
     fill_mode: tpl.fillMode,
   }
 }
@@ -193,17 +214,23 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
 /** Clamp a normalized coord into the safe zone [0.05, 0.95]. */
 const clampSafe = (v: number) => Math.min(0.95, Math.max(0.05, v))
 
-/** A draggable overlay marker that moves a normalized point within the preview. */
+/**
+ * A draggable overlay marker that moves a normalized point within the preview.
+ * Only rendered while `visible` — surfaced when its setting row is hovered or
+ * its tab is the active section, so the preview isn't cluttered by default.
+ */
 function DraggableMarker({
   point,
   label,
   containerRef,
+  visible,
   onBegin,
   onChange,
 }: {
   point: Pt
   label: string
   containerRef: React.RefObject<HTMLDivElement | null>
+  visible: boolean
   onBegin: () => void
   onChange: (p: Pt) => void
 }) {
@@ -226,6 +253,7 @@ function DraggableMarker({
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
   }
+  if (!visible) return null
   return (
     <div
       onPointerDown={onDown}
@@ -281,6 +309,98 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/** Upload + preview for an intro/outro image or video card. */
+function MediaUploadField({
+  kind,
+  url,
+  onUploaded,
+  onClear,
+}: {
+  kind: "image" | "video"
+  url: string | null
+  onUploaded: (url: string) => void
+  onClear: () => void
+}) {
+  const { t } = useTranslation()
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await apiFetch("/api/v1/brand-templates/media", { method: "POST", body: form })
+      if (res.ok) {
+        const data = (await res.json()) as { url: string }
+        onUploaded(data.url)
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const resolvedUrl = url ? (url.startsWith("/") ? API_URL + url : url) : null
+
+  return (
+    <div className="space-y-1.5">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={kind === "image" ? "image/*" : "video/*"}
+        className="hidden"
+        onChange={handleChange}
+      />
+      {resolvedUrl ? (
+        <div className="relative overflow-hidden rounded-md ring-1 ring-border">
+          {kind === "image" ? (
+            <img src={resolvedUrl} className="h-28 w-full object-cover" alt="" />
+          ) : (
+            <video src={resolvedUrl} className="h-28 w-full object-cover" muted loop autoPlay />
+          )}
+          <div className="absolute right-1.5 top-1.5 flex gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="h-6 w-6 rounded-md"
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="h-3 w-3" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="h-6 w-6 rounded-md"
+              onClick={onClear}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex h-20 w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground transition-colors hover:bg-muted"
+        >
+          <Upload className="h-4 w-4" />
+          <span className="text-xs">
+            {uploading
+              ? t("common.loading")
+              : t(`brandTemplate.introOutro.upload${kind === "image" ? "Image" : "Video"}`)}
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -292,6 +412,7 @@ function BrandTemplatePage() {
   const [past, setPast] = useState<Template[]>([])
   const [future, setFuture] = useState<Template[]>([])
   const [section, setSection] = useState<Section>(null)
+  const [hoveredRow, setHoveredRow] = useState<Section>(null)
   const [saved, setSaved] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
@@ -508,17 +629,31 @@ function BrandTemplatePage() {
                     <LayoutTemplate className="h-4.5 w-4.5 text-muted-foreground" />
                     {t("brandTemplate.rows.clipLayout")}
                   </TabsTrigger>
-                  <TabsTrigger value="caption" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                  <TabsTrigger
+                    value="title"
+                    className="justify-start gap-2.5 px-2 py-2 text-sm"
+                    onMouseEnter={() => setHoveredRow("title")}
+                    onMouseLeave={() => setHoveredRow((r) => (r === "title" ? null : r))}
+                  >
+                    <Heading className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.title")}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="caption"
+                    className="justify-start gap-2.5 px-2 py-2 text-sm"
+                    onMouseEnter={() => setHoveredRow("caption")}
+                    onMouseLeave={() => setHoveredRow((r) => (r === "caption" ? null : r))}
+                  >
                     <Captions className="h-4.5 w-4.5 text-muted-foreground" />
                     {t("brandTemplate.rows.caption")}
                   </TabsTrigger>
-                  <TabsTrigger value="overlay" className="justify-start gap-2.5 px-2 py-2 text-sm">
-                    <ImagePlus className="h-4.5 w-4.5 text-muted-foreground" />
-                    {t("brandTemplate.rows.overlay")}
-                  </TabsTrigger>
-                  <TabsTrigger value="introOutro" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                  <TabsTrigger value="intro" className="justify-start gap-2.5 px-2 py-2 text-sm">
                     <Clapperboard className="h-4.5 w-4.5 text-muted-foreground" />
-                    {t("brandTemplate.rows.introOutro")}
+                    {t("brandTemplate.rows.intro")}
+                  </TabsTrigger>
+                  <TabsTrigger value="outro" className="justify-start gap-2.5 px-2 py-2 text-sm">
+                    <Flag className="h-4.5 w-4.5 text-muted-foreground" />
+                    {t("brandTemplate.rows.outro")}
                   </TabsTrigger>
                   <TabsTrigger value="music" className="justify-start gap-2.5 px-2 py-2 text-sm">
                     <Music className="h-4.5 w-4.5 text-muted-foreground" />
@@ -580,6 +715,27 @@ function BrandTemplatePage() {
                   </Field>
                 </TabsContent>
 
+                <TabsContent value="title" className="space-y-4">
+                  <Field label={t("brandTemplate.titleCard.size")}>
+                    <ToggleGroup
+                      variant="outline"
+                      spacing={0}
+                      value={[String(template.titleSize)]}
+                      onValueChange={(v) => v[0] && update("titleSize", Number(v[0]))}
+                      className="w-full"
+                    >
+                      {TITLE_SIZES.map((s) => (
+                        <ToggleGroupItem key={s} value={String(s)} className="flex-1 text-xs">
+                          {s}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                  <p className="text-xs text-muted-foreground">
+                    {t("brandTemplate.titleCard.hint")}
+                  </p>
+                </TabsContent>
+
                 <TabsContent value="caption" className="space-y-4">
                   <Field label={t("brandTemplate.caption.font")}>
                     <Select
@@ -632,24 +788,7 @@ function BrandTemplatePage() {
                   </Field>
                 </TabsContent>
 
-                <TabsContent value="overlay" className="space-y-4">
-                  <Field label={t("brandTemplate.overlay.logo")}>
-                    <Input
-                      value={template.logoUrl}
-                      onChange={(e) => update("logoUrl", e.target.value)}
-                      placeholder={t("brandTemplate.overlay.logoPlaceholder")}
-                    />
-                  </Field>
-                  <Field label={t("brandTemplate.overlay.cta")}>
-                    <Input
-                      value={template.cta}
-                      onChange={(e) => update("cta", e.target.value)}
-                      placeholder={t("brandTemplate.overlay.ctaPlaceholder")}
-                    />
-                  </Field>
-                </TabsContent>
-
-                <TabsContent value="introOutro" className="space-y-4">
+                <TabsContent value="intro" className="space-y-4">
                   <label className="flex items-center justify-between">
                     <span className="text-sm">{t("brandTemplate.introOutro.intro")}</span>
                     <Switch
@@ -658,14 +797,43 @@ function BrandTemplatePage() {
                     />
                   </label>
                   {template.introEnabled && (
-                    <Field label={t("brandTemplate.introOutro.introText")}>
-                      <Input
-                        value={template.introText}
-                        onChange={(e) => update("introText", e.target.value)}
-                        placeholder={t("brandTemplate.introOutro.introPlaceholder")}
-                      />
-                    </Field>
+                    <>
+                      <Field label={t("brandTemplate.introOutro.type")}>
+                        <ToggleGroup
+                          variant="outline"
+                          spacing={0}
+                          value={[template.introKind]}
+                          onValueChange={(v) => v[0] && update("introKind", v[0] as IntroOutroKind)}
+                          className="w-full"
+                        >
+                          {(["text", "image", "video"] as const).map((k) => (
+                            <ToggleGroupItem key={k} value={k} className="flex-1 text-xs">
+                              {t(`brandTemplate.introOutro.kinds.${k}`)}
+                            </ToggleGroupItem>
+                          ))}
+                        </ToggleGroup>
+                      </Field>
+                      {template.introKind === "text" ? (
+                        <Field label={t("brandTemplate.introOutro.introText")}>
+                          <Input
+                            value={template.introText}
+                            onChange={(e) => update("introText", e.target.value)}
+                            placeholder={t("brandTemplate.introOutro.introPlaceholder")}
+                          />
+                        </Field>
+                      ) : (
+                        <MediaUploadField
+                          kind={template.introKind}
+                          url={template.introMediaUrl}
+                          onUploaded={(url) => update("introMediaUrl", url)}
+                          onClear={() => update("introMediaUrl", null)}
+                        />
+                      )}
+                    </>
                   )}
+                </TabsContent>
+
+                <TabsContent value="outro" className="space-y-4">
                   <label className="flex items-center justify-between">
                     <span className="text-sm">{t("brandTemplate.introOutro.outro")}</span>
                     <Switch
@@ -674,13 +842,39 @@ function BrandTemplatePage() {
                     />
                   </label>
                   {template.outroEnabled && (
-                    <Field label={t("brandTemplate.introOutro.outroText")}>
-                      <Input
-                        value={template.outroText}
-                        onChange={(e) => update("outroText", e.target.value)}
-                        placeholder={t("brandTemplate.introOutro.outroPlaceholder")}
-                      />
-                    </Field>
+                    <>
+                      <Field label={t("brandTemplate.introOutro.type")}>
+                        <ToggleGroup
+                          variant="outline"
+                          spacing={0}
+                          value={[template.outroKind]}
+                          onValueChange={(v) => v[0] && update("outroKind", v[0] as IntroOutroKind)}
+                          className="w-full"
+                        >
+                          {(["text", "image", "video"] as const).map((k) => (
+                            <ToggleGroupItem key={k} value={k} className="flex-1 text-xs">
+                              {t(`brandTemplate.introOutro.kinds.${k}`)}
+                            </ToggleGroupItem>
+                          ))}
+                        </ToggleGroup>
+                      </Field>
+                      {template.outroKind === "text" ? (
+                        <Field label={t("brandTemplate.introOutro.outroText")}>
+                          <Input
+                            value={template.outroText}
+                            onChange={(e) => update("outroText", e.target.value)}
+                            placeholder={t("brandTemplate.introOutro.outroPlaceholder")}
+                          />
+                        </Field>
+                      ) : (
+                        <MediaUploadField
+                          kind={template.outroKind}
+                          url={template.outroMediaUrl}
+                          onUploaded={(url) => update("outroMediaUrl", url)}
+                          onClear={() => update("outroMediaUrl", null)}
+                        />
+                      )}
+                    </>
                   )}
                 </TabsContent>
 
@@ -703,6 +897,37 @@ function BrandTemplatePage() {
         <main className="flex flex-1 items-center justify-center overflow-hidden p-8">
           <div className="flex h-full max-h-[680px] flex-col items-center gap-2">
             <span className="text-xs text-muted-foreground">{t("brandTemplate.demo")}</span>
+            <div className="flex w-full max-w-[280px] flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-lg bg-card px-3 py-2 text-[11px] text-muted-foreground ring-1 ring-border">
+              <span className="font-medium text-foreground">{template.aspect}</span>
+              <span aria-hidden>·</span>
+              <span>{FONTS.find((f) => f.value === template.captionFont)?.label ?? template.captionFont}</span>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <span
+                  className="h-2.5 w-2.5 rounded-full ring-1 ring-border"
+                  style={{ backgroundColor: template.captionColor }}
+                />
+                {template.captionSize}px
+              </span>
+              <span aria-hidden>·</span>
+              <span>
+                {template.musicEnabled
+                  ? t("brandTemplate.summary.musicOn")
+                  : t("brandTemplate.summary.musicOff")}
+              </span>
+              {template.introEnabled ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{t("brandTemplate.introOutro.intro")}</span>
+                </>
+              ) : null}
+              {template.outroEnabled ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{t("brandTemplate.introOutro.outro")}</span>
+                </>
+              ) : null}
+            </div>
             <div
               ref={previewRef}
               className="relative"
@@ -756,6 +981,7 @@ function BrandTemplatePage() {
                     point={template.titlePosition}
                     label={t("brandTemplate.rows.title")}
                     containerRef={previewRef}
+                    visible={section === "title" || hoveredRow === "title"}
                     onBegin={beginDrag}
                     onChange={(p) => liveSet("titlePosition", p)}
                   />
@@ -763,15 +989,9 @@ function BrandTemplatePage() {
                     point={template.captionPosition}
                     label={t("brandTemplate.rows.caption")}
                     containerRef={previewRef}
+                    visible={section === "caption" || hoveredRow === "caption"}
                     onBegin={beginDrag}
                     onChange={(p) => liveSet("captionPosition", p)}
-                  />
-                  <DraggableMarker
-                    point={template.ctaPosition}
-                    label="CTA"
-                    containerRef={previewRef}
-                    onBegin={beginDrag}
-                    onChange={(p) => liveSet("ctaPosition", p)}
                   />
                 </div>
               ) : null}
