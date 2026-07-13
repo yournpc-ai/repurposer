@@ -20,7 +20,7 @@ Distill the following speech material into a {{ count }}-slide carousel:
 - **Themes**: {{ content_plan.themes | join(', ') }}
 - **Target audience**: {{ content_plan.target_audience }}
 - **Focus for this carousel**: {{ derivative_plan.focus or 'Walk through the core thesis step by step' }}
-- **CTA**: {{ derivative_plan.cta or context.brand_strategy.cta or 'Invite readers to follow or share their take' }}
+- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'Invite readers to follow or share their take' }}
 
 ## Speaker
 

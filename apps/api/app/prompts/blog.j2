@@ -22,7 +22,7 @@ Based on the following speech materials and content plan, write a blog article. 
   - {{ arg }}
 {% endfor %}
 - **Focus for this blog post**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}
-- **CTA**: {{ derivative_plan.cta or context.brand_strategy.cta or 'End with a reflection or follow-up question' }}
+- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'End with a reflection or follow-up question' }}
 
 {% if derivative_plan.quote_candidates %}
 ## Quotes to Consider
@@ -45,14 +45,14 @@ Based on the following speech materials and content plan, write a blog article. 
 (No style profile provided)
 {% endif %}
 
-{% if context.brand_strategy %}
+{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
 ## Brand Content Strategy
 
-{% if context.brand_strategy.voice %}
-- **Brand voice**: {{ context.brand_strategy.voice }}
+{% if context.speaker_voice %}
+- **Brand voice**: {{ context.speaker_voice }}
 {% endif %}
-{% if context.brand_strategy.guidelines %}
-- **Content guidelines**: {{ context.brand_strategy.guidelines }}
+{% if context.speaker_guidelines %}
+- **Content guidelines**: {{ context.speaker_guidelines }}
 {% endif %}
 
 {% endif %}

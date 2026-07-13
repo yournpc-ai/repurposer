@@ -91,6 +91,37 @@ async def test_director_falls_back_to_text_on_multimodal_failure(director_client
         caption="slide",
     )
 
+    await agent.plan(
+        materials=["material"],
+        context=_make_context(),
+        media_inputs=[media],
+        requested_derivatives=[DerivativeType.QUOTE_CARD],
+    )
+
+async def test_director_falls_back_to_text_on_any_media_failure(director_client):
+    """Any failure with media inputs should fall back to text-only, not just
+    errors that mention multimodal keywords. This protects against provider-side
+    crashes like 'tuple index out of range' when sending video data URLs."""
+    agent, client = director_client
+    client.generate.side_effect = [
+        IndexError("tuple index out of range"),
+        ContentPlan(
+            core_thesis="fallback_from_tuple_error",
+            derivatives=[
+                DerivativePlan(derivative_type=DerivativeType.QUOTE_CARD)
+            ],
+        ),
+    ]
+
+    from app.models.schemas import MediaInput, MediaInputType
+
+    media = MediaInput(
+        type=MediaInputType.VIDEO,
+        mime="video/mp4",
+        data_url="data:video/mp4;base64,abc",
+        caption="talk",
+    )
+
     plan = await agent.plan(
         materials=["material"],
         context=_make_context(),
@@ -98,5 +129,5 @@ async def test_director_falls_back_to_text_on_multimodal_failure(director_client
         requested_derivatives=[DerivativeType.QUOTE_CARD],
     )
 
-    assert plan.core_thesis == "fallback"
+    assert plan.core_thesis == "fallback_from_tuple_error"
     assert client.generate.await_count == 2

@@ -28,20 +28,20 @@ You are planning content for **{{ context.speaker_name or "the speaker" }}{% if 
 Make sure the angle serves their audience and credibility.
 
 {% endif %}
-{% if context.brand_strategy %}
+{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
 ## Brand Content Strategy
 
-{% if context.brand_strategy.voice %}
-- **Brand voice**: {{ context.brand_strategy.voice }}
+{% if context.speaker_voice %}
+- **Brand voice**: {{ context.speaker_voice }}
 {% endif %}
-{% if context.brand_strategy.audience %}
-- **Target audience**: {{ context.brand_strategy.audience }}
+{% if context.speaker_audience %}
+- **Target audience**: {{ context.speaker_audience }}
 {% endif %}
-{% if context.brand_strategy.cta %}
-- **Call to action**: {{ context.brand_strategy.cta }} — derivative outputs should, when natural, lead to this action.
+{% if context.speaker_cta %}
+- **Call to action**: {{ context.speaker_cta }} — derivative outputs should, when natural, lead to this action.
 {% endif %}
-{% if context.brand_strategy.guidelines %}
-- **Content guidelines**: {{ context.brand_strategy.guidelines }}
+{% if context.speaker_guidelines %}
+- **Content guidelines**: {{ context.speaker_guidelines }}
 {% endif %}
 
 {% endif %}

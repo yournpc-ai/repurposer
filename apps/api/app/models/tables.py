@@ -51,7 +51,12 @@ class User(Base):
 
 
 class Speaker(Base):
-    """Speaker table."""
+    """Speaker table.
+
+    A speaker is a project-level memory of a talk's voice, style, and content
+    strategy. It can be extracted from one project and reused in others, and
+    eventually used to generate new AI content in that speaker's voice.
+    """
 
     __tablename__ = "speakers"
 
@@ -62,6 +67,10 @@ class Speaker(Base):
     language = Column(String(10), default="zh")
     avatar_url = Column(String(512), nullable=True)
     persona = Column(JSON, nullable=True)
+    voice = Column(String(255), nullable=True)
+    audience = Column(String(255), nullable=True)
+    guidelines = Column(Text, nullable=True)
+    cta = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

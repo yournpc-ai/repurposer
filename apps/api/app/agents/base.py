@@ -82,11 +82,14 @@ class MiniMaxAgentBase:
         response_model: type,
         temperature: float,
     ) -> Any:
-        """Call M3; if multimodal input is rejected, retry with text only.
+        """Call M3; if media input fails for any reason, retry with text only.
 
-        Only falls back when media inputs are present and the first failure is
-        a known multimodal unsupported error. All other exceptions are re-raised
-        immediately so real bugs or bad prompts do not silently retry.
+        Media inputs (video/image/slide data URLs) are brittle: providers may
+        reject them due to size, format, or transient issues, and the resulting
+        exceptions are not always easy to classify. When media inputs are
+        present we always fall back to the text-only prompt so generation can
+        still succeed from transcripts/extracted text. Failures without media
+        inputs are re-raised immediately.
         """
         try:
             return await self.client.generate(
@@ -97,13 +100,14 @@ class MiniMaxAgentBase:
         except Exception as first_error:  # noqa: BLE001
             if not media_inputs:
                 raise
-            if not _is_multimodal_error(first_error):
-                raise
             logger.warning(
                 "multimodal_failed_falling_back_to_text",
                 error=str(first_error),
+                error_type=type(first_error).__name__,
                 media_count=len(media_inputs),
             )
+            if not messages:
+                raise
             text_only_messages: list[dict[str, Any]] = [
                 messages[0],
                 {"role": "user", "content": user_prompt},
@@ -113,18 +117,3 @@ class MiniMaxAgentBase:
                 response_model=response_model,
                 temperature=temperature,
             )
-
-
-def _is_multimodal_error(error: Exception) -> bool:
-    """Return True if the exception indicates multimodal input is unsupported."""
-    message = str(error).lower()
-    markers = [
-        "multimodal",
-        "image",
-        "video",
-        "audio",
-        "content type",
-        "unsupported",
-        "not supported",
-    ]
-    return any(marker in message for marker in markers)

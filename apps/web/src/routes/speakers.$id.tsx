@@ -27,6 +27,10 @@ interface Speaker {
   language: string
   avatar_url: string | null
   persona: SpeakerPersona | null
+  voice: string | null
+  audience: string | null
+  guidelines: string | null
+  cta: string | null
   created_at: string
   updated_at: string | null
 }
@@ -69,6 +73,10 @@ function SpeakerDetailPage() {
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
   const [persona, setPersona] = useState<SpeakerPersona | null>(null)
+  const [voice, setVoice] = useState("")
+  const [audience, setAudience] = useState("")
+  const [guidelines, setGuidelines] = useState("")
+  const [cta, setCta] = useState("")
 
   const fetchData = async () => {
     setLoading(true)
@@ -85,6 +93,10 @@ function SpeakerDetailPage() {
       setName(speakerData.name)
       setTitle(speakerData.title || "")
       setPersona(speakerData.persona)
+      setVoice(speakerData.voice || "")
+      setAudience(speakerData.audience || "")
+      setGuidelines(speakerData.guidelines || "")
+      setCta(speakerData.cta || "")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load speaker")
     } finally {
@@ -104,7 +116,15 @@ function SpeakerDetailPage() {
     try {
       const res = await apiFetch(`/api/v1/speakers/${id}`, {
         method: "PUT",
-        body: { name, title, persona },
+        body: {
+          name,
+          title,
+          persona,
+          voice: voice || null,
+          audience: audience || null,
+          guidelines: guidelines || null,
+          cta: cta || null,
+        },
       })
       if (!res.ok) throw new Error("Failed to update speaker")
       setMessage(t("speakerDetail.msgUpdated"))
@@ -305,6 +325,57 @@ function SpeakerDetailPage() {
                       </div>
                     )
                   })}
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <CardTitle className="text-base">{t("speakerDetail.contentStrategyTitle")}</CardTitle>
+                    <CardDescription className="text-xs">
+                      {t("speakerDetail.contentStrategyDesc")}
+                    </CardDescription>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="voice">{t("speakerDetail.voice")}</Label>
+                      <Input
+                        id="voice"
+                        value={voice}
+                        onChange={(e) => setVoice(e.target.value)}
+                        placeholder={t("speakerDetail.voicePlaceholder")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="audience">{t("speakerDetail.audience")}</Label>
+                      <Input
+                        id="audience"
+                        value={audience}
+                        onChange={(e) => setAudience(e.target.value)}
+                        placeholder={t("speakerDetail.audiencePlaceholder")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cta">{t("speakerDetail.cta")}</Label>
+                    <Input
+                      id="cta"
+                      value={cta}
+                      onChange={(e) => setCta(e.target.value)}
+                      placeholder={t("speakerDetail.ctaPlaceholder")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="guidelines">{t("speakerDetail.guidelines")}</Label>
+                    <Textarea
+                      id="guidelines"
+                      value={guidelines}
+                      onChange={(e) => setGuidelines(e.target.value)}
+                      rows={4}
+                      placeholder={t("speakerDetail.guidelinesPlaceholder")}
+                    />
+                  </div>
 
                   <div className="flex justify-end">
                     <Button type="submit" disabled={saving}>

@@ -78,7 +78,17 @@ async def test_clip_agent_falls_back_to_text_on_multimodal_failure(clip_client):
     agent, client = clip_client
     client.generate.side_effect = [
         ValueError("multimodal rejected"),
-        ClipPlans(clips=[ClipPlan(id="clip_001", source_text="fallback", start_marker="start", end_marker="end", hook="Fallback hook")]),
+        ClipPlans(
+            clips=[
+                ClipPlan(
+                    id="clip_001",
+                    source_text="fallback",
+                    start_marker="start",
+                    end_marker="end",
+                    hook="Fallback hook",
+                )
+            ]
+        ),
     ]
 
     from app.models.schemas import MediaInput, MediaInputType

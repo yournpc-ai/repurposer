@@ -47,8 +47,8 @@ from app.models.tables import (
 )
 from app.services.brand import (
     brand_from_template,
-    content_strategy_from_template,
     music_from_plan,
+    resolve_content_strategy,
     resolve_music_ref,
 )
 from app.services.clip_spec import build_clip_spec
@@ -122,10 +122,12 @@ _OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
 }
 
 # Media snippets above these thresholds are not sent directly to the multimodal
-# model; we rely on ASR transcripts / extracted text instead. Limits are
-# conservative to avoid huge base64 payloads and model context blow-up.
-_MAX_DIRECT_VIDEO_SECONDS = 300  # 5 minutes
-_MAX_DIRECT_VIDEO_BYTES = 50 * 1024 * 1024  # 50 MB
+# model; we rely on ASR transcripts / extracted text instead. These limits are
+# generous (10 min / 200 MB) because the agent layer now falls back to text-only
+# automatically when a provider rejects or fails to process a media input, so
+# the user still gets results from the transcript even for large files.
+_MAX_DIRECT_VIDEO_SECONDS = 600  # 10 minutes
+_MAX_DIRECT_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 def _file_size_bytes(path: Path | None) -> int | None:
@@ -351,7 +353,9 @@ async def _run_targeted_revision(
                 .limit(1)
             )
         ).scalar_one_or_none()
-        content_strategy = content_strategy_from_template(bt.config if bt else None)
+        content_strategy = resolve_content_strategy(
+            speaker, bt.config if bt else None
+        )
 
         context = GenerationContext(
             speaker_name=speaker.name if speaker else None,
@@ -359,7 +363,10 @@ async def _run_targeted_revision(
             event_name=project.event_name,
             persona=persona,
             tone_settings=None,
-            brand_strategy=content_strategy,
+            speaker_voice=content_strategy.get("voice"),
+            speaker_audience=content_strategy.get("audience"),
+            speaker_guidelines=content_strategy.get("guidelines"),
+            speaker_cta=content_strategy.get("cta"),
             target_language=target_language,
             instruction=instruction,
         )
@@ -486,7 +493,9 @@ async def run_generation(run_id: UUID) -> None:
                         .limit(1)
                     )
                 ).scalar_one_or_none()
-            content_strategy = content_strategy_from_template(bt.config if bt else None)
+            content_strategy = resolve_content_strategy(
+                speaker, bt.config if bt else None
+            )
 
             # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
             #   1. on-camera VIDEO (with ASR words)      -> video clip
@@ -561,7 +570,10 @@ async def run_generation(run_id: UUID) -> None:
                 event_name=project.event_name,
                 persona=persona,
                 tone_settings=tone_settings,
-                brand_strategy=content_strategy,
+                speaker_voice=content_strategy.get("voice"),
+                speaker_audience=content_strategy.get("audience"),
+                speaker_guidelines=content_strategy.get("guidelines"),
+                speaker_cta=content_strategy.get("cta"),
                 target_language=target_language,
                 instruction=instruction,
                 brand_music_id=brand_music_id,

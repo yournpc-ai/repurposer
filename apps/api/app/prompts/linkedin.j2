@@ -22,7 +22,7 @@ Based on the following speech materials and content plan, write a LinkedIn long-
 - **Themes**: {{ content_plan.themes | join(', ') }}
 - **Target audience**: {{ content_plan.target_audience }}
 - **Focus for this LinkedIn post**: {{ derivative_plan.focus or 'Reinforce the core thesis' }}
-- **CTA**: {{ derivative_plan.cta or context.brand_strategy.cta or 'End with an open-ended question' }}
+- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'End with an open-ended question' }}
 
 ## Speaker Style Profile
 
@@ -37,17 +37,17 @@ Based on the following speech materials and content plan, write a LinkedIn long-
 (No style profile provided)
 {% endif %}
 
-{% if context.brand_strategy %}
+{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
 ## Brand Content Strategy
 
-{% if context.brand_strategy.voice %}
-- **Brand voice**: {{ context.brand_strategy.voice }}
+{% if context.speaker_voice %}
+- **Brand voice**: {{ context.speaker_voice }}
 {% endif %}
-{% if context.brand_strategy.audience %}
-- **Target audience**: {{ context.brand_strategy.audience }}
+{% if context.speaker_audience %}
+- **Target audience**: {{ context.speaker_audience }}
 {% endif %}
-{% if context.brand_strategy.guidelines %}
-- **Content guidelines**: {{ context.brand_strategy.guidelines }}
+{% if context.speaker_guidelines %}
+- **Content guidelines**: {{ context.speaker_guidelines }}
 {% endif %}
 
 {% endif %}

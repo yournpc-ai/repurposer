@@ -1,5 +1,7 @@
 """Pydantic models for Repurposer API."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -275,6 +277,10 @@ class SpeakerBase(BaseModel):
     title: str | None = None
     language: str = "zh"
     avatar_url: str | None = None
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
 
 
 class SpeakerCreate(SpeakerBase):
@@ -290,6 +296,10 @@ class SpeakerUpdate(BaseModel):
     title: str | None = None
     language: str | None = None
     avatar_url: str | None = None
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
     persona: SpeakerPersona | None = None
 
 
@@ -688,21 +698,6 @@ class ClipMusic(BaseModel):
     gain_db: float = -18.0
 
 
-class BrandContentStrategy(BaseModel):
-    """Content strategy derived from a brand template.
-
-    Passed to planning agents so hook/segment selection aligns with brand
-    voice, target audience, and content guidelines.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    voice: str | None = None
-    audience: str | None = None
-    guidelines: str | None = None
-    cta: str | None = None
-
-
 class GenerationContext(BaseModel):
     """Shared context passed to every content generation agent.
 
@@ -717,7 +712,10 @@ class GenerationContext(BaseModel):
     event_name: str | None = None
     persona: SpeakerPersona | None = None
     tone_settings: ToneSettings | None = None
-    brand_strategy: BrandContentStrategy | None = None
+    speaker_voice: str | None = None
+    speaker_audience: str | None = None
+    speaker_guidelines: str | None = None
+    speaker_cta: str | None = None
     target_language: str = "en"
     instruction: str | None = None
     # Brand template's default music piece (Music.id as string); the Clip Agent
