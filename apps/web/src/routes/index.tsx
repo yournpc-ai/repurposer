@@ -1,25 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  MessageSquarePlus,
-  Linkedin,
-  Quote,
-  Languages,
-  Newspaper,
-  Lightbulb,
-  FileText,
-  Presentation,
-  PenTool,
-  Images,
-  Bell,
-  Star,
-} from "lucide-react"
+import { MessageSquarePlus, Bell, Star } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
@@ -41,18 +27,6 @@ interface BrandTemplate {
   id: string
   name: string
 }
-
-const tools = [
-  { icon: Linkedin, id: "linkedinPost", isNew: false },
-  { icon: Quote, id: "quoteCard", isNew: false },
-  { icon: Languages, id: "multiLangSummary", isNew: false },
-  { icon: Newspaper, id: "newsletter", isNew: false },
-  { icon: Lightbulb, id: "keyInsights", isNew: true },
-  { icon: FileText, id: "onePager", isNew: false },
-  { icon: Presentation, id: "slides", isNew: true },
-  { icon: PenTool, id: "blogPost", isNew: false },
-  { icon: Images, id: "socialCarousel", isNew: true },
-] as const
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -85,11 +59,6 @@ function Home() {
   }, [])
 
   const heroWords = t("home.heroWords", { returnObjects: true }) as string[]
-
-  const handleToolClick = () => {
-    setError(t("home.comingSoon"))
-    setTimeout(() => setError(""), 2000)
-  }
 
   return (
     <div className="flex min-h-svh flex-1 flex-col">
@@ -151,32 +120,6 @@ function Home() {
           />
 
           {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-        </div>
-
-        {/* Tool row */}
-        <div className="mt-12 flex w-full max-w-5xl flex-wrap items-start justify-center gap-x-3 gap-y-6">
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={handleToolClick}
-              className="group relative flex w-[84px] flex-col items-center gap-2.5"
-            >
-              {tool.isNew && (
-                <Badge
-                  variant="secondary"
-                  className="absolute -top-2 right-1 z-10 px-1.5 text-[10px]"
-                >
-                  New
-                </Badge>
-              )}
-              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-card text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                <tool.icon className="h-6 w-6" />
-              </div>
-              <span className="text-center text-xs leading-tight">
-                {t(`home.tools.${tool.id}`)}
-              </span>
-            </button>
-          ))}
         </div>
       </section>
 
