@@ -635,13 +635,17 @@ export function HomeComposer({
                 <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                   {t("composer.outputsLabel")}
                 </p>
-                <div className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted-foreground">
+                <div className="flex w-full items-center justify-between rounded-md bg-accent px-2 py-1.5 text-sm text-foreground">
                   <span className="flex items-center gap-2">
-                    <Video className="h-4 w-4" />
-                    {t("composer.outputOptions.clips")}
-                    <span className="text-xs">— {t("home.alwaysIncluded")}</span>
+                    <Video className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex flex-col">
+                      <span>{t("composer.outputOptions.clips")}</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {t("home.alwaysIncluded")}
+                      </span>
+                    </span>
                   </span>
-                  <Check className="h-4 w-4" />
+                  <Check className="h-4 w-4 flex-shrink-0" />
                 </div>
                 {OUTPUT_OPTIONS.filter((o) => o !== "clips").map((key) => {
                   const active = outputs.includes(key)
