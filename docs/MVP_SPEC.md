@@ -241,7 +241,7 @@ Home composer
 | 参数 | 进入哪一步 | 影响什么 | 由谁决定 |
 |---|---|---|---|
 | **Prompt** | Message.content / instruction | 贯穿所有 agent：决定内容主题、hook 角度、文案风格 | 用户 |
-| **Speaker** | Project.speaker_id | 选择/创建 Speaker，提取 persona，影响文案语气和 clip 选题 | 用户 |
+| **Speaker** | Project.speaker_id | 选择/创建 Speaker，提取风格与内容记忆，影响文案语气和 clip 选题 | 用户 |
 | **Brand template** | generate request.brand_template_id | 被 bake 进每个 clip 的 `render_spec`，控制字体、颜色、logo、CTA | 用户 |
 | **Tone** | generate request.tone_settings | 影响所有文案 agent 的风格 | AI 推断 + 用户确认 |
 | **Language** | generate request.target_language | 影响文案语言、clip 字幕语言 | AI 推断 + 用户确认 |
@@ -260,9 +260,9 @@ Home composer
 
 ---
 
-## 4.6 Brand Template 内容策略
+## 4.6 Brand Template 视觉策略
 
-Brand template 不只是视觉皮肤，还承担**内容策略**角色。
+Brand template 承担**视觉皮肤**角色；内容策略（voice / audience / guidelines）已收敛到 Speaker。
 
 ### 当前字段
 
@@ -282,17 +282,17 @@ Brand template 不只是视觉皮肤，还承担**内容策略**角色。
 - Brand A（大学官方）：voice = academic, audience = researchers
 - Brand B（个人 IP）：voice = provocative, audience = tech Twitter
 
-如果没有 Brand 内容策略，Content Director 和 Clip Agent 只能按 speaker persona 定调，无法体现“这是官方账号还是个人账号”的差异。
+如果没有 Brand 视觉策略，Content Director 和 Clip Agent 按 speaker 的风格记忆定调，无法体现“这是官方账号还是个人账号”的视觉差异。
 
 ### 实现
 
-- `/brand-template` 页面新增 **Content strategy** Tab
-- 用户填写 voice / audience / contentGuidelines / CTA
-- 生成时后端调用 `content_strategy_from_template()` 提取内容策略
-- Content Director 和 Clip Agent prompt 增加 `## Brand Content Strategy` 段落，并明确告知：
+- `/brand-template` 页面只保留视觉设置（font / color / logo / position / CTA）
+- voice / audience / guidelines 属于 Speaker，在 `/speakers/$id` 管理
+- 生成时 Speaker 的 voice / audience / guidelines / cta 进入 `GenerationContext.speaker`
+- Content Director 和 Clip Agent prompt 从 `context.speaker` 读取风格记忆，并明确告知：
   - “你正在为这个 speaker 的受众定调和选 clip”
-  - “hook 要符合 brand voice”
-  - “CTA 是 {{ cta }}，尽量选能自然过渡到这个行动的片段”
+  - “hook 要符合 speaker 风格”
+  - “CTA 是 {{ speaker.cta }}，尽量选能自然过渡到这个行动的片段”
 
 ---
 

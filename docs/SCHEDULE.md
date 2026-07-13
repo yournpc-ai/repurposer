@@ -24,19 +24,19 @@
 
 ---
 
-### Week 2: Speaker Style Persona
+### Week 2: Speaker Memory
 
 | Days | Task | Deliverable | Owner |
 |:---|:---|:---|:---|
 | Day 1-2 | MiniMax Client wrapper | `clients/minimax.py`: calls, JSON parsing, retry, error handling | Backend |
-| Day 2-3 | Pydantic schemas | `SpeakerPersona`, `ClipRevision`, `StyleReview`, etc. | Backend |
-| Day 3-4 | Persona Agent + prompt | Generate style persona from past materials, Jinja2 templates | Backend |
-| Day 4-5 | Speaker material upload UI | Text / PDF upload, style persona display / edit page | Frontend |
+| Day 2-3 | Pydantic schemas | `SpeakerContext`, `ClipRevision`, `StyleReview`, etc. | Backend |
+| Day 3-4 | Persona Agent + prompt | Extract speaker style and content memory from materials, Jinja2 templates | Backend |
+| Day 4-5 | Speaker material upload UI | Text / PDF upload, style memory display / edit page | Frontend |
 | Day 5 | API integration | Frontend can call persona generation endpoint | Frontend + Backend |
 
-**Week 2 Milestone**: After uploading past materials, the system can generate and display a Speaker style persona.
+**Week 2 Milestone**: After uploading past materials, the system can generate and display a Speaker style memory.
 
-**Risk**: Stability of MiniMax M3 persona output; may need multiple rounds of prompt tuning.
+**Risk**: Stability of MiniMax M3 memory extraction output; may need multiple rounds of prompt tuning.
 
 ---
 
@@ -109,7 +109,7 @@
 | Time | Milestone | Acceptance Criteria |
 |:---|:---|:---|
 | End of Week 1 | Foundation ready | Docker Compose can launch all services, API and frontend accessible |
-| End of Week 2 | Persona generation | After uploading past materials, can generate an editable style persona |
+| End of Week 2 | Speaker memory extraction | After uploading past materials, can generate an editable style memory |
 | End of Week 3 | Script generation | Input transcript can generate 3 clip scripts |
 | End of Week 4 | Review loop closed | Frontend can edit scripts, submit feedback, regenerate |
 | End of Week 5 | End-to-end working | Full upload-to-export pipeline available |

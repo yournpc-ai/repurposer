@@ -40,7 +40,7 @@ This design guarantees that every output is derived from the same **content plan
 ## 2. Goals
 
 - **Consistency**: clips, LinkedIn posts, quote cards, etc. should reinforce the same core thesis and brand voice.
-- **Single source of truth**: speaker persona, brand strategy, tone, and user instruction are assembled once and shared.
+- **Single source of truth**: speaker memory, tone, and user instruction are assembled once and shared.
 - **Extensibility**: adding a new derivative type requires only a new executor agent and one registry entry.
 - **Stable contracts**: the public API and database schema do not change; the refactor is entirely internal to the service layer.
 
@@ -50,14 +50,12 @@ This design guarantees that every output is derived from the same **content plan
 
 ```python
 class GenerationContext(BaseModel):
-    speaker_name: str | None
-    speaker_title: str | None
+    speaker: SpeakerContext | None
     event_name: str | None
-    persona: SpeakerPersona | None
     tone_settings: ToneSettings | None
-    brand_strategy: BrandContentStrategy | None
     target_language: str
     instruction: str | None
+    brand_music_id: str | None
 ```
 
 It is constructed in `app/services/generation.py` from the resolved `Speaker`, selected `BrandTemplate`, project metadata, and the user's generation request.
@@ -141,8 +139,9 @@ Each prompt template receives `materials`, `context`, and `content_plan`:
 - `app/prompts/blog.j2`
 
 Prompts render:
-- Speaker identity and persona from `context`
-- Brand voice, audience, CTA, and guidelines from `context.brand_strategy`
+- Speaker identity and style memory from `context.speaker`
+- Tone settings and user instruction from `context`
+- Brand music default from `context.brand_music_id`
 - Core thesis, themes, and target audience from `content_plan`
 - Per-output focus and CTA from the matching `DerivativePlan`
 
@@ -179,7 +178,7 @@ This file was previously `derivative_generation.py` and contained per-type param
 ### 7.1 Flow
 
 1. Collect materials and media inputs.
-2. Resolve speaker, persona, brand template, and tone settings.
+2. Resolve speaker (auto-create default memory if none selected), brand template, and tone settings.
 3. Build `GenerationContext`.
 4. Map requested `outputs` to `DerivativeType`s.
 5. Call `content_director_agent.plan(...)` → `ContentPlan`.
@@ -199,22 +198,21 @@ This file was previously `derivative_generation.py` and contained per-type param
 
 ## 8. API and Data Stability
 
-No public contracts change:
+No public contracts change for `Clip`, `Derivative`, `WorkflowRun`, or `Project` tables.
 
 | Surface | Change |
 |---------|--------|
 | `POST /api/v1/projects/{id}/generate` | None |
 | `GET /api/v1/projects/{id}/results` | None |
-| `Clip`, `Derivative`, `WorkflowRun`, `Project` tables | None |
-| Frontend results page | None |
+| Speaker schema | Flattened: `persona` JSON replaced with `core_values`, `favorite_metaphors`, `sentence_style`, `emotional_tone`, `typical_hooks`, `avoid_words` columns; `voice/audience/guidelines/cta` remain direct columns |
 
-The refactor is entirely internal to the service and agent layers.
+The refactor keeps generation and results contracts stable; only the speaker data model changed.
 
 ## 9. Non-content agents
 
 The following agents are **not** part of the 4-layer executor pipeline and remain unchanged:
 
-- `app/agents/persona.py` — creates speaker personas from materials.
+- `app/agents/persona.py` — extracts speaker style and content memory from materials.
 - `app/agents/reviser.py` — revises a single clip script from human feedback.
 - `app/agents/intent.py` — infers generation intent from the user's prompt before generation.
 - `app/agents/caption_translate.py` — translates caption lines.

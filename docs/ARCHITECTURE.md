@@ -51,7 +51,7 @@
 
 | Agent | Input | Output | Description |
 |:---|:---|:---|:---|
-| `memory` (persona extraction) | Task materials | `SpeakerPersona` | Speaker style memory / portrait |
+| `persona` | Task materials + speaker name/title | `SpeakerContext` fields | Extract speaker style and content memory |
 | `content_director` | Materials + `GenerationContext` | `ContentPlan` | Unified analysis: core thesis, themes, audience, per-output plans |
 | `clip` | Materials + `GenerationContext` + `ContentPlan` | `ClipPlans` | Select segments and write vertical clip scripts |
 | `linkedin` | Materials + `GenerationContext` + `ContentPlan` | `LinkedInPost` | LinkedIn long post |
@@ -59,7 +59,7 @@
 | `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | LinkedIn carousel (cover → points → CTA) |
 | `summary` | Materials + `GenerationContext` + `ContentPlan` | `Summary` | Multi-language summary |
 | `blog` | Materials + `GenerationContext` + `ContentPlan` | `BlogPost` | Blog article |
-| `reviser` | Clip metadata + feedback + persona | `ClipRevision` | Revised clip metadata (hook, duration, titles, music) |
+| `reviser` | Clip metadata + feedback + `SpeakerContext` | `ClipRevision` | Revised clip metadata (hook, duration, titles, music) |
 | `caption_translate` | Word-level captions + target_language | `CaptionTranslation` | Caption language swap |
 
 > **Intent Channel**: `GenerateRequest.instruction` (homepage prompt) is folded into `GenerationContext` and passed to the Content Director and every derivative agent as "the highest-priority directive for this run."
@@ -74,7 +74,7 @@ Preprocessing (transcription / parsing / image processing)
     ↓
 Resolve Speaker (auto-create default memory if none selected)
     ↓
-Resolve Brand template → content strategy
+Resolve Brand template
     ↓
 Content Director Agent → unified ContentPlan
     ↓
@@ -86,8 +86,6 @@ Save results, await user review
     ↓
 User feedback → Reviser Agent → partial regeneration
 ```
-
-> **Difference from current implementation**: The existing code still has a standalone `persona` Agent that generates `SpeakerPersona` from Speaker-uploaded "past materials." Per ADR-021, this flow is being refactored toward "extract memory directly from task input and persist as Speaker." Until the refactor is complete, both forms will temporarily coexist in the codebase.
 
 ### 3.3 Human Feedback Loop
 

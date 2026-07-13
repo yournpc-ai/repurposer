@@ -522,17 +522,17 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-021: Speaker = persisted memory (optional selection / auto-create if not selected / per-user isolation)
 
-**Status**: Decided (pending implementation, corrected)
+**Status**: Implemented
 
 **Context**: `Speaker` and `Persona` were used interchangeably in code, documentation, and UI, causing conceptual ambiguity such as "Is Speaker a CRM contact? Or a user profile? Is Persona a standalone entity or a sub-field of Speaker?" After clarification: **Speaker is essentially memory persisted after a task completes** — recording the user's tone, style, preferences, voiceprint, and other stable characteristics. Externally still called Speaker, internally it is memory.
 
 **Decision**:
 1. **Speaker = persisted memory**: a user profile extracted from task inputs (prompt + attachments) via M3 analysis, persisted to the `speakers` table after the task completes.
-2. **Per-user isolation**: add `user_id` to the `speakers` table; users can only see and operate their own Speakers.
+2. **Per-user isolation**: `user_id` is on the `speakers` table; users can only see and operate their own Speakers.
 3. **Optional selection on home page / project creation**: existing Speakers can be selected in the input box / project creation form, but **not mandatory**. Users may actively choose a historical profile, or choose not to select one.
 4. **Auto-create if not selected**: if the user does not select a Speaker, the system automatically creates one after task analysis completes, and associates it with the current project.
 5. **Support multiple Speakers**: users can retain multiple Speaker records (e.g., different occasions / different identities), not forced to a singleton. But the default auto-created one is the current task's profile.
-6. **Naming unification**: code and documentation no longer treat `Speaker` and `Persona` as two separate entities. `Persona` is only used as a conceptual word describing the internal style attributes of a Speaker, not reflected in table names, routes, or component names. `SpeakerPersona` and similar naming gradually converges to `Speaker` or `SpeakerMemory`.
+6. **Naming unification**: code and documentation no longer treat `Speaker` and `Persona` as two separate entities. `Persona` is only used as a conceptual word describing the internal style attributes of a Speaker, not reflected in table names, routes, or component names. The legacy `SpeakerPersona` schema has been removed; `SpeakerContext` is the single agent-facing object, and style/memory fields are stored as flat columns on the `speakers` table.
 7. **Keep `/speakers` management page**: users can view, edit, and delete their own Speaker records on the list page; the detail page is for editing memory fields.
 8. **Two-layer division unchanged**: Speaker = stable user style memory; Project = current theme/intent + materials.
 9. **Dub voiceprint attached to Speaker**: priority is profile.VOICE_SAMPLE → current AUDIO/VIDEO; `voice_id` is cached on the Speaker, cloned once and reused across projects.
