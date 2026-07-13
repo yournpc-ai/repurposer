@@ -287,6 +287,17 @@ class InferredIntent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    action: Literal["generate", "answer"] = Field(
+        default="generate",
+        description=(
+            "Whether the user wants to generate content or is asking a question "
+            "about the tool's capabilities."
+        ),
+    )
+    answer: str | None = Field(
+        default=None,
+        description="Direct answer text when action is 'answer'. Null for generate.",
+    )
     language: str = Field(
         default="en",
         description="ISO language code for generated outputs (en/fr/de/es/it/zh).",

@@ -64,6 +64,8 @@ interface Project {
 }
 
 interface InferredIntent {
+  action: "generate" | "answer"
+  answer: string | null
   language: string
   outputs: OutputKey[]
   tone: Tone
@@ -118,6 +120,8 @@ const TONE_MAP: Record<
 }
 
 const DEFAULT_INTENT: InferredIntent = {
+  action: "generate",
+  answer: null,
   language: "en",
   outputs: ["clips", "linkedin", "quote_cards", "summary"],
   tone: "professional",
@@ -381,10 +385,10 @@ export function HomeComposer({
               <Wand2 className={cn("h-3.5 w-3.5", isInferring && "animate-pulse")} />
               <span>
                 {isInferring
-                  ? t("composer.detectingIntent")
-                  : hasIntent
-                    ? t("composer.aiDetected")
-                    : t("composer.aiWillDetect")}
+                ? t("composer.detectingIntent")
+                : hasIntent
+                  ? t("composer.aiDetected")
+                  : t("composer.aiWillDetect")}
               </span>
             </div>
             <Button
