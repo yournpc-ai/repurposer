@@ -6,7 +6,14 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import ClipRevision, FeedbackRequest, FeedbackReason, FeedbackScope, Segment, SpeakerPersona
+from app.models.schemas import (
+    ClipRevision,
+    FeedbackReason,
+    FeedbackRequest,
+    FeedbackScope,
+    Segment,
+    SpeakerContext,
+)
 
 logger = structlog.get_logger()
 
@@ -31,7 +38,7 @@ class ReviserAgent:
         clip_music_mood: str,
         segment: Segment,
         feedback: FeedbackRequest,
-        persona: SpeakerPersona | None,
+        speaker: SpeakerContext | None,
     ) -> ClipRevision:
         """Revise clip metadata based on feedback.
 
@@ -42,7 +49,7 @@ class ReviserAgent:
             clip_music_mood: Current music mood.
             segment: Source segment for context.
             feedback: Human feedback.
-            persona: Speaker style persona.
+            speaker: Speaker context for style guidance.
 
         Returns:
             Revised ClipRevision model.
@@ -55,7 +62,7 @@ class ReviserAgent:
             music_mood=clip_music_mood,
             segment=segment,
             feedback=feedback,
-            persona=persona,
+            speaker=speaker,
         )
 
         messages = [
@@ -102,7 +109,7 @@ class ReviserAgent:
         clip_music_mood: str,
         segment: Segment,
         instruction: str,
-        persona: SpeakerPersona | None,
+        speaker: SpeakerContext | None,
         scope: str = "full_script",
     ) -> ClipRevision:
         """Revise clip metadata from a free-text user instruction.
@@ -122,7 +129,7 @@ class ReviserAgent:
             clip_music_mood,
             segment,
             feedback,
-            persona,
+            speaker,
         )
 
 

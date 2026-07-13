@@ -13,13 +13,13 @@ You are a short-form video clip revision expert. The user has provided feedback 
 
 ## Speaker Style Profile
 
-{% if persona %}
-- Core Values: {{ persona.core_values | join(', ') }}
-- Preferred Metaphors: {{ persona.favorite_metaphors | join(', ') }}
-- Sentence Style: {{ persona.sentence_style }}
-- Emotional Tone: {{ persona.emotional_tone }}
-- Typical Openings: {{ persona.typical_hooks | join(' / ') }}
-- Words to Avoid: {{ persona.avoid_words | join(', ') }}
+{% if speaker %}
+- Core Values: {{ speaker.core_values | join(', ') }}
+- Preferred Metaphors: {{ speaker.favorite_metaphors | join(', ') }}
+- Sentence Style: {{ speaker.sentence_style }}
+- Emotional Tone: {{ speaker.emotional_tone }}
+- Typical Openings: {{ speaker.typical_hooks | join(' / ') }}
+- Words to Avoid: {{ speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}

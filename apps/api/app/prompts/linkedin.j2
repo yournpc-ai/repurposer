@@ -12,7 +12,7 @@ Based on the following speech materials and content plan, write a LinkedIn long-
 - Clear body structure, bullet points may be used
 - Preserve the speaker's original intent and core insights
 - End with a call to action or an open-ended question
-- Tone matches the speaker's style and brand voice
+- Tone matches the speaker's style and voice
 - 5–8 hashtags
 - **Output language: {{ context.target_language }}**
 
@@ -22,32 +22,32 @@ Based on the following speech materials and content plan, write a LinkedIn long-
 - **Themes**: {{ content_plan.themes | join(', ') }}
 - **Target audience**: {{ content_plan.target_audience }}
 - **Focus for this LinkedIn post**: {{ derivative_plan.focus or 'Reinforce the core thesis' }}
-- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'End with an open-ended question' }}
+- **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with an open-ended question' }}
 
 ## Speaker Style Profile
 
-{% if context.persona %}
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% if context.speaker %}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
 
-{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
-## Brand Content Strategy
+{% if context.speaker and (context.speaker.voice or context.speaker.audience or context.speaker.guidelines or context.speaker.cta) %}
+## Speaker Memory
 
-{% if context.speaker_voice %}
-- **Brand voice**: {{ context.speaker_voice }}
+{% if context.speaker.voice %}
+- **Voice**: {{ context.speaker.voice }}
 {% endif %}
-{% if context.speaker_audience %}
-- **Target audience**: {{ context.speaker_audience }}
+{% if context.speaker.audience %}
+- **Target audience**: {{ context.speaker.audience }}
 {% endif %}
-{% if context.speaker_guidelines %}
-- **Content guidelines**: {{ context.speaker_guidelines }}
+{% if context.speaker.guidelines %}
+- **Content guidelines**: {{ context.speaker.guidelines }}
 {% endif %}
 
 {% endif %}

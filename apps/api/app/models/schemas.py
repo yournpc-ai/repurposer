@@ -199,17 +199,103 @@ class ChatResponse(BaseModel):
     job_id: UUID | None = None
 
 
-class SpeakerPersona(BaseModel):
-    """Speaker style persona."""
+class SpeakerContext(BaseModel):
+    """Speaker business object returned by the API and passed to agents.
 
-    model_config = ConfigDict(extra="forbid")
+    Contains only flat fields backed by DB columns. The ``persona`` concept
+    lives at the agent layer as a rendered prompt summary, not as a stored
+    field.
+    """
 
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID | None = None
+    name: str
+    title: str | None = None
+    language: str = "zh"
+    avatar_url: str | None = None
     core_values: list[str] = Field(default_factory=list)
     favorite_metaphors: list[str] = Field(default_factory=list)
     sentence_style: str = ""
     emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] = "rational"
     typical_hooks: list[str] = Field(default_factory=list)
     avoid_words: list[str] = Field(default_factory=list)
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class SpeakerCreate(BaseModel):
+    """Create speaker request."""
+
+    name: str
+    title: str | None = None
+    language: str = "zh"
+    avatar_url: str | None = None
+    core_values: list[str] | None = None
+    favorite_metaphors: list[str] | None = None
+    sentence_style: str | None = None
+    emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] | None = None
+    typical_hooks: list[str] | None = None
+    avoid_words: list[str] | None = None
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+
+
+class SpeakerUpdate(BaseModel):
+    """Update speaker request."""
+
+    name: str | None = None
+    title: str | None = None
+    language: str | None = None
+    avatar_url: str | None = None
+    core_values: list[str] | None = None
+    favorite_metaphors: list[str] | None = None
+    sentence_style: str | None = None
+    emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] | None = None
+    typical_hooks: list[str] | None = None
+    avoid_words: list[str] | None = None
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+
+
+def render_speaker_persona(speaker: SpeakerContext) -> str:
+    """Render a prose persona summary from speaker fields for LLM prompts."""
+    lines: list[str] = []
+    if speaker.title:
+        lines.append(f"Speaker: {speaker.name} ({speaker.title})")
+    else:
+        lines.append(f"Speaker: {speaker.name}")
+
+    if speaker.core_values:
+        lines.append(f"Core values: {', '.join(speaker.core_values)}")
+    if speaker.favorite_metaphors:
+        lines.append(f"Favorite metaphors: {', '.join(speaker.favorite_metaphors)}")
+    if speaker.sentence_style:
+        lines.append(f"Sentence style: {speaker.sentence_style}")
+    if speaker.emotional_tone:
+        lines.append(f"Emotional tone: {speaker.emotional_tone}")
+    if speaker.typical_hooks:
+        lines.append(f"Typical hooks: {' / '.join(speaker.typical_hooks)}")
+    if speaker.avoid_words:
+        lines.append(f"Words to avoid: {', '.join(speaker.avoid_words)}")
+    if speaker.voice:
+        lines.append(f"Voice: {speaker.voice}")
+    if speaker.audience:
+        lines.append(f"Target audience: {speaker.audience}")
+    if speaker.guidelines:
+        lines.append(f"Content guidelines: {speaker.guidelines}")
+    if speaker.cta:
+        lines.append(f"Preferred call to action: {speaker.cta}")
+
+    return "\n".join(lines)
 
 
 class ToneSettings(BaseModel):
@@ -268,50 +354,6 @@ class InferIntentResponse(BaseModel):
     """Response from intent inference."""
 
     intent: InferredIntent
-
-
-class SpeakerBase(BaseModel):
-    """Base speaker model."""
-
-    name: str
-    title: str | None = None
-    language: str = "zh"
-    avatar_url: str | None = None
-    voice: str | None = None
-    audience: str | None = None
-    guidelines: str | None = None
-    cta: str | None = None
-
-
-class SpeakerCreate(SpeakerBase):
-    """Create speaker request."""
-
-    pass
-
-
-class SpeakerUpdate(BaseModel):
-    """Update speaker request."""
-
-    name: str | None = None
-    title: str | None = None
-    language: str | None = None
-    avatar_url: str | None = None
-    voice: str | None = None
-    audience: str | None = None
-    guidelines: str | None = None
-    cta: str | None = None
-    persona: SpeakerPersona | None = None
-
-
-class SpeakerResponse(SpeakerBase):
-    """Speaker response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    persona: SpeakerPersona | None = None
-    created_at: datetime
-    updated_at: datetime | None = None
 
 
 class ProjectBase(BaseModel):
@@ -707,15 +749,9 @@ class GenerationContext(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    speaker_name: str | None = None
-    speaker_title: str | None = None
+    speaker: SpeakerContext | None = None
     event_name: str | None = None
-    persona: SpeakerPersona | None = None
     tone_settings: ToneSettings | None = None
-    speaker_voice: str | None = None
-    speaker_audience: str | None = None
-    speaker_guidelines: str | None = None
-    speaker_cta: str | None = None
     target_language: str = "en"
     instruction: str | None = None
     # Brand template's default music piece (Music.id as string); the Clip Agent

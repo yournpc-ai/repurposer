@@ -21,40 +21,40 @@ The user's explicit requirements for this output are as follows. **Please priori
 > {{ context.instruction }}
 
 {% endif %}
-{% if context.speaker_name or context.speaker_title %}
+{% if context.speaker %}
 ## Speaker Context
 
-You are planning content for **{{ context.speaker_name or "the speaker" }}{% if context.speaker_title %} ({{ context.speaker_title }}){% endif %}**.
+You are planning content for **{{ context.speaker.name or "the speaker" }}{% if context.speaker.title %} ({{ context.speaker.title }}){% endif %}**.
 Make sure the angle serves their audience and credibility.
 
-{% endif %}
-{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
-## Brand Content Strategy
+{% if context.speaker.voice or context.speaker.audience or context.speaker.guidelines or context.speaker.cta %}
+### Speaker Memory
 
-{% if context.speaker_voice %}
-- **Brand voice**: {{ context.speaker_voice }}
+{% if context.speaker.voice %}
+- **Voice**: {{ context.speaker.voice }}
 {% endif %}
-{% if context.speaker_audience %}
-- **Target audience**: {{ context.speaker_audience }}
+{% if context.speaker.audience %}
+- **Target audience**: {{ context.speaker.audience }}
 {% endif %}
-{% if context.speaker_cta %}
-- **Call to action**: {{ context.speaker_cta }} — derivative outputs should, when natural, lead to this action.
+{% if context.speaker.cta %}
+- **Call to action**: {{ context.speaker.cta }} — derivative outputs should, when natural, lead to this action.
 {% endif %}
-{% if context.speaker_guidelines %}
-- **Content guidelines**: {{ context.speaker_guidelines }}
+{% if context.speaker.guidelines %}
+- **Content guidelines**: {{ context.speaker.guidelines }}
 {% endif %}
 
 {% endif %}
-{% if context.persona %}
-## Speaker Style Profile
+{% if context.speaker %}
+### Speaker Style Profile
 
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 
+{% endif %}
 {% endif %}
 {% if context.tone_settings %}
 ## Generation Tone Settings

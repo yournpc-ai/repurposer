@@ -133,6 +133,8 @@ interface HomeComposerProps {
   onError?: (error: string) => void
 }
 
+const EXTRACT_FROM_MATERIALS = "__extract__"
+
 export function HomeComposer({
   speakers,
   brandTemplates,
@@ -144,7 +146,7 @@ export function HomeComposer({
   const { t } = useTranslation()
 
   const [prompt, setPrompt] = useState("")
-  const [speakerId, setSpeakerId] = useState("")
+  const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
   const [tone, setTone] = useState<Tone>(DEFAULT_INTENT.tone)
   const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_INTENT.outputs)
   const [brandTemplateId, setBrandTemplateId] = useState("")
@@ -162,9 +164,8 @@ export function HomeComposer({
 
   // Sync defaults once data is loaded.
   useEffect(() => {
-    setSpeakerId((prev) => prev || (speakers[0]?.id ?? ""))
     setBrandTemplateId((prev) => prev || (brandTemplates[0]?.id ?? ""))
-  }, [speakers, brandTemplates])
+  }, [brandTemplates])
 
   // Auto-resize textarea.
   useEffect(() => {
@@ -250,7 +251,8 @@ export function HomeComposer({
           title: file?.name || prompt.slice(0, 60) || t("common.untitled"),
           event_name: "",
           language,
-          speaker_id: speakerId || undefined,
+          speaker_id:
+            speakerId === EXTRACT_FROM_MATERIALS ? undefined : speakerId || undefined,
         },
       })
       if (!projectRes.ok) throw new Error("Failed to create project")
@@ -310,9 +312,10 @@ export function HomeComposer({
     setOutputs(next)
   }
 
-  const selectedSpeakerName = speakerId
-    ? speakers.find((s) => s.id === speakerId)?.name
-    : t("composer.styleDefault")
+  const selectedSpeakerName =
+    speakerId === EXTRACT_FROM_MATERIALS
+      ? t("composer.extractFromMaterials")
+      : speakers.find((s) => s.id === speakerId)?.name ?? t("composer.styleDefault")
 
   const hasIntent = prompt.trim().length > 0
 
@@ -401,37 +404,54 @@ export function HomeComposer({
           {/* Editable intent chips */}
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
             {/* Speaker */}
-            {speakers.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
+                  >
+                    <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="max-w-[120px] truncate">
+                      {selectedSpeakerName}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t("composer.speakerLabel")}</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      lockParam("speaker")
+                      setSpeakerId(EXTRACT_FROM_MATERIALS)
+                    }}
+                  >
+                    <Wand2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate">{t("composer.extractFromMaterials")}</span>
+                    {speakerId === EXTRACT_FROM_MATERIALS && (
+                      <Check className="ml-2 h-4 w-4" />
+                    )}
+                  </DropdownMenuItem>
+                  {speakers.length > 0 && <DropdownMenuSeparator />}
+                  {speakers.map((s) => (
+                    <DropdownMenuItem
+                      key={s.id}
+                      onClick={() => {
+                        lockParam("speaker")
+                        setSpeakerId(s.id)
+                      }}
                     >
-                      <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="max-w-[120px] truncate">
-                        {selectedSpeakerName}
-                      </span>
-                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>{t("composer.styleLabel")}</DropdownMenuLabel>
-                    {speakers.map((s) => (
-                      <DropdownMenuItem key={s.id} onClick={() => { lockParam("speaker"); setSpeakerId(s.id) }}>
-                        <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span className="flex-1 truncate">{s.name}</span>
-                        {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                      <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <span className="flex-1 truncate">{s.name}</span>
+                      {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Brand template */}
             <DropdownMenu>

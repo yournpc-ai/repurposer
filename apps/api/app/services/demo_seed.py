@@ -35,10 +35,8 @@ from app.models.schemas import (
 from app.models.tables import (
     Asset,
     BrandTemplate,
-    ChatSession,
     Clip,
     Derivative,
-    Message,
     Project,
     Speaker,
     User,
@@ -94,16 +92,14 @@ async def _get_or_create_demo_speaker(db, user_id: UUID) -> Speaker:
             name="Alex Morgan",
             title="Leadership Coach & Resilience Speaker",
             language="en",
-            persona={
-                "core_values": ["resilience", "clarity", "decisive action"],
-                "sentence_style": "direct, conversational, story-driven",
-                "emotional_tone": "passionate",
-                "typical_hooks": [
-                    "How hard can it be?",
-                    "Move on, keep moving",
-                ],
-                "avoid_words": ["leverage", "synergy", "disrupt"],
-            },
+            core_values=["resilience", "clarity", "decisive action"],
+            sentence_style="direct, conversational, story-driven",
+            emotional_tone="passionate",
+            typical_hooks=[
+                "How hard can it be?",
+                "Move on, keep moving",
+            ],
+            avoid_words=["leverage", "synergy", "disrupt"],
         )
         db.add(speaker)
         await db.flush()

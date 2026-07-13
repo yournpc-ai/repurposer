@@ -10,6 +10,7 @@ from app.models.schemas import (
     ClipPlans,
     ContentPlan,
     GenerationContext,
+    SpeakerContext,
 )
 
 
@@ -23,7 +24,7 @@ def clip_client():
 
 def _make_context() -> GenerationContext:
     return GenerationContext(
-        speaker_name="Ada",
+        speaker=SpeakerContext(name="Ada"),
         target_language="en",
     )
 

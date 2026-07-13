@@ -54,8 +54,8 @@ class Speaker(Base):
     """Speaker table.
 
     A speaker is a project-level memory of a talk's voice, style, and content
-    strategy. It can be extracted from one project and reused in others, and
-    eventually used to generate new AI content in that speaker's voice.
+    strategy. Style and content memory are stored as flat columns; the
+    ``persona`` summary is rendered at the agent layer when needed.
     """
 
     __tablename__ = "speakers"
@@ -66,7 +66,12 @@ class Speaker(Base):
     title = Column(String(255), nullable=True)
     language = Column(String(10), default="zh")
     avatar_url = Column(String(512), nullable=True)
-    persona = Column(JSON, nullable=True)
+    core_values = Column(JSON, nullable=True, default=list)
+    favorite_metaphors = Column(JSON, nullable=True, default=list)
+    sentence_style = Column(String(255), nullable=True)
+    emotional_tone = Column(String(20), nullable=True)
+    typical_hooks = Column(JSON, nullable=True, default=list)
+    avoid_words = Column(JSON, nullable=True, default=list)
     voice = Column(String(255), nullable=True)
     audience = Column(String(255), nullable=True)
     guidelines = Column(Text, nullable=True)

@@ -11,7 +11,7 @@ Distill the following speech material into a {{ count }}-slide carousel:
 - **Slide 1 = Cover / Hook**: One line that grabs attention; body can be left empty or a single subtitle line.
 - **Middle slides = Core Points**: Each slide delivers one insight aligned with the content plan; title is the key point, body expands in 1–3 short lines.
 - **Last slide = CTA**: Call for interaction / follow / read the full article, echoing the speaker's identity.
-- Throughout, match the speaker's style and brand voice: professional but not preachy; each slide's text is concise and suitable for image cards.
+- Throughout, match the speaker's style and voice: professional but not preachy; each slide's text is concise and suitable for image cards.
 - **Output language: {{ context.target_language }}**
 
 ## Content Plan
@@ -20,13 +20,13 @@ Distill the following speech material into a {{ count }}-slide carousel:
 - **Themes**: {{ content_plan.themes | join(', ') }}
 - **Target audience**: {{ content_plan.target_audience }}
 - **Focus for this carousel**: {{ derivative_plan.focus or 'Walk through the core thesis step by step' }}
-- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'Invite readers to follow or share their take' }}
+- **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'Invite readers to follow or share their take' }}
 
 ## Speaker
 
-- Name: {{ context.speaker_name or 'Speaker' }}
-{% if context.speaker_title %}
-- Title: {{ context.speaker_title }}
+- Name: {{ context.speaker.name if context.speaker else 'Speaker' }}
+{% if context.speaker and context.speaker.title %}
+- Title: {{ context.speaker.title }}
 {% endif %}
 {% if context.event_name %}
 - Occasion: {{ context.event_name }}
@@ -34,17 +34,23 @@ Distill the following speech material into a {{ count }}-slide carousel:
 
 ## Speaker Style Profile
 
-{% if context.persona %}
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% if context.speaker %}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
 
+{% if context.speaker and context.speaker.voice %}
+## Speaker Voice
+
+- **Voice**: {{ context.speaker.voice }}
+
+{% endif %}
 ## Speech Material
 
 {% for material in materials %}

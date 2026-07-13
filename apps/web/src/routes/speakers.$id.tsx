@@ -26,22 +26,18 @@ interface Speaker {
   title: string | null
   language: string
   avatar_url: string | null
-  persona: SpeakerPersona | null
-  voice: string | null
-  audience: string | null
-  guidelines: string | null
-  cta: string | null
-  created_at: string
-  updated_at: string | null
-}
-
-interface SpeakerPersona {
   core_values: string[]
   favorite_metaphors: string[]
   sentence_style: string
   emotional_tone: "rational" | "passionate" | "gentle" | "sharp" | "humorous"
   typical_hooks: string[]
   avoid_words: string[]
+  voice: string | null
+  audience: string | null
+  guidelines: string | null
+  cta: string | null
+  created_at: string
+  updated_at: string | null
 }
 
 interface Asset {
@@ -72,7 +68,12 @@ function SpeakerDetailPage() {
 
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
-  const [persona, setPersona] = useState<SpeakerPersona | null>(null)
+  const [coreValues, setCoreValues] = useState("")
+  const [favoriteMetaphors, setFavoriteMetaphors] = useState("")
+  const [sentenceStyle, setSentenceStyle] = useState("")
+  const [emotionalTone, setEmotionalTone] = useState<Speaker["emotional_tone"]>("rational")
+  const [typicalHooks, setTypicalHooks] = useState("")
+  const [avoidWords, setAvoidWords] = useState("")
   const [voice, setVoice] = useState("")
   const [audience, setAudience] = useState("")
   const [guidelines, setGuidelines] = useState("")
@@ -86,13 +87,18 @@ function SpeakerDetailPage() {
         apiFetch(`/api/v1/speakers/${id}/assets`),
       ])
       if (!speakerRes.ok) throw new Error("Speaker not found")
-      const speakerData = await speakerRes.json()
+      const speakerData: Speaker = await speakerRes.json()
       const materialsData = await materialsRes.json()
       setSpeaker(speakerData)
       setMaterials(materialsData)
       setName(speakerData.name)
       setTitle(speakerData.title || "")
-      setPersona(speakerData.persona)
+      setCoreValues(speakerData.core_values.join("\n"))
+      setFavoriteMetaphors(speakerData.favorite_metaphors.join("\n"))
+      setSentenceStyle(speakerData.sentence_style)
+      setEmotionalTone(speakerData.emotional_tone)
+      setTypicalHooks(speakerData.typical_hooks.join("\n"))
+      setAvoidWords(speakerData.avoid_words.join("\n"))
       setVoice(speakerData.voice || "")
       setAudience(speakerData.audience || "")
       setGuidelines(speakerData.guidelines || "")
@@ -119,7 +125,12 @@ function SpeakerDetailPage() {
         body: {
           name,
           title,
-          persona,
+          core_values: coreValues.split("\n").filter((s) => s.trim()),
+          favorite_metaphors: favoriteMetaphors.split("\n").filter((s) => s.trim()),
+          sentence_style: sentenceStyle,
+          emotional_tone: emotionalTone,
+          typical_hooks: typicalHooks.split("\n").filter((s) => s.trim()),
+          avoid_words: avoidWords.split("\n").filter((s) => s.trim()),
           voice: voice || null,
           audience: audience || null,
           guidelines: guidelines || null,
@@ -144,9 +155,21 @@ function SpeakerDetailPage() {
       const res = await apiFetch(`/api/v1/speakers/${id}/persona/generate`, {
         method: "POST",
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || "Generation failed")
-      setPersona(data)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || "Generation failed")
+      }
+      const data: Speaker = await res.json()
+      setCoreValues(data.core_values.join("\n"))
+      setFavoriteMetaphors(data.favorite_metaphors.join("\n"))
+      setSentenceStyle(data.sentence_style)
+      setEmotionalTone(data.emotional_tone)
+      setTypicalHooks(data.typical_hooks.join("\n"))
+      setAvoidWords(data.avoid_words.join("\n"))
+      setVoice(data.voice || "")
+      setAudience(data.audience || "")
+      setGuidelines(data.guidelines || "")
+      setCta(data.cta || "")
       setMessage(t("speakerDetail.msgGenerated"))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed")
@@ -191,17 +214,6 @@ function SpeakerDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed")
     }
-  }
-
-  const updatePersonaField = <K extends keyof SpeakerPersona>(
-    field: K,
-    value: SpeakerPersona[K]
-  ) => {
-    setPersona((prev) => (prev ? { ...prev, [field]: value } : null))
-  }
-
-  const updateListField = (field: keyof SpeakerPersona, value: string) => {
-    updatePersonaField(field, value.split("\n").filter((s) => s.trim()))
   }
 
   if (loading && !speaker) {
@@ -267,129 +279,117 @@ function SpeakerDetailPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              {persona ? (
-                <form onSubmit={handleUpdateSpeaker} className="space-y-6">
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="tone">{t("speakerDetail.tone")}</Label>
-                      <Select
-                        value={persona.emotional_tone}
-                        onValueChange={(v) =>
-                          updatePersonaField(
-                            "emotional_tone",
-                            v as SpeakerPersona["emotional_tone"]
-                          )
-                        }
-                      >
-                        <SelectTrigger id="tone">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(["rational", "passionate", "gentle", "sharp", "humorous"] as const).map((tName) => (
-                            <SelectItem key={tName} value={tName}>
-                              {t(`speakerDetail.tones.${tName}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="sentence_style">{t("speakerDetail.sentenceStyle")}</Label>
-                      <Input
-                        id="sentence_style"
-                        value={persona.sentence_style}
-                        onChange={(e) => updatePersonaField("sentence_style", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {([
-                    { key: "core_values", rows: 4 },
-                    { key: "favorite_metaphors", rows: 3 },
-                    { key: "typical_hooks", rows: 4 },
-                    { key: "avoid_words", rows: 3 },
-                  ] as const).map((item) => {
-                    const label = t(`speakerDetail.fields.${item.key}` as const)
-                    return (
-                      <div key={item.key} className="space-y-2">
-                        <Label>{label}</Label>
-                        <Textarea
-                          value={(persona[item.key as keyof SpeakerPersona] as string[]).join("\n")}
-                          onChange={(e) => updateListField(item.key as keyof SpeakerPersona, e.target.value)}
-                          rows={item.rows}
-                          placeholder={t("speakerDetail.fieldPlaceholder", { label })}
-                        />
-                      </div>
-                    )
-                  })}
-
-                  <Separator />
-
+              <form onSubmit={handleUpdateSpeaker} className="space-y-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <CardTitle className="text-base">{t("speakerDetail.contentStrategyTitle")}</CardTitle>
-                    <CardDescription className="text-xs">
-                      {t("speakerDetail.contentStrategyDesc")}
-                    </CardDescription>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="voice">{t("speakerDetail.voice")}</Label>
-                      <Input
-                        id="voice"
-                        value={voice}
-                        onChange={(e) => setVoice(e.target.value)}
-                        placeholder={t("speakerDetail.voicePlaceholder")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="audience">{t("speakerDetail.audience")}</Label>
-                      <Input
-                        id="audience"
-                        value={audience}
-                        onChange={(e) => setAudience(e.target.value)}
-                        placeholder={t("speakerDetail.audiencePlaceholder")}
-                      />
-                    </div>
+                    <Label htmlFor="tone">{t("speakerDetail.tone")}</Label>
+                    <Select
+                      value={emotionalTone}
+                      onValueChange={(v) => setEmotionalTone(v as Speaker["emotional_tone"])}
+                    >
+                      <SelectTrigger id="tone">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(["rational", "passionate", "gentle", "sharp", "humorous"] as const).map((tName) => (
+                          <SelectItem key={tName} value={tName}>
+                            {t(`speakerDetail.tones.${tName}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="cta">{t("speakerDetail.cta")}</Label>
+                    <Label htmlFor="sentence_style">{t("speakerDetail.sentenceStyle")}</Label>
                     <Input
-                      id="cta"
-                      value={cta}
-                      onChange={(e) => setCta(e.target.value)}
-                      placeholder={t("speakerDetail.ctaPlaceholder")}
+                      id="sentence_style"
+                      value={sentenceStyle}
+                      onChange={(e) => setSentenceStyle(e.target.value)}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="guidelines">{t("speakerDetail.guidelines")}</Label>
-                    <Textarea
-                      id="guidelines"
-                      value={guidelines}
-                      onChange={(e) => setGuidelines(e.target.value)}
-                      rows={4}
-                      placeholder={t("speakerDetail.guidelinesPlaceholder")}
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button type="submit" disabled={saving}>
-                      <Save className="mr-2 h-4 w-4" />
-                      {saving ? t("common.saving") : t("speakerDetail.saveChanges")}
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
-                  <Sparkles className="mb-4 h-8 w-8 text-muted-foreground" />
-                  <p className="text-muted-foreground">{t("speakerDetail.emptyPersona")}</p>
                 </div>
-              )}
+
+                <Separator />
+
+                {([
+                  { key: "core_values", value: coreValues, setter: setCoreValues, rows: 4 },
+                  { key: "favorite_metaphors", value: favoriteMetaphors, setter: setFavoriteMetaphors, rows: 3 },
+                  { key: "typical_hooks", value: typicalHooks, setter: setTypicalHooks, rows: 4 },
+                  { key: "avoid_words", value: avoidWords, setter: setAvoidWords, rows: 3 },
+                ] as const).map((item) => {
+                  const label = t(`speakerDetail.fields.${item.key}` as const)
+                  return (
+                    <div key={item.key} className="space-y-2">
+                      <Label>{label}</Label>
+                      <Textarea
+                        value={item.value}
+                        onChange={(e) => item.setter(e.target.value)}
+                        rows={item.rows}
+                        placeholder={t("speakerDetail.fieldPlaceholder", { label })}
+                      />
+                    </div>
+                  )
+                })}
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <CardTitle className="text-base">{t("speakerDetail.contentStrategyTitle")}</CardTitle>
+                  <CardDescription className="text-xs">
+                    {t("speakerDetail.contentStrategyDesc")}
+                  </CardDescription>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="voice">{t("speakerDetail.voice")}</Label>
+                    <Input
+                      id="voice"
+                      value={voice}
+                      onChange={(e) => setVoice(e.target.value)}
+                      placeholder={t("speakerDetail.voicePlaceholder")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="audience">{t("speakerDetail.audience")}</Label>
+                    <Input
+                      id="audience"
+                      value={audience}
+                      onChange={(e) => setAudience(e.target.value)}
+                      placeholder={t("speakerDetail.audiencePlaceholder")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cta">{t("speakerDetail.cta")}</Label>
+                  <Input
+                    id="cta"
+                    value={cta}
+                    onChange={(e) => setCta(e.target.value)}
+                    placeholder={t("speakerDetail.ctaPlaceholder")}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="guidelines">{t("speakerDetail.guidelines")}</Label>
+                  <Textarea
+                    id="guidelines"
+                    value={guidelines}
+                    onChange={(e) => setGuidelines(e.target.value)}
+                    rows={4}
+                    placeholder={t("speakerDetail.guidelinesPlaceholder")}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={saving}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {saving ? t("common.saving") : t("speakerDetail.saveChanges")}
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>

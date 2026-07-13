@@ -5,7 +5,7 @@ derivative regeneration, and clip revision:
 
 - fetch a project and verify ownership
 - collect text materials from a project's assets
-- resolve a project's speaker and persona
+- resolve a project's speaker
 - validate a clip for revision
 """
 
@@ -15,8 +15,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import Segment, SpeakerPersona
+from app.models.schemas import Segment, SpeakerContext
 from app.models.tables import Asset, Clip, Project, Speaker
+
+
+def speaker_context_from_row(speaker: Speaker | None) -> SpeakerContext | None:
+    """Build a SpeakerContext from a Speaker DB row."""
+    if speaker is None:
+        return None
+    return SpeakerContext.model_validate(speaker)
 
 
 async def get_project_for_user(
@@ -55,31 +62,26 @@ async def collect_materials(
     ]
 
 
-async def resolve_speaker_and_persona(
+async def resolve_speaker(
     db: AsyncSession,
     project: Project,
     require_user: bool = False,
-) -> tuple[Speaker | None, SpeakerPersona | None]:
-    """Resolve a project's speaker and validated persona.
+) -> Speaker | None:
+    """Resolve a project's speaker.
 
-    Returns ``(None, None)`` when the project has no speaker or the speaker has
-    no persona. The optional ``require_user`` flag adds a ``Speaker.user_id``
-    filter to match the stricter lookup used during auto-speaker creation.
+    Returns ``None`` when the project has no speaker. The optional
+    ``require_user`` flag adds a ``Speaker.user_id`` filter to match the
+    stricter lookup used during auto-speaker creation.
     """
     if not project.speaker_id:
-        return None, None
+        return None
 
     query = select(Speaker).where(Speaker.id == project.speaker_id)
     if require_user:
         query = query.where(Speaker.user_id == project.user_id)
 
     result = await db.execute(query)
-    speaker = result.scalar_one_or_none()
-    if speaker is None or not speaker.persona:
-        return speaker, None
-
-    persona = SpeakerPersona.model_validate(speaker.persona)
-    return speaker, persona
+    return result.scalar_one_or_none()
 
 
 async def resolve_clip_for_revision(

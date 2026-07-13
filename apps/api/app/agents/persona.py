@@ -1,12 +1,12 @@
-"""Persona Agent: generate speaker style persona from materials."""
+"""Persona Agent: generate speaker style and content memory from materials."""
 
 from pathlib import Path
 
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import BaseModel, Field
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import SpeakerPersona
 
 logger = structlog.get_logger()
 
@@ -21,8 +21,23 @@ _jinja_env = Environment(
 _MAX_CHARS_PER_MATERIAL = 150_000
 
 
+class _ExtractedSpeakerMemory(BaseModel):
+    """Internal extraction result; maps directly to Speaker DB columns."""
+
+    core_values: list[str] = Field(default_factory=list)
+    favorite_metaphors: list[str] = Field(default_factory=list)
+    sentence_style: str = ""
+    emotional_tone: str = "rational"
+    typical_hooks: list[str] = Field(default_factory=list)
+    avoid_words: list[str] = Field(default_factory=list)
+    voice: str | None = None
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+
+
 class PersonaAgent:
-    """Agent that analyzes speaker materials and produces a SpeakerPersona."""
+    """Agent that analyzes speaker materials and produces extracted memory."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
@@ -33,8 +48,8 @@ class PersonaAgent:
         speaker_title: str | None,
         language: str,
         materials: list[str],
-    ) -> SpeakerPersona:
-        """Generate a speaker persona from raw text materials.
+    ) -> _ExtractedSpeakerMemory:
+        """Generate speaker style and content memory from raw text materials.
 
         Args:
             speaker_name: Speaker name.
@@ -43,7 +58,7 @@ class PersonaAgent:
             materials: List of extracted text from past materials.
 
         Returns:
-            SpeakerPersona model.
+            Extracted memory mapped to Speaker DB columns.
         """
         if not materials:
             raise MiniMaxError("No materials provided for persona generation")
@@ -73,30 +88,30 @@ class PersonaAgent:
         ]
 
         logger.info(
-            "persona_generation_started",
+            "speaker_extraction_started",
             speaker_name=speaker_name,
             material_count=len(trimmed_materials),
             total_chars=sum(len(m) for m in trimmed_materials),
         )
 
         try:
-            persona = await self.client.generate(
+            memory = await self.client.generate(
                 messages=messages,
-                response_model=SpeakerPersona,
+                response_model=_ExtractedSpeakerMemory,
                 temperature=0.3,
             )
         except MiniMaxError:
             raise
         except Exception as e:
-            logger.error("persona_generation_failed", error=str(e))
-            raise MiniMaxError(f"Persona generation failed: {e}") from e
+            logger.error("speaker_extraction_failed", error=str(e))
+            raise MiniMaxError(f"Speaker extraction failed: {e}") from e
 
         logger.info(
-            "persona_generation_completed",
+            "speaker_extraction_completed",
             speaker_name=speaker_name,
-            emotional_tone=persona.emotional_tone,
+            emotional_tone=memory.emotional_tone,
         )
-        return persona
+        return memory
 
 
 persona_agent = PersonaAgent()

@@ -112,68 +112,6 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
     )
 
 
-def content_strategy_from_template(
-    config: dict[str, Any] | None,
-) -> dict[str, str | None]:
-    """Extract legacy brand-template content strategy fields as a plain dict.
-
-    These fields are being migrated to the Speaker model; this helper remains
-    as a fallback for templates that still store them.
-    """
-    cfg = config or {}
-
-    def _clean(key: str) -> str | None:
-        val = cfg.get(key)
-        if isinstance(val, str):
-            val = val.strip()
-        return val or None
-
-    return {
-        "voice": _clean("voice"),
-        "audience": _clean("audience"),
-        "guidelines": _clean("contentGuidelines"),
-        "cta": _clean("cta"),
-    }
-
-
-def content_strategy_from_speaker(
-    speaker: Any | None,
-) -> dict[str, str | None]:
-    """Return a speaker's content strategy fields as a plain dict."""
-    if speaker is None:
-        return {"voice": None, "audience": None, "guidelines": None, "cta": None}
-
-    def _clean(val: Any) -> str | None:
-        if isinstance(val, str):
-            val = val.strip()
-        return val or None
-
-    return {
-        "voice": _clean(getattr(speaker, "voice", None)),
-        "audience": _clean(getattr(speaker, "audience", None)),
-        "guidelines": _clean(getattr(speaker, "guidelines", None)),
-        "cta": _clean(getattr(speaker, "cta", None)),
-    }
-
-
-def resolve_content_strategy(
-    speaker: Any | None,
-    brand_config: dict[str, Any] | None,
-) -> dict[str, str | None]:
-    """Pick the best available content strategy fields.
-
-    Speaker fields win; legacy brand-template fields are the fallback. This lets
-    existing templates keep working while new users manage voice/audience/
-    guidelines/cta on the Speaker page.
-    """
-    speaker_fields = content_strategy_from_speaker(speaker)
-    template_fields = content_strategy_from_template(brand_config)
-    return {
-        key: speaker_fields[key] or template_fields[key]
-        for key in ("voice", "audience", "guidelines", "cta")
-    }
-
-
 async def music_from_template(
     db: AsyncSession,
     config: dict[str, Any] | None,

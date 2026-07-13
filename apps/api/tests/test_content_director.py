@@ -10,6 +10,7 @@ from app.models.schemas import (
     DerivativePlan,
     DerivativeType,
     GenerationContext,
+    SpeakerContext,
 )
 
 
@@ -23,8 +24,10 @@ def director_client():
 
 def _make_context() -> GenerationContext:
     return GenerationContext(
-        speaker_name="Ada",
-        speaker_title="Dr.",
+        speaker=SpeakerContext(
+            name="Ada",
+            title="Dr.",
+        ),
         event_name="Test Event",
         target_language="en",
         instruction="focus on ethics",

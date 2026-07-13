@@ -9,7 +9,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 Based on the following speech materials and content plan, write a blog article. Requirements:
 - title: an engaging title that captures the theme
-- content: Markdown body with clear structure (subheadings, paragraphs, bullet points allowed), preserving the speaker's original meaning and core viewpoints, with a tone that matches the speaker's style and brand voice, 600–1200 words in length
+- content: Markdown body with clear structure (subheadings, paragraphs, bullet points allowed), preserving the speaker's original meaning and core viewpoints, with a tone that matches the speaker's style and voice, 600–1200 words in length
 - **Output language: {{ context.target_language }}**
 
 ## Content Plan
@@ -22,7 +22,7 @@ Based on the following speech materials and content plan, write a blog article. 
   - {{ arg }}
 {% endfor %}
 - **Focus for this blog post**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}
-- **CTA**: {{ derivative_plan.cta or context.speaker_cta or 'End with a reflection or follow-up question' }}
+- **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with a reflection or follow-up question' }}
 
 {% if derivative_plan.quote_candidates %}
 ## Quotes to Consider
@@ -34,25 +34,25 @@ Based on the following speech materials and content plan, write a blog article. 
 {% endif %}
 ## Speaker Style Profile
 
-{% if context.persona %}
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% if context.speaker %}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
 
-{% if context.speaker_voice or context.speaker_audience or context.speaker_guidelines or context.speaker_cta %}
-## Brand Content Strategy
+{% if context.speaker and (context.speaker.voice or context.speaker.guidelines) %}
+## Speaker Memory
 
-{% if context.speaker_voice %}
-- **Brand voice**: {{ context.speaker_voice }}
+{% if context.speaker.voice %}
+- **Voice**: {{ context.speaker.voice }}
 {% endif %}
-{% if context.speaker_guidelines %}
-- **Content guidelines**: {{ context.speaker_guidelines }}
+{% if context.speaker.guidelines %}
+- **Content guidelines**: {{ context.speaker.guidelines }}
 {% endif %}
 
 {% endif %}

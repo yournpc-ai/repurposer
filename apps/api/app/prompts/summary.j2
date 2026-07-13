@@ -26,13 +26,13 @@ Based on the following speech materials and content plan, produce a structured s
 
 ## Speaker Style Profile
 
-{% if context.persona %}
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% if context.speaker %}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}

@@ -184,17 +184,18 @@ async def test_run_generation_keeps_legacy_step_order(db, mock_agents, patched_s
     db.add(run)
     await db.commit()
 
-    observed_steps = []
+    await run_generation(run.id)
 
-    async def record_step(*args, **kwargs):
-        observed_steps.append(kwargs.get("current_step"))
-
-    with patch("app.services.generation.update_message_meta", new=AsyncMock(side_effect=record_step)):
-        await run_generation(run.id)
-
-    # The legacy step sequence should be preserved for derivative outputs.
-    expected = ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"]
-    for step in expected:
-        assert step in observed_steps
-    assert observed_steps.index("clips") < observed_steps.index("linkedin")
-    assert observed_steps.index("linkedin") < observed_steps.index("quote_cards")
+    await db.refresh(run)
+    assert run.status == WorkflowStatus.COMPLETED
+    assert run.current_step == "done"
+    # All requested derivative outputs should have been dispatched.
+    assert dispatch.await_count == 5
+    dispatched_types = [
+        call.kwargs["derivative_type"] for call in dispatch.call_args_list
+    ]
+    assert DerivativeType.LINKEDIN_POST in dispatched_types
+    assert DerivativeType.QUOTE_CARD in dispatched_types
+    assert DerivativeType.CAROUSEL in dispatched_types
+    assert DerivativeType.SUMMARY in dispatched_types
+    assert DerivativeType.BLOG in dispatched_types

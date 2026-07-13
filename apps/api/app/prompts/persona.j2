@@ -1,4 +1,4 @@
-You are a professional speaking style analyst. Your task is to read a speaker's past materials and distill a unique expression style portrait.
+You are a professional speaking style analyst. Your task is to read a speaker's materials and distill a unique expression style portrait and content memory.
 
 ## Speaker Basic Information
 
@@ -10,14 +10,21 @@ You are a professional speaking style analyst. Your task is to read a speaker's 
 
 ## Analysis Requirements
 
-Please summarize the speaker's style portrait across 6 dimensions based on the following materials:
+Please summarize the speaker's style and content memory across 10 dimensions based on the following materials. Write all extracted descriptions in {{ language }}.
 
+Style memory:
 1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
 2. **Favorite Metaphors (favorite_metaphors)**: Analogies, comparisons, and imagery they commonly use (e.g., "lighthouse", "bridge", "spark")
 3. **Sentence Style (sentence_style)**: A one-sentence description of their syntactic characteristics, such as "short and punchy sentences, fond of parallelism", "rational progression, layer by layer", or "colloquial, fond of rhetorical questions"
 4. **Emotional Tone (emotional_tone)**: Choose the single most fitting value from [rational, passionate, gentle, sharp, humorous]
 5. **Typical Hooks (typical_hooks)**: 3-5 common opening patterns or attention-grabbing phrases they use
 6. **Words to Avoid (avoid_words)**: 3-5 internet slang terms or exaggerated expressions that clash with their style and should be avoided
+
+Content memory:
+7. **Voice (voice)**: A concise description of the speaker's writing/speaking voice, e.g. "direct, first-person, avoids jargon"
+8. **Target Audience (audience)**: The primary audience for this speaker's content, e.g. "senior engineering leaders"
+9. **Content Guidelines (guidelines)**: Do's and don'ts for creating content in this speaker's voice (a short paragraph)
+10. **Default CTA (cta)**: A short, reusable call to action or engagement prompt
 
 ## Past Materials
 
@@ -37,5 +44,9 @@ Please output only valid JSON, with no explanations or markdown code blocks. The
   "sentence_style": "...",
   "emotional_tone": "rational",
   "typical_hooks": ["...", "..."],
-  "avoid_words": ["...", "..."]
+  "avoid_words": ["...", "..."],
+  "voice": "...",
+  "audience": "...",
+  "guidelines": "...",
+  "cta": "..."
 }

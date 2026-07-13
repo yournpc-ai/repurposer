@@ -32,9 +32,9 @@ Consider using or adapting these candidate quotes from the content plan:
 {% endif %}
 ## Speaker
 
-- Name: {{ context.speaker_name or 'Speaker' }}
-{% if context.speaker_title %}
-- Title: {{ context.speaker_title }}
+- Name: {{ context.speaker.name or 'Speaker' }}
+{% if context.speaker.title %}
+- Title: {{ context.speaker.title }}
 {% endif %}
 {% if context.event_name %}
 - Event: {{ context.event_name }}
@@ -42,13 +42,13 @@ Consider using or adapting these candidate quotes from the content plan:
 
 ## Speaker Style Profile
 
-{% if context.persona %}
-- Core values: {{ context.persona.core_values | join(', ') }}
-- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.persona.sentence_style }}
-- Emotional tone: {{ context.persona.emotional_tone }}
-- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
+{% if context.speaker %}
+- Core values: {{ context.speaker.core_values | join(', ') }}
+- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.speaker.sentence_style }}
+- Emotional tone: {{ context.speaker.emotional_tone }}
+- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}

@@ -77,6 +77,7 @@ const zh: Resources = {
   composer: {
     speaker: "演讲者",
     speakerLabel: "选择演讲者",
+    extractFromMaterials: "从素材提取",
     style: "风格",
     styleLabel: "声音风格",
     styleDefault: "默认风格",

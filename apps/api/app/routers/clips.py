@@ -26,7 +26,11 @@ from app.models.schemas import (
 from app.models.tables import Asset, Clip, Project, User
 from app.services.caption_translate import translate_caption_track
 from app.services.chat import chat
-from app.services.project_context import resolve_clip_for_revision, resolve_speaker_and_persona
+from app.services.project_context import (
+    resolve_clip_for_revision,
+    resolve_speaker,
+    speaker_context_from_row,
+)
 from app.services.storage import get_output_path, output_url, resolve_file_path
 from app.services.voice import clone_voice, extract_audio, synthesize
 
@@ -112,7 +116,7 @@ async def revise_clip(
             detail=str(e),
         ) from e
 
-    speaker, persona = await resolve_speaker_and_persona(db, project)
+    speaker = await resolve_speaker(db, project)
 
     try:
         revised = await reviser_agent.revise(
@@ -122,7 +126,7 @@ async def revise_clip(
             clip_music_mood=clip.music_mood,
             segment=source_segment,
             feedback=feedback,
-            persona=persona,
+            speaker=speaker_context_from_row(speaker),
         )
     except MiniMaxError as e:
         await db.rollback()

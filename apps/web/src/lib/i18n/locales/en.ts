@@ -75,6 +75,7 @@ const en = {
   composer: {
     speaker: "Speaker",
     speakerLabel: "Choose speaker",
+    extractFromMaterials: "Extract from materials",
     style: "Style",
     styleLabel: "Voice style",
     styleDefault: "Default style",

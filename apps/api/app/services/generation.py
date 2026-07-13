@@ -31,7 +31,7 @@ from app.models.schemas import (
     MediaInput,
     ProjectStatus,
     RenderStatus,
-    SpeakerPersona,
+    SpeakerContext,
     ToneSettings,
     WorkflowStatus,
 )
@@ -48,7 +48,6 @@ from app.models.tables import (
 from app.services.brand import (
     brand_from_template,
     music_from_plan,
-    resolve_content_strategy,
     resolve_music_ref,
 )
 from app.services.clip_spec import build_clip_spec
@@ -56,7 +55,8 @@ from app.services.derivative_dispatch import generate_derivative
 from app.services.project_context import (
     collect_materials,
     resolve_clip_for_revision,
-    resolve_speaker_and_persona,
+    resolve_speaker,
+    speaker_context_from_row,
 )
 from app.services.storage import (
     file_to_data_url,
@@ -214,6 +214,16 @@ def _collect_media_inputs(assets: list[Asset]) -> list[MediaInput]:
     return inputs
 
 
+def _truncate(value: str | None, max_len: int) -> str | None:
+    """Truncate a string to fit a SQL column, returning None for empty values."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return value[:max_len]
+
+
 async def _resolve_or_create_speaker(
     db: AsyncSession,
     project: Project,
@@ -222,8 +232,9 @@ async def _resolve_or_create_speaker(
     """Return the project's speaker, or auto-create one from materials.
 
     The homepage no longer forces the user to pick/create a speaker. When a
-    project has no speaker, we derive a default persona from the transcript so
-    the content director and clip agent still receive style guidance.
+    project has no speaker, we derive a default persona and content memory
+    (voice/audience/guidelines/cta) from the transcript so the content director
+    and clip agent receive style guidance.
     """
     if project.speaker_id:
         result = await db.execute(
@@ -242,7 +253,7 @@ async def _resolve_or_create_speaker(
         return None
 
     try:
-        persona = await persona_agent.generate(
+        memory = await persona_agent.generate(
             speaker_name=project.title or "Speaker",
             speaker_title=None,
             language=project.language or "en",
@@ -250,7 +261,7 @@ async def _resolve_or_create_speaker(
         )
     except Exception as e:  # noqa: BLE001
         logger.warning(
-            "auto_persona_generation_failed",
+            "auto_speaker_extraction_failed",
             project_id=str(project.id),
             error=str(e),
         )
@@ -261,7 +272,16 @@ async def _resolve_or_create_speaker(
         name=project.title or "Auto Speaker",
         title=None,
         language=project.language or "en",
-        persona=persona.model_dump(),
+        core_values=memory.core_values or [],
+        favorite_metaphors=memory.favorite_metaphors or [],
+        sentence_style=_truncate(memory.sentence_style, 255) or "",
+        emotional_tone=memory.emotional_tone or "rational",
+        typical_hooks=memory.typical_hooks or [],
+        avoid_words=memory.avoid_words or [],
+        voice=_truncate(memory.voice, 255),
+        audience=_truncate(memory.audience, 255),
+        guidelines=memory.guidelines,
+        cta=_truncate(memory.cta, 512),
     )
     db.add(speaker)
     await db.commit()
@@ -276,6 +296,11 @@ async def _resolve_or_create_speaker(
         speaker_id=str(speaker.id),
     )
     return speaker
+
+
+def _speaker_context(speaker: Speaker | None) -> SpeakerContext | None:
+    """Build a SpeakerContext from a Speaker row for generation agents."""
+    return speaker_context_from_row(speaker)
 
 
 async def _run_targeted_revision(
@@ -295,7 +320,7 @@ async def _run_targeted_revision(
         clip, source_segment = await resolve_clip_for_revision(
             db, target_id, project.id
         )
-        speaker, persona = await resolve_speaker_and_persona(db, project)
+        speaker = await resolve_speaker(db, project)
 
         revised = await reviser_agent.revise_by_instruction(
             clip_hook=clip.hook,
@@ -304,7 +329,7 @@ async def _run_targeted_revision(
             clip_music_mood=clip.music_mood,
             segment=source_segment,
             instruction=instruction or "Improve this clip",
-            persona=persona,
+            speaker=_speaker_context(speaker),
             scope=scope,
         )
         clip.hook = revised.hook
@@ -342,31 +367,13 @@ async def _run_targeted_revision(
             raise ValueError("Target derivative not found")
 
         materials = await collect_materials(db, project.id)
-        speaker, persona = await resolve_speaker_and_persona(db, project)
+        speaker = await resolve_speaker(db, project)
         target_language = run.context.get("target_language", derivative.language or "en")
 
-        bt = (
-            await db.execute(
-                select(BrandTemplate)
-                .where(BrandTemplate.user_id == project.user_id)
-                .order_by(BrandTemplate.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        content_strategy = resolve_content_strategy(
-            speaker, bt.config if bt else None
-        )
-
         context = GenerationContext(
-            speaker_name=speaker.name if speaker else None,
-            speaker_title=speaker.title if speaker else None,
+            speaker=_speaker_context(speaker),
             event_name=project.event_name,
-            persona=persona,
             tone_settings=None,
-            speaker_voice=content_strategy.get("voice"),
-            speaker_audience=content_strategy.get("audience"),
-            speaker_guidelines=content_strategy.get("guidelines"),
-            speaker_cta=content_strategy.get("cta"),
             target_language=target_language,
             instruction=instruction,
         )
@@ -469,8 +476,7 @@ async def run_generation(run_id: UUID) -> None:
             speaker = await _resolve_or_create_speaker(db, project, materials)
 
             # Resolve the brand template early so the content director can use
-            # its content strategy (voice/audience/cta/guidelines) when
-            # selecting segments.
+            # its visual brand settings and default music when selecting segments.
             bt_id = ctx.get("brand_template_id")
             bt = None
             if bt_id:
@@ -493,9 +499,6 @@ async def run_generation(run_id: UUID) -> None:
                         .limit(1)
                     )
                 ).scalar_one_or_none()
-            content_strategy = resolve_content_strategy(
-                speaker, bt.config if bt else None
-            )
 
             # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
             #   1. on-camera VIDEO (with ASR words)      -> video clip
@@ -545,12 +548,6 @@ async def run_generation(run_id: UUID) -> None:
             else:
                 render_source, render_kind = None, "video"
 
-            persona = (
-                SpeakerPersona.model_validate(speaker.persona)
-                if speaker is not None and speaker.persona
-                else None
-            )
-
             # Resolve the brand template's default music piece (if any) to its
             # UUID so the Clip Agent can reference it by id alongside the library.
             brand_music_id: str | None = None
@@ -565,15 +562,9 @@ async def run_generation(run_id: UUID) -> None:
             # same object so that speaker style, brand voice, tone, and user
             # instruction are applied consistently across every output.
             generation_context = GenerationContext(
-                speaker_name=speaker.name if speaker else None,
-                speaker_title=speaker.title if speaker else None,
+                speaker=_speaker_context(speaker),
                 event_name=project.event_name,
-                persona=persona,
                 tone_settings=tone_settings,
-                speaker_voice=content_strategy.get("voice"),
-                speaker_audience=content_strategy.get("audience"),
-                speaker_guidelines=content_strategy.get("guidelines"),
-                speaker_cta=content_strategy.get("cta"),
                 target_language=target_language,
                 instruction=instruction,
                 brand_music_id=brand_music_id,

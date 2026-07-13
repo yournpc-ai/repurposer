@@ -12,9 +12,8 @@ from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user
 from app.models.schemas import (
     AssetType,
+    SpeakerContext,
     SpeakerCreate,
-    SpeakerPersona,
-    SpeakerResponse,
     SpeakerUpdate,
 )
 from app.models.tables import Asset, Speaker, User
@@ -24,7 +23,7 @@ from app.services.storage import delete_file, delete_speaker_files
 router = APIRouter()
 
 
-@router.post("", response_model=SpeakerResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SpeakerContext, status_code=status.HTTP_201_CREATED)
 async def create_speaker(
     data: SpeakerCreate,
     db: DBDep,
@@ -45,7 +44,7 @@ async def create_speaker(
     return speaker
 
 
-@router.get("", response_model=list[SpeakerResponse])
+@router.get("", response_model=list[SpeakerContext])
 async def list_speakers(
     db: DBDep,
     current_user: User = Depends(get_current_user),
@@ -76,7 +75,7 @@ async def _get_user_speaker(speaker_id: UUID, user_id: UUID, db: DBDep) -> Speak
     return speaker
 
 
-@router.get("/{speaker_id}", response_model=SpeakerResponse)
+@router.get("/{speaker_id}", response_model=SpeakerContext)
 async def get_speaker(
     speaker_id: UUID,
     db: DBDep,
@@ -86,7 +85,7 @@ async def get_speaker(
     return await _get_user_speaker(speaker_id, current_user.id, db)
 
 
-@router.put("/{speaker_id}", response_model=SpeakerResponse)
+@router.put("/{speaker_id}", response_model=SpeakerContext)
 async def update_speaker(
     speaker_id: UUID,
     data: SpeakerUpdate,
@@ -128,13 +127,13 @@ async def delete_speaker(
     delete_speaker_files(speaker_id, current_user.id)
 
 
-@router.post("/{speaker_id}/persona/generate", response_model=SpeakerPersona)
+@router.post("/{speaker_id}/persona/generate", response_model=SpeakerContext)
 async def generate_persona(
     speaker_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user),
-) -> SpeakerPersona:
-    """Generate speaker persona from uploaded past materials."""
+) -> SpeakerContext:
+    """Generate speaker persona and content memory from uploaded past materials."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     # Find speaker's past material assets
@@ -170,7 +169,7 @@ async def generate_persona(
     await db.commit()
 
     try:
-        persona = await persona_agent.generate(
+        memory = await persona_agent.generate(
             speaker_name=speaker.name,
             speaker_title=speaker.title,
             language=speaker.language,
@@ -182,7 +181,16 @@ async def generate_persona(
             detail=str(e),
         ) from e
 
-    speaker.persona = persona.model_dump()
+    speaker.core_values = memory.core_values or []
+    speaker.favorite_metaphors = memory.favorite_metaphors or []
+    speaker.sentence_style = memory.sentence_style or ""
+    speaker.emotional_tone = memory.emotional_tone or "rational"
+    speaker.typical_hooks = memory.typical_hooks or []
+    speaker.avoid_words = memory.avoid_words or []
+    speaker.voice = memory.voice
+    speaker.audience = memory.audience
+    speaker.guidelines = memory.guidelines
+    speaker.cta = memory.cta
     await db.commit()
     await db.refresh(speaker)
-    return persona
+    return speaker
