@@ -266,38 +266,6 @@ class SpeakerUpdate(BaseModel):
     cta: str | None = None
 
 
-def render_speaker_persona(speaker: SpeakerContext) -> str:
-    """Render a prose persona summary from speaker fields for LLM prompts."""
-    lines: list[str] = []
-    if speaker.title:
-        lines.append(f"Speaker: {speaker.name} ({speaker.title})")
-    else:
-        lines.append(f"Speaker: {speaker.name}")
-
-    if speaker.core_values:
-        lines.append(f"Core values: {', '.join(speaker.core_values)}")
-    if speaker.favorite_metaphors:
-        lines.append(f"Favorite metaphors: {', '.join(speaker.favorite_metaphors)}")
-    if speaker.sentence_style:
-        lines.append(f"Sentence style: {speaker.sentence_style}")
-    if speaker.emotional_tone:
-        lines.append(f"Emotional tone: {speaker.emotional_tone}")
-    if speaker.typical_hooks:
-        lines.append(f"Typical hooks: {' / '.join(speaker.typical_hooks)}")
-    if speaker.avoid_words:
-        lines.append(f"Words to avoid: {', '.join(speaker.avoid_words)}")
-    if speaker.voice:
-        lines.append(f"Voice: {speaker.voice}")
-    if speaker.audience:
-        lines.append(f"Target audience: {speaker.audience}")
-    if speaker.guidelines:
-        lines.append(f"Content guidelines: {speaker.guidelines}")
-    if speaker.cta:
-        lines.append(f"Preferred call to action: {speaker.cta}")
-
-    return "\n".join(lines)
-
-
 class ToneSettings(BaseModel):
     """Tone settings for generation."""
 
