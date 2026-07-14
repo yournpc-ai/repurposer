@@ -713,6 +713,7 @@ async def run_generation(run_id: UUID) -> None:
                         language=target_language,
                         source_segment=segment.model_dump(),
                         render_spec=spec.model_dump(mode="json") if spec else None,
+                        render_status=RenderStatus.PENDING if spec else None,
                     )
                     db.add(clip)
                     clip_ids.append(clip.id)
