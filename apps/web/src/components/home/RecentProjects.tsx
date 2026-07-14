@@ -24,11 +24,13 @@ export function RecentProjects({ refreshKey }: RecentProjectsProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchProjects = async (attempt = 1) => {
+    let cancelled = false
+    const fetchProjects = async () => {
       try {
         const res = await apiFetch("/api/v1/projects")
         if (!res.ok) throw new Error("Failed to load projects")
         const all = (await res.json()) as Project[]
+        if (cancelled) return
 
         const demo = all.find((p) => p.id === DEMO_PROJECT_ID)
         const real = all
@@ -42,18 +44,18 @@ export function RecentProjects({ refreshKey }: RecentProjectsProps) {
 
         setProjects(real)
         setDemoProject(demo || null)
-      } catch (e) {
-        // Retry once if the API hasn't finished starting up yet.
-        if (attempt < 2) {
-          setTimeout(() => fetchProjects(attempt + 1), 2000)
-          return
-        }
-        console.error(e)
+      } catch {
+        // Leave lists empty if the API isn't ready yet; user can refresh.
       } finally {
-        setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
     fetchProjects()
+    return () => {
+      cancelled = true
+    }
   }, [refreshKey])
 
   if (loading) {
