@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
-> Status: proposed  
-> Last updated: 2026-07-05
+> Status: implemented on main
+> Last updated: 2026-07-14
 
 ## 1. Overview
 
@@ -18,7 +18,7 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
                    ▼
 ┌─────────────────────────────────────────────┐
 │ Layer 2: Content Director                   │
-│ (produces ContentPlan from materials)       │
+│ (produces ContentPlan from source texts)    │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
@@ -42,7 +42,8 @@ This design guarantees that every output is derived from the same **content plan
 - **Consistency**: clips, LinkedIn posts, quote cards, etc. should reinforce the same core thesis and brand voice.
 - **Single source of truth**: speaker memory, tone, and user instruction are assembled once and shared.
 - **Extensibility**: adding a new derivative type requires only a new executor agent and one registry entry.
-- **Stable contracts**: the public API and database schema do not change; the refactor is entirely internal to the service layer.
+- **Parallel execution**: independent derivative agents run concurrently via `asyncio.gather`.
+- **Resilience**: a single output failure does not fail the whole run; it is retried once and then surfaced for manual retry.
 
 ## 3. Layer 1: GenerationContext
 
@@ -62,7 +63,7 @@ It is constructed in `app/services/generation.py` from the resolved `Speaker`, s
 
 ## 4. Layer 2: Content Director
 
-The `ContentDirectorAgent` (`app/agents/content_director.py`) performs one analysis pass over the source materials and produces a `ContentPlan`.
+The `ContentDirectorAgent` (`app/agents/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentPlan`.
 
 ### 4.1 ContentPlan
 
@@ -91,10 +92,14 @@ Previously, the clip planner (`planner.py`) performed a rich analysis (`overall_
 
 The director centralizes analysis so that every downstream agent works from the same interpretation.
 
-### 4.3 Prompt
+### 4.3 Persistent ContentPlan
+
+The generated `ContentPlan` is persisted to `Project.content_plan` (JSON column) on first generation. Subsequent full regenerations reuse it instead of calling the director again, enabling faster iteration. Future work may invalidate the cache based on a materials hash.
+
+### 4.4 Prompt
 
 `app/prompts/content_director.j2` receives:
-- `materials` and optional `media_inputs`
+- `asset_texts` and optional `asset_media`
 - `context` (`GenerationContext`)
 - `requested_derivatives` (the output types the user asked for)
 
@@ -107,7 +112,7 @@ All content executors share the same interface:
 ```python
 async def generate(
     self,
-    materials: list[str],
+    asset_texts: list[str],
     context: GenerationContext,
     content_plan: ContentPlan,
 ) -> BaseModel:
@@ -129,7 +134,7 @@ Each executor extracts its own guidance from `content_plan.derivatives` by match
 
 ### 5.2 Prompt templates
 
-Each prompt template receives `materials`, `context`, and `content_plan`:
+Each prompt template receives `asset_texts`, `context`, and `content_plan`:
 
 - `app/prompts/clip_agent.j2`
 - `app/prompts/linkedin.j2`
@@ -160,16 +165,16 @@ _AGENTS: dict[DerivativeType, BaseDerivativeAgent] = {
 
 async def generate_derivative(
     derivative_type: DerivativeType,
-    materials: list[str],
+    asset_texts: list[str],
     context: GenerationContext,
     content_plan: ContentPlan,
 ) -> dict:
     agent = _AGENTS[derivative_type]
-    result = await agent.generate(materials, context, content_plan)
-    return result.model_dump()
+    result = await agent.generate(asset_texts, context, content_plan)
+    return validate_derivative_content(derivative_type, result.model_dump())
 ```
 
-This file was previously `derivative_generation.py` and contained per-type parameter normalization. With the unified interface, its only remaining responsibility is **dispatch**.
+This file was previously `derivative_generation.py` and contained per-type parameter normalization. With the unified interface, its only remaining responsibility is **dispatch** plus content validation.
 
 ## 7. Orchestration
 
@@ -177,44 +182,66 @@ This file was previously `derivative_generation.py` and contained per-type param
 
 ### 7.1 Flow
 
-1. Collect materials and media inputs.
+1. Collect source texts (`collect_asset_texts`) and media inputs (`collect_asset_media`).
 2. Resolve speaker (auto-create default memory if none selected), brand template, and tone settings.
 3. Build `GenerationContext`.
 4. Map requested `outputs` to `DerivativeType`s.
-5. Call `content_director_agent.plan(...)` → `ContentPlan`.
-6. If clips requested:
+5. Call `content_director_agent.plan(...)` → `ContentPlan`, then persist to `Project.content_plan`.
+6. Delete prior outputs for the requested types.
+7. If clips requested:
    - Call `clip_agent.generate(...)` → `ClipPlans`
    - Build `ClipSpec` for each plan and persist `Clip` rows.
-7. For each derivative in `ContentPlan.derivatives`:
+8. Run all requested derivatives concurrently with `asyncio.gather`:
    - Call `generate_derivative(...)`
    - Persist `Derivative` rows.
-8. Mark `WorkflowRun` completed and project status `REVIEW`.
+9. Mark `WorkflowRun` completed (or failed if every output failed) and project status `REVIEW`.
 
-### 7.2 Preserved behavior
+### 7.2 Per-output status and retry
 
-- `current_step` values remain exactly: `"clips"`, `"linkedin"`, `"quote_cards"`, `"carousel"`, `"summary"`, `"blog"`, `"done"`.
+`run.context["output_status"]` tracks each output independently:
+
+```json
+{
+  "clips": {"status": "completed", "progress": 100, "error": null},
+  "linkedin": {"status": "failed", "progress": 0, "error": "..."}
+}
+```
+
+Each output agent call is wrapped in `try/except` with **one automatic retry**. If it still fails, the error is recorded and the run continues. The frontend shows a manual retry button per failed output; retrying triggers a new `WorkflowRun` with only that output.
+
+### 7.3 Stepper stages
+
+During the planning phase, `WorkflowRun.current_step` uses three discrete values so the Result page can render a real stepper:
+
+- `"analyze"` — collecting source texts / media, resolving speaker and brand
+- `"plan"` — running the Content Director
+- `"prepare"` — plan persisted, clearing old outputs, about to generate
+
+After planning, `current_step` switches to the active output key (`clips`, `linkedin`, `quote_cards`, `carousel`, `summary`, `blog`) and finally `"done"`.
+
+### 7.4 Preserved behavior
+
 - Idempotency: prior outputs for requested types are still deleted before regeneration.
-- Targeted revision (`_run_targeted_revision`) is unchanged and bypasses the director.
+- Targeted revision (`_run_targeted_revision`) bypasses the director and uses a minimal plan.
+- The orchestrator never raises; failures land on the `WorkflowRun`.
 
 ## 8. API and Data Stability
 
-No public contracts change for `Clip`, `Derivative`, `WorkflowRun`, or `Project` tables.
-
 | Surface | Change |
 |---------|--------|
-| `POST /api/v1/projects/{id}/generate` | None |
-| `GET /api/v1/projects/{id}/results` | None |
-| Speaker schema | Flattened: `persona` JSON replaced with `core_values`, `favorite_metaphors`, `sentence_style`, `emotional_tone`, `typical_hooks`, `avoid_words` columns; `voice/audience/guidelines/cta` remain direct columns |
-
-The refactor keeps generation and results contracts stable; only the speaker data model changed.
+| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`/`blog`; `clips` is no longer forced; default `clip_count` is 5 |
+| `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
+| `Project` response | Includes `content_plan` |
+| `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
+| Speaker schema | Flattened: `persona` JSON replaced with direct columns (already landed) |
 
 ## 9. Non-content agents
 
 The following agents are **not** part of the 4-layer executor pipeline and remain unchanged:
 
-- `app/agents/persona.py` — extracts speaker style and content memory from materials.
+- `app/agents/persona.py` — extracts speaker style and content memory from source texts.
 - `app/agents/reviser.py` — revises a single clip script from human feedback.
-- `app/agents/intent.py` — infers generation intent from the user's prompt before generation.
+- `app/agents/intent.py` — infers generation intent (`outputs`, `clip_count`, `language`, `tone`) from the user's prompt before generation.
 - `app/agents/caption_translate.py` — translates caption lines.
 
 ## 10. Future work
@@ -223,26 +250,20 @@ The following agents are **not** part of the 4-layer executor pipeline and remai
 
 A future agent can review all generated outputs against the `ContentPlan` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the LinkedIn post's thesis), and trigger targeted revisions.
 
-### 10.2 Parallel execution
+### 10.2 ContentPlan invalidation
 
-Because the orchestration is now plan-driven, independent derivative agents can run concurrently instead of sequentially.
-
-### 10.3 Persistent ContentPlan
-
-The `ContentPlan` can be cached per project/materials hash, or stored in `WorkflowRun.context`, enabling:
-- faster regeneration
-- human editing of the plan before execution
-- versioning of content strategy
+Currently `Project.content_plan` is reused unconditionally. Future work should invalidate/rebuild when source materials change significantly, e.g. via a hash of asset texts/media.
 
 ## 11. Critical files
 
-- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`
-- `app/agents/content_director.py` — new director agent
+- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`
+- `app/agents/content_director.py` — director agent
 - `app/prompts/content_director.j2` — director prompt
-- `app/agents/clip_agent.py` — renamed/refactored clip agent
+- `app/agents/clip_agent.py` — clip agent
 - `app/prompts/clip_agent.j2` — clip agent prompt
 - `app/agents/linkedin.py`, `quote_agent.py`, `carousel.py`, `summary.py`, `blog.py` — derivative executors
 - `app/prompts/linkedin.j2`, `quote_agent.j2`, `carousel.j2`, `summary.j2`, `blog.j2` — derivative prompts
 - `app/services/derivative_dispatch.py` — thin dispatcher registry
 - `app/services/generation.py` — orchestration
+- `app/agents/intent.py` — intent recognition
 - `app/routers/derivatives.py` — single-derivative regeneration

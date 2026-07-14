@@ -228,21 +228,28 @@ Request:
 
 ```json
 {
-  "clip_count": 3,
+  "clip_count": 5,
   "outputs": ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"],
   "target_language": "en",
-  "brand_template_id": "uuid | null",        // Which brand template to use; defaults to latest if omitted
-  "instruction": "聚焦实体机器人角度，hook 要狠",  // User intent, drives the analyzer/script and derivative agents
+  "brand_template_id": "uuid | null",
+  "instruction": "聚焦实体机器人角度，hook 要狠",
   "tone_settings": {
     "academic_vs_casual": 0.7,
     "rational_vs_passionate": 0.4,
     "concise_vs_detailed": 0.5,
     "audience": "industry"
-  }
+  },
+  "scope": "full",
+  "target_id": null,
+  "operation": "regenerate"
 }
 ```
 
-> `outputs` options: `clips | linkedin | quote_cards | carousel | summary | blog`. `clips` is always generated.
+- `outputs`: any subset of `clips | linkedin | quote_cards | carousel | summary | blog`. Clips are generated only when included.
+- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`).
+- `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
+- `target_id`: clip or derivative UUID when `scope` is not `"full"`.
+- `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
 
 Response:
 
@@ -259,6 +266,21 @@ Response:
 ```http
 GET /api/v1/projects/{project_id}/jobs
 GET /api/v1/projects/{project_id}/jobs/{job_id}
+```
+
+`WorkflowRun` includes `context` with per-output progress:
+
+```json
+{
+  "context": {
+    "outputs": ["clips", "linkedin", "quote_cards"],
+    "clip_count": 5,
+    "output_status": {
+      "clips": {"status": "completed", "progress": 100, "error": null},
+      "linkedin": {"status": "failed", "progress": 0, "error": "..."}
+    }
+  }
+}
 ```
 
 ## 7. Clip Management
@@ -486,11 +508,11 @@ See the Data Models section in [Architecture Design](./ARCHITECTURE.md).
 Core models:
 
 - `Speaker` (= user profile: style memory + voiceprint; see ADR-021)
-- `Project`
+- `Project` (includes `content_plan: JSON` for persisted ContentPlan)
 - `Asset`
 - `Clip`
 - `Derivative`
-- `WorkflowRun`
+- `WorkflowRun` (includes `context` with `outputs`, `clip_count`, `output_status`)
 - `ChatSession` (project-scoped or asset-scoped chat container)
 - `Message` (chat messages, referenced by `session_id`)
 - `BrandTemplate`
