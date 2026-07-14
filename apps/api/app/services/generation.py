@@ -78,15 +78,43 @@ logger = structlog.get_logger()
 # parallel derivative tasks do not overwrite each other's output_status.
 _run_context_lock = asyncio.Lock()
 
-KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
+KNOWN_OUTPUTS = ("clips", "post", "quotes", "article", "carousel")
 
 _OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
-    "linkedin": DerivativeType.LINKEDIN_POST,
-    "quote_cards": DerivativeType.QUOTE_CARD,
+    "post": DerivativeType.POST,
+    "quotes": DerivativeType.QUOTES,
+    "article": DerivativeType.ARTICLE,
     "carousel": DerivativeType.CAROUSEL,
-    "summary": DerivativeType.SUMMARY,
-    "blog": DerivativeType.BLOG,
 }
+
+# Legacy output/derivative type names from before the video-first refactor.
+# Kept as a runtime safety net for pending WorkflowRuns and old content_plan
+# documents that may not have been rewritten by the migration.
+_LEGACY_OUTPUT_NAMES: dict[str, str] = {
+    "linkedin": "post",
+    "linkedin_post": "post",
+    "summary": "post",
+    "quote_cards": "quotes",
+    "quote_card": "quotes",
+    "blog": "article",
+}
+
+
+def _normalize_output_name(output: str) -> str:
+    """Map legacy output keys to the current output naming."""
+    return _LEGACY_OUTPUT_NAMES.get(output, output)
+
+
+def _normalize_content_plan_types(obj: object) -> object:
+    """Recursively rewrite legacy derivative_type values in a content_plan dict."""
+    if isinstance(obj, dict):
+        return {
+            k: _normalize_output_name(v) if k == "derivative_type" and isinstance(v, str) else _normalize_content_plan_types(v)
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_normalize_content_plan_types(item) for item in obj]
+    return obj
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. These limits are
@@ -110,17 +138,25 @@ def _quote_image_prompt(quote: str, attribution: str, event_name: str | None = N
     return base + quote_ctx + event_ctx
 
 
-async def _save_quote_card_image(
-    quote: str,
-    attribution: str,
-    derivative_id: UUID,
+async def _save_minimax_image(
     project: Project,
+    filename: str,
+    prompt: str,
+    aspect_ratio: str,
+    *,
+    log_context: dict[str, Any] | None = None,
 ) -> str | None:
-    """Generate and save a quote-card PNG; return the public URL or None on failure."""
+    """Generate an image via MiniMax and save it to project storage.
+
+    Returns the public URL or None on failure. Centralizes the repetitive
+    generate_image / base64 decode / save_output / output_url flow so that
+    quote cards, clip covers, and future image assets behave consistently.
+    """
+    log_ctx = log_context or {}
     try:
         images = await minimax_client.generate_image(
-            prompt=_quote_image_prompt(quote, attribution, project.event_name),
-            aspect_ratio="1:1",
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
             response_format="base64",
         )
         if not images:
@@ -129,16 +165,59 @@ async def _save_quote_card_image(
         relative_path = await save_output(
             project.id,
             project.user_id,
-            f"quote_{derivative_id}.png",
+            filename,
             image_bytes,
         )
         return output_url(relative_path)
     except MiniMaxError as e:
-        logger.warning("quote_card_image_failed", error=str(e))
+        logger.warning("minimax_image_failed", error=str(e), **log_ctx)
         return None
     except Exception as e:  # noqa: BLE001
-        logger.warning("quote_card_image_unexpected_error", error=str(e))
+        logger.warning("minimax_image_unexpected_error", error=str(e), **log_ctx)
         return None
+
+
+async def _save_quote_card_image(
+    quote: str,
+    attribution: str,
+    derivative_id: UUID,
+    project: Project,
+) -> str | None:
+    """Generate and save a quote-card PNG; return the public URL or None on failure."""
+    return await _save_minimax_image(
+        project,
+        f"quote_{derivative_id}.png",
+        _quote_image_prompt(quote, attribution, project.event_name),
+        "1:1",
+        log_context={"derivative_id": str(derivative_id), "kind": "quote_card"},
+    )
+
+
+async def _generate_clip_cover_image(clip: Clip, project: Project) -> str | None:
+    """Generate a vertical cover image for a clip on demand.
+
+    Returns the public URL or None on failure. The image is intentionally
+    generated only when requested by the UI to avoid paying image-generation
+    costs for every clip.
+    """
+    prompt = (
+        "A minimalist, elegant vertical cover image for a short knowledge video. "
+        "Clean composition with subtle depth, professional typography-ready background, "
+        "no text, no UI, no clutter. Suitable as a 9:16 video thumbnail. "
+    )
+    context_parts = [f"Topic: {clip.topic}"] if clip.topic else []
+    if clip.title:
+        context_parts.append(f"Title: {clip.title}")
+    if context_parts:
+        prompt += " ".join(context_parts)
+
+    return await _save_minimax_image(
+        project,
+        f"cover_{clip.id}.png",
+        prompt,
+        "9:16",
+        log_context={"clip_id": str(clip.id), "kind": "clip_cover"},
+    )
 
 
 def _file_size_bytes(path: Path | None) -> int | None:
@@ -450,15 +529,29 @@ async def _run_targeted_revision(
             target_language=target_language,
             instruction=instruction,
         )
-        content_plan = ContentPlan(
-            core_thesis="Regenerate this derivative faithfully to the source material",
-            derivatives=[
-                DerivativePlan(
-                    derivative_type=derivative.type,
-                    focus="Regenerate this derivative faithfully to the source material",
+        if project.content_plan:
+            normalized_plan = _normalize_content_plan_types(project.content_plan)
+            content_plan = ContentPlan.model_validate(normalized_plan)
+            if normalized_plan != project.content_plan:
+                project.content_plan = normalized_plan
+            # Ensure the requested derivative has guidance in the persisted plan.
+            if not any(p.derivative_type == derivative.type for p in content_plan.derivatives):
+                content_plan.derivatives.append(
+                    DerivativePlan(
+                        derivative_type=derivative.type,
+                        focus="Regenerate this derivative faithfully to the source material",
+                    )
                 )
-            ],
-        )
+        else:
+            content_plan = ContentPlan(
+                core_thesis="Regenerate this derivative faithfully to the source material",
+                derivatives=[
+                    DerivativePlan(
+                        derivative_type=derivative.type,
+                        focus="Regenerate this derivative faithfully to the source material",
+                    )
+                ],
+            )
 
         try:
             derivative.content = await generate_derivative(
@@ -573,7 +666,7 @@ async def _run_derivative_task(
         await db.commit()
 
         # Quote cards get a generated PNG for the first quote.
-        if derivative_type == DerivativeType.QUOTE_CARD:
+        if derivative_type == DerivativeType.QUOTES:
             await db.refresh(derivative)
             project = await db.get(Project, project_id)
             quotes = content.get("quotes", []) if isinstance(content, dict) else []
@@ -768,6 +861,12 @@ async def _run_clips_task(
             source_segment=segment.model_dump(),
             render_spec=spec.model_dump(mode="json") if spec else None,
             render_status=RenderStatus.PENDING if spec else None,
+            title=plan.title or None,
+            description=plan.description or None,
+            hashtags=plan.hashtags or None,
+            topic=plan.topic or None,
+            start_time=plan.start_seconds,
+            end_time=plan.end_seconds,
         )
         db.add(clip)
     await db.commit()
@@ -807,7 +906,11 @@ async def run_generation(run_id: UUID) -> None:
 
         try:
             ctx = run.context or {}
-            outputs = [o for o in ctx.get("outputs", ["clips"]) if o in KNOWN_OUTPUTS]
+            outputs = [
+                _normalize_output_name(o)
+                for o in ctx.get("outputs", ["clips"])
+                if _normalize_output_name(o) in KNOWN_OUTPUTS
+            ]
             if not outputs:
                 outputs = ["clips"]
             clip_count = int(ctx.get("clip_count", 3))
@@ -910,7 +1013,10 @@ async def run_generation(run_id: UUID) -> None:
             # Reuse a persisted plan when available (simple V1 reuse); otherwise
             # run the Content Director once and persist the result.
             if project.content_plan:
-                content_plan = ContentPlan.model_validate(project.content_plan)
+                normalized_plan = _normalize_content_plan_types(project.content_plan)
+                content_plan = ContentPlan.model_validate(normalized_plan)
+                if normalized_plan != project.content_plan:
+                    project.content_plan = normalized_plan
                 logger.info(
                     "content_plan_reused",
                     project_id=str(project.id),

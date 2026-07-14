@@ -101,6 +101,13 @@ export interface Clip {
   render_status: string | null
   render_error: string | null
   duration: number
+  title: string | null
+  description: string | null
+  hashtags: string[] | null
+  cover_image_url: string | null
+  topic: string | null
+  start_time: number | null
+  end_time: number | null
   created_at: string
   updated_at: string | null
 }

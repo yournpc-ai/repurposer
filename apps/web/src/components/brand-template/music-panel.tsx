@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { apiFetch } from "@/lib/api"
+import { formatDuration } from "@/lib/utils"
 
 /** Mirrors the backend MusicResponse (apps/api/app/models/schemas.py). */
 export interface MusicPiece {
@@ -30,13 +31,6 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 function absoluteUrl(url: string): string {
   return url.startsWith("/") ? API_URL + url : url
-}
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return "--:--"
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  return `${m}:${String(s).padStart(2, "0")}`
 }
 
 /**

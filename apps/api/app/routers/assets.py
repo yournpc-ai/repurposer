@@ -171,7 +171,7 @@ async def delete_asset(
 
 
 # ---------------------------------------------------------------------------
-# Speaker assets (past materials for persona generation)
+# Speaker assets (source material for persona generation)
 # ---------------------------------------------------------------------------
 
 

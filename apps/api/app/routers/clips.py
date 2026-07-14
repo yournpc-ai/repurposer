@@ -26,6 +26,7 @@ from app.models.schemas import (
 from app.models.tables import Asset, Clip, Project, User
 from app.services.caption_translate import translate_caption_track
 from app.services.chat import chat
+from app.services.generation import _generate_clip_cover_image
 from app.services.project_context import (
     resolve_clip_for_revision,
     resolve_speaker,
@@ -165,6 +166,40 @@ async def render_clip(
         )
     clip.render_status = RenderStatus.PENDING
     clip.render_error = None
+    await db.commit()
+    await db.refresh(clip)
+    return clip
+
+
+@router.post("/{clip_id}/cover", response_model=ClipResponse)
+async def generate_clip_cover(
+    clip_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user),
+) -> Clip:
+    """Generate a cover image for a clip on demand.
+
+    The image is created only when requested by the UI to avoid paying
+    image-generation costs for every clip.
+    """
+    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+
+    project = await db.get(Project, clip.project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    image_url = await _generate_clip_cover_image(clip, project)
+    if image_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Cover image generation failed",
+        )
+
+    clip.cover_image_url = image_url
+    clip.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(clip)
     return clip

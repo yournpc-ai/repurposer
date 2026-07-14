@@ -229,7 +229,7 @@ Request:
 ```json
 {
   "clip_count": 5,
-  "outputs": ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"],
+  "outputs": ["clips", "post", "quotes", "article", "carousel"],
   "target_language": "en",
   "brand_template_id": "uuid | null",
   "instruction": "聚焦实体机器人角度，hook 要狠",
@@ -245,7 +245,7 @@ Request:
 }
 ```
 
-- `outputs`: any subset of `clips | linkedin | quote_cards | carousel | summary | blog`. Clips are generated only when included.
+- `outputs`: any subset of `clips | post | quotes | article | carousel`. Clips are generated only when included.
 - `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`).
 - `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
@@ -273,11 +273,11 @@ GET /api/v1/projects/{project_id}/jobs/{job_id}
 ```json
 {
   "context": {
-    "outputs": ["clips", "linkedin", "quote_cards"],
+    "outputs": ["clips", "post", "quotes", "article"],
     "clip_count": 5,
     "output_status": {
       "clips": {"status": "completed", "progress": 100, "error": null},
-      "linkedin": {"status": "failed", "progress": 0, "error": "..."}
+      "post": {"status": "failed", "progress": 0, "error": "..."}
     }
   }
 }
@@ -379,7 +379,7 @@ Request:
 }
 ```
 
-Response: a `application/zip` file download with `Content-Disposition: attachment; filename={project_title}.zip`. The archive contains Markdown files for clips, LinkedIn posts, quote cards, summaries, and blog posts. There is no presigned URL; the ZIP is generated on the fly.
+Response: a `application/zip` file download with `Content-Disposition: attachment; filename={project_title}.zip`. The archive contains Markdown files for clips, posts, quote cards, and articles. There is no presigned URL; the ZIP is generated on the fly.
 
 ## 10. Chat
 
@@ -432,7 +432,7 @@ GET /api/v1/library
 Query params:
 
 - `type`: `clip` | `derivative` (optional)
-- `derivative_type`: `linkedin_post` | `quote_card` | `carousel` | `summary` | `blog` (optional)
+- `derivative_type`: `post` | `quotes` | `carousel` | `article` (optional)
 
 ## 12. Brand Template
 

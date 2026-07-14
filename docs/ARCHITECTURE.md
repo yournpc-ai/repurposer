@@ -28,8 +28,8 @@
 ┌─────────────────────────────────────────────┐
 │  Agent Steps (pure Python functions)         │
 │  memory / content_director / clip /          │
-│  linkedin / quote / carousel / summary /     │
-│  blog / reviser / caption_translate          │
+│  post / quotes / carousel / article /        │
+│  reviser / caption_translate                 │
 └─────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────┐
@@ -54,11 +54,10 @@
 | `persona` | Task materials + speaker name/title | `SpeakerContext` fields | Extract speaker style and content memory |
 | `content_director` | Materials + `GenerationContext` | `ContentPlan` | Unified analysis: core thesis, themes, audience, per-output plans |
 | `clip` | Materials + `GenerationContext` + `ContentPlan` | `ClipPlans` | Select segments and write vertical clip scripts |
-| `linkedin` | Materials + `GenerationContext` + `ContentPlan` | `LinkedInPost` | LinkedIn long post |
-| `quote` | Materials + `GenerationContext` + `ContentPlan` | `QuoteCardsResponse` | Quote card copy |
-| `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | LinkedIn carousel (cover → points → CTA) |
-| `summary` | Materials + `GenerationContext` + `ContentPlan` | `Summary` | Multi-language summary |
-| `blog` | Materials + `GenerationContext` + `ContentPlan` | `BlogPost` | Blog article |
+| `post` | Materials + `GenerationContext` + `ContentPlan` | `Post` | Social post |
+| `quotes` | Materials + `GenerationContext` + `ContentPlan` | `Quotes` | Quote card copy |
+| `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | Social carousel (cover → points → CTA) |
+| `article` | Materials + `GenerationContext` + `ContentPlan` | `Article` | Long-form article |
 | `reviser` | Clip metadata + feedback + `SpeakerContext` | `ClipRevision` | Revised clip metadata (hook, duration, titles, music) |
 | `caption_translate` | Word-level captions + target_language | `CaptionTranslation` | Caption language swap |
 
@@ -80,7 +79,7 @@ Content Director Agent → unified ContentPlan
     ↓
 Clip Agent → segment selection + scripts
     ↓
-Derivative Agents (LinkedIn / Quote / Carousel / Summary / Blog) → outputs
+Derivative Agents (Post / Quotes / Carousel / Article) → outputs
     ↓
 Save results, await user review
     ↓
@@ -127,7 +126,7 @@ Frontend makes three consecutive API calls:
                                             (also creates a project-scoped ChatSession and stores the prompt)
             ↓
 Worker claims WorkflowRun and calls Agents in order:
-  content_director → clip → linkedin / quote / carousel / summary / blog
+  content_director → clip → post / quotes / carousel / article
             ↓
 Generate clip-spec (including brand, music) and save to Clip.render_spec
             ↓
@@ -186,11 +185,10 @@ apps/api/
 │   │   ├── content_director.py
 │   │   ├── clip_agent.py
 │   │   ├── reviser.py
-│   │   ├── linkedin.py
-│   │   ├── quote_agent.py
+│   │   ├── post.py
+│   │   ├── quotes.py
 │   │   ├── carousel.py
-│   │   ├── summary.py
-│   │   ├── blog.py
+│   │   ├── article.py
 │   │   ├── intent.py        # /infer-intent helper
 │   │   └── caption_translate.py
 │   ├── prompts/             # Jinja2 templates

@@ -5,9 +5,9 @@ import {
   FileText,
   Search,
   Play,
-  Linkedin,
   Quote,
-  FileSpreadsheet,
+  Newspaper,
+  Image as ImageIcon,
   Download,
   ExternalLink,
 } from "lucide-react"
@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 
-type LibraryType = "upload" | "clip" | "linkedin" | "quote" | "summary"
+type LibraryType = "upload" | "clip" | "post" | "quotes" | "article" | "carousel"
 
 interface LibraryItem {
   id: string
@@ -36,17 +36,19 @@ const TABS: { key: FilterTab; labelKey: string; icon: typeof FileText }[] = [
   { key: "all", labelKey: "library.tabs.all", icon: FileText },
   { key: "upload", labelKey: "library.tabs.uploads", icon: FileText },
   { key: "clip", labelKey: "library.tabs.clips", icon: Play },
-  { key: "linkedin", labelKey: "library.tabs.linkedin", icon: Linkedin },
-  { key: "quote", labelKey: "library.tabs.quotes", icon: Quote },
-  { key: "summary", labelKey: "library.tabs.summary", icon: FileSpreadsheet },
+  { key: "post", labelKey: "library.tabs.post", icon: FileText },
+  { key: "quotes", labelKey: "library.tabs.quotes", icon: Quote },
+  { key: "article", labelKey: "library.tabs.article", icon: Newspaper },
+  { key: "carousel", labelKey: "library.tabs.carousel", icon: ImageIcon },
 ]
 
 const TYPE_ICONS: Record<LibraryType, typeof FileText> = {
   upload: FileText,
   clip: Play,
-  linkedin: Linkedin,
-  quote: Quote,
-  summary: FileSpreadsheet,
+  post: FileText,
+  quotes: Quote,
+  article: Newspaper,
+  carousel: ImageIcon,
 }
 
 export const Route = createFileRoute("/library")({
@@ -123,9 +125,10 @@ function LibraryPage() {
       all: items.length,
       upload: 0,
       clip: 0,
-      linkedin: 0,
-      quote: 0,
-      summary: 0,
+      post: 0,
+      quotes: 0,
+      article: 0,
+      carousel: 0,
     }
     for (const item of items) {
       c[item.type]++

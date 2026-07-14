@@ -5,7 +5,7 @@
 
 ## 1. Overview
 
-Repurposer turns a single source (talk video, audio, slides, or transcript) into a set of reusable knowledge assets: vertical clips, LinkedIn posts, quote cards, carousels, summaries, and blog posts.
+Repurposer turns a single source (talk video, audio, slides, or transcript) into a set of reusable knowledge assets: vertical clips, social posts, quote cards, carousels, and articles.
 
 The backend generation pipeline is organized as a **4-layer agent architecture**:
 
@@ -24,8 +24,8 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
                    ▼
 ┌─────────────────────────────────────────────┐
 │ Layer 3: Agent Executors                    │
-│ (clip / linkedin / quote / carousel /       │
-│  summary / blog)                            │
+│ (clip / post / quotes / carousel /          │
+│  article)                                   │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
@@ -39,7 +39,7 @@ This design guarantees that every output is derived from the same **content plan
 
 ## 2. Goals
 
-- **Consistency**: clips, LinkedIn posts, quote cards, etc. should reinforce the same core thesis and brand voice.
+- **Consistency**: clips, posts, quote cards, etc. should reinforce the same core thesis and brand voice.
 - **Single source of truth**: speaker memory, tone, and user instruction are assembled once and shared.
 - **Extensibility**: adding a new derivative type requires only a new executor agent and one registry entry.
 - **Parallel execution**: independent derivative agents run concurrently via `asyncio.gather`.
@@ -126,22 +126,20 @@ Each executor extracts its own guidance from `content_plan.derivatives` by match
 | Domain | File | Class | Output schema | Notes |
 |--------|------|-------|---------------|-------|
 | Clip | `app/agents/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentPlannerAgent` / `planner.py` |
-| LinkedIn | `app/agents/linkedin.py` | `LinkedInAgent` | `LinkedInPost` | |
-| Quote | `app/agents/quote_agent.py` | `QuoteAgent` | `QuoteCardsResponse` | Renamed from `quote_card.py` |
+| Post | `app/agents/post.py` | `PostAgent` | `Post` | |
+| Quotes | `app/agents/quotes.py` | `QuotesAgent` | `Quotes` | |
 | Carousel | `app/agents/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
-| Summary | `app/agents/summary.py` | `SummaryAgent` | `Summary` | |
-| Blog | `app/agents/blog.py` | `BlogAgent` | `BlogPost` | |
+| Article | `app/agents/article.py` | `ArticleAgent` | `Article` | |
 
 ### 5.2 Prompt templates
 
 Each prompt template receives `asset_texts`, `context`, and `content_plan`:
 
 - `app/prompts/clip_agent.j2`
-- `app/prompts/linkedin.j2`
-- `app/prompts/quote_agent.j2`
+- `app/prompts/post.j2`
+- `app/prompts/quotes.j2`
 - `app/prompts/carousel.j2`
-- `app/prompts/summary.j2`
-- `app/prompts/blog.j2`
+- `app/prompts/article.j2`
 
 Prompts render:
 - Speaker identity and style memory from `context.speaker`
@@ -156,11 +154,10 @@ Prompts render:
 
 ```python
 _AGENTS: dict[DerivativeType, BaseDerivativeAgent] = {
-    DerivativeType.LINKEDIN_POST: linkedin_agent,
-    DerivativeType.QUOTE_CARD: quote_agent,
+    DerivativeType.POST: post_agent,
+    DerivativeType.QUOTES: quotes_agent,
     DerivativeType.CAROUSEL: carousel_agent,
-    DerivativeType.SUMMARY: summary_agent,
-    DerivativeType.BLOG: blog_agent,
+    DerivativeType.ARTICLE: article_agent,
 }
 
 async def generate_derivative(
@@ -203,7 +200,7 @@ This file was previously `derivative_generation.py` and contained per-type param
 ```json
 {
   "clips": {"status": "completed", "progress": 100, "error": null},
-  "linkedin": {"status": "failed", "progress": 0, "error": "..."}
+  "post": {"status": "failed", "progress": 0, "error": "..."}
 }
 ```
 
@@ -217,7 +214,7 @@ During the planning phase, `WorkflowRun.current_step` uses three discrete values
 - `"plan"` — running the Content Director
 - `"prepare"` — plan persisted, clearing old outputs, about to generate
 
-After planning, `current_step` switches to the active output key (`clips`, `linkedin`, `quote_cards`, `carousel`, `summary`, `blog`) and finally `"done"`.
+After planning, `current_step` switches to the active output key (`clips`, `post`, `quotes`, `carousel`, `article`) and finally `"done"`.
 
 ### 7.4 Preserved behavior
 
@@ -229,7 +226,7 @@ After planning, `current_step` switches to the active output key (`clips`, `link
 
 | Surface | Change |
 |---------|--------|
-| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`/`blog`; `clips` is no longer forced; default `clip_count` is 5 |
+| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`; `clips` is no longer forced; default `clip_count` is 5 |
 | `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
 | `Project` response | Includes `content_plan` |
 | `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
@@ -248,7 +245,7 @@ The following agents are **not** part of the 4-layer executor pipeline and remai
 
 ### 10.1 Consistency Reviser (Layer 4)
 
-A future agent can review all generated outputs against the `ContentPlan` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the LinkedIn post's thesis), and trigger targeted revisions.
+A future agent can review all generated outputs against the `ContentPlan` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the post's thesis), and trigger targeted revisions.
 
 ### 10.2 ContentPlan invalidation
 
@@ -261,8 +258,8 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 - `app/prompts/content_director.j2` — director prompt
 - `app/agents/clip_agent.py` — clip agent
 - `app/prompts/clip_agent.j2` — clip agent prompt
-- `app/agents/linkedin.py`, `quote_agent.py`, `carousel.py`, `summary.py`, `blog.py` — derivative executors
-- `app/prompts/linkedin.j2`, `quote_agent.j2`, `carousel.j2`, `summary.j2`, `blog.j2` — derivative prompts
+- `app/agents/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
+- `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
 - `app/services/derivative_dispatch.py` — thin dispatcher registry
 - `app/services/generation.py` — orchestration
 - `app/agents/intent.py` — intent recognition

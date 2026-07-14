@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -173,6 +174,14 @@ class Clip(Base):
     render_status = Column(Enum(RenderStatus), nullable=True)
     render_error = Column(Text, nullable=True)
     srt_url = Column(String(512), nullable=True)
+    # Publishing-suite metadata for the clip (title, caption, hashtags, cover, topic, timecode).
+    title = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    hashtags = Column(JSON, nullable=True)
+    cover_image_url = Column(String(512), nullable=True)
+    topic = Column(String(255), nullable=True)
+    start_time = Column(Float, nullable=True)
+    end_time = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

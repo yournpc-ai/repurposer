@@ -2,19 +2,18 @@ import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BlogCard } from "@/components/results/BlogCard"
+import { ArticleCard } from "@/components/results/ArticleCard"
 import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { GenerationStepper } from "@/components/results/GenerationStepper"
-import { LinkedInCard } from "@/components/results/LinkedInCard"
-import { QuoteCard } from "@/components/results/QuoteCard"
+import { PostCard } from "@/components/results/PostCard"
+import { QuotesCard } from "@/components/results/QuotesCard"
 import {
   ResultsTabs,
   type ResultsTab,
 } from "@/components/results/ResultsTabs"
-import { SummaryCard } from "@/components/results/SummaryCard"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
@@ -57,20 +56,23 @@ interface ProjectResults {
 
 const TAB_TO_OUTPUT_KEY: Record<ResultsTab, string> = {
   clips: "clips",
-  linkedin: "linkedin",
-  quotes: "quote_cards",
+  post: "post",
+  quotes: "quotes",
   carousel: "carousel",
-  summary: "summary",
-  blog: "blog",
+  article: "article",
 }
 
 const OUTPUT_KEY_TO_TAB: Record<string, ResultsTab> = {
   clips: "clips",
-  linkedin: "linkedin",
-  quote_cards: "quotes",
+  post: "post",
+  quotes: "quotes",
   carousel: "carousel",
-  summary: "summary",
-  blog: "blog",
+  article: "article",
+  // Backward compatibility for jobs created before the output rename.
+  linkedin: "post",
+  quote_cards: "quotes",
+  summary: "post",
+  blog: "article",
 }
 
 export const Route = createFileRoute("/projects/$id")({
@@ -210,19 +212,17 @@ function ProjectDetailPage() {
 
   const { project, prompt, clips, derivatives } = results
 
-  const linkedin = derivatives.filter((d) => d.type === "linkedin_post")
-  const quotes = derivatives.filter((d) => d.type === "quote_card")
-  const summaries = derivatives.filter((d) => d.type === "summary")
+  const posts = derivatives.filter((d) => d.type === "post")
+  const quotes = derivatives.filter((d) => d.type === "quotes")
   const carousels = derivatives.filter((d) => d.type === "carousel")
-  const blogs = derivatives.filter((d) => d.type === "blog")
+  const articles = derivatives.filter((d) => d.type === "article")
 
   const counts = {
     clips: clips.length,
-    linkedin: linkedin.length,
+    post: posts.length,
     quotes: quotes.length,
     carousel: carousels.length,
-    summary: summaries.length,
-    blog: blogs.length,
+    article: articles.length,
   }
 
   const visibleTabs = useMemo(() => {
@@ -255,7 +255,17 @@ function ProjectDetailPage() {
 
   const renderFailed = (tab: ResultsTab) => {
     const outputKey = TAB_TO_OUTPUT_KEY[tab]
-    const status = outputStatus?.[outputKey]
+    let status = outputStatus?.[outputKey]
+    // Fallback to legacy output keys (e.g., linkedin/summary/blog) for jobs
+    // created before the output rename.
+    if (!status && outputStatus) {
+      const legacyEntry = Object.entries(outputStatus).find(
+        ([key, s]) => OUTPUT_KEY_TO_TAB[key] === tab && s.status === "failed"
+      )
+      if (legacyEntry) {
+        status = legacyEntry[1]
+      }
+    }
     return (
       <Card className="p-8 text-center ring-1 ring-border shadow-xl">
         <p className="text-sm text-destructive">
@@ -285,24 +295,24 @@ function ProjectDetailPage() {
           return <EmptyState text={t("results.empty.clips")} />
         }
         return (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {clips.map((clip) => (
               <ClipCard key={clip.id} clip={clip} onRegenerate={fetchResults} />
             ))}
           </div>
         )
-      case "linkedin":
-        if (isOutputFailed("linkedin")) return renderFailed("linkedin")
-        if (linkedin.length === 0 && isOutputRunning("linkedin")) {
-          return renderSkeletons("linkedin")
+      case "post":
+        if (isOutputFailed("post")) return renderFailed("post")
+        if (posts.length === 0 && isOutputRunning("post")) {
+          return renderSkeletons("post")
         }
-        if (linkedin.length === 0) {
-          return <EmptyState text={t("results.empty.linkedin")} />
+        if (posts.length === 0) {
+          return <EmptyState text={t("results.empty.post")} />
         }
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {linkedin.map((d) => (
-              <LinkedInCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {posts.map((d) => (
+              <PostCard key={d.id} derivative={d} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -317,7 +327,7 @@ function ProjectDetailPage() {
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {quotes.map((d) => (
-              <QuoteCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+              <QuotesCard key={d.id} derivative={d} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -336,33 +346,18 @@ function ProjectDetailPage() {
             ))}
           </div>
         )
-      case "summary":
-        if (isOutputFailed("summary")) return renderFailed("summary")
-        if (summaries.length === 0 && isOutputRunning("summary")) {
-          return renderSkeletons("summary")
+      case "article":
+        if (isOutputFailed("article")) return renderFailed("article")
+        if (articles.length === 0 && isOutputRunning("article")) {
+          return renderSkeletons("article")
         }
-        if (summaries.length === 0) {
-          return <EmptyState text={t("results.empty.summary")} />
-        }
-        return (
-          <div className="grid gap-4 md:grid-cols-2">
-            {summaries.map((d) => (
-              <SummaryCard key={d.id} derivative={d} onRegenerate={fetchResults} />
-            ))}
-          </div>
-        )
-      case "blog":
-        if (isOutputFailed("blog")) return renderFailed("blog")
-        if (blogs.length === 0 && isOutputRunning("blog")) {
-          return renderSkeletons("blog")
-        }
-        if (blogs.length === 0) {
-          return <EmptyState text={t("results.empty.blog")} />
+        if (articles.length === 0) {
+          return <EmptyState text={t("results.empty.article")} />
         }
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {blogs.map((d) => (
-              <BlogCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {articles.map((d) => (
+              <ArticleCard key={d.id} derivative={d} onRegenerate={fetchResults} />
             ))}
           </div>
         )

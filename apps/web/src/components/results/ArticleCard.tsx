@@ -9,24 +9,24 @@ import { AssetChatModal } from "./AssetChatModal"
 
 import type { Derivative } from "@/lib/types"
 
-interface LinkedInCardProps {
+interface ArticleCardProps {
   derivative: Derivative
   onRegenerate?: () => void
 }
 
-export function LinkedInCard({ derivative, onRegenerate }: LinkedInCardProps) {
-  const content = derivative.content?.content || ""
-  const hashtags = derivative.content?.hashtags || []
+export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
   const [chatOpen, setChatOpen] = useState(false)
+  const title = derivative.content?.title || ""
+  const content = derivative.content?.content || ""
 
   const handleDownload = () => {
     if (!content) return
-    const text = [content, hashtags.join(" ")].filter(Boolean).join("\n\n")
+    const text = [title, content].filter(Boolean).join("\n\n")
     const blob = new Blob([text], { type: "text/markdown" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `linkedin-${derivative.id}.md`
+    a.download = `article-${derivative.id}.md`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -55,16 +55,18 @@ export function LinkedInCard({ derivative, onRegenerate }: LinkedInCardProps) {
         />
       </div>
       <div className="space-y-3">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">{content}</p>
-        {hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {hashtags.map((h: string, i: number) => (
-              <Badge key={i} variant="secondary">
-                #{h.replace(/^#/, "")}
-              </Badge>
-            ))}
-          </div>
-        )}
+        {title && <h3 className="text-lg font-semibold">{title}</h3>}
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div
+            className="whitespace-pre-wrap text-sm leading-relaxed"
+            dangerouslySetInnerHTML={{
+              __html: content
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;"),
+            }}
+          />
+        </div>
       </div>
 
       <AssetChatModal

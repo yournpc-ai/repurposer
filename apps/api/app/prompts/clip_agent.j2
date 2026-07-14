@@ -30,7 +30,7 @@ The user's explicit requirements for this output are as follows. **Please priori
 {% endif %}
 ## Output Language
 
-**All output copy (every clip's source_text, summary, hook, title, golden_quote, shot subtitles, and title_options) must use the target language: {{ context.target_language }}.**
+**All output copy (every clip's source_text, summary, hook, title, golden_quote, shot subtitles, title_options, description, hashtags, and topic) must use the target language: {{ context.target_language }}.**
 If the original speech is in another language but the target language is en, translate/rewrite into English.
 
 The only exception is ``music_mood``: it must stay an English key from the music library — `calm`, `uplifting`, or `corporate`.
@@ -166,7 +166,10 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "end_seconds": 28.91,
       "summary": "What this segment is about, in one sentence",
       "hook": "The eye-catching text or opening line for the first 3 seconds",
-      "title": "Primary title for this clip",
+      "title": "Primary publishing title for this clip (not just a hook)",
+      "description": "1-2 sentence caption / posting copy for social distribution",
+      "hashtags": ["topic1", "topic2", "topic3"],
+      "topic": "The single most matching theme from content_plan.themes",
       "golden_quote": "A single sentence that can be turned into a quote card",
       "virality_score": 85,
       "duration_seconds": 45,
@@ -193,5 +196,9 @@ Requirements:
 - duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)
 - music_mood must be one of: calm, uplifting, corporate
 - music_id must be one of the listed piece ids, or null
+- `title` is the clip's publishing title; keep `title_options` as alternative hook/title candidates
+- `description` should be 1-2 sentences suitable as a social caption
+- `hashtags` should be 3-5 relevant tags without the `#` symbol
+- `topic` must be one of the themes listed in the Content Plan above
 - Output JSON only, no other content
 - All fields not in the clips array may be omitted; if present, they must align with the Content Plan above

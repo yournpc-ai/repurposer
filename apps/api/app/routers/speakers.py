@@ -110,7 +110,7 @@ async def delete_speaker(
     db: DBDep,
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """Delete speaker and all associated materials."""
+    """Delete speaker and all associated source assets."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     # Delete associated assets (files + DB rows)
@@ -133,7 +133,7 @@ async def generate_persona(
     db: DBDep,
     current_user: User = Depends(get_current_user),
 ) -> SpeakerContext:
-    """Generate speaker persona and content memory from uploaded past materials."""
+    """Generate speaker persona and content memory from uploaded source assets."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)
 
     # Find speaker's past material assets
@@ -150,20 +150,20 @@ async def generate_persona(
             detail="No past materials uploaded for this speaker",
         )
 
-    # Ensure all materials have extracted text
-    materials: list[str] = []
+    # Ensure all source assets have extracted text
+    asset_texts: list[str] = []
     for asset in assets:
         if not asset.extracted_text and asset.file_url:
             asset.extracted_text = extract_text(asset.file_url)
             asset.processed_at = datetime.now(UTC)
             db.add(asset)
         if asset.extracted_text:
-            materials.append(asset.extracted_text)
+            asset_texts.append(asset.extracted_text)
 
-    if not materials:
+    if not asset_texts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not extract text from any uploaded material",
+            detail="Could not extract text from any uploaded source asset",
         )
 
     await db.commit()
@@ -173,7 +173,7 @@ async def generate_persona(
             speaker_name=speaker.name,
             speaker_title=speaker.title,
             language=speaker.language,
-            asset_texts=materials,
+            asset_texts=asset_texts,
         )
     except MiniMaxError as e:
         raise HTTPException(

@@ -4,11 +4,10 @@ import { Button } from "@/components/ui/button"
 
 export type ResultsTab =
   | "clips"
-  | "linkedin"
+  | "post"
   | "quotes"
   | "carousel"
-  | "summary"
-  | "blog"
+  | "article"
 
 interface ResultsTabsProps {
   active: ResultsTab
@@ -21,11 +20,10 @@ interface ResultsTabsProps {
 
 const TABS: { key: ResultsTab; labelKey: string }[] = [
   { key: "clips", labelKey: "results.tabs.clips" },
-  { key: "linkedin", labelKey: "results.tabs.linkedin" },
+  { key: "post", labelKey: "results.tabs.post" },
   { key: "quotes", labelKey: "results.tabs.quotes" },
   { key: "carousel", labelKey: "results.tabs.carousel" },
-  { key: "summary", labelKey: "results.tabs.summary" },
-  { key: "blog", labelKey: "results.tabs.blog" },
+  { key: "article", labelKey: "results.tabs.article" },
 ]
 
 export function ResultsTabs({

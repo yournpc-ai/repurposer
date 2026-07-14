@@ -6,19 +6,17 @@ lives in the agents themselves; this module only provides the registry and a
 uniform call site.
 """
 
-from app.agents.blog import blog_agent
+from app.agents.article import article_agent
 from app.agents.carousel import carousel_agent
-from app.agents.linkedin import linkedin_agent
-from app.agents.quote_agent import quote_agent
-from app.agents.summary import summary_agent
+from app.agents.post import post_agent
+from app.agents.quotes import quotes_agent
 from app.models.schemas import ContentPlan, DerivativeType, GenerationContext, validate_derivative_content
 
 _AGENTS = {
-    DerivativeType.LINKEDIN_POST: linkedin_agent,
-    DerivativeType.QUOTE_CARD: quote_agent,
+    DerivativeType.POST: post_agent,
+    DerivativeType.QUOTES: quotes_agent,
     DerivativeType.CAROUSEL: carousel_agent,
-    DerivativeType.SUMMARY: summary_agent,
-    DerivativeType.BLOG: blog_agent,
+    DerivativeType.ARTICLE: article_agent,
 }
 
 

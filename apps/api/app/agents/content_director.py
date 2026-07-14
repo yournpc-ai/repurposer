@@ -2,8 +2,8 @@
 
 The director performs a single analysis pass over the project's source texts and
 media inputs, then emits a ContentPlan that all downstream agent executors
-share. This guarantees that clips, LinkedIn posts, quote cards, carousels,
-summaries, and blog posts reinforce the same core thesis and brand strategy.
+share. This guarantees that clips, social posts, quote cards, carousels, and
+articles reinforce the same core thesis and brand strategy.
 """
 
 from typing import Any

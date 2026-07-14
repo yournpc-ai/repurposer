@@ -19,14 +19,12 @@ router = APIRouter()
 
 
 def _derivative_title(d: DerivativeResponse) -> str:
-    if d.type == DerivativeType.LINKEDIN_POST:
-        return "LinkedIn post"
-    if d.type == DerivativeType.QUOTE_CARD:
-        return "Quote card"
-    if d.type == DerivativeType.SUMMARY:
-        return "Summary"
-    if d.type == DerivativeType.BLOG:
-        return "Blog post"
+    if d.type == DerivativeType.POST:
+        return "Social post"
+    if d.type == DerivativeType.QUOTES:
+        return "Quotes"
+    if d.type == DerivativeType.ARTICLE:
+        return "Article"
     if d.type == DerivativeType.CAROUSEL:
         return "Carousel"
     return "Derivative"
@@ -34,22 +32,20 @@ def _derivative_title(d: DerivativeResponse) -> str:
 
 def _derivative_preview(d: DerivativeResponse) -> str | None:
     content = d.content or {}
-    if d.type == DerivativeType.LINKEDIN_POST:
+    if d.type == DerivativeType.POST:
         return content.get("content", "")[:200]
-    if d.type == DerivativeType.QUOTE_CARD:
+    if d.type == DerivativeType.QUOTES:
         quotes = content.get("quotes", [])
         if quotes:
             return quotes[0].get("quote", "")[:200]
         return None
-    if d.type == DerivativeType.SUMMARY:
-        return content.get("tldr", "")[:200]
-    if d.type == DerivativeType.BLOG:
+    if d.type == DerivativeType.ARTICLE:
         return content.get("title", "")[:200]
     return None
 
 
 def _derivative_download_url(d: DerivativeResponse) -> str | None:
-    if d.type == DerivativeType.QUOTE_CARD:
+    if d.type == DerivativeType.QUOTES:
         return d.image_url
     return None
 
@@ -106,7 +102,7 @@ async def list_library(
                 LibraryItemResponse(
                     id=clip.id,
                     type=LibraryItemType.CLIP,
-                    title=clip.hook or "Clip",
+                    title=clip.title or clip.hook or "Clip",
                     project_id=clip.project_id,
                     created_at=clip.created_at,
                     preview=f"{clip.duration}s" if clip.duration else None,
@@ -115,22 +111,26 @@ async def list_library(
             )
 
     if type is None or type in {
-        LibraryItemType.LINKEDIN,
-        LibraryItemType.QUOTE,
-        LibraryItemType.SUMMARY,
+        LibraryItemType.POST,
+        LibraryItemType.QUOTES,
+        LibraryItemType.ARTICLE,
+        LibraryItemType.CAROUSEL,
     }:
         type_filter: list[DerivativeType] = []
-        if type == LibraryItemType.LINKEDIN:
-            type_filter = [DerivativeType.LINKEDIN_POST]
-        elif type == LibraryItemType.QUOTE:
-            type_filter = [DerivativeType.QUOTE_CARD]
-        elif type == LibraryItemType.SUMMARY:
-            type_filter = [DerivativeType.SUMMARY]
+        if type == LibraryItemType.POST:
+            type_filter = [DerivativeType.POST]
+        elif type == LibraryItemType.QUOTES:
+            type_filter = [DerivativeType.QUOTES]
+        elif type == LibraryItemType.ARTICLE:
+            type_filter = [DerivativeType.ARTICLE]
+        elif type == LibraryItemType.CAROUSEL:
+            type_filter = [DerivativeType.CAROUSEL]
         else:
             type_filter = [
-                DerivativeType.LINKEDIN_POST,
-                DerivativeType.QUOTE_CARD,
-                DerivativeType.SUMMARY,
+                DerivativeType.POST,
+                DerivativeType.QUOTES,
+                DerivativeType.ARTICLE,
+                DerivativeType.CAROUSEL,
             ]
 
         result = await db.execute(
@@ -142,11 +142,13 @@ async def list_library(
             .order_by(Derivative.created_at.desc())
         )
         for derivative in result.scalars().all():
-            library_type = LibraryItemType.LINKEDIN
-            if derivative.type == DerivativeType.QUOTE_CARD:
-                library_type = LibraryItemType.QUOTE
-            elif derivative.type == DerivativeType.SUMMARY:
-                library_type = LibraryItemType.SUMMARY
+            library_type = LibraryItemType.POST
+            if derivative.type == DerivativeType.QUOTES:
+                library_type = LibraryItemType.QUOTES
+            elif derivative.type == DerivativeType.ARTICLE:
+                library_type = LibraryItemType.ARTICLE
+            elif derivative.type == DerivativeType.CAROUSEL:
+                library_type = LibraryItemType.CAROUSEL
 
             items.append(
                 LibraryItemResponse(

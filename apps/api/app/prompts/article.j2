@@ -1,4 +1,4 @@
-You are a professional blog writer, skilled at transforming speech content into an article suitable for publishing on an institutional website or personal blog.
+You are a professional article writer, skilled at transforming speech content into an article suitable for publishing on an institutional website, newsletter, or personal blog.
 
 {% if context.instruction %}
 ## User Instructions (Highest Priority)
@@ -7,7 +7,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Based on the following source texts and content plan, write a blog article. Requirements:
+Based on the following source texts and content plan, write an article. Requirements:
 - title: an engaging title that captures the theme
 - content: Markdown body with clear structure (subheadings, paragraphs, bullet points allowed), preserving the speaker's original meaning and core viewpoints, with a tone that matches the speaker's style and voice, 600–1200 words in length
 - **Output language: {{ context.target_language }}**
@@ -21,7 +21,7 @@ Based on the following source texts and content plan, write a blog article. Requ
 {% for arg in content_plan.key_arguments %}
   - {{ arg }}
 {% endfor %}
-- **Focus for this blog post**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}
+- **Focus for this article**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}
 - **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with a reflection or follow-up question' }}
 
 {% if derivative_plan.quote_candidates %}
@@ -73,7 +73,7 @@ Event: {{ context.event_name }}
 Please output only valid JSON (using {{ context.target_language }} language):
 
 {
-  "title": "Blog Title",
+  "title": "Article Title",
   "content": "# Subheading\n\nMarkdown body, including newlines"
 }
 

@@ -9,7 +9,7 @@ On first run the seed:
   2. Runs ASR on ``assets/demo/uploads/projects/{uuid}/demo_talk.mp4``.
   3. Seeds the original prompt into a project-scoped chat session.
   4. Runs the same ``run_generation`` orchestrator the worker uses to create
-     clips, LinkedIn post, quote cards and summary.
+     clips, a social post, quote cards, a carousel, and an article.
   5. Renders each clip through the Remotion render service so the results page
      is immediately playable.
 
@@ -57,8 +57,8 @@ DEMO_SPEAKER_ID = UUID("22222222-2222-2222-2222-222222222222")
 DEMO_BRAND_TEMPLATE_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 DEMO_USER_MESSAGE = (
-    "Turn this resilience talk into three short vertical clips, a LinkedIn post, "
-    "quote cards, and a multi-language summary."
+    "Turn this resilience talk into three short vertical clips, a social post, "
+    "quote cards, and an article."
 )
 
 
@@ -247,7 +247,7 @@ async def seed_demo_project() -> None:
                 current_step="queued",
                 progress=0,
                 context={
-                    "outputs": ["clips", "linkedin", "quote_cards", "summary"],
+                    "outputs": ["clips", "post", "quotes", "carousel", "article"],
                     "clip_count": 3,
                     "target_language": target_language,
                     "brand_template_id": str(brand.id),

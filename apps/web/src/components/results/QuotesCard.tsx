@@ -10,12 +10,12 @@ import { AssetChatModal } from "./AssetChatModal"
 
 import type { Derivative } from "@/lib/types"
 
-interface QuoteCardProps {
+interface QuotesCardProps {
   derivative: Derivative
   onRegenerate?: () => void
 }
 
-export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
+export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
   const { t } = useTranslation()
   const [chatOpen, setChatOpen] = useState(false)
 
@@ -27,7 +27,7 @@ export function QuoteCard({ derivative, onRegenerate }: QuoteCardProps) {
     if (!url) return
     const a = document.createElement("a")
     a.href = url
-    a.download = `quote-${derivative.id}.png`
+    a.download = `quotes-${derivative.id}.png`
     document.body.appendChild(a)
     a.click()
     a.remove()

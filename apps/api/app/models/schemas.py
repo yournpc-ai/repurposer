@@ -27,7 +27,7 @@ class MediaInputType(StrEnum):
 
 
 class MediaInput(BaseModel):
-    """A single media snippet passed to the analyzer alongside text materials.
+    """A single media snippet passed to the analyzer alongside source text assets.
 
     Uses OpenAI-compatible content parts (image_url / video_url / audio_url).
     The URL may be a base64 data URL or an HTTP URL depending on model/provider
@@ -304,18 +304,16 @@ class InferredIntent(BaseModel):
     )
     outputs: list[
         Literal[
-            "clips", "linkedin", "quote_cards", "carousel", "summary", "blog"
+            "clips", "post", "quotes", "article", "carousel"
         ]
     ] = Field(
         default_factory=lambda: [
             "clips",
-            "linkedin",
-            "quote_cards",
-            "carousel",
-            "summary",
-            "blog",
+            "post",
+            "quotes",
+            "article",
         ],
-        description="Which asset types the user wants to generate.",
+        description="Which asset types the user wants to generate. Carousel is not selected by default.",
     )
     clip_count: int | None = Field(
         default=None,
@@ -435,7 +433,7 @@ class ClipRevision(BaseModel):
 
 
 class Segment(BaseModel):
-    """A high-potential segment extracted from project materials."""
+    """A high-potential segment extracted from project source assets."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -498,6 +496,9 @@ class ClipPlan(BaseModel):
     music_gain_db: float = -18.0
     visual_notes: str = ""
     title_options: list[str] = Field(default_factory=list)
+    description: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    topic: str = ""
 
     def to_segment(self) -> "Segment":
         return Segment(
@@ -528,7 +529,7 @@ class ClipPlans(BaseModel):
 
 
 class ContentAnalysis(BaseModel):
-    """Analysis result for project materials."""
+    """Analysis result for project source assets."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -539,8 +540,8 @@ class ContentAnalysis(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
 
 
-class LinkedInPost(BaseModel):
-    """Generated LinkedIn post."""
+class Post(BaseModel):
+    """Generated social post."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -548,7 +549,7 @@ class LinkedInPost(BaseModel):
     hashtags: list[str] = Field(default_factory=list)
 
 
-class QuoteCard(BaseModel):
+class Quote(BaseModel):
     """Generated quote card."""
 
     model_config = ConfigDict(extra="forbid")
@@ -557,16 +558,16 @@ class QuoteCard(BaseModel):
     attribution: str
 
 
-class QuoteCardsResponse(BaseModel):
+class Quotes(BaseModel):
     """Multiple quote cards response."""
 
     model_config = ConfigDict(extra="forbid")
 
-    quotes: list[QuoteCard] = Field(default_factory=list)
+    quotes: list[Quote] = Field(default_factory=list)
 
 
 class CarouselSlide(BaseModel):
-    """One slide of a LinkedIn/social carousel (a swipeable narrative)."""
+    """One slide of a social carousel (a swipeable narrative)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -582,18 +583,8 @@ class CarouselResponse(BaseModel):
     slides: list[CarouselSlide] = Field(default_factory=list)
 
 
-class Summary(BaseModel):
-    """Generated multi-language summary."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    tldr: str
-    key_points: list[str] = Field(default_factory=list)
-    full: str
-
-
-class BlogPost(BaseModel):
-    """Generated blog post."""
+class Article(BaseModel):
+    """Generated article / blog post."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -604,14 +595,13 @@ class BlogPost(BaseModel):
 class DerivativeType(StrEnum):
     """Derivative content types."""
 
-    LINKEDIN_POST = "linkedin_post"
-    QUOTE_CARD = "quote_card"
+    POST = "post"
+    QUOTES = "quotes"
     CAROUSEL = "carousel"
-    SUMMARY = "summary"
-    BLOG = "blog"
+    ARTICLE = "article"
 
 
-DerivativeContent = LinkedInPost | QuoteCardsResponse | CarouselResponse | Summary | BlogPost
+DerivativeContent = Post | Quotes | CarouselResponse | Article
 
 
 def validate_derivative_content(
@@ -624,11 +614,10 @@ def validate_derivative_content(
     ``ValueError`` if the shape does not match the declared type.
     """
     mapping: dict[DerivativeType, type[BaseModel]] = {
-        DerivativeType.LINKEDIN_POST: LinkedInPost,
-        DerivativeType.QUOTE_CARD: QuoteCardsResponse,
+        DerivativeType.POST: Post,
+        DerivativeType.QUOTES: Quotes,
         DerivativeType.CAROUSEL: CarouselResponse,
-        DerivativeType.SUMMARY: Summary,
-        DerivativeType.BLOG: BlogPost,
+        DerivativeType.ARTICLE: Article,
     }
     model = mapping.get(derivative_type)
     if model is None:
@@ -861,6 +850,13 @@ class ClipResponse(BaseModel):
     render_status: RenderStatus | None = None
     render_error: str | None = None
     srt_url: str | None = None
+    title: str | None = None
+    description: str | None = None
+    hashtags: list[str] | None = None
+    cover_image_url: str | None = None
+    topic: str | None = None
+    start_time: float | None = None
+    end_time: float | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -931,16 +927,15 @@ class GenerateRequest(BaseModel):
 
     clip_count: int = Field(default=5, ge=1, le=10)
     outputs: list[
-        Literal["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"]
+        Literal["clips", "post", "quotes", "article", "carousel"]
     ] = Field(
         default_factory=lambda: [
             "clips",
-            "linkedin",
-            "quote_cards",
-            "carousel",
-            "summary",
-            "blog",
-        ]
+            "post",
+            "quotes",
+            "article",
+        ],
+        description="Which asset types the user wants to generate. Carousel is not selected by default.",
     )
     tone_settings: ToneSettings | None = None
     target_language: str = Field(
@@ -956,7 +951,7 @@ class GenerateRequest(BaseModel):
         description="User steering prompt: what to focus on / produce.",
     )
     scope: Literal[
-        "full", "hook", "clip", "linkedin", "quote_card", "translation", "render"
+        "full", "hook", "clip", "post", "quotes", "derivative", "translation", "render"
     ] = Field(
         default="full",
         description="Scope of the generation: full project or targeted revision.",
@@ -1071,9 +1066,10 @@ class LibraryItemType(StrEnum):
 
     UPLOAD = "upload"
     CLIP = "clip"
-    LINKEDIN = "linkedin"
-    QUOTE = "quote"
-    SUMMARY = "summary"
+    POST = "post"
+    QUOTES = "quotes"
+    ARTICLE = "article"
+    CAROUSEL = "carousel"
 
 
 class LibraryItemResponse(BaseModel):

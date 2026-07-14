@@ -200,7 +200,7 @@ async def generate_content(
 
     # Persist the original prompt in the project-scoped chat session if it is
     # not already there. This is a no-op when the session already has messages.
-    prompt_text = request.instruction or "Generate content from the uploaded materials."
+    prompt_text = request.instruction or "Generate content from the uploaded assets."
     await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
 
     run = WorkflowRun(
@@ -335,50 +335,46 @@ async def export_project(
             zf.writestr("clips.md", "".join(lines))
 
         # Derivatives grouped by type
-        linkedin = [d for d in derivatives if d.type == DerivativeType.LINKEDIN_POST]
-        if linkedin:
-            lines = [f"# LinkedIn Posts for {project.title}\n"]
-            for d in linkedin:
+        posts = [d for d in derivatives if d.type == DerivativeType.POST]
+        if posts:
+            lines = [f"# Social Posts for {project.title}\n"]
+            for d in posts:
                 content = d.content
                 lines.append(f"\n---\n\n{content.get('content', '')}\n")
                 hashtags = content.get("hashtags", [])
                 if hashtags:
                     lines.append("\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags) + "\n")
-            zf.writestr("linkedin.md", "".join(lines))
+            zf.writestr("post.md", "".join(lines))
 
-        quote_cards = [d for d in derivatives if d.type == DerivativeType.QUOTE_CARD]
-        if quote_cards:
-            lines = [f"# Quote Cards for {project.title}\n"]
-            for d in quote_cards:
+        quotes = [d for d in derivatives if d.type == DerivativeType.QUOTES]
+        if quotes:
+            lines = [f"# Quotes for {project.title}\n"]
+            for d in quotes:
                 for q in d.content.get("quotes", []):
                     lines.append(f"\n> \"{q.get('quote', '')}\"\n")
                     lines.append(f"> — {q.get('attribution', '')}\n")
-            zf.writestr("quote-cards.md", "".join(lines))
+            zf.writestr("quotes.md", "".join(lines))
 
-        summaries = [d for d in derivatives if d.type == DerivativeType.SUMMARY]
-        if summaries:
-            lines = [f"# Summaries for {project.title}\n"]
-            for d in summaries:
-                content = d.content
-                if content.get("tldr"):
-                    lines.append(f"\n## TL;DR\n\n{content['tldr']}\n")
-                if content.get("key_points"):
-                    lines.append("\n### Key Points\n")
-                    for p in content["key_points"]:
-                        lines.append(f"- {p}\n")
-                if content.get("full"):
-                    lines.append(f"\n### Full Summary\n\n{content['full']}\n")
-            zf.writestr("summary.md", "".join(lines))
-
-        blogs = [d for d in derivatives if d.type == DerivativeType.BLOG]
-        if blogs:
-            lines = [f"# Blog Posts for {project.title}\n"]
-            for d in blogs:
+        articles = [d for d in derivatives if d.type == DerivativeType.ARTICLE]
+        if articles:
+            lines = [f"# Articles for {project.title}\n"]
+            for d in articles:
                 content = d.content
                 if content.get("title"):
                     lines.append(f"\n## {content['title']}\n")
                 lines.append(f"\n{content.get('content', '')}\n")
-            zf.writestr("blog.md", "".join(lines))
+            zf.writestr("article.md", "".join(lines))
+
+        carousels = [d for d in derivatives if d.type == DerivativeType.CAROUSEL]
+        if carousels:
+            lines = [f"# Carousels for {project.title}\n"]
+            for d in carousels:
+                for slide in d.content.get("slides", []):
+                    if slide.get("title"):
+                        lines.append(f"\n## {slide['title']}\n")
+                    if slide.get("body"):
+                        lines.append(f"\n{slide['body']}\n")
+            zf.writestr("carousel.md", "".join(lines))
 
     buffer.seek(0)
     filename = f"{project.title.replace(' ', '_').lower() or 'export'}.zip"

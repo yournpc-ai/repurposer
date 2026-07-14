@@ -16,8 +16,8 @@ import {
   Wand2,
   Users,
   Video,
-  Linkedin,
   Quote,
+  Newspaper,
   Image as ImageIcon,
   X,
 } from "lucide-react"
@@ -81,21 +81,29 @@ interface InferredIntent {
 
 const OUTPUT_OPTIONS = [
   "clips",
-  "linkedin",
-  "quote_cards",
+  "post",
+  "quotes",
+  "article",
   "carousel",
-  "summary",
-  "blog",
 ] as const
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]
 
+// Outputs selected by default in the composer. Carousel is available as a
+// top-level option but not checked by default because it is used less frequently
+// than the core knowledge assets.
+const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = [
+  "clips",
+  "post",
+  "quotes",
+  "article",
+]
+
 const OUTPUT_ICONS = {
   clips: Video,
-  linkedin: Linkedin,
-  quote_cards: Quote,
+  post: FileText,
+  quotes: Quote,
+  article: Newspaper,
   carousel: ImageIcon,
-  summary: Languages,
-  blog: FileText,
 } as const
 
 const LANGUAGES = [
@@ -111,7 +119,7 @@ const DEFAULT_INTENT: InferredIntent = {
   action: "generate",
   answer: null,
   language: "en",
-  outputs: ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"],
+  outputs: DEFAULT_SELECTED_OUTPUTS,
   clip_count: null,
   specific_instruction: null,
   confidence: 1,
@@ -141,7 +149,7 @@ export function HomeComposer({
 
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
-  const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_INTENT.outputs)
+  const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_SELECTED_OUTPUTS)
   const [clipCount, setClipCount] = useState<number>(DEFAULT_CLIP_COUNT)
   const [brandTemplateId, setBrandTemplateId] = useState("")
   const [language, setLanguage] = useState(DEFAULT_INTENT.language)

@@ -16,7 +16,7 @@
 
 ### 2.1 One-Liner
 
-Transform raw talk materials (video, audio, transcript, slides, photos) into high-quality knowledge assets for LinkedIn, institutional websites, and email newsletters — including LinkedIn long-form posts, multi-language summaries, quote cards, and vertical clips — while preserving the speaker's voice and style.
+Transform raw talk materials (video, audio, transcript, slides, photos) into high-quality knowledge assets for LinkedIn, institutional websites, and email newsletters — including social posts, articles, quote cards, and vertical clips — while preserving the speaker's voice and style.
 
 ### 2.2 Vision
 
@@ -50,7 +50,7 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 > **SpeechRepurposer is not "another OpusClip" in Europe — it's the only AI knowledge-assetization tool that understands academic talks, speaks 5 European languages natively, and can keep data in the EU.**
 
 - **Core channels are LinkedIn + institutional websites + email newsletters**, not TikTok/Douyin
-- **Product positioning shifts from "clip short videos" to "knowledge assetization"**: LinkedIn long-form posts + multi-language summaries + quote cards + vertical clips (optional)
+- **Product positioning shifts from "clip short videos" to "knowledge assetization"**: social posts + articles + quote cards + vertical clips (optional)
 - **Multi-language is elevated to P0**: Chinese/English + German/French/Spanish/Italian, M3 native translation, no third-party API
 - **EU data residency as a premium differentiator**: GDPR compliance + optional EU data residency via Cast AI Kimchi
 
@@ -113,7 +113,7 @@ Upload audio/video → Auto-transcribe to text → Natural language instructions
 | **Text Edits Video** | Edit transcript = edit video | High — P1 subtitle-level editing |
 | **Underlord AI Assistant** | Natural language multi-step editing | Medium — similar "regenerate" capability |
 | **Filler Word / Pause Cleanup** | One-click remove um/uh/long pauses | Low — non-core need |
-| **Show Notes / Chapter Markers** | Auto-generate episode descriptions | Medium — can generate LinkedIn long-form posts |
+| **Show Notes / Chapter Markers** | Auto-generate episode descriptions | Medium — can generate social posts |
 | **Multi-language Translation & Dubbing** | 30+ languages with lip sync | Medium — P2 |
 | **Overdub** | Text-to-speech in the speaker's voice | Low — P2 consideration |
 
@@ -163,7 +163,7 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 | User Type | Characteristics | Use Case | Europe-Specific |
 |:---|:---|:---|:---|
 | **University Professors / Researchers** | Many academic talks, want to expand influence | Auto-generate distribution assets after conference talks | Need multi-language versions (German/French/Spanish) to reach European peers |
-| **Corporate Executives / Industry Experts** | Need thought leadership output, time is fragmented | Generate LinkedIn content after summit talks | Need GDPR compliance proof for corporate procurement |
+| **Corporate Executives / Industry Experts** | Need thought leadership output, time is fragmented | Generate social content after summit talks | Need GDPR compliance proof for corporate procurement |
 | **Conference Organizers** | Large volume of talk video assets | Batch-generate conference promotional clips | European academic conferences (e.g. ECA, EMBO) have batch needs |
 | **Think Tanks / Research Institutes** | Policy talks need distribution | Turn talks into policy briefs + social content | UK/German think tanks (Chatham House, DIW Berlin) have strong content distribution needs |
 | **Corporate Universities / Training Depts** | Internal training content needs reuse | Turn internal training talks into reusable learning assets | Siemens, SAP, Bosch and other European enterprises have internal knowledge management needs |
@@ -173,14 +173,14 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 
 **Professor Zhang (Europe Edition)**
 - 55 years old, AI Research Institute Director at a university, frequently attends international conferences
-- Can't edit, but wants students/assistants to post his talks on LinkedIn
+- Can't edit, but wants students/assistants to post his talks on LinkedIn and other professional networks
 - Has Twitter/LinkedIn, but posts infrequently
 - Wants content to maintain academic rigor while being accessible to non-specialists
 - **Europe-specific need**: Needs German version to reach German peers; needs GDPR compliance proof for school procurement approval
 
 **Sarah (UK Think Tank Operations Manager)**
 - 32 years old, Chatham House content operations
-- Processes 10+ policy talks per month, currently relies on manual editing and writing LinkedIn long-form posts
+- Processes 10+ policy talks per month, currently relies on manual editing and writing social posts and articles
 - Needs to convert English talks into French/German versions to reach European policy circles
 - **Europe-specific need**: All content must be processed in the EU, cannot be transferred to the US; needs native multi-language quality, not stiff machine translation
 
@@ -198,9 +198,9 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 - AI auto-analysis: content segmentation, virality scoring, and Speaker memory extraction from task input
 - **AI Generation (P0 Core Outputs):**
   - 3-5 highlight clip scripts (with Hook + subtitles + visual suggestions)
-  - LinkedIn long-form post (matching Speaker voice)
+  - Social post (matching Speaker voice)
   - Quote cards / Carousel
-  - Multi-language summary / Blog article
+  - Article / newsletter content
   - **Multi-language versions:** Chinese/English + German/French/Spanish/Italian, M3 native translation
 - **Video rendering (P0, hard prerequisite):** vertical 9:16 MP4 + SRT via Remotion, driven by a declarative `clip-spec(JSON)` contract
 - **ASR (word-level timestamps):** faster-whisper self-hosted processing for audio/video uploads
@@ -215,7 +215,7 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 - **GDPR compliance documentation and data deletion features:** future procurement requirement
 - **Link auto-fetch (YouTube / Vimeo / podcasts):** yt-dlp-style fetch to lower input barrier
 - **Multi-language UI:** English/German/French/Spanish/Italian interface localization
-- **Direct social publishing:** LinkedIn API integration
+- **Direct social publishing:** Professional network APIs (e.g. LinkedIn) integration
 - **Team collaboration, analytics, billing**
 
 **Out of Scope (This Cycle):**
@@ -259,7 +259,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 **US-007**: As a user, I want the system to generate short-form video scripts based on the speaker's style.
 
-**US-008**: As a user, I want the system to generate LinkedIn-ready long-form post copy.
+**US-008**: As a user, I want the system to generate social post copy.
 
 **US-009**: As a user, I want the system to generate quote images suitable for multiple platforms.
 
@@ -358,9 +358,9 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|:---|:---|
 | FR-031 | Generate highlight clip scripts | P0 | Default 3-5, each containing: Hook + script + subtitle timestamps + visual suggestions + music mood |
 | FR-032 | Generate alternative hooks | P0 | Each clip gets 3 alternative titles/hooks, user can select or customize |
-| FR-033 | Generate LinkedIn long-form post | P0 | 1 post, matching Speaker voice, structure: Hook → Core insight → Personal take → Call to action |
+| FR-033 | Generate social post | P0 | 1 post, matching Speaker voice, structure: Hook → Core insight → Personal take → Call to action |
 | FR-034 | Generate quote cards | P0 | 3-5 cards, 1:1 or 4:5, with attribution and style templates |
-| FR-035 | Generate Carousel | P1 | Multi-page images + text, suitable for LinkedIn |
+| FR-035 | Generate Carousel | P1 | Multi-page images + text, suitable for social platforms |
 | **FR-036** | **Generate multi-language versions** | **P0** | **Chinese/English + German/French/Spanish/Italian, M3 native translation, preserves original meaning and impact** |
 | FR-037 | Generate visual/B-roll prompts | P1 | Annotate suggested visuals for each clip, match from uploaded materials |
 | FR-038 | Generate music suggestions | P1 | Match BGM by mood tags (calm/passionate/suspenseful/hopeful) |
@@ -550,7 +550,7 @@ Worker process claims Asset rows and preprocesses:
 User clicks Generate → WorkflowRun(PENDING) created
     ↓
 Worker claims WorkflowRun and runs agents:
-    content_director → clip → linkedin / quote / carousel / summary / blog
+    content_director → clip → post / quotes / carousel / article
     ↓
 Clip render_spec written; Derivative rows written
     ↓
@@ -575,11 +575,10 @@ P0 must have built-in Agent workflow, core reason being **users will inevitably 
 | Persona Agent | Generate Speaker style persona based on past materials | After Speaker creation/update |
 | Content Director | Analyze talk content once and produce a unified `ContentPlan` (thesis, themes, audience, per-output plans) | At the start of every full generation run |
 | Clip Agent | Select shareable segments and write vertical clip scripts from the `ContentPlan` | During clip generation |
-| LinkedIn Agent | Generate LinkedIn long-form posts | During derivative content generation |
-| Quote Agent | Generate quote card copy | During derivative content generation |
+| Post Agent | Generate social posts | During derivative content generation |
+| Quotes Agent | Generate quote card copy | During derivative content generation |
 | Carousel Agent | Generate Carousel multi-page images + text | During derivative content generation (P1) |
-| Summary Agent | Generate multi-language summary | During derivative content generation |
-| Blog Agent | Generate blog article | During derivative content generation |
+| Article Agent | Generate article / newsletter content | During derivative content generation |
 | Translator Agent | Multi-language translation | During multi-language version generation |
 | Reviser Agent | Modify specified content based on feedback | After user feedback |
 
@@ -594,7 +593,7 @@ Content Director → unified ContentPlan
     ↓
 Clip Agent → segment selection + scripts
     ↓
-LinkedIn Agent / Quote Agent / Carousel Agent / Summary Agent / Blog Agent → derivative content
+LinkedIn Agent / Quotes Agent / Carousel Agent / Article Agent → derivative content
     ↓
 Translator Agent → multi-language versions (German/French/Spanish/Italian)
     ↓
@@ -709,7 +708,7 @@ User feedback needs to be structured for the system to process effectively:
 |:---|:---|:---|
 | id | UUID | Primary key |
 | project_id | UUID | Associated project |
-| type | enum | linkedin_post / quote_card / carousel / summary / blog |
+| type | enum | post / quotes / carousel / article |
 | content | text/JSON | Content |
 | language | string | Language |
 | image_url | string | Image URL (quote card / carousel) |
@@ -784,14 +783,14 @@ User feedback needs to be structured for the system to process effectively:
    ├── Speaker: select existing Speaker or leave unselected
    ├── Brand template: select existing template or leave unselected
    ├── Tone: professional/thought leader/conversational/academic
-   └── Outputs: clips generated by default, optionally LinkedIn long-form / quote cards / multi-language, etc.
+   └── Outputs: clips generated by default, optionally social post / quote cards / article / carousel, etc.
 4. Click generate button
    ├── Frontend auto calls POST /projects to create Project
    ├── Frontend auto calls POST /projects/{id}/assets to upload materials
    └── Frontend auto calls POST /projects/{id}/generate to trigger async generation
 5. System processes asynchronously
    ├── Worker processes Asset: ASR transcription / text extraction / visual image reading
-   └── Worker runs Generation: Analyzer → Script / LinkedIn / Quote Card / Summary / Blog
+   └── Worker runs Generation: Analyzer → Script / Post / Quotes / Article / Carousel
 6. User auto-redirects to project detail page to view generation results
 ```
 
@@ -804,7 +803,7 @@ User feedback needs to be structured for the system to process effectively:
 2. Play/preview each clip
 3. Edit script, subtitles, hook (select from 3 alternatives or customize)
 4. Replace visuals or BGM (select from uploaded materials)
-5. View LinkedIn long-form post, quote cards, multi-language versions
+5. View social post, quote cards, article, and multi-language versions
 6. Submit feedback (structured: hook/style/complexity/facts/expression)
 7. Trigger Reviser Agent local regeneration
 8. Confirm and export
@@ -835,13 +834,23 @@ User feedback needs to be structured for the system to process effectively:
 - First 3 seconds of subtitles must have conflict, counter-intuition, or strong data
 - Title length suitable for display on all platforms
 
-### 12.3 LinkedIn Long-form Post
+### 12.3 Social Post
 
 | Attribute | Specification |
 |:---|:---|
 | Length | 150-300 English words / 300-600 Chinese characters |
 | Structure | Hook → Core insight → Personal take → Call to action |
 | Voice | Maintain Speaker style, professional but readable |
+| Hashtags | Auto-generate 3-5 relevant topic tags |
+| Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
+
+### 12.4 Article
+
+| Attribute | Specification |
+|:---|:---|
+| Length | 600-1,500 English words / 1,000-3,000 Chinese characters |
+| Structure | Title → Lead → Core arguments → Evidence/quotes → Conclusion/CTA |
+| Voice | Maintain Speaker style; suitable for institutional websites and newsletters |
 | Hashtags | Auto-generate 3-5 relevant topic tags |
 | Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
 
@@ -913,7 +922,7 @@ Reference OpusClip's "left list + right preview" layout:
 
 - **Left clip list**: Displays virality potential score, duration, current status
 - **Right preview area**: Video preview + subtitle timestamps + editing area
-- **Top tabs**: Video / LinkedIn / Quote cards / Multi-language
+- **Top tabs**: Clips / Post / Quotes / Article / Carousel
 - **Action buttons**: Export, regenerate, delete
 - **Sort/filter**: Filter by score, duration, status
 
@@ -1017,7 +1026,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 - Speaker Profile creation + style persona (Persona Agent)
 - Video/audio/transcript/slides/image upload
 - ASR transcription (faster-whisper, word-level timestamps)
-- MiniMax M3 generation: 3-5 clip scripts + LinkedIn long-form post + quote cards + carousel + summary + blog + multi-language versions (German/French/Spanish/Italian)
+- MiniMax M3 generation: 3-5 clip scripts + social post + quote cards + carousel + article + multi-language versions (German/French/Spanish/Italian)
 - Agent closed loop: Script → Review → Reviser (self-review iteration)
 - Human review + feedback regeneration (HITL)
 - Vertical clip rendering via Remotion (MP4 + SRT)
@@ -1046,7 +1055,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 
 - User system and permissions (multi-tenant)
 - Billing system (European pricing 20-30% higher than US)
-- Direct publishing to LinkedIn (API integration)
+- Direct publishing to LinkedIn and other professional networks (API integration)
 - AI-generated dynamic B-roll
 - Analytics (virality tracking)
 - More platform formats
@@ -1065,7 +1074,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 | Speaker Profile | Speaker profile, including style persona, voice settings, voice samples |
 | Clip | Generated highlight segment |
 | Hook | Attention-grabbing opening sentence for video/post |
-| Carousel | Multi-page images + text, common on LinkedIn/Instagram |
+| Carousel | Multi-page images + text, common on LinkedIn/Instagram and other social platforms |
 | SRT | Subtitle file format |
 | Persona | Persona style profile |
 | B-roll | Supplementary visual material |
@@ -1193,11 +1202,10 @@ apps/api/
 │   │   ├── content_director.py
 │   │   ├── clip_agent.py
 │   │   ├── reviser.py
-│   │   ├── linkedin.py
-│   │   ├── quote_agent.py
+│   │   ├── post.py
+│   │   ├── quotes.py
 │   │   ├── carousel.py
-│   │   ├── summary.py
-│   │   ├── blog.py
+│   │   ├── article.py
 │   │   ├── intent.py
 │   │   └── caption_translate.py
 │   ├── prompts/             # Jinja2 templates
