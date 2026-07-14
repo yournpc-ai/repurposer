@@ -195,6 +195,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 - **clip-spec (JSON) is the sole contract**; the renderer is a **replaceable black box** behind it. **Do not leak Remotion / React concepts into clip-spec** — it only describes "what" (segment / crop / subtitle track / style preset / title / soundtrack / brand), remaining renderer-agnostic.
 - **The first renderer is Remotion** (server-side, headless Chrome + internal FFmpeg), launched as an independent Node rendering service with **pnpm**, acting as a `spec → MP4 + SRT` black box triggered by the Python queue. **Do not stuff Remotion logic into the Python backend**.
 - **Editing form**: transcript editing (deleting a sentence = cutting a segment, **non-destructive**: mark `hidden` instead of actually deleting) + **single-track trim**; preview uses the Remotion `<Player>` (the same component is used for both preview and rendering).
+- **Auto-render on generation**: `run_generation` creates `Clip` rows with `render_status=PENDING` when a renderable source (video/image) exists. The worker claims these rows and calls the Remotion render service automatically; the frontend polls `Clip.video_url` until the MP4 is ready. Do not require users to click a manual "Render" button for the standard flow.
 - **Scope discipline (critical)**: **do not** add multi-track timelines / layer compositing / transition effects / B-roll library / automatic face reframe / client-side engine — these are L3, explicitly delegated to CapCut / Premiere. Subtitle styles use **preset enums**, no free-form layout.
 - **Styles stay within the subset that both CSS and libass can express**, preserving the low-cost option of switching to hand-rolled FFmpeg in the future (clip-spec → filtergraph + shared libass on both ends).
 - Hard prerequisites: **multi-language ASR (word-level timestamps) + streamable / seekable video** (**local FS + FastAPI Range endpoint is sufficient**; object storage deferred to scaling, ADR-011).
@@ -212,3 +213,11 @@ Overall style: restrained, lightweight, unified. Key reference points:
   - `feat: add theme toggle with view transition`
   - `fix: correct SidebarMenuButton render usage`
   - `docs: update i18n and theme conventions`
+
+## Demo Seed
+
+`app/services/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips/derivatives appear immediately. It does **not** render clips synchronously anymore — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
+
+## Testing
+
+The API test suite was removed because it had drifted from the rapidly changing implementation (stale columns, changed storage paths, outdated mocks). Verify changes by running the relevant flow end-to-end instead of relying on a test suite.
