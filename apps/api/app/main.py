@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -26,6 +27,16 @@ from app.services.brand import seed_default_brand_template
 from app.services.demo_seed import seed_demo_project
 from app.services.music import seed_default_music
 
+logger = logging.getLogger(__name__)
+
+
+def _log_demo_seed_result(task: asyncio.Task) -> None:
+    """Log any exception from the async demo seed task."""
+    try:
+        task.result()
+    except Exception as e:
+        logger.exception("demo_seed_async_failed", exc_info=e)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,7 +48,8 @@ async def lifespan(app: FastAPI):
         await seed_default_music(db)
     if not settings.skip_demo_seed:
         if settings.demo_seed_async:
-            asyncio.create_task(seed_demo_project())
+            task = asyncio.create_task(seed_demo_project())
+            task.add_done_callback(_log_demo_seed_result)
         else:
             await seed_demo_project()
     yield

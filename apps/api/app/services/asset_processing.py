@@ -9,7 +9,8 @@ the single seam where heavier processors plug in:
 - SLIDES         -> per-page render + OCR (future; today plain PDF text)
 """
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -43,17 +44,17 @@ class ProcessResult:
 
 # A processor turns an asset into a ProcessResult (or an empty one for media
 # types with no processor yet).
-Processor = Callable[[Asset], ProcessResult]
+Processor = Callable[[Asset], Awaitable[ProcessResult]]
 
 
-def _extract_text_processor(asset: Asset) -> ProcessResult:
+async def _extract_text_processor(asset: Asset) -> ProcessResult:
     """Extract text from a document-like asset (txt/md/pdf)."""
     if not asset.file_url:
         return ProcessResult()
     return ProcessResult(extracted_text=extract_text(asset.file_url))
 
 
-def _slides_processor(asset: Asset) -> ProcessResult:
+async def _slides_processor(asset: Asset) -> ProcessResult:
     """Slides: render PDF pages to images for stills backing.
 
     The generation agents (content director / clip agent) read slide images
@@ -70,7 +71,7 @@ def _slides_processor(asset: Asset) -> ProcessResult:
     return ProcessResult(slide_pages=slide_pages)
 
 
-def _asr_processor(asset: Asset) -> ProcessResult:
+async def _asr_processor(asset: Asset) -> ProcessResult:
     """Transcribe a video/audio asset to text + word-level timestamps."""
     path = resolve_file_path(asset.file_url)
     if path is None or not path.is_file():
@@ -78,7 +79,9 @@ def _asr_processor(asset: Asset) -> ProcessResult:
 
     from app.services.asr import transcribe  # lazy: heavy model deps
 
-    result = transcribe(path)
+    # Transcription is CPU-bound; run it in a thread so the async event loop
+    # stays responsive (important for the demo seed and worker concurrency).
+    result = await asyncio.to_thread(transcribe, path)
     duration = result.get("duration")
     return ProcessResult(
         transcript=result["transcript"],
@@ -87,7 +90,7 @@ def _asr_processor(asset: Asset) -> ProcessResult:
     )
 
 
-def _noop_processor(asset: Asset) -> ProcessResult:
+async def _noop_processor(asset: Asset) -> ProcessResult:
     """Placeholder for types with no text/transcript processor.
 
     IMAGE assets are consumed directly by the generation agents as raw media,
@@ -123,7 +126,7 @@ async def process_asset(asset_id: UUID) -> None:
 
         try:
             processor = PROCESSORS.get(asset.type, _noop_processor)
-            result = processor(asset)
+            result = await processor(asset)
             if result.extracted_text is not None:
                 asset.extracted_text = result.extracted_text
             if result.transcript is not None:
