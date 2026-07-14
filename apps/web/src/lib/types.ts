@@ -64,6 +64,7 @@ export interface Project {
   speaker_id: string | null
   event_name: string | null
   language: string
+  content_plan?: Record<string, unknown> | null
   created_at: string
 }
 

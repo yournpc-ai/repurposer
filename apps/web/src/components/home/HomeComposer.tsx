@@ -74,18 +74,28 @@ interface InferredIntent {
   answer: string | null
   language: string
   outputs: OutputKey[]
+  clip_count: number | null
   specific_instruction: string | null
   confidence: number
 }
 
-const OUTPUT_OPTIONS = ["clips", "linkedin", "quote_cards", "summary"] as const
+const OUTPUT_OPTIONS = [
+  "clips",
+  "linkedin",
+  "quote_cards",
+  "carousel",
+  "summary",
+  "blog",
+] as const
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]
 
 const OUTPUT_ICONS = {
   clips: Video,
   linkedin: Linkedin,
   quote_cards: Quote,
+  carousel: ImageIcon,
   summary: Languages,
+  blog: FileText,
 } as const
 
 const LANGUAGES = [
@@ -101,12 +111,13 @@ const DEFAULT_INTENT: InferredIntent = {
   action: "generate",
   answer: null,
   language: "en",
-  outputs: ["clips", "linkedin", "quote_cards", "summary"],
+  outputs: ["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"],
+  clip_count: null,
   specific_instruction: null,
   confidence: 1,
 }
 
-const DEFAULT_CLIP_COUNT = 3
+const DEFAULT_CLIP_COUNT = 5
 
 interface HomeComposerProps {
   speakers: Speaker[]
@@ -131,6 +142,7 @@ export function HomeComposer({
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
   const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_INTENT.outputs)
+  const [clipCount, setClipCount] = useState<number>(DEFAULT_CLIP_COUNT)
   const [brandTemplateId, setBrandTemplateId] = useState("")
   const [language, setLanguage] = useState(DEFAULT_INTENT.language)
   const [files, setFiles] = useState<File[]>([])
@@ -179,8 +191,23 @@ export function HomeComposer({
         setInferred(data.intent)
 
         // Apply inferred values only to params the user hasn't locked.
-        setLanguage((prev) => (lockedParams.has("language") ? prev : data.intent.language))
-        setOutputs((prev) => (lockedParams.has("outputs") ? prev : data.intent.outputs))
+        const nextLanguage = lockedParams.has("language") ? language : data.intent.language
+        const nextOutputs = lockedParams.has("outputs") ? outputs : data.intent.outputs
+        const nextClipCount = lockedParams.has("clip_count")
+          ? clipCount
+          : data.intent.clip_count ?? DEFAULT_CLIP_COUNT
+
+        setLanguage(nextLanguage)
+        setOutputs(nextOutputs)
+        setClipCount(nextClipCount)
+
+        // Refresh autofill if the prompt box is still empty or was auto-generated.
+        const canAutofill = prompt.trim() === "" || prompt === autofilledPromptRef.current
+        if (canAutofill) {
+          const filled = buildPrefillPrompt(nextOutputs, nextLanguage, nextClipCount)
+          autofilledPromptRef.current = filled
+          setPrompt(filled)
+        }
       } catch (e) {
         // Silent fallback: leave current values.
       } finally {
@@ -189,7 +216,7 @@ export function HomeComposer({
     }, 600)
 
     return () => clearTimeout(timer)
-  }, [prompt, files])
+  }, [prompt, files, lockedParams])
 
   const lockParam = (key: string) => {
     setLockedParams((prev) => new Set(prev).add(key))
@@ -220,6 +247,10 @@ export function HomeComposer({
     const hasContent = files.length > 0 || prompt.trim()
     if (!hasContent) {
       onError?.(t("home.noContentError"))
+      return
+    }
+    if (outputs.length === 0) {
+      onError?.(t("home.noOutputError"))
       return
     }
     setIsGenerating(true)
@@ -262,8 +293,8 @@ export function HomeComposer({
       const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
         method: "POST",
         body: {
-          clip_count: DEFAULT_CLIP_COUNT,
-          outputs: ["clips", ...outputs],
+          clip_count: clipCount,
+          outputs,
           target_language: language,
           brand_template_id: brandTemplateId || undefined,
           instruction,
@@ -309,13 +340,14 @@ export function HomeComposer({
   // Template-splice a prompt sentence from the selected output pills, e.g.
   // "generate 3 short clips, write a LinkedIn long-form post and create
   // shareable quote cards from this talk". Language-aware via i18n.
-  const buildPrefillPrompt = (selected: OutputKey[], lang: string): string => {
+  const buildPrefillPrompt = (
+    selected: OutputKey[],
+    lang: string,
+    count: number = DEFAULT_CLIP_COUNT
+  ): string => {
     if (selected.length === 0) return ""
     const fragments = selected.map((key) =>
-      t(
-        `composer.promptFragments.${key}`,
-        key === "clips" ? { count: DEFAULT_CLIP_COUNT } : undefined
-      )
+      t(`composer.promptFragments.${key}`, key === "clips" ? { count } : undefined)
     )
     const last = fragments.pop() as string
     const base =
@@ -339,7 +371,7 @@ export function HomeComposer({
     // never overwrite text the user actually typed.
     const canAutofill = prompt.trim() === "" || prompt === autofilledPromptRef.current
     if (canAutofill) {
-      const filled = buildPrefillPrompt(next, language)
+      const filled = buildPrefillPrompt(next, language, clipCount)
       autofilledPromptRef.current = filled
       setPrompt(filled)
     }
@@ -628,7 +660,7 @@ export function HomeComposer({
                     <span>{t("composer.outputs")}</span>
                     {outputs.length > 0 && (
                       <Badge variant="secondary" className="ml-1 px-1.5 text-[10px]">
-                        {outputs.length + 1}
+                        {outputs.length}
                       </Badge>
                     )}
                     <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -639,19 +671,7 @@ export function HomeComposer({
                 <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                   {t("composer.outputsLabel")}
                 </p>
-                <div className="flex w-full items-center justify-between rounded-md bg-accent px-2 py-1.5 text-sm text-foreground">
-                  <span className="flex items-center gap-2">
-                    <Video className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                    <span className="flex flex-col">
-                      <span>{t("composer.outputOptions.clips")}</span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {t("home.alwaysIncluded")}
-                      </span>
-                    </span>
-                  </span>
-                  <Check className="h-4 w-4 flex-shrink-0" />
-                </div>
-                {OUTPUT_OPTIONS.filter((o) => o !== "clips").map((key) => {
+                {OUTPUT_OPTIONS.map((key) => {
                   const active = outputs.includes(key)
                   const Icon = OUTPUT_ICONS[key]
                   return (
