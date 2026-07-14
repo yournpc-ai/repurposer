@@ -28,7 +28,6 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetStatus,
     AssetType,
-    DerivativeType,
     ProjectStatus,
     WorkflowStatus,
 )
@@ -46,13 +45,9 @@ from app.services.asset_processing import process_asset
 from app.services.brand import DEFAULT_BRAND_CONFIG
 from app.services.chat import seed_project_prompt
 from app.services.generation import run_generation
-from app.services.rendering import render_clip
 from app.services.storage import (
-    _relative_path,
     get_project_output_dir,
     get_project_upload_dir,
-    output_url,
-    resolve_file_path,
 )
 
 logger = structlog.get_logger()
@@ -181,79 +176,6 @@ async def _count_derivatives(db) -> int:
     ) or 0
 
 
-async def _count_rendered_clips(db) -> int:
-    return await db.scalar(
-        select(func.count())
-        .where(Clip.project_id == DEMO_PROJECT_ID)
-        .where(Clip.video_url.is_not(None))
-    ) or 0
-
-
-async def _render_demo_clips(db) -> None:
-    """Render every generated demo clip that does not yet have a video_url."""
-    clip_result = await db.execute(
-        select(Clip).where(
-            Clip.project_id == DEMO_PROJECT_ID,
-            Clip.video_url.is_(None),
-        )
-    )
-    clips = list(clip_result.scalars().all())
-    if not clips:
-        return
-    logger.info("demo_rendering_clips", count=len(clips))
-    for clip in clips:
-        await render_clip(clip.id)
-        # render_clip uses its own session; refresh to see updated video_url.
-        await db.refresh(clip)
-
-
-async def _rename_demo_outputs(db) -> None:
-    """Give demo rendered files human-readable names instead of UUIDs.
-
-    Demo outputs live flat under ``demo/outputs/projects/``; rename clips to
-    ``clip_1.mp4`` / ``clip_1.srt`` and the quote card to ``quote_1.png``.
-    """
-    output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
-
-    clip_result = await db.execute(
-        select(Clip).where(Clip.project_id == DEMO_PROJECT_ID).order_by(Clip.created_at)
-    )
-    for idx, clip in enumerate(clip_result.scalars().all(), start=1):
-        renamed = False
-        if clip.video_url:
-            old_path = resolve_file_path(clip.video_url.replace("/api/v1/outputs/", ""))
-            if old_path and old_path.is_file():
-                new_path = output_dir / f"clip_{idx}.mp4"
-                old_path.rename(new_path)
-                clip.video_url = output_url(_relative_path(new_path))
-                renamed = True
-        if clip.srt_url:
-            old_path = resolve_file_path(clip.srt_url.replace("/api/v1/outputs/", ""))
-            if old_path and old_path.is_file():
-                new_path = output_dir / f"clip_{idx}.srt"
-                old_path.rename(new_path)
-                clip.srt_url = output_url(_relative_path(new_path))
-                renamed = True
-        if renamed:
-            await db.commit()
-            logger.info("demo_clip_renamed", clip_id=str(clip.id), index=idx)
-
-    derivative_result = await db.execute(
-        select(Derivative)
-        .where(Derivative.project_id == DEMO_PROJECT_ID)
-        .where(Derivative.type == DerivativeType.QUOTE_CARD)
-    )
-    quote = derivative_result.scalar_one_or_none()
-    if quote and quote.image_url:
-        old_path = resolve_file_path(quote.image_url.replace("/api/v1/outputs/", ""))
-        if old_path and old_path.is_file():
-            new_path = output_dir / "quote_1.png"
-            old_path.rename(new_path)
-            quote.image_url = output_url(_relative_path(new_path))
-            await db.commit()
-            logger.info("demo_quote_renamed", derivative_id=str(quote.id))
-
-
 async def seed_demo_project() -> None:
     """Create or refresh the demo project using the real generation pipeline."""
     async with AsyncSessionLocal() as db:
@@ -265,20 +187,17 @@ async def seed_demo_project() -> None:
         if existing_project is not None:
             clip_count = await _count_clips(db)
             derivative_count = await _count_derivatives(db)
-            rendered_count = await _count_rendered_clips(db)
-            if clip_count > 0 and derivative_count > 0 and rendered_count == clip_count:
+            if clip_count > 0 and derivative_count > 0:
                 logger.debug(
                     "demo_project_already_seeded",
                     clips=clip_count,
                     derivatives=derivative_count,
-                    rendered=rendered_count,
                 )
                 return
             logger.info(
                 "demo_project_partial_seed",
                 clips=clip_count,
                 derivatives=derivative_count,
-                rendered=rendered_count,
             )
 
         _demo_paths()
@@ -358,20 +277,16 @@ async def seed_demo_project() -> None:
                 )
                 return
 
-        # Render every generated clip so the results page is immediately playable.
-        await _render_demo_clips(db)
-
-        # Rename demo outputs from UUIDs to human-readable names.
-        await _rename_demo_outputs(db)
+        # Demo clips are queued for rendering automatically by the generation
+        # orchestrator (render_status=PENDING). The worker will render them in
+        # the background so startup is not blocked waiting for Remotion/Chromium.
 
         # Log final state.
         final_clips = await _count_clips(db)
         final_derivatives = await _count_derivatives(db)
-        rendered_clips = await _count_rendered_clips(db)
         logger.info(
             "demo_project_seeded",
             project_id=str(DEMO_PROJECT_ID),
             clips=final_clips,
             derivatives=final_derivatives,
-            rendered=rendered_clips,
         )
