@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -34,7 +35,11 @@ async def lifespan(app: FastAPI):
     await seed_default_brand_template()
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
-    await seed_demo_project()
+    if not settings.skip_demo_seed:
+        if settings.demo_seed_async:
+            asyncio.create_task(seed_demo_project())
+        else:
+            await seed_demo_project()
     yield
 
 

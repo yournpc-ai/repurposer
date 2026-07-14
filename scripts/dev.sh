@@ -15,6 +15,7 @@ cd "$ROOT" || { echo "Cannot cd to repo root ($ROOT)"; exit 1; }
 # render service, started from apps/render, writes to repo/assets — a 404 trap.)
 export ASSET_DIR="$ROOT/assets"
 export RENDER_OUTPUT_DIR="$ROOT/assets"
+export DEMO_SEED_ASYNC=true
 mkdir -p "$ASSET_DIR"
 
 # --- helpers ---------------------------------------------------------------
@@ -43,6 +44,21 @@ with_timeout() {
 }
 
 port_in_use() { lsof -tiTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+
+# Wait until a URL returns HTTP 200, up to a timeout.
+wait_for_url() {
+  local url=$1 name=$2 timeout=${3:-30}
+  echo "Waiting for $name to be ready..."
+  for ((i=0; i<timeout; i++)); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "$name is ready."
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for $name (continuing anyway)."
+  return 1
+}
 
 # --- free the dev ports ----------------------------------------------------
 kill_port 8000 "backend"
@@ -89,6 +105,10 @@ API_PID=$!
 echo "Starting background worker ..."
 ( cd "$ROOT/apps/api" && uv run python -m app.worker ) &
 WORKER_PID=$!
+
+# Wait for the API to finish startup before launching the frontend, otherwise
+# the first page fetch races the FastAPI application lifespan.
+wait_for_url "http://localhost:8000/health" "API" 60
 
 # --- render service --------------------------------------------------------
 # Remotion render service (clip-spec -> MP4+SRT). Node/pnpm, headless Chrome +

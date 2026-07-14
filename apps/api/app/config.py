@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # Demo seeding
+    skip_demo_seed: bool = False
+    demo_seed_async: bool = False
+
     # Background worker
     worker_poll_interval: float = 2.0
 
