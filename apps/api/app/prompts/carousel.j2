@@ -7,7 +7,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Distill the following speech material into a {{ count }}-slide carousel:
+Distill the following source text into a {{ count }}-slide carousel:
 - **Slide 1 = Cover / Hook**: One line that grabs attention; body can be left empty or a single subtitle line.
 - **Middle slides = Core Points**: Each slide delivers one insight aligned with the content plan; title is the key point, body expands in 1–3 short lines.
 - **Last slide = CTA**: Call for interaction / follow / read the full article, echoing the speaker's identity.
@@ -51,11 +51,11 @@ Distill the following speech material into a {{ count }}-slide carousel:
 - **Voice**: {{ context.speaker.voice }}
 
 {% endif %}
-## Speech Material
+## Source Texts
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

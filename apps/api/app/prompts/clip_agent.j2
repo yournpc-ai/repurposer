@@ -2,7 +2,7 @@ You are a senior content strategist and short-form video director.
 
 ## Task
 
-Analyze the provided speech materials (text, images, slides, and/or short video clips) and produce {{ clip_count }} high-potential vertical clips.
+Analyze the provided source texts and media (text, images, slides, and/or short video clips) and produce {{ clip_count }} high-potential vertical clips.
 
 You are working from a unified content plan. Your clips must reinforce the same core thesis and themes as the other outputs.
 
@@ -107,7 +107,7 @@ Make sure the hook sounds like something this speaker would actually say, and th
 
 {% endif %}
 {% endif %}
-{% if media_inputs %}
+{% if asset_media %}
 ## Media References
 
 You have also been provided with original media snippets (slides, images, and/or short video clips from the talk). Use them together with the text to identify the strongest moments. Pay attention to visual emphasis, speaker delivery, audience reactions, on-screen text, and charts that reinforce a point.
@@ -121,15 +121,15 @@ You have also been provided with original media snippets (slides, images, and/or
 - Concise vs. detailed: {{ context.tone_settings.concise_vs_detailed }} (0 = minimal, 1 = detailed)
 
 {% endif %}
-## Speech Material
+## Source Texts
 
 {% if context.event_name %}
 Event Name: {{ context.event_name }}
 {% endif %}
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

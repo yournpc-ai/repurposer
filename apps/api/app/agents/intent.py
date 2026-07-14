@@ -42,12 +42,14 @@ class IntentAgent:
             "  in the same language as the user prompt that explains the tool's capabilities and "
             "  invites the user to upload or paste talk content. Set to null when action is 'generate'.\n"
             "- language: ISO code (en/fr/de/es/it/zh). Infer from the prompt language or explicit requests like 'in German'. Default to en if unclear.\n"
-            "- outputs: array of requested asset types. Valid values: clips, linkedin, quote_cards, summary.\n"
-            "  Default to [\"clips\", \"linkedin\", \"quote_cards\", \"summary\"] when unclear.\n"
+            "- outputs: array of requested asset types. Valid values: clips, linkedin, quote_cards, carousel, summary, blog.\n"
+            "  Default to [\"clips\", \"linkedin\", \"quote_cards\", \"carousel\", \"summary\", \"blog\"] when unclear.\n"
             "  If the user explicitly asks for only some types, return only those.\n"
-            "  If the user says 'no clips' or 'just LinkedIn', respect that.\n"
+            "  If the user says 'no clips', 'without clips', 'just LinkedIn', or excludes an output type, respect that.\n"
+            "- clip_count: integer number of clips the user wants (e.g. '5 clips' → 5, 'a few clips' → 3, 'no clips' → 0).\n"
+            "  Only set this when the user mentions a quantity of clips. Otherwise null.\n"
             "- tone: one of professional, thoughtLeadership, conversational, academic. Default professional.\n"
-            "- specific_instruction: a short distilled instruction for the generator. Capture what the user wants, excluding language/output/tone. "
+            "- specific_instruction: a short distilled instruction for the generator. Capture what the user wants, excluding language/output/tone/clip_count. "
             "  For action='answer', set this to null.\n"
             "- confidence: 0.0-1.0 indicating how clearly the intent was expressed.\n\n"
             "Return only a JSON object matching the schema."
@@ -74,7 +76,15 @@ class IntentAgent:
                 action="generate",
                 answer=None,
                 language="en",
-                outputs=["clips", "linkedin", "quote_cards", "summary"],
+                outputs=[
+                    "clips",
+                    "linkedin",
+                    "quote_cards",
+                    "carousel",
+                    "summary",
+                    "blog",
+                ],
+                clip_count=None,
                 tone="professional",
                 specific_instruction=prompt.strip() or None,
                 confidence=0.0,

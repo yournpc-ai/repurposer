@@ -303,10 +303,26 @@ class InferredIntent(BaseModel):
         description="ISO language code for generated outputs (en/fr/de/es/it/zh).",
     )
     outputs: list[
-        Literal["clips", "linkedin", "quote_cards", "summary"]
+        Literal[
+            "clips", "linkedin", "quote_cards", "carousel", "summary", "blog"
+        ]
     ] = Field(
-        default_factory=lambda: ["clips", "linkedin", "quote_cards", "summary"],
+        default_factory=lambda: [
+            "clips",
+            "linkedin",
+            "quote_cards",
+            "carousel",
+            "summary",
+            "blog",
+        ],
         description="Which asset types the user wants to generate.",
+    )
+    clip_count: int | None = Field(
+        default=None,
+        description=(
+            "Requested number of clips when 'clips' is in outputs. "
+            "None means the caller should use its own default."
+        ),
     )
     tone: Literal["professional", "thoughtLeadership", "conversational", "academic"] = (
         Field(default="professional", description="Detected tone preset.")
@@ -368,6 +384,7 @@ class ProjectResponse(ProjectBase):
     speaker_id: UUID | None
     status: ProjectStatus
     tone_snapshot: ToneSettings | None = None
+    content_plan: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -912,10 +929,19 @@ class DerivativeUpdate(BaseModel):
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
-    clip_count: int = Field(default=3, ge=1, le=10)
+    clip_count: int = Field(default=5, ge=1, le=10)
     outputs: list[
         Literal["clips", "linkedin", "quote_cards", "carousel", "summary", "blog"]
-    ] = Field(default_factory=lambda: ["clips", "linkedin", "quote_cards"])
+    ] = Field(
+        default_factory=lambda: [
+            "clips",
+            "linkedin",
+            "quote_cards",
+            "carousel",
+            "summary",
+            "blog",
+        ]
+    )
     tone_settings: ToneSettings | None = None
     target_language: str = Field(
         default="en",

@@ -17,7 +17,7 @@ _jinja_env = Environment(
     autoescape=select_autoescape(),
 )
 
-_MAX_CHARS_PER_MATERIAL = 150_000
+_MAX_CHARS_PER_TEXT = 150_000
 
 
 def _find_derivative_plan(
@@ -41,7 +41,7 @@ class MiniMaxAgentBase:
 
     Provides shared helpers for:
     - loading prompt templates
-    - trimming long text materials
+    - trimming long text inputs
     - building OpenAI-compatible multimodal user messages
     - falling back to text-only when multimodal input is rejected
     """
@@ -52,12 +52,12 @@ class MiniMaxAgentBase:
         self.client = client or MiniMaxClient()
 
     @staticmethod
-    def _trim_materials(materials: list[str]) -> list[str]:
-        """Return non-empty materials trimmed to a safe length."""
+    def _trim_texts(texts: list[str]) -> list[str]:
+        """Return non-empty texts trimmed to a safe length."""
         return [
-            m[:_MAX_CHARS_PER_MATERIAL]
-            for m in materials
-            if m and m.strip()
+            t[:_MAX_CHARS_PER_TEXT]
+            for t in texts
+            if t and t.strip()
         ]
 
     @staticmethod

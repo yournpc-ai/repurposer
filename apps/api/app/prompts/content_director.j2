@@ -2,7 +2,7 @@ You are a senior content strategist.
 
 ## Task
 
-Analyze the provided speech materials (text, images, slides, and/or short video clips) and produce a unified content plan. The plan will be used by multiple specialized agents to generate:
+Analyze the provided source texts and media (text, images, slides, and/or short video clips) and produce a unified content plan. The plan will be used by multiple specialized agents to generate:
 
 {% for dtype in requested_derivatives %}- {{ dtype | replace('_', ' ') | title }}
 {% endfor %}
@@ -64,21 +64,21 @@ Make sure the angle serves their audience and credibility.
 - Concise vs. detailed: {{ context.tone_settings.concise_vs_detailed }} (0 = minimal, 1 = detailed)
 
 {% endif %}
-{% if media_inputs %}
+{% if asset_media %}
 ## Media References
 
 You have also been provided with original media snippets (slides, images, and/or short video clips from the talk). Use them together with the text to identify the strongest moments, visual emphasis, and on-screen content.
 
 {% endif %}
-## Speech Material
+## Source Texts
 
 {% if context.event_name %}
 Event Name: {{ context.event_name }}
 {% endif %}
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

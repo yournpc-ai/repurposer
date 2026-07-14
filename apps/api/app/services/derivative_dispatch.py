@@ -24,7 +24,7 @@ _AGENTS = {
 
 async def generate_derivative(
     derivative_type: DerivativeType,
-    materials: list[str],
+    asset_texts: list[str],
     context: GenerationContext,
     content_plan: ContentPlan,
 ) -> dict:
@@ -32,7 +32,7 @@ async def generate_derivative(
 
     Args:
         derivative_type: The type of derivative to generate.
-        materials: Extracted text from project assets.
+        asset_texts: Extracted text from project assets.
         context: Shared generation context.
         content_plan: Unified content plan from the Content Director.
 
@@ -45,7 +45,7 @@ async def generate_derivative(
         raise ValueError(f"Unsupported derivative type: {derivative_type}")
 
     result = await agent.generate(
-        materials=materials,
+        asset_texts=asset_texts,
         context=context,
         content_plan=content_plan,
     )

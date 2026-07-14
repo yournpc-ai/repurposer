@@ -1,10 +1,16 @@
 """Background generation orchestration.
 
-Runs the analyzer/script/linkedin/quote agents for a project according to the
-requested ``outputs``, tracking progress on a :class:`WorkflowRun`. Designed to
-run in a FastAPI ``BackgroundTask`` with its own database session.
+Runs the content director, clip agent, and derivative agents for a project
+according to the requested ``outputs``, tracking progress on a
+:class:`WorkflowRun`. Designed to run in the worker process with its own
+database session.
+
+Per-output status is recorded in ``run.context["output_status"]`` so the
+frontend can render skeletons for each requested output and surface isolated
+failures without hiding successful outputs.
 """
 
+import asyncio
 import base64
 import mimetypes
 from datetime import UTC, datetime
@@ -53,7 +59,7 @@ from app.services.brand import (
 from app.services.clip_spec import build_clip_spec
 from app.services.derivative_dispatch import generate_derivative
 from app.services.project_context import (
-    collect_materials,
+    collect_asset_texts,
     resolve_clip_for_revision,
     resolve_speaker,
     speaker_context_from_row,
@@ -67,6 +73,29 @@ from app.services.storage import (
 )
 
 logger = structlog.get_logger()
+
+# Serializes concurrent updates to a single WorkflowRun's context so that
+# parallel derivative tasks do not overwrite each other's output_status.
+_run_context_lock = asyncio.Lock()
+
+KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
+
+_OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
+    "linkedin": DerivativeType.LINKEDIN_POST,
+    "quote_cards": DerivativeType.QUOTE_CARD,
+    "carousel": DerivativeType.CAROUSEL,
+    "summary": DerivativeType.SUMMARY,
+    "blog": DerivativeType.BLOG,
+}
+
+# Media snippets above these thresholds are not sent directly to the multimodal
+# model; we rely on ASR transcripts / extracted text instead. These limits are
+# generous (10 min / 200 MB) because the agent layer now falls back to text-only
+# automatically when a provider rejects or fails to process a media input, so
+# the user still gets results from the transcript even for large files.
+_MAX_DIRECT_VIDEO_SECONDS = 600  # 10 minutes
+_MAX_DIRECT_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
+
 
 def _quote_image_prompt(quote: str, attribution: str, event_name: str | None = None) -> str:
     """Build a visual prompt for MiniMax image-01 to illustrate a quote card."""
@@ -110,24 +139,6 @@ async def _save_quote_card_image(
     except Exception as e:  # noqa: BLE001
         logger.warning("quote_card_image_unexpected_error", error=str(e))
         return None
-
-KNOWN_OUTPUTS = ("clips", "linkedin", "quote_cards", "carousel", "summary", "blog")
-
-_OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
-    "linkedin": DerivativeType.LINKEDIN_POST,
-    "quote_cards": DerivativeType.QUOTE_CARD,
-    "carousel": DerivativeType.CAROUSEL,
-    "summary": DerivativeType.SUMMARY,
-    "blog": DerivativeType.BLOG,
-}
-
-# Media snippets above these thresholds are not sent directly to the multimodal
-# model; we rely on ASR transcripts / extracted text instead. These limits are
-# generous (10 min / 200 MB) because the agent layer now falls back to text-only
-# automatically when a provider rejects or fails to process a media input, so
-# the user still gets results from the transcript even for large files.
-_MAX_DIRECT_VIDEO_SECONDS = 600  # 10 minutes
-_MAX_DIRECT_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 def _file_size_bytes(path: Path | None) -> int | None:
@@ -186,7 +197,7 @@ def _media_input_for_video(asset: Asset):
     )
 
 
-def _collect_media_inputs(assets: list[Asset]) -> list[MediaInput]:
+def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
     """Collect multimodal inputs from image/slide/video assets.
 
     Returns a list of MediaInput objects. AUDIO is intentionally omitted because
@@ -227,9 +238,9 @@ def _truncate(value: str | None, max_len: int) -> str | None:
 async def _resolve_or_create_speaker(
     db: AsyncSession,
     project: Project,
-    materials: list[str],
+    asset_texts: list[str],
 ) -> Speaker | None:
-    """Return the project's speaker, or auto-create one from materials.
+    """Return the project's speaker, or auto-create one from source texts.
 
     The homepage no longer forces the user to pick/create a speaker. When a
     project has no speaker, we derive a default persona and content memory
@@ -245,10 +256,10 @@ async def _resolve_or_create_speaker(
         )
         return result.scalar_one_or_none()
 
-    if not materials:
+    if not asset_texts:
         return None
 
-    trimmed = [m[:20_000] for m in materials if m and m.strip()]
+    trimmed = [t[:20_000] for t in asset_texts if t and t.strip()]
     if not trimmed:
         return None
 
@@ -257,7 +268,7 @@ async def _resolve_or_create_speaker(
             speaker_name=project.title or "Speaker",
             speaker_title=None,
             language=project.language or "en",
-            materials=trimmed,
+            asset_texts=trimmed,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning(
@@ -301,6 +312,68 @@ async def _resolve_or_create_speaker(
 def _speaker_context(speaker: Speaker | None) -> SpeakerContext | None:
     """Build a SpeakerContext from a Speaker row for generation agents."""
     return speaker_context_from_row(speaker)
+
+
+def _init_output_status(outputs: list[str]) -> dict[str, dict[str, Any]]:
+    """Create the per-output tracking structure stored in run.context."""
+    return {
+        output: {"status": "pending", "progress": 0, "error": None}
+        for output in outputs
+    }
+
+
+def _compute_progress(output_status: dict[str, dict[str, Any]]) -> int:
+    """Calculate overall progress from per-output statuses."""
+    if not output_status:
+        return 100
+    completed = sum(
+        1 for s in output_status.values() if s.get("status") == "completed"
+    )
+    return int(completed / len(output_status) * 100)
+
+
+def _first_active_output(
+    output_status: dict[str, dict[str, Any]],
+) -> str | None:
+    """Return the first output still running/pending, or None if all done."""
+    for output, status in output_status.items():
+        if status.get("status") in ("running", "pending"):
+            return output
+    return None
+
+
+async def _update_run_output_status(
+    run_id: UUID,
+    output_status_update: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]] | None:
+    """Atomically merge per-output updates into the run context.
+
+    Uses a module-level lock so parallel derivative tasks do not race when
+    updating the shared ``output_status`` dict.
+
+    Returns the merged output_status dict, or None if the run is missing.
+    """
+    async with _run_context_lock:
+        async with AsyncSessionLocal() as db:
+            run = await db.get(WorkflowRun, run_id)
+            if run is None:
+                return None
+            ctx = run.context or {}
+            output_status = ctx.get("output_status", {})
+            for output, update in output_status_update.items():
+                existing = output_status.get(output, {})
+                existing.update(update)
+                output_status[output] = existing
+            ctx["output_status"] = output_status
+            run.context = ctx
+            run.progress = _compute_progress(output_status)
+            active = _first_active_output(output_status)
+            if active:
+                run.current_step = active
+            else:
+                run.current_step = "done"
+            await db.commit()
+            return output_status
 
 
 async def _run_targeted_revision(
@@ -366,7 +439,7 @@ async def _run_targeted_revision(
         if derivative is None or derivative.project_id != project.id:
             raise ValueError("Target derivative not found")
 
-        materials = await collect_materials(db, project.id)
+        asset_texts = await collect_asset_texts(db, project.id)
         speaker = await resolve_speaker(db, project)
         target_language = run.context.get("target_language", derivative.language or "en")
 
@@ -390,7 +463,7 @@ async def _run_targeted_revision(
         try:
             derivative.content = await generate_derivative(
                 derivative_type=derivative.type,
-                materials=materials,
+                asset_texts=asset_texts,
                 context=context,
                 content_plan=content_plan,
             )
@@ -410,6 +483,318 @@ async def _run_targeted_revision(
 
     # Fallback: scope not yet supported as a targeted operation.
     raise ValueError(f"Targeted scope not implemented: {scope}")
+
+
+async def _generate_derivative_with_retry(
+    derivative_type: DerivativeType,
+    asset_texts: list[str],
+    context: GenerationContext,
+    content_plan: ContentPlan,
+) -> dict:
+    """Generate a derivative, retrying once on failure."""
+    try:
+        return await generate_derivative(
+            derivative_type=derivative_type,
+            asset_texts=asset_texts,
+            context=context,
+            content_plan=content_plan,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "derivative_auto_retry",
+            derivative_type=derivative_type.value,
+            error=str(e),
+        )
+        return await generate_derivative(
+            derivative_type=derivative_type,
+            asset_texts=asset_texts,
+            context=context,
+            content_plan=content_plan,
+        )
+
+
+async def _run_derivative_task(
+    run_id: UUID,
+    project_id: UUID,
+    user_id: UUID,
+    output: str,
+    derivative_type: DerivativeType,
+    asset_texts: list[str],
+    generation_context: GenerationContext,
+    content_plan: ContentPlan,
+    target_language: str,
+    event_name: str | None,
+) -> None:
+    """Generate and persist one derivative, updating per-output status.
+
+    Each derivative task owns its database session so that generation agents can
+    run concurrently. The shared run context update is serialized via an
+    asyncio lock inside ``_update_run_output_status``.
+    """
+    derivative_plan = next(
+        (p for p in content_plan.derivatives if p.derivative_type == derivative_type),
+        DerivativePlan(derivative_type=derivative_type),
+    )
+
+    await _update_run_output_status(
+        run_id,
+        {output: {"status": "running", "progress": 0, "error": None}},
+    )
+
+    try:
+        content = await _generate_derivative_with_retry(
+            derivative_type=derivative_type,
+            asset_texts=asset_texts,
+            context=generation_context,
+            content_plan=content_plan,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "derivative_failed_after_retry",
+            run_id=str(run_id),
+            output=output,
+            derivative_type=derivative_type.value,
+            error=str(e),
+        )
+        await _update_run_output_status(
+            run_id,
+            {output: {"status": "failed", "progress": 0, "error": str(e)}},
+        )
+        return
+
+    async with AsyncSessionLocal() as db:
+        derivative = Derivative(
+            project_id=project_id,
+            type=derivative_type,
+            content=content,
+            language=target_language,
+        )
+        db.add(derivative)
+        await db.commit()
+
+        # Quote cards get a generated PNG for the first quote.
+        if derivative_type == DerivativeType.QUOTE_CARD:
+            await db.refresh(derivative)
+            project = await db.get(Project, project_id)
+            quotes = content.get("quotes", []) if isinstance(content, dict) else []
+            if quotes and project is not None:
+                first_quote = quotes[0]
+                image_url = await _save_quote_card_image(
+                    quote=first_quote.get("quote", ""),
+                    attribution=first_quote.get("attribution", ""),
+                    derivative_id=derivative.id,
+                    project=project,
+                )
+                if image_url:
+                    derivative.image_url = image_url
+                    await db.commit()
+
+    await _update_run_output_status(
+        run_id,
+        {output: {"status": "completed", "progress": 100, "error": None}},
+    )
+
+
+async def _run_clips_task(
+    db: AsyncSession,
+    run: WorkflowRun,
+    project: Project,
+    asset_texts: list[str],
+    assets: list[Asset],
+    generation_context: GenerationContext,
+    content_plan: ContentPlan,
+    clip_count: int,
+    bt: BrandTemplate | None,
+    brand_music_id: str | None,
+) -> None:
+    """Generate clips, with one auto-retry, and update per-output status."""
+    await _update_run_output_status(
+        run.id,
+        {"clips": {"status": "running", "progress": 0, "error": None}},
+    )
+
+    # Render source selection (docs/VIDEO_EDITOR.md §4).
+    def _has_words(a: Asset) -> bool:
+        return bool(a.file_url and (a.meta or {}).get("words"))
+
+    slide_page_urls = [
+        u
+        for a in assets
+        if a.type == AssetType.SLIDES
+        for p in (a.slide_pages or [])
+        if (u := stream_url(p))
+    ]
+    image_urls = [
+        u
+        for a in assets
+        if a.type == AssetType.IMAGE and (u := stream_url(a.file_url))
+    ]
+    still_images = slide_page_urls + image_urls
+    source_video = next(
+        (a for a in assets if a.type == AssetType.VIDEO and _has_words(a)),
+        None,
+    )
+    source_audio = next(
+        (a for a in assets if a.type == AssetType.AUDIO and _has_words(a)),
+        None,
+    )
+    first_visual = next(
+        (
+            a
+            for a in assets
+            if a.type in (AssetType.SLIDES, AssetType.IMAGE) and a.file_url
+        ),
+        None,
+    )
+    if source_video is not None:
+        render_source, render_kind = source_video, "video"
+    elif source_audio is not None:
+        render_source, render_kind = source_audio, "stills"
+    elif first_visual is not None and still_images:
+        render_source, render_kind = first_visual, "stills"
+    else:
+        render_source, render_kind = None, "video"
+
+    try:
+        music_rows = (
+            await db.execute(
+                select(Music)
+                .where(Music.is_public.is_(True))
+                .order_by(Music.created_at.desc())
+            )
+        ).scalars().all()
+        music_pieces: list[dict[str, str]] = [
+            {
+                "id": str(m.id),
+                "mood": str(m.mood),
+                "title": str(m.title),
+            }
+            for m in music_rows
+        ]
+
+        plans = await clip_agent.generate(
+            asset_texts=asset_texts,
+            context=generation_context,
+            content_plan=content_plan,
+            asset_media=collect_asset_media(assets),
+            clip_count=clip_count,
+            source_words=(
+                (render_source.meta or {}).get("words")
+                if render_source is not None
+                else None
+            ),
+            music_pieces=music_pieces,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clip_agent_auto_retry", error=str(e))
+        try:
+            music_rows = (
+                await db.execute(
+                    select(Music)
+                    .where(Music.is_public.is_(True))
+                    .order_by(Music.created_at.desc())
+                )
+            ).scalars().all()
+            music_pieces = [
+                {
+                    "id": str(m.id),
+                    "mood": str(m.mood),
+                    "title": str(m.title),
+                }
+                for m in music_rows
+            ]
+            plans = await clip_agent.generate(
+                asset_texts=asset_texts,
+                context=generation_context,
+                content_plan=content_plan,
+                asset_media=collect_asset_media(assets),
+                clip_count=clip_count,
+                source_words=(
+                    (render_source.meta or {}).get("words")
+                    if render_source is not None
+                    else None
+                ),
+                music_pieces=music_pieces,
+            )
+        except Exception as e2:  # noqa: BLE001
+            logger.error(
+                "clip_agent_failed_after_retry",
+                run_id=str(run.id),
+                error=str(e2),
+            )
+            await _update_run_output_status(
+                run.id,
+                {"clips": {"status": "failed", "progress": 0, "error": str(e2)}},
+            )
+            return
+
+    brand = brand_from_template(bt.config) if bt is not None else None
+    brand_ref = bt.id if bt is not None else None
+    cfg = (bt.config or {}) if bt is not None else {}
+    aspect = str(cfg.get("aspect", "9:16"))
+    cap_pos = cfg.get("captionPosition")
+    ttl_pos = cfg.get("titlePosition")
+    ttl_size_raw = cfg.get("titleSize")
+    ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
+
+    for plan in plans.clips[:clip_count]:
+        segment = plan.to_segment()
+        music = await music_from_plan(db, plan, bt.config if bt else None)
+        spec = (
+            build_clip_spec(
+                render_source,
+                segment,
+                generation_context.target_language,
+                kind=render_kind,
+                aspect=aspect,
+                caption_position=cap_pos,
+                title_size=ttl_size,
+                title_position=ttl_pos,
+                image_urls=still_images if render_kind == "stills" else None,
+                brand=brand,
+                music=music,
+                brand_ref=brand_ref,
+            )
+            if render_source is not None
+            else None
+        )
+        clip = Clip(
+            project_id=project.id,
+            hook=plan.hook,
+            title_options=plan.title_options or ([plan.title] if plan.title else []),
+            music_mood=plan.music_mood,
+            duration=plan.duration_seconds,
+            language=generation_context.target_language,
+            source_segment=segment.model_dump(),
+            render_spec=spec.model_dump(mode="json") if spec else None,
+            render_status=RenderStatus.PENDING if spec else None,
+        )
+        db.add(clip)
+    await db.commit()
+
+    await _update_run_output_status(
+        run.id,
+        {"clips": {"status": "completed", "progress": 100, "error": None}},
+    )
+
+
+async def _delete_prior_outputs(
+    db: AsyncSession,
+    project_id: UUID,
+    outputs: list[str],
+    requested_derivative_types: list[DerivativeType],
+) -> None:
+    """Idempotency: clear prior outputs for the requested types."""
+    if "clips" in outputs:
+        await db.execute(delete(Clip).where(Clip.project_id == project_id))
+    for derivative_type in requested_derivative_types:
+        await db.execute(
+            delete(Derivative).where(
+                Derivative.project_id == project_id,
+                Derivative.type == derivative_type,
+            )
+        )
+    await db.commit()
 
 
 async def run_generation(run_id: UUID) -> None:
@@ -439,9 +824,11 @@ async def run_generation(run_id: UUID) -> None:
                     target_id = UUID(str(raw_target_id))
                 except (ValueError, TypeError):
                     target_id = None
+
             run.status = WorkflowStatus.RUNNING
             run.progress = 0
-            run.current_step = "loading"
+            run.current_step = "analyze"
+            run.context = {**ctx, "output_status": _init_output_status(outputs)}
             await db.commit()
 
             project = await db.get(Project, run.project_id)
@@ -454,29 +841,23 @@ async def run_generation(run_id: UUID) -> None:
                 )
                 return
 
-            materials = await collect_materials(db, project.id)
+            asset_texts = await collect_asset_texts(db, project.id)
             asset_rows = await db.execute(
                 select(Asset).where(Asset.project_id == project.id)
             )
             assets = list(asset_rows.scalars().all())
-            media_inputs = _collect_media_inputs(assets)
-            if not materials and not media_inputs:
+            asset_media = collect_asset_media(assets)
+            if not asset_texts and not asset_media:
                 raise ValueError("No source material to analyze")
             logger.info(
-                "generation_materials_collected",
+                "generation_asset_inputs_collected",
                 project_id=str(project.id),
-                text_count=len(materials),
-                media_count=len(media_inputs),
+                text_count=len(asset_texts),
+                media_count=len(asset_media),
             )
 
-            # Resolve the project's speaker. If none is assigned, generate a
-            # default persona from the materials so the content director and
-            # clip agent have style guidance. This keeps the homepage UI free
-            # of speaker selection.
-            speaker = await _resolve_or_create_speaker(db, project, materials)
+            speaker = await _resolve_or_create_speaker(db, project, asset_texts)
 
-            # Resolve the brand template early so the content director can use
-            # its visual brand settings and default music when selecting segments.
             bt_id = ctx.get("brand_template_id")
             bt = None
             if bt_id:
@@ -500,56 +881,6 @@ async def run_generation(run_id: UUID) -> None:
                     )
                 ).scalar_one_or_none()
 
-            # Render source selection (docs/VIDEO_EDITOR.md §4), in priority:
-            #   1. on-camera VIDEO (with ASR words)      -> video clip
-            #   2. else speech AUDIO (with ASR words)    -> stills audiogram
-            #   3. else any backing visual (slides/image) -> stills, no audio
-            # None of the above -> clips carry no render_spec (text assets only).
-            # Backing visuals = rendered slide-deck pages first (the talk's own
-            # narrative), then uploaded photos.
-            def _has_words(a: Asset) -> bool:
-                return bool(a.file_url and (a.meta or {}).get("words"))
-
-            slide_page_urls = [
-                u
-                for a in assets
-                if a.type == AssetType.SLIDES
-                for p in (a.slide_pages or [])
-                if (u := stream_url(p))
-            ]
-            image_urls = [
-                u
-                for a in assets
-                if a.type == AssetType.IMAGE and (u := stream_url(a.file_url))
-            ]
-            still_images = slide_page_urls + image_urls
-            source_video = next(
-                (a for a in assets if a.type == AssetType.VIDEO and _has_words(a)),
-                None,
-            )
-            source_audio = next(
-                (a for a in assets if a.type == AssetType.AUDIO and _has_words(a)),
-                None,
-            )
-            first_visual = next(
-                (
-                    a
-                    for a in assets
-                    if a.type in (AssetType.SLIDES, AssetType.IMAGE) and a.file_url
-                ),
-                None,
-            )
-            if source_video is not None:
-                render_source, render_kind = source_video, "video"
-            elif source_audio is not None:
-                render_source, render_kind = source_audio, "stills"
-            elif first_visual is not None and still_images:
-                render_source, render_kind = first_visual, "stills"
-            else:
-                render_source, render_kind = None, "video"
-
-            # Resolve the brand template's default music piece (if any) to its
-            # UUID so the Clip Agent can reference it by id alongside the library.
             brand_music_id: str | None = None
             if bt is not None:
                 bt_cfg: dict[str, Any] = bt.config or {}
@@ -558,9 +889,6 @@ async def run_generation(run_id: UUID) -> None:
                 )
                 brand_music_id = str(brand_piece.id) if brand_piece is not None else None
 
-            # Assemble the shared generation context once. All agents receive this
-            # same object so that speaker style, brand voice, tone, and user
-            # instruction are applied consistently across every output.
             generation_context = GenerationContext(
                 speaker=_speaker_context(speaker),
                 event_name=project.event_name,
@@ -570,225 +898,107 @@ async def run_generation(run_id: UUID) -> None:
                 brand_music_id=brand_music_id,
             )
 
+            run.current_step = "plan"
+            await db.commit()
+
             requested_derivative_types = [
                 _OUTPUT_TO_DERIVATIVE_TYPE[o]
                 for o in outputs
                 if o in _OUTPUT_TO_DERIVATIVE_TYPE
             ]
 
-            # Run the Content Director before any generation so that every agent
-            # works from the same core thesis, themes, and per-output focus.
-            # current_step remains "loading" during planning to preserve the
-            # legacy step sequence for frontend polling.
-            content_plan: ContentPlan = await content_director_agent.plan(
-                materials=materials,
-                context=generation_context,
-                media_inputs=media_inputs,
-                requested_derivatives=requested_derivative_types,
+            # Reuse a persisted plan when available (simple V1 reuse); otherwise
+            # run the Content Director once and persist the result.
+            if project.content_plan:
+                content_plan = ContentPlan.model_validate(project.content_plan)
+                logger.info(
+                    "content_plan_reused",
+                    project_id=str(project.id),
+                )
+            else:
+                content_plan = await content_director_agent.plan(
+                    asset_texts=asset_texts,
+                    context=generation_context,
+                    asset_media=asset_media,
+                    requested_derivatives=requested_derivative_types,
+                )
+                project.content_plan = content_plan.model_dump(mode="json")
+                await db.commit()
+
+            run.current_step = "prepare"
+            await db.commit()
+
+            # Clear prior outputs for requested types.
+            await _delete_prior_outputs(
+                db, project.id, outputs, requested_derivative_types
             )
 
-            # Idempotency: clear prior outputs for the requested types so reruns
-            # replace rather than accumulate.
+            # Run clips first (when requested). They are independent of derivatives.
             if "clips" in outputs:
-                await db.execute(delete(Clip).where(Clip.project_id == project.id))
-            if DerivativeType.LINKEDIN_POST in requested_derivative_types:
-                await db.execute(
-                    delete(Derivative).where(
-                        Derivative.project_id == project.id,
-                        Derivative.type == DerivativeType.LINKEDIN_POST,
-                    )
+                await _run_clips_task(
+                    db,
+                    run,
+                    project,
+                    asset_texts,
+                    assets,
+                    generation_context,
+                    content_plan,
+                    clip_count,
+                    bt,
+                    brand_music_id,
                 )
-            if DerivativeType.QUOTE_CARD in requested_derivative_types:
-                await db.execute(
-                    delete(Derivative).where(
-                        Derivative.project_id == project.id,
-                        Derivative.type == DerivativeType.QUOTE_CARD,
-                    )
-                )
-            if DerivativeType.CAROUSEL in requested_derivative_types:
-                await db.execute(
-                    delete(Derivative).where(
-                        Derivative.project_id == project.id,
-                        Derivative.type == DerivativeType.CAROUSEL,
-                    )
-                )
-            if DerivativeType.SUMMARY in requested_derivative_types:
-                await db.execute(
-                    delete(Derivative).where(
-                        Derivative.project_id == project.id,
-                        Derivative.type == DerivativeType.SUMMARY,
-                    )
-                )
-            if DerivativeType.BLOG in requested_derivative_types:
-                await db.execute(
-                    delete(Derivative).where(
-                        Derivative.project_id == project.id,
-                        Derivative.type == DerivativeType.BLOG,
-                    )
-                )
-            await db.commit()
 
-            total = len(outputs)
-            done = 0
-
-            if "clips" in outputs:
-                run.current_step = "clips"
-                await db.commit()
-                # Surface the public music library to the Clip Agent so it can
-                # select a piece per clip by id (no MiniMax call here — see
-                # docs/MUSIC_ARCHITECTURE.md §7.1 / §8.3).
-                music_rows = (
-                    await db.execute(
-                        select(Music)
-                        .where(Music.is_public.is_(True))
-                        .order_by(Music.created_at.desc())
-                    )
-                ).scalars().all()
-                music_pieces: list[dict[str, str]] = [
-                    {
-                        "id": str(m.id),
-                        "mood": str(m.mood),
-                        "title": str(m.title),
-                    }
-                    for m in music_rows
-                ]
-                plans = await clip_agent.generate(
-                    materials=materials,
-                    context=generation_context,
-                    content_plan=content_plan,
-                    media_inputs=media_inputs,
-                    clip_count=clip_count,
-                    source_words=(
-                        (render_source.meta or {}).get("words")
-                        if render_source is not None
-                        else None
-                    ),
-                    music_pieces=music_pieces,
-                )
-                # Bake the chosen brand template into each clip's render_spec so
-                # the renderer/preview show it without DB access (see ADR-016).
-                brand = brand_from_template(bt.config) if bt is not None else None
-                brand_ref = bt.id if bt is not None else None
-                cfg = (bt.config or {}) if bt is not None else {}
-                aspect = str(cfg.get("aspect", "9:16"))
-                # Normalized {x,y} points (or None -> renderer default).
-                cap_pos = cfg.get("captionPosition")
-                ttl_pos = cfg.get("titlePosition")
-                ttl_size_raw = cfg.get("titleSize")
-                ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
-                clip_ids: list[UUID] = []
-                for plan in plans.clips[:clip_count]:
-                    segment = plan.to_segment()
-                    # Music: the Clip Agent's per-clip pick (plan.music_id) wins;
-                    # otherwise fall back to the brand template's default. No
-                    # MiniMax call — pieces are pre-generated library assets.
-                    music = await music_from_plan(db, plan, bt.config if bt else None)
-                    # render_spec = the actual render contract (None for
-                    # text-only projects).
-                    spec = (
-                        build_clip_spec(
-                            render_source,
-                            segment,
-                            target_language,
-                            kind=render_kind,
-                            aspect=aspect,
-                            caption_position=cap_pos,
-                            title_size=ttl_size,
-                            title_position=ttl_pos,
-                            image_urls=still_images if render_kind == "stills" else None,
-                            brand=brand,
-                            music=music,
-                            brand_ref=brand_ref,
+            # Run all requested derivatives concurrently.
+            derivative_outputs = [
+                output for output in outputs if output in _OUTPUT_TO_DERIVATIVE_TYPE
+            ]
+            if derivative_outputs:
+                await asyncio.gather(
+                    *[
+                        _run_derivative_task(
+                            run_id=run.id,
+                            project_id=project.id,
+                            user_id=project.user_id,
+                            output=output,
+                            derivative_type=_OUTPUT_TO_DERIVATIVE_TYPE[output],
+                            asset_texts=asset_texts,
+                            generation_context=generation_context,
+                            content_plan=content_plan,
+                            target_language=target_language,
+                            event_name=project.event_name,
                         )
-                        if render_source is not None
-                        else None
-                    )
-                    clip = Clip(
-                        project_id=project.id,
-                        hook=plan.hook,
-                        title_options=plan.title_options
-                        or ([plan.title] if plan.title else []),
-                        music_mood=plan.music_mood,
-                        duration=plan.duration_seconds,
-                        language=target_language,
-                        source_segment=segment.model_dump(),
-                        render_spec=spec.model_dump(mode="json") if spec else None,
-                        render_status=RenderStatus.PENDING if spec else None,
-                    )
-                    db.add(clip)
-                    clip_ids.append(clip.id)
-                await db.commit()
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-
-            # Generate each requested derivative in the original output order,
-            # preserving the legacy current_step values and progress tracking.
-            for output in outputs:
-                if output == "clips":
-                    continue
-                derivative_type = _OUTPUT_TO_DERIVATIVE_TYPE.get(output)
-                if derivative_type is None:
-                    continue
-
-                derivative_plan = next(
-                    (p for p in content_plan.derivatives if p.derivative_type == derivative_type),
-                    None,
+                        for output in derivative_outputs
+                    ]
                 )
-                if derivative_plan is None:
-                    logger.warning(
-                        "missing_derivative_plan",
-                        output=output,
-                        derivative_type=derivative_type.value,
-                    )
-                    derivative_plan = DerivativePlan(derivative_type=derivative_type)
 
-                run.current_step = output
-                await db.commit()
+            # Refresh run state after parallel work and finalize.
+            await db.refresh(run)
+            output_status = (run.context or {}).get("output_status", {})
+            failed_outputs = [
+                o for o, s in output_status.items() if s.get("status") == "failed"
+            ]
 
-                content = await generate_derivative(
-                    derivative_type=derivative_type,
-                    materials=materials,
-                    context=generation_context,
-                    content_plan=content_plan,
-                )
-                derivative = Derivative(
-                    project_id=project.id,
-                    type=derivative_type,
-                    content=content,
-                    language=target_language,
-                )
-                db.add(derivative)
-                await db.commit()
-
-                # Quote cards get a generated PNG for the first quote.
-                if derivative_type == DerivativeType.QUOTE_CARD:
-                    await db.refresh(derivative)
-                    quotes = content.get("quotes", []) if isinstance(content, dict) else []
-                    if quotes:
-                        first_quote = quotes[0]
-                        image_url = await _save_quote_card_image(
-                            quote=first_quote.get("quote", ""),
-                            attribution=first_quote.get("attribution", ""),
-                            derivative_id=derivative.id,
-                            project=project,
-                        )
-                        if image_url:
-                            derivative.image_url = image_url
-                            await db.commit()
-
-                done += 1
-                run.progress = int(done / total * 100)
-                await db.commit()
-
-            run.status = WorkflowStatus.COMPLETED
-            run.current_step = "done"
-            run.progress = 100
-            if project is not None:
+            if failed_outputs and len(failed_outputs) == len(output_status):
+                # All outputs failed: mark run failed.
+                run.status = WorkflowStatus.FAILED
+                run.error = "All outputs failed"
+                run.current_step = "done"
+                run.progress = 100
+            else:
+                run.status = WorkflowStatus.COMPLETED
+                run.error = None
+                run.current_step = "done"
+                run.progress = 100
                 project.status = ProjectStatus.REVIEW
                 project.updated_at = datetime.now(UTC)
+
             await db.commit()
-            logger.info("generation_completed", run_id=str(run_id), outputs=outputs)
+            logger.info(
+                "generation_completed",
+                run_id=str(run_id),
+                outputs=outputs,
+                failed=failed_outputs,
+            )
         except Exception as e:  # noqa: BLE001 — record any failure on the run
             logger.error("generation_failed", run_id=str(run_id), error=str(e))
             run.status = WorkflowStatus.FAILED

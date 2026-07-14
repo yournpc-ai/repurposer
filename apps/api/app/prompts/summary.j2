@@ -7,7 +7,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Based on the following speech materials and content plan, produce a structured summary. Requirements:
+Based on the following source texts and content plan, produce a structured summary. Requirements:
 - tldr: One sentence summarizing the core content
 - key_points: 3-6 key points, each one sentence
 - full: A full summary paragraph (150-300 words), preserving the speaker's original intent and core arguments
@@ -37,15 +37,15 @@ Based on the following speech materials and content plan, produce a structured s
 (No style profile provided)
 {% endif %}
 
-## Speech Materials
+## Source Texts
 
 {% if context.event_name %}
 Event: {{ context.event_name }}
 {% endif %}
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

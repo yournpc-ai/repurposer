@@ -173,7 +173,7 @@ async def generate_persona(
             speaker_name=speaker.name,
             speaker_title=speaker.title,
             language=speaker.language,
-            materials=materials,
+            asset_texts=materials,
         )
     except MiniMaxError as e:
         raise HTTPException(

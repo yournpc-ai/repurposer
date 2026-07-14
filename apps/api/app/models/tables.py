@@ -93,6 +93,7 @@ class Project(Base):
     language = Column(String(10), default="zh")
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
+    content_plan = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

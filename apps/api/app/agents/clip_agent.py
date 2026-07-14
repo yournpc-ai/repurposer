@@ -17,25 +17,25 @@ logger = structlog.get_logger()
 
 
 class ClipAgent(MiniMaxAgentBase):
-    """Agent that plans clips from a content plan and source materials."""
+    """Agent that plans clips from a content plan and source texts/media."""
 
     async def generate(
         self,
-        materials: list[str],
+        asset_texts: list[str],
         context: GenerationContext,
         content_plan: ContentPlan,
-        media_inputs: list[MediaInput] | None = None,
+        asset_media: list[MediaInput] | None = None,
         clip_count: int = 3,
         source_words: list[dict[str, Any]] | None = None,
         music_pieces: list[dict[str, str]] | None = None,
     ) -> ClipPlans:
-        """Plan clips from text materials and/or raw media.
+        """Plan clips from source texts and/or raw media.
 
         Args:
-            materials: Extracted text / transcripts from project assets.
+            asset_texts: Extracted text / transcripts from project assets.
             context: Shared generation context (speaker, brand, tone, language).
             content_plan: Unified content plan from the Content Director.
-            media_inputs: Optional images/videos/short audio snippets.
+            asset_media: Optional images/videos/short audio snippets from assets.
             clip_count: Number of clips to plan.
             source_words: Optional ASR word-level timestamps for the primary source
                 so the agent can output exact ``start_seconds`` / ``end_seconds``.
@@ -45,17 +45,17 @@ class ClipAgent(MiniMaxAgentBase):
         Returns:
             ClipPlans containing analysis and a list of ClipPlan objects.
         """
-        if not materials and not media_inputs:
-            raise MiniMaxError("No materials or media provided for clip planning")
+        if not asset_texts and not asset_media:
+            raise MiniMaxError("No source texts or media provided for clip planning")
 
-        media_inputs = media_inputs or []
-        trimmed_materials = self._trim_materials(materials)
-        if not trimmed_materials and not media_inputs:
+        asset_media = asset_media or []
+        trimmed_texts = self._trim_texts(asset_texts)
+        if not trimmed_texts and not asset_media:
             raise MiniMaxError("No usable text or media found")
 
         user_prompt = self.jinja_env.get_template("clip_agent.j2").render(
-            materials=trimmed_materials,
-            media_inputs=media_inputs,
+            asset_texts=trimmed_texts,
+            asset_media=asset_media,
             clip_count=clip_count,
             context=context.model_dump(),
             content_plan=content_plan.model_dump(),
@@ -71,13 +71,13 @@ class ClipAgent(MiniMaxAgentBase):
                     "director. You output valid JSON only, with no extra commentary."
                 ),
             },
-            self._build_user_message(user_prompt, media_inputs),
+            self._build_user_message(user_prompt, asset_media),
         ]
 
         logger.info(
             "clip_planning_started",
-            material_count=len(trimmed_materials),
-            media_count=len(media_inputs),
+            text_count=len(trimmed_texts),
+            media_count=len(asset_media),
             clip_count=clip_count,
             target_language=context.target_language,
         )
@@ -86,7 +86,7 @@ class ClipAgent(MiniMaxAgentBase):
             plans = await self._generate_with_fallback(
                 messages=messages,
                 user_prompt=user_prompt,
-                media_inputs=media_inputs,
+                media_inputs=asset_media,
                 response_model=ClipPlans,
                 temperature=0.4,
             )

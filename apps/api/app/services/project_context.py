@@ -4,7 +4,7 @@ This module centralizes small, repeated patterns that appear across generation,
 derivative regeneration, and clip revision:
 
 - fetch a project and verify ownership
-- collect text materials from a project's assets
+- collect asset texts from a project's assets
 - resolve a project's speaker
 - validate a clip for revision
 """
@@ -44,7 +44,7 @@ async def get_project_for_user(
     return project
 
 
-async def collect_materials(
+async def collect_asset_texts(
     db: AsyncSession,
     project_id: UUID,
 ) -> list[str]:

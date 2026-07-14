@@ -1,4 +1,4 @@
-"""LinkedIn Agent: generate LinkedIn posts from project materials."""
+"""LinkedIn Agent: generate LinkedIn posts from source texts."""
 
 from pathlib import Path
 
@@ -17,39 +17,39 @@ _jinja_env = Environment(
     autoescape=select_autoescape(),
 )
 
-_MAX_CHARS_PER_MATERIAL = 150_000
+_MAX_CHARS_PER_TEXT = 150_000
 
 
 class LinkedInAgent:
-    """Agent that generates LinkedIn posts from speech materials."""
+    """Agent that generates LinkedIn posts from source texts."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
 
     async def generate(
         self,
-        materials: list[str],
+        asset_texts: list[str],
         context: GenerationContext,
         content_plan: ContentPlan,
     ) -> LinkedInPost:
         """Generate a LinkedIn post.
 
         Args:
-            materials: Extracted text from project assets.
+            asset_texts: Extracted text from project assets.
             context: Shared generation context.
             content_plan: Unified content plan.
 
         Returns:
             LinkedInPost model.
         """
-        if not materials:
-            raise MiniMaxError("No materials provided for LinkedIn generation")
+        if not asset_texts:
+            raise MiniMaxError("No source texts provided for LinkedIn generation")
 
-        trimmed_materials = [
-            m[:_MAX_CHARS_PER_MATERIAL] for m in materials if m and m.strip()
+        trimmed_texts = [
+            t[:_MAX_CHARS_PER_TEXT] for t in asset_texts if t and t.strip()
         ]
-        if not trimmed_materials:
-            raise MiniMaxError("No usable text found in materials")
+        if not trimmed_texts:
+            raise MiniMaxError("No usable text found in source texts")
 
         derivative_plan = _find_derivative_plan(
             content_plan, "linkedin_post"
@@ -57,7 +57,7 @@ class LinkedInAgent:
 
         template = _jinja_env.get_template("linkedin.j2")
         user_prompt = template.render(
-            materials=trimmed_materials,
+            asset_texts=trimmed_texts,
             context=context.model_dump(),
             content_plan=content_plan.model_dump(),
             derivative_plan=derivative_plan,

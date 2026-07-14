@@ -1,4 +1,4 @@
-"""Carousel Agent: generate a LinkedIn/social carousel from project materials."""
+"""Carousel Agent: generate a LinkedIn/social carousel from source texts."""
 
 from pathlib import Path
 
@@ -17,7 +17,7 @@ _jinja_env = Environment(
     autoescape=select_autoescape(),
 )
 
-_MAX_CHARS_PER_MATERIAL = 150_000
+_MAX_CHARS_PER_TEXT = 150_000
 
 
 class CarouselAgent:
@@ -28,35 +28,35 @@ class CarouselAgent:
 
     async def generate(
         self,
-        materials: list[str],
+        asset_texts: list[str],
         context: GenerationContext,
         content_plan: ContentPlan,
     ) -> CarouselResponse:
-        """Generate a carousel from speech materials.
+        """Generate a carousel from source texts.
 
         Args:
-            materials: Extracted text from project assets.
+            asset_texts: Extracted text from project assets.
             context: Shared generation context.
             content_plan: Unified content plan.
 
         Returns:
             CarouselResponse model.
         """
-        if not materials:
-            raise MiniMaxError("No materials provided for carousel generation")
+        if not asset_texts:
+            raise MiniMaxError("No source texts provided for carousel generation")
 
-        trimmed_materials = [
-            m[:_MAX_CHARS_PER_MATERIAL] for m in materials if m and m.strip()
+        trimmed_texts = [
+            t[:_MAX_CHARS_PER_TEXT] for t in asset_texts if t and t.strip()
         ]
-        if not trimmed_materials:
-            raise MiniMaxError("No usable text found in materials")
+        if not trimmed_texts:
+            raise MiniMaxError("No usable text found in source texts")
 
         derivative_plan = _find_derivative_plan(content_plan, "carousel")
         count = derivative_plan.get("count") or 6
 
         template = _jinja_env.get_template("carousel.j2")
         user_prompt = template.render(
-            materials=trimmed_materials,
+            asset_texts=trimmed_texts,
             context=context.model_dump(),
             content_plan=content_plan.model_dump(),
             derivative_plan=derivative_plan,

@@ -7,7 +7,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Extract {{ count }} quotes from the following speech material. Each quote must:
+Extract {{ count }} quotes from the following source text. Each quote must:
 - Be 20–80 characters in length, suitable for a graphic card
 - Be able to stand alone and resonate without context
 - Match the speaker's style and brand voice
@@ -53,11 +53,11 @@ Consider using or adapting these candidate quotes from the content plan:
 (No style profile provided)
 {% endif %}
 
-## Speech Material
+## Source Texts
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

@@ -1,6 +1,6 @@
-"""Content Director: produces a unified ContentPlan from source materials.
+"""Content Director: produces a unified ContentPlan from source texts and media.
 
-The director performs a single analysis pass over the project's materials and
+The director performs a single analysis pass over the project's source texts and
 media inputs, then emits a ContentPlan that all downstream agent executors
 share. This guarantees that clips, LinkedIn posts, quote cards, carousels,
 summaries, and blog posts reinforce the same core thesis and brand strategy.
@@ -23,39 +23,39 @@ logger = structlog.get_logger()
 
 
 class ContentDirectorAgent(MiniMaxAgentBase):
-    """Agent that produces a unified content plan from source materials."""
+    """Agent that produces a unified content plan from source texts and media."""
 
     async def plan(
         self,
-        materials: list[str],
+        asset_texts: list[str],
         context: GenerationContext,
-        media_inputs: list[MediaInput] | None = None,
+        asset_media: list[MediaInput] | None = None,
         requested_derivatives: list[DerivativeType] | None = None,
     ) -> ContentPlan:
-        """Generate a ContentPlan from materials and generation context.
+        """Generate a ContentPlan from source texts and generation context.
 
         Args:
-            materials: Extracted text / transcripts from project assets.
+            asset_texts: Extracted text / transcripts from project assets.
             context: Shared generation context (speaker, brand, tone, language).
-            media_inputs: Optional images/videos/short audio snippets.
+            asset_media: Optional images/videos/short audio snippets from assets.
             requested_derivatives: Derivative types the user asked for.
 
         Returns:
             ContentPlan containing core thesis, themes, audience, and per-output
             derivative plans.
         """
-        if not materials and not media_inputs:
-            raise MiniMaxError("No materials or media provided for content planning")
+        if not asset_texts and not asset_media:
+            raise MiniMaxError("No source texts or media provided for content planning")
 
-        media_inputs = media_inputs or []
+        asset_media = asset_media or []
         requested_derivatives = requested_derivatives or []
-        trimmed_materials = self._trim_materials(materials)
-        if not trimmed_materials and not media_inputs:
+        trimmed_texts = self._trim_texts(asset_texts)
+        if not trimmed_texts and not asset_media:
             raise MiniMaxError("No usable text or media found")
 
         user_prompt = self.jinja_env.get_template("content_director.j2").render(
-            materials=trimmed_materials,
-            media_inputs=media_inputs,
+            asset_texts=trimmed_texts,
+            asset_media=asset_media,
             context=context.model_dump(),
             requested_derivatives=[d.value for d in requested_derivatives],
         )
@@ -65,17 +65,17 @@ class ContentDirectorAgent(MiniMaxAgentBase):
                 "role": "system",
                 "content": (
                     "You are a senior content strategist. You analyze source "
-                    "materials and output a single coherent content plan as valid "
+                    "texts and media and output a single coherent content plan as valid "
                     "JSON, with no extra commentary."
                 ),
             },
-            self._build_user_message(user_prompt, media_inputs),
+            self._build_user_message(user_prompt, asset_media),
         ]
 
         logger.info(
             "content_director_started",
-            material_count=len(trimmed_materials),
-            media_count=len(media_inputs),
+            text_count=len(trimmed_texts),
+            media_count=len(asset_media),
             derivative_count=len(requested_derivatives),
             target_language=context.target_language,
         )
@@ -84,7 +84,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
             plan = await self._generate_with_fallback(
                 messages=messages,
                 user_prompt=user_prompt,
-                media_inputs=media_inputs,
+                media_inputs=asset_media,
                 response_model=ContentPlan,
                 temperature=0.4,
             )

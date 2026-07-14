@@ -1,4 +1,4 @@
-You are a professional speaking style analyst. Your task is to read a speaker's materials and distill a unique expression style portrait and content memory.
+You are a professional speaking style analyst. Your task is to read a speaker's source texts and distill a unique expression style portrait and content memory.
 
 ## Speaker Basic Information
 
@@ -10,7 +10,7 @@ You are a professional speaking style analyst. Your task is to read a speaker's 
 
 ## Analysis Requirements
 
-Please summarize the speaker's style and content memory across 10 dimensions based on the following materials. Write all extracted descriptions in {{ language }}.
+Please summarize the speaker's style and content memory across 10 dimensions based on the following source texts. Write all extracted descriptions in {{ language }}.
 
 Style memory:
 1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
@@ -26,11 +26,11 @@ Content memory:
 9. **Content Guidelines (guidelines)**: Do's and don'ts for creating content in this speaker's voice (a short paragraph)
 10. **Default CTA (cta)**: A short, reusable call to action or engagement prompt
 
-## Past Materials
+## Source Texts
 
-{% for material in materials %}
---- Material {{ loop.index }} ---
-{{ material }}
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
 
 {% endfor %}
 

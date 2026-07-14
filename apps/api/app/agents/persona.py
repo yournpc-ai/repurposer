@@ -1,4 +1,4 @@
-"""Persona Agent: generate speaker style and content memory from materials."""
+"""Persona Agent: generate speaker style and content memory from source texts."""
 
 from pathlib import Path
 
@@ -17,8 +17,8 @@ _jinja_env = Environment(
     autoescape=select_autoescape(),
 )
 
-# Maximum characters to send per material to stay well within 1M context
-_MAX_CHARS_PER_MATERIAL = 150_000
+# Maximum characters to send per text to stay well within 1M context
+_MAX_CHARS_PER_TEXT = 150_000
 
 
 class _ExtractedSpeakerMemory(BaseModel):
@@ -37,7 +37,7 @@ class _ExtractedSpeakerMemory(BaseModel):
 
 
 class PersonaAgent:
-    """Agent that analyzes speaker materials and produces extracted memory."""
+    """Agent that analyzes source texts and produces extracted memory."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
@@ -47,25 +47,25 @@ class PersonaAgent:
         speaker_name: str,
         speaker_title: str | None,
         language: str,
-        materials: list[str],
+        asset_texts: list[str],
     ) -> _ExtractedSpeakerMemory:
-        """Generate speaker style and content memory from raw text materials.
+        """Generate speaker style and content memory from extracted asset texts.
 
         Args:
             speaker_name: Speaker name.
             speaker_title: Speaker title/role.
             language: Primary language (zh, en, etc.).
-            materials: List of extracted text from past materials.
+            asset_texts: List of extracted text from project assets.
 
         Returns:
             Extracted memory mapped to Speaker DB columns.
         """
-        if not materials:
-            raise MiniMaxError("No materials provided for persona generation")
+        if not asset_texts:
+            raise MiniMaxError("No source texts provided for persona generation")
 
-        # Truncate each material to avoid blowing context
-        trimmed_materials = [
-            m[:_MAX_CHARS_PER_MATERIAL] for m in materials if m and m.strip()
+        # Truncate each text to avoid blowing context
+        trimmed_texts = [
+            t[:_MAX_CHARS_PER_TEXT] for t in asset_texts if t and t.strip()
         ]
 
         template = _jinja_env.get_template("persona.j2")
@@ -73,7 +73,7 @@ class PersonaAgent:
             speaker_name=speaker_name,
             speaker_title=speaker_title,
             language=language,
-            materials=trimmed_materials,
+            asset_texts=trimmed_texts,
         )
 
         messages = [
@@ -90,8 +90,8 @@ class PersonaAgent:
         logger.info(
             "speaker_extraction_started",
             speaker_name=speaker_name,
-            material_count=len(trimmed_materials),
-            total_chars=sum(len(m) for m in trimmed_materials),
+            text_count=len(trimmed_texts),
+            total_chars=sum(len(t) for t in trimmed_texts),
         )
 
         try:
