@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageSquarePlus, Bell, Star } from "lucide-react"
+import { Bell, Star } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
 
@@ -27,7 +27,6 @@ export const Route = createFileRoute("/")({
 })
 
 function Home() {
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const [projectCount, setProjectCount] = useState(0)
   const [speakers, setSpeakers] = useState<Speaker[]>([])
@@ -55,12 +54,7 @@ function Home() {
   return (
     <div className="flex min-h-svh flex-1 flex-col">
       {/* Global top bar */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <Button variant="outline" className="gap-2" onClick={() => navigate({ to: "/" })}>
-          <MessageSquarePlus className="h-4 w-4" />
-          {t("home.newChat")}
-        </Button>
-
+      <header className="flex items-center justify-end px-6 py-4">
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <LanguageSwitcher />
