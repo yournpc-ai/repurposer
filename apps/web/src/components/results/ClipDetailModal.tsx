@@ -79,6 +79,26 @@ export function ClipDetailModal({
     (clipState.render_spec as { caption_track?: { start: number; end: number; text: string }[] } | null)
       ?.caption_track || []
 
+  // Word-level captions are grouped into sentence-level lines for readable transcript browsing.
+  const transcriptLines = transcript.reduce<
+    { start: number; end: number; text: string }[]
+  >((lines, cue) => {
+    const text = cue.text.trim()
+    if (!text) return lines
+
+    const last = lines[lines.length - 1]
+    const endsSentence = /[.!?。！？]$/.test(text)
+
+    if (!last || endsSentence || last.text.length > 120) {
+      lines.push({ start: cue.start, end: cue.end, text })
+    } else {
+      last.end = cue.end
+      last.text += ` ${text}`
+    }
+
+    return lines
+  }, [])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-0">
@@ -150,14 +170,14 @@ export function ClipDetailModal({
             </TabsContent>
 
             <TabsContent value="transcript" className="pt-2">
-              {transcript.length > 0 ? (
+              {transcriptLines.length > 0 ? (
                 <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
-                  {transcript.map((cue, i) => (
-                    <div key={i} className="flex gap-3 text-sm">
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatTime(cue.start)}
+                  {transcriptLines.map((line, i) => (
+                    <div key={i} className="flex items-baseline gap-3 text-sm">
+                      <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
+                        {formatTime(line.start)} - {formatTime(line.end)}
                       </span>
-                      <p className="leading-relaxed">{cue.text}</p>
+                      <p className="leading-relaxed">{line.text}</p>
                     </div>
                   ))}
                 </div>

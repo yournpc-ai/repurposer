@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { Play } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -32,6 +32,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
   )
   const [renderError, setRenderError] = useState<string | null>(clip.render_error)
   const [isPlaying, setIsPlaying] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Keep local state in sync if the parent re-renders with updated data.
   useEffect(() => {
@@ -44,7 +45,13 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     }
   }, [clip, isRendering])
 
-  // Poll render status after the user queues a render.
+  useEffect(() => {
+    if (isPlaying && videoRef.current) {
+      videoRef.current.play().catch(() => {
+        // Autoplay blocked; keep controls visible so the user can start playback.
+      })
+    }
+  }, [isPlaying])
   useEffect(() => {
     if (!isRendering) return
 
@@ -127,13 +134,18 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
       <Card className="group flex flex-col overflow-hidden ring-1 ring-border shadow-xl">
         {/* Thumbnail / player */}
         <div
-          className="relative aspect-[9/16] w-full cursor-pointer overflow-hidden bg-muted"
-          onClick={() => !isPlaying && setDetailOpen(true)}
+          className="relative aspect-square w-full cursor-pointer overflow-hidden bg-muted"
+          onClick={(e) => {
+            const target = e.target as HTMLElement
+            if (target.closest("[data-play-trigger]")) return
+            if (!isPlaying) setDetailOpen(true)
+          }}
         >
           {isPlaying && clipState.video_url ? (
             <video
+              ref={videoRef}
               src={toAbsoluteUrl(clipState.video_url) || undefined}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
               controls
               autoPlay
               playsInline
@@ -147,18 +159,20 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
                 <img
                   src={thumbnailUrl || undefined}
                   alt={clipState.title || clipState.hook}
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  className="h-full w-full object-contain transition-transform group-hover:scale-105"
                 />
               ) : (
                 <video
                   src={thumbnailUrl || undefined}
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  className="h-full w-full object-contain transition-transform group-hover:scale-105"
                   preload="metadata"
                   muted
                 />
               )}
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
               <button
                 type="button"
+                data-play-trigger
                 onClick={(e) => {
                   e.stopPropagation()
                   if (clipState.video_url) {
@@ -168,15 +182,15 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
                   }
                 }}
                 disabled={isRendering}
-                className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20"
+                className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                   {isRendering ? (
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   ) : (
                     <Play className="h-5 w-5 fill-current" />
                   )}
-                </div>
+                </span>
               </button>
             </>
           ) : (
@@ -208,7 +222,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
         </div>
 
         {/* Info */}
-        <div className="flex flex-1 flex-col justify-between p-4">
+        <div className="flex flex-1 flex-col justify-between p-3">
           <div className="space-y-1">
             {clipState.topic ? (
               <Badge variant="secondary" className="text-[10px]">{clipState.topic}</Badge>
@@ -221,7 +235,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
             <p className="text-xs text-muted-foreground">{formatDuration(clipState.duration)}</p>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-2">
             <AssetActionBar
               onEdit={handleEdit}
               onDownload={clipState.video_url ? handleDownload : undefined}
