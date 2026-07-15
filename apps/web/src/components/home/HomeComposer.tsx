@@ -94,8 +94,6 @@ type OutputKey = (typeof OUTPUT_OPTIONS)[number]
 const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = [
   "clips",
   "post",
-  "quotes",
-  "article",
 ]
 
 const OUTPUT_ICONS = {
