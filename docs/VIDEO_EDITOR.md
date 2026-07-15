@@ -3,6 +3,7 @@
 > This document records the final plan for Repurposer's "portrait video output + editable" main pipeline.
 > It is the conclusion of multiple rounds of technical reviews (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
 > See also: ADR-016 (decision record), ADR-017 (queue foundation, implemented).
+> Last updated: 2026-07-16.
 
 ## 1. Background & Category Positioning
 
@@ -52,7 +53,7 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
   // url is the optional audio track (empty string if no recording), image_urls are background images (0→solid color / 1→full screen / N→evenly split hard-cut slideshow)
   "source": { "asset_id": "uuid", "kind": "video", "url": "/api/v1/files/...mp4", "image_urls": [], "fps": 30, "duration": 120.5 },
   "aspect": "9:16",                         // 9:16 | 1:1
-  "segments": [                              // retained interval list; deleting a sentence = mark a segment as hidden (non-destructive)
+  "segments": [                              // retained interval list; deleting a sentence = mark a segment as hidden (non-destructive). Each retained segment must be at least 5 seconds after agent planning.
     { "start": 12.4, "end": 31.0, "hidden": false }
   ],
   "crop": { "x": 0.5, "y": 0.5, "scale": 1.0 }, // normalized center + scale; implemented with transform, not object-position
@@ -195,6 +196,9 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 
 - The backend generates `carousel` and `blog` derivative types alongside clips, LinkedIn posts, quote cards, and summaries. As of the current build, the project results page (`/projects/$id`) only renders tabs for **clips, LinkedIn, quote cards, and summaries**; carousel and blog outputs exist in the API but are not yet surfaced in the UI or the library endpoint.
 - The clip editor route (`/projects/$id/clips/$clipId`) uses the shared `@repurposer/clip` component inside a Remotion `<Player>` and supports caption editing, language switching, render triggering, and export. The full Descript-style single-track trim strip described in §7 is partially wired through `trimBounds`/`removeRange` helpers but not yet fully exposed in the UI.
+- **Clip card rendering state**: on the project results page, a clip with `render_status` of `pending` or `rendering` shows a spinner overlay, hides the action bar, and disables hover playback / detail open until rendering completes or fails.
+- **Clip download**: the frontend requests rendered outputs with `?download=1` so the API returns `Content-Disposition: attachment`, prompting the browser to save the MP4/SRT instead of playing it inline.
+- **Project thumbnails**: the home page project cards display the earliest rendered clip as a video thumbnail with a duration / aspect badge; the API left-joins the first rendered clip per project in `GET /api/v1/projects`.
 
 ## 11. Validation
 

@@ -1,6 +1,6 @@
 # API Specification
 
-> Status: Draft, updated iteratively as development progresses.
+> Status: Draft, updated iteratively as development progresses. Last updated: 2026-07-16.
 
 ## 1. Basics
 
@@ -57,7 +57,8 @@ Source video uploads, rendered outputs, and built-in music tracks are all served
 ```http
 GET /api/v1/files/{file_path}
 GET /api/v1/outputs/{file_path}
-GET /api/v1/music/{mood}        # Built-in mood library, e.g. calm / uplifting / corporate
+GET /api/v1/outputs/{file_path}?download=1   # Force download with Content-Disposition: attachment
+GET /api/v1/music/{mood}                     # Built-in mood library, e.g. calm / uplifting / corporate
 ```
 
 ## 4. Error Format
@@ -182,7 +183,23 @@ Request:
 GET /api/v1/projects?speaker_id=uuid
 ```
 
-### Get Project Detail
+Response now includes a representative clip thumbnail for each project:
+
+```json
+[
+  {
+    "id": "uuid",
+    "title": "...",
+    "updated_at": "2026-07-16T...",
+    "thumbnail_url": "/api/v1/outputs/.../clip.mp4",
+    "thumbnail_duration": 62,
+    "thumbnail_aspect": "9:16"
+  }
+]
+```
+
+- `thumbnail_url` points to the earliest rendered clip for the project.
+- Demo project is hidden from the list once the user has created any real project.
 
 ```http
 GET /api/v1/projects/{project_id}

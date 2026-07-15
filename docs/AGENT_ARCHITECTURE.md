@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
 > Status: implemented on main
-> Last updated: 2026-07-14
+> Last updated: 2026-07-16
 
 ## 1. Overview
 
@@ -105,6 +105,17 @@ The generated `ContentPlan` is persisted to `Project.content_plan` (JSON column)
 
 It outputs JSON matching `ContentPlan`.
 
+### 4.5 Director output constraints
+
+`ContentPlan.derivatives` must only contain **text derivative** plans. Valid `derivative_type` values are:
+
+- `post`
+- `quotes`
+- `carousel`
+- `article`
+
+The director must **never** emit `clips`, `short_clips`, `video`, or any other non-text type. Clips are planned separately by the `ClipAgent` because they require word-level timestamp alignment and segment-level constraints (e.g., minimum duration) that do not apply to text outputs. If the user did not request any text derivatives, the director returns an empty `derivatives` array.
+
 ## 5. Layer 3: Agent Executors
 
 All content executors share the same interface:
@@ -131,7 +142,18 @@ Each executor extracts its own guidance from `content_plan.derivatives` by match
 | Carousel | `app/agents/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
 | Article | `app/agents/article.py` | `ArticleAgent` | `Article` | |
 
-### 5.2 Prompt templates
+### 5.2 Clip agent constraints
+
+`ClipAgent` plans video segments from the source transcript's word-level timestamps. Every planned clip must satisfy:
+
+- `start_seconds < end_seconds`.
+- **Minimum duration of 5 seconds**; if the selected words produce a shorter segment, the agent extends the selection by including surrounding words until the duration is at least 5 seconds.
+- No overlap between consecutive clips; each subsequent clip starts after the previous one ends.
+- `duration_seconds` is clamped to `5–120` seconds.
+
+These constraints are enforced in `app/prompts/clip_agent.j2` and validated by `ClipPlans` before `Clip` rows are created.
+
+### 5.3 Prompt templates
 
 Each prompt template receives `asset_texts`, `context`, and `content_plan`:
 

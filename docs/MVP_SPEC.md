@@ -1,6 +1,6 @@
 # Repurposer MVP 产品规格文档
 
-> 版本：2026-07-04  
+> 版本：2026-07-16  
 > 状态：已实现基准规格（随代码迭代持续更新）  
 > 背景：基于 OpusClip / Seedance 调研以及当前 Repurposer 已有代码，收敛出投资人 demo 阶段的最小闭环。
 
@@ -91,9 +91,10 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 
 ### 4.1 总体原则
 
-- **除了 composer 之外，其他布局不变**
+- 顶部全局栏右侧保留 Theme / Language / Notification 入口，**New Chat 按钮已移除**（首页本身就是创建入口）
 - Recent projects 区域保留在页面最下方
 - Demo project 就是 Recent projects 区域中的一个真实 project item，**不单独做一个 “Demo showcase” 模块**
+- 有真实项目后 demo project 自动隐藏
 
 ### 4.2 页面状态
 
@@ -125,14 +126,14 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 │  Hero + composer                                           │
 ├────────────────────────────────────────────────────────────┤
 │  Recent projects                                           │
-│  [Project 1] [Project 2] [Demo Project] ...                │
+│  [Project 1] [Project 2] ...                               │
+│  （Demo project 不再显示）                                  │
 └────────────────────────────────────────────────────────────┘
 ```
 
-- Demo project 固定在 Recent projects 的**最后**
-- 真实 project 按更新时间倒序排列在前面
-- 如果用户没有任何真实 project，demo 自然显示在最前面
-- 每个 project card 展示：标题、最后更新时间、产物类型标签、缩略图/图标
+- 真实 project 按更新时间倒序排列
+- 每个 project card 展示：标题、最后更新时间、缩略图（首个渲染完成的 clip）、时长 / 比例角标
+- **当用户已创建任意真实 project 时，demo project 被隐藏**，避免占用首页空间；仅在用户无任何真实项目时作为 onboarding 示例出现
 
 ### 4.3 Composer / 内嵌 Workflow
 
@@ -144,19 +145,20 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  ┌─────┐                                                   │
-│  │ +   │  Paste transcript or upload a video/audio/file... │
-│  └─────┘                                                   │
-│                                                            │
-│                   [ Generate knowledge assets → ]          │
+│  ┌─────┐  Paste transcript or upload a video/audio/file... │
+│  │ +   │                                                   │
+│  └─────┘                                          [ ↑ ]    │
 │                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ AI detected your intent — edit below before generating │  │
-│  │                                                       │  │
-│  │  Speaker ▾  Brand ▾  Tone ▾  Language ▾  Outputs ▾   │  │
+│  │  Speaker ▾  Brand ▾  Language ▾  Outputs ▾     ✨   │  │
 │  └──────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────┘
 ```
+
+- 左侧上传入口支持多文件；已上传文件以堆叠卡片展示，再次点击“+”可追加
+- 右侧为固定高度的文本输入区；右下角放置圆形发送按钮（生成中显示 spinner）
+- 参数 pills 位于输入区下方同一行：Speaker / Brand template / Language / Outputs；最右侧为 AI 意图状态图标（hover 显示当前识别状态）
+- 点击 pill 展开下拉菜单 / Popover 修改参数；被用户手动修改的参数会被 **锁定**，后续 prompt 变化不再覆盖
 
 #### 意图识别层
 
@@ -166,7 +168,8 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
   - `outputs`：请求的产物类型（clips / post / quotes / article / carousel）
   - `tone`：professional / thoughtLeadership / conversational / academic
   - `specific_instruction`： distilled 后的具体指令
-- 识别结果展示在输入区下方的确认面板中
+- 识别结果通过参数 pill 上的 AI 图标 tooltip 反馈，不再占用输入区下方的大块确认面板
+- 如果 prompt 为空或用户未输入，前端会根据当前选中的 outputs / language / clip_count 自动拼写一段示例 prompt；用户开始输入后不再自动覆盖
 - 用户可以手动修改任何参数；被修改的参数会被 **锁定**，后续 prompt 变化不再覆盖
 - 如果识别失败或服务不可用，fallback 到高置信度默认值
 
@@ -174,16 +177,16 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 
 | 参数 | 默认值 | 选项 | 来源 |
 |---|---|---|---|
-| Speaker | 当前用户的第一个 speaker | 下拉选择所有 speakers | 用户选择 |
+| Speaker | 从素材提取 | 下拉选择所有 speakers / 从素材提取 | 用户选择 |
 | Brand template | 默认 brand template | 下拉选择所有 brand templates | 用户选择 |
 | Tone | `professional` | 现有 TONES 枚举 | AI 推断 + 可改 |
 | Language | `en` | en / fr / de / es / it / zh | AI 推断 + 可改 |
-| Outputs | clips + post + quotes + article | 可多选；carousel 默认不选中 | AI 推断 + 可改 |
+| Outputs | **clips + post** | 可多选；quotes / article / carousel 默认不选中 | AI 推断 + 可改 |
 
 #### 行为
 
 1. 用户上传/粘贴后，file/prompt 变为有效状态
-2. 用户输入 prompt 时，AI 实时推断意图并在下方展示可编辑的确认面板
+2. 用户输入 prompt 时，AI 实时推断意图并通过参数 pill 旁的 AI 图标反馈；用户可随时展开 pill 手动修改参数
 3. 点击 Generate → 调用 `POST /api/v1/projects` 创建 project → 上传 asset → 创建 user message → 触发 generation
 4. **页面跳转到 `/projects/$id`**（Home 保持原样，不原地变形）
 5. 前端通过轮询 `GET /api/v1/projects/{id}/results` 等待生成完成并展示结果卡片
