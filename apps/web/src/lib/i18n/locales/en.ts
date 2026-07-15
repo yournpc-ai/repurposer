@@ -45,8 +45,8 @@ const en = {
     heroSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs, just like you'd make it yourself.",
     placeholder:
       "Describe what you want to generate, e.g. turn this 45-minute AI safety talk into 5 LinkedIn posts, 10 quote cards, a German summary, and a newsletter draft...",
-    uploadSource: "Upload source",
-    uploadSourceTooltip: "Upload transcript, slides, audio, or video",
+    uploadSource: "Upload file",
+    uploadSourceTooltip: "Upload a transcript, slides, audio, video, or images",
     pastePlaceholder:
       "Paste your transcript, interview notes, or speech text… or upload audio/video/docs on the left.",
     selectSpeaker: "Speaker",
@@ -200,7 +200,7 @@ const en = {
     jobRunning: "Generating",
     jobFailed: "Generation failed",
     generating: "Generating...",
-    uploadTranscript: "Upload source",
+    uploadTranscript: "Upload file",
     uploading: "Uploading...",
     uploadHint: "Upload a transcript, slides, audio, video, or images — clips render from audio/video or an image audiogram",
     noMaterials: "No transcript uploaded yet.",
@@ -472,7 +472,7 @@ const en = {
     copy: "Copy",
     copied: "Copied",
     openInEditor: "Open in editor",
-    uploadFile: "Upload source",
+    uploadFile: "Upload file",
     uploading: "Uploading...",
     composerPlaceholder: "Describe what you want to generate...",
     composerFollowUpPlaceholder: "Ask a follow-up, e.g. 'make the hook shorter' or 'add German version'...",
