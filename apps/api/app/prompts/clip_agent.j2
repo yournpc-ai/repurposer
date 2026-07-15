@@ -20,6 +20,15 @@ For each clip you must both:
 1. **Select the segment**: identify the most shareable moment from the source material.
 2. **Write the script**: craft a strong hook, title, shot breakdown, and select background music for that segment.
 
+## Captions / Subtitles
+
+The pipeline can automatically burn word-level captions into the rendered video using ASR. Set `caption_enabled` to tell the renderer whether to overlay captions for this clip:
+
+- `true` (default): burn captions. Use this when the source has no readable on-screen text, when the audio is essential to understanding (talks, interviews, podcasts), or when captions improve accessibility.
+- `false`: do NOT burn captions. Use this when the source video already has clear hard-coded subtitles/burned-in captions that would overlap with our overlay, or when the clip is visual-only (e.g., a stills slideshow with no speech and no need for text).
+
+If you are unsure and the source is a normal speech video, default to `true`.
+
 {% if context.instruction %}
 ## User Instruction (Highest Priority)
 
@@ -177,6 +186,7 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "music_id": "uuid of the chosen music piece, or null",
       "music_enabled": true,
       "music_gain_db": -18.0,
+      "caption_enabled": true,
       "visual_notes": "Optional notes on visual emphasis, gestures, or slide content to highlight",
       "title_options": [
         "Title option 1",
@@ -196,6 +206,7 @@ Requirements:
 - duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)
 - music_mood must be one of: calm, uplifting, corporate
 - music_id must be one of the listed piece ids, or null
+- caption_enabled must be true or false (see Captions / Subtitles section above)
 - `title` is the clip's publishing title; keep `title_options` as alternative hook/title candidates
 - `description` should be 1-2 sentences suitable as a social caption
 - `hashtags` should be 3-5 relevant tags without the `#` symbol

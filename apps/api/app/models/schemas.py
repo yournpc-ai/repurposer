@@ -499,6 +499,10 @@ class ClipPlan(BaseModel):
     description: str = ""
     hashtags: list[str] = Field(default_factory=list)
     topic: str = ""
+    # When false, the renderer skips burned-in captions (e.g., source video
+    # already has hard-coded subtitles). ASR is still performed so the transcript
+    # and SRT export remain available.
+    caption_enabled: bool = True
 
     def to_segment(self) -> "Segment":
         return Segment(
@@ -807,6 +811,8 @@ class ClipBrand(BaseModel):
     intro: IntroOutroCard | None = None  # opening card (None = no intro)
     outro: IntroOutroCard | None = None  # closing card (None = no outro)
     fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
+    # Default from brand template; Clip plan can override per clip.
+    caption_enabled: bool = True
 
 
 class ClipSpec(BaseModel):
@@ -823,6 +829,7 @@ class ClipSpec(BaseModel):
     # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset).
     caption_style_preset: Literal["clean-bottom", "karaoke-highlight"] = "clean-bottom"
     caption_position: Point | None = None  # normalized center; None -> default (bottom)
+    caption_enabled: bool = True  # when false, caption_track is not burned into video
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)
     dub: ClipDub | None = None  # cloned-voice dub; replaces source audio when enabled

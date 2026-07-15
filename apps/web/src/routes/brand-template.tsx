@@ -85,6 +85,7 @@ type Template = {
   captionSize: number
   captionColor: string
   captionPosition: Pt
+  captionEnabled: boolean
   titleSize: number
   titlePosition: Pt
   introEnabled: boolean
@@ -113,6 +114,7 @@ const DEFAULT_TEMPLATE: Template = {
   captionSize: 44,
   captionColor: "#facc15",
   captionPosition: { x: 0.5, y: 0.84 },
+  captionEnabled: true,
   titleSize: 58,
   titlePosition: { x: 0.5, y: 0.12 },
   introEnabled: false,
@@ -167,6 +169,7 @@ function templateToBrand(tpl: Template): ClipBrand {
     intro: introOutroCard(tpl.introEnabled, tpl.introKind, tpl.introText, tpl.introMediaUrl),
     outro: introOutroCard(tpl.outroEnabled, tpl.outroKind, tpl.outroText, tpl.outroMediaUrl),
     fill_mode: tpl.fillMode,
+    caption_enabled: tpl.captionEnabled,
   }
 }
 
@@ -189,6 +192,7 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
     caption_track,
     caption_style_preset: tpl.keywordHighlighter ? "karaoke-highlight" : "clean-bottom",
     caption_position: tpl.captionPosition,
+    caption_enabled: tpl.captionEnabled,
     title: { text: DEMO_TITLE, enabled: true, size: tpl.titleSize, position: tpl.titlePosition },
     // Preview plays the selected music piece via its real stream URL so the
     // brand-template preview matches the actual render (see services/brand.py
@@ -737,6 +741,13 @@ function BrandTemplatePage() {
                 </TabsContent>
 
                 <TabsContent value="caption" className="space-y-4">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm">{t("brandTemplate.caption.enable")}</span>
+                    <Switch
+                      checked={template.captionEnabled}
+                      onCheckedChange={(v) => update("captionEnabled", v)}
+                    />
+                  </label>
                   <Field label={t("brandTemplate.caption.font")}>
                     <Select
                       value={template.captionFont}

@@ -314,6 +314,7 @@ const en = {
       font: "Font",
       size: "Size",
       color: "Color",
+      enable: "Burn captions",
     },
     content: {
       voice: "Brand voice",

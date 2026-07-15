@@ -113,6 +113,7 @@ def build_clip_spec(
     kind: str = "video",
     aspect: str = "9:16",
     caption_position: Any = None,
+    caption_enabled: bool = True,
     title_size: int | None = None,
     title_position: Any = None,
     image_urls: list[str] | None = None,
@@ -148,16 +149,20 @@ def build_clip_spec(
         if words and audio_url:
             # Audio-backed: captions + speech track sliced to the located span.
             start, end = locate_span(words, segment)
-            caption_track = [
-                CaptionCue(
-                    start=float(w["start"]),
-                    end=float(w["end"]),
-                    text=str(w["word"]).strip(),
-                    lang=target_language,
-                )
-                for w in words
-                if start <= float(w["start"]) and float(w["end"]) <= end + 0.05
-            ]
+            caption_track = (
+                [
+                    CaptionCue(
+                        start=float(w["start"]),
+                        end=float(w["end"]),
+                        text=str(w["word"]).strip(),
+                        lang=target_language,
+                    )
+                    for w in words
+                    if start <= float(w["start"]) and float(w["end"]) <= end + 0.05
+                ]
+                if caption_enabled
+                else []
+            )
             url, duration = audio_url, (
                 float(source.duration_seconds) if source.duration_seconds else None
             )
@@ -178,6 +183,7 @@ def build_clip_spec(
             segments=[ClipSegment(start=start, end=end)],
             caption_track=caption_track,
             caption_position=caption_position,
+            caption_enabled=caption_enabled,
             title=title,
             target_language=target_language,
             brand=brand,
@@ -192,16 +198,20 @@ def build_clip_spec(
     words = cast("dict[str, Any]", source.meta or {}).get("words", [])
     start, end = locate_span(words, segment)
 
-    caption_track = [
-        CaptionCue(
-            start=float(w["start"]),
-            end=float(w["end"]),
-            text=str(w["word"]).strip(),
-            lang=target_language,
-        )
-        for w in words
-        if start <= float(w["start"]) and float(w["end"]) <= end + 0.05
-    ]
+    caption_track = (
+        [
+            CaptionCue(
+                start=float(w["start"]),
+                end=float(w["end"]),
+                text=str(w["word"]).strip(),
+                lang=target_language,
+            )
+            for w in words
+            if start <= float(w["start"]) and float(w["end"]) <= end + 0.05
+        ]
+        if caption_enabled
+        else []
+    )
 
     return ClipSpec(
         source=ClipSource(
@@ -213,6 +223,7 @@ def build_clip_spec(
         segments=[ClipSegment(start=start, end=end)],
         caption_track=caption_track,
         caption_position=caption_position,
+        caption_enabled=caption_enabled,
         title=title,
         target_language=target_language,
         brand=brand,

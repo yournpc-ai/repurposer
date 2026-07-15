@@ -106,6 +106,7 @@ export interface ClipBrand {
   intro?: IntroOutroCard | null;
   outro?: IntroOutroCard | null;
   fill_mode?: "fill" | "fit";
+  caption_enabled?: boolean;
 }
 
 export interface ClipSpec {
@@ -117,6 +118,8 @@ export interface ClipSpec {
   caption_style_preset: CaptionStylePreset;
   /** Normalized center point of the caption block. Null -> default (bottom). */
   caption_position?: Point | null;
+  /** When false, the renderer skips burned-in captions even if caption_track is non-empty. */
+  caption_enabled?: boolean;
   title: ClipTitle;
   music: ClipMusic;
   /** Cloned-voice dub; when enabled, replaces the source's original audio. */

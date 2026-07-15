@@ -16,6 +16,7 @@ export const DEFAULT_SPEC: ClipSpec = {
   crop: { x: 0.5, y: 0.5, scale: 1 },
   caption_track: [],
   caption_style_preset: "clean-bottom",
+  caption_enabled: true,
   title: { text: "", enabled: false },
   music: { music_id: null, enabled: false, gain_db: -18 },
   brand_ref: null,

@@ -316,6 +316,7 @@ const zh: Resources = {
       font: "字体",
       size: "字号",
       color: "颜色",
+      enable: "烧录字幕",
     },
     content: {
       voice: "品牌语气",

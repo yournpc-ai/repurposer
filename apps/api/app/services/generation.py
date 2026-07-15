@@ -833,6 +833,14 @@ async def _run_clips_task(
     for plan in plans.clips[:clip_count]:
         segment = plan.to_segment()
         music = await music_from_plan(db, plan, bt.config if bt else None)
+        # Clip agent decides whether burned-in captions make sense for this segment;
+        # the brand template only supplies the default.
+        brand_caption_enabled = brand.caption_enabled if brand is not None else True
+        caption_enabled = (
+            plan.caption_enabled
+            if getattr(plan, "caption_enabled", None) is not None
+            else brand_caption_enabled
+        )
         spec = (
             build_clip_spec(
                 render_source,
@@ -841,6 +849,7 @@ async def _run_clips_task(
                 kind=render_kind,
                 aspect=aspect,
                 caption_position=cap_pos,
+                caption_enabled=caption_enabled,
                 title_size=ttl_size,
                 title_position=ttl_pos,
                 image_urls=still_images if render_kind == "stills" else None,

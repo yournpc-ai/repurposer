@@ -43,6 +43,7 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "musicGainDb": -18.0,
     "removeFiller": False,
     "keywordHighlighter": True,
+    "captionEnabled": True,
 }
 
 
@@ -104,6 +105,7 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
         intro=_intro_outro_card(cfg, "intro"),
         outro=_intro_outro_card(cfg, "outro"),
         fill_mode=fill_mode,
+        caption_enabled=bool(cfg.get("captionEnabled", True)),
     )
 
 

@@ -175,6 +175,8 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     lines.find((line) => sourceTime < line[0].start) ??
     [];
 
+  const captionsEnabled = spec.caption_enabled !== false;
+
   // Background music: play the baked track when enabled, looped to fill the clip.
   const music = spec.music;
   const musicUrl = music?.enabled ? music.url ?? null : null;
@@ -281,7 +283,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </div>
       ) : null}
 
-      {inVideo && activeLine.length > 0 ? (
+      {inVideo && captionsEnabled && activeLine.length > 0 ? (
         <div
           style={{
             textAlign: "center",
