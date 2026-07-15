@@ -66,9 +66,14 @@ async def stream_upload(
 @router.get("/outputs/{file_path:path}")
 async def stream_output(
     file_path: str,
+    download: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> FileResponse:
-    """Stream a rendered output (MP4/SRT) by relative path, with Range support."""
+    """Stream a rendered output (MP4/SRT) by relative path, with Range support.
+
+    Set ``download=1`` to prompt the browser to save the file instead of
+    playing it inline.
+    """
     _authorize_path(file_path, current_user)
     path = resolve_output_safe(file_path)
     if path is None or not path.is_file():
@@ -76,4 +81,7 @@ async def stream_output(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
         )
-    return FileResponse(path)
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
+    return FileResponse(path, headers=headers)
