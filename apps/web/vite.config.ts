@@ -9,6 +9,9 @@ import tailwindcss from '@tailwindcss/vite'
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
+  preview: {
+    allowedHosts: ['repurposer.yournpc.ai', '.yournpc.ai'],
+  },
 })
 
 export default config
