@@ -170,6 +170,9 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
                 />
               )}
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
+              <div className="absolute right-2 top-2 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                {formatDuration(clipState.duration)}
+              </div>
               <button
                 type="button"
                 data-play-trigger
@@ -232,7 +235,6 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
             <h3 className="line-clamp-2 text-sm font-medium">
               {clipState.title || clipState.hook}
             </h3>
-            <p className="text-xs text-muted-foreground">{formatDuration(clipState.duration)}</p>
           </div>
 
           <div className="mt-2">
