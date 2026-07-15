@@ -9,7 +9,12 @@
 
 export type Aspect = "9:16" | "1:1";
 
-export type CaptionStylePreset = "clean-bottom" | "karaoke-highlight";
+export type CaptionStylePreset =
+  | "clean-bottom"
+  | "karaoke-highlight"
+  | "fade-in"
+  | "pop-in"
+  | "slide-up";
 
 /**
  * What backs the clip's visual: a real on-camera video, or a "stills" audiogram
@@ -96,6 +101,8 @@ export interface IntroOutroCard {
   text?: string | null;
   /** kind === "image" | "video" (storage-seam URL) */
   media_url?: string | null;
+  /** How long the card displays, in seconds. Null -> renderer default (2s). */
+  duration_seconds?: number | null;
 }
 
 /** Resolved brand values baked into the spec by the API (renderer-agnostic). */
@@ -134,17 +141,17 @@ export const ASPECT_DIMENSIONS: Record<Aspect, { width: number; height: number }
 /** Composition timeline fps (independent of the source's fps). */
 export const COMPOSITION_FPS = 30;
 
-/** Fixed durations (seconds) for brand intro/outro title cards. */
+/** Default duration (seconds) for a brand intro/outro card with no explicit duration_seconds. */
 export const INTRO_SECONDS = 2;
 export const OUTRO_SECONDS = 2;
 
 /** Intro card duration for this spec (0 when no brand intro card). */
 export const introSeconds = (spec: ClipSpec): number =>
-  spec.brand?.intro ? INTRO_SECONDS : 0;
+  spec.brand?.intro ? spec.brand.intro.duration_seconds || INTRO_SECONDS : 0;
 
 /** Outro card duration for this spec (0 when no brand outro card). */
 export const outroSeconds = (spec: ClipSpec): number =>
-  spec.brand?.outro ? OUTRO_SECONDS : 0;
+  spec.brand?.outro ? spec.brand.outro.duration_seconds || OUTRO_SECONDS : 0;
 
 /** Non-hidden segments in order. */
 export const keptSegments = (spec: ClipSpec): ClipSegment[] =>

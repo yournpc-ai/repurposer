@@ -826,9 +826,13 @@ async def _run_clips_task(
     cfg = (bt.config or {}) if bt is not None else {}
     aspect = str(cfg.get("aspect", "9:16"))
     cap_pos = cfg.get("captionPosition")
+    cap_style_raw = cfg.get("captionStylePreset")
+    cap_style = cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
     ttl_pos = cfg.get("titlePosition")
     ttl_size_raw = cfg.get("titleSize")
     ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
+    ttl_enabled_raw = cfg.get("titleEnabled")
+    ttl_enabled = True if ttl_enabled_raw is None else bool(ttl_enabled_raw)
 
     for plan in plans.clips[:clip_count]:
         segment = plan.to_segment()
@@ -841,8 +845,10 @@ async def _run_clips_task(
                 kind=render_kind,
                 aspect=aspect,
                 caption_position=cap_pos,
+                caption_style_preset=cap_style,
                 title_size=ttl_size,
                 title_position=ttl_pos,
+                title_enabled=ttl_enabled,
                 image_urls=still_images if render_kind == "stills" else None,
                 brand=brand,
                 music=music,

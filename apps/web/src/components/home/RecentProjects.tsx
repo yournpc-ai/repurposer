@@ -9,15 +9,19 @@ interface Project {
   title: string
   status: string
   updated_at?: string | null
+  thumbnail_url?: string | null
+  thumbnail_duration?: number | null
+  thumbnail_aspect?: string | null
 }
 
 const DEMO_PROJECT_ID = "11111111-1111-1111-1111-111111111111"
 
 interface RecentProjectsProps {
   refreshKey?: number
+  onCountChange?: (count: number) => void
 }
 
-export function RecentProjects({ refreshKey }: RecentProjectsProps) {
+export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProps) {
   const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[]>([])
   const [demoProject, setDemoProject] = useState<Project | null>(null)
@@ -44,6 +48,7 @@ export function RecentProjects({ refreshKey }: RecentProjectsProps) {
 
         setProjects(real)
         setDemoProject(demo || null)
+        onCountChange?.(all.length)
       } catch {
         // Leave lists empty if the API isn't ready yet; user can refresh.
       } finally {

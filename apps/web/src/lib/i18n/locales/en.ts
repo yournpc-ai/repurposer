@@ -276,7 +276,7 @@ const en = {
     untitled: "Untitled",
     namePlaceholder: "Template name",
     delete: "Delete template",
-    previewHint: "Drag the Title / Caption markers to position them. Text comes from your talk; set the style on the left.",
+    previewHint: "Hover the Title / Caption text to reveal its marker — drag to move, drag a corner to resize. Text comes from your talk; set the style on the left.",
     save: "Save template",
     undo: "Undo",
     redo: "Redo",
@@ -298,7 +298,6 @@ const en = {
       outro: "Outro",
       music: "Music",
       removeFiller: "Remove filler words",
-      keywordHighlighter: "AI keywords highlighter",
     },
     clipLayout: {
       aspect: "Aspect ratio",
@@ -307,6 +306,7 @@ const en = {
       fit: "Fit",
     },
     titleCard: {
+      enable: "Title",
       size: "Size",
       hint: "The hook line is generated per clip; position it by dragging the Title marker in the preview.",
     },
@@ -314,6 +314,15 @@ const en = {
       font: "Font",
       size: "Size",
       color: "Color",
+      customColor: "Custom color",
+      animation: "Animation",
+      animations: {
+        "clean-bottom": "Static (no animation)",
+        "karaoke-highlight": "Karaoke word highlight",
+        "fade-in": "Fade in",
+        "pop-in": "Pop in",
+        "slide-up": "Slide up",
+      },
     },
     content: {
       voice: "Brand voice",
@@ -338,6 +347,7 @@ const en = {
       },
       uploadImage: "Upload image",
       uploadVideo: "Upload video",
+      duration: "Duration (seconds)",
     },
     music: {
       enable: "Background music",

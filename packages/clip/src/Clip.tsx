@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Easing,
   Img,
   interpolate,
   OffthreadVideo,
@@ -10,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import type { CaptionCue, ClipSpec, IntroOutroCard, Point } from "./types";
+import type { CaptionCue, CaptionStylePreset, ClipSpec, IntroOutroCard, Point } from "./types";
 import {
   COMPOSITION_FPS,
   introSeconds,
@@ -64,6 +65,46 @@ function splitFrames(count: number, total: number): number[] {
   return Array.from({ length: count }, (_, i) =>
     i === count - 1 ? Math.max(1, total - base * (count - 1)) : base,
   );
+}
+
+/**
+ * Per-line caption entrance animation for the `fade-in` / `pop-in` /
+ * `slide-up` presets — `clean-bottom` / `karaoke-highlight` render statically
+ * (no entry animation). Returns a transform *suffix* rather than a full
+ * `transform` because the caller already centers the box via `pointStyle()`'s
+ * `translate(-50%, -50%)`; the two compose into one `transform` string. All
+ * three map onto a single opacity/transform pair a future libass renderer can
+ * express with `\fad` + `\t(\fscx,\fscy)` or `\move` (see docs/VIDEO_EDITOR.md).
+ */
+function captionEntrance(
+  preset: CaptionStylePreset,
+  frame: number,
+  revealFrame: number,
+): { opacity: number; transformSuffix: string } {
+  if (preset === "fade-in") {
+    const opacity = interpolate(frame, [revealFrame, revealFrame + 6], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    });
+    return { opacity, transformSuffix: "" };
+  }
+  if (preset === "pop-in") {
+    const t = interpolate(frame, [revealFrame, revealFrame + 8], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.back(1.7)),
+    });
+    return { opacity: Math.min(1, t + 0.4), transformSuffix: `scale(${0.85 + 0.15 * t})` };
+  }
+  if (preset === "slide-up") {
+    const t = interpolate(frame, [revealFrame, revealFrame + 7], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.quad),
+    });
+    return { opacity: t, transformSuffix: `translateY(${(1 - t) * 14}px)` };
+  }
+  return { opacity: 1, transformSuffix: "" };
 }
 
 /**
@@ -175,6 +216,18 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     lines.find((line) => sourceTime < line[0].start) ??
     [];
 
+  // Frame at which the active line's first cue becomes visible in OUTPUT
+  // time — the inverse of the sourceTime mapping above. Drives the entrance
+  // animation presets below (fade-in / pop-in / slide-up).
+  const revealFrame = (() => {
+    if (activeLine.length === 0) return 0;
+    const cueStart = activeLine[0].start;
+    const seg = timeline.find((t) => cueStart >= t.seg.start && cueStart <= t.seg.end) ?? current;
+    if (!seg) return 0;
+    const revealLocalOutput = seg.outStart + Math.max(0, cueStart - seg.seg.start);
+    return Math.round((introDur + revealLocalOutput) * fpsv);
+  })();
+
   // Background music: play the baked track when enabled, looped to fill the clip.
   const music = spec.music;
   const musicUrl = music?.enabled ? music.url ?? null : null;
@@ -185,6 +238,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   // the video portion. Rough overlay — no lip-sync (see docs/VIDEO_EDITOR.md).
   const dubUrl = spec.dub?.enabled ? spec.dub.url ?? null : null;
   const dubVolume = Math.min(1, Math.pow(10, (spec.dub?.gain_db ?? 0) / 20));
+
+  const captionPosStyle = pointStyle(spec.caption_position, DEFAULT_CAPTION_POS);
+  const entrance = captionEntrance(spec.caption_style_preset, frame, revealFrame);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -292,7 +348,11 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             color: captionColor,
             WebkitTextStroke: "2px rgba(0,0,0,0.55)",
             textShadow: "0 2px 10px rgba(0,0,0,0.6)",
-            ...pointStyle(spec.caption_position, DEFAULT_CAPTION_POS),
+            ...captionPosStyle,
+            transform: [captionPosStyle.transform, entrance.transformSuffix]
+              .filter(Boolean)
+              .join(" "),
+            opacity: entrance.opacity,
           }}
         >
           {activeLine.map((cue, i) => {

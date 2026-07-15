@@ -28,21 +28,24 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "captionSize": 44,
     "captionColor": "#facc15",
     "captionPosition": {"x": 0.5, "y": 0.84},
+    "captionStylePreset": "clean-bottom",
+    "titleEnabled": True,
     "titlePosition": {"x": 0.5, "y": 0.12},
     "introEnabled": False,
-    "introKind": "text",
+    "introKind": "image",
     "introText": "",
     "introMediaUrl": None,
+    "introDurationSeconds": 2.0,
     "outroEnabled": False,
-    "outroKind": "text",
+    "outroKind": "image",
     "outroText": "",
     "outroMediaUrl": None,
+    "outroDurationSeconds": 2.0,
     "musicEnabled": False,
     "musicMood": "calm",
     "musicId": None,
     "musicGainDb": -18.0,
     "removeFiller": False,
-    "keywordHighlighter": True,
 }
 
 
@@ -108,18 +111,28 @@ def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
 
 
 def _intro_outro_card(cfg: dict[str, Any], prefix: str) -> IntroOutroCard | None:
-    """Build an intro/outro card from ``{prefix}Enabled/Kind/Text/MediaUrl`` config keys."""
+    """Build an intro/outro card from ``{prefix}Enabled/Kind/Text/MediaUrl/DurationSeconds``."""
     if not cfg.get(f"{prefix}Enabled"):
         return None
-    raw_kind = cfg.get(f"{prefix}Kind") or "text"
+    duration_raw = cfg.get(f"{prefix}DurationSeconds")
+    duration = float(duration_raw) if isinstance(duration_raw, (int, float)) else None
+    raw_kind = cfg.get(f"{prefix}Kind") or "image"
     if raw_kind == "text":
         text = cfg.get(f"{prefix}Text")
         text = text.strip() if isinstance(text, str) else ""
-        return IntroOutroCard(kind="text", text=text) if text else None
+        return (
+            IntroOutroCard(kind="text", text=text, duration_seconds=duration)
+            if text
+            else None
+        )
     kind: Literal["image", "video"] = "video" if raw_kind == "video" else "image"
     media_url = cfg.get(f"{prefix}MediaUrl")
     media_url = media_url.strip() if isinstance(media_url, str) else ""
-    return IntroOutroCard(kind=kind, media_url=media_url) if media_url else None
+    return (
+        IntroOutroCard(kind=kind, media_url=media_url, duration_seconds=duration)
+        if media_url
+        else None
+    )
 
 
 async def music_from_template(
@@ -239,12 +252,18 @@ async def music_from_plan(
     """Per-clip music: the Clip Agent's pick wins, else the brand default.
 
     Selection (see docs/MUSIC_ARCHITECTURE.md §8.3):
+    0. If a brand template is set and its ``musicEnabled`` toggle is off, music
+       is disabled outright — the brand-level toggle is a master switch the
+       per-clip agent's pick cannot override.
     1. ``plan.music_id`` (UUID or mood key) when ``plan.music_enabled`` — the
        agent's per-clip choice, with ``plan.music_gain_db`` applied.
     2. Otherwise the brand template default (``music_from_template``), which
        honors ``musicEnabled``/``musicId``/``musicGainDb`` (and legacy musicMood).
     3. If neither resolves, a disabled, track-less block is returned.
     """
+    if brand_config is not None and not brand_config.get("musicEnabled"):
+        return ClipMusic(gain_db=_gain_db(brand_config.get("musicGainDb")))
+
     if getattr(plan, "music_enabled", True) and getattr(plan, "music_id", None):
         piece = await resolve_music_ref(db, plan.music_id)
         if piece is not None:

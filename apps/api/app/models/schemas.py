@@ -385,6 +385,11 @@ class ProjectResponse(ProjectBase):
     content_plan: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    # Representative clip for the project-list card (list endpoint only; the
+    # earliest rendered clip). None while no clip has finished rendering yet.
+    thumbnail_url: str | None = None
+    thumbnail_duration: int | None = None
+    thumbnail_aspect: str | None = None
 
 
 class AssetResponse(BaseModel):
@@ -786,9 +791,11 @@ class IntroOutroCard(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["text", "image", "video"] = "text"
+    kind: Literal["text", "image", "video"] = "image"
     text: str | None = None  # kind == "text"
     media_url: str | None = None  # kind == "image" | "video" (storage-seam URL)
+    # How long the card displays; None -> renderer default (2s).
+    duration_seconds: float | None = Field(default=None, gt=0)
 
 
 class ClipBrand(BaseModel):
@@ -820,8 +827,12 @@ class ClipSpec(BaseModel):
     crop: ClipCrop = Field(default_factory=ClipCrop)
     caption_track: list[CaptionCue] = Field(default_factory=list)
     # Preset enum, NOT free styling — keeps preview=render parity and the
-    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset).
-    caption_style_preset: Literal["clean-bottom", "karaoke-highlight"] = "clean-bottom"
+    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset). The
+    # fade-in/pop-in/slide-up entrance presets are expressible with libass
+    # \fad / \t(\fscx,\fscy) / \move, so a future FFmpeg swap stays cheap.
+    caption_style_preset: Literal[
+        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up"
+    ] = "clean-bottom"
     caption_position: Point | None = None  # normalized center; None -> default (bottom)
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)

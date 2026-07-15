@@ -278,7 +278,7 @@ const zh: Resources = {
     untitled: "未命名",
     namePlaceholder: "模板名称",
     delete: "删除模板",
-    previewHint: "拖动 Title / Caption 标记调整位置。文字来自你的演讲；样式在左侧设置。",
+    previewHint: "将鼠标悬停在 Title / Caption 文字上即可显示控制框——拖动移动位置，拖动四角调整大小。文字来自你的演讲；样式在左侧设置。",
     save: "保存模板",
     undo: "撤销",
     redo: "重做",
@@ -300,7 +300,6 @@ const zh: Resources = {
       outro: "片尾",
       music: "配乐",
       removeFiller: "去除口头禅",
-      keywordHighlighter: "AI 关键词高亮",
     },
     clipLayout: {
       aspect: "画面比例",
@@ -309,6 +308,7 @@ const zh: Resources = {
       fit: "适应",
     },
     titleCard: {
+      enable: "标题",
       size: "字号",
       hint: "标题（钩子句）按片段自动生成；在预览中拖动 Title 标记调整位置。",
     },
@@ -316,6 +316,15 @@ const zh: Resources = {
       font: "字体",
       size: "字号",
       color: "颜色",
+      customColor: "自定义颜色",
+      animation: "动画效果",
+      animations: {
+        "clean-bottom": "静态（无动画）",
+        "karaoke-highlight": "逐词高亮",
+        "fade-in": "淡入",
+        "pop-in": "弹出",
+        "slide-up": "上滑",
+      },
     },
     content: {
       voice: "品牌语气",
@@ -340,6 +349,7 @@ const zh: Resources = {
       },
       uploadImage: "上传图片",
       uploadVideo: "上传视频",
+      duration: "持续时间（秒）",
     },
     music: {
       enable: "背景配乐",
