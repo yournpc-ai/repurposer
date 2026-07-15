@@ -51,17 +51,25 @@ def upgrade() -> None:
     op.add_column('clips', sa.Column('end_time', sa.Float(), nullable=True))
 
     # Rename DerivativeType enum values to the new output naming.
-    # Two legacy values (linkedin_post, summary) collapse into 'post', so we
-    # add the new values first, migrate rows, then rebuild the enum type to
-    # remove the legacy values (PostgreSQL does not support DROP VALUE).
-    op.execute("ALTER TYPE derivativetype ADD VALUE IF NOT EXISTS 'post'")
-    op.execute("ALTER TYPE derivativetype ADD VALUE IF NOT EXISTS 'quotes'")
-    op.execute("ALTER TYPE derivativetype ADD VALUE IF NOT EXISTS 'article'")
+    # PostgreSQL enum labels are case-sensitive and stored as uppercase in this
+    # database. We temporarily cast the column to TEXT so we can rewrite rows
+    # without the "unsafe new enum value" transaction restriction.
+    op.execute("ALTER TABLE derivatives ALTER COLUMN type TYPE TEXT")
+    op.execute("UPDATE derivatives SET type = 'POST' WHERE type = 'SUMMARY'")
+    op.execute("UPDATE derivatives SET type = 'POST' WHERE type = 'LINKEDIN_POST'")
+    op.execute("UPDATE derivatives SET type = 'QUOTES' WHERE type = 'QUOTE_CARD'")
+    op.execute("UPDATE derivatives SET type = 'ARTICLE' WHERE type = 'BLOG'")
 
-    op.execute("UPDATE derivatives SET type = 'post' WHERE type = 'summary'")
-    op.execute("UPDATE derivatives SET type = 'post' WHERE type = 'linkedin_post'")
-    op.execute("UPDATE derivatives SET type = 'quotes' WHERE type = 'quote_card'")
-    op.execute("UPDATE derivatives SET type = 'article' WHERE type = 'blog'")
+    # Rebuild the enum type to drop legacy values.
+    # PostgreSQL does not support ALTER TYPE ... DROP VALUE, so we create a new
+    # type, move the column to it, drop the old type, and rename the new one.
+    op.execute("CREATE TYPE derivativetype_new AS ENUM ('POST', 'QUOTES', 'CAROUSEL', 'ARTICLE')")
+    op.execute(
+        "ALTER TABLE derivatives ALTER COLUMN type TYPE derivativetype_new "
+        "USING type::text::derivativetype_new"
+    )
+    op.execute("DROP TYPE derivativetype")
+    op.execute("ALTER TYPE derivativetype_new RENAME TO derivativetype")
 
     # Reshape legacy summary content to match the new Post schema.
     # Summary stored {tldr, key_points, full}; Post requires {content, hashtags}.
@@ -72,7 +80,7 @@ def upgrade() -> None:
             'content', COALESCE(content->>'full', content->>'tldr', ''),
             'hashtags', '[]'::jsonb
         )::json
-        WHERE type = 'post'
+        WHERE type = 'POST'
           AND (
               content::jsonb ? 'tldr'
               OR content::jsonb ? 'key_points'
@@ -94,17 +102,6 @@ def upgrade() -> None:
                 {"content_plan": normalized, "id": project_id},
             )
 
-    # Rebuild the enum type to drop legacy values.
-    # PostgreSQL does not support ALTER TYPE ... DROP VALUE, so we create a new
-    # type, move the column to it, drop the old type, and rename the new one.
-    op.execute("CREATE TYPE derivativetype_new AS ENUM ('post', 'quotes', 'carousel', 'article')")
-    op.execute(
-        "ALTER TABLE derivatives ALTER COLUMN type TYPE derivativetype_new "
-        "USING type::text::derivativetype_new"
-    )
-    op.execute("DROP TYPE derivativetype")
-    op.execute("ALTER TYPE derivativetype_new RENAME TO derivativetype")
-
     # Downgrade hint: legacy summary rows are collapsed into post and cannot be
     # disambiguated on rollback. This is accepted per the migration design.
 
@@ -112,9 +109,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # Rebuild the enum type to restore legacy values.
+    op.execute("ALTER TABLE derivatives ALTER COLUMN type TYPE TEXT")
+    op.execute("UPDATE derivatives SET type = 'LINKEDIN_POST' WHERE type = 'POST'")
+    op.execute("UPDATE derivatives SET type = 'QUOTE_CARD' WHERE type = 'QUOTES'")
+    op.execute("UPDATE derivatives SET type = 'BLOG' WHERE type = 'ARTICLE'")
     op.execute(
         "CREATE TYPE derivativetype_new AS ENUM ("
-        "'linkedin_post', 'quote_card', 'carousel', 'summary', 'blog'"
+        "'LINKEDIN_POST', 'QUOTE_CARD', 'CAROUSEL', 'SUMMARY', 'BLOG'"
         ")"
     )
     op.execute(
@@ -123,12 +124,6 @@ def downgrade() -> None:
     )
     op.execute("DROP TYPE derivativetype")
     op.execute("ALTER TYPE derivativetype_new RENAME TO derivativetype")
-
-    # Migrate rows back to legacy values (lossy: post rows become linkedin_post,
-    # original summary rows are indistinguishable).
-    op.execute("UPDATE derivatives SET type = 'linkedin_post' WHERE type = 'post'")
-    op.execute("UPDATE derivatives SET type = 'quote_card' WHERE type = 'quotes'")
-    op.execute("UPDATE derivatives SET type = 'blog' WHERE type = 'article'")
 
     # Drop publishing-suite columns.
     op.drop_column('clips', 'end_time')
