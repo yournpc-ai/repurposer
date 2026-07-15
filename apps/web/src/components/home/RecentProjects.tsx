@@ -14,8 +14,6 @@ interface Project {
   thumbnail_aspect?: string | null
 }
 
-const DEMO_PROJECT_ID = "11111111-1111-1111-1111-111111111111"
-
 interface RecentProjectsProps {
   refreshKey?: number
   onCountChange?: (count: number) => void
@@ -24,7 +22,6 @@ interface RecentProjectsProps {
 export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProps) {
   const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[]>([])
-  const [demoProject, setDemoProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -36,18 +33,13 @@ export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProp
         const all = (await res.json()) as Project[]
         if (cancelled) return
 
-        const demo = all.find((p) => p.id === DEMO_PROJECT_ID)
-        const real = all
-          .filter((p) => p.id !== DEMO_PROJECT_ID)
-          .sort(
-            (a, b) =>
-              new Date(b.updated_at || b.id).getTime() -
-              new Date(a.updated_at || a.id).getTime()
-          )
-          .slice(0, 3)
+        const sorted = all.sort(
+          (a, b) =>
+            new Date(b.updated_at || b.id).getTime() -
+            new Date(a.updated_at || a.id).getTime()
+        )
 
-        setProjects(real)
-        setDemoProject(demo || null)
+        setProjects(sorted)
         onCountChange?.(all.length)
       } catch {
         // Leave lists empty if the API isn't ready yet; user can refresh.
@@ -71,7 +63,7 @@ export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProp
     )
   }
 
-  if (projects.length === 0 && !demoProject) {
+  if (projects.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-muted-foreground">
         {t("home.noProjects")}
@@ -82,11 +74,8 @@ export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProp
   return (
     <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {projects.map((project) => (
-        <ProjectCard key={project.id} project={project} />
+        <ProjectCard key={project.id} project={project} isDemo={project.id === "11111111-1111-1111-1111-111111111111"} />
       ))}
-      {demoProject && (
-        <ProjectCard key={demoProject.id} project={demoProject} isDemo />
-      )}
     </div>
   )
 }
