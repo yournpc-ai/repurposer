@@ -38,12 +38,10 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
   useEffect(() => {
     setClipState(clip)
     setRenderError(clip.render_error)
-    if (!isRendering) {
-      setIsRendering(
-        clip.render_status === "pending" || clip.render_status === "rendering"
-      )
-    }
-  }, [clip, isRendering])
+    setIsRendering(
+      clip.render_status === "pending" || clip.render_status === "rendering"
+    )
+  }, [clip])
 
   useEffect(() => {
     if (isPlaying && videoRef.current) {
@@ -52,30 +50,6 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
       })
     }
   }, [isPlaying])
-  useEffect(() => {
-    if (!isRendering) return
-
-    const poll = async () => {
-      try {
-        const res = await apiFetch(`/api/v1/clips/${clipState.id}`)
-        if (!res.ok) return
-        const updated: Clip = await res.json()
-        setClipState(updated)
-        if (updated.video_url || updated.render_status === "failed") {
-          setIsRendering(false)
-        }
-        if (updated.render_error) {
-          setRenderError(updated.render_error)
-        }
-      } catch {
-        // Ignore polling errors; the user can retry.
-      }
-    }
-
-    poll()
-    const interval = setInterval(poll, 2500)
-    return () => clearInterval(interval)
-  }, [isRendering, clipState.id])
 
   const handleDownload = () => {
     const url = toAbsoluteUrl(clipState.video_url)
@@ -237,11 +211,6 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
         {/* Info */}
         <div className="flex flex-1 flex-col justify-between p-3">
           <div className="space-y-1">
-            {clipState.topic ? (
-              <Badge variant="secondary" className="text-[10px]">{clipState.topic}</Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px]">{clipState.music_mood}</Badge>
-            )}
             <h3 className="line-clamp-2 text-sm font-medium">
               {clipState.title || clipState.hook}
             </h3>

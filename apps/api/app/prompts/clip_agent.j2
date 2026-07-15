@@ -201,6 +201,7 @@ Requirements:
 - Each clip's id must be in the format clip_001, clip_002, etc.
 - **start_seconds and end_seconds are required** and must be copied from the Source Word-Level Timestamps above
 - start_seconds must be strictly less than end_seconds
+- **Every clip must be at least 5 seconds long**. If your selected words produce a segment shorter than 5 seconds, extend the segment by including additional words before or after until the duration is >= 5 seconds.
 - Each subsequent clip must start after the previous clip ends (no overlap)
 - virality_score is an integer from 1-100
 - duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)

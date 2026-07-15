@@ -41,7 +41,7 @@ const en = {
   home: {
     newChat: "New chat",
     heroPrefix: "Turn your talks into",
-    heroWords: ["vertical clips", "LinkedIn posts", "quote cards", "blog posts", "summaries"],
+    heroWords: ["video clips", "LinkedIn posts", "quote cards", "articles", "carousels"],
     heroSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs, just like you'd make it yourself.",
     placeholder:
       "Describe what you want to generate, e.g. turn this 45-minute AI safety talk into 5 LinkedIn posts, 10 quote cards, a German summary, and a newsletter draft...",

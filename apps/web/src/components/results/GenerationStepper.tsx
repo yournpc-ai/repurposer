@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
 import {
   Progress,
@@ -53,9 +51,6 @@ export function GenerationStepper({
   return (
     <Dialog open={open}>
       <DialogContent showCloseButton={false} className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("results.generatingTitle")}</DialogTitle>
-        </DialogHeader>
         <div className="w-full space-y-3 py-2">
           <Progress value={normalizedProgress}>
             <div className="flex items-center justify-between">

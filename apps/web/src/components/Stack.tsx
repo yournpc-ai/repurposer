@@ -74,7 +74,11 @@ export function Stack({
       const ids = cards.map((c) => c.id)
       const kept = prev.filter((id) => ids.includes(id))
       const added = ids.filter((id) => !kept.includes(id))
-      return [...kept, ...added]
+      const next = [...kept, ...added]
+      // Only update state if the order actually changed to avoid re-renders.
+      return next.length === prev.length && next.every((id, i) => id === prev[i])
+        ? prev
+        : next
     })
   }, [cards])
 

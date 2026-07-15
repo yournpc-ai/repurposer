@@ -134,6 +134,7 @@ Please output valid JSON only, with no explanations or markdown code blocks.
 
 Requirements:
 - Include one entry in `derivatives` for every type requested above.
-- `derivative_type` must be one of: {{ requested_derivatives | join(', ') }}.
+- `derivative_type` must be exactly one of: post, quotes, carousel, article. Never use clips, short_clips, video, or any other value.
+- If no text derivatives were requested, return an empty `derivatives` array (`[]`).
 - `quote_candidates` should be actual, verbatim-ish sentences from the material (minor cleanup allowed), not invented quotes.
 - Output JSON only, no other content.
