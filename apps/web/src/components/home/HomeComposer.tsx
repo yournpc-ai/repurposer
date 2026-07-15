@@ -172,14 +172,6 @@ export function HomeComposer({
     setBrandTemplateId((prev) => prev || (brandTemplates[0]?.id ?? ""))
   }, [brandTemplates])
 
-  // Auto-resize textarea.
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`
-  }, [prompt])
-
   // Debounced intent inference.
   useEffect(() => {
     if (!prompt.trim()) {
@@ -481,36 +473,23 @@ export function HomeComposer({
             </div>
           )}
 
-          <Textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                handleGenerate()
-              }
-            }}
-            placeholder={t("home.pastePlaceholder")}
-            className="min-h-[80px] flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0"
-          />
-        </div>
-
-        {/* Generate + confirmation layer */}
-        <div className="mt-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Wand2 className={cn("h-3.5 w-3.5", isInferring && "animate-pulse")} />
-              <span>
-                {isInferring
-                ? t("composer.detectingIntent")
-                : hasIntent
-                  ? t("composer.aiDetected")
-                  : t("composer.aiWillDetect")}
-              </span>
-            </div>
+          <div className="relative h-28 flex-1">
+            <Textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  handleGenerate()
+                }
+              }}
+              placeholder={t("home.pastePlaceholder")}
+              className="h-full resize-none border-0 bg-transparent p-2 pb-11 text-base shadow-none focus-visible:ring-0"
+            />
+            <div className="pointer-events-none absolute bottom-2 left-0 h-9 w-full" aria-hidden="true" />
             <Button
-              className="h-9 w-9 rounded-full"
+              className="absolute bottom-2 right-2 h-9 w-9 rounded-full"
               size="icon"
               disabled={isGenerating}
               onClick={handleGenerate}
@@ -522,9 +501,10 @@ export function HomeComposer({
               )}
             </Button>
           </div>
+        </div>
 
-          {/* Editable intent chips */}
-          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
+        {/* Editable intent chips */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
             {/* Speaker */}
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -702,8 +682,30 @@ export function HomeComposer({
                 })}
               </PopoverContent>
             </Popover>
+
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      "ml-auto flex h-8 w-8 items-center justify-center rounded-md text-primary transition-colors hover:bg-accent hover:text-foreground",
+                      isInferring && "animate-pulse"
+                    )}
+                  >
+                    <Wand2 className="h-4 w-4" />
+                  </button>
+                }
+              />
+              <TooltipContent side="top">
+                {isInferring
+                  ? t("composer.detectingIntent")
+                  : hasIntent
+                    ? t("composer.aiDetected")
+                    : t("composer.aiWillDetect")}
+              </TooltipContent>
+            </Tooltip>
           </div>
-        </div>
       </CardContent>
     </Card>
   )
