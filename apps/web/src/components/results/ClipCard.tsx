@@ -77,15 +77,24 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     return () => clearInterval(interval)
   }, [isRendering, clipState.id])
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const url = toAbsoluteUrl(clipState.video_url)
     if (!url) return
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${clipState.title || clipState.hook || "clip"}.mp4`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error("Download failed")
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = blobUrl
+      a.download = `${clipState.title || clipState.hook || "clip"}.mp4`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch (e) {
+      console.error("Download failed", e)
+    }
   }
 
   const handleRegenerate = async () => {
