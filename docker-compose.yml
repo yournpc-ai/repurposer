@@ -19,12 +19,12 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - ASSET_DIR=/app/assets
+      - ASSET_DIR=/repo/assets
       # Absolute base the render service uses to fetch source clips back over HTTP.
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
     volumes:
-      - ./assets:/app/assets
+      - ./assets:/repo/assets
     depends_on:
       - db
 
@@ -38,11 +38,11 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - ASSET_DIR=/app/assets
+      - ASSET_DIR=/repo/assets
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
     volumes:
-      - ./assets:/app/assets
+      - ./assets:/repo/assets
     depends_on:
       - db
       - render
@@ -56,10 +56,10 @@ services:
       dockerfile: apps/render/Dockerfile
     environment:
       - RENDER_PORT=3001
-      - RENDER_OUTPUT_DIR=/assets
+      - RENDER_OUTPUT_DIR=/repo/assets
     volumes:
       # Shared with api/worker: render writes here, api serves it via Range.
-      - ./assets:/assets
+      - ./assets:/repo/assets
 
   web:
     build:
@@ -68,7 +68,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=${VITE_API_URL}
     depends_on:
       - api
 

@@ -107,17 +107,6 @@ def upgrade() -> None:
                 sa.text("UPDATE projects SET content_plan = :content_plan WHERE id = :id"),
                 {"content_plan": normalized, "id": project_id},
             )
-å
-    # Rebuild the enum type to drop legacy values.
-    # PostgreSQL does not support ALTER TYPE ... DROP VALUE, so we create a new
-    # type, move the column to it, drop the old type, and rename the new one.
-    op.execute("CREATE TYPE derivativetype_new AS ENUM ('POST', 'QUOTES', 'CAROUSEL', 'ARTICLE')")
-    op.execute(
-        "ALTER TABLE derivatives ALTER COLUMN type TYPE derivativetype_new "
-        "USING type::text::derivativetype_new"
-    )
-    op.execute("DROP TYPE derivativetype")
-    op.execute("ALTER TYPE derivativetype_new RENAME TO derivativetype")
 
     # Downgrade hint: legacy summary rows are collapsed into post and cannot be
     # disambiguated on rollback. This is accepted per the migration design.
@@ -125,6 +114,15 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Drop publishing-suite columns first so enum rebuild doesn't fail on dependencies.
+    op.drop_column('clips', 'end_time')
+    op.drop_column('clips', 'start_time')
+    op.drop_column('clips', 'topic')
+    op.drop_column('clips', 'cover_image_url')
+    op.drop_column('clips', 'hashtags')
+    op.drop_column('clips', 'description')
+    op.drop_column('clips', 'title')
+
     # Rebuild the enum type to restore legacy values.
     op.execute("ALTER TABLE derivatives ALTER COLUMN type TYPE TEXT")
     op.execute("UPDATE derivatives SET type = 'LINKEDIN_POST' WHERE type = 'POST'")
@@ -142,17 +140,5 @@ def downgrade() -> None:
     op.execute("DROP TYPE derivativetype")
     op.execute("ALTER TYPE derivativetype_new RENAME TO derivativetype")
 
-    # Migrate rows back to legacy values (lossy: post rows become linkedin_post,
-    # original summary rows are indistinguishable).
-    op.execute("UPDATE derivatives SET type = 'LINKEDIN_POST' WHERE type = 'POST'")
-    op.execute("UPDATE derivatives SET type = 'QUOTE_CARD' WHERE type = 'QUOTES'")
-    op.execute("UPDATE derivatives SET type = 'BLOG' WHERE type = 'ARTICLE'")
-
-    # Drop publishing-suite columns.
-    op.drop_column('clips', 'end_time')
-    op.drop_column('clips', 'start_time')
-    op.drop_column('clips', 'topic')
-    op.drop_column('clips', 'cover_image_url')
-    op.drop_column('clips', 'hashtags')
-    op.drop_column('clips', 'description')
-    op.drop_column('clips', 'title')
+    # Downgrade hint: original summary rows are collapsed into post and cannot be
+    # disambiguated on rollback. This is accepted per the migration design.
