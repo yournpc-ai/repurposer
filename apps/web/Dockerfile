@@ -26,6 +26,8 @@ RUN pnpm install --filter web... --frozen-lockfile
 COPY packages/clip packages/clip
 COPY apps/web apps/web
 WORKDIR /repo/apps/web
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm build
 
 EXPOSE 3000
