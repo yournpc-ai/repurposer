@@ -31,6 +31,7 @@ from app.models.tables import (
     User,
     WorkflowRun,
 )
+from app.services.demo_seed import DEMO_PROJECT_ID
 from app.services.chat import get_project_prompt, seed_project_prompt
 from app.services.project_context import get_project_for_user
 from app.services.storage import delete_file, delete_project_files
@@ -105,8 +106,18 @@ async def list_projects(
         .limit(limit)
     )
     result = await db.execute(query)
+    rows = result.all()
+
+    # Demo project is a onboarding aid; hide it once the user has created real
+    # projects so the home page only shows their own work.
+    has_real_project = any(
+        project.id != DEMO_PROJECT_ID for project, *_ in rows
+    )
+
     responses = []
-    for project, video_url, duration, render_spec in result.all():
+    for project, video_url, duration, render_spec in rows:
+        if has_real_project and project.id == DEMO_PROJECT_ID:
+            continue
         resp = ProjectResponse.model_validate(project)
         resp.thumbnail_url = video_url
         resp.thumbnail_duration = duration
