@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
@@ -142,27 +142,23 @@ function ProjectDetailPage() {
   const requestedOutputs = latestJob?.context?.outputs ?? []
   const clipCount = latestJob?.context?.clip_count ?? 5
 
-  const requestedTabs = useMemo(() => {
-    return requestedOutputs
-      .map((o) => OUTPUT_KEY_TO_TAB[o])
-      .filter(Boolean) as ResultsTab[]
-  }, [requestedOutputs])
+  const requestedTabs = requestedOutputs
+    .map((o) => OUTPUT_KEY_TO_TAB[o])
+    .filter(Boolean) as ResultsTab[]
 
-  const runningTabs = useMemo(() => {
-    if (!outputStatus) return []
-    return Object.entries(outputStatus)
-      .filter(([, s]) => s.status === "running" || s.status === "pending")
-      .map(([output]) => OUTPUT_KEY_TO_TAB[output])
-      .filter(Boolean) as ResultsTab[]
-  }, [outputStatus])
+  const runningTabs = outputStatus
+    ? (Object.entries(outputStatus)
+        .filter(([, s]) => s.status === "running" || s.status === "pending")
+        .map(([output]) => OUTPUT_KEY_TO_TAB[output])
+        .filter(Boolean) as ResultsTab[])
+    : []
 
-  const failedTabs = useMemo(() => {
-    if (!outputStatus) return []
-    return Object.entries(outputStatus)
-      .filter(([, s]) => s.status === "failed")
-      .map(([output]) => OUTPUT_KEY_TO_TAB[output])
-      .filter(Boolean) as ResultsTab[]
-  }, [outputStatus])
+  const failedTabs = outputStatus
+    ? (Object.entries(outputStatus)
+        .filter(([, s]) => s.status === "failed")
+        .map(([output]) => OUTPUT_KEY_TO_TAB[output])
+        .filter(Boolean) as ResultsTab[])
+    : []
 
   const isGenerating =
     latestJob?.status === "pending" || latestJob?.status === "running"
@@ -225,13 +221,12 @@ function ProjectDetailPage() {
     article: articles.length,
   }
 
-  const visibleTabs = useMemo(() => {
-    const tabs = new Set<ResultsTab>(requestedTabs)
-    ;(Object.keys(counts) as ResultsTab[]).forEach((tab) => {
-      if ((counts[tab] ?? 0) > 0) tabs.add(tab)
-    })
-    return Array.from(tabs)
-  }, [requestedTabs, counts])
+  const visibleTabs = Array.from(
+    new Set<ResultsTab>([
+      ...requestedTabs,
+      ...(Object.keys(counts) as ResultsTab[]).filter((tab) => (counts[tab] ?? 0) > 0),
+    ])
+  )
 
   const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
   const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
@@ -295,7 +290,7 @@ function ProjectDetailPage() {
           return <EmptyState text={t("results.empty.clips")} />
         }
         return (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {clips.map((clip) => (
               <ClipCard key={clip.id} clip={clip} onRegenerate={fetchResults} />
             ))}
@@ -370,11 +365,7 @@ function ProjectDetailPage() {
         {/* Header */}
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">{project.title}</h1>
-          {prompt && (
-            <p className="text-sm text-muted-foreground">
-              {t("results.prompt")}: {prompt}
-            </p>
-          )}
+          {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
         </div>
 
         {/* Tabs + status */}
