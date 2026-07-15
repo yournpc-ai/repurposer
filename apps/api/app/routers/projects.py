@@ -245,7 +245,7 @@ async def generate_content(
     run = WorkflowRun(
         project_id=project_id,
         status=WorkflowStatus.PENDING,
-        current_step="queued",
+        current_step="analyze",
         progress=0,
         context={
             "outputs": request.outputs,

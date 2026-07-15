@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
 import {
   Progress,
@@ -35,27 +33,27 @@ export function GenerationStepper({
   const isPlanning = planningIndex >= 0
 
   let labelKey = currentStep
-  let normalizedProgress = progress ?? 0
+  let normalizedProgress = 0
 
   if (isPlanning) {
-    normalizedProgress = Math.min(
-      ((planningIndex + 1) / PLANNING_STEPS.length) * 45,
-      45
-    )
+    // Planning phases occupy 10%–40% so the bar always moves forward.
+    normalizedProgress = (planningIndex + 1) * 15
   } else if (currentStep === "done") {
     normalizedProgress = 100
     labelKey = "done"
-  } else if (!OUTPUT_STEPS.includes(currentStep as (typeof OUTPUT_STEPS)[number])) {
+  } else if (OUTPUT_STEPS.includes(currentStep as (typeof OUTPUT_STEPS)[number])) {
+    // Map backend 0–100 progress onto 50%–95% of the overall bar.
+    const backendProgress = Math.max(0, Math.min(100, progress ?? 0))
+    normalizedProgress = 50 + Math.round((backendProgress / 100) * 45)
+  } else {
+    // Unknown/fallback step: keep at the end of planning.
     labelKey = "prepare"
-    normalizedProgress = 45
+    normalizedProgress = 40
   }
 
   return (
     <Dialog open={open}>
       <DialogContent showCloseButton={false} className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("results.generatingTitle")}</DialogTitle>
-        </DialogHeader>
         <div className="w-full space-y-3 py-2">
           <Progress value={normalizedProgress}>
             <div className="flex items-center justify-between">

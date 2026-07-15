@@ -1,9 +1,10 @@
 "use client"
 
 import { Link, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  Loader2,
   ArrowUp,
   Plus,
   FileText,
@@ -382,30 +383,34 @@ export function HomeComposer({
 
   const hasIntent = prompt.trim().length > 0
 
-  const fileCards: StackCardData[] = files.map((file, index) => {
-    const Icon = fileIconFor(file)
-    return {
-      id: `${file.name}:${file.size}`,
-      content: (
-        <div className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-lg bg-card p-2 text-center ring-1 ring-border shadow-md">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              removeFile(index)
-            }}
-            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
-          >
-            <X className="h-3 w-3" />
-          </button>
-          <Icon className="h-5 w-5 text-muted-foreground" />
-          <span className="max-w-full break-all px-1 text-[10px] leading-tight text-muted-foreground">
-            {file.name}
-          </span>
-        </div>
-      ),
-    }
-  })
+  const fileCards: StackCardData[] = useMemo(
+    () =>
+      files.map((file, index) => {
+        const Icon = fileIconFor(file)
+        return {
+          id: `${file.name}:${file.size}`,
+          content: (
+            <div className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-lg bg-card p-2 text-center ring-1 ring-border shadow-md">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeFile(index)
+                }}
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              <Icon className="h-5 w-5 text-muted-foreground" />
+              <span className="max-w-full break-all px-1 text-[10px] leading-tight text-muted-foreground">
+                {file.name}
+              </span>
+            </div>
+          ),
+        }
+      }),
+    [files]
+  )
 
   return (
     <Card className="overflow-hidden py-0 ring-1 ring-border shadow-xl">
@@ -489,7 +494,7 @@ export function HomeComposer({
             <Button
               className="absolute bottom-2 right-2 h-9 w-9 rounded-full"
               size="icon"
-              disabled={isGenerating}
+              disabled={isGenerating || isInferring}
               onClick={handleGenerate}
             >
               {isGenerating ? (
@@ -691,7 +696,11 @@ export function HomeComposer({
                       isInferring && "animate-pulse"
                     )}
                   >
-                    <Wand2 className="h-4 w-4" />
+                    {isInferring ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Wand2 className="h-4 w-4" />
+                    )}
                   </button>
                 }
               />

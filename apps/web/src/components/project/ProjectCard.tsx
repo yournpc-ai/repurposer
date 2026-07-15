@@ -41,7 +41,7 @@ export function ProjectCard({ project, isDemo }: ProjectCardProps) {
     <Link
       to="/projects/$id"
       params={{ id: project.id }}
-      className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 ring-1 ring-border transition-all hover:bg-accent hover:ring-primary/40"
+      className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 transition-all hover:bg-accent"
     >
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-primary/10">
         {showVideo ? (

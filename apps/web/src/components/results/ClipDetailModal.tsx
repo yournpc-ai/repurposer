@@ -158,14 +158,9 @@ export function ClipDetailModal({
             )}
           >
             {/* Meta header */}
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-              <div className="min-w-0 flex-1 space-y-1">
-                {clipState.topic && (
-                  <Badge variant="secondary" className="text-xs">{clipState.topic}</Badge>
-                )}
-                <h2 className="text-lg font-medium leading-tight">{clipState.title || clipState.hook}</h2>
-              </div>
-              <span className="shrink-0 text-sm text-muted-foreground">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg font-medium leading-tight">{clipState.title || clipState.hook}</h2>
+              <span className="text-xs text-muted-foreground">
                 {formatTime(clipState.start_time)} - {formatTime(clipState.end_time)}
                 {clipState.duration > 0 && ` · ${clipState.duration}s`}
               </span>
@@ -174,6 +169,7 @@ export function ClipDetailModal({
             <Tabs defaultValue="social" className="w-full">
               <TabsList variant="line" className="w-full">
                 <TabsTrigger value="social">{t("results.clipDetail.socialCaptionTab")}</TabsTrigger>
+                <TabsTrigger value="topic">Topic</TabsTrigger>
                 <TabsTrigger value="transcript">{t("results.clipDetail.transcriptTab")}</TabsTrigger>
               </TabsList>
 
@@ -198,6 +194,14 @@ export function ClipDetailModal({
                     handleCopy((clipState.hashtags || []).map((h) => `#${h}`).join(" "), "hashtags")
                   }
                 />
+              </TabsContent>
+
+              <TabsContent value="topic" className="pt-3">
+                {clipState.topic ? (
+                  <p className="text-sm leading-relaxed text-foreground">{clipState.topic}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No topic available.</p>
+                )}
               </TabsContent>
 
               <TabsContent value="transcript" className="pt-3">
