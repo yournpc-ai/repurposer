@@ -1,65 +1,77 @@
-import { Check } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Progress,
+  ProgressLabel,
+  ProgressTrack,
+} from "@/components/animate-ui/components/base/progress"
 import { cn } from "@/lib/utils"
 
 interface GenerationStepperProps {
-  currentStep: "analyze" | "plan" | "prepare" | string
+  currentStep: string
+  progress?: number
+  open: boolean
 }
 
-const STEPS = ["analyze", "plan", "prepare"] as const
+const PLANNING_STEPS = ["analyze", "plan", "prepare"] as const
+const OUTPUT_STEPS = ["clips", "post", "quotes", "carousel", "article"] as const
 
-export function GenerationStepper({ currentStep }: GenerationStepperProps) {
+export function GenerationStepper({
+  currentStep,
+  progress,
+  open,
+}: GenerationStepperProps) {
   const { t } = useTranslation()
-  const stepIndex = STEPS.indexOf(currentStep as (typeof STEPS)[number])
-  const currentIndex = stepIndex >= 0 ? stepIndex : 0
+
+  const planningIndex = PLANNING_STEPS.indexOf(
+    currentStep as (typeof PLANNING_STEPS)[number]
+  )
+  const isPlanning = planningIndex >= 0
+
+  let labelKey = currentStep
+  let normalizedProgress = progress ?? 0
+
+  if (isPlanning) {
+    normalizedProgress = Math.min(
+      ((planningIndex + 1) / PLANNING_STEPS.length) * 45,
+      45
+    )
+  } else if (currentStep === "done") {
+    normalizedProgress = 100
+    labelKey = "done"
+  } else if (!OUTPUT_STEPS.includes(currentStep as (typeof OUTPUT_STEPS)[number])) {
+    labelKey = "prepare"
+    normalizedProgress = 45
+  }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="flex items-center justify-between">
-        {STEPS.map((step, index) => {
-          const isCompleted = index < currentIndex
-          const isCurrent = index === currentIndex
-          return (
-            <div key={step} className="flex flex-1 items-center">
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium",
-                    isCompleted
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : isCurrent
-                        ? "border-primary text-primary"
-                        : "border-muted-foreground/30 text-muted-foreground"
-                  )}
-                >
-                  {isCompleted ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <span>{index + 1}</span>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "text-xs",
-                    isCurrent ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {t(`results.stepper.${step}`)}
-                </span>
-              </div>
-              {index < STEPS.length - 1 && (
-                <div
-                  className={cn(
-                    "mx-2 h-0.5 flex-1",
-                    index < currentIndex ? "bg-primary" : "bg-muted"
-                  )}
-                />
-              )}
+    <Dialog open={open}>
+      <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("results.generatingTitle")}</DialogTitle>
+        </DialogHeader>
+        <div className="w-full space-y-3 py-2">
+          <Progress value={normalizedProgress}>
+            <div className="flex items-center justify-between">
+              <ProgressLabel>{t(`results.stepper.${labelKey}`)}</ProgressLabel>
             </div>
-          )
-        })}
-      </div>
-    </div>
+            <ProgressTrack
+              className={cn("h-2 w-full overflow-hidden rounded-full bg-muted")}
+            >
+              <div
+                className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-500"
+                style={{ transform: `scaleX(${normalizedProgress / 100})` }}
+              />
+            </ProgressTrack>
+          </Progress>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -76,14 +76,8 @@ const OUTPUT_KEY_TO_TAB: Record<string, ResultsTab> = {
 }
 
 export const Route = createFileRoute("/projects/$id")({
-  component: ProjectRouteComponent,
+  component: ProjectDetailPage,
 })
-
-function ProjectRouteComponent() {
-  const matches = useMatches()
-  const isLeaf = matches[matches.length - 1]?.routeId === Route.id
-  return isLeaf ? <ProjectDetailPage /> : <Outlet />
-}
 
 function ProjectDetailPage() {
   const { id } = Route.useParams()
@@ -163,10 +157,8 @@ function ProjectDetailPage() {
   const isGenerating =
     latestJob?.status === "pending" || latestJob?.status === "running"
 
-  const showStepper =
-    isGenerating &&
-    latestJob?.current_step != null &&
-    ["analyze", "plan", "prepare"].includes(latestJob.current_step)
+  const showProgress =
+    isGenerating && latestJob?.current_step != null
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
@@ -368,7 +360,7 @@ function ProjectDetailPage() {
           {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
         </div>
 
-        {/* Tabs + status */}
+        {/* Tabs */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <ResultsTabs
             active={activeTab}
@@ -378,23 +370,18 @@ function ProjectDetailPage() {
             running={runningTabs}
             failed={failedTabs}
           />
-          {isGenerating && (
-            <p className="text-sm text-muted-foreground">
-              {t("results.generating")}
-            </p>
-          )}
         </div>
 
-        {/* Stepper overlay during the planning phase */}
-        {showStepper && (
-          <div className="flex flex-col items-center justify-center gap-6 rounded-lg bg-card p-8 ring-1 ring-border shadow-xl">
-            <GenerationStepper currentStep={latestJob?.current_step ?? "analyze"} />
-            <p className="text-sm text-muted-foreground">{t("results.generating")}</p>
-          </div>
+        {showProgress && (
+          <GenerationStepper
+            currentStep={latestJob?.current_step ?? "analyze"}
+            progress={latestJob?.progress}
+            open={showProgress}
+          />
         )}
 
         {/* Content */}
-        {!showStepper && <div>{renderTabContent()}</div>}
+        <div>{renderTabContent()}</div>
       </div>
     </div>
   )

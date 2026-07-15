@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export function DerivativeCardSkeleton() {
   return (
-    <Card className="space-y-4 p-4 ring-1 ring-border shadow-xl">
+    <Card className="space-y-4 p-4 ring-1 ring-border">
       <div className="flex items-center justify-between">
         <Skeleton className="h-5 w-12" />
         <Skeleton className="h-4 w-24" />
