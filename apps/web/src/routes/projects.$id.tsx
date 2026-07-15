@@ -120,17 +120,22 @@ function ProjectDetailPage() {
     }
   }, [latestJob?.context?.outputs])
 
-  // Poll latest job until it settles.
+  // Poll latest job until it settles, and keep polling while any clip is still
+  // rendering (clip rendering happens outside the workflow run).
   useEffect(() => {
     if (!results?.latest_job) return
     const status = results.latest_job.status
-    if (status === "completed" || status === "failed") return
+    const hasRenderingClips = results.latest_job.status === "completed" &&
+      (results?.clips ?? []).some(
+        (c: Clip) => c.render_status === "pending" || c.render_status === "rendering"
+      )
+    if ((status === "completed" || status === "failed") && !hasRenderingClips) return
 
     const interval = setInterval(() => {
       fetchResults()
-    }, 2000)
+    }, 2500)
     return () => clearInterval(interval)
-  }, [results?.latest_job?.status, results?.latest_job?.id])
+  }, [results?.latest_job?.status, results?.latest_job?.id, results?.clips])
 
   const outputStatus = latestJob?.context?.output_status
   const requestedOutputs = latestJob?.context?.outputs ?? []
