@@ -408,6 +408,7 @@ const zh: Resources = {
     polling: "正在检查生成状态...",
     clipDetail: {
       publishTab: "发布",
+      socialCaptionTab: "社交配文",
       transcriptTab: "字幕稿",
       title: "标题",
       caption: "配文",

@@ -406,6 +406,7 @@ const en = {
     polling: "Checking generation status...",
     clipDetail: {
       publishTab: "Publish",
+      socialCaptionTab: "Social caption",
       transcriptTab: "Transcript",
       title: "Title",
       caption: "Caption",

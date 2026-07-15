@@ -7,16 +7,15 @@ import { Link } from "@tanstack/react-router"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { apiPost, toAbsoluteUrl } from "@/lib/api"
-import { formatDuration } from "@/lib/utils"
+import { formatDuration, cn } from "@/lib/utils"
 
 import type { Clip } from "@/lib/types"
 
@@ -75,6 +74,12 @@ export function ClipDetailModal({
 
   const formatTime = (seconds: number | null) => formatDuration(seconds, "")
 
+  const aspect =
+    (clipState.render_spec as { aspect?: string } | null)?.aspect || "9:16"
+  const isLandscape = aspect === "16:9"
+  const aspectRatio =
+    aspect === "1:1" ? "1 / 1" : aspect === "16:9" ? "16 / 9" : "9 / 16"
+
   const transcript =
     (clipState.render_spec as { caption_track?: { start: number; end: number; text: string }[] } | null)
       ?.caption_track || []
@@ -101,130 +106,154 @@ export function ClipDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0">
+      <DialogContent
+        className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-3xl"
+        style={{ width: "auto" }}
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>{clipState.title || clipState.hook}</DialogTitle>
         </DialogHeader>
 
-        {/* Video player */}
-        <div className="relative aspect-video w-full overflow-hidden rounded-t-lg bg-muted">
-          {clipState.video_url ? (
-            <video
-              src={toAbsoluteUrl(clipState.video_url) || undefined}
-              className="h-full w-full object-contain"
-              controls
-              playsInline
-              preload="metadata"
-              poster={clipState.cover_image_url ? toAbsoluteUrl(clipState.cover_image_url) || undefined : undefined}
-            />
-          ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Play className="h-10 w-10" />
-              <p className="text-sm">{t("results.clipNotRendered")}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4 p-5">
-          {/* Meta header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1 space-y-1">
-              {clipState.topic && (
-                <Badge variant="secondary" className="text-xs">{clipState.topic}</Badge>
-              )}
-              <h2 className="text-lg font-medium">{clipState.title || clipState.hook}</h2>
-            </div>
-            <span className="shrink-0 text-sm text-muted-foreground">
-              {formatTime(clipState.start_time)} - {formatTime(clipState.end_time)}
-              {clipState.duration > 0 && ` · ${clipState.duration}s`}
-            </span>
+        <div
+          className={`flex max-h-[85vh] ${
+            isLandscape ? "flex-col" : "flex-col md:flex-row"
+          }`}
+        >
+          {/* Video player */}
+          <div
+            className={cn(
+              "relative overflow-hidden bg-muted",
+              isLandscape
+                ? "w-full"
+                : "w-full md:w-auto md:max-h-[75vh]",
+              aspect === "1:1" && "md:max-h-[55vh]"
+            )}
+            style={{ aspectRatio: aspectRatio }}
+          >
+            {clipState.video_url ? (
+              <video
+                src={toAbsoluteUrl(clipState.video_url) || undefined}
+                className="h-full w-full object-contain"
+                controls
+                playsInline
+                preload="metadata"
+                poster={clipState.cover_image_url ? toAbsoluteUrl(clipState.cover_image_url) || undefined : undefined}
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Play className="h-10 w-10" />
+                <p className="text-sm">{t("results.clipNotRendered")}</p>
+              </div>
+            )}
           </div>
 
-          <Tabs defaultValue="publish">
-            <TabsList variant="line" className="w-full">
-              <TabsTrigger value="publish">{t("results.clipDetail.publishTab")}</TabsTrigger>
-              <TabsTrigger value="transcript">{t("results.clipDetail.transcriptTab")}</TabsTrigger>
-            </TabsList>
+          {/* Info panel */}
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-4 overflow-y-auto p-5",
+              isLandscape
+                ? "w-full"
+                : "w-full md:w-[320px] lg:w-[360px]"
+            )}
+          >
+            {/* Meta header */}
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                {clipState.topic && (
+                  <Badge variant="secondary" className="text-xs">{clipState.topic}</Badge>
+                )}
+                <h2 className="text-lg font-medium leading-tight">{clipState.title || clipState.hook}</h2>
+              </div>
+              <span className="shrink-0 text-sm text-muted-foreground">
+                {formatTime(clipState.start_time)} - {formatTime(clipState.end_time)}
+                {clipState.duration > 0 && ` · ${clipState.duration}s`}
+              </span>
+            </div>
 
-            <TabsContent value="publish" className="space-y-4 pt-2">
-              <CopyField
-                label={t("results.clipDetail.title")}
-                value={clipState.title || ""}
-                copied={copiedKey === "title"}
-                onCopy={() => handleCopy(clipState.title || "", "title")}
-              />
-              <CopyField
-                label={t("results.clipDetail.caption")}
-                value={clipState.description || ""}
-                copied={copiedKey === "caption"}
-                onCopy={() => handleCopy(clipState.description || "", "caption")}
-              />
-              <CopyField
-                label={t("results.clipDetail.hashtags")}
-                value={(clipState.hashtags || []).map((h) => `#${h}`).join(" ")}
-                copied={copiedKey === "hashtags"}
-                onCopy={() =>
-                  handleCopy((clipState.hashtags || []).map((h) => `#${h}`).join(" "), "hashtags")
-                }
-              />
-            </TabsContent>
+            <Tabs defaultValue="social" className="w-full">
+              <TabsList variant="line" className="w-full">
+                <TabsTrigger value="social">{t("results.clipDetail.socialCaptionTab")}</TabsTrigger>
+                <TabsTrigger value="transcript">{t("results.clipDetail.transcriptTab")}</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="transcript" className="pt-2">
-              {transcriptLines.length > 0 ? (
-                <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
-                  {transcriptLines.map((line, i) => (
-                    <div key={i} className="flex items-baseline gap-3 text-sm">
-                      <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
-                        {formatTime(line.start)} - {formatTime(line.end)}
-                      </span>
-                      <p className="leading-relaxed">{line.text}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("results.clipDetail.noTranscript")}</p>
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <Separator />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={handleDownload}
-              disabled={!clipState.video_url}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {t("results.clipDetail.download")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              render={
-                <Link
-                  to="/projects/$id/clips/$clipId"
-                  params={{ id: clipState.project_id, clipId: clipState.id }}
+              <TabsContent value="social" className="space-y-4 pt-3">
+                <CopyField
+                  label={t("results.clipDetail.title")}
+                  value={clipState.title || ""}
+                  copied={copiedKey === "title"}
+                  onCopy={() => handleCopy(clipState.title || "", "title")}
                 />
-              }
-            >
-              <Edit className="mr-2 h-4 w-4" />
-              {t("results.clipDetail.editClip")}
-            </Button>
-            {!clipState.cover_image_url && (
+                <CopyField
+                  label={t("results.clipDetail.caption")}
+                  value={clipState.description || ""}
+                  copied={copiedKey === "caption"}
+                  onCopy={() => handleCopy(clipState.description || "", "caption")}
+                />
+                <CopyField
+                  label={t("results.clipDetail.hashtags")}
+                  value={(clipState.hashtags || []).map((h) => `#${h}`).join(" ")}
+                  copied={copiedKey === "hashtags"}
+                  onCopy={() =>
+                    handleCopy((clipState.hashtags || []).map((h) => `#${h}`).join(" "), "hashtags")
+                  }
+                />
+              </TabsContent>
+
+              <TabsContent value="transcript" className="pt-3">
+                {transcriptLines.length > 0 ? (
+                  <div className="max-h-52 space-y-2 overflow-y-auto pr-2">
+                    {transcriptLines.map((line, i) => (
+                      <div key={i} className="flex items-baseline gap-3 text-sm">
+                        <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
+                          {formatTime(line.start)} - {formatTime(line.end)}
+                        </span>
+                        <p className="leading-relaxed">{line.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("results.clipDetail.noTranscript")}</p>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <div className="mt-auto flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 className="h-9"
-                onClick={handleGenerateCover}
+                onClick={handleDownload}
+                disabled={!clipState.video_url}
               >
-                <ImageIcon className="mr-2 h-4 w-4" />
-                {t("results.clipDetail.generateCover")}
+                <Download className="mr-2 h-4 w-4" />
+                {t("results.clipDetail.download")}
               </Button>
-            )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                render={
+                  <Link
+                    to="/projects/$id/clips/$clipId"
+                    params={{ id: clipState.project_id, clipId: clipState.id }}
+                  />
+                }
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                {t("results.clipDetail.editClip")}
+              </Button>
+              {!clipState.cover_image_url && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={handleGenerateCover}
+                >
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  {t("results.clipDetail.generateCover")}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
