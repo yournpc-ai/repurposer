@@ -397,19 +397,19 @@ export function HomeComposer({
     return {
       id: `${file.name}:${file.size}`,
       content: (
-        <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-lg bg-card p-1.5 text-center ring-1 ring-border shadow-md">
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-lg bg-card p-2 text-center ring-1 ring-border shadow-md">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
               removeFile(index)
             }}
-            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
+            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
           >
-            <X className="h-2.5 w-2.5" />
+            <X className="h-3 w-3" />
           </button>
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="line-clamp-2 px-1 text-[8px] leading-tight text-muted-foreground">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+          <span className="max-w-full break-all px-1 text-[10px] leading-tight text-muted-foreground">
             {file.name}
           </span>
         </div>
@@ -438,17 +438,17 @@ export function HomeComposer({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="relative flex h-20 w-14 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="relative flex h-28 w-20 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/50 p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   />
                 }
               >
-                <Plus className="h-5 w-5" />
-                <span className="text-[10px]">{t("home.uploadSource")}</span>
+                <Plus className="h-6 w-6" />
+                <span className="text-center text-[11px] leading-tight">{t("home.uploadSource")}</span>
               </TooltipTrigger>
               <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
             </Tooltip>
           ) : (
-            <div className="relative h-20 w-14 flex-shrink-0">
+            <div className="relative h-28 w-20 flex-shrink-0">
               <Stack
                 cards={fileCards}
                 className="h-full w-full"
@@ -470,11 +470,11 @@ export function HomeComposer({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="absolute -bottom-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+                      className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
                     />
                   }
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-3.5 w-3.5" />
                 </TooltipTrigger>
                 <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
               </Tooltip>
