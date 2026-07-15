@@ -8,6 +8,7 @@ import {
   COMPOSITION_FPS,
   totalDurationSeconds,
   type CaptionCue,
+  type CaptionStylePreset,
   type ClipBrand,
   type ClipSpec,
   type IntroOutroCard,
@@ -20,7 +21,6 @@ import {
   Flag,
   Music,
   Eraser,
-  Highlighter,
   Undo2,
   Redo2,
   Save,
@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -69,9 +70,17 @@ const FONTS = [
 
 // Renderer supports 9:16 / 1:1 only (vertical-first positioning).
 const ASPECTS = ["9:16", "1:1"] as const
-const CAPTION_SIZES = [32, 40, 44, 56] as const
-const TITLE_SIZES = [40, 48, 58, 72] as const
+// Quick-pick presets; both size and color also accept any free-form value.
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
+// MVP set: 2 existing (static / karaoke word-highlight) + 3 new entrance
+// animations. Kept deliberately small per product direction.
+const CAPTION_ANIMATIONS: readonly CaptionStylePreset[] = [
+  "clean-bottom",
+  "karaoke-highlight",
+  "fade-in",
+  "pop-in",
+  "slide-up",
+]
 
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
@@ -86,21 +95,24 @@ type Template = {
   captionColor: string
   captionPosition: Pt
   captionEnabled: boolean
+  titleEnabled: boolean
   titleSize: number
   titlePosition: Pt
   introEnabled: boolean
   introKind: IntroOutroKind
   introText: string
   introMediaUrl: string | null
+  introDurationSeconds: number
   outroEnabled: boolean
   outroKind: IntroOutroKind
   outroText: string
   outroMediaUrl: string | null
+  outroDurationSeconds: number
   musicEnabled: boolean
   musicId: string | null
   musicGainDb: number
   removeFiller: boolean
-  keywordHighlighter: boolean
+  captionStylePreset: CaptionStylePreset
 }
 
 type SavedTemplate = { id: string; name: string; config: Partial<Template> }
@@ -115,21 +127,39 @@ const DEFAULT_TEMPLATE: Template = {
   captionColor: "#facc15",
   captionPosition: { x: 0.5, y: 0.84 },
   captionEnabled: true,
+  titleEnabled: true,
   titleSize: 58,
   titlePosition: { x: 0.5, y: 0.12 },
   introEnabled: false,
-  introKind: "text",
+  introKind: "image",
   introText: "",
   introMediaUrl: null,
+  introDurationSeconds: 2,
   outroEnabled: false,
-  outroKind: "text",
+  outroKind: "image",
   outroText: "",
   outroMediaUrl: null,
+  outroDurationSeconds: 2,
   musicEnabled: false,
   musicId: null,
   musicGainDb: -18,
   removeFiller: false,
-  keywordHighlighter: true,
+  captionStylePreset: "clean-bottom",
+}
+
+/**
+ * Merge a saved config over the defaults, migrating the old boolean
+ * `keywordHighlighter` (karaoke vs. clean-bottom) into `captionStylePreset`
+ * for templates saved before that field existed.
+ */
+function mergeTemplateConfig(
+  config: Partial<Template> & { keywordHighlighter?: boolean }
+): Template {
+  const merged = { ...DEFAULT_TEMPLATE, ...config }
+  if (config.captionStylePreset === undefined && config.keywordHighlighter) {
+    merged.captionStylePreset = "karaoke-highlight"
+  }
+  return merged
 }
 
 type Section = null | "clipLayout" | "title" | "caption" | "intro" | "outro" | "music"
@@ -150,15 +180,18 @@ function introOutroCard(
   enabled: boolean,
   kind: IntroOutroKind,
   text: string,
-  mediaUrl: string | null
+  mediaUrl: string | null,
+  durationSeconds: number
 ): IntroOutroCard | null {
   if (!enabled) return null
-  if (kind === "text") return text.trim() ? { kind, text: text.trim() } : null
+  if (kind === "text") {
+    return text.trim() ? { kind, text: text.trim(), duration_seconds: durationSeconds } : null
+  }
   if (!mediaUrl) return null
   // Preview-only: the <Player> renders in the browser, so relative storage-seam
   // URLs need the API origin (mirrors the music.url handling below).
   const url = mediaUrl.startsWith("/") ? API_URL + mediaUrl : mediaUrl
-  return { kind, media_url: url }
+  return { kind, media_url: url, duration_seconds: durationSeconds }
 }
 
 function templateToBrand(tpl: Template): ClipBrand {
@@ -166,8 +199,20 @@ function templateToBrand(tpl: Template): ClipBrand {
     caption_color: tpl.captionColor || null,
     caption_size: tpl.captionSize || null,
     caption_font: tpl.captionFont || null,
-    intro: introOutroCard(tpl.introEnabled, tpl.introKind, tpl.introText, tpl.introMediaUrl),
-    outro: introOutroCard(tpl.outroEnabled, tpl.outroKind, tpl.outroText, tpl.outroMediaUrl),
+    intro: introOutroCard(
+      tpl.introEnabled,
+      tpl.introKind,
+      tpl.introText,
+      tpl.introMediaUrl,
+      tpl.introDurationSeconds
+    ),
+    outro: introOutroCard(
+      tpl.outroEnabled,
+      tpl.outroKind,
+      tpl.outroText,
+      tpl.outroMediaUrl,
+      tpl.outroDurationSeconds
+    ),
     fill_mode: tpl.fillMode,
     caption_enabled: tpl.captionEnabled,
   }
@@ -190,10 +235,15 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
     segments: [{ start: 0, end, hidden: false }],
     crop: { x: 0.5, y: 0.5, scale: 1 },
     caption_track,
-    caption_style_preset: tpl.keywordHighlighter ? "karaoke-highlight" : "clean-bottom",
+    caption_style_preset: tpl.captionStylePreset,
     caption_position: tpl.captionPosition,
     caption_enabled: tpl.captionEnabled,
-    title: { text: DEMO_TITLE, enabled: true, size: tpl.titleSize, position: tpl.titlePosition },
+    title: {
+      text: DEMO_TITLE,
+      enabled: tpl.titleEnabled,
+      size: tpl.titleSize,
+      position: tpl.titlePosition,
+    },
     // Preview plays the selected music piece via its real stream URL so the
     // brand-template preview matches the actual render (see services/brand.py
     // music_from_template).
@@ -219,25 +269,66 @@ function buildPreviewSpec(tpl: Template): ClipSpec {
 const clampSafe = (v: number) => Math.min(0.95, Math.max(0.05, v))
 
 /**
- * A draggable overlay marker that moves a normalized point within the preview.
- * Only rendered while `visible` — surfaced when its setting row is hovered or
- * its tab is the active section, so the preview isn't cluttered by default.
+ * Friendly display id for the template switcher: a name-derived slug plus a
+ * short suffix from the real UUID (the actual id used for API calls/storage
+ * is untouched — this is display-only, no schema change).
+ */
+function displayTemplateId(name: string, id: string): string {
+  const base = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  const suffix = id.replace(/-/g, "").slice(0, 6)
+  return base ? `${base}-${suffix}` : suffix
+}
+
+// Fixed relative width of a title/caption box — matches the renderer's own
+// fixed 84%-of-frame text box width (see @repurposer/clip pointStyle()), so
+// the hover/resize hit-box lines up with where the text actually renders.
+const MARKER_WIDTH_PERCENT = 84
+
+/**
+ * A draggable + resizable overlay marker over a title/caption position.
+ * Shows its bordered box + corner handles either when the caller forces it
+ * via `visible` (its settings row is hovered/active) or when the user hovers
+ * the marker's own footprint directly — which sits where the live caption/
+ * title text renders, so hovering the on-screen text reveals the controller
+ * too, not just the settings list.
+ *
+ * Resize scales `sizeValue` (font px in composition space) uniformly from
+ * corner-drag distance; the renderer only has a single font-size field, not
+ * independent box dimensions (ADR-016: no free-form layout), so this is the
+ * honest mapping for "resize" rather than a fake independent width/height.
  */
 function DraggableMarker({
   point,
   label,
   containerRef,
   visible,
+  sizeValue,
+  compositionHeight,
+  minSize = 16,
+  maxSize = 140,
   onBegin,
   onChange,
+  onSizeChange,
 }: {
   point: Pt
   label: string
   containerRef: React.RefObject<HTMLDivElement | null>
   visible: boolean
+  sizeValue: number
+  compositionHeight: number
+  minSize?: number
+  maxSize?: number
   onBegin: () => void
   onChange: (p: Pt) => void
+  onSizeChange: (size: number) => void
 }) {
+  const [hovering, setHovering] = useState(false)
+  const shown = visible || hovering
+
   const onDown = (e: React.PointerEvent) => {
     e.preventDefault()
     onBegin()
@@ -257,21 +348,74 @@ function DraggableMarker({
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
   }
-  if (!visible) return null
+
+  const onResizeDown = (e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onBegin()
+    const el = containerRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const centerX = r.left + point.x * r.width
+    const centerY = r.top + point.y * r.height
+    const startDist = Math.hypot(e.clientX - centerX, e.clientY - centerY) || 1
+    const startSize = sizeValue
+    const move = (ev: PointerEvent) => {
+      const dist = Math.hypot(ev.clientX - centerX, ev.clientY - centerY) || 1
+      const next = Math.round((startSize * dist) / startDist)
+      onSizeChange(Math.min(maxSize, Math.max(minSize, next)))
+    }
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
+
+  // Box height as a percentage of the frame, derived from the font size in
+  // composition px (same normalized space as position) — an honest
+  // approximation of a ~2-line text block, not a pixel-exact text bound.
+  const heightPercent = Math.min(30, Math.max(6, (sizeValue / compositionHeight) * 100 * 2.4))
+
   return (
     <div
       onPointerDown={onDown}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       style={{
         position: "absolute",
         left: `${point.x * 100}%`,
         top: `${point.y * 100}%`,
         transform: "translate(-50%, -50%)",
+        width: `${MARKER_WIDTH_PERCENT}%`,
+        height: `${heightPercent}%`,
         pointerEvents: "auto",
         cursor: "move",
       }}
-      className="select-none whitespace-nowrap rounded-md border border-dashed border-white/70 bg-black/50 px-2 py-1 text-[10px] font-medium text-white shadow"
     >
-      {label}
+      {shown && (
+        <>
+          <div className="pointer-events-none absolute inset-0 rounded-sm border border-dashed border-white/80" />
+          <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 select-none whitespace-nowrap rounded-md border border-dashed border-white/70 bg-black/50 px-2 py-1 text-[10px] font-medium text-white shadow">
+            {label}
+          </span>
+          {(["nw", "ne", "sw", "se"] as const).map((corner) => (
+            <div
+              key={corner}
+              onPointerDown={onResizeDown}
+              className="absolute h-2.5 w-2.5 rounded-sm border border-white bg-primary shadow"
+              style={{
+                cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                top: corner.includes("n") ? -5 : undefined,
+                bottom: corner.includes("s") ? -5 : undefined,
+                left: corner.includes("w") ? -5 : undefined,
+                right: corner.includes("e") ? -5 : undefined,
+              }}
+            />
+          ))}
+        </>
+      )}
     </div>
   )
 }
@@ -309,6 +453,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  )
+}
+
+/** Free-form font-size control: drag the slider or type an exact value. */
+function SizeControl({
+  value,
+  onChange,
+  min = 16,
+  max = 120,
+}: {
+  value: number
+  onChange: (v: number) => void
+  min?: number
+  max?: number
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <Slider
+        min={min}
+        max={max}
+        step={1}
+        value={[value]}
+        onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
+        className="flex-1"
+      />
+      <Input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) || value)}
+        className="h-9 w-16 shrink-0 text-center"
+      />
     </div>
   )
 }
@@ -436,7 +614,7 @@ function BrandTemplatePage() {
       if (pick) {
         setSelectedId(pick.id)
         setName(pick.name)
-        setTemplate({ ...DEFAULT_TEMPLATE, ...pick.config })
+        setTemplate(mergeTemplateConfig(pick.config))
       }
     } catch {
       /* offline / no backend — keep the local default */
@@ -488,7 +666,7 @@ function BrandTemplatePage() {
     if (!found) return
     setSelectedId(found.id)
     setName(found.name)
-    commit({ ...DEFAULT_TEMPLATE, ...found.config })
+    commit(mergeTemplateConfig(found.config))
   }
 
   const handleSave = async () => {
@@ -550,7 +728,15 @@ function BrandTemplatePage() {
         <div className="flex items-center gap-2">
           <Select value={selectedId ?? NEW_OPTION} onValueChange={(v) => selectTemplate(v ?? NEW_OPTION)}>
             <SelectTrigger className="h-9 w-44 justify-between rounded-md text-sm">
-              <SelectValue placeholder={t("brandTemplate.untitled")} />
+              <SelectValue placeholder={t("brandTemplate.untitled")}>
+                {(value: string) => {
+                  if (value === NEW_OPTION) return t("brandTemplate.newTemplate")
+                  const found = templates.find((x) => x.id === value)
+                  return found
+                    ? displayTemplateId(found.name, found.id)
+                    : t("brandTemplate.untitled")
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {templates.map((tpl) => (
@@ -672,12 +858,6 @@ function BrandTemplatePage() {
                   checked={template.removeFiller}
                   onCheckedChange={(v) => update("removeFiller", v)}
                 />
-                <ToggleRow
-                  icon={Highlighter}
-                  label={t("brandTemplate.rows.keywordHighlighter")}
-                  checked={template.keywordHighlighter}
-                  onCheckedChange={(v) => update("keywordHighlighter", v)}
-                />
               </div>
             </div>
           </div>
@@ -720,24 +900,26 @@ function BrandTemplatePage() {
                 </TabsContent>
 
                 <TabsContent value="title" className="space-y-4">
-                  <Field label={t("brandTemplate.titleCard.size")}>
-                    <ToggleGroup
-                      variant="outline"
-                      spacing={0}
-                      value={[String(template.titleSize)]}
-                      onValueChange={(v) => v[0] && update("titleSize", Number(v[0]))}
-                      className="w-full"
-                    >
-                      {TITLE_SIZES.map((s) => (
-                        <ToggleGroupItem key={s} value={String(s)} className="flex-1 text-xs">
-                          {s}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                  </Field>
-                  <p className="text-xs text-muted-foreground">
-                    {t("brandTemplate.titleCard.hint")}
-                  </p>
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm">{t("brandTemplate.titleCard.enable")}</span>
+                    <Switch
+                      checked={template.titleEnabled}
+                      onCheckedChange={(v) => update("titleEnabled", v)}
+                    />
+                  </label>
+                  {template.titleEnabled && (
+                    <>
+                      <Field label={t("brandTemplate.titleCard.size")}>
+                        <SizeControl
+                          value={template.titleSize}
+                          onChange={(v) => update("titleSize", v)}
+                        />
+                      </Field>
+                      <p className="text-xs text-muted-foreground">
+                        {t("brandTemplate.titleCard.hint")}
+                      </p>
+                    </>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="caption" className="space-y-4">
@@ -766,19 +948,10 @@ function BrandTemplatePage() {
                     </Select>
                   </Field>
                   <Field label={t("brandTemplate.caption.size")}>
-                    <ToggleGroup
-                      variant="outline"
-                      spacing={0}
-                      value={[String(template.captionSize)]}
-                      onValueChange={(v) => v[0] && update("captionSize", Number(v[0]))}
-                      className="w-full"
-                    >
-                      {CAPTION_SIZES.map((s) => (
-                        <ToggleGroupItem key={s} value={String(s)} className="flex-1 text-xs">
-                          {s}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
+                    <SizeControl
+                      value={template.captionSize}
+                      onChange={(v) => update("captionSize", v)}
+                    />
                   </Field>
                   <Field label={t("brandTemplate.caption.color")}>
                     <div className="flex items-center gap-2">
@@ -795,7 +968,56 @@ function BrandTemplatePage() {
                           )}
                         />
                       ))}
+                      <label
+                        className={cn(
+                          "relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-full ring-2 ring-offset-2 ring-offset-card transition-all",
+                          CAPTION_COLORS.includes(template.captionColor)
+                            ? "ring-transparent"
+                            : "ring-primary"
+                        )}
+                        style={{
+                          background:
+                            "conic-gradient(from 0deg, #ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7, #ef4444)",
+                        }}
+                        aria-label={t("brandTemplate.caption.customColor")}
+                      >
+                        <input
+                          type="color"
+                          value={template.captionColor}
+                          onChange={(e) => update("captionColor", e.target.value)}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                      </label>
                     </div>
+                    <Input
+                      value={template.captionColor}
+                      onChange={(e) => update("captionColor", e.target.value)}
+                      placeholder="#ffffff"
+                      className="h-8 font-mono text-xs"
+                    />
+                  </Field>
+                  <Field label={t("brandTemplate.caption.animation")}>
+                    <Select
+                      value={template.captionStylePreset}
+                      onValueChange={(v) =>
+                        v && update("captionStylePreset", v as CaptionStylePreset)
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-full rounded-md text-sm">
+                        <SelectValue>
+                          {(value: CaptionStylePreset) =>
+                            t(`brandTemplate.caption.animations.${value}`)
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CAPTION_ANIMATIONS.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {t(`brandTemplate.caption.animations.${p}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Field>
                 </TabsContent>
 
@@ -839,6 +1061,20 @@ function BrandTemplatePage() {
                           onUploaded={(url) => update("introMediaUrl", url)}
                           onClear={() => update("introMediaUrl", null)}
                         />
+                      )}
+                      {template.introKind !== "video" && (
+                        <Field label={t("brandTemplate.introOutro.duration")}>
+                          <Input
+                            type="number"
+                            min={0.5}
+                            max={10}
+                            step={0.5}
+                            value={template.introDurationSeconds}
+                            onChange={(e) =>
+                              update("introDurationSeconds", Number(e.target.value) || 2)
+                            }
+                          />
+                        </Field>
                       )}
                     </>
                   )}
@@ -884,6 +1120,20 @@ function BrandTemplatePage() {
                           onUploaded={(url) => update("outroMediaUrl", url)}
                           onClear={() => update("outroMediaUrl", null)}
                         />
+                      )}
+                      {template.outroKind !== "video" && (
+                        <Field label={t("brandTemplate.introOutro.duration")}>
+                          <Input
+                            type="number"
+                            min={0.5}
+                            max={10}
+                            step={0.5}
+                            value={template.outroDurationSeconds}
+                            onChange={(e) =>
+                              update("outroDurationSeconds", Number(e.target.value) || 2)
+                            }
+                          />
+                        </Field>
                       )}
                     </>
                   )}
@@ -988,21 +1238,29 @@ function BrandTemplatePage() {
                     className="absolute left-0 right-0 top-1/2"
                     style={{ height: 1, background: "rgba(255,255,255,0.12)" }}
                   />
-                  <DraggableMarker
-                    point={template.titlePosition}
-                    label={t("brandTemplate.rows.title")}
-                    containerRef={previewRef}
-                    visible={section === "title" || hoveredRow === "title"}
-                    onBegin={beginDrag}
-                    onChange={(p) => liveSet("titlePosition", p)}
-                  />
+                  {template.titleEnabled && (
+                    <DraggableMarker
+                      point={template.titlePosition}
+                      label={t("brandTemplate.rows.title")}
+                      containerRef={previewRef}
+                      visible={section === "title" || hoveredRow === "title"}
+                      sizeValue={template.titleSize}
+                      compositionHeight={ASPECT_DIMENSIONS[previewSpec.aspect].height}
+                      onBegin={beginDrag}
+                      onChange={(p) => liveSet("titlePosition", p)}
+                      onSizeChange={(s) => liveSet("titleSize", s)}
+                    />
+                  )}
                   <DraggableMarker
                     point={template.captionPosition}
                     label={t("brandTemplate.rows.caption")}
                     containerRef={previewRef}
                     visible={section === "caption" || hoveredRow === "caption"}
+                    sizeValue={template.captionSize}
+                    compositionHeight={ASPECT_DIMENSIONS[previewSpec.aspect].height}
                     onBegin={beginDrag}
                     onChange={(p) => liveSet("captionPosition", p)}
+                    onSizeChange={(s) => liveSet("captionSize", s)}
                   />
                 </div>
               ) : null}

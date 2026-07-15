@@ -29,6 +29,9 @@ from app.services.storage import stream_url
 # Seconds each backing image holds in a no-audio "stills" slideshow.
 SECS_PER_IMAGE = 4.0
 
+# Mirrors ClipSpec.caption_style_preset's Literal values.
+_CAPTION_STYLE_PRESETS = {"clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up"}
+
 
 def _norm(text: str) -> list[str]:
     """Lowercased alphanumeric word tokens, for marker matching."""
@@ -114,8 +117,10 @@ def build_clip_spec(
     aspect: str = "9:16",
     caption_position: Any = None,
     caption_enabled: bool = True,
+    caption_style_preset: str = "clean-bottom",
     title_size: int | None = None,
     title_position: Any = None,
+    title_enabled: bool = True,
     image_urls: list[str] | None = None,
     brand: ClipBrand | None = None,
     music: ClipMusic | None = None,
@@ -134,9 +139,12 @@ def build_clip_spec(
     """
     images = image_urls or []
     aspect = aspect if aspect in ("9:16", "1:1") else "9:16"
+    caption_style_preset = (
+        caption_style_preset if caption_style_preset in _CAPTION_STYLE_PRESETS else "clean-bottom"
+    )
     title = ClipTitle(
         text=segment.hook or "",
-        enabled=bool(segment.hook),
+        enabled=bool(segment.hook) and title_enabled,
         size=title_size,
         position=title_position,
     )
@@ -184,6 +192,7 @@ def build_clip_spec(
             caption_track=caption_track,
             caption_position=caption_position,
             caption_enabled=caption_enabled,
+            caption_style_preset=caption_style_preset,
             title=title,
             target_language=target_language,
             brand=brand,
@@ -224,6 +233,7 @@ def build_clip_spec(
         caption_track=caption_track,
         caption_position=caption_position,
         caption_enabled=caption_enabled,
+        caption_style_preset=caption_style_preset,
         title=title,
         target_language=target_language,
         brand=brand,

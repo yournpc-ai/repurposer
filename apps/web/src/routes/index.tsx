@@ -12,12 +12,6 @@ import RotatingText from "@/components/RotatingText"
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecentProjects } from "@/components/home/RecentProjects"
 
-interface Project {
-  id: string
-  title: string
-  status: string
-}
-
 interface Speaker {
   id: string
   name: string
@@ -35,7 +29,7 @@ export const Route = createFileRoute("/")({
 function Home() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const [projects, setProjects] = useState<Project[]>([])
+  const [projectCount, setProjectCount] = useState(0)
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
   const [error, setError] = useState("")
@@ -45,11 +39,9 @@ function Home() {
   useEffect(() => {
     Promise.all([
       apiFetch("/api/v1/speakers").then((r) => r.json()),
-      apiFetch("/api/v1/projects").then((r) => r.json()),
       apiFetch("/api/v1/brand-templates").then((r) => (r.ok ? r.json() : [])),
-    ]).then(([s, p, bt]) => {
+    ]).then(([s, bt]) => {
       setSpeakers((s as Speaker[]) || [])
-      setProjects(p || [])
       setBrandTemplates(bt || [])
     })
   }, [])
@@ -128,11 +120,11 @@ function Home() {
         <div className="mx-auto w-full max-w-6xl">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
             <span className="text-sm font-medium text-foreground">
-              {t("home.allProjects", { count: projects.length })}
+              {t("home.allProjects", { count: projectCount })}
             </span>
           </div>
 
-          <RecentProjects refreshKey={refreshKey} />
+          <RecentProjects refreshKey={refreshKey} onCountChange={setProjectCount} />
         </div>
       </section>
     </div>

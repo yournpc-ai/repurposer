@@ -73,9 +73,30 @@ async def list_projects(
     speaker_id: UUID | None = None,
     skip: int = 0,
     limit: int = 100,
-) -> list[Project]:
-    """List projects for the current user."""
-    query = select(Project).where(Project.user_id == current_user.id)
+) -> list[ProjectResponse]:
+    """List projects for the current user, with a representative clip thumbnail.
+
+    Left-joins each project to its earliest rendered clip (by created_at) so
+    the home page can show a real video thumbnail + duration/aspect badge
+    without a second round trip per card.
+    """
+    thumb = (
+        select(
+            Clip.project_id.label("project_id"),
+            Clip.video_url.label("video_url"),
+            Clip.duration.label("duration"),
+            Clip.render_spec.label("render_spec"),
+        )
+        .distinct(Clip.project_id)
+        .where(Clip.video_url.isnot(None))
+        .order_by(Clip.project_id, Clip.created_at.asc())
+        .subquery()
+    )
+    query = (
+        select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
+        .outerjoin(thumb, thumb.c.project_id == Project.id)
+        .where(Project.user_id == current_user.id)
+    )
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
     query = (
@@ -84,7 +105,14 @@ async def list_projects(
         .limit(limit)
     )
     result = await db.execute(query)
-    return list(result.scalars().all())
+    responses = []
+    for project, video_url, duration, render_spec in result.all():
+        resp = ProjectResponse.model_validate(project)
+        resp.thumbnail_url = video_url
+        resp.thumbnail_duration = duration
+        resp.thumbnail_aspect = (render_spec or {}).get("aspect")
+        responses.append(resp)
+    return responses
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
