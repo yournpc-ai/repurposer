@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost, toAbsoluteUrl } from "@/lib/api"
-import { formatDuration } from "@/lib/utils"
+import { formatDuration, cn } from "@/lib/utils"
 
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
@@ -132,17 +132,26 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col overflow-hidden ring-1 ring-border shadow-xl">
+      <Card className="group flex flex-col gap-0 overflow-hidden ring-1 ring-border">
         {/* Thumbnail / player */}
         <div
-          className="relative aspect-square w-full cursor-pointer overflow-hidden bg-muted"
+          className={cn(
+            "relative aspect-square w-full overflow-hidden bg-muted",
+            !isRendering && "cursor-pointer"
+          )}
           onClick={(e) => {
+            if (isRendering) return
             const target = e.target as HTMLElement
             if (target.closest("[data-play-trigger]")) return
             if (!isPlaying) setDetailOpen(true)
           }}
         >
-          {isPlaying && clipState.video_url ? (
+          {isRendering ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <p className="text-sm text-muted-foreground">{t("chat.rendering")}</p>
+            </div>
+          ) : isPlaying && clipState.video_url ? (
             <video
               ref={videoRef}
               src={toAbsoluteUrl(clipState.video_url) || undefined}
@@ -239,12 +248,14 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
           </div>
 
           <div className="mt-2">
-            <AssetActionBar
-              onEdit={handleEdit}
-              onDownload={clipState.video_url ? handleDownload : undefined}
-              onRegenerate={handleRegenerate}
-              onChat={() => setChatOpen(true)}
-            />
+            {!isRendering && (
+              <AssetActionBar
+                onEdit={handleEdit}
+                onDownload={clipState.video_url ? handleDownload : undefined}
+                onRegenerate={handleRegenerate}
+                onChat={() => setChatOpen(true)}
+              />
+            )}
           </div>
         </div>
       </Card>

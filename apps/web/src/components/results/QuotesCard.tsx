@@ -45,7 +45,7 @@ export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden ring-1 ring-border shadow-xl">
+    <Card className="overflow-hidden ring-1 ring-border">
       {derivative.image_url ? (
         <div className="relative aspect-square bg-muted">
           <img

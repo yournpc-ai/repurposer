@@ -45,7 +45,7 @@ export function PostCard({ derivative, onRegenerate }: PostCardProps) {
   }
 
   return (
-    <Card className="p-4 ring-1 ring-border shadow-xl">
+    <Card className="p-4 ring-1 ring-border">
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
         <AssetActionBar
