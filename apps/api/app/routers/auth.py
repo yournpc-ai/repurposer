@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.dependencies import DBDep
 from app.services.auth import (
+    RateLimitError,
     create_access_token,
     create_verification_code,
     get_or_create_user,
@@ -49,7 +50,13 @@ async def send_code(
     email = data.email.lower().strip()
     ip_address = request.client.host if request.client else None
 
-    vc = await create_verification_code(db, email, ip_address)
+    try:
+        vc = await create_verification_code(db, email, ip_address)
+    except RateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        ) from e
     try:
         await send_verification_email(email, vc.code)
     except RuntimeError as e:
@@ -57,6 +64,8 @@ async def send_code(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         ) from e
+
+    return SendCodeResponse(message="Verification code sent")
 
     return SendCodeResponse(message="Verification code sent")
 

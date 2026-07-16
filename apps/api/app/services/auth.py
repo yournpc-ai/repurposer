@@ -6,7 +6,7 @@ from uuid import UUID
 
 import jwt
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -19,6 +19,19 @@ CODE_EXPIRE_MINUTES = 10
 MAX_ATTEMPTS = 5
 JWT_ALGORITHM = "HS256"
 
+# send-code rate limits (abuse control for the email provider)
+RESEND_COOLDOWN_SECONDS = 60
+MAX_CODES_PER_EMAIL_PER_HOUR = 5
+MAX_CODES_PER_IP_PER_HOUR = 30
+
+
+class RateLimitError(Exception):
+    """Raised when a send-code request exceeds the rate limits."""
+
+    def __init__(self, message: str, retry_after_seconds: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
 
 def _generate_code() -> str:
     """Generate a 6-digit numeric verification code."""
@@ -28,11 +41,57 @@ def _generate_code() -> str:
 async def create_verification_code(
     db: AsyncSession, email: str, ip_address: str | None = None
 ) -> VerificationCode:
-    """Create a new verification code for the given email."""
+    """Create a new verification code for the given email.
+
+    Enforces a per-email resend cooldown plus hourly caps per email and per
+    IP, so the endpoint cannot be used to bomb inboxes or burn email quota.
+    """
+    email = email.lower().strip()
+    now = datetime.now(UTC)
+
+    result = await db.execute(
+        select(VerificationCode)
+        .where(VerificationCode.email == email)
+        .order_by(VerificationCode.created_at.desc())
+        .limit(1)
+    )
+    latest = result.scalar_one_or_none()
+    if latest is not None:
+        elapsed = (now - latest.created_at).total_seconds()
+        if elapsed < RESEND_COOLDOWN_SECONDS:
+            raise RateLimitError(
+                "Please wait before requesting a new code",
+                retry_after_seconds=int(RESEND_COOLDOWN_SECONDS - elapsed),
+            )
+
+    hour_ago = now - timedelta(hours=1)
+    email_count = await db.scalar(
+        select(func.count())
+        .select_from(VerificationCode)
+        .where(
+            VerificationCode.email == email,
+            VerificationCode.created_at > hour_ago,
+        )
+    )
+    if (email_count or 0) >= MAX_CODES_PER_EMAIL_PER_HOUR:
+        raise RateLimitError("Too many codes requested for this email; try again later")
+
+    if ip_address:
+        ip_count = await db.scalar(
+            select(func.count())
+            .select_from(VerificationCode)
+            .where(
+                VerificationCode.ip_address == ip_address,
+                VerificationCode.created_at > hour_ago,
+            )
+        )
+        if (ip_count or 0) >= MAX_CODES_PER_IP_PER_HOUR:
+            raise RateLimitError("Too many codes requested; try again later")
+
     code = _generate_code()
-    expires_at = datetime.now(UTC) + timedelta(minutes=CODE_EXPIRE_MINUTES)
+    expires_at = now + timedelta(minutes=CODE_EXPIRE_MINUTES)
     vc = VerificationCode(
-        email=email.lower().strip(),
+        email=email,
         code=code,
         expires_at=expires_at,
         ip_address=ip_address,
