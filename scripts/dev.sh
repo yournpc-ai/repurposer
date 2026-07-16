@@ -9,14 +9,7 @@ echo "Starting Repurposer development environment..."
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "Cannot cd to repo root ($ROOT)"; exit 1; }
 
-# Shared asset dir as ABSOLUTE path so api / worker / render all read & write
-# the same place regardless of each process's cwd. (Otherwise the api, started
-# from apps/api, would look for rendered files under apps/api/assets while the
-# render service, started from apps/render, writes to repo/assets — a 404 trap.)
-export ASSET_DIR="$ROOT/assets"
-export RENDER_OUTPUT_DIR="$ROOT/assets"
 export DEMO_SEED_ASYNC=true
-mkdir -p "$ASSET_DIR"
 
 # --- helpers ---------------------------------------------------------------
 kill_port() {

@@ -540,6 +540,8 @@ demo/outputs/projects/{demo_project_id}/{filename}
 
 如果旧数据不需要保留，也可以直接清空并重新 seed。
 
+> **已执行（2026-07-17）**：`assets/`、`data/` 目录已从仓库删除（含 git 历史外的本地副本），`dev.sh` 的 `ASSET_DIR` / `RENDER_OUTPUT_DIR` 导出同步移除。种子对象（demo 视频、3 个默认音乐）的唯一权威副本在对象存储 bucket 中。**全新 bucket 的环境需要先把这些对象迁移过去**（从现有 bucket 复制，或重跑 `scripts/seed_default_music.py` 重新生成音乐——注意这会消耗 MiniMax 额度；demo 视频无重新生成路径，必须复制）。
+
 ---
 
 ## 8. Demo Project 规格
