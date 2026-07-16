@@ -15,6 +15,7 @@ from pydantic import (
     ValidationInfo,
     computed_field,
     field_validator,
+    model_validator,
 )
 
 
@@ -917,6 +918,21 @@ class ClipResponse(BaseModel):
     end_time: float | None = None
     created_at: datetime
     updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _resolve_output_urls(self) -> ClipResponse:
+        """Resolve stored object keys to public URLs at the API boundary.
+
+        The DB stores bare object keys (e.g. ``demo/outputs/<clip_id>.mp4``);
+        the frontend consumes playable URLs. Legacy rows holding absolute URLs
+        or ``/api/v1/...`` paths pass through untouched.
+        """
+        from app.services.storage import resolve_stored_url
+
+        self.video_url = resolve_stored_url(self.video_url)
+        self.srt_url = resolve_stored_url(self.srt_url)
+        self.cover_image_url = resolve_stored_url(self.cover_image_url)
+        return self
 
 
 class ClipUpdate(BaseModel):

@@ -169,6 +169,21 @@ def public_url(key: str | None) -> str | None:
     return f"{base}/{_normalize_key(key)}"
 
 
+def resolve_stored_url(value: str | None) -> str | None:
+    """Resolve a stored URL-or-key value to a browser-usable URL.
+
+    DB columns hold bare object keys (new data) or legacy ``/api/v1/...`` paths
+    (rows from before the object-storage migration). Bare keys are joined with
+    the public URL base; absolute URLs and legacy API paths pass through
+    unchanged so old rows keep working through the redirect endpoints.
+    """
+    if not value:
+        return value
+    if value.startswith(("http://", "https://", "/")):
+        return value
+    return public_url(value)
+
+
 def stream_url(key: str | None) -> str | None:
     """Browser-playable URL for an uploaded source file."""
     return public_url(key)

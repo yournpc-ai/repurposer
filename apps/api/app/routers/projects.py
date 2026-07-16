@@ -35,7 +35,7 @@ from app.models.tables import (
 from app.services.chat import get_project_prompt, seed_project_prompt
 from app.services.demo_seed import DEMO_PROJECT_ID
 from app.services.project_context import get_project_for_user
-from app.services.storage import delete_file, delete_project_files
+from app.services.storage import delete_file, delete_project_files, resolve_stored_url
 
 router = APIRouter()
 
@@ -123,7 +123,7 @@ async def list_projects(
             continue
         resp = ProjectResponse.model_validate(project)
         resp.is_demo = project.id == DEMO_PROJECT_ID
-        resp.thumbnail_url = video_url
+        resp.thumbnail_url = resolve_stored_url(video_url)
         resp.thumbnail_duration = duration
         resp.thumbnail_aspect = (render_spec or {}).get("aspect")
         responses.append(resp)

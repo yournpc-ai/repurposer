@@ -13,7 +13,7 @@ from app.models.schemas import (
     LibraryItemType,
 )
 from app.models.tables import Asset, Clip, Derivative, Project, User
-from app.services.storage import stream_url
+from app.services.storage import resolve_stored_url, stream_url
 
 router = APIRouter()
 
@@ -106,7 +106,7 @@ async def list_library(
                     project_id=clip.project_id,
                     created_at=clip.created_at,
                     preview=f"{clip.duration}s" if clip.duration else None,
-                    download_url=clip.video_url,
+                    download_url=resolve_stored_url(clip.video_url),
                 )
             )
 
