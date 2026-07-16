@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
-from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
     AssetType,
     ClipResponse,
@@ -95,11 +94,19 @@ async def list_projects(
         .order_by(Clip.project_id, Clip.created_at.asc())
         .subquery()
     )
-    user_ids = [current_user.id, DEFAULT_USER_ID] if current_user else [DEFAULT_USER_ID]
+    # Anonymous users see only the demo project. Authenticated users see their
+    # own projects plus the demo project (the demo is owned by the shared
+    # default user; nothing else of the default user leaks into anyone's list).
+    if current_user:
+        ownership_filter = (Project.user_id == current_user.id) | (
+            Project.id == DEMO_PROJECT_ID
+        )
+    else:
+        ownership_filter = Project.id == DEMO_PROJECT_ID
     query = (
         select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
-        .where(Project.user_id.in_(user_ids))
+        .where(ownership_filter)
     )
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
