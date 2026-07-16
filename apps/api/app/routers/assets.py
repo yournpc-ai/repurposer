@@ -18,6 +18,9 @@ from app.models.schemas import (
 from app.models.tables import Asset, Project, Speaker, User
 from app.services.storage import (
     delete_file,
+    exists,
+    get_project_upload_dir,
+    get_speaker_upload_dir,
     get_upload_path,
     presign_upload,
     save_speaker_upload,
@@ -114,6 +117,20 @@ async def create_asset_from_key(
 ) -> Asset:
     """Create an asset record after the client uploaded the file directly to storage."""
     await _get_user_project(project_id, current_user.id, db)
+
+    # The key must be one this server issued for this project+user, and the
+    # object must actually exist — never trust a client-reported key blindly.
+    expected_prefix = get_project_upload_dir(project_id, current_user.id)
+    if not request.key.startswith(f"{expected_prefix}/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid upload key",
+        )
+    if not await exists(request.key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file not found in storage; upload it first",
+        )
 
     asset = Asset(
         user_id=current_user.id,
@@ -293,6 +310,19 @@ async def create_speaker_asset_from_key(
 ) -> Asset:
     """Create a speaker asset record after direct upload to storage."""
     await _get_user_speaker(speaker_id, current_user.id, db)
+
+    # Same trust rules as project assets: server-issued key + object present.
+    expected_prefix = get_speaker_upload_dir(speaker_id, current_user.id)
+    if not request.key.startswith(f"{expected_prefix}/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid upload key",
+        )
+    if not await exists(request.key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file not found in storage; upload it first",
+        )
 
     asset = Asset(
         user_id=current_user.id,

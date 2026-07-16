@@ -54,6 +54,25 @@ def _to_response(music: Music) -> MusicResponse:
     )
 
 
+async def _get_music_for_owner(db, music_id: UUID, user_id: UUID) -> Music:
+    """Fetch a piece and ensure the caller created it.
+
+    Platform/default pieces (``generated_by_user_id`` NULL) are immutable to
+    regular users; user-generated pieces can only be touched by their creator.
+    """
+    music = await get_music(db, music_id)
+    if music is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Music not found"
+        )
+    if music.generated_by_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the creator can modify this music piece",
+        )
+    return music
+
+
 @router.get("", response_model=list[MusicResponse])
 async def list_music_endpoint(
     db: DBDep,
@@ -115,10 +134,10 @@ async def update_music_endpoint(
     music_id: UUID,
     data: MusicMetadataUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user_required),  # noqa: ARG001
+    current_user: User = Depends(get_current_user_required),
 ) -> MusicResponse:
-    """Update a music piece's editable metadata."""
-    _ = current_user  # reserved for future ownership checks
+    """Update a music piece's editable metadata (creator only)."""
+    await _get_music_for_owner(db, music_id, current_user.id)
     music = await update_music_metadata(
         db,
         music_id,
@@ -139,10 +158,10 @@ async def update_music_endpoint(
 async def delete_music_endpoint(
     music_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user_required),  # noqa: ARG001
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
-    """Delete a music piece; 409 if any clip still references it."""
-    _ = current_user  # reserved for future ownership checks
+    """Delete a music piece (creator only); 409 if any clip references it."""
+    await _get_music_for_owner(db, music_id, current_user.id)
     try:
         music = await delete_music(db, music_id)
     except MusicInUseError as e:
