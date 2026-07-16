@@ -20,6 +20,8 @@ const zh: Resources = {
     profile: "个人资料",
     settings: "设置",
     logout: "退出登录",
+    login: "登录",
+    guest: "访客",
     helpCenter: "帮助中心",
     inviteMembers: "邀请成员",
     new: "新建",

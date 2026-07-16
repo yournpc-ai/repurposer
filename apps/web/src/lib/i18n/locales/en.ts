@@ -18,6 +18,8 @@ const en = {
     profile: "Profile",
     settings: "Settings",
     logout: "Log out",
+    login: "Log in",
+    guest: "Guest",
     helpCenter: "Help center",
     inviteMembers: "Invite members",
     new: "New",

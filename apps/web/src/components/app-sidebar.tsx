@@ -13,9 +13,10 @@ import {
   User,
   Settings,
   LogOut,
+  LogIn,
   Sparkles,
 } from "lucide-react"
-import { Link, useRouterState } from "@tanstack/react-router"
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -42,7 +43,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 
-import { clearAuth } from "@/lib/auth"
+import { clearAuth, getUser } from "@/lib/auth"
+import { useAuth } from "@/components/AuthProvider"
 
 const createItems = [
   { key: "home", url: "/", icon: Home },
@@ -71,6 +73,19 @@ export function AppSidebar() {
   const currentPath = router.location.pathname
   const { t } = useTranslation()
   const { toggleSidebar } = useSidebar()
+  const navigate = useNavigate()
+  const { isAuthenticated, setLoginOpen, refreshAuth } = useAuth()
+
+  // Re-read on every render; auth-state changes re-render via context.
+  const user = getUser()
+  const displayName = user?.name || user?.email || t("common.guest")
+  const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase()
+
+  const handleLogout = () => {
+    clearAuth()
+    refreshAuth()
+    navigate({ to: "/" })
+  }
 
   return (
     <Sidebar
@@ -167,13 +182,13 @@ export function AppSidebar() {
                 className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
               >
                 <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
-                  <AvatarImage src="" alt="User" />
+                  <AvatarImage src="" alt={displayName} />
                   <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
-                    U
+                    {isAuthenticated ? initial : <User className="h-3 w-3" />}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
-                  <span className="text-sm font-medium leading-none">User</span>
+                  <span className="text-sm font-medium leading-none">{displayName}</span>
                   <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
@@ -186,36 +201,42 @@ export function AppSidebar() {
             align="start"
             sideOffset={8}
           >
-            <DropdownMenuGroup>
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                  {t("common.freePlan")}
-                </span>
-              </div>
-            </DropdownMenuGroup>
-            <DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <User className="mr-2 h-4 w-4" />
-                {t("common.profile")}
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                {t("common.settings")}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  clearAuth()
-                  window.location.href = "/"
-                }}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                {t("common.logout")}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            {isAuthenticated ? (
+              <>
+                <DropdownMenuGroup>
+                  <div className="flex items-center gap-2 px-2 py-1.5">
+                    <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                      {t("common.freePlan")}
+                    </span>
+                  </div>
+                </DropdownMenuGroup>
+                <DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <User className="mr-2 h-4 w-4" />
+                    {t("common.profile")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    {t("common.settings")}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    {t("common.logout")}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            ) : (
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => setLoginOpen(true)}>
+                  <LogIn className="mr-2 h-4 w-4" />
+                  {t("common.login")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
