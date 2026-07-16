@@ -8,26 +8,34 @@ from sqlalchemy import select
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
+    AssetUploadUrlRequest,
+    AssetUploadUrlResponse,
+    BrandMediaCreateRequest,
     BrandTemplateCreate,
     BrandTemplateResponse,
     BrandTemplateUpdate,
 )
 from app.models.tables import BrandTemplate, User
-from app.services.storage import save_brand_media_upload, stream_url
+from app.services.storage import (
+    get_brand_media_path,
+    presign_upload,
+    save_brand_media_upload,
+    stream_url,
+)
 
 router = APIRouter()
 
 
 async def _get_user_brand_template(
-    template_id: UUID, user_id: UUID, db: DBDep
+    template_id: UUID, user_id: UUID | None, db: DBDep
 ) -> BrandTemplate:
-    """Fetch a brand template and ensure it belongs to the given user."""
-    result = await db.execute(
-        select(BrandTemplate).where(
-            BrandTemplate.id == template_id,
-            BrandTemplate.user_id == user_id,
-        )
-    )
+    """Fetch a brand template and ensure it belongs to the given user or defaults."""
+    query = select(BrandTemplate).where(BrandTemplate.id == template_id)
+    if user_id is None:
+        query = query.where(BrandTemplate.user_id == DEFAULT_USER_ID)
+    else:
+        query = query.where(BrandTemplate.user_id.in_([user_id, DEFAULT_USER_ID]))
+    result = await db.execute(query)
     template = result.scalar_one_or_none()
     if template is None:
         raise HTTPException(
@@ -54,28 +62,53 @@ async def create_brand_template(
 @router.get("", response_model=list[BrandTemplateResponse])
 async def list_brand_templates(
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> list[BrandTemplate]:
     """List brand templates for the current user plus the system defaults."""
+    user_ids = [current_user.id, DEFAULT_USER_ID] if current_user else [DEFAULT_USER_ID]
     result = await db.execute(
         select(BrandTemplate)
         .where(
-            BrandTemplate.user_id.in_([current_user.id, DEFAULT_USER_ID])
+            BrandTemplate.user_id.in_(user_ids)
         )
         .order_by(BrandTemplate.created_at.desc())
     )
     return list(result.scalars().all())
 
 
+@router.post("/media/upload-url", response_model=AssetUploadUrlResponse)
+async def create_brand_media_upload_url(
+    request: AssetUploadUrlRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> AssetUploadUrlResponse:
+    """Return a presigned PUT URL for direct upload of brand intro/outro media."""
+    key = str(await get_brand_media_path(current_user.id, request.filename))
+    upload_url = await presign_upload(key, content_type=request.content_type)
+    if upload_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate upload URL",
+        )
+    return AssetUploadUrlResponse(key=key, upload_url=upload_url)
+
+
 @router.post("/media", status_code=status.HTTP_201_CREATED)
+async def create_brand_media_from_key(
+    request: BrandMediaCreateRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> dict[str, str | None]:
+    """Confirm a directly-uploaded brand media file and return its stream URL."""
+    return {"url": stream_url(request.key)}
+
+
+@router.post("/media/upload", status_code=status.HTTP_201_CREATED)
 async def upload_brand_media(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_required),
 ) -> dict[str, str | None]:
-    """Upload an intro/outro image or video; returns its storage-seam URL.
+    """Upload an intro/outro image or video through the API (local/fallback).
 
-    Not scoped by template_id (a draft may not have one yet) — placed before
-    the ``/{template_id}`` routes so ``media`` is never parsed as a UUID.
+    Prefer ``POST /media/upload-url`` for direct-to-storage uploads.
     """
     if not (file.content_type or "").startswith(("image/", "video/")):
         raise HTTPException(status_code=422, detail="File must be an image or video")
@@ -89,10 +122,12 @@ async def upload_brand_media(
 async def get_brand_template(
     template_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> BrandTemplate:
     """Get a brand template by ID."""
-    return await _get_user_brand_template(template_id, current_user.id, db)
+    return await _get_user_brand_template(
+        template_id, current_user.id if current_user else None, db
+    )
 
 
 @router.put("/{template_id}", response_model=BrandTemplateResponse)

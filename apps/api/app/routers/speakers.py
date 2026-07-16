@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.agents.persona import persona_agent
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
+from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
     AssetType,
     SpeakerContext,
@@ -47,25 +48,31 @@ async def create_speaker(
 @router.get("", response_model=list[SpeakerContext])
 async def list_speakers(
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
     skip: int = 0,
     limit: int = 100,
 ) -> list[Speaker]:
-    """List speakers for the current user."""
+    """List speakers for the current user plus system defaults."""
+    user_ids = [current_user.id, DEFAULT_USER_ID] if current_user else [DEFAULT_USER_ID]
     result = await db.execute(
         select(Speaker)
-        .where(Speaker.user_id == current_user.id)
+        .where(Speaker.user_id.in_(user_ids))
         .offset(skip)
         .limit(limit)
     )
     return list(result.scalars().all())
 
 
-async def _get_user_speaker(speaker_id: UUID, user_id: UUID, db: DBDep) -> Speaker:
-    """Fetch a speaker and ensure it belongs to the given user."""
-    result = await db.execute(
-        select(Speaker).where(Speaker.id == speaker_id, Speaker.user_id == user_id)
-    )
+async def _get_user_speaker(
+    speaker_id: UUID, user_id: UUID | None, db: DBDep
+) -> Speaker:
+    """Fetch a speaker and ensure it belongs to the given user or defaults."""
+    query = select(Speaker).where(Speaker.id == speaker_id)
+    if user_id is None:
+        query = query.where(Speaker.user_id == DEFAULT_USER_ID)
+    else:
+        query = query.where(Speaker.user_id.in_([user_id, DEFAULT_USER_ID]))
+    result = await db.execute(query)
     speaker = result.scalar_one_or_none()
     if not speaker:
         raise HTTPException(
@@ -79,10 +86,12 @@ async def _get_user_speaker(speaker_id: UUID, user_id: UUID, db: DBDep) -> Speak
 async def get_speaker(
     speaker_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> Speaker:
     """Get speaker by ID."""
-    return await _get_user_speaker(speaker_id, current_user.id, db)
+    return await _get_user_speaker(
+        speaker_id, current_user.id if current_user else None, db
+    )
 
 
 @router.put("/{speaker_id}", response_model=SpeakerContext)

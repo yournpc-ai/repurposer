@@ -5,7 +5,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -26,15 +25,15 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"
 
-    # Storage
-    # Default to the repo-root assets/ directory so scripts and the API behave
-    # the same regardless of the current working directory.
-    asset_dir: Path = _REPO_ROOT / "assets"
-    # Deprecated: upload_dir/output_dir are kept for compatibility during the
-    # migration to asset_dir; new code should use asset_dir directly.
-    upload_dir: Path = Path("./data/uploads")
-    output_dir: Path = Path("./data/outputs")
-    music_dir: Path = Path("./data/music")  # built-in mood music library
+    # S3-compatible object storage (Volcengine TOS, AWS S3, MinIO, etc.)
+    s3_endpoint_url: str
+    s3_bucket_name: str
+    s3_access_key_id: str
+    s3_secret_access_key: str
+    s3_region: str = "ap-southeast-1"
+    s3_public_url: str  # public read base URL, e.g. https://bucket.tos-s3-region.volces.com
+    s3_force_path_style: bool = False  # MUST be False for Volcengine TOS
+    s3_presign_upload_ttl: int = 3600  # presigned PUT URL TTL in seconds
 
     # API
     api_host: str = "0.0.0.0"
@@ -74,16 +73,9 @@ class Settings(BaseSettings):
     from_email: str = "Repurposer <no-reply@repurposer.local>"
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_expire_days: int = 30
-    # When True, requests without a bearer token fall back to the seeded default
-    # user (local development). When False, protected endpoints require a JWT.
-    auth_allow_default_user: bool = True
 
     def ensure_dirs(self) -> None:
-        """Ensure storage directories exist."""
-        self.asset_dir.mkdir(parents=True, exist_ok=True)
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.music_dir.mkdir(parents=True, exist_ok=True)
+        """No local media directories are used; all persistence is object storage."""
 
 
 settings = Settings()

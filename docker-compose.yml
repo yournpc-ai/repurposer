@@ -25,18 +25,18 @@ services:
       - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
-      - AUTH_ALLOW_DEFAULT_USER=${AUTH_ALLOW_DEFAULT_USER:-false}
-      - ASSET_DIR=/repo/assets
-      # Absolute base the render service uses to fetch source clips back over HTTP.
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
-    volumes:
-      - ./assets:/repo/assets
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      - S3_REGION=${S3_REGION:-ap-southeast-1}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL}
+      - S3_PRESIGN_UPLOAD_TTL=${S3_PRESIGN_UPLOAD_TTL:-3600}
     depends_on:
       - db
 
-  # Queue worker: same image as api, different entrypoint. This is the process
-  # that POSTs clip-specs to the render service and writes the results back.
   worker:
     build:
       context: ./apps/api
@@ -51,29 +51,25 @@ services:
       - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
-      - AUTH_ALLOW_DEFAULT_USER=${AUTH_ALLOW_DEFAULT_USER:-false}
-      - ASSET_DIR=/repo/assets
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
-    volumes:
-      - ./assets:/repo/assets
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      - S3_REGION=${S3_REGION:-ap-southeast-1}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL}
+      - S3_PRESIGN_UPLOAD_TTL=${S3_PRESIGN_UPLOAD_TTL:-3600}
     depends_on:
       - db
       - render
 
-  # Remotion render service (clip-spec -> MP4+SRT). Headless Chromium + bundled
-  # FFmpeg, called by the worker; off the request path for text-only flows.
-  # Build context is the repo root (workspace pkg — see apps/render/Dockerfile).
   render:
     build:
       context: .
       dockerfile: apps/render/Dockerfile
     environment:
       - RENDER_PORT=3001
-      - RENDER_OUTPUT_DIR=/repo/assets
-    volumes:
-      # Shared with api/worker: render writes here, api serves it via Range.
-      - ./assets:/repo/assets
 
   web:
     build:

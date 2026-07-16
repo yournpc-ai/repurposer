@@ -71,7 +71,7 @@ async def create_project(
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
     speaker_id: UUID | None = None,
     skip: int = 0,
     limit: int = 100,
@@ -94,10 +94,11 @@ async def list_projects(
         .order_by(Clip.project_id, Clip.created_at.asc())
         .subquery()
     )
+    user_ids = [current_user.id, DEFAULT_USER_ID] if current_user else [DEFAULT_USER_ID]
     query = (
         select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
-        .where(Project.user_id.in_([current_user.id, DEFAULT_USER_ID]))
+        .where(Project.user_id.in_(user_ids))
     )
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
@@ -111,7 +112,7 @@ async def list_projects(
 
     # Demo project is an onboarding aid; hide it once the user has created real
     # projects so the home page only shows their own work.
-    has_real_project = any(
+    has_real_project = current_user is not None and any(
         project.id != DEMO_PROJECT_ID and project.user_id == current_user.id
         for project, *_ in rows
     )
@@ -132,20 +133,22 @@ async def list_projects(
 async def get_project(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> Project:
     """Get project by ID."""
-    return await get_project_for_user(db, project_id, current_user.id)
+    return await get_project_for_user(db, project_id, current_user.id if current_user else None)
 
 
 @router.get("/{project_id}/results", response_model=ProjectResultsResponse)
 async def get_project_results(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> dict:
     """Aggregate project results: metadata, prompt, clips, derivatives, latest job."""
-    project = await get_project_for_user(db, project_id, current_user.id)
+    project = await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
 
     # The original prompt is the first user message in the project-scoped chat session.
     prompt = await get_project_prompt(db, project_id)
@@ -231,7 +234,7 @@ async def delete_project(
     # unlinked individually since we need each file_url before deletion.
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     for asset in result.scalars().all():
-        delete_file(asset.file_url)
+        await delete_file(asset.file_url)
 
     await db.execute(delete(Clip).where(Clip.project_id == project_id))
     await db.execute(delete(Derivative).where(Derivative.project_id == project_id))
@@ -241,7 +244,7 @@ async def delete_project(
     await db.commit()
 
     # Remove project upload directory after DB commit
-    delete_project_files(project_id, current_user.id)
+    await delete_project_files(project_id, current_user.id)
 
 
 @router.post("/{project_id}/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
@@ -302,10 +305,12 @@ async def generate_content(
 async def list_project_jobs(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> list[WorkflowRun]:
     """List generation jobs for a project, newest first."""
-    await get_project_for_user(db, project_id, current_user.id)
+    await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
     result = await db.execute(
         select(WorkflowRun)
         .where(WorkflowRun.project_id == project_id)
@@ -319,10 +324,12 @@ async def get_project_job(
     project_id: UUID,
     job_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> WorkflowRun:
     """Get a single generation job's status."""
-    await get_project_for_user(db, project_id, current_user.id)
+    await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
     run = await db.get(WorkflowRun, job_id)
     if run is None or run.project_id != project_id:
         raise HTTPException(
@@ -336,10 +343,12 @@ async def get_project_job(
 async def list_project_clips(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> list[Clip]:
     """List generated clips for a project."""
-    await get_project_for_user(db, project_id, current_user.id)
+    await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
 
     result = await db.execute(
         select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
@@ -351,10 +360,12 @@ async def list_project_clips(
 async def list_project_derivatives(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> list[Derivative]:
     """List generated derivatives (LinkedIn posts, quote cards) for a project."""
-    await get_project_for_user(db, project_id, current_user.id)
+    await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
     result = await db.execute(
         select(Derivative)
         .where(Derivative.project_id == project_id)

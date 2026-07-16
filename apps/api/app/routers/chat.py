@@ -32,7 +32,7 @@ async def get_chat_session(
     asset_id: UUID | None = None,
     asset_type: Literal["clip", "derivative"] | None = None,
     db: DBDep = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> ChatSession | None:
     """Get the existing chat session for a project or asset scope.
 
@@ -74,7 +74,7 @@ async def send_chat_message(
 async def list_chat_messages(
     session_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> MessageListResponse:
     """List messages in a chat session, oldest first."""
     session = await db.get(ChatSession, session_id)

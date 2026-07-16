@@ -11,7 +11,6 @@ from starlette.concurrency import run_in_threadpool
 
 from app.agents.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError
-from app.config import settings
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
@@ -32,7 +31,7 @@ from app.services.project_context import (
     resolve_speaker,
     speaker_context_from_row,
 )
-from app.services.storage import get_output_path, output_url, resolve_file_path
+from app.services.storage import download_to_temp, get_output_path, output_url, save
 from app.services.voice import clone_voice, extract_audio, synthesize
 
 router = APIRouter()
@@ -41,9 +40,11 @@ router = APIRouter()
 async def _get_clip_for_user(
     db: AsyncSession,
     clip_id: UUID,
-    user_id: UUID,
+    user_id: UUID | None,
 ) -> Clip:
-    """Fetch a clip and ensure it belongs to the given user."""
+    """Fetch a clip and ensure it belongs to the given user or is the demo."""
+    from app.services.project_context import DEMO_PROJECT_ID
+
     clip = await db.get(Clip, clip_id)
     if clip is None:
         raise HTTPException(
@@ -51,22 +52,31 @@ async def _get_clip_for_user(
             detail="Clip not found",
         )
     project = await db.get(Project, clip.project_id)
-    if project is None or project.user_id != user_id:
+    if project is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
         )
-    return clip
+    if user_id is not None and project.user_id == user_id:
+        return clip
+    if project.id == DEMO_PROJECT_ID:
+        return clip
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied",
+    )
 
 
 @router.get("/{clip_id}", response_model=ClipResponse)
 async def get_clip(
     clip_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> Clip:
     """Get a single clip (editor load + render-status polling)."""
-    return await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+    return await _get_clip_for_user(
+        db, clip_id, UUID(str(current_user.id)) if current_user else None
+    )
 
 
 @router.put("/{clip_id}", response_model=ClipResponse)
@@ -305,27 +315,25 @@ async def dub_clip(
             status.HTTP_400_BAD_REQUEST,
             "No voice sample — upload audio/video (or a voice sample) to dub",
         )
-    src_path = resolve_file_path(sample.file_url)
-    if src_path is None or not src_path.is_file():
+    src_path = await download_to_temp(sample.file_url)
+    if src_path is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Voice sample file missing")
 
+    tmp_audio_path = None
     try:
         # Reuse a cached cloned voice (MiniMax clones are ~168h temporary).
         voice_id = (sample.meta or {}).get("voice_id")
         if not voice_id:
             audio_path = src_path
-            tmp = None
             if sample.type == AssetType.VIDEO:
-                tmp = await run_in_threadpool(extract_audio, src_path)
-                if tmp is None:
+                tmp_audio_path = await run_in_threadpool(extract_audio, src_path)
+                if tmp_audio_path is None:
                     raise HTTPException(
                         status.HTTP_400_BAD_REQUEST,
                         "Could not extract audio from the video for voice cloning",
                     )
-                audio_path = tmp
+                audio_path = tmp_audio_path
             voice_id = await run_in_threadpool(clone_voice, audio_path)
-            if tmp is not None:
-                tmp.unlink(missing_ok=True)
             if not voice_id:
                 raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Voice cloning unavailable")
             sample.meta = {**(sample.meta or {}), "voice_id": voice_id}
@@ -335,17 +343,27 @@ async def dub_clip(
         audio_bytes = await run_in_threadpool(synthesize, text, voice_id, data.target_language)
     except MiniMaxError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+    finally:
+        if tmp_audio_path is not None:
+            tmp_audio_path.unlink(missing_ok=True)
+        if src_path is not None:
+            src_path.unlink(missing_ok=True)
 
-    out_path = get_output_path(clip.project_id, project.user_id, f"{clip_id}_dub_{data.target_language}.mp3")
-    out_path.write_bytes(audio_bytes)
-    rel = str(out_path.relative_to(settings.asset_dir))
+    out_key = str(
+        get_output_path(
+            clip.project_id,
+            project.user_id,
+            f"{clip_id}_dub_{data.target_language}.mp3",
+        )
+    )
+    out_key = await save(out_key, audio_bytes)
 
     # Reassign a NEW dict so SQLAlchemy flushes the JSON column.
     clip.render_spec = {
         **spec,
         "caption_track": new_track,
         "target_language": data.target_language,
-        "dub": {"url": output_url(rel), "enabled": True, "gain_db": 0.0},
+        "dub": {"url": output_url(out_key), "enabled": True, "gain_db": 0.0},
     }
     clip.updated_at = datetime.now(UTC)
     await db.commit()

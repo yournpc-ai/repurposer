@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     AssetResponse,
     DerivativeResponse,
@@ -64,7 +64,7 @@ def _upload_type(a: AssetResponse) -> LibraryItemType:
 async def list_library(
     type: LibraryItemType | None = None,  # noqa: A002
     db: DBDep = None,  # type: ignore[assignment]
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> list[LibraryItemResponse]:
     """Return the current user's assets, clips, and derivatives as a flat timeline."""
     db = db  # satisfy type checker when DBDep is optional

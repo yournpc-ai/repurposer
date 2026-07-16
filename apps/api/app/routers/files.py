@@ -1,32 +1,23 @@
-"""File streaming endpoints (Range-capable).
+"""File streaming endpoints.
 
-Serves stored uploads (source videos) and rendered outputs (MP4/SRT) with HTTP
-Range support so the browser can play/seek. These are the *local* implementation
-behind ``storage.stream_url()`` / ``storage.output_url()``; swapping to object
-storage means returning presigned URLs from those seams, leaving these endpoints
-and all callers unchanged (see docs/VIDEO_EDITOR.md §5).
-
-Starlette's :class:`FileResponse` handles ``Range`` requests natively (206
-partial content), which is what video scrubbing needs.
+The object storage bucket is public-read, so these endpoints only perform
+ownership checks and redirect callers to the public object URL. Range requests
+and delivery are handled entirely by the object store.
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from starlette.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.dependencies import get_current_user
 from app.models.tables import User
-from app.services.storage import (
-    owner_from_path,
-    resolve_output_safe,
-    resolve_safe,
-)
+from app.services.storage import owner_from_path, public_url
 
 router = APIRouter()
 
 
-def _authorize_path(file_path: str, current_user: User) -> None:
+def _authorize_path(file_path: str, current_user: User | None) -> None:
     """Refuse access unless the path belongs to the current user or is demo."""
     owner = owner_from_path(file_path)
     if owner == "demo":
@@ -35,6 +26,11 @@ def _authorize_path(file_path: str, current_user: User) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
+        )
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
         )
     try:
         if UUID(owner) == current_user.id:
@@ -50,38 +46,33 @@ def _authorize_path(file_path: str, current_user: User) -> None:
 @router.get("/files/{file_path:path}")
 async def stream_upload(
     file_path: str,
-    current_user: User = Depends(get_current_user),
-) -> FileResponse:
-    """Stream an uploaded source file by relative path, with Range support."""
+    current_user: User | None = Depends(get_current_user),
+):
+    """Stream an uploaded source file by key."""
     _authorize_path(file_path, current_user)
-    path = resolve_safe(file_path)
-    if path is None or not path.is_file():
+    url = public_url(file_path)
+    if url is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
         )
-    return FileResponse(path)
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get("/outputs/{file_path:path}")
 async def stream_output(
     file_path: str,
     download: bool = False,
-    current_user: User = Depends(get_current_user),
-) -> FileResponse:
-    """Stream a rendered output (MP4/SRT) by relative path, with Range support.
-
-    Set ``download=1`` to prompt the browser to save the file instead of
-    playing it inline.
-    """
+    current_user: User | None = Depends(get_current_user),
+):
+    """Stream a rendered output (MP4/SRT) by key."""
     _authorize_path(file_path, current_user)
-    path = resolve_output_safe(file_path)
-    if path is None or not path.is_file():
+    url = public_url(file_path)
+    if url is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
         )
-    headers = {}
     if download:
-        headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
-    return FileResponse(path, headers=headers)
+        url = f"{url}?download=1"
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)

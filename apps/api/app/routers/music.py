@@ -4,23 +4,16 @@ Endpoints (prefix ``/api/v1/music``):
 
 - ``GET  ""``                  list pieces (auth; public + caller's own).
 - ``POST "/generate"``         generate a custom piece from a prompt (auth).
-- ``GET  "/{music_id}/stream"`` stream a piece's audio by UUID (no auth — the
-                                render service fetches without a bearer token).
+- ``GET  "/{music_id}/stream"`` redirect to a piece's public audio URL (no auth).
 - ``PUT  "/{music_id}"``       update metadata (auth).
 - ``DELETE "/{music_id}"``     delete (auth; 409 if referenced by any clip).
-- ``GET  "/{ref}"``            unified: UUID → metadata (auth-free, public
-                                only); mood string → legacy audio stream
-                                (no auth, Range-capable). Declared last so it
-                                doesn't shadow ``/generate`` or ``/stream``.
-
-The legacy ``GET /api/v1/music/{mood}`` audio stream (old clips' render_spec)
-moved here from ``routers/files.py``; its URL is unchanged.
+- ``GET "/{ref}"``             UUID → metadata (auth-free, public only).
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from starlette.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
@@ -36,7 +29,7 @@ from app.services.music import (
 )
 from app.services.music_generation import USER_MODEL
 from app.services.music_generation import generate_music as generate_music_bytes
-from app.services.storage import resolve_music_safe, resolve_safe
+from app.services.storage import public_url
 
 router = APIRouter()
 
@@ -64,10 +57,10 @@ def _to_response(music: Music) -> MusicResponse:
 @router.get("", response_model=list[MusicResponse])
 async def list_music_endpoint(
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ) -> list[MusicResponse]:
     """List available music pieces (public + the caller's own)."""
-    pieces = await list_music(db, user_id=current_user.id)
+    pieces = await list_music(db, user_id=current_user.id if current_user else None)
     return [_to_response(m) for m in pieces]
 
 
@@ -77,11 +70,7 @@ async def generate_music_endpoint(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> MusicResponse:
-    """Generate a new music piece from a prompt via MiniMax and persist it.
-
-    Sync in Phase 1 (the call is async so the event loop is not blocked); a
-    chat-driven worker path is Phase 2 (see docs/MUSIC_ARCHITECTURE.md).
-    """
+    """Generate a new music piece from a prompt via MiniMax and persist it."""
     try:
         generated = await generate_music_bytes(
             data.prompt,
@@ -106,19 +95,19 @@ async def generate_music_endpoint(
 
 
 @router.get("/{music_id}/stream")
-async def stream_music_by_id(music_id: UUID, db: DBDep) -> FileResponse:
-    """Stream a music piece's audio by UUID, with Range support (no auth)."""
+async def stream_music_by_id(music_id: UUID, db: DBDep):
+    """Redirect to a music piece's public audio URL (no auth)."""
     music = await get_music(db, music_id)
     if music is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Music not found"
         )
-    path = resolve_safe(music.file_path)
-    if path is None or not path.is_file():
+    url = public_url(music.file_path)
+    if url is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Music file not found"
         )
-    return FileResponse(path)
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.put("/{music_id}", response_model=MusicResponse)
@@ -128,11 +117,7 @@ async def update_music_endpoint(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),  # noqa: ARG001
 ) -> MusicResponse:
-    """Update a music piece's editable metadata.
-
-    MVP: the single default user is the platform admin, so any piece is
-    editable. Future: restrict to the piece's ``generated_by_user_id``.
-    """
+    """Update a music piece's editable metadata."""
     _ = current_user  # reserved for future ownership checks
     music = await update_music_metadata(
         db,
@@ -174,22 +159,14 @@ async def delete_music_endpoint(
 
 @router.get("/{ref}")
 async def get_or_stream_music(ref: str, db: DBDep):
-    """Unified single-segment handler.
-
-    - ``ref`` parses as a UUID → return the piece's metadata (public only).
-    - otherwise → treat ``ref`` as a legacy mood key and stream the audio
-      (preserves ``/api/v1/music/{mood}`` for old clips; Range-capable).
-    """
+    """Return metadata for a public music piece by UUID."""
     try:
         music_id = UUID(ref)
     except ValueError:
-        path = resolve_music_safe(ref)
-        if path is None or not path.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Music track not found",
-            )
-        return FileResponse(path)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Music not found",
+        )
 
     music = await get_music(db, music_id)
     if music is None or not music.is_public:
