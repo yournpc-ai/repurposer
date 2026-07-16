@@ -278,14 +278,33 @@ export function HomeComposer({
           files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
         const uploaded = await Promise.all(
           materials.map(async (material) => {
-            const form = new FormData()
-            form.append("type", files.length > 0 ? inferAssetType(material) : "transcript")
-            form.append("file", material)
+            const type = files.length > 0 ? inferAssetType(material) : "transcript"
+
+            const urlRes = await apiFetch(`/api/v1/projects/${project.id}/assets/upload-url`, {
+              method: "POST",
+              body: {
+                filename: material.name,
+                content_type: material.type || undefined,
+              },
+            })
+            if (!urlRes.ok) throw new Error("Failed to get upload URL")
+            const { key, upload_url } = (await urlRes.json()) as {
+              key: string
+              upload_url: string
+            }
+
+            const putRes = await fetch(upload_url, {
+              method: "PUT",
+              body: material,
+              headers: material.type ? { "Content-Type": material.type } : {},
+            })
+            if (!putRes.ok) throw new Error("Failed to upload file")
+
             const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
               method: "POST",
-              body: form,
+              body: { type, key },
             })
-            if (!assetRes.ok) throw new Error("Failed to upload material")
+            if (!assetRes.ok) throw new Error("Failed to create asset")
             return (await assetRes.json()) as Asset
           })
         )

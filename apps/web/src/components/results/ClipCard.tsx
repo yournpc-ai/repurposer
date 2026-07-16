@@ -5,9 +5,8 @@ import { useNavigate } from "@tanstack/react-router"
 import { Play } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { apiFetch, apiPost, toAbsoluteUrl } from "@/lib/api"
+import { apiPost, toAbsoluteUrl } from "@/lib/api"
 import { formatDuration, cn } from "@/lib/utils"
 
 import { AssetActionBar } from "./AssetActionBar"

@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
+import { resolveProjectId } from "@/lib/constants"
 
 import type { Clip, Derivative, Project } from "@/lib/types"
 
@@ -81,6 +82,7 @@ export const Route = createFileRoute("/projects/$id")({
 
 function ProjectDetailPage() {
   const { id } = Route.useParams()
+  const projectId = resolveProjectId(id)
   const { t } = useTranslation()
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [activeTab, setActiveTab] = useState<ResultsTab>("clips")
@@ -91,7 +93,7 @@ function ProjectDetailPage() {
 
   const fetchResults = async () => {
     try {
-      const res = await apiFetch(`/api/v1/projects/${id}/results`)
+      const res = await apiFetch(`/api/v1/projects/${projectId}/results`)
       if (!res.ok) throw new Error("Project not found")
       setResults(await res.json())
     } catch (e) {
@@ -106,7 +108,7 @@ function ProjectDetailPage() {
   useEffect(() => {
     setLoading(true)
     fetchResults()
-  }, [id])
+  }, [projectId])
 
   // Default to the first requested output tab once, when a generation is running.
   useEffect(() => {
@@ -195,7 +197,7 @@ function ProjectDetailPage() {
     setRetrying((prev) => ({ ...prev, [tab]: true }))
     try {
       const ctx = latestJob?.context
-      await apiPost(`/api/v1/projects/${id}/generate`, {
+      await apiPost(`/api/v1/projects/${projectId}/generate`, {
         outputs: [outputKey],
         clip_count: outputKey === "clips" ? clipCount : undefined,
         target_language: ctx?.target_language || results.project.language || "en",

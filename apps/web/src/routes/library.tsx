@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
+import { DEMO_PROJECT_ID, projectRouteParam } from "@/lib/constants"
 
 type LibraryType = "upload" | "clip" | "post" | "quotes" | "article" | "carousel"
 
@@ -247,7 +248,7 @@ function LibraryCard({ item }: { item: LibraryItem }) {
           variant="ghost"
           size="icon-sm"
           nativeButton={false}
-          render={<Link to="/projects/$id" params={{ id: item.project_id }} />}
+          render={<Link to="/projects/$id" params={{ id: projectRouteParam({ id: item.project_id, is_demo: item.project_id === DEMO_PROJECT_ID }) }} />}
           title={t("library.viewProject")}
         >
           <ExternalLink className="h-4 w-4" />

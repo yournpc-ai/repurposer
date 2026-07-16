@@ -185,13 +185,31 @@ function SpeakerDetailPage() {
     setError("")
     setMessage("")
     try {
-      const formData = new FormData()
-      formData.append("file", file)
+      const urlRes = await apiFetch(`/api/v1/speakers/${id}/assets/upload-url`, {
+        method: "POST",
+        body: {
+          filename: file.name,
+          content_type: file.type || undefined,
+        },
+      })
+      if (!urlRes.ok) throw new Error("Failed to get upload URL")
+      const { key, upload_url } = (await urlRes.json()) as {
+        key: string
+        upload_url: string
+      }
+
+      const putRes = await fetch(upload_url, {
+        method: "PUT",
+        body: file,
+        headers: file.type ? { "Content-Type": file.type } : {},
+      })
+      if (!putRes.ok) throw new Error("Upload failed")
+
       const res = await apiFetch(`/api/v1/speakers/${id}/assets`, {
         method: "POST",
-        body: formData,
+        body: { key },
       })
-      if (!res.ok) throw new Error("Upload failed")
+      if (!res.ok) throw new Error("Create asset failed")
       setMessage(t("speakerDetail.msgUploaded"))
       fetchData()
     } catch (err) {

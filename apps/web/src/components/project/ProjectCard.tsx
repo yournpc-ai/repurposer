@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
+import { projectRouteParam } from "@/lib/constants"
 import { formatDuration } from "@/lib/utils"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -16,6 +17,7 @@ interface Project {
   thumbnail_url?: string | null
   thumbnail_duration?: number | null
   thumbnail_aspect?: string | null
+  is_demo?: boolean
 }
 
 interface ProjectCardProps {
@@ -40,7 +42,7 @@ export function ProjectCard({ project, isDemo }: ProjectCardProps) {
   return (
     <Link
       to="/projects/$id"
-      params={{ id: project.id }}
+      params={{ id: projectRouteParam(project) }}
       className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 transition-all hover:bg-accent"
     >
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-primary/10">

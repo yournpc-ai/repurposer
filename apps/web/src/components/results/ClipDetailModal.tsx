@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next"
 import { Copy, Download, Edit, ImageIcon, Play } from "lucide-react"
 import { Link } from "@tanstack/react-router"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {

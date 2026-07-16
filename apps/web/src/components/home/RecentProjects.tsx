@@ -12,6 +12,7 @@ interface Project {
   thumbnail_url?: string | null
   thumbnail_duration?: number | null
   thumbnail_aspect?: string | null
+  is_demo?: boolean
 }
 
 interface RecentProjectsProps {
@@ -74,7 +75,7 @@ export function RecentProjects({ refreshKey, onCountChange }: RecentProjectsProp
   return (
     <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {projects.map((project) => (
-        <ProjectCard key={project.id} project={project} isDemo={project.id === "11111111-1111-1111-1111-111111111111"} />
+        <ProjectCard key={project.id} project={project} isDemo={project.is_demo} />
       ))}
     </div>
   )

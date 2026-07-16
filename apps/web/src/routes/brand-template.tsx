@@ -513,9 +513,30 @@ function MediaUploadField({
     if (!file) return
     setUploading(true)
     try {
-      const form = new FormData()
-      form.append("file", file)
-      const res = await apiFetch("/api/v1/brand-templates/media", { method: "POST", body: form })
+      const urlRes = await apiFetch("/api/v1/brand-templates/media/upload-url", {
+        method: "POST",
+        body: {
+          filename: file.name,
+          content_type: file.type || undefined,
+        },
+      })
+      if (!urlRes.ok) throw new Error("Failed to get upload URL")
+      const { key, upload_url } = (await urlRes.json()) as {
+        key: string
+        upload_url: string
+      }
+
+      const putRes = await fetch(upload_url, {
+        method: "PUT",
+        body: file,
+        headers: file.type ? { "Content-Type": file.type } : {},
+      })
+      if (!putRes.ok) throw new Error("Upload failed")
+
+      const res = await apiFetch("/api/v1/brand-templates/media", {
+        method: "POST",
+        body: { key },
+      })
       if (res.ok) {
         const data = (await res.json()) as { url: string }
         onUploaded(data.url)

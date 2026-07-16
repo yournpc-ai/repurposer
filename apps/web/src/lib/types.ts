@@ -66,6 +66,7 @@ export interface Project {
   language: string
   content_plan?: Record<string, unknown> | null
   created_at: string
+  is_demo?: boolean
 }
 
 export interface Speaker {
