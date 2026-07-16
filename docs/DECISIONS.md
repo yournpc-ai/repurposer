@@ -405,7 +405,7 @@ uv run alembic downgrade -1
 
 **Constraints and notes**:
 - render's `spec.source.url` must be an **absolute URL** (the API worker absolutizes the storage seam's relative URL before calling).
-- render writes MP4/SRT to shared `data/outputs`, api serves through the Range endpoint (storage seam).
+- render outputs MP4/SRT to a **temporary directory**, then PUTs them to the presigned URLs supplied by the API worker. No shared volume or local `data/outputs` is used.
 - First Remotion render will download headless Chromium (~hundreds of MB); some native dependency build scripts may need `pnpm approve-builds`.
 - `<Clip>` MVP renders the first kept segment; multi-segment concat (gaps from transcript sentence deletion) is implemented.
 - Brand (logo/CTA/subtitle color/font size/font/fill/opening/closing) and music are **baked into `render_spec`** as resolved values; `<Clip>` consumes `spec.brand` / `spec.music`; render service does not read the DB.
@@ -419,32 +419,31 @@ uv run alembic downgrade -1
 - All 5 full-stack services have Dockerfiles: `api` (uv, installs `libgomp1` for ctranslate2), `worker` (reuses api image with different `command`), `render`, `web`.
 - **`render` / `web` build context is the repo root** — they import workspace package `@repurposer/clip`, and a subdirectory context cannot access `pnpm-workspace.yaml` / `pnpm-lock.yaml` / `packages/clip`. Dockerfile first COPYs each workspace's `package.json` (needed for pnpm to resolve the whole graph) + lockfile to install dependencies, then COPYs source code, maximizing layer cache.
 - `render` image installs headless Chromium system libraries (libnss3/libatk/libgbm/fonts, etc.); Chromium binary is **lazily downloaded on first render** (not pulled during build, avoiding build dependency on external network and hanging in CI/restricted networks; render service runtime already needs external network to pull source video). Production can mount a cache volume on the Remotion download directory to avoid re-downloading on restart.
-- Container service interconnection: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (overrides localhost defaults in `config.py`). render writes to shared volume `./data/outputs`, api serves through the Range endpoint.
+- Container service interconnection: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (overrides localhost defaults in `config.py`). The render service uploads outputs to the presigned URLs provided by the API worker; no shared volumes are required.
 - **`web` uses `vite preview` for SSR**: sufficient for MVP/staging; switch to a lightweight node http adapter around the exported fetch handler (`dist/server/server.js`) for high traffic. This SSR path has been smoke-tested through image build and single-frame rendering.
 
 ## ADR-019: Music uses built-in mood library (user-provided music pieces)
 
-**Status**: Implemented
+**Status**: Superseded by ADR-023 / `docs/MUSIC_ARCHITECTURE.md`
 
-**Context**: clip-spec has a `music` block, brand template has `musicMood`, but missing "where do music pieces come from". Involves copyright; cannot have AI automatically grab unauthorized music.
+**Context** (historical): clip-spec has a `music` block, brand template has `musicMood`, but missing "where do music pieces come from". Involves copyright; cannot have AI automatically grab unauthorized music.
 
-**Decision**:
-1. **Built-in mood library**: `data/music/<mood>.<ext>` (supports `.mp3/.m4a/.aac/.ogg/.wav`), music pieces provided by users/operations with authorization.
+**Decision** (historical):
+1. **Built-in mood library**: local `data/music/<mood>.<ext>` (supports `.mp3/.m4a/.aac/.ogg/.wav`), music pieces provided by users/operations with authorization.
 2. **Route by mood**: `GET /api/v1/music/<mood>` extension-agnostic, resolver finds files by stem; with Range support.
 3. **Bake at generation time**: `services/brand.py:music_from_template` maps `BrandTemplate.musicMood` → `ClipMusic{music_id, url}`; `ClipMusic.enabled` is controlled by `musicEnabled`.
 4. **Render mix**: Remotion `<Audio src={url} volume={dbToLinear(gain_db)} loop>`.
 
-**Rationale**:
+**Rationale** (historical):
 - No third-party music API/subscription, zero new dependencies or costs.
 - Copyright responsibility is clear: users/operations only place authorized music pieces; repo does not bundle music.
 - Library can expand with operations: add files, no code changes needed.
 
 **Related files**:
-- `apps/api/app/services/storage.py` (`resolve_music_safe` / `music_url`)
-- `apps/api/app/routers/files.py` (`/music/{mood}`)
+- `apps/api/app/services/storage.py`
+- `apps/api/app/routers/music.py`
 - `apps/api/app/services/brand.py` (`music_from_template`)
 - `packages/clip/src/Clip.tsx` (`<Audio>`)
-- `data/music/README.md`
 
 ## ADR-020: Final cut supports a second source kind — "stills" image+audio audiogram
 
@@ -486,7 +485,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: ADR-019 established a filesystem-only mood music library (`data/music/{mood}.<ext>`), and ADR-022 later added a management CRUD layer on top of it. Both approaches share a fundamental limitation: they rely on manually sourced audio files with uncertain copyright status. Opus Pro and similar tools frequently show "license expiry" warnings, and user-uploaded music pieces introduce legal liability. Meanwhile, MiniMax (and other providers) now offer music generation APIs, making it possible to produce original, platform-safe background music on demand.
 
 **Decision**:
-1. **Default music is AI-generated and stored in a dedicated `music` table**: three pre-generated music pieces (`calm`, `uplifting`, `corporate`) are seeded as `Music` rows at application startup. Audio files live under `assets/music/` (consistent with current `main`, which stores uploads/outputs under `assets/`); structured metadata lives in the `music` table.
+1. **Default music is AI-generated and stored in a dedicated `music` table**: three pre-generated music pieces (`calm`, `uplifting`, `corporate`) are seeded as `Music` rows at application startup. Audio objects live in S3-compatible object storage under `music/`; structured metadata lives in the `music` table.
 2. **Brand template selects by music id**: `BrandTemplate.config.musicId` replaces `musicMood`. The template only picks a default music piece; it does not store a generation prompt or a mood string.
 3. **Clip Agent selects music per clip**: based on the brand default, the Content Director's mood suggestion, and the clip's content tone, the Clip Agent picks an existing music piece. No music generation API is called during clip generation.
 4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `Music` and updating `Clip.render_spec.music`. The clip is then re-rendered.
@@ -501,6 +500,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Consequences**:
 - `musicMood` and the filesystem-only resolver become legacy; existing templates and clips need migration or graceful fallback.
+- Local `assets/` and `data/music/` storage is removed; all music objects live in object storage.
 - A new `music` table and Alembic migration are required.
 - Custom music generation is more expensive than selection, so quotas or paid tiers may be needed.
 - MiniMax (or chosen provider) usage terms must explicitly allow commercial use and redistribution.

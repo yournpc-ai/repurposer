@@ -133,7 +133,7 @@ apps/web/           editor uses @repurposer/clip <Clip> inside <Player>
 pnpm-workspace.yaml web/render/clip workspace; api uses uv independently, not in the workspace
 ```
 
-Source video URL: the render service's `spec.source.url` must be an **absolute URL** (worker absolutizes the storage seam's relative URL before calling). The render service writes MP4/SRT to the shared `data/outputs`, served by the API via the Range endpoint.
+Source video URL: the render service's `spec.source.url` must be an **absolute URL** (worker absolutizes the storage seam's relative URL before calling). The render service renders to a temporary directory and PUTs the MP4/SRT to the presigned URLs supplied by the API worker; outputs are served directly from object storage.
 
 ## 7. Editor Interaction (Thin Editing Surface, Not a Multi-Track NLE)
 

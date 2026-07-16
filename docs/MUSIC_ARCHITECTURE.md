@@ -50,7 +50,7 @@ This document proposes a unified architecture that replaces the static mood-file
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         Music Library                                       │
 │  (pre-generated AI music + user-generated music in future)                  │
-│  Stored as: Music row + audio file under assets/                            │
+│  Stored as: Music row + audio object in S3-compatible object storage         │
 └───────────────────────────────┬─────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -97,7 +97,7 @@ This document proposes a unified architecture that replaces the static mood-file
 
 | Data | Source of Truth | Rationale |
 |---|---|---|
-| **Audio bytes** | File on disk (`assets/music/{music_id}.{ext}`) | Current `main` stores uploads/outputs under `assets/`. Music follows the same convention; legacy `data/music/` is deprecated. |
+| **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | Current `main` stores uploads/outputs in object storage. Music follows the same convention; legacy `data/music/` is deprecated. |
 | **Music metadata** | `music` table (`Music` model) | Dedicated table for music-specific fields (mood, prompt, license, duration, attribution, is_public, generated_by_user_id). |
 | **Brand default music** | `BrandTemplate.config.musicId` | Explicit reference to a `Music.id`. User-facing: "default music". |
 | **Per-clip music choice** | `Clip.render_spec.music` | The render contract is the runtime source of truth. |
@@ -122,7 +122,7 @@ Why a dedicated table instead of `Asset`?
 
 ```python
 class Music(Base):
-    """Background music piece (DB-backed; audio bytes stay under assets/)."""
+    """Background music piece (DB-backed; audio bytes stay in object storage)."""
 
     __tablename__ = "music"
 
@@ -130,7 +130,7 @@ class Music(Base):
     mood = Column(String(50), nullable=False, unique=True)
     title = Column(String(255), nullable=False)
     ext = Column(String(8), nullable=False)
-    file_path = Column(String(512), nullable=False)  # relative to asset_dir, e.g. "music/{music_id}.mp3"
+    file_path = Column(String(512), nullable=False)  # object storage key, e.g. "music/{music_id}.mp3"
     size_bytes = Column(Integer, nullable=False)
     duration_seconds = Column(Integer, nullable=True)
     prompt = Column(Text, nullable=True)
@@ -256,7 +256,7 @@ async def seed_default_music(db: AsyncSession) -> None:
             await create_music_from_file(db, spec)
 ```
 
-Audio files live at `assets/music/{music_id}.{ext}` (relative to `settings.asset_dir`).
+Audio files live at `music/{music_id}.{ext}` in object storage.
 
 ### 7.4 Artist-Generated Music Pieces (Future)
 
@@ -329,7 +329,7 @@ async def build_clip_spec(..., plan: ClipPlan, ...):
         if music_piece and music_piece.file_path:
             music = ClipMusic(
                 music_id=str(music_piece.id),
-                url=stream_url(music_piece.file_path),  # resolves under asset_dir
+                url=stream_url(music_piece.file_path),  # resolves to public object URL
                 enabled=True,
                 gain_db=plan.music_gain_db,
             )
@@ -383,7 +383,7 @@ Or:
 For `regenerate_music`:
 
 1. Call `services/music_generation.generate_music(prompt, mood)`.
-2. Save audio file to `assets/music/{new_music_id}.{ext}` (under `settings.asset_dir`).
+2. Save audio object to object storage under `music/{new_music_id}.{ext}`.
 3. Create `Music(...)` row with `file_path="music/{new_music_id}.{ext}"`.
 4. Update `clip.render_spec.music` with new `music_id` and `url`.
 5. Set `clip.render_status = RenderStatus.PENDING`.
@@ -535,7 +535,7 @@ No changes to `packages/clip/src/Clip.tsx` or `apps/render`. Remotion continues 
 ### Phase 1: MVP — AI-Generated Defaults + Selection
 
 1. Add `Music` table and Alembic migration.
-2. Update `settings.music_dir` (or storage helpers) so music files live under `assets/music/`.
+2. Update storage helpers so generated music objects use the `music/` prefix in object storage.
 3. Implement `services/music_generation.py` (MiniMax integration).
 4. Generate 3 default music pieces and seed as `Music` rows.
 5. Add `/api/v1/music` endpoints (list, generate, get metadata, update metadata, delete).

@@ -230,7 +230,7 @@ Home composer
               │      ├─ quotes → Quotes agent + MiniMax image-01
               │      ├─ carousel → Carousel agent
               │      └─ article → Article agent
-              ├─ 4. 保存 Clip / Derivative 到数据库 + assets/
+              ├─ 4. 保存 Clip / Derivative 到数据库 + 对象存储 key
               └─ 5. WorkflowRun completed
               │
               ▼
@@ -470,84 +470,72 @@ Library **不按 project 分组**，它是一个扁平的资产时间线。
 
 ### 7.1 当前问题
 
-当前实现：
-
-```
-data/uploads/projects/{project_id}/{filename}
-data/uploads/speakers/{speaker_id}/{filename}
-data/outputs/{project_id}/{filename}
-```
-
-问题：
-
-1. 没有 `user_id` 层级，无法做用户隔离
-2. `Asset` 表没有 `user_id` 字段
-3. `/api/v1/files/{path}` 没有校验所有权
-4. Demo 资产没有固定位置
+早期实现把媒体存在本地文件系统（`data/uploads/`、`data/outputs/`、`assets/`）。这带来多副本、权限校验、容器共享卷等维护成本，且不符合 GDPR/EU 部署对对象存储的期望。
 
 ### 7.2 MVP 目标结构
 
+所有持久化媒体统一使用 S3 兼容对象存储（Volcengine TOS），数据库只存对象 **key**，完整 URL 由环境变量 `S3_PUBLIC_URL` + key 拼接。
+
+对象 key 约定：
+
 ```
-assets/
-├── demo/
-│   ├── uploads/
-│   │   └── projects/{demo_project_id}/demo_video.mp4
-│   └── outputs/
-│       └── projects/{demo_project_id}/
-│           ├── clip_1.mp4
-│           ├── post_1.txt
-│           ├── quote_card_1.png
-│           └── article_1.txt
-└── {user_id}/
-    ├── uploads/
-    │   └── projects/{project_id}/{filename}
-    ├── speakers/{speaker_id}/{filename}
-    └── outputs/
-        └── projects/{project_id}/{filename}   # 含渲染后的 MP4/SRT、quote card PNG
+{user_id}/uploads/projects/{project_id}/{filename}
+{user_id}/speakers/{speaker_id}/{filename}
+{user_id}/brand-media/{filename}
+{user_id}/outputs/projects/{project_id}/{filename}   # 含渲染后的 MP4/SRT、quote card PNG
+music/{music_id}.mp3
+demo/uploads/{filename}
+demo/outputs/projects/{demo_project_id}/{filename}
 ```
 
 说明：
 
-- 顶层目录直接用 `assets/`，不再包一层 `data/`
-- 按 `user_id` 隔离；demo 资产使用固定的 `demo/` 前缀（如 `demo/uploads/projects/{demo_project_id}/...`）
+- 顶层按 `user_id` 隔离；demo 资产使用固定的 `demo/` 前缀
 - Demo project 的 `id` 是一个固定的 UUID（数据库 `Project.id` 为 UUID 类型，不能存字符串 `"demo"`）
 - Demo project 和用户创建的正式项目**没有任何区别**，只有内容不同
 - `uploads` 和 `outputs` 内部保留 project/speaker 子目录，方便按 project 清理
-- Remotion 渲染服务直接输出到 `assets/`，`rendering.py` 通过 `out_subdir = "{user_id}/outputs/projects/{project_id}"` 保证路径一致
+- Remotion 渲染服务通过后端生成的 **presigned PUT URL** 把输出上传到对象存储，不在本地落盘
 
 ### 7.3 数据库变更
 
 - `Asset` 表新增 `user_id: UUID`（nullable 或默认 demo user）
 - `Speaker` 表已有 `user_id`，确保一致
 - `Project` 表确认有 `user_id`（当前已有）
+- `Asset.file_url`、`Clip.video_url`、`Clip.srt_url`、`Derivative.image_url`、`Music.file_path` 等字段统一存对象 key
 
 ### 7.4 API / 服务层变更
 
 - `app/services/storage.py`：
-  - `save_upload(project_id, user_id, file)` → `assets/{user_id}/uploads/projects/{project_id}/{filename}`
-  - `save_speaker_upload(speaker_id, user_id, file)` → `assets/{user_id}/speakers/{speaker_id}/{filename}`
-  - `save_output(project_id, user_id, filename, content)` → `assets/{user_id}/outputs/projects/{project_id}/{filename}`
-  - 所有读取/删除路径同步更新
+  - 统一 S3-only 后端（`S3Backend`），基于 `boto3`
+  - `save_upload(project_id, user_id, file)` → `{user_id}/uploads/projects/{project_id}/{filename}`
+  - `save_speaker_upload(speaker_id, user_id, file)` → `{user_id}/speakers/{speaker_id}/{filename}`
+  - `save_brand_media_upload(user_id, file)` → `{user_id}/brand-media/{filename}`
+  - `save_output(project_id, user_id, filename, content)` → `{user_id}/outputs/projects/{project_id}/{filename}`
+  - `public_url(key)` 返回 `S3_PUBLIC_URL/key`
+  - `presign_upload(key)` 生成前端/渲染服务直传的 PUT URL
+  - 读取/删除/前缀清理同步更新
 - `app/routers/files.py`：
-  - `/api/v1/files/{path}` 与 `/api/v1/outputs/{path}` 统一在 `assets/` 下解析
-  - 读取 `user_id` 从 session/token，校验 path 是否属于该 user；`demo/` 前缀的资产作为公开 demo 放行
+  - `/api/v1/files/{path}` 与 `/api/v1/outputs/{path}` 只做所有权校验，然后 307 重定向到对象存储公开 URL
+  - bucket 为公共读，Range/下载由对象存储处理
+- `app/routers/assets.py`：
+  - 新增 `POST /{project_id}/assets/upload-url`：返回 `{key, upload_url}`，前端直传 TOS
+  - `POST /{project_id}/assets` 接收 `key` 创建 Asset 记录
 - `app/config.py`：
-  - `asset_dir = Path("assets")`
-  - 废弃或重定向旧的 `upload_dir` / `output_dir`（保留兼容也可）
+  - 移除 `asset_dir` / `upload_dir` / `output_dir` / `music_dir`
+  - 新增强制 S3 配置：`s3_endpoint_url`、`s3_bucket_name`、`s3_access_key_id`、`s3_secret_access_key`、`s3_region`、`s3_public_url`、`s3_presign_upload_ttl`
+  - `ensure_dirs()` 为空操作
 - Remotion 渲染服务：
-  - 输出目录指向 `assets/`
-  - `app/services/rendering.py` 传 `out_subdir = "{user_id}/outputs/projects/{project_id}"`
-
-注意：`assets/` 目录必须加入 `.gitignore`，避免上传用户文件到仓库。
+  - 渲染到临时目录，通过 `outputs.video.put_url` / `outputs.srt.put_url` 上传
+  - 不再依赖共享卷或 `RENDER_OUTPUT_DIR`
 
 ### 7.5 迁移策略
 
-MVP 阶段允许“破坏性”迁移（因为是 demo 环境）：
+本次是破坏性迁移，不再保留本地模式：
 
-1. 新增 `user_id` 列，默认填充当前默认用户
-2. 运行一次性脚本把旧的 `data/uploads/` 和 `data/outputs/` 移动到 `assets/{default_user_id}/`
-3. 更新 `Asset.file_url` 相对路径前缀
-4. 在 `.gitignore` 中加入 `assets/`
+1. 开通公共读 bucket 并配置 `.env` 中的 S3 环境变量
+2. 将历史本地文件按原相对路径作为 key 上传到对象存储
+3. 确认数据库中的 `file_url` 等字段可直接作为 key 使用（已是相对路径格式）
+4. 删除仓库中的 `assets/`、`data/` 目录及 Docker 共享卷配置
 
 如果旧数据不需要保留，也可以直接清空并重新 seed。
 
@@ -563,9 +551,9 @@ MVP 阶段允许“破坏性”迁移（因为是 demo 环境）：
 
 - 使用一个固定的 demo 用户 ID（可与默认用户一致，简化鉴权）
 - 使用一个固定的 demo project UUID（例如 `11111111-1111-1111-1111-111111111111`），因为 `Project.id` 是 UUID 类型，不能存字符串 `"demo"`
-- 在 `assets/demo/` 放置：
-  - `uploads/projects/{demo_project_id}/demo_talk.mp4`（本地演讲视频，~2-5 分钟）
-  - `outputs/projects/{demo_project_id}/` 下预生成产物
+- 在对象存储中放置 demo 资产：
+  - `demo/uploads/demo_talk.mp4`（本地演讲视频，~2-5 分钟）
+  - `demo/outputs/projects/{demo_project_id}/` 下预生成产物
 - 在数据库 seed 中创建：
   - `Project`：`id = {demo_project_uuid}`，`user_id = demo_user_id`，`title = "Example: AI Ethics Keynote"`
   - `Asset`：指向 demo 视频（`file_url` 以 `demo/...` 开头）
