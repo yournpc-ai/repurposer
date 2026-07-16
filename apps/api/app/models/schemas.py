@@ -856,6 +856,7 @@ class ClipResponse(BaseModel):
 
     id: UUID
     project_id: UUID
+    workflow_run_id: UUID | None = None
     hook: str
     title_options: list[str]
     music_mood: str
@@ -916,6 +917,7 @@ class DerivativeResponse(BaseModel):
 
     id: UUID
     project_id: UUID
+    workflow_run_id: UUID | None = None
     type: DerivativeType
     content: dict
     language: str

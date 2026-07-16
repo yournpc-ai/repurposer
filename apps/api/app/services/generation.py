@@ -488,6 +488,7 @@ async def _run_targeted_revision(
         clip.title_options = revised.title_options
         clip.music_mood = revised.music_mood
         clip.duration = revised.duration_seconds
+        clip.workflow_run_id = run.id
         await db.commit()
 
         run.status = WorkflowStatus.COMPLETED
@@ -505,6 +506,7 @@ async def _run_targeted_revision(
 
         clip.render_status = RenderStatus.PENDING
         clip.render_error = None
+        clip.workflow_run_id = run.id
         await db.commit()
 
         run.status = WorkflowStatus.COMPLETED
@@ -566,6 +568,7 @@ async def _run_targeted_revision(
         derivative.language = target_language
         derivative.status = "generated"
         derivative.updated_at = datetime.now(UTC)
+        derivative.workflow_run_id = run.id
         await db.commit()
 
         run.status = WorkflowStatus.COMPLETED
@@ -658,6 +661,7 @@ async def _run_derivative_task(
     async with AsyncSessionLocal() as db:
         derivative = Derivative(
             project_id=project_id,
+            workflow_run_id=run_id,
             type=derivative_type,
             content=content,
             language=target_language,
@@ -868,6 +872,7 @@ async def _run_clips_task(
         )
         clip = Clip(
             project_id=project.id,
+            workflow_run_id=run.id,
             hook=plan.hook,
             title_options=plan.title_options or ([plan.title] if plan.title else []),
             music_mood=plan.music_mood,
