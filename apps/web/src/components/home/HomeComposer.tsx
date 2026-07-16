@@ -245,16 +245,16 @@ export function HomeComposer({
   }
 
   const handleGenerate = async () => {
-    const hasContent = files.length > 0 || prompt.trim()
-    if (!hasContent) {
-      onError?.(t("home.noContentError"))
-      return
-    }
-    if (outputs.length === 0) {
-      onError?.(t("home.noOutputError"))
-      return
-    }
     await requireAuth(async () => {
+      const hasContent = files.length > 0 || prompt.trim()
+      if (!hasContent) {
+        onError?.(t("home.noContentError"))
+        return
+      }
+      if (outputs.length === 0) {
+        onError?.(t("home.noOutputError"))
+        return
+      }
       setIsGenerating(true)
       onGenerateStart?.()
       try {
