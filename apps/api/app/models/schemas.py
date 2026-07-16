@@ -1099,6 +1099,21 @@ class WorkflowRunResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class ProjectAssetStatus(BaseModel):
+    """Lightweight per-asset processing status for the results page.
+
+    Lets the results page render the transcribing/parsing phase of the
+    loading state while the generation run waits for assets to settle.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    type: AssetType
+    processing_status: AssetStatus
+    processing_error: str | None = None
+
+
 class ProjectResultsResponse(BaseModel):
     """Aggregated results for the project detail/results page."""
 
@@ -1109,6 +1124,7 @@ class ProjectResultsResponse(BaseModel):
     clips: list[ClipResponse] = Field(default_factory=list)
     derivatives: list[DerivativeResponse] = Field(default_factory=list)
     latest_job: WorkflowRunResponse | None = None
+    assets: list[ProjectAssetStatus] = Field(default_factory=list)
 
 
 class BrandTemplateBase(BaseModel):

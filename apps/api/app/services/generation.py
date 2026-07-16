@@ -22,6 +22,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.agents.clip_agent import clip_agent
 from app.agents.content_director import content_director_agent
@@ -420,13 +421,19 @@ def _init_output_status(outputs: list[str]) -> dict[str, dict[str, Any]]:
 
 
 def _compute_progress(output_status: dict[str, dict[str, Any]]) -> int:
-    """Calculate overall progress from per-output statuses."""
+    """Overall progress = mean of per-output progress values.
+
+    Outputs report coarse but real sub-stage progress (e.g. clips: 5 while
+    selecting segments, 60 while building specs), so the bar moves with actual
+    work instead of only jumping on completions.
+    """
     if not output_status:
         return 100
-    completed = sum(
-        1 for s in output_status.values() if s.get("status") == "completed"
+    total = sum(
+        max(0, min(100, int(s.get("progress", 0) or 0)))
+        for s in output_status.values()
     )
-    return int(completed / len(output_status) * 100)
+    return int(total / len(output_status))
 
 
 def _first_active_output(
@@ -463,6 +470,10 @@ async def _update_run_output_status(
                 output_status[output] = existing
             ctx["output_status"] = output_status
             run.context = ctx
+            # Plain JSON columns don't detect in-place mutation; force the
+            # context into the flush (empirically, reassignment of the same
+            # dict object alone never reaches the database).
+            flag_modified(run, "context")
             run.progress = _compute_progress(output_status)
             active = _first_active_output(output_status)
             if active:
@@ -648,7 +659,7 @@ async def _run_derivative_task(
 
     await _update_run_output_status(
         run_id,
-        {output: {"status": "running", "progress": 0, "error": None}},
+        {output: {"status": "running", "progress": 5, "error": None, "stage": "writing_copy"}},
     )
 
     try:
@@ -668,7 +679,7 @@ async def _run_derivative_task(
         )
         await _update_run_output_status(
             run_id,
-            {output: {"status": "failed", "progress": 0, "error": str(e)}},
+            {output: {"status": "failed", "progress": 0, "error": str(e), "stage": None}},
         )
         return
 
@@ -689,6 +700,10 @@ async def _run_derivative_task(
             project = await db.get(Project, project_id)
             quotes = content.get("quotes", []) if isinstance(content, dict) else []
             if quotes and project is not None:
+                await _update_run_output_status(
+                    run_id,
+                    {output: {"status": "running", "progress": 70, "error": None, "stage": "generating_image"}},
+                )
                 first_quote = quotes[0]
                 image_url = await _save_quote_card_image(
                     quote=first_quote.get("quote", ""),
@@ -702,7 +717,7 @@ async def _run_derivative_task(
 
     await _update_run_output_status(
         run_id,
-        {output: {"status": "completed", "progress": 100, "error": None}},
+        {output: {"status": "completed", "progress": 100, "error": None, "stage": None}},
     )
 
 
@@ -721,7 +736,7 @@ async def _run_clips_task(
     """Generate clips, with one auto-retry, and update per-output status."""
     await _update_run_output_status(
         run.id,
-        {"clips": {"status": "running", "progress": 0, "error": None}},
+        {"clips": {"status": "running", "progress": 5, "error": None, "stage": "selecting_segments"}},
     )
 
     # Render source selection (docs/VIDEO_EDITOR.md §4).
@@ -835,9 +850,14 @@ async def _run_clips_task(
             )
             await _update_run_output_status(
                 run.id,
-                {"clips": {"status": "failed", "progress": 0, "error": str(e2)}},
+                {"clips": {"status": "failed", "progress": 0, "error": str(e2), "stage": None}},
             )
             return
+
+    await _update_run_output_status(
+        run.id,
+        {"clips": {"status": "running", "progress": 60, "error": None, "stage": "building_specs"}},
+    )
 
     brand = brand_from_template(bt.config) if bt is not None else None
     brand_ref = bt.id if bt is not None else None
@@ -907,7 +927,7 @@ async def _run_clips_task(
 
     await _update_run_output_status(
         run.id,
-        {"clips": {"status": "completed", "progress": 100, "error": None}},
+        {"clips": {"status": "completed", "progress": 100, "error": None, "stage": None}},
     )
 
 
@@ -983,7 +1003,7 @@ async def run_generation(run_id: UUID) -> None:
                 select(Asset).where(Asset.project_id == project.id)
             )
             assets = list(asset_rows.scalars().all())
-            asset_media = collect_asset_media(assets)
+            asset_media = await collect_asset_media(assets)
             if not asset_texts and not asset_media:
                 raise ValueError("No source material to analyze")
             logger.info(
@@ -1143,4 +1163,17 @@ async def run_generation(run_id: UUID) -> None:
             logger.error("generation_failed", run_id=str(run_id), error=str(e))
             run.status = WorkflowStatus.FAILED
             run.error = str(e)
+            # A run that dies mid-flight leaves its per-output statuses stuck
+            # in pending/running forever. Mark non-terminal outputs as failed
+            # so consumers (results page polling, retry UI) can settle.
+            ctx = dict(run.context or {})
+            output_status = ctx.get("output_status") or {}
+            for status_entry in output_status.values():
+                if status_entry.get("status") not in ("completed", "failed"):
+                    status_entry["status"] = "failed"
+                    status_entry["error"] = str(e)
+            if output_status:
+                ctx["output_status"] = output_status
+                run.context = ctx
+                flag_modified(run, "context")
             await db.commit()

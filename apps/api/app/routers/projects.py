@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
+    AssetType,
     ClipResponse,
     DerivativeResponse,
     DerivativeType,
@@ -193,12 +194,20 @@ async def get_project_results(
     )
     derivatives = list(derivatives_result.scalars().all())
 
+    # Asset processing statuses power the results-page loading state (the
+    # transcribing/parsing phase before the generation run starts).
+    assets_result = await db.execute(
+        select(Asset).where(Asset.project_id == project_id).order_by(Asset.created_at)
+    )
+    assets = list(assets_result.scalars().all())
+
     return {
         "project": project,
         "prompt": prompt,
         "clips": clips,
         "derivatives": derivatives,
         "latest_job": latest_job,
+        "assets": assets,
     }
 
 
@@ -267,6 +276,34 @@ async def generate_content(
     project = await get_project_for_user(
         db, project_id, UUID(str(current_user.id)), allow_demo=False
     )
+
+    # Clips need a renderable media source (video / audio / image / slides).
+    # Reject early instead of letting the run produce unrenderable clips.
+    if "clips" in request.outputs and request.scope == "full":
+        media_result = await db.execute(
+            select(Asset.id)
+            .where(
+                Asset.project_id == project_id,
+                Asset.type.in_(
+                    [
+                        AssetType.VIDEO,
+                        AssetType.AUDIO,
+                        AssetType.IMAGE,
+                        AssetType.SLIDES,
+                    ]
+                ),
+                Asset.file_url.isnot(None),
+            )
+            .limit(1)
+        )
+        if media_result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "Clips need a video, audio, or image source. "
+                    "Upload one or deselect clips."
+                ),
+            )
 
     # Persist the original prompt in the project-scoped chat session if it is
     # not already there. This is a no-op when the session already has messages.

@@ -38,40 +38,48 @@ logger = structlog.get_logger()
 def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     """Make storage-relative URLs absolute so the render service can fetch them.
 
-    Source, brand media, music and dub URLs may be stored as object keys. Since
-    the bucket is public-read, we join them with the public URL base. Any URL
-    that is already absolute is left untouched.
+    Two kinds of relative values appear in persisted specs:
+    - Bare object keys (``user/uploads/...``) — joined with the bucket's public
+      URL base (the bucket is public-read).
+    - Legacy API-relative paths (``/api/v1/...``, e.g. music stream URLs baked
+      before music URLs became direct object URLs) — joined with the API's
+      public base URL; those endpoints redirect to object storage.
+
+    Any URL that is already absolute is left untouched.
     """
+
+    def _resolve(value: str) -> str:
+        if value.startswith(("http://", "https://")):
+            return value
+        if value.startswith("/api/"):
+            return f"{settings.api_public_url.rstrip('/')}{value}"
+        return public_url(value) or value
+
     src = spec.get("source", {})
     url = src.get("url", "")
-    if url and not url.startswith(("http://", "https://")):
-        src["url"] = public_url(url)
+    if url:
+        src["url"] = _resolve(url)
     images = src.get("image_urls")
     if isinstance(images, list):
-        src["image_urls"] = [
-            public_url(u)
-            if isinstance(u, str) and u and not u.startswith(("http://", "https://"))
-            else u
-            for u in images
-        ]
+        src["image_urls"] = [_resolve(u) if isinstance(u, str) and u else u for u in images]
     brand = spec.get("brand")
     if isinstance(brand, dict):
         for card_key in ("intro", "outro"):
             card = brand.get(card_key)
             if isinstance(card, dict):
                 media_url = card.get("media_url") or ""
-                if media_url and not media_url.startswith(("http://", "https://")):
-                    card["media_url"] = public_url(media_url)
+                if media_url:
+                    card["media_url"] = _resolve(media_url)
     music = spec.get("music")
     if isinstance(music, dict):
         track = music.get("url") or ""
-        if track and not track.startswith(("http://", "https://")):
-            music["url"] = public_url(track)
+        if track:
+            music["url"] = _resolve(track)
     dub = spec.get("dub")
     if isinstance(dub, dict):
         dub_url = dub.get("url") or ""
-        if dub_url and not dub_url.startswith(("http://", "https://")):
-            dub["url"] = public_url(dub_url)
+        if dub_url:
+            dub["url"] = _resolve(dub_url)
     return spec
 
 

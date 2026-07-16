@@ -57,12 +57,26 @@ async def claim_pending_run(db: AsyncSession) -> UUID | None:
     """Atomically claim one pending generation run, flipping it to RUNNING.
 
     Returns the claimed run id, or None if no run is pending.
+
+    Runs whose project still has assets being processed (ASR / extraction) are
+    skipped: the run must not start analyzing before the source material is
+    ready. The run stays PENDING — the results page shows this waiting window
+    as the transcribing/queued phase.
     """
+    assets_busy = (
+        select(Asset.id)
+        .where(
+            Asset.project_id == WorkflowRun.project_id,
+            Asset.processing_status.in_([AssetStatus.PENDING, AssetStatus.PROCESSING]),
+        )
+        .exists()
+    )
     result = await db.execute(
         select(WorkflowRun.id)
         .where(WorkflowRun.status == WorkflowStatus.PENDING)
+        .where(~assets_busy)
         .order_by(WorkflowRun.created_at)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=WorkflowRun)
         .limit(1)
     )
     run_id = result.scalar_one_or_none()

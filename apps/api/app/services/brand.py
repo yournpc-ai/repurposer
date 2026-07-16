@@ -17,7 +17,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import ClipBrand, ClipMusic, IntroOutroCard
 from app.models.tables import BrandTemplate, Music, User
 from app.services.music import get_music, get_music_by_mood
-from app.services.storage import music_stream_url
+from app.services.storage import public_url
 
 # Seeded when the DB has no brand templates so generation/preview always have a
 # usable default. Mirrors the brand-template UI's PRESET_1.
@@ -159,7 +159,9 @@ async def music_from_template(
         return ClipMusic(enabled=enabled, gain_db=gain)
     return ClipMusic(
         music_id=str(piece.id),
-        url=music_stream_url(piece.id),
+        # Bake the storage-resolved public URL (object key → public object URL)
+        # so the renderer fetches the audio directly from object storage.
+        url=public_url(piece.file_path),
         enabled=enabled,
         gain_db=gain,
     )
@@ -243,7 +245,7 @@ async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
     if piece is None:
         return ClipMusic()
     return ClipMusic(
-        music_id=str(piece.id), url=music_stream_url(piece.id), enabled=True
+        music_id=str(piece.id), url=public_url(piece.file_path), enabled=True
     )
 
 
@@ -272,7 +274,7 @@ async def music_from_plan(
         if piece is not None:
             return ClipMusic(
                 music_id=str(piece.id),
-                url=music_stream_url(piece.id),
+                url=public_url(piece.file_path),
                 enabled=True,
                 gain_db=float(getattr(plan, "music_gain_db", -18.0) or -18.0),
             )
