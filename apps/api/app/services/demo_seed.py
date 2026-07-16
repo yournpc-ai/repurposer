@@ -5,7 +5,8 @@ without uploading their own media. It reuses the default user and a fixed
 project UUID so it can be safely re-run on every app startup.
 
 On first run the seed:
-  1. Creates a demo speaker, brand template, project and video asset.
+  1. Creates a demo speaker, project and video asset (reusing the shared
+     Default brand template rather than a demo-specific one).
   2. Runs ASR on ``assets/demo/uploads/projects/{uuid}/demo_talk.mp4``.
   3. Seeds the original prompt into a project-scoped chat session.
   4. Runs the same ``run_generation`` orchestrator the worker uses to create
@@ -100,17 +101,36 @@ async def _get_or_create_demo_speaker(db, user_id: UUID) -> Speaker:
 
 
 async def _get_or_create_demo_brand(db, user_id: UUID) -> BrandTemplate:
-    brand = await db.get(BrandTemplate, DEMO_BRAND_TEMPLATE_ID)
-    if brand is None:
-        brand_config = dict(DEFAULT_BRAND_CONFIG)
-        brand = BrandTemplate(
-            id=DEMO_BRAND_TEMPLATE_ID,
-            user_id=user_id,
-            name="Demo Brand",
-            config=brand_config,
-        )
-        db.add(brand)
+    """Return the shared Default brand for the demo generation run.
+
+    Older builds seeded a separate "Demo Brand" template whose config was an
+    exact copy of the Default one, leaving a duplicate in every brand picker.
+    Fold it back: rename it when it is the only template, delete it when a
+    real Default already exists.
+    """
+    legacy = await db.get(BrandTemplate, DEMO_BRAND_TEMPLATE_ID)
+    result = await db.execute(
+        select(BrandTemplate)
+        .where(BrandTemplate.user_id == user_id)
+        .order_by(BrandTemplate.created_at.asc())
+    )
+    others = [b for b in result.scalars() if b.id != DEMO_BRAND_TEMPLATE_ID]
+    if others:
+        if legacy is not None:
+            await db.delete(legacy)
+            await db.flush()
+        return others[0]
+    if legacy is not None:
+        legacy.name = "Default"
         await db.flush()
+        return legacy
+    brand = BrandTemplate(
+        name="Default",
+        user_id=user_id,
+        config=dict(DEFAULT_BRAND_CONFIG),
+    )
+    db.add(brand)
+    await db.flush()
     return brand
 
 
