@@ -45,7 +45,7 @@ export async function apiPost(
 ) {
   return apiFetch(path, {
     method: "POST",
-    body: body ? JSON.stringify(body) : undefined,
+    body,
     ...options,
   })
 }
@@ -57,13 +57,31 @@ export async function apiPut(
 ) {
   return apiFetch(path, {
     method: "PUT",
-    body: body ? JSON.stringify(body) : undefined,
+    body,
     ...options,
   })
 }
 
 export async function apiDelete(path: string, options: RequestInit = {}) {
   return apiFetch(path, { method: "DELETE", ...options })
+}
+
+/** Extract a human-readable message from a FastAPI error body.
+ *
+ * `detail` is a string for HTTPException, but an array of
+ * `{loc, msg, type}` objects for 422 validation errors — rendering the raw
+ * value would show "[object Object]".
+ */
+export function errorDetail(body: unknown, fallback: string): string {
+  const detail = (body as { detail?: unknown } | null)?.detail
+  if (typeof detail === "string" && detail) return detail
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d as { msg?: string } | null)?.msg)
+      .filter((m): m is string => !!m)
+    if (msgs.length > 0) return msgs.join("; ")
+  }
+  return fallback
 }
 
 /** Prefix a storage-relative URL (e.g. `/api/v1/outputs/...`) with the API origin.

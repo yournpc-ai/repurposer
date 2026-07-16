@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { apiPost } from "@/lib/api"
+import { apiPost, errorDetail } from "@/lib/api"
 import { setAuth } from "@/lib/auth"
 
 interface LoginDialogProps {
@@ -46,8 +46,8 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     try {
       const res = await apiPost("/api/v1/auth/send-code", { email: email.trim() })
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || t("login.sendFailed"))
+        const body = await res.json().catch(() => null)
+        throw new Error(errorDetail(body, t("login.sendFailed")))
       }
       setStep("code")
     } catch (e) {
@@ -67,8 +67,8 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
         code: code.trim(),
       })
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || t("login.verifyFailed"))
+        const body = await res.json().catch(() => null)
+        throw new Error(errorDetail(body, t("login.verifyFailed")))
       }
       const data = await res.json()
       setAuth(data.token, data.user)
