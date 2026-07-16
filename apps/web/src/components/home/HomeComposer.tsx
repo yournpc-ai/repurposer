@@ -17,8 +17,6 @@ import {
   Wand2,
   Users,
   Video,
-  Quote,
-  Newspaper,
   Image as ImageIcon,
   X,
 } from "lucide-react"
@@ -98,14 +96,6 @@ const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = [
   "post",
 ]
 
-const OUTPUT_ICONS = {
-  clips: Video,
-  post: FileText,
-  quotes: Quote,
-  article: Newspaper,
-  carousel: ImageIcon,
-} as const
-
 const LANGUAGES = [
   { code: "en", labelKey: "languages.en" },
   { code: "fr", labelKey: "languages.fr" },
@@ -137,6 +127,19 @@ interface HomeComposerProps {
 
 const EXTRACT_FROM_MATERIALS = "__extract__"
 
+/** Dropdown/popover header: a short title plus a one-line explanation of what
+ * this dimension controls, so first-time users understand the pill's purpose. */
+function PillHeaderText({ title, desc }: { title: string; desc: string }) {
+  return (
+    <>
+      <span className="block text-xs font-medium">{title}</span>
+      <span className="mt-0.5 block text-[11px] font-normal leading-snug text-muted-foreground">
+        {desc}
+      </span>
+    </>
+  )
+}
+
 export function HomeComposer({
   speakers,
   brandTemplates,
@@ -159,14 +162,23 @@ export function HomeComposer({
 
   const [inferred, setInferred] = useState<InferredIntent>(DEFAULT_INTENT)
   const [isInferring, setIsInferring] = useState(false)
-  // Track params the user has manually edited so inference doesn't overwrite them.
-  const [lockedParams, setLockedParams] = useState<Set<string>>(new Set())
+  // Track params the user has manually edited so inference doesn't overwrite
+  // them. A ref, not state: pill clicks must never retrigger the inference
+  // effect below (it fires an LLM call and re-renders mid-dropdown-animation).
+  const lockedParamsRef = useRef<Set<string>>(new Set())
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Last prompt text we auto-filled from pill selection, so a later pill
   // toggle can keep regenerating it without clobbering hand-typed text.
   const autofilledPromptRef = useRef("")
+  // Live mirror of `prompt` for async callbacks: an in-flight inference
+  // response must decide against what the box contains NOW, not the stale
+  // value captured when the request started.
+  const promptRef = useRef(prompt)
+  useEffect(() => {
+    promptRef.current = prompt
+  }, [prompt])
 
   // Sync defaults once data is loaded.
   useEffect(() => {
@@ -175,26 +187,32 @@ export function HomeComposer({
 
   // Debounced intent inference.
   useEffect(() => {
-    if (!prompt.trim()) {
-      setInferred(DEFAULT_INTENT)
+    const text = prompt.trim()
+    // Skip when empty, or when the text is our own autofill — pill toggles
+    // already applied their choices; re-inferring would only churn renders.
+    if (!text || prompt === autofilledPromptRef.current) {
+      if (!text) setInferred(DEFAULT_INTENT)
       return
     }
 
+    const controller = new AbortController()
     const timer = setTimeout(async () => {
       setIsInferring(true)
       try {
         const res = await apiFetch("/api/v1/infer-intent", {
           method: "POST",
           body: { prompt, filename: files[0]?.name || undefined },
+          signal: controller.signal,
         })
         if (!res.ok) throw new Error("Intent inference failed")
         const data = (await res.json()) as { intent: InferredIntent }
         setInferred(data.intent)
 
         // Apply inferred values only to params the user hasn't locked.
-        const nextLanguage = lockedParams.has("language") ? language : data.intent.language
-        const nextOutputs = lockedParams.has("outputs") ? outputs : data.intent.outputs
-        const nextClipCount = lockedParams.has("clip_count")
+        const locked = lockedParamsRef.current
+        const nextLanguage = locked.has("language") ? language : data.intent.language
+        const nextOutputs = locked.has("outputs") ? outputs : data.intent.outputs
+        const nextClipCount = locked.has("clip_count")
           ? clipCount
           : data.intent.clip_count ?? DEFAULT_CLIP_COUNT
 
@@ -202,25 +220,31 @@ export function HomeComposer({
         setOutputs(nextOutputs)
         setClipCount(nextClipCount)
 
-        // Refresh autofill if the prompt box is still empty or was auto-generated.
-        const canAutofill = prompt.trim() === "" || prompt === autofilledPromptRef.current
+        // Refresh autofill only if the box is STILL empty or auto-generated —
+        // checked against the live prompt, so typing that happened while this
+        // request was in flight is never clobbered.
+        const live = promptRef.current
+        const canAutofill = live.trim() === "" || live === autofilledPromptRef.current
         if (canAutofill) {
           const filled = buildPrefillPrompt(nextOutputs, nextLanguage, nextClipCount)
           autofilledPromptRef.current = filled
           setPrompt(filled)
         }
       } catch (e) {
-        // Silent fallback: leave current values.
+        // Silent fallback: leave current values (aborted requests land here too).
       } finally {
         setIsInferring(false)
       }
     }, 600)
 
-    return () => clearTimeout(timer)
-  }, [prompt, files, lockedParams])
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [prompt, files])
 
   const lockParam = (key: string) => {
-    setLockedParams((prev) => new Set(prev).add(key))
+    lockedParamsRef.current = new Set(lockedParamsRef.current).add(key)
   }
 
   const inferAssetType = (file: File): string => {
@@ -228,20 +252,6 @@ export function HomeComposer({
     if (file.type.startsWith("audio/")) return "audio"
     if (file.type.startsWith("image/")) return "image"
     return "transcript"
-  }
-
-  const waitForAssetProcessed = async (projectId: string, assetId: string) => {
-    for (let i = 0; i < 120; i++) {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/assets/${assetId}`)
-      if (!res.ok) throw new Error("Failed to check asset status")
-      const asset: Asset = await res.json()
-      if (asset.processing_status === "completed") return
-      if (asset.processing_status === "failed") {
-        throw new Error(asset.processing_error || "Asset processing failed")
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2500))
-    }
-    throw new Error("Asset processing timed out")
   }
 
   const handleGenerate = async () => {
@@ -253,6 +263,15 @@ export function HomeComposer({
       }
       if (outputs.length === 0) {
         onError?.(t("home.noOutputError"))
+        return
+      }
+      // Clips need a renderable media source; a text-only prompt/transcript
+      // can't produce a video. Block early with a clear message.
+      if (
+        outputs.includes("clips") &&
+        !files.some((f) => ["video", "audio", "image"].includes(inferAssetType(f)))
+      ) {
+        onError?.(t("home.clipsNeedMedia"))
         return
       }
       setIsGenerating(true)
@@ -276,7 +295,7 @@ export function HomeComposer({
 
         const materials =
           files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
-        const uploaded = await Promise.all(
+        await Promise.all(
           materials.map(async (material) => {
             const type = files.length > 0 ? inferAssetType(material) : "transcript"
 
@@ -309,8 +328,8 @@ export function HomeComposer({
           })
         )
 
-        await Promise.all(uploaded.map((asset) => waitForAssetProcessed(project.id, asset.id)))
-
+        // Asset processing (ASR / extraction) continues in the background;
+        // the results page loading state covers that waiting window.
         const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
           method: "POST",
           body: {
@@ -360,7 +379,7 @@ export function HomeComposer({
   }
 
   // Template-splice a prompt sentence from the selected output pills, e.g.
-  // "generate 3 short clips, write a LinkedIn long-form post and create
+  // "generate 3 short clips, write a social long-form post and create
   // shareable quote cards from this talk". Language-aware via i18n.
   const buildPrefillPrompt = (
     selected: OutputKey[],
@@ -499,7 +518,7 @@ export function HomeComposer({
             </div>
           )}
 
-          <div className="relative h-28 flex-1">
+          <div className="flex h-28 flex-1 flex-col">
             <Textarea
               ref={textareaRef}
               value={prompt}
@@ -511,21 +530,22 @@ export function HomeComposer({
                 }
               }}
               placeholder={t("home.pastePlaceholder")}
-              className="h-full resize-none border-0 bg-transparent p-2 pb-11 text-base shadow-none focus-visible:ring-0"
+              className="min-h-0 flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0"
             />
-            <div className="pointer-events-none absolute bottom-2 left-0 h-9 w-full" aria-hidden="true" />
-            <Button
-              className="absolute bottom-2 right-2 h-9 w-9 rounded-full"
-              size="icon"
-              disabled={isGenerating || isInferring}
-              onClick={handleGenerate}
-            >
-              {isGenerating ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <ArrowUp className="h-4 w-4" />
-              )}
-            </Button>
+            <div className="flex items-center justify-end px-2 pb-2">
+              <Button
+                className="h-9 w-9 rounded-full"
+                size="icon"
+                disabled={isGenerating || isInferring}
+                onClick={handleGenerate}
+              >
+                {isGenerating ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -548,9 +568,14 @@ export function HomeComposer({
                   </Button>
                 }
               />
-              <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuContent align="start" className="w-64">
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("composer.speakerLabel")}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="px-2 py-1.5">
+                    <PillHeaderText
+                      title={t("composer.speakerLabel")}
+                      desc={t("composer.speakerDesc")}
+                    />
+                  </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
                       lockParam("speaker")
@@ -606,9 +631,14 @@ export function HomeComposer({
                   </Button>
                 }
               />
-              <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuContent align="start" className="w-64">
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("composer.brandLabel")}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="px-2 py-1.5">
+                    <PillHeaderText
+                      title={t("composer.brandLabel")}
+                      desc={t("composer.brandDesc")}
+                    />
+                  </DropdownMenuLabel>
                   {brandTemplates.map((b) => (
                     <DropdownMenuItem
                       key={b.id}
@@ -645,9 +675,14 @@ export function HomeComposer({
                   </Button>
                 }
               />
-              <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("common.language")}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="px-2 py-1.5">
+                    <PillHeaderText
+                      title={t("composer.languageLabel")}
+                      desc={t("composer.languageDesc")}
+                    />
+                  </DropdownMenuLabel>
                   {LANGUAGES.map((lang) => (
                     <DropdownMenuItem
                       key={lang.code}
@@ -681,28 +716,43 @@ export function HomeComposer({
                   </Button>
                 }
               />
-              <PopoverContent align="start" className="w-56 space-y-1 p-2">
-                <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                  {t("composer.outputsLabel")}
-                </p>
+              <PopoverContent align="start" className="w-64 gap-1 p-1">
+                <div className="px-2 py-1.5">
+                  <PillHeaderText
+                    title={t("composer.outputsLabel")}
+                    desc={t("composer.outputsDesc")}
+                  />
+                </div>
                 {OUTPUT_OPTIONS.map((key) => {
                   const active = outputs.includes(key)
-                  const Icon = OUTPUT_ICONS[key]
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => toggleOutput(key)}
                       className={cn(
-                        "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors",
-                        active ? "bg-accent text-foreground" : "hover:bg-accent/50"
+                        "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                        active ? "bg-accent" : "hover:bg-accent/50"
                       )}
                     >
-                      <span className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                        {t(`composer.outputOptions.${key}`)}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs leading-tight">
+                          {t(`composer.outputOptions.${key}`)}
+                        </span>
+                        <span className="block text-[11px] leading-tight text-muted-foreground">
+                          {t(`composer.outputDesc.${key}`)}
+                        </span>
                       </span>
-                      {active && <Check className="h-4 w-4" />}
+                      <span
+                        className={cn(
+                          "mt-px flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground/40"
+                        )}
+                      >
+                        {active && <Check className="h-2.5 w-2.5" />}
+                      </span>
                     </button>
                   )
                 })}
