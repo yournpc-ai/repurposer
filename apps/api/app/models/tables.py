@@ -37,9 +37,9 @@ def now_utc() -> datetime:
 class User(Base):
     """User account.
 
-    The MVP ships without a login UI: a seeded default user owns all data.
-    When real authentication is added, ``email`` becomes unique and a password
-    hash / OAuth fields can be appended without changing the public API.
+    Login is passwordless: a 6-digit email code (see ``services/auth.py``) is
+    exchanged for a JWT. All product data is isolated per user; the seeded
+    default user only owns shared demo content.
     """
 
     __tablename__ = "users"

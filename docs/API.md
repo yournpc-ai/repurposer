@@ -7,7 +7,24 @@
 - **Base URL**: `http://localhost:8000`
 - **API Prefix**: `/api/v1`
 - **Content-Type**: `application/json`
-- **Authentication**: Not implemented in this phase; JWT or session-based auth will be added later.
+- **Authentication**: Passwordless email verification-code login; clients send the returned JWT as `Authorization: Bearer <token>`. The home page and demo content are readable anonymously; all write endpoints and per-user data require a valid token — there is no default-user fallback.
+
+## 1.1 Authentication
+
+Login is a 6-digit email code delivered via Resend:
+
+```
+POST /api/v1/auth/send-code    { "email": "you@example.com" }
+  → { "message": "Verification code sent" }
+POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
+  → { "token": "<jwt>", "user": { "id", "email", "name" } }
+```
+
+- Codes expire after 10 minutes, allow max 5 verification attempts, and are single-use.
+- send-code rate limits: 60s resend cooldown per email, 5 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
+- `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
+- List endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects.
+- Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
 ## 2. Main Flow Call Sequence
 

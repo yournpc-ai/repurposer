@@ -260,7 +260,7 @@ The following agents are **not** part of the 4-layer executor pipeline and remai
 
 - `app/agents/persona.py` — extracts speaker style and content memory from source texts.
 - `app/agents/reviser.py` — revises a single clip script from human feedback.
-- `app/agents/intent.py` — infers generation intent (`outputs`, `clip_count`, `language`, `tone`) from the user's prompt before generation.
+- `app/agents/intent.py` — infers generation intent (`outputs`, `clip_count`, `language`, `tone`) from the user's prompt before generation. `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article.
 - `app/agents/caption_translate.py` — translates caption lines.
 
 ## 10. Future work

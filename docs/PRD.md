@@ -628,7 +628,7 @@ User feedback needs to be structured for the system to process effectively:
 | created_at | datetime | Creation time |
 | updated_at | datetime | Update time |
 
-> **Note**: Real authentication, UI language preference, and EU-region residency are future features. The current MVP uses a single seeded default user.
+> **Note**: Login is implemented as passwordless email verification-code (Resend) with per-user data isolation across speakers/projects/assets/brand templates/chat sessions. The seeded default user remains only as the owner of shared demo content. UI language preference and EU-region residency are future features.
 
 ### 10.2 Speaker / Memory
 
