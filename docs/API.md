@@ -47,11 +47,11 @@ POST /api/v1/projects/{project_id}/generate
 After that, the frontend navigates to the project detail page and polls the following endpoints to check results:
 
 ```
-GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt + clips + derivatives + latest job
+GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt + clips + derivatives + latest job + assets
 GET /api/v1/projects/{project_id}/jobs/{job_id}
 ```
 
-The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The legacy single-resource endpoints are still available:
+The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. The legacy single-resource endpoints are still available:
 
 ```
 GET /api/v1/projects/{project_id}
@@ -284,6 +284,10 @@ Request:
 - `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
 - `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
+
+Validation: for a full-scope request that includes `"clips"`, the project must have at least one renderable media asset (`video` / `audio` / `image` / `slides` with a file URL); otherwise the endpoint returns `422`. A text-only project cannot produce clips.
+
+Queueing note: the created run stays `pending` until every project asset has finished processing (ASR / extraction) — the worker skips runs whose assets are not ready yet. It is therefore safe to call `/generate` immediately after uploading; there is no need to wait for asset processing first.
 
 Response:
 

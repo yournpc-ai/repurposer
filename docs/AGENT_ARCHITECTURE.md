@@ -221,12 +221,16 @@ This file was previously `derivative_generation.py` and contained per-type param
 
 ```json
 {
-  "clips": {"status": "completed", "progress": 100, "error": null},
-  "post": {"status": "failed", "progress": 0, "error": "..."}
+  "clips": {"status": "completed", "progress": 100, "error": null, "stage": null},
+  "post": {"status": "failed", "progress": 0, "error": "...", "stage": null}
 }
 ```
 
-Each output agent call is wrapped in `try/except` with **one automatic retry**. If it still fails, the error is recorded and the run continues. The frontend shows a manual retry button per failed output; retrying triggers a new `WorkflowRun` with only that output.
+Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 5 → 60 → 100), and `run.progress` is the mean of per-output progress values.
+
+Context updates are persisted with `flag_modified` — plain SQLAlchemy JSON columns do not detect in-place mutation, and without it per-output statuses never reach the database.
+
+Each output agent call is wrapped in `try/except` with **one automatic retry**. If it still fails, the error is recorded and the run continues. A run that fails mid-flight marks every non-terminal output as `failed` so consumers can settle. The frontend shows a manual retry button per failed output; retrying triggers a new `WorkflowRun` with only that output.
 
 ### 7.3 Stepper stages
 

@@ -187,9 +187,9 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 
 1. 用户上传/粘贴后，file/prompt 变为有效状态
 2. 用户输入 prompt 时，AI 实时推断意图并通过参数 pill 旁的 AI 图标反馈；用户可随时展开 pill 手动修改参数
-3. 点击 Generate → 调用 `POST /api/v1/projects` 创建 project → 上传 asset → 创建 user message → 触发 generation
+3. 点击 Generate → 前置校验（outputs 含 clips 时必须有视频/音频/图片文件，否则本地报错拦截；后端 `/generate` 镜像校验返回 422）→ 调用 `POST /api/v1/projects` 创建 project → 上传 asset → 创建 user message → **立即触发 generation，不在首页等待 ASR 完成**
 4. **页面跳转到 `/projects/$id`**（Home 保持原样，不原地变形）
-5. 前端通过轮询 `GET /api/v1/projects/{id}/results` 等待生成完成并展示结果卡片
+5. 前端通过轮询 `GET /api/v1/projects/{id}/results` 等待生成完成并展示结果卡片；**loading 从落地即出现**，覆盖「转写/解析素材（assets 的 processing_status）→ run 排队 → analyze/plan/prepare → 各 output 子阶段」的完整旅程，单行 shimmer 文案 + 百分比 + 进度条
 
 ### 4.4 Show Grid（能力展示，非操作入口）
 
@@ -219,15 +219,16 @@ Home composer
         WorkflowRun (PENDING)
               │
               ▼
-        Worker 认领并执行
+        Worker 认领并执行（项目内 asset 未处理完时延迟认领，run 保持 PENDING）
               │
               ├─ 1. Content Director：基于材料、GenerationContext 产出统一 ContentPlan
               │     （core thesis / themes / target audience / 每个 output 的 DerivativePlan）
               ├─ 2. Clip Agent：基于 ContentPlan 规划 clips（选段 + script）
+              │     （子阶段上报：selecting_segments → building_specs）
               ├─ 3. 对每个非 clip output 调用对应 agent
               │      ├─ clips → build_clip_spec + render_spec
               │      ├─ post → Post agent
-              │      ├─ quotes → Quotes agent + MiniMax image-01
+              │      ├─ quotes → Quotes agent + MiniMax image-01（writing_copy → generating_image）
               │      ├─ carousel → Carousel agent
               │      └─ article → Article agent
               ├─ 4. 保存 Clip / Derivative 到数据库 + 对象存储 key

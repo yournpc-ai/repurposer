@@ -119,6 +119,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import settings
 from app.models.database import Base
+import app.models.tables  # noqa: F401 — required, registers tables on Base.metadata
 
 async def reset():
     engine = create_async_engine(settings.database_url)
@@ -128,7 +129,12 @@ async def reset():
 
 asyncio.run(reset())
 "
+# drop_all does NOT drop alembic_version (it is not in Base.metadata), so reset
+# the recorded revision first — otherwise upgrade head applies nothing.
+uv run alembic stamp base
 uv run alembic upgrade head
 ```
+
+**Pitfalls**: without `import app.models.tables`, `Base.metadata` is empty and `drop_all` silently drops nothing; without `alembic stamp base`, the surviving `alembic_version` row makes `upgrade head` a no-op and the schema stays missing.
 
 **Never do this in production.**

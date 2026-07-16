@@ -139,7 +139,7 @@ Render trigger → Clip.render_status=PENDING → worker calls Remotion renderin
 Export MP4 + SRT
 ```
 
-**Note**: After upload, an `Asset(processing_status=PENDING)` is created immediately; the worker claims and processes it in the background (ASR / text extraction / vision). The generation runtime reads the Asset's `extracted_text` / `transcript` / `meta["words"]` directly; if parsing is not yet complete, generation will fail or receive empty content.
+**Note**: After upload, an `Asset(processing_status=PENDING)` is created immediately; the worker claims and processes it in the background (ASR / text extraction / vision). The generation runtime reads the Asset's `extracted_text` / `transcript` / `meta["words"]` directly. A generation run created while assets are still processing simply stays `pending`: the worker skips runs whose project has unprocessed assets (deferred claim), so `/generate` can be called immediately after upload — no client-side wait for ASR/extraction is needed.
 
 ## 5. Code Structure
 
@@ -287,7 +287,7 @@ Long-running tasks (ASR, video rendering, generation) do not run in the API proc
 └──────────────────────┘
 ```
 
-- `app/services/jobs.py`: `claim_pending_*` (atomic claiming) + `reap_stale` (startup reset of orphaned tasks).
+- `app/services/jobs.py`: `claim_pending_*` (atomic claiming) + `reap_stale` (startup reset of orphaned tasks). `claim_pending_run` additionally skips runs whose project still has `pending`/`processing` assets, so generation never starts before its source material is ready.
 - `app/services/asset_processing.py`: Processor dispatch by `AssetType` — **the future hook-in point for ASR/OCR/video rendering**.
 - When horizontal scaling is needed, replace claiming with arq/Celery + Redis; callers remain unchanged.
 
