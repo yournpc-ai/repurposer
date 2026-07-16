@@ -52,6 +52,11 @@ class IntentAgent:
             "quotes, carousel, article.\n"
             "  Default to [\"clips\", \"post\", \"quotes\", \"article\"] when "
             "unclear.\n"
+            "  IMPORTANT: only include 'clips' when a media source file "
+            "(video, audio, or image) is attached — clips are rendered videos "
+            "and need visual or audio source material. When no file is "
+            "uploaded, or the uploaded file is a document/text file, exclude "
+            "'clips' (default to [\"post\", \"quotes\", \"article\"] instead).\n"
             "  If the user explicitly asks for only some types, return only those.\n"
             "  If the user says 'no clips', 'without clips', 'just a post', or "
             "excludes an output type, respect that.\n"
@@ -75,6 +80,8 @@ class IntentAgent:
         context = f"User prompt: {prompt}"
         if filename:
             context += f"\nUploaded file: {filename}"
+        else:
+            context += "\nNo file uploaded (text-only input)."
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -88,17 +95,21 @@ class IntentAgent:
                 temperature=0.2,
             )
         except MiniMaxError:
-            # Fall back to defaults so the UI never breaks.
+            # Fall back to defaults so the UI never breaks. Clips need a media
+            # source file, so text-only input falls back to text outputs.
+            has_media = filename is not None and filename.lower().endswith(
+                (".mp4", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".aac",
+                 ".ogg", ".png", ".jpg", ".jpeg", ".webp")
+            )
             return InferredIntent(
                 action="generate",
                 answer=None,
                 language="en",
-                outputs=[
-                    "clips",
-                    "post",
-                    "quotes",
-                    "article",
-                ],
+                outputs=(
+                    ["clips", "post", "quotes", "article"]
+                    if has_media
+                    else ["post", "quotes", "article"]
+                ),
                 clip_count=None,
                 tone="professional",
                 specific_instruction=prompt.strip() or None,
