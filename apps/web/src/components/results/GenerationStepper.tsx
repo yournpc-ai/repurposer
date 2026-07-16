@@ -8,67 +8,115 @@ import {
   Progress,
   ProgressLabel,
   ProgressTrack,
+  ProgressValue,
 } from "@/components/animate-ui/components/base/progress"
-import { cn } from "@/lib/utils"
+
+export interface OutputStatusEntry {
+  status: "pending" | "running" | "completed" | "failed"
+  progress?: number | null
+  error?: string | null
+  stage?: string | null
+}
+
+export interface ResultsAssetStatus {
+  id: string
+  type: string
+  processing_status: "pending" | "processing" | "completed" | "failed"
+  processing_error?: string | null
+}
 
 interface GenerationStepperProps {
-  currentStep: string
-  progress?: number
   open: boolean
+  runStatus?: "pending" | "running" | "completed" | "failed" | null
+  currentStep?: string | null
+  progress?: number
+  assets?: ResultsAssetStatus[]
+  outputs?: string[]
+  outputStatus?: Record<string, OutputStatusEntry>
 }
 
 const PLANNING_STEPS = ["analyze", "plan", "prepare"] as const
 const OUTPUT_STEPS = ["clips", "post", "quotes", "carousel", "article"] as const
 
 export function GenerationStepper({
+  open,
+  runStatus,
   currentStep,
   progress,
-  open,
+  assets = [],
+  outputs = [],
+  outputStatus = {},
 }: GenerationStepperProps) {
   const { t } = useTranslation()
+
+  // 1. Assets still transcribing/parsing — the run is queued behind them.
+  const busyAssets = assets.filter(
+    (a) => a.processing_status === "pending" || a.processing_status === "processing"
+  )
+  const busyTypes = new Set(busyAssets.map((a) => a.type))
+
+  // 2. Currently running output (drives the sub-stage label).
+  const activeOutput = outputs.find((o) => outputStatus[o]?.status === "running")
+  const activeStage = activeOutput ? outputStatus[activeOutput]?.stage : null
+
+  let labelKey: string
+  let percent: number
 
   const planningIndex = PLANNING_STEPS.indexOf(
     currentStep as (typeof PLANNING_STEPS)[number]
   )
-  const isPlanning = planningIndex >= 0
+  const isOutputStep = OUTPUT_STEPS.includes(
+    currentStep as (typeof OUTPUT_STEPS)[number]
+  )
 
-  let labelKey = currentStep
-  let normalizedProgress = 0
-
-  if (isPlanning) {
-    // Planning phases occupy 10%–40% so the bar always moves forward.
-    normalizedProgress = (planningIndex + 1) * 15
+  if (busyAssets.length > 0) {
+    labelKey = busyTypes.has("video")
+      ? "transcribing_video"
+      : busyTypes.has("audio")
+        ? "transcribing_audio"
+        : "parsing"
+    percent = 8
+  } else if (runStatus === "pending") {
+    labelKey = "queued"
+    percent = 15
+  } else if (planningIndex >= 0) {
+    // Planning phases occupy 20%–30% of the bar.
+    labelKey = PLANNING_STEPS[planningIndex]
+    percent = 20 + planningIndex * 5
   } else if (currentStep === "done") {
-    normalizedProgress = 100
     labelKey = "done"
-  } else if (OUTPUT_STEPS.includes(currentStep as (typeof OUTPUT_STEPS)[number])) {
-    // Map backend 0–100 progress onto 50%–95% of the overall bar.
+    percent = 100
+  } else if (isOutputStep) {
+    // Map backend 0–100 (mean of per-output progress) onto 30%–100%.
     const backendProgress = Math.max(0, Math.min(100, progress ?? 0))
-    normalizedProgress = 50 + Math.round((backendProgress / 100) * 45)
+    percent = 30 + Math.round((backendProgress / 100) * 70)
+    if (activeStage === "writing_copy" && activeOutput) {
+      labelKey = `stage.writing_copy.${activeOutput}`
+    } else if (activeStage) {
+      labelKey = `stage.${activeStage}`
+    } else {
+      labelKey = currentStep ?? "clips"
+    }
   } else {
     // Unknown/fallback step: keep at the end of planning.
     labelKey = "prepare"
-    normalizedProgress = 40
+    percent = 30
   }
 
   return (
     <Dialog open={open}>
       <DialogContent showCloseButton={false} className="sm:max-w-md">
-        <div className="w-full space-y-3 py-2">
-          <Progress value={normalizedProgress}>
-            <div className="flex items-center justify-between">
-              <ProgressLabel>{t(`results.stepper.${labelKey}`)}</ProgressLabel>
-            </div>
-            <ProgressTrack
-              className={cn("h-2 w-full overflow-hidden rounded-full bg-muted")}
-            >
-              <div
-                className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-500"
-                style={{ transform: `scaleX(${normalizedProgress / 100})` }}
-              />
-            </ProgressTrack>
-          </Progress>
-        </div>
+        <Progress value={percent} className="w-full space-y-2">
+          <div className="flex items-center justify-between gap-1">
+            <ProgressLabel className="shimmer text-sm font-medium">
+              {t(`results.stepper.${labelKey}`)}
+            </ProgressLabel>
+            <span className="text-sm">
+              <ProgressValue /> %
+            </span>
+          </div>
+          <ProgressTrack />
+        </Progress>
       </DialogContent>
     </Dialog>
   )

@@ -25,6 +25,14 @@ interface OutputStatus {
   status: "pending" | "running" | "completed" | "failed"
   progress: number
   error: string | null
+  stage?: string | null
+}
+
+interface AssetStatusEntry {
+  id: string
+  type: string
+  processing_status: "pending" | "processing" | "completed" | "failed"
+  processing_error?: string | null
 }
 
 interface WorkflowRun {
@@ -53,6 +61,7 @@ interface ProjectResults {
   clips: Clip[]
   derivatives: Derivative[]
   latest_job: WorkflowRun | null
+  assets?: AssetStatusEntry[]
 }
 
 const TAB_TO_OUTPUT_KEY: Record<ResultsTab, string> = {
@@ -122,21 +131,12 @@ function ProjectDetailPage() {
     }
   }, [latestJob?.context?.outputs])
 
-  // Poll latest job until it settles, and keep polling while any requested
-  // output is still pending/running or any clip is still rendering. Relying
-  // only on run.status can stop polling too early if the backend updates the
-  // run status before all per-output statuses have reached a terminal state.
+  // Poll the latest job until the run settles AND no clip from this run is
+  // still rendering. Clip renders proceed independently of the run status.
   useEffect(() => {
     if (!results?.latest_job) return
 
     const status = results.latest_job.status
-    const outputStatus = results.latest_job.context?.output_status ?? {}
-    const requestedOutputs = results.latest_job.context?.outputs ?? []
-
-    const hasPendingOutputs = requestedOutputs.some((output) => {
-      const s = outputStatus[output]
-      return !s || (s.status !== "completed" && s.status !== "failed")
-    })
 
     const currentRunId = results.latest_job.id
     const currentRunClips = (results?.clips ?? []).filter(
@@ -147,13 +147,11 @@ function ProjectDetailPage() {
       (c: Clip) => c.render_status === "pending" || c.render_status === "rendering"
     )
 
-    // Only stop polling once the run is settled AND every requested output has
-    // reached a terminal state AND no clip video is still rendering.
-    if (
-      (status === "completed" || status === "failed") &&
-      !hasPendingOutputs &&
-      !hasRenderingClips
-    ) {
+    // A settled run (completed or failed) never progresses its outputs
+    // further — stop polling regardless of what the per-output statuses say
+    // (legacy runs may carry stale pending entries). Clip renders proceed
+    // independently of the run, so keep polling only while any are active.
+    if ((status === "completed" || status === "failed") && !hasRenderingClips) {
       return
     }
 
@@ -171,16 +169,26 @@ function ProjectDetailPage() {
     .map((o) => OUTPUT_KEY_TO_TAB[o])
     .filter(Boolean) as ResultsTab[]
 
+  // When the run itself failed, outputs that never reached a terminal state
+  // are dead too — present them as failed (with a retry) instead of skeletons.
+  const runFailed = latestJob?.status === "failed"
+
   const runningTabs = outputStatus
     ? (Object.entries(outputStatus)
-        .filter(([, s]) => s.status === "running" || s.status === "pending")
+        .filter(
+          ([, s]) =>
+            !runFailed && (s.status === "running" || s.status === "pending")
+        )
         .map(([output]) => OUTPUT_KEY_TO_TAB[output])
         .filter(Boolean) as ResultsTab[])
     : []
 
   const failedTabs = outputStatus
     ? (Object.entries(outputStatus)
-        .filter(([, s]) => s.status === "failed")
+        .filter(
+          ([, s]) =>
+            s.status === "failed" || (runFailed && s.status !== "completed")
+        )
         .map(([output]) => OUTPUT_KEY_TO_TAB[output])
         .filter(Boolean) as ResultsTab[])
     : []
@@ -188,8 +196,13 @@ function ProjectDetailPage() {
   const isGenerating =
     latestJob?.status === "pending" || latestJob?.status === "running"
 
-  const showProgress =
-    isGenerating && latestJob?.current_step != null
+  // The loading covers the full journey: asset transcription/parsing first,
+  // then the generation run. It is visible from the moment the user lands on
+  // this page after clicking Generate, until the run settles.
+  const assetsBusy = (results?.assets ?? []).some(
+    (a) => a.processing_status === "pending" || a.processing_status === "processing"
+  )
+  const showProgress = assetsBusy || isGenerating
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
@@ -295,7 +308,7 @@ function ProjectDetailPage() {
     return (
       <Card className="p-8 text-center ring-1 ring-border shadow-xl">
         <p className="text-sm text-destructive">
-          {status?.error || t("results.retryFailed")}
+          {status?.error || latestJob?.error || t("results.retryFailed")}
         </p>
         <Button
           variant="outline"
@@ -413,9 +426,13 @@ function ProjectDetailPage() {
 
         {showProgress && (
           <GenerationStepper
-            currentStep={latestJob?.current_step ?? "analyze"}
-            progress={latestJob?.progress}
             open={showProgress}
+            runStatus={latestJob?.status ?? null}
+            currentStep={latestJob?.current_step ?? null}
+            progress={latestJob?.progress}
+            assets={results?.assets ?? []}
+            outputs={requestedOutputs}
+            outputStatus={outputStatus ?? {}}
           />
         )}
 
