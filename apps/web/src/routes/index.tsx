@@ -83,9 +83,10 @@ function Home() {
             {mounted ? (
               <RotatingText
                 texts={heroWords}
-                rotationInterval={2200}
+                rotationInterval={3000}
                 splitBy="characters"
                 staggerDuration={0.02}
+                staggerFrom="random"
                 mainClassName="text-primary"
                 splitLevelClassName="overflow-hidden py-1"
               />
