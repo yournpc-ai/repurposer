@@ -26,6 +26,7 @@ from uuid import UUID
 import boto3
 import structlog
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from app.config import settings
 
@@ -236,6 +237,37 @@ async def presign_upload(
     )
 
 
+async def presign_download(
+    key: str,
+    *,
+    filename: str | None = None,
+    ttl: int = 300,
+) -> str:
+    """Generate a presigned GET URL for an object.
+
+    When ``filename`` is given, the response carries
+    ``Content-Disposition: attachment; filename*=UTF-8''<name>`` so the browser
+    downloads instead of playing inline (the plain public URL cannot do this).
+    """
+    client = _get_s3_client()
+    params: dict[str, str] = {
+        "Bucket": settings.s3_bucket_name,
+        "Key": _normalize_key(key),
+    }
+    if filename:
+        from urllib.parse import quote
+
+        params["ResponseContentDisposition"] = (
+            f"attachment; filename*=UTF-8''{quote(filename)}"
+        )
+    return await asyncio.to_thread(
+        client.generate_presigned_url,
+        "get_object",
+        Params=params,
+        ExpiresIn=ttl,
+    )
+
+
 async def save(key: str, data: bytes | BinaryIO, content_type: str | None = None) -> str:
     """Upload bytes or a file-like object to object storage and return the key."""
     client = _get_s3_client()
@@ -308,19 +340,25 @@ async def read(key: str) -> bytes:
 async def download_to_temp(key: str | None) -> Path | None:
     """Download an object to a temporary file and return its path.
 
-    The caller is responsible for deleting the temp file.
+    Streams to disk via ``download_file`` (no full-object memory buffering), so
+    it is safe for multi-GB source videos. The caller is responsible for
+    deleting the temp file.
     """
     if not key:
         return None
-    data = await read(key)
+    client = _get_s3_client()
     suffix = Path(key).suffix or ""
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
     try:
-        with os.fdopen(fd, "wb") as tmp:
-            tmp.write(data)
+        await asyncio.to_thread(
+            client.download_file,
+            settings.s3_bucket_name,
+            _normalize_key(key),
+            tmp_path,
+        )
         return Path(tmp_path)
     except Exception:
-        os.close(fd)
         Path(tmp_path).unlink(missing_ok=True)
         raise
 
@@ -397,8 +435,17 @@ def owner_from_path(key: str | None) -> str | None:
     return first if first else None
 
 
+def _is_not_found(e: ClientError) -> bool:
+    """True when the S3 error means the object simply does not exist."""
+    return e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound")
+
+
 async def exists(key: str | None) -> bool:
-    """Return True if the object exists in storage."""
+    """Return True if the object exists in storage.
+
+    Only a missing object yields False; credential/network errors propagate so
+    callers (e.g. seed reconcilers) do not silently misread them as "absent".
+    """
     if not key:
         return False
     client = _get_s3_client()
@@ -409,12 +456,14 @@ async def exists(key: str | None) -> bool:
             Key=_normalize_key(key),
         )
         return True
-    except Exception:
-        return False
+    except ClientError as e:
+        if _is_not_found(e):
+            return False
+        raise
 
 
 async def size(key: str | None) -> int | None:
-    """Return the object size in bytes, or None if missing."""
+    """Return the object size in bytes, or None if missing (404 only)."""
     if not key:
         return None
     client = _get_s3_client()
@@ -425,8 +474,10 @@ async def size(key: str | None) -> int | None:
             Key=_normalize_key(key),
         )
         return int(response["ContentLength"])
-    except Exception:
-        return None
+    except ClientError as e:
+        if _is_not_found(e):
+            return None
+        raise
 
 
 def resolve_file_path(key: str | None) -> Path | None:

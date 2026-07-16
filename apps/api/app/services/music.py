@@ -230,7 +230,12 @@ async def seed_default_music(db: AsyncSession) -> list[Music]:
             continue
         music_id = default_music_id(mood)
         key = music_file_path(music_id)
-        if not await music_disk_path(music_id):
+        try:
+            object_exists = await music_disk_path(music_id)
+        except Exception as e:  # noqa: BLE001 — storage unreachable at startup
+            logger.error("seed_default_music_check_failed", mood=mood, error=str(e))
+            continue
+        if not object_exists:
             logger.warning("seed_default_music_missing_object", mood=mood, key=key)
             continue
         file_size = await size(key) or 0

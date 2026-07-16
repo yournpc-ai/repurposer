@@ -5,9 +5,14 @@ It absolutizes the clip-spec's source URL (the spec stores a relative stream URL
 via the storage seam; the render service needs an absolute URL it can fetch),
 POSTs the spec to the render service (black box: spec -> MP4+SRT), and writes the
 resulting output keys back onto the clip.
+
+Output keys carry a per-render timestamp suffix (``<clip_id>-<ts>.mp4``) so a
+re-render never overwrites the object a browser may have cached under the same
+URL. The previous render's objects are deleted once the new one succeeds.
 """
 
 import copy
+import time
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +24,13 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Clip, Project
-from app.services.storage import get_output_path, output_url, presign_upload, public_url
+from app.services.storage import (
+    delete,
+    get_output_path,
+    output_url,
+    presign_upload,
+    public_url,
+)
 
 logger = structlog.get_logger()
 
@@ -89,11 +100,12 @@ async def render_clip(clip_id: UUID) -> None:
 
         try:
             spec = _absolutize(copy.deepcopy(clip.render_spec))
+            render_ts = int(time.time())
             video_key = await get_output_path(
-                clip.project_id, user_id, f"{clip.id}.mp4"
+                clip.project_id, user_id, f"{clip.id}-{render_ts}.mp4"
             )
             srt_key = await get_output_path(
-                clip.project_id, user_id, f"{clip.id}.srt"
+                clip.project_id, user_id, f"{clip.id}-{render_ts}.srt"
             )
             video_put_url = await presign_upload(
                 video_key, content_type="video/mp4", ttl=900
@@ -121,11 +133,28 @@ async def render_clip(clip_id: UUID) -> None:
                 resp.raise_for_status()
                 data = resp.json()
 
+            old_video_key = clip.video_url
+            old_srt_key = clip.srt_url
             clip.video_url = data["video"]
             clip.srt_url = data["srt"]
             clip.render_status = RenderStatus.COMPLETED
             clip.render_error = None
             await db.commit()
+
+            # Best-effort cleanup of the previous render's objects. Only bare
+            # keys are deletable; legacy /api/v1 paths and absolute URLs are
+            # skipped (deleting them would be a no-op anyway).
+            for old_key in (old_video_key, old_srt_key):
+                if old_key and not old_key.startswith(("http://", "https://", "/")):
+                    try:
+                        await delete(old_key)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "render_old_output_delete_failed",
+                            key=old_key,
+                            error=str(e),
+                        )
+
             logger.info(
                 "clip_rendered",
                 clip_id=str(clip_id),

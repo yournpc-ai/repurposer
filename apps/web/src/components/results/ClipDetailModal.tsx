@@ -13,7 +13,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import { apiPost, toAbsoluteUrl } from "@/lib/api"
+import { apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { formatDuration, cn } from "@/lib/utils"
 
 import type { Clip } from "@/lib/types"
@@ -49,15 +49,11 @@ export function ClipDetailModal({
   }
 
   const handleDownload = () => {
-    const url = toAbsoluteUrl(clipState.video_url)
-    if (!url) return
-    const downloadUrl = url.includes("?") ? `${url}&download=1` : `${url}?download=1`
-    const a = document.createElement("a")
-    a.href = downloadUrl
-    a.download = `${clipState.title || clipState.hook || "clip"}.mp4`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
+    if (!clipState.video_url) return
+    const filename = `${clipState.title || clipState.hook || "clip"}.mp4`
+    downloadFile(clipState.video_url, filename).catch((e) =>
+      console.error("Download failed", e)
+    )
   }
 
   const handleGenerateCover = async () => {

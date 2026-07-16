@@ -13,6 +13,7 @@ failures without hiding successful outputs.
 import asyncio
 import base64
 import mimetypes
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -187,10 +188,14 @@ async def _save_quote_card_image(
     derivative_id: UUID,
     project: Project,
 ) -> str | None:
-    """Generate and save a quote-card PNG; return the public URL or None on failure."""
+    """Generate and save a quote-card PNG; return the public URL or None on failure.
+
+    The filename carries a timestamp so a regeneration never overwrites the
+    object a browser may have cached under the previous URL.
+    """
     return await _save_minimax_image(
         project,
-        f"quote_{derivative_id}.png",
+        f"quote_{derivative_id}-{int(time.time())}.png",
         _quote_image_prompt(quote, attribution, project.event_name),
         "1:1",
         log_context={"derivative_id": str(derivative_id), "kind": "quote_card"},
@@ -217,7 +222,7 @@ async def _generate_clip_cover_image(clip: Clip, project: Project) -> str | None
 
     return await _save_minimax_image(
         project,
-        f"cover_{clip.id}.png",
+        f"cover_{clip.id}-{int(time.time())}.png",
         prompt,
         "9:16",
         log_context={"clip_id": str(clip.id), "kind": "clip_cover"},

@@ -78,3 +78,36 @@ export function toAbsoluteUrl(
   return `${API_URL}${url.startsWith("/") ? url : `/${url}`}`
 }
 
+/** Download a URL as a file via fetch → blob → object URL.
+ *
+ * Works cross-origin (object-storage public URLs): unlike `<a download>` on a
+ * remote URL — which browsers ignore — a blob object URL is same-origin, so
+ * the filename is honored. API-relative URLs carry the bearer token via
+ * apiFetch; absolute URLs go through plain fetch (no auth header leaked to
+ * the storage host).
+ */
+export async function downloadFile(
+  url: string | null | undefined,
+  filename: string
+): Promise<void> {
+  const absolute = toAbsoluteUrl(url)
+  if (!absolute) return
+  const resp = absolute.startsWith(API_URL)
+    ? await apiFetch(absolute.slice(API_URL.length))
+    : await fetch(absolute)
+  if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
+  const blob = await resp.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement("a")
+    a.href = objectUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } finally {
+    // Delay revocation so the browser has started consuming the blob.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000)
+  }
+}
+

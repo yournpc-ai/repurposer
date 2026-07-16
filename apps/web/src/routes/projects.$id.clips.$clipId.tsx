@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { apiFetch, toAbsoluteUrl } from '@/lib/api'
+import { apiFetch, downloadFile, toAbsoluteUrl } from '@/lib/api'
 import type { MusicPiece } from '@/components/brand-template/music-panel'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -339,11 +339,29 @@ function ClipEditorPage() {
               <p className="text-xs font-medium text-muted-foreground">{t('clipEditor.rendered')}</p>
               <video src={toAbsoluteUrl(clip.video_url) ?? undefined} controls className="w-full rounded-md" />
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 gap-1.5" render={<a href={toAbsoluteUrl(clip.video_url) ?? undefined} download />}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={() =>
+                    downloadFile(clip.video_url, `${clip.hook || 'clip'}.mp4`).catch((e) =>
+                      setError(e instanceof Error ? e.message : 'Download failed'),
+                    )
+                  }
+                >
                   <Download className="h-4 w-4" /> MP4
                 </Button>
                 {clip.srt_url ? (
-                  <Button variant="outline" size="sm" className="flex-1 gap-1.5" render={<a href={toAbsoluteUrl(clip.srt_url) ?? undefined} download />}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() =>
+                      downloadFile(clip.srt_url, `${clip.hook || 'clip'}.srt`).catch((e) =>
+                        setError(e instanceof Error ? e.message : 'Download failed'),
+                      )
+                    }
+                  >
                     <FileText className="h-4 w-4" /> SRT
                   </Button>
                 ) : null}
