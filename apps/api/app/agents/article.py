@@ -40,7 +40,8 @@ class ArticleAgent(MiniMaxAgentBase):
             {
                 "role": "system",
                 "content": (
-                    "You are a professional article writer. You only output valid JSON, with no additional explanations."
+                    "You are a professional article writer. You only output valid "
+                    "JSON, with no additional explanations."
                 ),
             },
             {"role": "user", "content": user_prompt},

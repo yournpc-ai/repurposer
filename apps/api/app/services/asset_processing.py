@@ -21,12 +21,8 @@ import structlog
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
-from app.services.extraction import extract_text, render_pdf_pages
-from app.services.storage import (
-    _relative_path,
-    get_project_upload_dir,
-    resolve_file_path,
-)
+from app.services.extraction import extract_text, render_pdf_pages_and_upload
+from app.services.storage import download_to_temp, get_project_output_dir
 
 logger = structlog.get_logger()
 
@@ -38,7 +34,7 @@ class ProcessResult:
     extracted_text: str | None = None
     transcript: str | None = None
     duration_seconds: int | None = None
-    slide_pages: list[str] | None = None  # relative paths to rendered PDF pages
+    slide_pages: list[str] | None = None  # object storage keys to rendered PDF pages
     meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -51,7 +47,7 @@ async def _extract_text_processor(asset: Asset) -> ProcessResult:
     """Extract text from a document-like asset (txt/md/pdf)."""
     if not asset.file_url:
         return ProcessResult()
-    return ProcessResult(extracted_text=extract_text(asset.file_url))
+    return ProcessResult(extracted_text=await extract_text(asset.file_url))
 
 
 async def _slides_processor(asset: Asset) -> ProcessResult:
@@ -65,29 +61,32 @@ async def _slides_processor(asset: Asset) -> ProcessResult:
         return ProcessResult()
     slide_pages: list[str] | None = None
     if asset.file_url.lower().endswith(".pdf"):
-        out_dir = get_project_upload_dir(asset.project_id) / f"slides-{asset.id}"
-        pages = render_pdf_pages(asset.file_url, out_dir)
-        slide_pages = [_relative_path(p) for p in pages] or None
+        prefix = f"{get_project_output_dir(asset.project_id, asset.user_id)}/slides-{asset.id}"
+        pages = await render_pdf_pages_and_upload(asset.file_url, prefix)
+        slide_pages = pages or None
     return ProcessResult(slide_pages=slide_pages)
 
 
 async def _asr_processor(asset: Asset) -> ProcessResult:
     """Transcribe a video/audio asset to text + word-level timestamps."""
-    path = resolve_file_path(asset.file_url)
-    if path is None or not path.is_file():
+    path = await download_to_temp(asset.file_url)
+    if path is None:
         return ProcessResult()
 
     from app.services.asr import transcribe  # lazy: heavy model deps
 
-    # Transcription is CPU-bound; run it in a thread so the async event loop
-    # stays responsive (important for the demo seed and worker concurrency).
-    result = await asyncio.to_thread(transcribe, path)
-    duration = result.get("duration")
-    return ProcessResult(
-        transcript=result["transcript"],
-        duration_seconds=int(duration) if duration else None,
-        meta={"words": result["words"], "language": result["language"]},
-    )
+    try:
+        # Transcription is CPU-bound; run it in a thread so the async event loop
+        # stays responsive (important for the demo seed and worker concurrency).
+        result = await asyncio.to_thread(transcribe, path)
+        duration = result.get("duration")
+        return ProcessResult(
+            transcript=result["transcript"],
+            duration_seconds=int(duration) if duration else None,
+            meta={"words": result["words"], "language": result["language"]},
+        )
+    finally:
+        path.unlink(missing_ok=True)
 
 
 async def _noop_processor(asset: Asset) -> ProcessResult:

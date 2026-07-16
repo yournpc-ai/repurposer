@@ -45,7 +45,5 @@ COPY apps/render apps/render
 
 WORKDIR /repo/apps/render
 ENV RENDER_PORT=3001
-# Rendered MP4/SRT land here; the api serves them from the shared volume.
-ENV RENDER_OUTPUT_DIR=/data/outputs
 EXPOSE 3001
 CMD ["pnpm", "start"]

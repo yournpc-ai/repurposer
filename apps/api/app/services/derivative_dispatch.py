@@ -10,7 +10,12 @@ from app.agents.article import article_agent
 from app.agents.carousel import carousel_agent
 from app.agents.post import post_agent
 from app.agents.quotes import quotes_agent
-from app.models.schemas import ContentPlan, DerivativeType, GenerationContext, validate_derivative_content
+from app.models.schemas import (
+    ContentPlan,
+    DerivativeType,
+    GenerationContext,
+    validate_derivative_content,
+)
 
 _AGENTS = {
     DerivativeType.POST: post_agent,

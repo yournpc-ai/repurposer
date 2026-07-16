@@ -251,7 +251,12 @@ class ChatSession(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
     title = Column(String(255), nullable=True)
@@ -271,7 +276,10 @@ class Message(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     session_id = Column(
-        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=True)
@@ -283,7 +291,7 @@ class Message(Base):
 
 
 class Music(Base):
-    """Background music piece (DB-backed; audio bytes stay under ``assets/``).
+    """Background music piece (DB-backed; audio bytes stay in object storage).
 
     A dedicated table — not the ``Asset`` table — because music library items are
     global/shared resources: they don't belong to a single project or speaker
@@ -296,8 +304,8 @@ class Music(Base):
     - Future user uploads (Phase 3): ``generated_by_user_id = <user_id>``,
       ``is_public = False`` until reviewed.
 
-    ``file_path`` is relative to ``settings.asset_dir`` (e.g.
-    ``"music/{music_id}.mp3"``). Audio bytes never live in the DB (ADR-011).
+    ``file_path`` is an object storage key (e.g. ``"music/{music_id}.mp3"``).
+    Audio bytes never live in the DB.
 
     ``mood`` is a unique natural key (``calm`` / ``uplifting`` / ``corporate``)
     kept for legacy compatibility — new code references pieces by ``id``.

@@ -10,29 +10,28 @@ The regular API startup also calls ``seed_demo_project()`` automatically.
 
 import argparse
 import asyncio
-import shutil
 import sys
 from pathlib import Path
-from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from sqlalchemy import delete
 
 from app.models.database import AsyncSessionLocal
 from app.models.tables import Clip, Derivative
 from app.services.demo_seed import DEMO_PROJECT_ID, seed_demo_project
-from app.services.storage import get_project_output_dir
+from app.services.storage import delete_prefix, get_project_output_dir
 
 
 async def _reset_demo_outputs() -> None:
-    """Delete existing demo clips, derivatives, and rendered output files."""
+    """Delete existing demo clips, derivatives, and rendered output objects."""
     async with AsyncSessionLocal() as db:
-        await db.execute(__import__('sqlalchemy').delete(Clip).where(Clip.project_id == DEMO_PROJECT_ID))
-        await db.execute(__import__('sqlalchemy').delete(Derivative).where(Derivative.project_id == DEMO_PROJECT_ID))
+        await db.execute(delete(Clip).where(Clip.project_id == DEMO_PROJECT_ID))
+        await db.execute(delete(Derivative).where(Derivative.project_id == DEMO_PROJECT_ID))
         await db.commit()
 
-    output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
+    output_prefix = get_project_output_dir(DEMO_PROJECT_ID, "demo")
+    await delete_prefix(output_prefix)
 
 
 async def main() -> None:

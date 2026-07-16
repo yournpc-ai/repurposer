@@ -1,4 +1,6 @@
+import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 
 import type { ClipSpec } from "@repurposer/clip";
 import express from "express";
@@ -9,11 +11,17 @@ const app = express();
 app.use(express.json({ limit: "8mb" }));
 
 const PORT = Number(process.env.RENDER_PORT ?? 3001);
-// Shared output dir — the api serves these files via its Range endpoint.
-// Defaults to the repo's assets (relative to apps/render cwd) so rendered
-// outputs share the user-scoped layout with the API.
-const OUTPUT_DIR =
-  process.env.RENDER_OUTPUT_DIR ?? path.resolve(process.cwd(), "../../assets");
+
+async function uploadFile(url: string, filePath: string, contentType?: string) {
+  const buffer = await fs.readFile(filePath);
+  const headers: Record<string, string> = {};
+  if (contentType) headers["Content-Type"] = contentType;
+  const resp = await fetch(url, { method: "PUT", body: buffer, headers });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Upload failed: ${resp.status} ${body}`);
+  }
+}
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -21,19 +29,22 @@ app.get("/health", (_req, res) => {
 
 /**
  * Black-box render endpoint: clip-spec in -> MP4 + SRT out.
- * Body: { spec, out_subdir?, basename? }. Returns paths relative to OUTPUT_DIR
- * so the api can map them onto its stream URL (storage seam).
+ * Body: { spec, out_subdir?, basename?, outputs: { video: { key, put_url, content_type? }, srt: { key, put_url, content_type? } } }.
+ *
+ * The render service renders to a temp dir, PUTs the rendered files to the
+ * supplied presigned URLs, and returns the object keys.
  */
 app.post("/render", async (req, res) => {
-  const { spec, out_subdir, basename } = req.body as {
+  const { spec, basename, outputs } = req.body as {
     spec?: ClipSpec;
-    out_subdir?: string;
     basename?: string;
+    outputs?: {
+      video?: { key: string; put_url: string; content_type?: string };
+      srt?: { key: string; put_url: string; content_type?: string };
+    };
   };
 
   const src = spec?.source;
-  // Renderable if: video/stills with a media URL, or stills with backing images
-  // (a no-audio slideshow has url="" and relies on image_urls).
   const renderable =
     src && (src.kind === "stills" ? (src.image_urls?.length ?? 0) > 0 || !!src.url : !!src.url);
   if (!renderable) {
@@ -41,13 +52,24 @@ app.post("/render", async (req, res) => {
     return;
   }
 
+  if (!outputs?.video?.put_url || !outputs?.srt?.put_url) {
+    res.status(400).json({ error: "outputs.video.put_url and outputs.srt.put_url are required" });
+    return;
+  }
+
   try {
-    const outDir = path.join(OUTPUT_DIR, out_subdir ?? "clips");
+    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
     const name = basename ?? `clip-${Date.now()}`;
     const { videoPath, srtPath } = await renderClip(spec, outDir, name);
+
+    await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
+    await uploadFile(outputs.srt.put_url, srtPath, outputs.srt.content_type);
+    await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});
+
     res.json({
-      video: path.relative(OUTPUT_DIR, videoPath),
-      srt: path.relative(OUTPUT_DIR, srtPath),
+      ok: true,
+      video: outputs.video.key,
+      srt: outputs.srt.key,
     });
   } catch (err) {
     console.error("render_failed", err);

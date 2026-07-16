@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies import DBDep, get_current_user, get_current_user_required
+from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,

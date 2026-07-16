@@ -1,23 +1,23 @@
-"""MiniMax music generation + on-disk persistence.
+"""MiniMax music generation + object storage persistence.
 
 The native ``/v1/music_generation`` call (see ``clients/minimax.py``) returns a
 short-lived audio URL. This service generates a piece, downloads the bytes
-immediately, persists them under ``assets/music/{music_id}.{ext}``, and returns
-the bytes + duration + provenance so ``services/music`` can create the DB row.
+immediately, persists them under ``music/{music_id}.{ext}`` in object storage,
+and returns the bytes + duration + provenance so ``services/music`` can create
+the DB row.
 
-Bytes never live in the DB (ADR-011 local FS). The file path stored on the
-``Music`` row is relative to ``settings.asset_dir``.
+Bytes never live in the DB. The file path stored on the ``Music`` row is an
+object storage key.
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 from uuid import UUID
 
 import httpx
 import structlog
 
 from app.clients.minimax import MiniMaxError, minimax_client
-from app.config import settings
+from app.services.storage import exists, save
 
 logger = structlog.get_logger()
 
@@ -87,23 +87,24 @@ async def generate_music(
 
 
 def music_file_path(music_id: UUID) -> str:
-    """Return the stored file_path (relative to asset_dir) for a music piece."""
+    """Return the object storage key for a music piece's audio file."""
     return f"music/{music_id}.{AUDIO_EXT}"
 
 
-def music_disk_path(music_id: UUID) -> Path:
-    """Return the absolute on-disk path for a music piece's audio file."""
-    return settings.asset_dir / music_file_path(music_id)
+async def persist_music(music_id: UUID, generated: GeneratedMusic) -> tuple[str, int]:
+    """Upload generated audio bytes to object storage.
 
-
-def persist_music(music_id: UUID, generated: GeneratedMusic) -> tuple[str, int]:
-    """Write generated audio bytes to disk and return (relative file_path, size).
-
-    Creates ``assets/music/`` if needed. ``file_path`` is relative to
-    ``asset_dir`` so it can be stored on the ``Music`` row and served via the
-    storage seam.
+    Returns (object_key, size). The key is ``music/{music_id}.{ext}``.
     """
-    path = music_disk_path(music_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(generated.audio_bytes)
-    return music_file_path(music_id), len(generated.audio_bytes)
+    key = music_file_path(music_id)
+    await save(key, generated.audio_bytes, content_type="audio/mpeg")
+    return key, len(generated.audio_bytes)
+
+
+async def music_disk_path(music_id: UUID) -> bool:
+    """Return whether the music object exists in storage.
+
+    Kept as an async compatibility shim for code that used ``music_disk_path``
+    to check file existence.
+    """
+    return await exists(music_file_path(music_id))

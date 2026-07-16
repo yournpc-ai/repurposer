@@ -62,13 +62,11 @@ DEMO_USER_MESSAGE = (
 )
 
 
-def _demo_paths() -> tuple:
-    """Return upload and output directories for the demo project."""
-    upload_dir = get_project_upload_dir(DEMO_PROJECT_ID, "demo")
-    output_dir = get_project_output_dir(DEMO_PROJECT_ID, "demo")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return upload_dir, output_dir
+def _demo_paths() -> tuple[str, str]:
+    """Return upload and output prefixes for the demo project."""
+    upload_prefix = get_project_upload_dir(DEMO_PROJECT_ID, "demo")
+    output_prefix = get_project_output_dir(DEMO_PROJECT_ID, "demo")
+    return upload_prefix, output_prefix
 
 
 async def _get_or_create_demo_user(db) -> User | None:

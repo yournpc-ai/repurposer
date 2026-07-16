@@ -40,10 +40,18 @@ async def cleanup() -> None:
         if assets:
             asset_project_ids = [a.project_id for a in assets if a.project_id]
             if asset_project_ids:
-                await db.execute(delete(Derivative).where(Derivative.project_id.in_(asset_project_ids)))
-                await db.execute(delete(Clip).where(Clip.project_id.in_(asset_project_ids)))
-                await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id.in_(asset_project_ids)))
-                await db.execute(delete(Project).where(Project.id.in_(asset_project_ids)))
+                await db.execute(
+                    delete(Derivative).where(Derivative.project_id.in_(asset_project_ids))
+                )
+                await db.execute(
+                    delete(Clip).where(Clip.project_id.in_(asset_project_ids))
+                )
+                await db.execute(
+                    delete(WorkflowRun).where(WorkflowRun.project_id.in_(asset_project_ids))
+                )
+                await db.execute(
+                    delete(Project).where(Project.id.in_(asset_project_ids))
+                )
             await db.execute(delete(Asset).where(Asset.id.in_([a.id for a in assets])))
             print(f"Deleted {len(assets)} stuck assets and their projects.")
 

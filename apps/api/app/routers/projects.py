@@ -32,8 +32,8 @@ from app.models.tables import (
     User,
     WorkflowRun,
 )
-from app.services.demo_seed import DEMO_PROJECT_ID
 from app.services.chat import get_project_prompt, seed_project_prompt
+from app.services.demo_seed import DEMO_PROJECT_ID
 from app.services.project_context import get_project_for_user
 from app.services.storage import delete_file, delete_project_files
 
@@ -122,6 +122,7 @@ async def list_projects(
         if has_real_project and project.id == DEMO_PROJECT_ID:
             continue
         resp = ProjectResponse.model_validate(project)
+        resp.is_demo = project.id == DEMO_PROJECT_ID
         resp.thumbnail_url = video_url
         resp.thumbnail_duration = duration
         resp.thumbnail_aspect = (render_spec or {}).get("aspect")
@@ -134,9 +135,12 @@ async def get_project(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> Project:
+) -> ProjectResponse:
     """Get project by ID."""
-    return await get_project_for_user(db, project_id, current_user.id if current_user else None)
+    project = await get_project_for_user(db, project_id, current_user.id if current_user else None)
+    resp = ProjectResponse.model_validate(project)
+    resp.is_demo = project.id == DEMO_PROJECT_ID
+    return resp
 
 
 @router.get("/{project_id}/results", response_model=ProjectResultsResponse)

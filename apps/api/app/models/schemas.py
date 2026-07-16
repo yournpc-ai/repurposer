@@ -313,7 +313,10 @@ class InferredIntent(BaseModel):
             "quotes",
             "article",
         ],
-        description="Which asset types the user wants to generate. Carousel is not selected by default.",
+        description=(
+            "Which asset types the user wants to generate. "
+            "Carousel is not selected by default."
+        ),
     )
     clip_count: int | None = Field(
         default=None,
@@ -385,6 +388,9 @@ class ProjectResponse(ProjectBase):
     content_plan: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    # True for the seeded demo project; lets the frontend route/link by slug
+    # instead of exposing the long UUID.
+    is_demo: bool = False
     # Representative clip for the project-list card (list endpoint only; the
     # earliest rendered clip). None while no clip has finished rendering yet.
     thumbnail_url: str | None = None
@@ -418,6 +424,39 @@ class AssetResponse(BaseModel):
         from app.services.storage import stream_url
 
         return stream_url(self.file_url)
+
+
+class AssetUploadUrlRequest(BaseModel):
+    """Request a presigned PUT URL for direct upload to object storage."""
+
+    filename: str
+    content_type: str = "application/octet-stream"
+
+
+class AssetUploadUrlResponse(BaseModel):
+    """Presigned PUT URL response."""
+
+    key: str
+    upload_url: str
+
+
+class AssetCreateRequest(BaseModel):
+    """Create an asset record after the client uploaded the file to storage."""
+
+    key: str
+    type: AssetType
+
+
+class SpeakerAssetCreateRequest(BaseModel):
+    """Create a speaker asset record after direct upload to storage."""
+
+    key: str
+
+
+class BrandMediaCreateRequest(BaseModel):
+    """Confirm a directly-uploaded brand media file."""
+
+    key: str
 
 
 class ClipRevision(BaseModel):
@@ -509,7 +548,7 @@ class ClipPlan(BaseModel):
     # and SRT export remain available.
     caption_enabled: bool = True
 
-    def to_segment(self) -> "Segment":
+    def to_segment(self) -> Segment:
         return Segment(
             id=self.id,
             source_text=self.source_text,
@@ -955,7 +994,10 @@ class GenerateRequest(BaseModel):
             "quotes",
             "article",
         ],
-        description="Which asset types the user wants to generate. Carousel is not selected by default.",
+        description=(
+            "Which asset types the user wants to generate. "
+            "Carousel is not selected by default."
+        ),
     )
     tone_settings: ToneSettings | None = None
     target_language: str = Field(

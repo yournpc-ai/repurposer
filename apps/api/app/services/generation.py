@@ -65,9 +65,9 @@ from app.services.project_context import (
     speaker_context_from_row,
 )
 from app.services.storage import (
+    download_to_temp,
     file_to_data_url,
     output_url,
-    resolve_file_path,
     save_output,
     stream_url,
 )
@@ -109,7 +109,11 @@ def _normalize_content_plan_types(obj: object) -> object:
     """Recursively rewrite legacy derivative_type values in a content_plan dict."""
     if isinstance(obj, dict):
         return {
-            k: _normalize_output_name(v) if k == "derivative_type" and isinstance(v, str) else _normalize_content_plan_types(v)
+            k: (
+                _normalize_output_name(v)
+                if k == "derivative_type" and isinstance(v, str)
+                else _normalize_content_plan_types(v)
+            )
             for k, v in obj.items()
         }
     if isinstance(obj, list):
@@ -230,53 +234,62 @@ def _file_size_bytes(path: Path | None) -> int | None:
         return None
 
 
-def _media_input_for_image(file_url: str, caption: str | None = None):
+async def _media_input_for_image(file_url: str, caption: str | None = None):
     """Build a MediaInput for an image file URL, or None if unreadable."""
-    path = resolve_file_path(file_url)
+    path = await download_to_temp(file_url)
     if path is None:
         return None
-    data_url = file_to_data_url(path)
-    if data_url is None:
-        return None
-    from app.models.schemas import MediaInput, MediaInputType
+    try:
+        data_url = file_to_data_url(path)
+        if data_url is None:
+            return None
+        from app.models.schemas import MediaInput, MediaInputType
 
-    mime, _ = mimetypes.guess_type(str(path))
-    mime = mime or "image/png"
-    return MediaInput(
-        type=MediaInputType.IMAGE,
-        mime=mime,
-        data_url=data_url,
-        caption=caption,
-    )
+        mime, _ = mimetypes.guess_type(str(path))
+        mime = mime or "image/png"
+        return MediaInput(
+            type=MediaInputType.IMAGE,
+            mime=mime,
+            data_url=data_url,
+            caption=caption,
+        )
+    finally:
+        path.unlink(missing_ok=True)
 
 
-def _media_input_for_video(asset: Asset):
+async def _media_input_for_video(asset: Asset):
     """Build a MediaInput for a short video, or None if it exceeds safe limits."""
     if asset.type != AssetType.VIDEO or not asset.file_url:
         return None
     duration = asset.duration_seconds or 0
     if duration > _MAX_DIRECT_VIDEO_SECONDS:
         return None
-    path = resolve_file_path(asset.file_url)
-    size = _file_size_bytes(path)
-    if size is None or size > _MAX_DIRECT_VIDEO_BYTES:
+
+    path = await download_to_temp(asset.file_url)
+    if path is None:
         return None
-    data_url = file_to_data_url(path)
-    if data_url is None:
-        return None
-    from app.models.schemas import MediaInput, MediaInputType
+    try:
+        size = _file_size_bytes(path)
+        if size is None or size > _MAX_DIRECT_VIDEO_BYTES:
+            return None
+        data_url = file_to_data_url(path)
+        if data_url is None:
+            return None
+        from app.models.schemas import MediaInput, MediaInputType
 
-    mime, _ = mimetypes.guess_type(str(path))
-    mime = mime or "video/mp4"
-    return MediaInput(
-        type=MediaInputType.VIDEO,
-        mime=mime,
-        data_url=data_url,
-        caption="A short video clip from the talk. Use it together with the transcript.",
-    )
+        mime, _ = mimetypes.guess_type(str(path))
+        mime = mime or "video/mp4"
+        return MediaInput(
+            type=MediaInputType.VIDEO,
+            mime=mime,
+            data_url=data_url,
+            caption="A short video clip from the talk. Use it together with the transcript.",
+        )
+    finally:
+        path.unlink(missing_ok=True)
 
 
-def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
+async def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
     """Collect multimodal inputs from image/slide/video assets.
 
     Returns a list of MediaInput objects. AUDIO is intentionally omitted because
@@ -286,19 +299,19 @@ def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
     inputs: list[MediaInput] = []
     for asset in assets:
         if asset.type == AssetType.IMAGE and asset.file_url:
-            item = _media_input_for_image(str(asset.file_url))
+            item = await _media_input_for_image(str(asset.file_url))
             if item:
                 inputs.append(item)
         elif asset.type == AssetType.SLIDES and asset.slide_pages:
             for idx, page_path in enumerate(asset.slide_pages, start=1):
-                item = _media_input_for_image(
+                item = await _media_input_for_image(
                     str(page_path),
                     caption=f"Slide {idx} from the talk deck.",
                 )
                 if item:
                     inputs.append(item)
         elif asset.type == AssetType.VIDEO:
-            item = _media_input_for_video(asset)
+            item = await _media_input_for_video(asset)
             if item:
                 inputs.append(item)
     return inputs
@@ -627,10 +640,6 @@ async def _run_derivative_task(
     run concurrently. The shared run context update is serialized via an
     asyncio lock inside ``_update_run_output_status``.
     """
-    derivative_plan = next(
-        (p for p in content_plan.derivatives if p.derivative_type == derivative_type),
-        DerivativePlan(derivative_type=derivative_type),
-    )
 
     await _update_run_output_status(
         run_id,
@@ -773,7 +782,7 @@ async def _run_clips_task(
             asset_texts=asset_texts,
             context=generation_context,
             content_plan=content_plan,
-            asset_media=collect_asset_media(assets),
+            asset_media=await collect_asset_media(assets),
             clip_count=clip_count,
             source_words=(
                 (render_source.meta or {}).get("words")
@@ -804,7 +813,7 @@ async def _run_clips_task(
                 asset_texts=asset_texts,
                 context=generation_context,
                 content_plan=content_plan,
-                asset_media=collect_asset_media(assets),
+                asset_media=await collect_asset_media(assets),
                 clip_count=clip_count,
                 source_words=(
                     (render_source.meta or {}).get("words")

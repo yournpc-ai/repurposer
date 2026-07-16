@@ -44,7 +44,8 @@ class CaptionTranslateAgent:
             {
                 "role": "system",
                 "content": (
-                    "You are a professional subtitle translator. You only output valid JSON, with no additional explanation."
+                    "You are a professional subtitle translator. You only output "
+                    "valid JSON, with no additional explanation."
                 ),
             },
             {"role": "user", "content": user_prompt},

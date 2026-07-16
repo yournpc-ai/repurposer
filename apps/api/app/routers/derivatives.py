@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import DBDep, get_current_user, get_current_user_required
+from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     ChatRequest,
     DerivativeResponse,

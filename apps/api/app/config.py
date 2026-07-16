@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     s3_access_key_id: str
     s3_secret_access_key: str
     s3_region: str = "ap-southeast-1"
-    s3_public_url: str  # public read base URL, e.g. https://bucket.tos-s3-region.volces.com
+    s3_public_url: str  # public read base URL, e.g. https://bucket.tos-region.volces.com
     s3_force_path_style: bool = False  # MUST be False for Volcengine TOS
     s3_presign_upload_ttl: int = 3600  # presigned PUT URL TTL in seconds
 
