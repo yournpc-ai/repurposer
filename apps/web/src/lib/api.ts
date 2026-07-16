@@ -1,12 +1,8 @@
-/** Thin API client with a default bearer token for the no-login MVP.
- *
- * The backend resolves the bearer token to the seeded default user. When real
- * authentication is added, this module is the only place that needs to swap
- * "default" for an actual JWT from a login flow.
- */
+/** Thin API client with bearer token from the auth flow. */
+
+import { getToken } from "@/lib/auth"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
-const DEFAULT_TOKEN = "default"
 
 function buildUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
@@ -20,8 +16,9 @@ export async function apiFetch(
   options: ApiFetchOptions = {}
 ): Promise<Response> {
   const headers = new Headers(options.headers)
-  if (!headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${DEFAULT_TOKEN}`)
+  const token = getToken()
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`)
   }
 
   let body: BodyInit | undefined

@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import Segment, SpeakerContext
 from app.models.tables import Asset, Clip, Project, Speaker
 
+DEMO_PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
+
 
 def speaker_context_from_row(speaker: Speaker | None) -> SpeakerContext | None:
     """Build a SpeakerContext from a Speaker DB row."""
@@ -30,10 +32,15 @@ async def get_project_for_user(
     db: AsyncSession,
     project_id: UUID,
     user_id: UUID,
+    allow_demo: bool = True,
 ) -> Project:
-    """Fetch a project and ensure it belongs to the given user."""
+    """Fetch a project and ensure it belongs to the given user.
+
+    The seeded demo project is readable by every user (``allow_demo=True``);
+    write operations should pass ``allow_demo=False`` so the demo stays intact.
+    """
     result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
     if not project:
@@ -41,7 +48,14 @@ async def get_project_for_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
-    return project
+    if project.user_id == user_id:
+        return project
+    if allow_demo and project.id == DEMO_PROJECT_ID:
+        return project
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Project not found",
+    )
 
 
 async def collect_asset_texts(

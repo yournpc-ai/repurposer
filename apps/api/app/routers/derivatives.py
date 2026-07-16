@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     ChatRequest,
     DerivativeResponse,
@@ -61,7 +61,7 @@ async def update_derivative(
     derivative_id: UUID,
     data: DerivativeUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Derivative:
     """Directly edit a derivative's content or status."""
     derivative = await _get_derivative_for_user(
@@ -89,7 +89,7 @@ async def regenerate_derivative(
     derivative_id: UUID,
     data: DerivativeRegenerateRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict:
     """Queue regeneration of a single derivative through the generic chat layer."""
     derivative = await _get_derivative_for_user(

@@ -7,6 +7,7 @@ import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { AuthProvider } from "@/components/AuthProvider"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
@@ -43,16 +44,18 @@ function RootComponent() {
     <ThemeProvider>
       <I18nProvider>
         <TooltipProvider>
-          <SidebarProvider defaultOpen={false}>
-            <AppSidebar />
-            <SidebarInset className="relative overflow-hidden">
-              <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-                <div className="absolute -left-[20%] -top-[10%] h-[50%] w-[50%] rounded-full bg-primary/5 blur-[120px]" />
-                <div className="absolute -right-[20%] top-[20%] h-[40%] w-[40%] rounded-full bg-primary/3 blur-[100px]" />
-              </div>
-              <Outlet />
-            </SidebarInset>
-          </SidebarProvider>
+          <AuthProvider>
+            <SidebarProvider defaultOpen={false}>
+              <AppSidebar />
+              <SidebarInset className="relative overflow-hidden">
+                <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+                  <div className="absolute -left-[20%] -top-[10%] h-[50%] w-[50%] rounded-full bg-primary/5 blur-[120px]" />
+                  <div className="absolute -right-[20%] top-[20%] h-[40%] w-[40%] rounded-full bg-primary/3 blur-[100px]" />
+                </div>
+                <Outlet />
+              </SidebarInset>
+            </SidebarProvider>
+          </AuthProvider>
         </TooltipProvider>
       </I18nProvider>
     </ThemeProvider>

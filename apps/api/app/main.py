@@ -11,6 +11,7 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal, init_db
 from app.routers import (
     assets,
+    auth,
     brand_templates,
     chat,
     clips,
@@ -70,6 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(speakers, prefix="/api/v1/speakers", tags=["speakers"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(chat, prefix="/api/v1/chat", tags=["chat"])

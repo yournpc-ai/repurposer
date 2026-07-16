@@ -92,6 +92,7 @@ export interface Asset {
 export interface Clip {
   id: string
   project_id: string
+  workflow_run_id: string | null
   hook: string
   title_options: string[]
   music_mood: string
@@ -115,6 +116,7 @@ export interface Clip {
 export interface Derivative {
   id: string
   project_id: string
+  workflow_run_id: string | null
   type: string
   content: {
     content?: string

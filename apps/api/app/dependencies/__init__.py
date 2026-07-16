@@ -5,13 +5,18 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies.auth import get_current_user, get_current_user_optional
+from app.dependencies.auth import (
+    get_current_user,
+    get_current_user_optional,
+    get_current_user_required,
+)
 from app.models.database import AsyncSessionLocal
 
 __all__ = [
     "DBDep",
     "get_current_user",
     "get_current_user_optional",
+    "get_current_user_required",
     "get_db",
 ]
 

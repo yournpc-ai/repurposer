@@ -21,6 +21,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "faster-whisper>=1.2.1",
     "pymupdf>=1.27.2.3",
+    "pyjwt>=2.8",
 ]
 
 [project.optional-dependencies]

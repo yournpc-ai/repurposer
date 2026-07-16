@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import FileResponse
 
 from app.clients.minimax import MiniMaxError
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import MusicGenerateRequest, MusicMetadataUpdate, MusicResponse
 from app.models.tables import Music, User
 from app.services.music import (
@@ -75,7 +75,7 @@ async def list_music_endpoint(
 async def generate_music_endpoint(
     data: MusicGenerateRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> MusicResponse:
     """Generate a new music piece from a prompt via MiniMax and persist it.
 
@@ -126,7 +126,7 @@ async def update_music_endpoint(
     music_id: UUID,
     data: MusicMetadataUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),  # noqa: ARG001
+    current_user: User = Depends(get_current_user_required),  # noqa: ARG001
 ) -> MusicResponse:
     """Update a music piece's editable metadata.
 
@@ -154,7 +154,7 @@ async def update_music_endpoint(
 async def delete_music_endpoint(
     music_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),  # noqa: ARG001
+    current_user: User = Depends(get_current_user_required),  # noqa: ARG001
 ) -> None:
     """Delete a music piece; 409 if any clip still references it."""
     _ = current_user  # reserved for future ownership checks

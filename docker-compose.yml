@@ -21,6 +21,11 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
+      - AUTH_ALLOW_DEFAULT_USER=${AUTH_ALLOW_DEFAULT_USER:-false}
       - ASSET_DIR=/repo/assets
       # Absolute base the render service uses to fetch source clips back over HTTP.
       - API_PUBLIC_URL=http://api:8000
@@ -42,6 +47,11 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
+      - AUTH_ALLOW_DEFAULT_USER=${AUTH_ALLOW_DEFAULT_USER:-false}
       - ASSET_DIR=/repo/assets
       - API_PUBLIC_URL=http://api:8000
       - RENDER_URL=http://render:3001/render
@@ -69,10 +79,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL}
     ports:
       - "3000:3000"
-    environment:
-      - VITE_API_URL=${VITE_API_URL}
     depends_on:
       - api
 

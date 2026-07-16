@@ -120,22 +120,46 @@ function ProjectDetailPage() {
     }
   }, [latestJob?.context?.outputs])
 
-  // Poll latest job until it settles, and keep polling while any clip is still
-  // rendering (clip rendering happens outside the workflow run).
+  // Poll latest job until it settles, and keep polling while any requested
+  // output is still pending/running or any clip is still rendering. Relying
+  // only on run.status can stop polling too early if the backend updates the
+  // run status before all per-output statuses have reached a terminal state.
   useEffect(() => {
     if (!results?.latest_job) return
+
     const status = results.latest_job.status
-    const hasRenderingClips = results.latest_job.status === "completed" &&
-      (results?.clips ?? []).some(
-        (c: Clip) => c.render_status === "pending" || c.render_status === "rendering"
-      )
-    if ((status === "completed" || status === "failed") && !hasRenderingClips) return
+    const outputStatus = results.latest_job.context?.output_status ?? {}
+    const requestedOutputs = results.latest_job.context?.outputs ?? []
+
+    const hasPendingOutputs = requestedOutputs.some((output) => {
+      const s = outputStatus[output]
+      return !s || (s.status !== "completed" && s.status !== "failed")
+    })
+
+    const currentRunId = results.latest_job.id
+    const currentRunClips = (results?.clips ?? []).filter(
+      (c: Clip) => c.workflow_run_id === currentRunId || c.workflow_run_id === null
+    )
+
+    const hasRenderingClips = currentRunClips.some(
+      (c: Clip) => c.render_status === "pending" || c.render_status === "rendering"
+    )
+
+    // Only stop polling once the run is settled AND every requested output has
+    // reached a terminal state AND no clip video is still rendering.
+    if (
+      (status === "completed" || status === "failed") &&
+      !hasPendingOutputs &&
+      !hasRenderingClips
+    ) {
+      return
+    }
 
     const interval = setInterval(() => {
       fetchResults()
     }, 2500)
     return () => clearInterval(interval)
-  }, [results?.latest_job?.status, results?.latest_job?.id, results?.clips])
+  }, [results?.latest_job, results?.clips])
 
   const outputStatus = latestJob?.context?.output_status
   const requestedOutputs = latestJob?.context?.outputs ?? []
@@ -203,7 +227,15 @@ function ProjectDetailPage() {
     )
   }
 
-  const { project, prompt, clips, derivatives } = results
+  const { project, prompt, clips: allClips, derivatives: allDerivatives } = results
+
+  const currentRunId = latestJob?.id
+  const clips = allClips.filter(
+    (c) => c.workflow_run_id === currentRunId || c.workflow_run_id === null
+  )
+  const derivatives = allDerivatives.filter(
+    (d) => d.workflow_run_id === currentRunId || d.workflow_run_id === null
+  )
 
   const posts = derivatives.filter((d) => d.type === "post")
   const quotes = derivatives.filter((d) => d.type === "quotes")

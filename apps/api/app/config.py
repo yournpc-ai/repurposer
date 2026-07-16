@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     """Application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # Public base of this API, used to absolutize source URLs the render service
     # fetches (clip-spec stores relative stream URLs via the storage seam).
     api_public_url: str = "http://localhost:8000"
+
+    # Auth / email
+    resend_api_key: str = ""
+    from_email: str = "Repurposer <no-reply@repurposer.local>"
+    jwt_secret_key: str = "dev-secret-change-in-production"
+    jwt_expire_days: int = 30
+    # When True, requests without a bearer token fall back to the seeded default
+    # user (local development). When False, protected endpoints require a JWT.
+    auth_allow_default_user: bool = True
 
     def ensure_dirs(self) -> None:
         """Ensure storage directories exist."""

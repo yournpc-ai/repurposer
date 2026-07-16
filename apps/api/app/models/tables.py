@@ -51,6 +51,21 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
+class VerificationCode(Base):
+    """Email verification code for passwordless login."""
+
+    __tablename__ = "verification_codes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    email = Column(String(255), nullable=False, index=True)
+    code = Column(String(6), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    ip_address = Column(String(45), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
 class Speaker(Base):
     """Speaker table.
 
@@ -160,6 +175,9 @@ class Clip(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    workflow_run_id = Column(
+        UUID(as_uuid=True), ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True
+    )
     hook = Column(String(500), nullable=False)
     title_options = Column(JSON, default=list)
     music_mood = Column(String(50), default="calm")
@@ -193,6 +211,9 @@ class Derivative(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    workflow_run_id = Column(
+        UUID(as_uuid=True), ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True
+    )
     type = Column(Enum(DerivativeType), nullable=False)
     content = Column(JSON, nullable=False)
     language = Column(String(10), default="zh")

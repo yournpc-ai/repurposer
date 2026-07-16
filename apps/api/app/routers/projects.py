@@ -7,7 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
+from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
     ClipResponse,
     DerivativeResponse,
@@ -43,7 +44,7 @@ router = APIRouter()
 async def create_project(
     data: ProjectCreate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Project:
     """Create a new project."""
     if data.speaker_id:
@@ -96,7 +97,7 @@ async def list_projects(
     query = (
         select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
-        .where(Project.user_id == current_user.id)
+        .where(Project.user_id.in_([current_user.id, DEFAULT_USER_ID]))
     )
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
@@ -108,10 +109,11 @@ async def list_projects(
     result = await db.execute(query)
     rows = result.all()
 
-    # Demo project is a onboarding aid; hide it once the user has created real
+    # Demo project is an onboarding aid; hide it once the user has created real
     # projects so the home page only shows their own work.
     has_real_project = any(
-        project.id != DEMO_PROJECT_ID for project, *_ in rows
+        project.id != DEMO_PROJECT_ID and project.user_id == current_user.id
+        for project, *_ in rows
     )
 
     responses = []
@@ -148,18 +150,6 @@ async def get_project_results(
     # The original prompt is the first user message in the project-scoped chat session.
     prompt = await get_project_prompt(db, project_id)
 
-    clips_result = await db.execute(
-        select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
-    )
-    clips = list(clips_result.scalars().all())
-
-    derivatives_result = await db.execute(
-        select(Derivative)
-        .where(Derivative.project_id == project_id)
-        .order_by(Derivative.created_at.desc())
-    )
-    derivatives = list(derivatives_result.scalars().all())
-
     latest_job_result = await db.execute(
         select(WorkflowRun)
         .where(WorkflowRun.project_id == project_id)
@@ -167,6 +157,34 @@ async def get_project_results(
         .limit(1)
     )
     latest_job = latest_job_result.scalar_one_or_none()
+
+    # Filter clips/derivatives to the latest workflow run. Rows with a NULL
+    # workflow_run_id are legacy data from before this column existed; include
+    # them so existing projects don't appear empty immediately after the
+    # migration.
+    latest_job_id = latest_job.id if latest_job is not None else None
+    clips_filter = Clip.project_id == project_id
+    derivatives_filter = Derivative.project_id == project_id
+    if latest_job_id is not None:
+        clips_filter = clips_filter & (
+            (Clip.workflow_run_id == latest_job_id) | Clip.workflow_run_id.is_(None)
+        )
+        derivatives_filter = derivatives_filter & (
+            (Derivative.workflow_run_id == latest_job_id)
+            | Derivative.workflow_run_id.is_(None)
+        )
+
+    clips_result = await db.execute(
+        select(Clip).where(clips_filter).order_by(Clip.created_at.desc())
+    )
+    clips = list(clips_result.scalars().all())
+
+    derivatives_result = await db.execute(
+        select(Derivative)
+        .where(derivatives_filter)
+        .order_by(Derivative.created_at.desc())
+    )
+    derivatives = list(derivatives_result.scalars().all())
 
     return {
         "project": project,
@@ -182,10 +200,12 @@ async def update_project(
     project_id: UUID,
     data: ProjectUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Project:
     """Update project."""
-    project = await get_project_for_user(db, project_id, current_user.id)
+    project = await get_project_for_user(
+        db, project_id, current_user.id, allow_demo=False
+    )
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -200,10 +220,12 @@ async def update_project(
 async def delete_project(
     project_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete project and all associated assets."""
-    project = await get_project_for_user(db, project_id, current_user.id)
+    project = await get_project_for_user(
+        db, project_id, current_user.id, allow_demo=False
+    )
 
     # Delete child rows in FK-safe order, then the project. Asset files are
     # unlinked individually since we need each file_url before deletion.
@@ -227,7 +249,7 @@ async def generate_content(
     project_id: UUID,
     request: GenerateRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict:
     """Queue background generation for a project.
 
@@ -235,7 +257,9 @@ async def generate_content(
     persisted, then creates a PENDING WorkflowRun. The background worker claims
     and runs it (see app.worker).
     """
-    project = await get_project_for_user(db, project_id, UUID(str(current_user.id)))
+    project = await get_project_for_user(
+        db, project_id, UUID(str(current_user.id)), allow_demo=False
+    )
 
     # Persist the original prompt in the project-scoped chat session if it is
     # not already there. This is a no-op when the session already has messages.
@@ -344,10 +368,12 @@ async def export_project(
     project_id: UUID,
     request: ExportRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Export all generated content for a project as a zip archive."""
-    project = await get_project_for_user(db, project_id, current_user.id)
+    project = await get_project_for_user(
+        db, project_id, current_user.id, allow_demo=False
+    )
 
     clips_result = await db.execute(
         select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())

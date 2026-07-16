@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.agents.persona import persona_agent
 from app.clients.minimax import MiniMaxError
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
     SpeakerContext,
@@ -27,7 +27,7 @@ router = APIRouter()
 async def create_speaker(
     data: SpeakerCreate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Speaker:
     """Create a new speaker."""
     speaker = Speaker(**data.model_dump(), user_id=current_user.id)
@@ -90,7 +90,7 @@ async def update_speaker(
     speaker_id: UUID,
     data: SpeakerUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Speaker:
     """Update speaker."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)
@@ -108,7 +108,7 @@ async def update_speaker(
 async def delete_speaker(
     speaker_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete speaker and all associated source assets."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)
@@ -131,7 +131,7 @@ async def delete_speaker(
 async def generate_persona(
     speaker_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> SpeakerContext:
     """Generate speaker persona and content memory from uploaded source assets."""
     speaker = await _get_user_speaker(speaker_id, current_user.id, db)

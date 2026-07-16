@@ -25,6 +25,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { useAuth } from "@/components/AuthProvider"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -145,6 +146,7 @@ export function HomeComposer({
 }: HomeComposerProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { requireAuth } = useAuth()
 
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
@@ -252,64 +254,66 @@ export function HomeComposer({
       onError?.(t("home.noOutputError"))
       return
     }
-    setIsGenerating(true)
-    onGenerateStart?.()
-    try {
-      const instruction =
-        inferred.specific_instruction?.trim() || (prompt.trim() ? prompt.trim() : undefined)
+    await requireAuth(async () => {
+      setIsGenerating(true)
+      onGenerateStart?.()
+      try {
+        const instruction =
+          inferred.specific_instruction?.trim() || (prompt.trim() ? prompt.trim() : undefined)
 
-      const projectRes = await apiFetch("/api/v1/projects", {
-        method: "POST",
-        body: {
-          title: files[0]?.name || prompt.slice(0, 60) || t("common.untitled"),
-          event_name: "",
-          language,
-          speaker_id:
-            speakerId === EXTRACT_FROM_MATERIALS ? undefined : speakerId || undefined,
-        },
-      })
-      if (!projectRes.ok) throw new Error("Failed to create project")
-      const project = (await projectRes.json()) as Project
-
-      const materials =
-        files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
-      const uploaded = await Promise.all(
-        materials.map(async (material) => {
-          const form = new FormData()
-          form.append("type", files.length > 0 ? inferAssetType(material) : "transcript")
-          form.append("file", material)
-          const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
-            method: "POST",
-            body: form,
-          })
-          if (!assetRes.ok) throw new Error("Failed to upload material")
-          return (await assetRes.json()) as Asset
+        const projectRes = await apiFetch("/api/v1/projects", {
+          method: "POST",
+          body: {
+            title: files[0]?.name || prompt.slice(0, 60) || t("common.untitled"),
+            event_name: "",
+            language,
+            speaker_id:
+              speakerId === EXTRACT_FROM_MATERIALS ? undefined : speakerId || undefined,
+          },
         })
-      )
+        if (!projectRes.ok) throw new Error("Failed to create project")
+        const project = (await projectRes.json()) as Project
 
-      await Promise.all(uploaded.map((asset) => waitForAssetProcessed(project.id, asset.id)))
+        const materials =
+          files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
+        const uploaded = await Promise.all(
+          materials.map(async (material) => {
+            const form = new FormData()
+            form.append("type", files.length > 0 ? inferAssetType(material) : "transcript")
+            form.append("file", material)
+            const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
+              method: "POST",
+              body: form,
+            })
+            if (!assetRes.ok) throw new Error("Failed to upload material")
+            return (await assetRes.json()) as Asset
+          })
+        )
 
-      const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
-        method: "POST",
-        body: {
-          clip_count: clipCount,
-          outputs,
-          target_language: language,
-          brand_template_id: brandTemplateId || undefined,
-          instruction,
-        },
-      })
-      if (!generateRes.ok) {
-        const detail = await generateRes.json().catch(() => null)
-        throw new Error(detail?.detail || "Generation failed")
+        await Promise.all(uploaded.map((asset) => waitForAssetProcessed(project.id, asset.id)))
+
+        const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
+          method: "POST",
+          body: {
+            clip_count: clipCount,
+            outputs,
+            target_language: language,
+            brand_template_id: brandTemplateId || undefined,
+            instruction,
+          },
+        })
+        if (!generateRes.ok) {
+          const detail = await generateRes.json().catch(() => null)
+          throw new Error(detail?.detail || "Generation failed")
+        }
+
+        onProjectCreated?.(project.id)
+        navigate({ to: "/projects/$id", params: { id: project.id } })
+      } catch (e) {
+        onError?.(e instanceof Error ? e.message : "Something went wrong")
+        setIsGenerating(false)
       }
-
-      onProjectCreated?.(project.id)
-      navigate({ to: "/projects/$id", params: { id: project.id } })
-    } catch (e) {
-      onError?.(e instanceof Error ? e.message : "Something went wrong")
-      setIsGenerating(false)
-    }
+    })
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -5,7 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
+from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
     BrandTemplateCreate,
     BrandTemplateResponse,
@@ -40,7 +41,7 @@ async def _get_user_brand_template(
 async def create_brand_template(
     data: BrandTemplateCreate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> BrandTemplate:
     """Create a brand template."""
     template = BrandTemplate(**data.model_dump(), user_id=current_user.id)
@@ -55,10 +56,12 @@ async def list_brand_templates(
     db: DBDep,
     current_user: User = Depends(get_current_user),
 ) -> list[BrandTemplate]:
-    """List brand templates for the current user, newest first."""
+    """List brand templates for the current user plus the system defaults."""
     result = await db.execute(
         select(BrandTemplate)
-        .where(BrandTemplate.user_id == current_user.id)
+        .where(
+            BrandTemplate.user_id.in_([current_user.id, DEFAULT_USER_ID])
+        )
         .order_by(BrandTemplate.created_at.desc())
     )
     return list(result.scalars().all())
@@ -67,7 +70,7 @@ async def list_brand_templates(
 @router.post("/media", status_code=status.HTTP_201_CREATED)
 async def upload_brand_media(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict[str, str | None]:
     """Upload an intro/outro image or video; returns its storage-seam URL.
 
@@ -97,7 +100,7 @@ async def update_brand_template(
     template_id: UUID,
     data: BrandTemplateUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> BrandTemplate:
     """Update a brand template."""
     template = await _get_user_brand_template(template_id, current_user.id, db)
@@ -115,7 +118,7 @@ async def update_brand_template(
 async def delete_brand_template(
     template_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete a brand template."""
     template = await _get_user_brand_template(template_id, current_user.id, db)

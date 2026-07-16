@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import AssetResponse, AssetStatus, AssetType
 from app.models.tables import Asset, Project, Speaker, User
 from app.services.storage import (
@@ -61,7 +61,7 @@ async def upload_asset(
     type: AssetType = Form(...),  # noqa: A002
     file: UploadFile = File(...),
     db: DBDep = None,  # type: ignore[assignment]
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Upload an asset to a project."""
     await _get_user_project(project_id, current_user.id, db)
@@ -113,7 +113,7 @@ async def reprocess_asset(
     project_id: UUID,
     asset_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Re-queue a project asset for processing (e.g. after a failure)."""
     await _get_user_project(project_id, current_user.id, db)
@@ -152,7 +152,7 @@ async def delete_asset(
     project_id: UUID,
     asset_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete a project asset."""
     await _get_user_project(project_id, current_user.id, db)
@@ -184,7 +184,7 @@ async def upload_speaker_asset(
     speaker_id: UUID,
     file: UploadFile = File(...),
     db: DBDep = None,  # type: ignore[assignment]
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Upload a past material asset for a speaker."""
     await _get_user_speaker(speaker_id, current_user.id, db)
@@ -227,7 +227,7 @@ async def delete_speaker_asset(
     speaker_id: UUID,
     asset_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete a speaker asset."""
     await _get_user_speaker(speaker_id, current_user.id, db)

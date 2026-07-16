@@ -42,6 +42,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 
+import { clearAuth } from "@/lib/auth"
+
 const createItems = [
   { key: "home", url: "/", icon: Home },
   { key: "brandTemplate", url: "/brand-template", icon: Palette },
@@ -204,7 +206,12 @@ export function AppSidebar() {
             </DropdownMenuGroup>
             <DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  clearAuth()
+                  window.location.href = "/"
+                }}
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 {t("common.logout")}
               </DropdownMenuItem>

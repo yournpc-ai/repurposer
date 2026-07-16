@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.agents.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError
 from app.config import settings
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
     ChatRequest,
@@ -74,7 +74,7 @@ async def update_clip(
     clip_id: UUID,
     data: ClipUpdate,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Update a clip's editable fields (editor save: render_spec, hook, etc.)."""
     clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
@@ -95,7 +95,7 @@ async def revise_clip(
     clip_id: UUID,
     feedback: FeedbackRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Revise a clip based on feedback and return the updated clip."""
     clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
@@ -155,7 +155,7 @@ async def revise_clip(
 async def render_clip(
     clip_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Queue this clip for video rendering (worker claims render_status=PENDING)."""
     clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
@@ -175,7 +175,7 @@ async def render_clip(
 async def generate_clip_cover(
     clip_id: UUID,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Generate a cover image for a clip on demand.
 
@@ -210,7 +210,7 @@ async def translate_captions(
     clip_id: UUID,
     data: TranslateCaptionsRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Re-translate the clip's caption track into ``target_language``.
 
@@ -258,7 +258,7 @@ async def dub_clip(
     clip_id: UUID,
     data: DubRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> Clip:
     """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
 
@@ -367,7 +367,7 @@ async def regenerate_clip(
     clip_id: UUID,
     data: ClipRegenerateRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict:
     """Queue regeneration of a single clip through the generic chat layer."""
     clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))

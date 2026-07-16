@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies import DBDep, get_current_user
+from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
@@ -59,7 +59,7 @@ async def get_chat_session(
 async def send_chat_message(
     data: ChatRequest,
     db: DBDep,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_required),
 ) -> ChatResponse:
     """Send a message to a project or asset chat.
 
