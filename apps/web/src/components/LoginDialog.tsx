@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { apiPost, errorDetail } from "@/lib/api"
 import { setAuth } from "@/lib/auth"
 
+const RESEND_COOLDOWN_SECONDS = 60
+
 interface LoginDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -26,12 +28,20 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const [step, setStep] = useState<"email" | "code">("email")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [countdown, setCountdown] = useState(0)
+
+  useEffect(() => {
+    if (countdown <= 0) return
+    const timer = setInterval(() => setCountdown((c) => c - 1), 1000)
+    return () => clearInterval(timer)
+  }, [countdown > 0])
 
   const reset = () => {
     setEmail("")
     setCode("")
     setStep("email")
     setError(null)
+    setCountdown(0)
   }
 
   const handleOpenChange = (next: boolean) => {
@@ -50,6 +60,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
         throw new Error(errorDetail(body, t("login.sendFailed")))
       }
       setStep("code")
+      setCountdown(RESEND_COOLDOWN_SECONDS)
     } catch (e) {
       setError(e instanceof Error ? e.message : t("login.sendFailed"))
     } finally {
@@ -81,6 +92,14 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     }
   }
 
+  const resendDisabled = loading || countdown > 0 || !email.trim()
+  const sendLabel =
+    step === "email"
+      ? t("login.sendCode")
+      : countdown > 0
+        ? t("login.resendIn", { count: countdown })
+        : t("login.resendCode")
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -99,15 +118,18 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && step === "email" && email.trim()) sendCode()
+                }}
                 disabled={loading || step === "code"}
               />
               <Button
                 type="button"
                 variant="outline"
                 onClick={sendCode}
-                disabled={loading || step === "code" || !email.trim()}
+                disabled={resendDisabled}
               >
-                {step === "code" ? t("login.codeSent") : t("login.sendCode")}
+                {sendLabel}
               </Button>
             </div>
           </div>
@@ -123,7 +145,11 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                 placeholder={t("login.codePlaceholder")}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && code.length === 6) verifyCode()
+                }}
                 disabled={loading}
+                autoFocus
               />
             </div>
           )}
@@ -131,29 +157,29 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <div className="flex justify-end gap-2">
-          {step === "code" && (
+        {step === "code" && (
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setStep("email")}
+              onClick={() => {
+                setStep("email")
+                setCode("")
+                setError(null)
+              }}
               disabled={loading}
             >
               {t("login.back")}
             </Button>
-          )}
-          <Button
-            type="button"
-            onClick={step === "email" ? sendCode : verifyCode}
-            disabled={loading || (step === "email" ? !email.trim() : code.length !== 6)}
-          >
-            {loading
-              ? t("login.loading")
-              : step === "email"
-                ? t("login.sendCode")
-                : t("login.verifyAndLogin")}
-          </Button>
-        </div>
+            <Button
+              type="button"
+              onClick={verifyCode}
+              disabled={loading || code.length !== 6}
+            >
+              {loading ? t("login.loading") : t("login.verifyAndLogin")}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

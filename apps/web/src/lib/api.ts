@@ -1,8 +1,12 @@
 /** Thin API client with bearer token from the auth flow. */
 
-import { getToken } from "@/lib/auth"
+import { clearAuth, getToken } from "@/lib/auth"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+
+/** Dispatched on window when any API call answers 401, so the AuthProvider
+ * can clear state and open the login dialog instead of leaving raw errors. */
+export const UNAUTHORIZED_EVENT = "repurposer:unauthorized"
 
 function buildUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
@@ -31,7 +35,12 @@ export async function apiFetch(
     }
   }
 
-  return fetch(buildUrl(path), { ...options, headers, body })
+  const response = await fetch(buildUrl(path), { ...options, headers, body })
+  if (response.status === 401 && typeof window !== "undefined") {
+    clearAuth()
+    window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
+  }
+  return response
 }
 
 export async function apiGet(path: string, options: RequestInit = {}) {

@@ -8,6 +8,7 @@ import {
 } from "react"
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { isAuthenticated } from "@/lib/auth"
+import { UNAUTHORIZED_EVENT } from "@/lib/api"
 import { LoginDialog } from "@/components/LoginDialog"
 
 interface AuthContextValue {
@@ -37,6 +38,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMounted(true)
     refreshAuth()
+  }, [refreshAuth])
+
+  // Any API call that answers 401 (expired/invalid token) forces re-login.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      refreshAuth()
+      setLoginOpen(true)
+    }
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
   }, [refreshAuth])
 
   const requireAuth = useCallback(
