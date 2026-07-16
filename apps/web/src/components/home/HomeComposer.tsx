@@ -530,7 +530,7 @@ export function HomeComposer({
                 }
               }}
               placeholder={t("home.pastePlaceholder")}
-              className="min-h-0 flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0"
+              className="min-h-0 flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
             <div className="flex items-center justify-end px-2 pb-2">
               <Button
