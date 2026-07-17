@@ -181,15 +181,16 @@ Account dropdown 保留：Profile / Settings / Logout（当前已有）。
 | Brand template | 默认 brand template | 下拉选择所有 brand templates | 用户选择 |
 | Tone | `professional` | 现有 TONES 枚举 | AI 推断 + 可改 |
 | Language | `en` | en / fr / de / es / it / zh | AI 推断 + 可改 |
-| Outputs | **clips + post** | 可多选；quotes / article / carousel 默认不选中 | AI 推断 + 可改 |
+| Outputs | **不预选（空）** | 可多选（clips / post / quotes / article / carousel）；用户不选则提交被拦 | AI 推断 + 可改 |
 
 #### 行为
 
 1. 用户上传/粘贴后，file/prompt 变为有效状态
-2. 用户输入 prompt 时，AI 实时推断意图并通过参数 pill 旁的 AI 图标反馈；用户可随时展开 pill 手动修改参数
-3. 点击 Generate → 前置校验（outputs 含 clips 时必须有视频/音频/图片文件，否则本地报错拦截；后端 `/generate` 镜像校验返回 422）→ 调用 `POST /api/v1/projects` 创建 project → 上传 asset → 创建 user message → **立即触发 generation，不在首页等待 ASR 完成**
-4. **页面跳转到 `/projects/$id`**（Home 保持原样，不原地变形）
-5. 前端通过轮询 `GET /api/v1/projects/{id}/results` 等待生成完成并展示结果卡片；**loading 从落地即出现**，覆盖「转写/解析素材（assets 的 processing_status）→ run 排队 → analyze/plan/prepare → 各 output 子阶段」的完整旅程，单行 shimmer 文案 + 百分比 + 进度条
+2. 用户输入 prompt 时，AI 实时推断意图并通过参数 pill 旁的 AI 图标反馈；用户可随时展开 pill 手动修改参数。**意图推断只在有媒体源文件（视频/音频/图片）时才会推荐 clips**，纯文本输入回退为 post/quotes/article
+3. 快速开始：勾选 **Video clips** 且未选任何文件时，前端自动拉取 TOS 上的 demo 演讲视频（`/api/v1/files/demo/uploads/demo_talk.mp4?proxy=1`）放入上传区，零素材即可跑通 clips 全流程
+4. 点击 Generate → 前置校验（outputs 含 clips 时必须有视频/音频/图片文件，否则本地报错拦截；后端 `/generate` 镜像校验返回 422）→ 调用 `POST /api/v1/projects` 创建 project → 上传 asset → 创建 user message → **立即触发 generation，不在首页等待 ASR 完成**
+5. **页面跳转到 `/projects/$id`**（Home 保持原样，不原地变形）
+6. 前端通过轮询 `GET /api/v1/projects/{id}/results` 等待生成完成并展示结果卡片；**loading 从落地即出现**，覆盖「转写/解析素材（assets 的 processing_status）→ run 排队 → analyze/plan/prepare → 各 output 子阶段」的完整旅程，单行 shimmer 文案 + 百分比 + 进度条
 
 ### 4.4 Show Grid（能力展示，非操作入口）
 

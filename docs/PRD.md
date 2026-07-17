@@ -531,7 +531,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Core Intelligence Layer | **MiniMax M3** | Understand all input materials, generate persona, extract quotes, generate scripts and social copy, multi-language translation |
 | Async Task Scheduling Layer | **Postgres queue + standalone worker** | `FOR UPDATE SKIP LOCKED` claim rows; worker process runs ASR, generation, and rendering; no Celery/Redis in MVP |
 | Media Processing Layer | **faster-whisper, PyMuPDF, Remotion, MiniMax voice_clone/T2A** | ASR transcription, document/slide parsing, video rendering, voice-clone dubbing, music |
-| Data Persistence Layer | **PostgreSQL + local filesystem** | PostgreSQL for metadata, local filesystem for uploaded files and generated results; object storage deferred to scale |
+| Data Persistence Layer | **PostgreSQL + object storage** | PostgreSQL for metadata; S3-compatible object storage (Volcengine TOS) for uploaded files and generated results (ADR-024) |
 
 ### 9.3 Data Flow
 
@@ -540,7 +540,7 @@ User input materials
     ├── Upload files (video/audio/transcript/slides/images)
     └── Paste text or prompt in input box
     ↓
-FastAPI receives → store in local filesystem → write Asset(PENDING) to PostgreSQL
+FastAPI receives → presign direct upload to object storage → write Asset(PENDING) to PostgreSQL
     ↓
 Worker process claims Asset rows and preprocesses:
     ├── Video/audio → ASR transcription (faster-whisper, multi-language) → word-level timestamps
@@ -1020,7 +1020,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 
 **Goal**: Run through the core loop of "upload → AI generate scripts → human review → export", validating product-market fit in Europe.
 
-**Tech stack**: FastAPI + MiniMax M3 + hand-rolled Agent + TanStack Start + PostgreSQL + local storage.
+**Tech stack**: FastAPI + MiniMax M3 + hand-rolled Agent + TanStack Start + PostgreSQL + S3-compatible object storage (TOS).
 
 **Includes**:
 - Speaker Profile creation + style persona (Persona Agent)

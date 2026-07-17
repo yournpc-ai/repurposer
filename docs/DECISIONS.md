@@ -173,7 +173,7 @@ repurposer/
 
 ## ADR-011: Local file system for file storage
 
-**Status**: Decided
+**Status**: Superseded by ADR-024 (object storage, Volcengine TOS)
 
 **Decision**: Store uploaded files on the local file system for P0.
 
@@ -555,3 +555,28 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `apps/api/app/routers/clips.py` (dub reads profile voiceprint + voice_id cached on profile)
 - `apps/web/src/routes/index.tsx`, `projects.tsx` (optional Speaker selection)
 - `apps/web/src/routes/speakers.tsx`, `speakers.$id.tsx` (per-user isolated multi-Speaker management page)
+
+## ADR-024: Object storage (Volcengine TOS) for all persistent files
+
+**Status**: Implemented (supersedes ADR-011's local-FS decision; ADR-016's "local FS + Range suffices" note is updated accordingly)
+
+**Context**: The local-filesystem approach (ADR-011) tied file serving to the API host's disk, blocked multi-instance deployment, and mixed uploaded assets with the repo checkout. The music library (ADR-023) already assumed object storage. Meanwhile `assets/` and `data/` local dirs have been removed from the repo.
+
+**Decision**:
+1. **All persistent files live in one S3-compatible bucket (Volcengine TOS)**: uploads, rendered outputs, brand media, music, demo assets. PostgreSQL stores only object keys.
+2. **Per-user key prefixes**: `{user_id}/uploads|outputs/...`; shared demo assets under `demo/`; music under `music/`. The files endpoint derives ownership from the key prefix (`demo/` is anonymous-readable).
+3. **Uploads are direct-to-storage**: the API issues short-lived (15 min) presigned PUT URLs; the client PUTs bytes directly and then creates the Asset row from the returned key. The create-from-key endpoint validates the key prefix and that the object exists.
+4. **The bucket is public-read without ListBucket**: reads 307-redirect from the API (after an ownership check) to the public object URL. Accepted trade-off for MVP (URLs are unguessable UUID keys); revisit private bucket + presigned GET before EU institutional sales.
+5. **Two delivery modes**: redirect (default, for `<video>/<img>` tags) and `?proxy=1` (API streams bytes) for programmatic `fetch()` — the bucket does not send `Vary: Origin`, so a no-cors copy of an object poisons the browser cache for later CORS fetches.
+6. **Downloads use presigned GET** carrying `Content-Disposition: attachment` (`/outputs/{key}?download=1`).
+
+**Consequences**:
+- Local `assets/` and `data/` directories are deleted; `scripts/migrate_to_tos.py` performs the one-time upload of MVP assets.
+- Render service uploads outputs via presigned PUT; no shared volumes anywhere.
+- Frontend receives storage-public URLs at the API boundary (`resolve_stored_url`); the DB keeps bare keys.
+
+**Related files**:
+- `apps/api/app/services/storage.py` (keys, presign, public/resolve URLs)
+- `apps/api/app/routers/files.py` (redirect / proxy / presigned download)
+- `apps/api/scripts/migrate_to_tos.py`
+- `docker-compose.yml` (S3_* env wiring)

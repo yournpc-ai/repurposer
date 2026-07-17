@@ -156,7 +156,7 @@ apps/api/
 │   │   ├── assets.py
 │   │   ├── clips.py         # Review, render trigger, caption translation, dub, regenerate, revise
 │   │   ├── derivatives.py
-│   │   ├── files.py         # Range streaming endpoints (uploads/outputs/music)
+│   │   ├── files.py         # File streaming: ownership check → 307 redirect (or ?proxy=1 byte streaming)
 │   │   ├── brand_templates.py
 │   │   ├── chat.py          # Project/asset-scoped chat sessions and intent dispatch
 │   │   └── library.py       # Cross-project output library
@@ -307,5 +307,5 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic)
 - **Category = OpusClip-like** (server-side pipeline + lean editing surface + hand off to CapCut/Premiere for fine editing). Editing form follows Descript (transcript editing / delete sentence = cut segment, non-destructive / single-track trim), **no multi-track NLE / layers / effects / client-side engine**.
 - **Brand enters rendering**: The API parses `BrandTemplate` into `ClipBrand` (logo/CTA/caption color/font size/font/fill/intro-outro) at generation time and **bakes it into `render_spec`**; the rendering service only reads the spec, not the DB, ensuring parity.
 - **Music enters rendering**: `BrandTemplate.musicMood` → `ClipMusic.url` (built-in mood music library `/api/v1/music/<mood>`) → Remotion `<Audio>` looped and mixed.
-- **Hard prerequisites**: Multi-language ASR (word-level timestamps) + streamable/seekable video (**local FS + Range endpoint suffices**; object storage deferred to scale, ADR-011).
+- **Hard prerequisites**: Multi-language ASR (word-level timestamps) + streamable/seekable video. Storage is **S3-compatible object storage (Volcengine TOS, ADR-024)** — the API performs ownership checks and 307-redirects to public object URLs (or streams via `?proxy=1` for programmatic fetches); uploads go through short-lived presigned PUT URLs.
 - **Low regret**: The spec is stable; in the future it can be swapped for hand-rolled FFmpeg (+ shared libass across both ends) or client-side WebCodecs without changing the contract.

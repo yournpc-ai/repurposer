@@ -21,9 +21,9 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 ```
 
 - Codes expire after 10 minutes, allow max 5 verification attempts, and are single-use.
-- send-code rate limits: 60s resend cooldown per email, 5 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
+- send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
 - `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
-- List endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects.
+- Anonymous requests see **only the demo project** (`11111111-1111-1111-1111-111111111111`, routed as `/projects/demo`) and its clips. Logged-in list endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
 ## 2. Main Flow Call Sequence
@@ -70,14 +70,17 @@ POST /api/v1/clips/{clip_id}/render
 
 ## 3. File Streaming
 
-Source video uploads, rendered outputs, and built-in music tracks are all served through HTTP Range-enabled endpoints for browser playback, seeking, and renderer fetching:
+Uploads and rendered outputs live in S3-compatible object storage (Volcengine TOS). These endpoints first perform an **ownership check** (objects under `demo/` are anonymous-readable; other prefixes are owner-only, otherwise 403/404), then redirect to the storage URL — Range requests and delivery are handled by the object store:
 
 ```http
-GET /api/v1/files/{file_path}
-GET /api/v1/outputs/{file_path}
-GET /api/v1/outputs/{file_path}?download=1   # Force download with Content-Disposition: attachment
+GET /api/v1/files/{file_path}            # 307 → public object URL (source uploads)
+GET /api/v1/files/{file_path}?proxy=1    # stream bytes through the API (no redirect)
+GET /api/v1/outputs/{file_path}          # 307 → public object URL (rendered MP4/SRT)
+GET /api/v1/outputs/{file_path}?download=1   # 307 → presigned GET with Content-Disposition: attachment
 GET /api/v1/music/{mood}                     # Built-in mood library, e.g. calm / uplifting / corporate
 ```
+
+- Use `?proxy=1` when fetching a file **programmatically** (`fetch()` → blob): the cross-origin redirect is subject to CORS, and the bucket does not send `Vary: Origin`, so a no-cors `<video>` copy of the same object can poison the browser cache for later CORS fetches. `<video>/<audio>/<img>` tags can use the redirect form directly.
 
 ## 4. Error Format
 
@@ -225,10 +228,26 @@ GET /api/v1/projects/{project_id}
 
 ## 5. Asset Upload
 
-### Upload Asset
+The primary flow is **direct-to-storage** via a presigned PUT URL; the multipart endpoint below remains as a fallback:
 
 ```http
+POST /api/v1/projects/{project_id}/assets/upload-url
+{ "filename": "talk.mp4", "content_type": "video/mp4" }
+  → { "key": "{user_id}/uploads/projects/{project_id}/{unique}.mp4", "upload_url": "<presigned PUT, 15 min TTL>" }
+
+PUT {upload_url}                               # client uploads bytes directly to object storage
+
 POST /api/v1/projects/{project_id}/assets
+{ "type": "video", "key": "{user_id}/uploads/projects/{project_id}/{unique}.mp4" }
+  → Asset { id, processing_status: "pending", ... }
+```
+
+The create-from-key call validates that the key sits under the server-issued upload dir for that user+project and that the object actually exists in storage (400 otherwise). Speaker assets have the same two-step flow under `/api/v1/speakers/{speaker_id}/assets/upload-url`.
+
+### Upload Asset (multipart fallback)
+
+```http
+POST /api/v1/projects/{project_id}/assets/upload
 Content-Type: multipart/form-data
 ```
 
@@ -510,10 +529,12 @@ Request:
     "outroMediaUrl": "/api/v1/files/.../outro.mp4",
     "outroDurationSeconds": 3,
     "musicEnabled": true,
-    "musicMood": "corporate"
+    "musicId": "<music row uuid>"
   }
 }
 ```
+
+> `musicId` references a `Music` row (see `docs/MUSIC_ARCHITECTURE.md`); the legacy `musicMood` key (calm/uplifting/corporate/none) is still honored as a fallback for templates saved before ADR-023.
 
 ### List Brand Templates
 
