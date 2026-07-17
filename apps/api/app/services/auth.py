@@ -21,7 +21,7 @@ JWT_ALGORITHM = "HS256"
 
 # send-code rate limits (abuse control for the email provider)
 RESEND_COOLDOWN_SECONDS = 60
-MAX_CODES_PER_EMAIL_PER_HOUR = 5
+MAX_CODES_PER_EMAIL_PER_HOUR = 10
 MAX_CODES_PER_IP_PER_HOUR = 30
 
 
