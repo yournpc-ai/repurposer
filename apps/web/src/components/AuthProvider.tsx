@@ -9,6 +9,7 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { isAuthenticated } from "@/lib/auth"
 import { UNAUTHORIZED_EVENT } from "@/lib/api"
+import { DEMO_PROJECT_SLUG } from "@/lib/constants"
 import { LoginDialog } from "@/components/LoginDialog"
 
 interface AuthContextValue {
@@ -22,6 +23,10 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 const PUBLIC_PATHS = new Set(["/"])
+
+/** The demo project page is a public product preview — the backend serves
+ * demo reads anonymously, so the route must not sit behind the login wall. */
+const PUBLIC_PATH_PREFIXES = [`/projects/${DEMO_PROJECT_SLUG}`]
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authed, setAuthed] = useState(false)
@@ -61,7 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const isPublicPath = PUBLIC_PATHS.has(pathname)
+  const isPublicPath =
+    PUBLIC_PATHS.has(pathname) ||
+    PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))
   const shouldBlock = mounted && !isPublicPath && !authed
 
   useEffect(() => {
