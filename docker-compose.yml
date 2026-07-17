@@ -9,6 +9,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d repurposer"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
 
   api:
     build:
@@ -35,7 +41,9 @@ services:
       - S3_PUBLIC_URL=${S3_PUBLIC_URL}
       - S3_PRESIGN_UPLOAD_TTL=${S3_PRESIGN_UPLOAD_TTL:-3600}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
   worker:
     build:
@@ -61,8 +69,11 @@ services:
       - S3_PUBLIC_URL=${S3_PUBLIC_URL}
       - S3_PRESIGN_UPLOAD_TTL=${S3_PRESIGN_UPLOAD_TTL:-3600}
     depends_on:
-      - db
-      - render
+      db:
+        condition: service_healthy
+      render:
+        condition: service_started
+    restart: unless-stopped
 
   render:
     build:
@@ -70,6 +81,7 @@ services:
       dockerfile: apps/render/Dockerfile
     environment:
       - RENDER_PORT=3001
+    restart: unless-stopped
 
   web:
     build:
@@ -80,7 +92,9 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:
