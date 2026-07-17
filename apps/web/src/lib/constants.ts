@@ -7,6 +7,12 @@
 export const DEMO_PROJECT_ID = "11111111-1111-1111-1111-111111111111"
 export const DEMO_PROJECT_SLUG = "demo"
 
+/** Object key of the seeded demo talk video in storage. The files endpoint
+ * serves demo/* keys anonymously, so the composer can fetch it as a quick
+ * start source for the clips flow. */
+export const DEMO_VIDEO_KEY = "demo/uploads/demo_talk.mp4"
+export const DEMO_VIDEO_NAME = "demo_talk.mp4"
+
 /** Resolve a project route param (slug or UUID) to the real project id. */
 export function resolveProjectId(id: string): string {
   return id === DEMO_PROJECT_SLUG ? DEMO_PROJECT_ID : id

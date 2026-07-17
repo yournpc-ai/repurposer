@@ -23,6 +23,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { DEMO_VIDEO_KEY, DEMO_VIDEO_NAME } from "@/lib/constants"
 import { useAuth } from "@/components/AuthProvider"
 
 import { Button } from "@/components/ui/button"
@@ -88,13 +89,9 @@ const OUTPUT_OPTIONS = [
 ] as const
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]
 
-// Outputs selected by default in the composer. Carousel is available as a
-// top-level option but not checked by default because it is used less frequently
-// than the core knowledge assets.
-const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = [
-  "clips",
-  "post",
-]
+// Nothing is pre-selected: the user picks outputs explicitly (or the intent
+// inference suggests some from their prompt).
+const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = []
 
 const LANGUAGES = [
   { code: "en", labelKey: "languages.en" },
@@ -401,12 +398,36 @@ export function HomeComposer({
     return `${base} ${t("composer.promptInLanguage", { language: langName })}`
   }
 
+  // Quick start: fetch the seeded demo talk video as a File so first-time
+  // users (and demos to investors) can run the clips flow with zero uploads.
+  // demo/* keys are served anonymously by the files endpoint.
+  const addDemoVideo = async () => {
+    try {
+      const res = await apiFetch(`/api/v1/files/${DEMO_VIDEO_KEY}?proxy=1`)
+      if (!res.ok) throw new Error("demo video fetch failed")
+      const blob = await res.blob()
+      const file = new File([blob], DEMO_VIDEO_NAME, {
+        type: blob.type || "video/mp4",
+      })
+      setFiles((prev) =>
+        prev.some((f) => f.name === DEMO_VIDEO_NAME) ? prev : [...prev, file]
+      )
+    } catch {
+      onError?.(t("home.demoVideoLoadFailed"))
+    }
+  }
+
   const toggleOutput = (key: OutputKey) => {
     lockParam("outputs")
-    const next = outputs.includes(key)
-      ? outputs.filter((o) => o !== key)
-      : [...outputs, key]
+    const checked = !outputs.includes(key)
+    const next = checked ? [...outputs, key] : outputs.filter((o) => o !== key)
     setOutputs(next)
+
+    // Clips need a media source; when the user asks for clips with no files
+    // attached, drop the demo talk video into the upload stack for them.
+    if (key === "clips" && checked && files.length === 0) {
+      void addDemoVideo()
+    }
 
     // Only autofill an empty box, or one we generated ourselves earlier —
     // never overwrite text the user actually typed.
