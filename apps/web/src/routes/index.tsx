@@ -57,7 +57,7 @@ function Home() {
       {/* Global top bar */}
       <header className="flex items-center justify-between px-6 py-4">
         <SidebarTrigger className="md:hidden" />
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
           <LanguageSwitcher />
 
