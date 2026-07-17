@@ -6,6 +6,7 @@ import { Bell, Star } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
@@ -54,7 +55,8 @@ function Home() {
   return (
     <div className="flex min-h-svh flex-1 flex-col">
       {/* Global top bar */}
-      <header className="flex items-center justify-end px-6 py-4">
+      <header className="flex items-center justify-between px-6 py-4">
+        <SidebarTrigger className="md:hidden" />
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <LanguageSwitcher />
@@ -70,8 +72,6 @@ function Home() {
             <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
             <span>0</span>
           </div>
-
-          <Button>{t("home.credits")}</Button>
         </div>
       </header>
 

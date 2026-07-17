@@ -58,7 +58,6 @@ const zh: Resources = {
     noContentError: "请先粘贴演讲内容或上传素材",
     noOutputError: "请至少选择一种输出类型",
     clipsNeedMedia: "生成视频片段需要视频、音频或图片素材——请添加文件或取消选择 clips",
-    credits: "充值积分",
     allProjects: "全部项目 ({{count}})",
     noProjects: "还没有项目——从上方上传或粘贴演讲内容开始。",
     speakerCreateFailed: "创建 Speaker 失败",

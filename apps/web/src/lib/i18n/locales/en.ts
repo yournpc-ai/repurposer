@@ -56,7 +56,6 @@ const en = {
     noContentError: "Please paste your content or upload a source file first",
     noOutputError: "Please select at least one output type",
     clipsNeedMedia: "Clips need a video, audio, or image source — upload media or deselect clips",
-    credits: "Add more credits",
     allProjects: "All projects ({{count}})",
     noProjects: "No projects yet — start by uploading or pasting your talk content above.",
     speakerCreateFailed: "Failed to create speaker",
