@@ -54,6 +54,7 @@ GET /api/v1/projects/{project_id}/jobs/{job_id}
 The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. The legacy single-resource endpoints are still available:
 
 ```
+GET /api/v1/projects                  → own projects + demo project (anonymous: demo project only)
 GET /api/v1/projects/{project_id}
 GET /api/v1/projects/{project_id}/assets
 GET /api/v1/projects/{project_id}/clips
