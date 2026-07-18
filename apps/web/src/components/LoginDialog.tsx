@@ -54,7 +54,12 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     setLoading(true)
     setError(null)
     try {
-      const res = await apiPost("/api/v1/auth/send-code", { email: email.trim() })
+      const res = await apiPost(
+        "/api/v1/auth/send-code",
+        { email: email.trim() },
+        // Errors render inline inside the dialog; suppress the global toast.
+        { toast: false }
+      )
       if (!res.ok) {
         const body = await res.json().catch(() => null)
         throw new Error(errorDetail(body, t("login.sendFailed")))
@@ -73,10 +78,15 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     setLoading(true)
     setError(null)
     try {
-      const res = await apiPost("/api/v1/auth/verify-code", {
-        email: email.trim(),
-        code: code.trim(),
-      })
+      const res = await apiPost(
+        "/api/v1/auth/verify-code",
+        {
+          email: email.trim(),
+          code: code.trim(),
+        },
+        // Errors render inline inside the dialog; suppress the global toast.
+        { toast: false }
+      )
       if (!res.ok) {
         const body = await res.json().catch(() => null)
         throw new Error(errorDetail(body, t("login.verifyFailed")))

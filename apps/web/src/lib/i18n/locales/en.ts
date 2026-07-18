@@ -24,6 +24,8 @@ const en = {
     inviteMembers: "Invite members",
     new: "New",
     freePlan: "Free plan",
+    requestFailed: "Request failed",
+    networkError: "Network error — check your connection",
   },
   nav: {
     home: "Home",
@@ -64,8 +66,9 @@ const en = {
   composer: {
     speaker: "Speaker",
     speakerLabel: "Speaker",
-    speakerDesc: "Whose writing style the AI imitates — auto-extracted if unselected",
-    extractFromMaterials: "Extract from materials",
+    speakerDesc: "Whose writing style the AI imitates — auto-generated if unselected",
+    autoGenerate: "Auto-generate",
+    uploadFailed: "Upload failed — please try again",
     manageSpeakers: "Manage speakers…",
     brandLabel: "Brand template",
     brandDesc: "Colors, fonts, and logo baked into every output",

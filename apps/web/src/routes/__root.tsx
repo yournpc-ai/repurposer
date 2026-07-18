@@ -3,6 +3,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
 import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
@@ -55,6 +56,7 @@ function RootComponent() {
                 <Outlet />
               </SidebarInset>
             </SidebarProvider>
+            <Toaster />
           </AuthProvider>
         </TooltipProvider>
       </I18nProvider>

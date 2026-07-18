@@ -23,6 +23,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { toast } from "sonner"
 import { DEMO_VIDEO_KEY, DEMO_VIDEO_NAME } from "@/lib/constants"
 import { useAuth } from "@/components/AuthProvider"
 
@@ -119,10 +120,9 @@ interface HomeComposerProps {
   brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
   onProjectCreated?: (projectId: string) => void
-  onError?: (error: string) => void
 }
 
-const EXTRACT_FROM_MATERIALS = "__extract__"
+const AUTO_GENERATE = "__auto_generate__"
 
 /** Dropdown/popover header: a short title plus a one-line explanation of what
  * this dimension controls, so first-time users understand the pill's purpose. */
@@ -142,14 +142,13 @@ export function HomeComposer({
   brandTemplates,
   onGenerateStart,
   onProjectCreated,
-  onError,
 }: HomeComposerProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { requireAuth } = useAuth()
 
   const [prompt, setPrompt] = useState("")
-  const [speakerId, setSpeakerId] = useState(EXTRACT_FROM_MATERIALS)
+  const [speakerId, setSpeakerId] = useState(AUTO_GENERATE)
   const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_SELECTED_OUTPUTS)
   const [clipCount, setClipCount] = useState<number>(DEFAULT_CLIP_COUNT)
   const [brandTemplateId, setBrandTemplateId] = useState("")
@@ -200,6 +199,8 @@ export function HomeComposer({
           method: "POST",
           body: { prompt, filename: files[0]?.name || undefined },
           signal: controller.signal,
+          // Silent: inference is a best-effort autofill, never worth a toast.
+          toast: false,
         })
         if (!res.ok) throw new Error("Intent inference failed")
         const data = (await res.json()) as { intent: InferredIntent }
@@ -255,11 +256,11 @@ export function HomeComposer({
     await requireAuth(async () => {
       const hasContent = files.length > 0 || prompt.trim()
       if (!hasContent) {
-        onError?.(t("home.noContentError"))
+        toast.error(t("home.noContentError"))
         return
       }
       if (outputs.length === 0) {
-        onError?.(t("home.noOutputError"))
+        toast.error(t("home.noOutputError"))
         return
       }
       // Clips need a renderable media source; a text-only prompt/transcript
@@ -268,7 +269,7 @@ export function HomeComposer({
         outputs.includes("clips") &&
         !files.some((f) => ["video", "audio", "image"].includes(inferAssetType(f)))
       ) {
-        onError?.(t("home.clipsNeedMedia"))
+        toast.error(t("home.clipsNeedMedia"))
         return
       }
       setIsGenerating(true)
@@ -284,7 +285,7 @@ export function HomeComposer({
             event_name: "",
             language,
             speaker_id:
-              speakerId === EXTRACT_FROM_MATERIALS ? undefined : speakerId || undefined,
+              speakerId === AUTO_GENERATE ? undefined : speakerId || undefined,
           },
         })
         if (!projectRes.ok) throw new Error("Failed to create project")
@@ -314,7 +315,11 @@ export function HomeComposer({
               body: material,
               headers: material.type ? { "Content-Type": material.type } : {},
             })
-            if (!putRes.ok) throw new Error("Failed to upload file")
+            // Direct-to-storage PUT bypasses apiFetch, so toast here.
+            if (!putRes.ok) {
+              toast.error(t("composer.uploadFailed"))
+              throw new Error("Failed to upload file")
+            }
 
             const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
               method: "POST",
@@ -344,8 +349,8 @@ export function HomeComposer({
 
         onProjectCreated?.(project.id)
         navigate({ to: "/projects/$id", params: { id: project.id } })
-      } catch (e) {
-        onError?.(e instanceof Error ? e.message : "Something went wrong")
+      } catch {
+        // apiFetch already toasted the server's reason; just reset the UI.
         setIsGenerating(false)
       }
     })
@@ -403,7 +408,9 @@ export function HomeComposer({
   // demo/* keys are served anonymously by the files endpoint.
   const addDemoVideo = async () => {
     try {
-      const res = await apiFetch(`/api/v1/files/${DEMO_VIDEO_KEY}?proxy=1`)
+      const res = await apiFetch(`/api/v1/files/${DEMO_VIDEO_KEY}?proxy=1`, {
+        toast: false,
+      })
       if (!res.ok) throw new Error("demo video fetch failed")
       const blob = await res.blob()
       const file = new File([blob], DEMO_VIDEO_NAME, {
@@ -413,7 +420,7 @@ export function HomeComposer({
         prev.some((f) => f.name === DEMO_VIDEO_NAME) ? prev : [...prev, file]
       )
     } catch {
-      onError?.(t("home.demoVideoLoadFailed"))
+      toast.error(t("home.demoVideoLoadFailed"))
     }
   }
 
@@ -440,8 +447,8 @@ export function HomeComposer({
   }
 
   const selectedSpeakerName =
-    speakerId === EXTRACT_FROM_MATERIALS
-      ? t("composer.extractFromMaterials")
+    speakerId === AUTO_GENERATE
+      ? t("composer.autoGenerate")
       : speakers.find((s) => s.id === speakerId)?.name ?? t("composer.speaker")
 
   const hasIntent = prompt.trim().length > 0
@@ -600,12 +607,12 @@ export function HomeComposer({
                   <DropdownMenuItem
                     onClick={() => {
                       lockParam("speaker")
-                      setSpeakerId(EXTRACT_FROM_MATERIALS)
+                      setSpeakerId(AUTO_GENERATE)
                     }}
                   >
                     <Wand2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">{t("composer.extractFromMaterials")}</span>
-                    {speakerId === EXTRACT_FROM_MATERIALS && (
+                    <span className="flex-1 truncate">{t("composer.autoGenerate")}</span>
+                    {speakerId === AUTO_GENERATE && (
                       <Check className="ml-2 h-4 w-4" />
                     )}
                   </DropdownMenuItem>

@@ -1,6 +1,9 @@
 /** Thin API client with bearer token from the auth flow. */
 
+import { toast } from "sonner"
+
 import { clearAuth, getToken } from "@/lib/auth"
+import i18n from "@/lib/i18n"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
@@ -8,49 +11,89 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
  * can clear state and open the login dialog instead of leaving raw errors. */
 export const UNAUTHORIZED_EVENT = "repurposer:unauthorized"
 
+/** Per-call toast control:
+ * - omitted: errors toast the server's real `detail` via sonner, success is silent
+ * - `false`: fully silent — the caller handles all feedback itself
+ * - `string`: show this success message on 2xx (errors still auto-toast)
+ * - `{ success, error }`: custom messages; `error` overrides the server detail
+ */
+export type ApiToastOption = false | string | { success?: string; error?: string }
+
 function buildUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return `${API_URL}${normalized}`
 }
 
-type ApiFetchOptions = Omit<RequestInit, "body"> & { body?: unknown }
+type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  body?: unknown
+  toast?: ApiToastOption
+}
 
 export async function apiFetch(
   path: string,
   options: ApiFetchOptions = {}
 ): Promise<Response> {
-  const headers = new Headers(options.headers)
+  const { toast: toastOption, ...init } = options
+  const headers = new Headers(init.headers)
   const token = getToken()
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`)
   }
 
   let body: BodyInit | undefined
-  if (options.body instanceof FormData) {
-    body = options.body
-  } else if (options.body !== undefined) {
-    body = JSON.stringify(options.body)
+  if (init.body instanceof FormData) {
+    body = init.body
+  } else if (init.body !== undefined) {
+    body = JSON.stringify(init.body)
     if (!headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json")
     }
   }
 
-  const response = await fetch(buildUrl(path), { ...options, headers, body })
+  let response: Response
+  try {
+    response = await fetch(buildUrl(path), { ...init, headers, body })
+  } catch (e) {
+    // Network-level failure (server unreachable, CORS, DNS): there is no
+    // response to parse, so toast here before rethrowing for the caller's
+    // control flow.
+    if (toastOption !== false && typeof window !== "undefined") {
+      toast.error(i18n.t("common.networkError"))
+    }
+    throw e
+  }
   if (response.status === 401 && typeof window !== "undefined") {
     clearAuth()
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
   }
+
+  if (toastOption !== false && typeof window !== "undefined") {
+    if (response.ok) {
+      const successMessage =
+        typeof toastOption === "string" ? toastOption : toastOption?.success
+      if (successMessage) toast.success(successMessage)
+    } else if (response.status !== 401) {
+      const customError =
+        typeof toastOption === "object" ? toastOption.error : undefined
+      if (customError) {
+        toast.error(customError)
+      } else {
+        const errorBody = await response.clone().json().catch(() => null)
+        toast.error(errorDetail(errorBody, i18n.t("common.requestFailed")))
+      }
+    }
+  }
   return response
 }
 
-export async function apiGet(path: string, options: RequestInit = {}) {
+export async function apiGet(path: string, options: ApiFetchOptions = {}) {
   return apiFetch(path, { method: "GET", ...options })
 }
 
 export async function apiPost(
   path: string,
   body?: unknown,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ) {
   return apiFetch(path, {
     method: "POST",
@@ -62,7 +105,7 @@ export async function apiPost(
 export async function apiPut(
   path: string,
   body?: unknown,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ) {
   return apiFetch(path, {
     method: "PUT",
@@ -71,7 +114,7 @@ export async function apiPut(
   })
 }
 
-export async function apiDelete(path: string, options: RequestInit = {}) {
+export async function apiDelete(path: string, options: ApiFetchOptions = {}) {
   return apiFetch(path, { method: "DELETE", ...options })
 }
 

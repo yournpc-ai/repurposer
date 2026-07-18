@@ -60,7 +60,6 @@ export function MusicPanel({
   const [prompt, setPrompt] = useState("")
   const [title, setTitle] = useState("")
   const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState("")
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const loadPieces = async () => {
@@ -102,7 +101,6 @@ export function MusicPanel({
   const generate = async () => {
     if (!prompt.trim() || generating) return
     setGenerating(true)
-    setError("")
     try {
       const body: { prompt: string; title?: string } = { prompt: prompt.trim() }
       if (title.trim()) body.title = title.trim()
@@ -110,17 +108,16 @@ export function MusicPanel({
         method: "POST",
         body,
       })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.detail || t("brandTemplate.music.generateFailed"))
-      }
+      // apiFetch already toasted the server's reason; throw only to skip
+      // the success path below.
+      if (!res.ok) throw new Error("music generate failed")
       const piece: MusicPiece = await res.json()
       setPieces((prev) => [piece, ...prev])
       onSelect(piece.id)
       setPrompt("")
       setTitle("")
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("brandTemplate.music.generateFailed"))
+    } catch {
+      // Global toast covers both server errors and network failures.
     } finally {
       setGenerating(false)
     }
@@ -244,7 +241,6 @@ export function MusicPanel({
                 )}
               </Button>
             </div>
-            {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </div>
         </>
       ) : null}

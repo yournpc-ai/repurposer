@@ -26,6 +26,8 @@ const zh: Resources = {
     inviteMembers: "邀请成员",
     new: "新建",
     freePlan: "免费版",
+    requestFailed: "请求失败",
+    networkError: "网络错误，请检查连接",
   },
   nav: {
     home: "首页",
@@ -66,8 +68,9 @@ const zh: Resources = {
   composer: {
     speaker: "演讲者",
     speakerLabel: "演讲者",
-    speakerDesc: "AI 模仿谁的写作风格——不选则从素材自动提取",
-    extractFromMaterials: "从素材提取",
+    speakerDesc: "AI 模仿谁的写作风格——不选则自动生成",
+    autoGenerate: "自动生成",
+    uploadFailed: "上传失败，请重试",
     manageSpeakers: "管理演讲者…",
     brandLabel: "品牌模板",
     brandDesc: "融入每个产出物的配色、字体与 Logo",

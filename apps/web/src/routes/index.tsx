@@ -32,7 +32,6 @@ function Home() {
   const [projectCount, setProjectCount] = useState(0)
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
-  const [error, setError] = useState("")
   const [mounted, setMounted] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -101,12 +100,8 @@ function Home() {
           <HomeComposer
             speakers={speakers}
             brandTemplates={brandTemplates}
-            onGenerateStart={() => setError("")}
             onProjectCreated={() => setRefreshKey((k) => k + 1)}
-            onError={setError}
           />
-
-          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
         </div>
       </section>
 

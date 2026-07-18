@@ -200,6 +200,12 @@ Overall style: restrained, lightweight, unified. Key reference points:
 - **Styles stay within the subset that both CSS and libass can express**, preserving the low-cost option of switching to hand-rolled FFmpeg in the future (clip-spec → filtergraph + shared libass on both ends).
 - Hard prerequisites: **multi-language ASR (word-level timestamps) + streamable / seekable video** (**local FS + FastAPI Range endpoint is sufficient**; object storage deferred to scaling, ADR-011).
 
+## Error Handling & Toasts
+
+- All API calls go through `apiFetch` in `apps/web/src/lib/api.ts`. By default, non-OK responses (except 401, which clears auth and opens the login dialog) and network failures surface a **global sonner toast** carrying the server's real `detail`; success responses are silent.
+- Per-call control via the `toast` option: `toast: false` (fully silent — caller handles feedback), `toast: "..."` (show a success message on 2xx), `toast: { success, error }` (custom overrides; `error` replaces the server detail).
+- A single `<Toaster />` is mounted in `__root.tsx` (shadcn sonner, wired to the project's own `ThemeProvider` — **not** next-themes). Do not add inline error `<p>` blocks for action feedback; use the global toast. Page-level load-failure placeholder states may stay inline, but pass `toast: false` on those calls to avoid double reporting.
+
 ## Task Queue (Backend)
 
 > See ADR-017 for details.
