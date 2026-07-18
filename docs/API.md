@@ -24,7 +24,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 - Emails are normalized (lowercase, trimmed) and format-validated on both endpoints — malformed addresses get 400 before a code is created. A recipient rejected by Resend (4xx) also returns 400; genuine provider/5xx failures return 502.
 - send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
 - `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
-- Anonymous requests see **only the demo project** (`11111111-1111-1111-1111-111111111111`, routed as `/projects/demo`) and its clips. Logged-in list endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects.
+- Anonymous requests see **only the demo project** (`11111111-1111-1111-1111-111111111111`, routed as `/projects/demo`) and its clips. Logged-in list endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects. **Exception**: `/speakers` returns only the caller's own speakers — project creation rejects speaker_ids the caller does not own, so demo/default speakers are never offered as selectable options.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
 ## 2. Main Flow Call Sequence
@@ -85,15 +85,17 @@ GET /api/v1/music/{mood}                     # Built-in mood library, e.g. calm 
 
 ## 4. Error Format
 
+Errors use FastAPI's default shape — the human-readable reason is always in `detail`:
+
 ```json
-{
-  "error": {
-    "code": "RESOURCE_NOT_FOUND",
-    "message": "Project not found",
-    "detail": {}
-  }
-}
+{ "detail": "Speaker not found" }
 ```
+
+- **Handler-raised errors** (4xx/5xx via `HTTPException`): `detail` is a string with the reason.
+- **Validation errors** (422): `detail` is an array of `{loc, msg, type}` field errors.
+- **Unhandled exceptions** (500): a global handler logs the traceback server-side and returns `{ "detail": "Internal server error" }` — internals never leak to clients.
+
+Every request is logged as `http_request` with method, path, query, status, duration, client IP, and — for JSON payloads — the request and response bodies (credentials like `token`/`code` are redacted, bodies truncated; multipart and file streams are never buffered). Errors additionally log `http_error` / `http_validation_error` / `http_unhandled_error` with the reason at raise time.
 
 ## 5. Speaker Management
 
