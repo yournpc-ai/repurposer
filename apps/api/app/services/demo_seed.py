@@ -36,7 +36,6 @@ from app.models.tables import (
     Asset,
     BrandTemplate,
     Clip,
-    Derivative,
     Project,
     Speaker,
     User,
@@ -57,10 +56,7 @@ DEMO_PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
 DEMO_SPEAKER_ID = UUID("22222222-2222-2222-2222-222222222222")
 DEMO_BRAND_TEMPLATE_ID = UUID("33333333-3333-3333-3333-333333333333")
 
-DEMO_USER_MESSAGE = (
-    "Turn this resilience talk into three short vertical clips, a social post, "
-    "quote cards, and an article."
-)
+DEMO_USER_MESSAGE = "Turn this resilience talk into five short vertical clips."
 
 
 def _demo_paths() -> tuple[str, str]:
@@ -188,12 +184,6 @@ async def _count_clips(db) -> int:
     ) or 0
 
 
-async def _count_derivatives(db) -> int:
-    return await db.scalar(
-        select(func.count()).where(Derivative.project_id == DEMO_PROJECT_ID)
-    ) or 0
-
-
 async def seed_demo_project() -> None:
     """Create or refresh the demo project using the real generation pipeline."""
     async with AsyncSessionLocal() as db:
@@ -204,18 +194,17 @@ async def seed_demo_project() -> None:
         existing_project = await db.get(Project, DEMO_PROJECT_ID)
         if existing_project is not None:
             clip_count = await _count_clips(db)
-            derivative_count = await _count_derivatives(db)
-            if clip_count > 0 and derivative_count > 0:
+            # Demo generates clips only (no derivatives), so clips are the
+            # completion signal.
+            if clip_count > 0:
                 logger.debug(
                     "demo_project_already_seeded",
                     clips=clip_count,
-                    derivatives=derivative_count,
                 )
                 return
             logger.info(
                 "demo_project_partial_seed",
                 clips=clip_count,
-                derivatives=derivative_count,
             )
 
         _demo_paths()
@@ -255,9 +244,8 @@ async def seed_demo_project() -> None:
         await seed_project_prompt(db, user.id, DEMO_PROJECT_ID, DEMO_USER_MESSAGE)
 
         clip_count = await _count_clips(db)
-        derivative_count = await _count_derivatives(db)
 
-        if clip_count == 0 or derivative_count == 0:
+        if clip_count == 0:
             # Queue and immediately run the real generation orchestrator.
             run = WorkflowRun(
                 project_id=DEMO_PROJECT_ID,
@@ -265,8 +253,8 @@ async def seed_demo_project() -> None:
                 current_step="queued",
                 progress=0,
                 context={
-                    "outputs": ["clips", "post", "quotes", "carousel", "article"],
-                    "clip_count": 3,
+                    "outputs": ["clips"],
+                    "clip_count": 5,
                     "target_language": target_language,
                     "brand_template_id": str(brand.id),
                     "instruction": DEMO_USER_MESSAGE,
@@ -301,10 +289,8 @@ async def seed_demo_project() -> None:
 
         # Log final state.
         final_clips = await _count_clips(db)
-        final_derivatives = await _count_derivatives(db)
         logger.info(
             "demo_project_seeded",
             project_id=str(DEMO_PROJECT_ID),
             clips=final_clips,
-            derivatives=final_derivatives,
         )
