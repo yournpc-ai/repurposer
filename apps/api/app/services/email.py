@@ -10,6 +10,10 @@ logger = structlog.get_logger()
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+class InvalidRecipientError(ValueError):
+    """Resend rejected the recipient address (4xx validation error)."""
+
+
 async def send_verification_email(email: str, code: str) -> None:
     """Send a verification code email via Resend.
 
@@ -57,6 +61,10 @@ async def send_verification_email(email: str, code: str) -> None:
                 body=e.response.text,
                 email=email,
             )
+            if 400 <= e.response.status_code < 500:
+                raise InvalidRecipientError(
+                    f"Email address rejected by the mail provider: {email}"
+                ) from e
             raise RuntimeError(f"Failed to send verification email: {e.response.text}") from e
 
     logger.info("verification_email_sent", email=email)

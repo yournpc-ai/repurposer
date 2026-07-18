@@ -1,5 +1,7 @@
 """Authentication router: email verification code login."""
 
+import re
+
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -11,9 +13,21 @@ from app.services.auth import (
     get_or_create_user,
     verify_code,
 )
-from app.services.email import send_verification_email
+from app.services.email import InvalidRecipientError, send_verification_email
 
 router = APIRouter()
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_email(raw: str) -> str:
+    email = raw.lower().strip()
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid email address",
+        )
+    return email
 
 
 class SendCodeRequest(BaseModel):
@@ -47,7 +61,7 @@ async def send_code(
     db: DBDep,
 ) -> SendCodeResponse:
     """Send a verification code to the given email."""
-    email = data.email.lower().strip()
+    email = _normalize_email(data.email)
     ip_address = request.client.host if request.client else None
 
     try:
@@ -59,13 +73,16 @@ async def send_code(
         ) from e
     try:
         await send_verification_email(email, vc.code)
+    except InvalidRecipientError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         ) from e
-
-    return SendCodeResponse(message="Verification code sent")
 
     return SendCodeResponse(message="Verification code sent")
 
@@ -76,14 +93,15 @@ async def verify_code_endpoint(
     db: DBDep,
 ) -> VerifyCodeResponse:
     """Verify the code and return a JWT."""
-    vc = await verify_code(db, data.email, data.code)
+    email = _normalize_email(data.email)
+    vc = await verify_code(db, email, data.code)
     if vc is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification code",
         )
 
-    user = await get_or_create_user(db, data.email)
+    user = await get_or_create_user(db, email)
     token = create_access_token(user.id)
 
     return VerifyCodeResponse(
