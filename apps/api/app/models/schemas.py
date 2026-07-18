@@ -546,8 +546,9 @@ class ClipPlan(BaseModel):
     topic: str = ""
     # When false, the renderer skips burned-in captions (e.g., source video
     # already has hard-coded subtitles). ASR is still performed so the transcript
-    # and SRT export remain available.
-    caption_enabled: bool = True
+    # and SRT export remain available. ``None`` means the agent did not decide,
+    # so the brand template default applies.
+    caption_enabled: bool | None = None
 
     def to_segment(self) -> Segment:
         return Segment(
