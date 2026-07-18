@@ -659,7 +659,7 @@ async def _run_derivative_task(
 
     await _update_run_output_status(
         run_id,
-        {output: {"status": "running", "progress": 5, "error": None, "stage": "writing_copy"}},
+        {output: {"status": "running", "progress": 40, "error": None, "stage": "writing_copy"}},
     )
 
     try:
@@ -736,7 +736,7 @@ async def _run_clips_task(
     """Generate clips, with one auto-retry, and update per-output status."""
     await _update_run_output_status(
         run.id,
-        {"clips": {"status": "running", "progress": 5, "error": None, "stage": "selecting_segments"}},
+        {"clips": {"status": "running", "progress": 60, "error": None, "stage": "selecting_segments"}},
     )
 
     # Render source selection (docs/VIDEO_EDITOR.md §4).
@@ -856,7 +856,7 @@ async def _run_clips_task(
 
     await _update_run_output_status(
         run.id,
-        {"clips": {"status": "running", "progress": 60, "error": None, "stage": "building_specs"}},
+        {"clips": {"status": "running", "progress": 90, "error": None, "stage": "building_specs"}},
     )
 
     brand = brand_from_template(bt.config) if bt is not None else None

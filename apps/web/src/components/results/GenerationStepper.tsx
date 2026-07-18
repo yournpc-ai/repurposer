@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -37,6 +38,33 @@ interface GenerationStepperProps {
 
 const PLANNING_STEPS = ["analyze", "plan", "prepare"] as const
 const OUTPUT_STEPS = ["clips", "post", "quotes", "carousel", "article"] as const
+
+/**
+ * Eases the displayed percent toward the polled target so the bar animates
+ * between 2.5s polls instead of jumping. Never regresses within an open
+ * dialog; resets to 0 when the dialog closes.
+ */
+function useSmoothedPercent(target: number, active: boolean): number {
+  const [value, setValue] = useState(0)
+
+  useEffect(() => {
+    if (!active) {
+      setValue(0)
+      return
+    }
+    // Clamp down only when the target itself regresses (new run / retry).
+    setValue((v) => (target < v ? target : v))
+    const id = window.setInterval(() => {
+      setValue((v) => {
+        if (v >= target) return v
+        return Math.min(target, v + Math.max(0.4, (target - v) * 0.12))
+      })
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [target, active])
+
+  return Math.round(value)
+}
 
 export function GenerationStepper({
   open,
@@ -103,10 +131,12 @@ export function GenerationStepper({
     percent = 30
   }
 
+  const displayPercent = useSmoothedPercent(percent, open)
+
   return (
     <Dialog open={open}>
       <DialogContent showCloseButton={false} className="sm:max-w-md">
-        <Progress value={percent} className="w-full space-y-2">
+        <Progress value={displayPercent} className="w-full space-y-2">
           <div className="flex items-center justify-between gap-1">
             <ProgressLabel className="shimmer text-sm font-medium">
               {t(`results.stepper.${labelKey}`)}
