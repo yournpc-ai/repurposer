@@ -1,6 +1,6 @@
 # API Specification
 
-> Status: Draft, updated iteratively as development progresses. Last updated: 2026-07-16.
+> Status: Draft, updated iteratively as development progresses. Last updated: 2026-07-18.
 
 ## 1. Basics
 
@@ -21,6 +21,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 ```
 
 - Codes expire after 10 minutes, allow max 5 verification attempts, and are single-use.
+- Emails are normalized (lowercase, trimmed) and format-validated on both endpoints — malformed addresses get 400 before a code is created. A recipient rejected by Resend (4xx) also returns 400; genuine provider/5xx failures return 502.
 - send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
 - `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
 - Anonymous requests see **only the demo project** (`11111111-1111-1111-1111-111111111111`, routed as `/projects/demo`) and its clips. Logged-in list endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects.

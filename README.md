@@ -198,23 +198,35 @@ Notes:
 - The `render` image includes system libraries for headless Chromium; the Chromium binary (~90MB) is downloaded **lazily on first render** (no external network dependency at build time, better for CI / restricted networks).
 - `web` currently uses `vite preview` for SSR, suitable for MVP / staging; for high-traffic deployments, switch to a lightweight Node adapter around the exported fetch handler (see ADR-018).
 
+### 6. Production Reverse Proxy (nginx)
+
+In production the web container and api container sit behind nginx. **The `/api` prefix is owned by FastAPI alone** — nginx must forward transparently, and the web bundle must not add its own `/api`:
+
+```nginx
+# Correct: no trailing slash on proxy_pass — /api/v1/... is forwarded as-is
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+}
+```
+
+- Web build arg: `VITE_API_URL=https://<your-domain>` (**no trailing `/api`**; the value is inlined into the JS bundle at build time, so changing it requires `--build web`, not a restart).
+- Pitfall: `proxy_pass http://127.0.0.1:8000/;` (with trailing slash) strips the `/api/` prefix. Pairing that with a bundle base that ends in `/api` produces the double-`/api/api/v1/...` URL shape — it only works while both misconfigurations stay in lockstep and breaks confusingly during partial deploys.
+- Rebuild `api`/`worker`/`web` together (`docker compose up -d --build api worker web`) so new frontend bundles never call routes an old api image doesn't have.
+- The api logs every request as `http_request` (method, path as received post-proxy, status, duration, client IP from `X-Forwarded-For`) — the first place to check when a request behaves differently between environments.
+
 ## Demo Project
 
 The app seeds a demo project on startup so first-time visitors can see a fully populated results page without uploading their own media.
 
 - **Demo project id**: `11111111-1111-1111-1111-111111111111`
 - **Demo user**: the seeded default user (`DEFAULT_USER_ID`)
-- **Demo asset paths**:
-  - Upload: `assets/demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4`
-  - Outputs: `assets/demo/outputs/projects/11111111-1111-1111-1111-111111111111/clip_*.mp4`, `quote_*.png`
+- **Demo video**: the object `demo/uploads/demo_talk.mp4` in the configured object-storage bucket (TOS). The seed runs ASR on it and generates **5 clips only** (no derivatives).
+- The demo project is idempotent — startups are no-ops once clips exist.
 
-To set up the demo locally:
+To swap the demo video on an environment:
 
-1. Place a short source video at `assets/demo/uploads/projects/11111111-1111-1111-1111-111111111111/demo_talk.mp4`.
-2. Optionally pre-render clips to `assets/demo/outputs/projects/11111111-1111-1111-1111-111111111111/clip_1.mp4`, `clip_2.mp4`, `clip_3.mp4`.
-3. If quote-card PNGs are missing, the seed copies `apps/web/public/logo512.png` as a placeholder.
-
-The demo project is idempotent — re-running the app will not duplicate it.
+1. Replace the object `demo/uploads/demo_talk.mp4` in the bucket (e.g. via `scripts/migrate_to_tos.py --force`).
+2. Run `python scripts/seed_demo.py --force` — it deletes the existing demo clips, workflow runs, **and the demo Asset row**, so ASR re-runs on the new video and 5 fresh clips are generated.
 
 ## Tests
 

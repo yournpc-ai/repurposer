@@ -216,7 +216,9 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 ## Demo Seed
 
-`app/services/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips/derivatives appear immediately. It does **not** render clips synchronously anymore — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
+`app/services/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips appear immediately. The demo requests **only the `clips` output with `clip_count=5`** (no derivatives), and treats clips as the sole completion signal. It does **not** render clips synchronously — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
+
+To regenerate after swapping the demo video: upload the new object to storage, then run `python scripts/seed_demo.py --force` — it deletes the demo clips, workflow runs, **and the demo Asset row** (without the latter, ASR is skipped and generation would reuse the old transcript).
 
 ## Testing
 

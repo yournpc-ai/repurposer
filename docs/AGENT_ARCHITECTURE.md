@@ -150,6 +150,7 @@ Each executor extracts its own guidance from `content_plan.derivatives` by match
 - **Minimum duration of 5 seconds**; if the selected words produce a shorter segment, the agent extends the selection by including surrounding words until the duration is at least 5 seconds.
 - No overlap between consecutive clips; each subsequent clip starts after the previous one ends.
 - `duration_seconds` is clamped to `5–120` seconds.
+- `caption_enabled` is tri-state (`bool | None`): the agent sets `false` when the source video already has hard-coded subtitles; when the agent omits a decision (`None`), the brand template's `captionEnabled` default applies.
 
 These constraints are enforced in `app/prompts/clip_agent.j2` and validated by `ClipPlans` before `Clip` rows are created.
 
@@ -226,7 +227,7 @@ This file was previously `derivative_generation.py` and contained per-type param
 }
 ```
 
-Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 60 → 90 → 100), and `run.progress` is the mean of per-output progress values.
+Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 60 → 90 → 100, calibrated so the slow LLM phases sit in the upper half of the bar), and `run.progress` is the mean of per-output progress values. The frontend stepper polls every 2.5 s and **interpolates** toward the last polled target (eased, monotonically non-decreasing) so the bar animates between polls instead of jumping.
 
 Context updates are persisted with `flag_modified` — plain SQLAlchemy JSON columns do not detect in-place mutation, and without it per-output statuses never reach the database.
 
