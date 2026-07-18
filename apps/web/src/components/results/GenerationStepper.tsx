@@ -138,7 +138,7 @@ export function GenerationStepper({
       <DialogContent showCloseButton={false} className="sm:max-w-md">
         <Progress value={displayPercent} className="w-full space-y-2">
           <div className="flex items-center justify-between gap-1">
-            <ProgressLabel className="shimmer text-sm font-medium">
+            <ProgressLabel className="shimmer text-muted-foreground text-sm font-medium">
               {t(`results.stepper.${labelKey}`)}
             </ProgressLabel>
             <span className="text-sm">
