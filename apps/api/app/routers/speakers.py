@@ -52,11 +52,18 @@ async def list_speakers(
     skip: int = 0,
     limit: int = 100,
 ) -> list[Speaker]:
-    """List speakers for the current user plus system defaults."""
-    user_ids = [current_user.id, DEFAULT_USER_ID] if current_user else [DEFAULT_USER_ID]
+    """List the current user's own speakers.
+
+    Demo/default-user speakers are intentionally excluded: project creation
+    rejects speaker_ids the caller does not own, so listing them would offer
+    options that always 404 when selected. Anonymous callers get an empty
+    list (generation requires login anyway).
+    """
+    if current_user is None:
+        return []
     result = await db.execute(
         select(Speaker)
-        .where(Speaker.user_id.in_(user_ids))
+        .where(Speaker.user_id == current_user.id)
         .offset(skip)
         .limit(limit)
     )
