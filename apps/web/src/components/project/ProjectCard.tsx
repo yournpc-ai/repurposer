@@ -65,18 +65,21 @@ export function ProjectCard({ project, isDemo }: ProjectCardProps) {
         {isDemo && (
           <Badge
             variant="secondary"
-            className="absolute left-2 top-2 text-[10px]"
+            className="absolute left-2 top-2 rounded-md text-[10px]"
           >
             {t("brandTemplate.demo")}
           </Badge>
         )}
         {showVideo && videoReady && project.thumbnail_duration != null && (
           <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-            <Badge variant="secondary" className="tabular-nums">
+            <Badge variant="secondary" className="rounded-md tabular-nums">
               {formatDuration(project.thumbnail_duration)}
             </Badge>
             {project.thumbnail_aspect ? (
-              <Badge variant="secondary" className="font-normal text-muted-foreground">
+              <Badge
+                variant="secondary"
+                className="rounded-md font-normal text-muted-foreground"
+              >
                 {project.thumbnail_aspect}
               </Badge>
             ) : null}
