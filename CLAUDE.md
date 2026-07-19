@@ -51,6 +51,7 @@ Correct:
 - **`rounded-full` is prohibited**, with only the following two exceptions:
   1. True circular icon buttons (e.g., the send arrow in the bottom-right corner of an input: `h-9 w-9 rounded-full`).
   2. Status badges / red dots (notification corner markers).
+- The shadcn `Badge` component's base style is `rounded-full` — always override with `className="rounded-md"` when using it for metadata tags (durations, aspect ratios, labels).
 - Controls in the same row must align in height: action-area controls are uniformly `h-9`, matching the send button height.
 - Pill / dropdown trigger **text must not be bold** (do not add `font-medium`), keep it lightweight.
 
