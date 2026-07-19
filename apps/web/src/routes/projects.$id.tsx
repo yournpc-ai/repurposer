@@ -7,7 +7,7 @@ import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
-import { GenerationStepper } from "@/components/results/GenerationStepper"
+import { GenerationStepper, type UiStep } from "@/components/results/GenerationStepper"
 import { PostCard } from "@/components/results/PostCard"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -62,6 +62,7 @@ interface ProjectResults {
   derivatives: Derivative[]
   latest_job: WorkflowRun | null
   assets?: AssetStatusEntry[]
+  ui_step?: UiStep | null
 }
 
 const TAB_TO_OUTPUT_KEY: Record<ResultsTab, string> = {
@@ -193,16 +194,10 @@ function ProjectDetailPage() {
         .filter(Boolean) as ResultsTab[])
     : []
 
-  const isGenerating =
-    latestJob?.status === "pending" || latestJob?.status === "running"
-
-  // The loading covers the full journey: asset transcription/parsing first,
-  // then the generation run. It is visible from the moment the user lands on
-  // this page after clicking Generate, until the run settles.
-  const assetsBusy = (results?.assets ?? []).some(
-    (a) => a.processing_status === "pending" || a.processing_status === "processing"
-  )
-  const showProgress = assetsBusy || isGenerating
+  // The loading dialog's lifecycle is driven entirely by the backend's
+  // ui_step: it covers asset processing, the generation run, and the wait
+  // for the first clip render (ready_to_render at 100%), then disappears.
+  const showProgress = results?.ui_step != null
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
@@ -425,15 +420,7 @@ function ProjectDetailPage() {
         </div>
 
         {showProgress && (
-          <GenerationStepper
-            open={showProgress}
-            runStatus={latestJob?.status ?? null}
-            currentStep={latestJob?.current_step ?? null}
-            progress={latestJob?.progress}
-            assets={results?.assets ?? []}
-            outputs={requestedOutputs}
-            outputStatus={outputStatus ?? {}}
-          />
+          <GenerationStepper open={showProgress} uiStep={results?.ui_step} />
         )}
 
         {/* Content */}

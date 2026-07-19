@@ -1115,6 +1115,15 @@ class ProjectAssetStatus(BaseModel):
     processing_error: str | None = None
 
 
+class UiStep(BaseModel):
+    """Stepper position for the results-page loading dialog (see
+    projects._compute_ui_step). percent = (index + 1) / total."""
+
+    key: str
+    index: int
+    total: int
+
+
 class ProjectResultsResponse(BaseModel):
     """Aggregated results for the project detail/results page."""
 
@@ -1126,6 +1135,7 @@ class ProjectResultsResponse(BaseModel):
     derivatives: list[DerivativeResponse] = Field(default_factory=list)
     latest_job: WorkflowRunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
+    ui_step: UiStep | None = None
 
 
 class BrandTemplateBase(BaseModel):

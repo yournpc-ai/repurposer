@@ -151,6 +151,82 @@ async def get_project(
     return resp
 
 
+# Stepper prefix phases (asset processing → planning) always exist; output
+# phases are included only when the run requested them.
+_UI_STEP_BASE = ["transcribing", "queued", "analyze", "plan", "prepare"]
+_UI_STEP_TEXT_OUTPUTS = {"post", "quotes", "article", "carousel"}
+
+
+def _ui_steps_for_outputs(outputs: list[str]) -> list[str]:
+    steps = list(_UI_STEP_BASE)
+    if "clips" in outputs:
+        steps += ["selecting_segments", "building_specs"]
+    if any(o in _UI_STEP_TEXT_OUTPUTS for o in outputs):
+        steps.append("writing_copy")
+    if "quotes" in outputs:
+        steps.append("generating_image")
+    if "clips" in outputs:
+        steps.append("ready_to_render")
+    return steps
+
+
+def _compute_ui_step(
+    assets: list[Asset],
+    latest_job: WorkflowRun | None,
+    clips: list[Clip],
+) -> dict | None:
+    """Stepper position for the results-page loading dialog.
+
+    The stepper is a numbered list derived from the pipeline itself, so the
+    frontend only renders {key, index, total} (percent = (index + 1) / total)
+    — every step advances by the same increment, and the final step
+    (ready_to_render) sits at 100% while clips wait for the render worker.
+    None = hide the dialog (no run, run failed, or everything settled).
+    """
+    if latest_job is None or latest_job.status == "failed":
+        return None
+
+    ctx = latest_job.context or {}
+    outputs = ctx.get("outputs") or ["clips"]
+    steps = _ui_steps_for_outputs(outputs)
+
+    def at(key: str) -> dict:
+        return {"key": key, "index": steps.index(key), "total": len(steps)}
+
+    # Assets still processing (ASR / extraction) — the run queues behind them.
+    if any(a.processing_status in ("pending", "processing") for a in assets):
+        return at("transcribing")
+
+    if latest_job.status == "pending":
+        return at("queued")
+
+    step = latest_job.current_step
+    if step in ("analyze", "plan", "prepare"):
+        return at(step)
+
+    if step == "clips":
+        stage = (ctx.get("output_status") or {}).get("clips", {}).get("stage")
+        return at(stage if stage in steps else "selecting_segments")
+
+    # Text derivatives run concurrently, so they share one step; quotes' image
+    # rendering is the last sub-stage.
+    if step in _UI_STEP_TEXT_OUTPUTS:
+        quotes_stage = (ctx.get("output_status") or {}).get("quotes", {}).get("stage")
+        if quotes_stage == "generating_image" and "generating_image" in steps:
+            return at("generating_image")
+        return at("writing_copy")
+
+    if step == "done" or latest_job.status == "completed":
+        if "ready_to_render" in steps and any(
+            c.render_status in ("pending", "rendering") for c in clips
+        ):
+            return at("ready_to_render")
+        return None
+
+    # Unknown step label: stay at the end of planning.
+    return at("prepare")
+
+
 @router.get("/{project_id}/results", response_model=ProjectResultsResponse)
 async def get_project_results(
     project_id: UUID,
@@ -215,6 +291,7 @@ async def get_project_results(
         "derivatives": derivatives,
         "latest_job": latest_job,
         "assets": assets,
+        "ui_step": _compute_ui_step(assets, latest_job, clips),
     }
 
 

@@ -227,7 +227,9 @@ This file was previously `derivative_generation.py` and contained per-type param
 }
 ```
 
-Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 60 → 90 → 100, calibrated so the slow LLM phases sit in the upper half of the bar), and `run.progress` is the mean of per-output progress values. The frontend stepper polls every 2.5 s and **interpolates** toward the last polled target (eased, monotonically non-decreasing) so the bar animates between polls instead of jumping.
+Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 60 → 90 → 100, calibrated so the slow LLM phases sit in the upper half of the bar), and `run.progress` is the mean of per-output progress values.
+
+The results page does **not** derive its stepper from these raw values. `GET /projects/{id}/results` returns a computed `ui_step` (`{key, index, total}`, see `_compute_ui_step` in `app/routers/projects.py`): the step list is `transcribing → queued → analyze → plan → prepare` plus per-output steps (`selecting_segments`/`building_specs` for clips, one shared `writing_copy` for the concurrent text derivatives, `generating_image` for quotes) and ends with `ready_to_render`, which holds at 100% while clips wait for the render worker. The frontend renders `percent = (index + 1) / total` — equal increments per step — and interpolates between the 2.5 s polls; `ui_step = null` (run failed, or everything including renders settled) closes the dialog.
 
 Context updates are persisted with `flag_modified` — plain SQLAlchemy JSON columns do not detect in-place mutation, and without it per-output statuses never reach the database.
 
