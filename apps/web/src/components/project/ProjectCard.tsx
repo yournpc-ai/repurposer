@@ -72,13 +72,13 @@ export function ProjectCard({ project, isDemo }: ProjectCardProps) {
         )}
         {showVideo && videoReady && project.thumbnail_duration != null && (
           <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-            <span className="rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+            <Badge variant="secondary" className="tabular-nums">
               {formatDuration(project.thumbnail_duration)}
-            </span>
+            </Badge>
             {project.thumbnail_aspect ? (
-              <span className="rounded bg-black/75 px-1.5 py-0.5 text-[10px] text-white/80">
+              <Badge variant="secondary" className="font-normal text-muted-foreground">
                 {project.thumbnail_aspect}
-              </span>
+              </Badge>
             ) : null}
           </div>
         )}
