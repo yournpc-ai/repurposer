@@ -629,3 +629,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - If the M3 tool-calling spike fails, `chat_with_tools` is implemented via structured-output simulation behind the same interface.
 
 **Related**: ADR-003, ADR-004, `docs/ROADMAP.md` §3
+
+## ADR-026: AI 内容标识分级策略——合成轨道强制 C2PA，纯剪辑豁免，分类器自动判定
+
+**Status**: Decided (2026-07-21)
+
+**Context**: EU AI Act Art.50（2026-08-02 生效，新部署系统无宽限）要求 AI 生成/操纵内容带机器可读标识。平台侧 2026 年现状：LinkedIn 纯靠 C2PA 自动检测打 "CR" 标（无手动开关、发布 API 无披露字段）；TikTok 对四类内容强制标记（合成人脸/**声音克隆**/AI 背景/拟真产品），C2PA 自动检测兜底，漏标有四级处罚（警告→限流→封禁），被追标内容另有 12–48h 分发冻结。我们的产品里内容分两类：(a) 真实演讲素材的剪辑+字幕（标准编辑，非合成内容）；(b) 含合成轨道的内容——dub 声音克隆配音（已上线，`POST /clips/{id}/dub`）、AI 生成视觉（intro/outro/配图）。七家视频再利用竞品全部未做机器可读标识（structural 缺席，见 STRATEGY §2.3）。
+
+**Decision**:
+1. **分级，但分类器自动判定、不靠用户勾选**：渲染服务从 clip-spec 判定——spec 含合成轨道（dub 音轨 / AI 生成视觉）→ 产物嵌 C2PA Content Credentials + 发布界面披露提示 + `Publication.ai_disclosure=true`；纯剪辑+字幕 → 不嵌、不提示。用户永远不回答"这是不是 AI 生成"，也就不会答错。
+2. **纯剪辑豁免**：真实素材的剪切、字幕、字幕翻译属标准编辑，不落入合成内容标记义务；LinkedIn 文案类（AI 撰写）依 Art.50(4) 的人工审核豁免——审核队列默认全员强制人工确认（2026-07-21 决策）恰好构成该豁免所需的 editorial control。
+3. **不做全量标识**：尊重"标识是披露不是装饰"的平台语义——给明显非合成的内容贴 AI 标会稀释标识可信度，也误伤纯剪辑内容的分发。
+
+**Consequences**:
+- dub 是唯一"已上线且强制标记"的功能：C2PA 嵌入链路须在 2026-08-02 之后的首个部署前落地；ROADMAP P0-1 范围收窄为"合成轨道检测 + C2PA 写入"，纯剪辑产物零负担。
+- 分类规则集中在 clip-spec 扩展字段（合成轨道标记），render 服务一处写入，Distribution 只读结果——符合"合规横切切面不分散"（MODULE_ARCH §5 规则 5）。
+- TikTok 直发上线时由审核队列人工确认标识状态；若 TikTok Content Posting API 后续暴露 AI 标识字段，适配器接入。
+- 差异化叙事保留：标识自动化 + 分级精确本身成为机构采购的合规卖点。
+
+**Related**: `docs/ROADMAP.md` §7、§5；`docs/MODULE_ARCHITECTURE.md` §5 规则 5；`docs/STRATEGY.md` §2.3

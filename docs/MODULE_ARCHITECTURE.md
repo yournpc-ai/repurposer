@@ -82,7 +82,7 @@
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | 无（hidden 标记是雏形：`packages/clip/src/types.ts`） | 📋 ROADMAP §2 |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `services/chat.py`（规则意图→派生 WorkflowRun）、`agents/intent.py`（LLM 意图，未接入 chat） | 🚧 雏形 |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
-| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | 无 | 📋 ROADMAP §5 |
+| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | 无 | 📋 ROADMAP §5；设计见 `DISTRIBUTION.md` |
 | **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `agents/persona.py`、`services/brand.py`、`routers/brand_templates.py` | ✅ 主体落地 |
 | **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、WorkflowRun 成本计量、EU 数据驻留（P2） | 无（`clients/minimax.py` 丢弃 usage 字段） | 📋 ROADMAP §7/§8 |
 

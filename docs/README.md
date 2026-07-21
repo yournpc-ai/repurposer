@@ -29,6 +29,7 @@
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
 | `DECISIONS.md` | ADR-001 ~ ADR-025 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
+| `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建，📋 未实现） | 动 Distribution 前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
@@ -40,4 +41,3 @@
 ## 已规划的文档（尚未撰写）
 
 - `CHAT_ARCHITECTURE.md` — Agent Interface 层：意图 → 操作 dispatch、chat 何时产生 editor 操作 vs 触发重生成
-- Distribution 数据模型设计 — Publication / ChannelAccount / 审核队列状态机
