@@ -6,10 +6,14 @@
 
 Read these before touching a subsystem (check each doc's own status line — some describe proposed work not yet landed on `main`):
 
-- `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`; the canonical map of `services/generation.py` orchestration and the `app/agents/` registry.
-- `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table; supersedes ADR-019's filesystem-only mood library. Proposed; implementation task in `docs/tasks/music-asset-library.md`.
+- `docs/README.md` — **docs 索引与治理原则（单一事实源表）**，找文档先查这里。
+- `docs/ROADMAP.md` — 分模块需求排期的**唯一事实源**（8 模块表 + 依赖图 + P0 汇总）；排期/优先级只准引用它。
+- `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则；新表/新模块/新认领源必须在此登记。
+- `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`（Layer 4 未实现，图已标注）；the canonical map of `services/generation.py` orchestration and the `app/agents/` registry.
+- `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table; supersedes ADR-019's filesystem-only mood library. Implemented (Layer-4 music verification still future).
 - `docs/VIDEO_EDITOR.md` + ADR-016 — clip-spec is the **sole render contract**; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec.
-- `docs/DECISIONS.md` — ADRs (ADR-011 local FS + Range, ADR-016 renderer, ADR-017 Postgres `FOR UPDATE SKIP LOCKED` queue, ADR-021 Speaker, ADR-023 music asset library).
+- `docs/DECISIONS.md` — ADRs，只追加不修改；翻案写新 ADR（如 ADR-025 修订 ADR-004 的 provider 抽象决策）。
+- `docs/COMPETITIVE_ANALYSIS.md` + `docs/DECISION_MATRIX.md` + `docs/research/` — 竞品综合 / 采纳矩阵 / 原始证据三层，评估竞品功能时按此顺序查。
 - `docs/DATABASE_MIGRATIONS.md` — Alembic workflow; `migrations/versions/*.py` is part of the codebase and must be committed.
 - `docs/tasks/` — per-feature implementation briefs with acceptance criteria and explicit "Prohibited Behaviors"; read the relevant task before starting and respect its prohibitions.
 
@@ -76,6 +80,13 @@ Correct:
 - Bottom action bar: parameter pills on the left (Speaker / Tone / Format…), credit chip + circular send button on the right, entire row aligned with `items-center`, controls at `h-9`.
 - Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
 - Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
+
+#### Composer behavioral contract（自 MVP_SPEC §4 迁入，2026-07-20）
+- **Intent inference**: prompt input debounces **600ms** → `POST /api/v1/infer-intent` (LLM infers language / outputs / tone / specific_instruction); results surface via the pill's AI-icon tooltip, never a big confirmation panel. On failure, fall back to high-confidence defaults without blocking.
+- **Manual edits lock**: any parameter the user changes by hand is **locked** — later prompt edits must not overwrite it.
+- **Outputs are not pre-selected**: empty by default; submitting with none selected is blocked locally. Clips are only suggested when a media source (video/audio/image) exists; clips + no media file → local validation error (backend `/generate` mirrors with 422).
+- **Zero-asset quick start**: checking "Video clips" with no file attached pulls the demo talk video from TOS into the upload area.
+- **Show grid ≠ tool grid**: the capability icon row below the composer is display-only — it must not switch outputs or touch composer params.
 
 ## Product Positioning
 
@@ -187,6 +198,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 - Route `/brand-template`, left settings panel + right real-time preview.
 - Settings include font, primary color, accent color, logo, default CTA, language tone; preview is reflected in real time on the quote card and LinkedIn post sample cards.
+- **Brand = visual skin only**（自 MVP_SPEC §4.6 迁入）：voice / audience / contentGuidelines / CTA 归属 Speaker（`/speakers/$id`），生成时经 `GenerationContext.speaker` 注入 Content Director / Clip Agent。理由：同一个 Speaker 可以服务多个 Brand（如大学官方号 vs 个人 IP），内容策略必须跟人走而不是跟皮肤走。
 - When adding new settings, simultaneously extend the `brandTemplate.*` i18n keys.
 
 ## Video Editor & Rendering (Vertical Shorts)
@@ -226,6 +238,10 @@ Overall style: restrained, lightweight, unified. Key reference points:
 `app/services/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips appear immediately. The demo requests **only the `clips` output with `clip_count=5`** (no derivatives), and treats clips as the sole completion signal. It does **not** render clips synchronously — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
 
 To regenerate after swapping the demo video: upload the new object to storage, then run `python scripts/seed_demo.py --force` — it deletes the demo clips, workflow runs, **and the demo Asset row** (without the latter, ASR is skipped and generation would reuse the old transcript).
+
+Ops notes（自 MVP_SPEC §7.5/§8 迁入）:
+- The demo project uses a **fixed UUID** (`Project.id` is UUID-typed — a string `"demo"` is impossible); demo assets live under the `demo/` storage prefix, anonymous-readable.
+- **Bucket migration warning**: seed objects' only authoritative copy is the TOS bucket. The demo video has **no regeneration path** — when provisioning a fresh bucket you must copy it from the existing one; the 3 default music tracks can be re-generated via `scripts/seed_default_music.py`, but that spends MiniMax quota.
 
 ## Testing
 

@@ -75,6 +75,19 @@ repurposer/
 
 **Future**: If the P2 workflow becomes very complex, re-evaluate LangGraph or Pydantic AI.
 
+**Context appendix**（2026-07-20 自 PRD §20 迁入，决策当时的候选对比，仅作历史存档）:
+
+| Framework | Core Positioning | Suitability |
+|:---|:---|:---|
+| Pydantic AI | Type-safe LLM Agent | High, but needs MiniMax Custom Model |
+| LangGraph | Complex state machine workflow | High, strongest HITL, steep learning curve |
+| ControlFlow | Structured Agent task flow | High, clearest code, small ecosystem |
+| CrewAI | Role-playing multi-Agent | Medium, simple API but weak control |
+| dspy | LLM program optimization | Medium, for continuous prompt optimization |
+| Hand-rolled | Self-developed orchestrator | High, fully controllable |
+
+Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无需适配层）、MiniMax 兼容性（直连 vs Custom Model 适配）、调试白盒 vs 框架黑盒、未来扩展性（框架更整洁）。
+
 ---
 
 ## ADR-005: uv for Python package management
@@ -478,9 +491,21 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `apps/api/app/services/generation.py` (source selection priority VIDEO→AUDIO→IMAGE), `services/rendering.py` (`_absolutize` handles `image_urls`)
 - `apps/web/src/routes/projects.$id.tsx` (upload infers type by MIME, never infers voice_sample)
 
+## ADR-022: Music library CRUD (management layer over the mood library)
+
+**Status**: Superseded by ADR-023
+
+> 2026-07-20 补录：此 ADR 被 ADR-023 与 `docs/MUSIC_ARCHITECTURE.md` 引用但从未落笔成文，按代码与文档记录重建。
+
+**Decision**: 在 ADR-019 的文件系统情绪音乐库（`data/music/{mood}.<ext>`）之上加管理 CRUD 层（上传 / 列表 / 指派 mood），供后台维护音乐素材。
+
+**Consequences**: 管理面建立在"人工采集音频"之上，素材版权状态不可控；ADR-023 随后将音乐库整体改为 AI 生成 + `Music` 表，本决策的文件系统部分随之废弃，管理 API 演化为 `app/routers/music.py`。
+
+---
+
 ## ADR-023: Music becomes an AI-generated, asset-based library
 
-**Status**: Proposed
+**Status**: Implemented (2026-07; supersedes ADR-019/ADR-022 的人工采集路线)
 
 **Context**: ADR-019 established a filesystem-only mood music library (`data/music/{mood}.<ext>`), and ADR-022 later added a management CRUD layer on top of it. Both approaches share a fundamental limitation: they rely on manually sourced audio files with uncertain copyright status. Opus Pro and similar tools frequently show "license expiry" warnings, and user-uploaded music pieces introduce legal liability. Meanwhile, MiniMax (and other providers) now offer music generation APIs, making it possible to produce original, platform-safe background music on demand.
 
@@ -580,3 +605,27 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `apps/api/app/routers/files.py` (redirect / proxy / presigned download)
 - `apps/api/scripts/migrate_to_tos.py`
 - `docker-compose.yml` (S3_* env wiring)
+
+---
+
+## ADR-025: Thin LLM provider interface (amends ADR-004's "no provider abstraction" rationale)
+
+**Status**: Decided
+
+**Context**: ADR-004 rejected agent frameworks partly on the grounds of "single model (MiniMax M3), no need for provider abstraction", and agents today depend directly on `clients/minimax.py` via `MiniMaxAgentBase`. Three things changed since:
+
+1. **EU institutional sales** (ADR-013's positioning, EU AI Act era) may require EU-hosted models (e.g. Mistral) for data-residency reasons. Without an interface, every agent's prompts and structured-output handling are welded to M3's behavior and a swap becomes a rewrite.
+2. **Agent Interface roadmap** (`docs/ROADMAP.md` §3): chat is being upgraded from rule-based intent dispatch to a tool-calling agent layer. M3's native function-calling reliability is unverified (spike scheduled); an interface lets us swap between "native tool calling" and "structured-output simulated tool calling" without touching agents.
+3. **Transparent metering** (ROADMAP P0-2): cost accounting requires capturing token usage at a single choke point — today `clients/minimax.py` discards the API `usage` fields entirely.
+
+**Decision**:
+1. Introduce a thin provider interface with two methods: `generate_structured(prompt, schema)` and `chat_with_tools(messages, tools)`. Agents depend on the interface, not on the MiniMax client; `clients/minimax.py` becomes the first adapter.
+2. This is **not** a multi-model strategy: M3 remains the default and only configured provider (ADR-003 unchanged). The interface exists for swap-ability and metering, not for running multiple providers concurrently.
+3. Usage capture is part of the interface contract: every call records tokens / latency / cost onto the owning `WorkflowRun` row.
+
+**Consequences**:
+- `MiniMaxAgentBase` (`app/agents/base.py`) is refactored to depend on the interface; M3-specific quirks (prompt idioms, structured-output retry behavior) live in the MiniMax adapter.
+- ADR-004's framework rejection is **not** re-opened — orchestration stays hand-rolled; only the model-access seam is abstracted.
+- If the M3 tool-calling spike fails, `chat_with_tools` is implemented via structured-output simulation behind the same interface.
+
+**Related**: ADR-003, ADR-004, `docs/ROADMAP.md` §3

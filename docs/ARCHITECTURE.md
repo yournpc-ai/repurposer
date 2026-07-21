@@ -1,5 +1,8 @@
 # Repurposer Architecture Design
 
+> Status: Active（现状架构的唯一事实源；模块边界与表归属见 `MODULE_ARCHITECTURE.md`，排期见 `ROADMAP.md`）
+> Last updated: 2026-07-20
+
 ## 1. Design Principles
 
 1. **Simplicity First**: P0 does not introduce complex frameworks; agent workflows are hand-rolled in pure Python + FastAPI
@@ -264,7 +267,7 @@ class RenderStatus(StrEnum):
 
 | Future Requirement | Extension Approach |
 |:---|:---|
-| Add a second model | Add `clients/openai.py` at the same level as `minimax.py`, abstracting an LLMClient interface |
+| Model swap / EU-hosted model | Thin provider interface per ADR-025 (`generate_structured` / `chat_with_tools`); MiniMax stays the default and only configured adapter |
 | More languages | Add `translator.py` to support additional target languages |
 | Complex workflow | P2 evaluate LangGraph or Pydantic AI |
 | Team collaboration | Add `organizations` / `members` tables and permission middleware |
@@ -309,3 +312,12 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic)
 - **Music enters rendering**: `BrandTemplate.musicMood` → `ClipMusic.url` (built-in mood music library `/api/v1/music/<mood>`) → Remotion `<Audio>` looped and mixed.
 - **Hard prerequisites**: Multi-language ASR (word-level timestamps) + streamable/seekable video. Storage is **S3-compatible object storage (Volcengine TOS, ADR-024)** — the API performs ownership checks and 307-redirects to public object URLs (or streams via `?proxy=1` for programmatic fetches); uploads go through short-lived presigned PUT URLs.
 - **Low regret**: The spec is stable; in the future it can be swapped for hand-rolled FFmpeg (+ shared libass across both ends) or client-side WebCodecs without changing the contract.
+
+## 11. Data Model Conventions
+
+Field-level truth lives in code: `apps/api/app/models/tables.py` (table structures) + `apps/api/migrations/` (evolution history). Docs do not duplicate field tables (the pre-2026-07 PRD copy had already drifted). Cross-cutting conventions:
+
+- **Auth & isolation**: passwordless email verification-code login (Resend); per-user data isolation across speakers / projects / assets / brand templates / chat sessions. The seeded default user remains only as the owner of shared demo content.
+- **Storage keys**: PostgreSQL stores object keys only; bytes live in TOS (ADR-024). Key prefix `{user_id}/…` carries ownership; `demo/` is anonymous-readable.
+- **EU data residency**: project-level `data_region` is a future differentiator (see `docs/ROADMAP.md` §7), not implemented.
+- **UI language preference**: future; the first screen renders in English to avoid hydration mismatch (see CLAUDE.md i18n).

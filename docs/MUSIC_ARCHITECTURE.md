@@ -1,7 +1,7 @@
 # Repurposer Music Architecture
 
-> Status: Proposed  
-> Last updated: 2026-07-05  
+> Status: Implemented (core landed 2026-07: `Music` table, MiniMax music-2.6 generation, pipeline integration; the Layer-4 music verification pass below remains future work)  
+> Last updated: 2026-07-20  
 > Author: Claude + Product Team  
 > Related: ADR-019 (built-in mood music library), ADR-022 (music library CRUD), `docs/tasks/todo.md`
 

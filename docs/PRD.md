@@ -64,6 +64,8 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 ### 3.4 Competitive Analysis
 
+> **⚠️ SUPERSEDED (2026-07-19)**: 本节为 v0.4 定位论证版，颗粒度粗且未反映实现现状。竞品事实与决策的唯一入口为 [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景 + 六范式分类）、单家卡片 [research/](./research/)（opusclip / descript / chatcut / submagic / repurpose / crayo / revid）、决策层 [DECISION_MATRIX.md](./DECISION_MATRIX.md)（功能点 × 采纳/改造/放弃 × 现状）。本节保留仅供追溯定位论证脉络，不再维护。
+
 #### Competitive Landscape (European Perspective)
 
 | Competitor | Positioning | Weakness in Europe | Our Advantage |
@@ -330,7 +332,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|:---|:---|
 | FR-018 | Auto-extract Speaker memory from task input | P0 | Extract values, common metaphors, sentence patterns, terminology preferences, emotional tendencies from current task materials + prompts, persist as Speaker |
 | FR-019 | Manual edit Speaker memory | P0 | User can modify, supplement, or disable certain expressions |
-| FR-020 | Content segmentation & scoring | P0 | Slice talk into shareable segments, sort by "virality potential score" (0-100) |
+| FR-020 | Content segmentation & scoring | P0 | Slice talk into shareable segments, sort by "virality potential score" (0-100). *Impl. status 2026-07: the LLM produces scores but they are not yet persisted to `Clip` or shown in the UI — see ROADMAP P0-3* |
 | FR-021 | Keyframe/slide page recommendation | P1 | Recommend suitable visuals from uploaded materials |
 | FR-022 | Quote extraction | P0 | Auto-extract 5-10 most viral quotes |
 
@@ -459,295 +461,13 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ## 9. Technical Architecture
 
-### 9.1 Abstract Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Client Layer                          │
-│              (Web UI / Mobile UI / Admin Dashboard)        │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   Application Layer: FastAPI                  │
-│         (RESTful API, upload endpoints, task scheduling,    │
-│          permission management)                               │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  Core Intelligence Layer: MiniMax M3          │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │ Long Context │ │ Multimodal  │ │ Structured Content │   │
-│  │ Understanding│ │ Understanding│ │ Generation         │   │
-│  │              │ │ (Image/Text/ │ │ (JSON scripts/copy)│   │
-│  │              │ │  Video)      │ │                    │   │
-│  └─────────────┘ └─────────────┘ └─────────────────────┘   │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │ Persona      │ │ Content      │ │ Multi-language      │   │
-│  │ Style Persona│ │ Segmentation │ │ Translation         │   │
-│  │              │ │ & Scoring    │ │                     │   │
-│  └─────────────┘ └─────────────┘ └─────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      Async Task Scheduling Layer             │
-│              (Task queue + background worker nodes)          │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      Media Processing Layer                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐      │
-│  │ Speech   │ │ Video    │ │ Document │ │ Image      │      │
-│  │ Recognition│ │ Frame    │ │ Parsing  │ │ Processing │      │
-│  │ Engine   │ │ Engine   │ │ Engine   │ │ Engine     │      │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐      │
-│  │ Voice    │ │ Speech   │ │ Video    │ │ Graphics   │      │
-│  │ Cloning  │ │ Synthesis│ │ Rendering│ │ Generation │      │
-│  │ Service  │ │ Service  │ │ Engine   │ │ Engine     │      │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘      │
-│  ┌──────────┐                                              │
-│  │ Music/   │                                              │
-│  │ Sound    │                                              │
-│  │ Resource │                                              │
-│  │ Service  │                                              │
-│  └──────────┘                                              │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      Data Persistence Layer                  │
-│  ┌────────────┐ ┌────────────┐ ┌──────────────────────┐   │
-│  │ Relational │ │ Object     │ │ Vector Database      │   │
-│  │ Database   │ │ Storage    │ │ (optional)           │   │
-│  └────────────┘ └────────────┘ └──────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 9.2 Architecture Description
-
-| Layer | Confirmed Technology | Responsibility |
-|:---|:---|:---|
-| Client Layer | **TanStack Start** | User material upload, voice configuration, review generation results, export content; supports multi-language UI |
-| Application Layer | **FastAPI** | Receive uploads, manage Speaker/project/tasks, expose REST API, coordinate layers |
-| Core Intelligence Layer | **MiniMax M3** | Understand all input materials, generate persona, extract quotes, generate scripts and social copy, multi-language translation |
-| Async Task Scheduling Layer | **Postgres queue + standalone worker** | `FOR UPDATE SKIP LOCKED` claim rows; worker process runs ASR, generation, and rendering; no Celery/Redis in MVP |
-| Media Processing Layer | **faster-whisper, PyMuPDF, Remotion, MiniMax voice_clone/T2A** | ASR transcription, document/slide parsing, video rendering, voice-clone dubbing, music |
-| Data Persistence Layer | **PostgreSQL + object storage** | PostgreSQL for metadata; S3-compatible object storage (Volcengine TOS) for uploaded files and generated results (ADR-024) |
-
-### 9.3 Data Flow
-
-```
-User input materials
-    ├── Upload files (video/audio/transcript/slides/images)
-    └── Paste text or prompt in input box
-    ↓
-FastAPI receives → presign direct upload to object storage → write Asset(PENDING) to PostgreSQL
-    ↓
-Worker process claims Asset rows and preprocesses:
-    ├── Video/audio → ASR transcription (faster-whisper, multi-language) → word-level timestamps
-    ├── Images → M3 vision key-point extraction
-    └── Slides/PDF → PyMuPDF page rendering + text extraction
-    ↓
-User clicks Generate → WorkflowRun(PENDING) created
-    ↓
-Worker claims WorkflowRun and runs agents:
-    content_director → clip → post / quotes / carousel / article
-    ↓
-Clip render_spec written; Derivative rows written
-    ↓
-User reviews; chat/revise/translate/dub requests create new WorkflowRun rows
-    ↓
-Render trigger → worker calls Remotion render service → MP4 + SRT
-    ↓
-TanStack Start frontend review
-    ↓
-Iteration loop:
-    chat instruction → intent parsing → background run → updated clip/derivative
-```
-
-### 9.4 Agent Workflow Design
-
-P0 must have built-in Agent workflow, core reason being **users will inevitably be dissatisfied with AI-generated results**, the system needs to support a "generate → self-review → correct → human feedback → local regenerate" closed loop.
-
-#### Core Agent List
-
-| Agent | Responsibility | Trigger Timing |
-|:---|:---|:---|
-| Persona Agent | Generate Speaker style persona based on past materials | After Speaker creation/update |
-| Content Director | Analyze talk content once and produce a unified `ContentPlan` (thesis, themes, audience, per-output plans) | At the start of every full generation run |
-| Clip Agent | Select shareable segments and write vertical clip scripts from the `ContentPlan` | During clip generation |
-| Post Agent | Generate social posts | During derivative content generation |
-| Quotes Agent | Generate quote card copy | During derivative content generation |
-| Carousel Agent | Generate Carousel multi-page images + text | During derivative content generation (P1) |
-| Article Agent | Generate article / newsletter content | During derivative content generation |
-| Translator Agent | Multi-language translation | During multi-language version generation |
-| Reviser Agent | Modify specified content based on feedback | After user feedback |
-
-#### Generation Flow
-
-```
-Upload materials and preprocess
-    ↓
-Persona Agent → Speaker style persona (if no speaker selected)
-    ↓
-Content Director → unified ContentPlan
-    ↓
-Clip Agent → segment selection + scripts
-    ↓
-LinkedIn Agent / Quotes Agent / Carousel Agent / Article Agent → derivative content
-    ↓
-Translator Agent → multi-language versions (German/French/Spanish/Italian)
-    ↓
-Wait for user review
-    ↓
-User feedback → Reviser Agent → local regeneration
-```
-
-#### Human-in-the-Loop (HITL)
-
-User feedback needs to be structured for the system to process effectively:
-
-| Feedback Type | Processing Scope |
-|:---|:---|
-| Hook not engaging | Only regenerate hook |
-| Overall style doesn't sound like me | Regenerate entire script, may need persona/tone adjustment |
-| Information too complex/too simple | Regenerate by audience |
-| Factually inaccurate | Prompt user to check source materials, do not auto-correct |
-| Want different expression | Optimize based on user-edited content |
+> **已迁移**：技术架构的唯一事实源是 [ARCHITECTURE.md](./ARCHITECTURE.md)（抽象架构 / Agent 工作流 / 数据流 / 队列 / 渲染）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；模块边界与演进方向见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)。（2026-07-20 自本文移除，原内容为 ARCHITECTURE 的重复副本）
 
 ---
 
 ## 10. Data Models
 
-### 10.1 User
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| email | string | Login email |
-| name | string | Username |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-> **Note**: Login is implemented as passwordless email verification-code (Resend) with per-user data isolation across speakers/projects/assets/brand templates/chat sessions. The seeded default user remains only as the owner of shared demo content. UI language preference and EU-region residency are future features.
-
-### 10.2 Speaker / Memory
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| user_id | UUID | Associated user (isolated by user) |
-| name | string | Name |
-| title | string | Title/position |
-| avatar_url | string | Avatar |
-| language | string | Primary language |
-| persona | JSON | AI-extracted speaker style memory from task input or past materials |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-### 10.3 Project
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| user_id | UUID | Associated user |
-| speaker_id | UUID | Associated speaker, **optional** |
-| title | string | Project title |
-| event_name | string | Event name |
-| language | string | Content language |
-| status | enum | draft/uploading/processing/review/completed |
-| tone_snapshot | JSON | Voice settings snapshot at generation time |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-> **Note**: Project-level EU data residency (`data_region`) is a future differentiator, not implemented in the MVP.
-
-### 10.4 Asset
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| user_id | UUID | Associated user (denormalized for ownership checks) |
-| project_id | UUID | Associated project (nullable when attached to speaker) |
-| speaker_id | UUID | Associated speaker (nullable when attached to project) |
-| type | enum | video/audio/transcript/slides/image/voice_sample/past_material |
-| file_url | string | File URL |
-| transcript | text | Transcription text (audio/video) |
-| extracted_text | text | Extracted text (documents/images) |
-| slide_pages | JSON | Slide page list |
-| meta | JSON | Processor extras (ASR word-level timestamps, detected language, etc.) |
-| processing_status | enum | pending/processing/completed/failed |
-| processing_error | text | Failure reason |
-| duration_seconds | int | Duration (audio/video) |
-| processed_at | datetime | Processing completion time |
-| created_at | datetime | Creation time |
-
-### 10.5 Clip
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| project_id | UUID | Associated project |
-| hook | string | Opening hook |
-| title_options | JSON | Alternative titles |
-| music_mood | string | Music mood |
-| status | string | `generated` / `rendering` / `completed` / `failed` (legacy field) |
-| video_url | string | Generated video URL |
-| srt_url | string | Exported subtitles URL |
-| duration | int | Duration (seconds) |
-| language | string | Language |
-| source_segment | JSON | Selected source segment metadata |
-| render_spec | JSON | Renderer-agnostic clip-spec contract (source, segments, captions, brand, music, dub) |
-| render_status | enum | pending/rendering/completed/failed |
-| render_error | text | Render failure reason |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-### 10.6 Derivative
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| project_id | UUID | Associated project |
-| type | enum | post / quotes / carousel / article |
-| content | text/JSON | Content |
-| language | string | Language |
-| image_url | string | Image URL (quote card / carousel) |
-| status | string | `generated` / `edited` (legacy string field) |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-### 10.7 WorkflowRun
-
-| Field | Type | Description |
-|:---|:---|:---|
-| id | UUID | Primary key |
-| project_id | UUID | Associated project |
-| status | enum | pending/running/waiting_human/completed/failed |
-| current_step | string | Current step description |
-| progress | int | Progress percentage |
-| error | text | Failure reason |
-| context | JSON | Generation inputs and outputs |
-| created_at | datetime | Creation time |
-| updated_at | datetime | Update time |
-
-### 10.8 ChatSession & Message
-
-| Field | Type | Description |
-|:---|:---|:---|
-| ChatSession.id | UUID | Primary key |
-| ChatSession.user_id | UUID | Associated user |
-| ChatSession.project_id | UUID | Associated project |
-| ChatSession.asset_id | UUID | Associated asset (for asset-scoped chat) |
-| ChatSession.asset_type | string | `clip` / `derivative` (when asset_id is set) |
-| ChatSession.title | string | Session title |
-| Message.id | UUID | Primary key |
-| Message.session_id | UUID | Associated chat session |
-| Message.role | enum | user / assistant / system |
-| Message.content | text | Message content |
-| Message.attachments | JSON | Attached files |
-| Message.workflow_run_id | UUID | Related generation job |
-| Message.intent | JSON | Parsed assistant intent |
-| Message.created_at | datetime | Creation time |
+> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（旧版文档字段表已 drift，不再维护）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [ARCHITECTURE.md](./ARCHITECTURE.md) §11。（2026-07-20 自本文移除）
 
 ---
 
@@ -888,16 +608,7 @@ User feedback needs to be structured for the system to process effectively:
 
 ## 13. API Overview
 
-The detailed API specification is maintained in [API.md](./API.md). At a high level the backend exposes:
-
-- **Speaker management** (`/speakers`)
-- **Project management** (`/projects`, including `/generate`, `/jobs`, `/results`, `/export`)
-- **Asset upload** (`/projects/{id}/assets` and `/speakers/{id}/assets`)
-- **Clip actions** (`/clips/{id}`: regenerate, revise, translate-captions, dub, render)
-- **Derivative editing** (`/derivatives/{id}`)
-- **Chat** (`/chat`, `/chat/session`, `/chat/sessions/{id}/messages`)
-- **Library** (`/library`)
-- **File streaming** (`/files`, `/outputs`, `/music`)
+> API 规格的唯一事实源：[API.md](./API.md)。（2026-07-20 移除重复的高层列表）
 
 ---
 
@@ -939,16 +650,7 @@ Reference Descript's text-editing experience:
 
 ### 14.5 UX Borrowed from Competitors
 
-| Borrow | Source | P0 Adopted? | Description |
-|:---|:---|:---|:---|
-| Upload = process, no complex config | OpusClip | ✅ | After user upload, auto-enters processing flow |
-| AI generate + score sort | OpusClip | ✅ | Each clip displays virality potential score |
-| Left list + right preview | OpusClip | ✅ | Standard review layout |
-| Hook/title A/B testing | OpusClip | ✅ | Each clip provides 3 alternative titles |
-| Natural language segment filter | OpusClip | ❌ P1 | "Find segments discussing X" |
-| Text edits video | Descript | ❌ P1 | Edit subtitle = edit video, P0 only does subtitle editing |
-| AI multi-step editing instructions | Descript | ❌ P1 | Similar to "polish this episode into YouTube version" |
-| Multi-language translation dubbing | Descript | ❌ P2 | Future extension |
+> **已迁移**：竞品 UX 借鉴与采纳/不做决策的唯一事实源是 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。（原表已过时——例如"文稿编辑视频 ❌ P1"实际已在 MVP 落地；2026-07-20 移除）
 
 ---
 
@@ -1014,55 +716,13 @@ Reference Descript's text-editing experience:
 
 ## 17. Roadmap
 
-See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
+> 工程排期的唯一事实源：[ROADMAP.md](./ROADMAP.md)（分模块排期 + 依赖图 + P0 汇总）。P0 时代计划文档已删除，见 git 历史。
 
-### Phase 1: P0 MVP (6 weeks)
+产品阶段方向（非排期）：
 
-**Goal**: Run through the core loop of "upload → AI generate scripts → human review → export", validating product-market fit in Europe.
-
-**Tech stack**: FastAPI + MiniMax M3 + hand-rolled Agent + TanStack Start + PostgreSQL + S3-compatible object storage (TOS).
-
-**Includes**:
-- Speaker Profile creation + style persona (Persona Agent)
-- Video/audio/transcript/slides/image upload
-- ASR transcription (faster-whisper, word-level timestamps)
-- MiniMax M3 generation: 3-5 clip scripts + social post + quote cards + carousel + article + multi-language versions (German/French/Spanish/Italian)
-- Agent closed loop: Script → Review → Reviser (self-review iteration)
-- Human review + feedback regeneration (HITL)
-- Vertical clip rendering via Remotion (MP4 + SRT)
-- Voice-clone dubbing via MiniMax voice_clone + T2A
-- Export copy, quote card images, ZIP archive
-- Project-scoped chat for natural-language revisions
-
-**Excludes**: link auto-fetch, slide OCR, multi-language UI, complex multi-track editing, social media publishing, EU data residency, GDPR compliance docs.
-
-> **v0.4 adjustment**: Vertical clip output + editor (including ASR + Range streaming endpoint + Remotion rendering + Descript-style transcript editor) has been **elevated to MVP mandatory main flow**, no longer in Phase 2. Object storage still deferred to scale per ADR-011. See ADR-016 / VIDEO_EDITOR.md.
-
-### Phase 2: P1 (6-8 weeks)
-
-**Goal**: Productization preparation, expand input and output capabilities, improve UX.
-
-- Paste link auto-fetch (YouTube / Vimeo / podcasts, yt-dlp-style)
-- Slide OCR (PDF/PPT/PPTX → images + searchable text)
-- More subtitle styles and brand template options
-- Object storage migration (S3/R2/MinIO)
-- Multi-language UI (English/German/French/Spanish/Italian)
-- Analytics and user system foundations
-
-### Phase 3: P2 (8-12 weeks)
-
-**Goal**: SaaS-ify, scale European market.
-
-- User system and permissions (multi-tenant)
-- Billing system (European pricing 20-30% higher than US)
-- Direct publishing to LinkedIn and other professional networks (API integration)
-- AI-generated dynamic B-roll
-- Analytics (virality tracking)
-- More platform formats
-- EU data residency option (via Cast AI Kimchi or EU cloud region)
-- GDPR compliance documentation
-- European local sales team (London/Berlin)
-- Partnership with academic conference organizers (batch customer acquisition)
+- **P0 MVP（已完成，2026-07 收官）**：跑通"上传 → AI 生成 → 人工审核 → 导出"核心闭环。
+- **P1 产品化**：链接摄入（Zoom/Drive/RSS）、术语表、分发（LinkedIn 直发 / 审核队列 / 定时发布）、合规标识（EU AI Act Art.50，2026-08 生效）。
+- **P2 SaaS 化**：多租户与计费、EU 数据驻留、MCP 接入。GTM：欧洲本地销售（London/Berlin）、学术会议组织方合作批量获客。
 
 ---
 
@@ -1105,138 +765,7 @@ See [SCHEDULE.md](./SCHEDULE.md) for detailed schedule.
 
 ## 20. Agent Framework Selection Decision
 
-### 20.1 Why Agent Workflow is Needed
-
-When users say "not satisfied", it's usually not a full redo, but a local issue:
-
-| Dissatisfaction Type | Handling |
-|:---|:---|
-| Overall style doesn't sound like me | Return to Speaker Profile for recalibration |
-| A certain clip isn't engaging enough | Only regenerate this clip |
-| Hook doesn't work | Only regenerate title/hook |
-| Translation unnatural | Only retranslate this segment |
-| Visuals don't match subtitles | Only change visual prompts or B-roll |
-| A certain quote isn't powerful enough | Only regenerate quote card |
-| Factually inaccurate | Prompt user to check source materials, do not auto-correct |
-| Overall too complex/too simple | Regenerate by audience |
-
-Therefore the system cannot be "generate once and done", it must be: **generate draft → user feedback/self-review → locate issue → local regenerate → user confirm**.
-
-### 20.2 Candidate Frameworks
-
-| Framework | Core Positioning | Suitability for This Project |
-|:---|:---|:---|
-| **Pydantic AI** | Type-safe LLM Agent | High, but needs MiniMax Custom Model |
-| **LangGraph** | Complex state machine workflow | High, strongest HITL, but steep learning curve |
-| **ControlFlow** | Structured Agent task flow | High, clearest code, but small ecosystem |
-| **CrewAI** | Role-playing multi-Agent | Medium, simple API but weak control |
-| **dspy** | LLM program optimization | Medium, suitable for continuous prompt optimization |
-| **Hand-rolled** | Self-developed Agent orchestrator | High, fully controllable |
-
-### 20.3 Hand-rolled vs Pydantic AI Comparison
-
-| Dimension | Hand-rolled | Pydantic AI |
-|:---|:---|:---|
-| Development speed (P0) | Fast, write directly by business | Slightly slower upfront, need MiniMax adapter |
-| Learning cost | Low | Medium |
-| Type safety | Self-use Pydantic validation | Framework built-in, more elegant |
-| MiniMax compatibility | Direct call, zero adaptation | Needs Custom Model adapter |
-| Debug/observability | White box | Somewhat black box |
-| Module decoupling | Fully controllable | Constrained by framework |
-| Future extensibility | Code may get messy | Cleaner |
-| Framework risk | None | New framework, potential issues |
-
-### 20.4 Decision Conclusion
-
-**P0 adopts "hand-rolled Agent workflow" solution.**
-
-Reasons:
-1. Project scenario is clear, single model (MiniMax M3), doesn't need framework's provider abstraction
-2. Workflow is clear (persona → analyze → script → review → revise → HITL), not an open-ended Agent
-3. Prompts need fine control, framework templates may not be flexible enough
-4. MiniMax M3 needs adaptation, framework advantage is weakened
-5. Team is familiar with FastAPI/Pydantic, hand-rolled is just combining these capabilities
-6. P0's core is validating "content generation quality", not validating "Agent framework capability"
-
-**Future**: If P1/P2 workflow becomes too complex to maintain in code, evaluate migration to Pydantic AI or LangGraph.
-
-### 20.5 Hand-rolled Architecture Recommendation
-
-```
-apps/api/
-├── app/
-│   ├── main.py              # FastAPI entry point
-│   ├── config.py            # Configuration management
-│   ├── dependencies.py      # Dependency injection
-│   ├── worker.py            # Standalone worker process entry point
-│   ├── routers/             # API routes
-│   │   ├── speakers.py
-│   │   ├── projects.py      # Includes generation, export, jobs, clips, derivatives
-│   │   ├── assets.py
-│   │   ├── clips.py         # Review, render trigger, caption translation
-│   │   ├── derivatives.py
-│   │   ├── files.py         # Range streaming endpoints (uploads/outputs/music)
-│   │   ├── intent.py        # /infer-intent
-│   │   └── brand_templates.py
-│   ├── services/            # Business logic
-│   │   ├── jobs.py          # Queue claiming
-│   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision
-│   │   ├── generation.py    # Generation flow orchestration
-│   │   ├── derivative_dispatch.py # Thin registry for derivative agents
-│   │   ├── rendering.py     # Calls Remotion rendering service
-│   │   ├── clip_spec.py     # clip-spec construction
-│   │   ├── brand.py         # Brand template → ClipBrand/ClipMusic/BrandContentStrategy
-│   │   ├── extraction.py    # Text/PDF extraction + PyMuPDF per-page image rendering
-│   │   ├── vision.py        # M3 vision: image → key point text
-│   │   ├── voice.py         # Voice cloning + T2A synthesis + video audio track extraction
-│   │   ├── caption_translate.py  # Caption track translation
-│   │   ├── storage.py       # Storage seam
-│   │   └── asr.py           # faster-whisper
-│   ├── models/              # Database models + Pydantic schemas
-│   │   ├── database.py
-│   │   ├── schemas.py
-│   │   └── tables.py
-│   ├── agents/              # Agent steps
-│   │   ├── base.py          # Shared MiniMax agent base + helpers
-│   │   ├── persona.py
-│   │   ├── content_director.py
-│   │   ├── clip_agent.py
-│   │   ├── reviser.py
-│   │   ├── post.py
-│   │   ├── quotes.py
-│   │   ├── carousel.py
-│   │   ├── article.py
-│   │   ├── intent.py
-│   │   └── caption_translate.py
-│   ├── prompts/             # Jinja2 templates
-│   └── clients/
-│       └── minimax.py       # MiniMax M3 wrapper
-├── migrations/              # Alembic migration scripts
-├── pyproject.toml
-└── Dockerfile
-```
-
-### 20.6 Key Design Points
-
-1. **Each Agent step is a pure function**: input context + prompt, output Pydantic model
-2. **Unified MiniMax client**: encapsulates calling, JSON cleaning, retry, error handling
-3. **Workflow records each step's state**: facilitates debugging and HITL recovery
-4. **User feedback is structured**: not free text, but select reason + optional supplementary note
-5. **Version history**: each regeneration saves old version, supports A/B comparison and rollback
-
-### 20.7 Dependency Libraries (Non-Framework)
-
-Hand-rolled doesn't mean from scratch, these libraries can be used:
-
-| Purpose | Library |
-|:---|:---|
-| HTTP calls | httpx |
-| Data validation | pydantic |
-| Retry mechanism | tenacity |
-| Prompt templates | jinja2 |
-| Async tasks | asyncio / task queue |
-| Logging | structlog / logging |
-| Database | SQLAlchemy etc. |
+> **已迁移**：决策结论与理由以 [DECISIONS.md](./DECISIONS.md) 为准——ADR-004（手搓编排，不引入框架）+ ADR-025（薄 provider 接口，修订 ADR-004 的"无需 provider 抽象"理由）。候选框架对比表已移入 ADR-004 附录。（2026-07-20 自本文移除）
 
 ---
 
@@ -1248,3 +777,4 @@ Hand-rolled doesn't mean from scratch, these libraries can be used:
 | v0.2 | 2026/06/22 | Added Agent framework selection decision, refined technical architecture | Tech Team |
 | v0.3 | 2026/06/24 | Europe Edition: incorporated market research, multi-language P0, EU data residency, Agent workflow, European user personas, roadmap adjustment | Product Team + Market Research Team |
 | v0.4 | 2026/06/27 | Vertical clip output + editor finalized (elevated to MVP main flow): clip-spec contract + Remotion first renderer + Descript-style transcript editor; ASR elevated to hard prerequisite (video needs streamable playback, local FS + Range sufficient; object storage still deferred to scale) (see ADR-016 / VIDEO_EDITOR.md) | Tech Team |
+| v0.5 | 2026/07/20 | Post-MVP slimming (1252→779 lines): §9 Technical Architecture / §10 Data Models / §13 API / §14.5 UX borrowing / §20 framework decision removed as duplicates — replaced with pointers to ARCHITECTURE.md / code / API.md / DECISION_MATRIX.md / DECISIONS.md (single-source principle, see docs/README.md); §17 Roadmap compressed to pointer + phase direction; FR-020 annotated with implementation status | Tech Team |

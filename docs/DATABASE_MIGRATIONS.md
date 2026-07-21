@@ -1,5 +1,8 @@
 # Database Migration Guide
 
+> Status: Active
+> Last updated: 2026-07-20
+
 The Repurposer backend uses [SQLAlchemy 2.0](https://www.sqlalchemy.org/) as the ORM and [Alembic](https://alembic.sqlalchemy.org/) as the database migration tool.
 
 ## Why Alembic

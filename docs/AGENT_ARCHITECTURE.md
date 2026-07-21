@@ -35,6 +35,8 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
 └─────────────────────────────────────────────┘
 ```
 
+> **Naming caution**: `app/agents/reviser.py` is **not** Layer 4 — it is the single-clip metadata revision agent invoked by targeted revision (see §9). Layer 4 (cross-output consistency review) is unimplemented as of 2026-07; there is no `consistency` code in `app/`.
+
 This design guarantees that every output is derived from the same **content plan** and **generation context**, instead of each agent independently re-analyzing the source material.
 
 ## 2. Goals

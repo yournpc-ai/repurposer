@@ -1,9 +1,10 @@
 # Portrait Video Editor — Design & Implementation Plan
 
+> Status: Implemented（L2 主流程已落地；undo 待 Operation Model，见 ROADMAP §2）
 > This document records the final plan for Repurposer's "portrait video output + editable" main pipeline.
 > It is the conclusion of multiple rounds of technical reviews (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
 > See also: ADR-016 (decision record), ADR-017 (queue foundation, implemented).
-> Last updated: 2026-07-16.
+> Last updated: 2026-07-20.
 
 ## 1. Background & Category Positioning
 
@@ -24,7 +25,7 @@
 | **L2** (main body of this doc) | Basic portrait video output: segment trimming + burned-in subtitles + brand styling + music + intro/outro → MP4 + SRT; transcript-style editing + single-track trim | **Implemented** |
 | **L3** | Multi-track / layer compositing / transition effects / B-roll library / auto face-tracking reframe / desktop offline / client-side engine | **Never; hand off to CapCut** |
 
-**Polished means**: (1) preview = output pixel parity; (2) multilingual subtitles are accurate and one-click editable; (3) one-click yields a publishable clip (editing is optional, not required); (4) deleting a sentence = trimming the video, undoable; (5) restrained, unified UI + honesty (clearly say "export to CapCut for fine-tuning" where we can't deliver).
+**Polished means**: (1) preview = output pixel parity; (2) multilingual subtitles are accurate and one-click editable; (3) one-click yields a publishable clip (editing is optional, not required); (4) deleting a sentence = trimming the video, undoable (sentence deletion is implemented; the **undo** itself is pending the Operation Model layer — see `docs/ROADMAP.md` §2); (5) restrained, unified UI + honesty (clearly say "export to CapCut for fine-tuning" where we can't deliver).
 
 ## 3. Core Decision: Lock the Contract, Treat Renderer as a Replaceable Black Box
 
