@@ -666,3 +666,25 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - ROADMAP §5 审核队列行移至 P2（与团队工作区同行）；DISTRIBUTION §5/§11 按本文改写。
 
 **Related**: ADR-026；`docs/DISTRIBUTION.md` §3.3/§5/§11；`docs/ROADMAP.md` §5
+
+## ADR-028: RunPlan 持久化——计划图作为一等对象（内化 flow，不做 Flow 产品）
+
+**Status**: Decided (2026-07-22)
+
+**Context**: 生成计划今天是**易失的**：`ContentPlan` 是单趟 LLM pass 产出的内存对象（`agents/content_director.py`），跑完即焚；`workflow_runs.current_step` 是裸字符串、`context` 是无结构 JSON blob（`tables.py:234-235`）。`clips`/`derivatives` 有 `workflow_run_id`（run 级血统，带 `ondelete="SET NULL"`）但没有节点级血统——"只重跑选段、保留文案"在结构上不可能，重跑单位是整个 run。ElevenCreative Flows（`research/elevencreative.md`）证明 DAG 是生成编排的成熟形态（显式节点图、@ 引用类型化槽位、节点级重跑、一键成模板），但那是卖给操作员的画布产品，不是我们的物种形态。同时三个已排期事项暴露同一个缺口：**P0 成本计量**（ADR-025 约定 usage 落 WorkflowRun，但 run 内没有步骤身份可归属）、**Operation Model**（生成侧操作"带指令重跑这步"需要节点地址）、**配方 = run-plan 模板**（STRATEGY §5，需要可序列化的计划结构，否则配方永远只是参数包）。
+
+**Decision**:
+1. **内化 flow，不做 Flow 产品**：DAG 是内部表征——agent 当编排者，用户看步骤清单（每步状态/成本/重跑入口）；不做节点画布 UI、不向用户暴露模型名、不做自由 DAG 编辑。
+2. **`plan_nodes` 独立表**（否决 `workflow_runs.plan` JSONB 方案）：(a) 节点状态是高频并发写——并行节点完成时各自回写，JSONB 整文档读-改-写会丢更新；(b) 血统需要真外键，JSONB 里的"节点 id"只是约定字符串；(c) 成本聚合（`avg(cost) by kind`，成本预估的查询形状）是行级查询。节点的不透明载荷（模型参数、instruction）放 `spec` JSONB 列。新表按契约登记 MODULE_ARCH §4（Owner: Pipeline）。
+3. **节点级血统**：`clips`/`derivatives` 加 `plan_node_id`（`ondelete="SET NULL"`，沿用 `workflow_run_id` 先例）。解锁：步骤级重跑、逐节点成本归属、编辑痕迹回流的 join 键。
+4. **多趟规划自然化**：plan 是图之后，"分析 → 覆盖 → 各格式规划"成为图的多层；覆盖问责（哪个论点未被任何资产使用、两条 clip 是否撞同一论点）成为 plan 的一等字段（ROADMAP §1）。
+5. **与 P0 计量钩子同源**：usage 先按 step-name 记（零迁移成本），`plan_nodes` 落地后切换到 node id；ADR-025 第 3 条"usage 落 WorkflowRun 行"修订为"落 `plan_nodes` 行，run 级成本为聚合视图"。
+
+**Consequences**:
+- 步骤级重跑（只重跑选段保留文案、只重跑 dub 不动画面）结构上成为可能；`derivative_dispatch` 的按类型粗粒度寻址逐步被节点寻址取代。
+- 成本预估（ROADMAP §8 P1）获得查询形状：历史 `plan_nodes` 按 kind 聚合出每步均值，估价 = 逐节点求和。
+- 配方模板（STRATEGY §5）获得序列化对象：run-plan 模板 = DAG 定义 + 类型化输入槽位。
+- `workflow_runs.current_step` 退役为查询（`plan_nodes WHERE run_id=X AND status='running'`），run 行只管 run 级状态机。
+- 用户侧永不见 DAG 画布；步骤清单是唯一呈现形态（DECISION_MATRIX §F"节点编排画布"行：对内采纳、对外放弃）。
+
+**Related**: ADR-016（clip-spec 契约不动）、ADR-025（provider 抽象与计量）、`docs/MODULE_ARCHITECTURE.md` §2.1/§4、`docs/STRATEGY.md` §2.5/§5、`docs/research/elevencreative.md`、`docs/ROADMAP.md` §1/§2

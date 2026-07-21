@@ -27,19 +27,19 @@
 | `AGENT_ARCHITECTURE.md` | 4-layer 生成编排（Layer 4 未实现，图已标注） | 已实现 | 动 generation/agents 前 |
 | `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 待 Operation Model） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
-| `DECISIONS.md` | ADR-001 ~ ADR-025 | 持续追加 | 翻案/新决策时 |
+| `DECISIONS.md` | ADR-001 ~ ADR-028 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建，📋 未实现） | 动 Distribution 前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
-| `research/` | 竞品卡片（7 家）+ Opus 深拆 + 渲染技术调研 | 原始素材层 | 引用证据时 |
+| `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + 渲染技术调研 | 原始素材层 | 引用证据时 |
 | `tasks/` | 单功能实施简报（含 Prohibited Behaviors） | 活跃 | 开工对应功能前必读 |
 
 > MVP 时代文档（`MVP_SPEC.md`、`SCHEDULE.md`）已于 2026-07-20 逐节 review 后删除：可保留的信息已迁入 CLAUDE.md（composer 行为契约 / Brand=视觉皮肤 / demo 运维注意事项）与 MODULE_ARCHITECTURE.md（精修三角），其余章节确认被新体系覆盖或已过时（如"不做 LLM 意图识别"），需要时从 git 历史查阅。
 
 ## 已规划的文档（尚未撰写）
 
-- `CHAT_ARCHITECTURE.md` — Agent Interface 层：意图 → 操作 dispatch、chat 何时产生 editor 操作 vs 触发重生成
+- `CHAT_ARCHITECTURE.md` — Agent Interface 层：意图 → 操作 dispatch、chat 何时产生 editor 操作 vs 触发重生成；run-plan 步骤语义（ADR-028）
 - `METRICS.md` — 产品度量：漏斗（上传→生成→精修→发布→回流）、事件埋点、各阶段成功指标
 - `BILLING.md` — 套餐经济设计：档位 / 免费额度 / credits↔产出换算 / 对外成本预估呈现

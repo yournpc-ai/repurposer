@@ -27,12 +27,17 @@
 | 传播潜力分：维度明细 + 打分理由 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
 | persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
+| RunPlan 持久化（`plan_nodes` 表 + Clip/Derivative 节点级血统——计划图作为一等对象，与 Operation Model 同源于"步骤皆可寻址"） | ADR-028；STRATEGY §2.5；elevencreative §3 | **P1（地基）** | 无 | — 纯工程 | ❌（计划为单趟易失对象；`current_step` 裸字符串） |
+| ContentPlan 覆盖问责（论点→资产映射 + 去重约束 = fortnight 分镜表） | STRATEGY §2.5；elevencreative | P1 | RunPlan 持久化 | ✅ | ❌（单趟 plan 无覆盖概念） |
+| 结构化节拍图 + clip-spec motion 枚举（分镜入 plan：hook/body/payoff 时间戳；运镜入 spec 预设枚举——ADR-016 纪律不破，仍 CSS/libass 双端可表达） | STRATEGY §2.5；elevencreative | P2 | 覆盖问责 | ⚠️ | ❌（`visual_notes` 自由文本；crop 整条静态） |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
 | Consistency Reviser（真正的 Layer 4） | AGENT_ARCH §10.1 | P2 | Operation Model（修订即操作） | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
 
 ## 2. Operation Model（操作日志层）⭐ 地基
 
 > 2027 架构的核心对冲：editor GUI、chat、MCP 都是操作的三个前端。即使手动编辑占比萎缩，投资全部沉淀在本层。
+>
+> **生成侧半身**：RunPlan 持久化（§1，ADR-028）与本层同一条原则——**步骤皆可寻址**——分别落在生成侧与编辑侧。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -93,7 +98,7 @@
 
 ## 7. 合规底座 ⚖️ 法律时限
 
-> EU AI Act Article 50：AI 生成内容须机器可读标识 + 披露，**2026-08-02 生效**（已上市系统宽限至 2026-12-02），罚则最高 €35M / 全球营收 7%。我们是面向欧洲机构的产品，这不是加分项是入场券；七家竞品全部 structural 缺席，同时是差异化。
+> EU AI Act Article 50：AI 生成内容须机器可读标识 + 披露，**2026-08-02 生效**（已上市系统宽限至 2026-12-02），罚则最高 €35M / 全球营收 7%。我们是面向欧洲机构的产品，这不是加分项是入场券；七家竞品全部 structural 缺席，同时是差异化。呈现野心参照：ElevenCreative（物种不同）已把合规做成具名可购 SKU——Zero Retention mode / Data Residency options / HIPAA BAA 全挂定价档（research/elevencreative.md §2）；本节各行落地时应以"有名字的开关"形态出现，而非安全页徽章（STRATEGY §2.3）。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -139,6 +144,10 @@
 Operation Model (P1 地基) ──┬──► Editor undo 栈 (P1)
                             ├──► chat 意图→操作 dispatch (P1)
                             └──► Consistency Reviser (P2)
+
+RunPlan 持久化 (P1 地基, ADR-028) ──┬──► 逐节点成本归属 ──► 成本预估 (P1)
+                                    ├──► 覆盖问责 (P1) ──► 节拍+motion 枚举 (P2)
+                                    └──► 配方 = run-plan 模板 (STRATEGY §5)
 
 M3 tool-calling spike (P1) ──► Operation schema ──► Agent Interface ──► MCP (P2)
 provider 抽象 (P1, 需修订 ADR-003) ──► EU-hosted 模型选项 (P2)

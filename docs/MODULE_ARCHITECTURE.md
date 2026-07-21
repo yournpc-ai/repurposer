@@ -64,6 +64,7 @@
 |---|---|---|
 | 上传 → 预处理 | `assets` 行 + worker `SKIP LOCKED` 认领 | ✅ |
 | 预处理 → 生成 | `workflow_runs` 行（deferred claim：素材未就绪不认领） | ✅ |
+| 生成计划图 | （📋）`plan_nodes`——计划作为一等对象，节点级血统/成本/重跑（ADR-028） | 📋 P1 地基 |
 | 生成 → 精修 | `clips.render_spec` / `derivatives`（clip-spec 契约） | ✅ |
 | 精修 → 渲染 | `clips.render_status=PENDING`（worker 第三认领源） | ✅ |
 | 精修操作记录 | （📋）`operations` 表——Edit/Chat/MCP 三前端共用 | 📋 P1 地基 |
@@ -78,7 +79,7 @@
 
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
-| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、渲染触发 | `services/asset_processing.py`、`services/generation.py`、`app/agents/`、`services/rendering.py` | ✅ 已落地 |
+| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（📋 ADR-028）、渲染触发 | `services/asset_processing.py`、`services/generation.py`、`app/agents/`、`services/rendering.py` | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | 无（hidden 标记是雏形：`packages/clip/src/types.ts`） | 📋 ROADMAP §2 |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `services/chat.py`（规则意图→派生 WorkflowRun）、`agents/intent.py`（LLM 意图，未接入 chat） | 🚧 雏形 |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
@@ -104,6 +105,7 @@
 | `speakers` | Memory | 各模块注入用只读；persona 只由 persona agent 写 |
 | `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
+| （📋）plan_nodes | Pipeline | 节点状态只由 orchestrator/worker 写；Clip/Derivative 的 `plan_node_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028） |
 | （📋）operations | Operation Model | editor GUI / chat / MCP 三个前端写入；worker 消费 |
 | （📋）publications / channel_accounts / publication_events | Distribution | 状态机只由 Distribution 服务迁移；事件日志只追加；回流字段预留给分析 |
 
