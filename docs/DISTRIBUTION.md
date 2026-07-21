@@ -12,6 +12,14 @@
 - 审核队列是 HITL 的正确形态，机构合规刚需（2026-07-21 定：**默认全员强制人工确认**）。
 - 发布数据回流是传播潜力分**唯一的真实校准源**（闭环流转图的回流②）；表结构现在不定，闭环永远断着。
 
+### 1.1 命名约定（2026-07-21 定）
+
+- **模块 / 服务 / adapter / 文档 = `distribution`**（业务域）：`services/distribution.py`（长大可拆 `services/distribution/` 包，adapter 入包）、`routers/distribution.py`。
+- **表 = 资源名**：`publications` / `channel_accounts` / `publication_events`——表名 ≠ 模块名（先例：Pipeline 模块的表叫 `assets` / `workflow_runs`，不叫 pipeline）。
+- **REST 路径 = 资源名**：`/channels/*` / `/publications/*`，不加 `/distribution` 前缀（URL 命资源，不命模块）。
+- **不叫 `posts`**（与 derivative 类型 `post` 撞名）；**不叫 `social_accounts`**（P2 的 ESP 渠道不是 social）。
+- **`channel_accounts` 独立成表，不进 users**：一对多基数、唯一约束与 FK 需要表载体；credentials 是密钥，独立表 = 只有 Distribution 服务碰它；per-user 实体独立成表是仓库惯例。
+
 ## 2. 平台范围与准入决策（2026-07-21）
 
 | 平台 | 决策 | 准入动作（墙钟，立即排队） |
@@ -131,6 +139,22 @@ created_at
 - Token 状态为 `expired` 时渠道设置页提示重连；`revoked`（用户在平台侧解除授权）由发布失败/刷新失败的错误码识别并落态。
 - 发布前必查 `creator` 能力（TikTok `creator_info` 查询：可发视频时长/隐私档），不满足则建单时拦截。
 
+### 4.1 配置（env，命名沿用 `config.py` 前缀惯例）
+
+| env | 用途 |
+|---|---|
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn 应用凭证 |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | TikTok 应用凭证（官方字段就叫 client_key，不是 client_id） |
+| `CHANNEL_CREDENTIALS_KEY` | `credentials_enc` 的加密 key（方案定案走 ADR，§14 开放问题 2） |
+
+三个"刻意不加"：
+
+- **Redirect URI 不加 env**：由既有 `api_public_url` 派生——`{api_public_url}/api/v1/channels/{platform}/callback`。平台后台必须登记完全一致的 URI（dev/prod 各一套，两边后台都登记）。
+- **渠道开关不加 env**：presence-gating——`LINKEDIN_CLIENT_ID` 为空，该渠道在 UI 就不展示（"即将上线"态）。TikTok 审核期间代码可先合并，天然灰度，不需要 feature flag。
+- **Scope 不加 env**：固化在代码里（LinkedIn `openid profile email w_member_social`；TikTok `user.info.basic video.publish`）——避免环境间 scope 漂移导致行为不一致。
+
+本地联调注意：LinkedIn 允许 `http://localhost` redirect；**TikTok 要求 HTTPS**，本地需 tunnel（ngrok 等）联调。
+
 ## 5. 审核队列
 
 - **默认全员强制人工确认**（2026-07-21 决策）：`approved` 之前没有人肉节点不得进入调度。
@@ -210,6 +234,39 @@ class PlatformAdapter(Protocol):
 | `GET /publications/{id}` | 详情 + publication_events 时间线 | — |
 
 约定：路由只做参数校验与调用服务函数；状态迁移、事件写入、due_at 计算全在 Distribution 服务层（守 §3.3 规则）；全部走 `apiFetch` + 全局 toast（前端约定）。
+
+### 10.3 服务层函数清单（状态机的唯一写者）
+
+```python
+# ── 渠道侧 ──────────────────────────────────────────────
+connect_start(platform, user_id) -> url      # 生成 OAuth 链接（带 state nonce 防 CSRF）
+connect_finish(platform, code, state)        # 换 token，upsert channel_account
+disconnect(account_id, user_id)              # 删 credentials，发布历史留存（SET NULL）
+refresh_if_needed(account) -> account        # token 过期前刷新
+
+# ── 发布单生命周期（每个都经 _transition 写事件）─────────
+create_publication(project_id, target, channel_id, overrides)
+                                             # payload 预填快照 + idempotency_key
+submit(pub_id, user_id)                      # draft→pending_review；重推导 ai_disclosure
+approve(pub_id, reviewer) / reject(pub_id, reviewer, reason)
+schedule(pub_id, user_id, when)              # approved→scheduled；due_at = scheduled_at
+cancel(pub_id, user_id)                      # published 前任意态 → cancelled
+
+# ── worker 侧（同进程第四认领源，§6）─────────────────────
+claim_due_publications()                     # SKIP LOCKED；每轮循环最先查
+execute_publication(pub)                     # refresh → begin_publish → 存 job_id
+                                             # → due_at = 轮询间隔
+poll_publication(pub)                        # await_publish → published / failed / 续等
+                                             # （不确定结果的对账逻辑在此，§7）
+reap_stale_publications()                    # publishing 卡死回收
+
+# ── 内部（模块外不可见）─────────────────────────────────
+_transition(pub, to_state, actor, reason)    # 唯一状态写者：改 state + 写 publication_events
+_classify_ai_disclosure(target) -> bool      # clip-spec 分类器（ADR-026）
+_build_payload(target, channel) -> dict      # 预填快照（含 channel 快照，断连后历史可读）
+```
+
+规则：`_transition` 之外的任何代码（路由、其他模块、脚本）不得写 `state` 列；查询函数（`list_publications` / `get_publication` 带 events 时间线）只读，所有模块可用。
 
 ## 11. UI 面
 

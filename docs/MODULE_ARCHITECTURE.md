@@ -105,7 +105,7 @@
 | `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | （📋）operations | Operation Model | editor GUI / chat / MCP 三个前端写入；worker 消费 |
-| （📋）publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析 |
+| （📋）publications / channel_accounts / publication_events | Distribution | 状态机只由 Distribution 服务迁移；事件日志只追加；回流字段预留给分析 |
 
 **Clip 共享聚合的细则**：`clips` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = render_spec diff）、worker（渲染产物回写）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
 
