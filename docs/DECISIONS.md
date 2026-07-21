@@ -687,4 +687,28 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `workflow_runs.current_step` 退役为查询（`plan_nodes WHERE run_id=X AND status='running'`），run 行只管 run 级状态机。
 - 用户侧永不见 DAG 画布；步骤清单是唯一呈现形态（DECISION_MATRIX §F"节点编排画布"行：对内采纳、对外放弃）。
 
+**Amendment（2026-07-22）**：Consequences 中"用户侧永不见 DAG 画布"修正为——**画布不作前门**；P2+ 增加以读为主的**运行图检视面**（触发条件：机构模式"管得住"信任需求 + 虚拟产物时代混合图/变体使线性清单失效），无接线、无模型名、非图编辑。依据：ElevenCreative 自身为双界面结构（composer 前门 + Flows 收侧边栏，`research/elevencreative.md` §1/§3）——画布对我们是信任工具，不是创作工具。排期见 ROADMAP §3"运行图检视面"行。
+
 **Related**: ADR-016（clip-spec 契约不动）、ADR-025（provider 抽象与计量）、`docs/MODULE_ARCHITECTURE.md` §2.1/§4、`docs/STRATEGY.md` §2.5/§5、`docs/research/elevencreative.md`、`docs/ROADMAP.md` §1/§2
+
+## ADR-029: 双链并列——AI 生成结果以 RunPlan 新节点类型进入，虚拟产物独立成族
+
+**Status**: Decided (2026-07-22)
+
+**Context**: 2026-07-22 确认战略终态：AI 生成结果必做，形态 = **persona 驱动虚拟产物**（identity-driven），非 Factory 通用生成（STRATEGY §2.2）。分界澄清：clip 线主轨永远是"时间轴上的记录"（选段/trim/hidden 语义预设了已拍素材）；虚拟内容以**轨道级**在 clip 内合法存在（dub 声音克隆、AI 音乐、片头尾卡，ADR-026 管辖）；主轨本身生成的产物**不是 clip**——没有"从素材选段"的语义，其"编辑"是重掷/选变体而非修剪。问题：results 链需要独立的 agent 链路吗？
+
+**Decision**:
+1. **双链并列，禁第二条编排链**：虚拟产物生成 = RunPlan 新 node kind（`avatar_gen` / `synth_visual` / `voice_gen`，provider=媒体、异步 begin/await），与 clip 节点共享 `plan_nodes` / worker / 成本汇总 / 步骤清单。**混合图合法**：一次 fortnight 规划可同时产出 clip 与虚拟产物（覆盖节点按内容性质分配产线）。
+2. **虚拟产物独立成族**：新输出表（与 `clips` 平级，落地时按契约登记 MODULE_ARCH §4），不进 `clips`、不进 clip-spec；包装层（字幕/品牌框）可复用 Remotion 渲染器，但产物身份不是 Clip。**parity 承诺只覆盖确定性包装层**，生成部分无 parity（有方差），UI 文案不得混淆两者。
+3. **三个扩展**：(a) 媒体 provider `begin_generation / await_generation` 接口（ADR-025 的兄弟接口，任务型：提交→轮询→取件）；(b) provenance 记录（虚拟产物行 + 生成谱系，供 ADR-026 分类器判定）；(c) persona 视觉身份 + 授权记录（GDPR / AI Act 肖像授权，机构采购必问）。
+4. **节点语义差**：generate 节点带 `gate: variant_pick`（生成 N 变体、选定后下游才跑——"默认不阻塞"原则的唯一例外，因下游花真钱）；**每次尝试计价**，失败不扣费（ROADMAP §8）在生成节点从加分项变为生死项。
+5. **图组装 presence-gating**：persona 视觉身份未录入，虚拟分支不进图（同 Distribution 的 presence-gating 原则）。
+6. **类型化边 + provenance 边流**：selection 类节点输入类型 = "timeline-of-record"；虚拟产物边携带 generated 标记，合规节点读边判定 C2PA——ADR-026 从"读 clip-spec"升级为"读图的边"。
+
+**Consequences**:
+- DECISION_MATRIX §F"AI 视频生成"💡 后排不变，终态声明为 identity-driven 虚拟产物族；接入时 persona / Brand 原样复用（身份层在范式之上）。
+- RunPlan（ADR-028）是双链公共地基；本 ADR 除新产物表外不新增架构层。
+- chat 随 DAG 内核连带升级：dispatch 目标 = editor 操作 / 整体重生成 / plan 级（节点重跑·追加·参数），ChatCut 原则推广到计划层（CHAT_ARCHITECTURE 待写；ROADMAP §3）。
+- 运行图检视面（ADR-028 Amendment）在虚拟时代从"可选深度面"变为必需——变体集与混合图是线性清单表达不了的。
+
+**Related**: ADR-016、ADR-021、ADR-025、ADR-026、ADR-028（含 Amendment）；`docs/STRATEGY.md` §2.2/§2.5；`docs/research/elevencreative.md`；`docs/research/chatcut.md`；`docs/ROADMAP.md` §3

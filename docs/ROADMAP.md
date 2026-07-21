@@ -48,15 +48,18 @@
 ## 3. Agent Interface（chat 升级 + MCP）
 
 > chat 从 asset-scoped Modal 快捷服务升级为主交互层：人话 / agent 话 → Operation Model / WorkflowRun 的统一入口。
+>
+> **随 DAG 内核连带升级（2026-07-22）**：dispatch 目标分三类——editor 操作 / 整体重生成 / **plan 级**（节点重跑·追加·参数："重新选段"=重跑 selection 节点，"加德语版"=追加 post_gen(de) 节点）；ChatCut 原则（指令=可检查可撤销的真实操作，矩阵 §E）推广到计划层。详见 CHAT_ARCHITECTURE（待写）与 ADR-029。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
 | chat 接入 LLM 意图解析（`agents/intent.py` 已存在未接线） | 代码现状快赢 | **P1 快赢** | 无 | ✅ | 🚧（chat 用纯关键词规则，`Message.intent` 注释与实际不符） |
 | M3 tool-calling spike（验证原生 function calling；不可靠则走"结构化输出模拟工具调用"） | 2027 架构 | **P1（先于一切 agent 设计）** | 无 | ⚠️ 待 spike | ❌ |
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
-| 意图 → 操作 dispatch 注册表（翻译/改短/换音乐/配音/prompt-to-clip） | 矩阵 §B P1 | P1 | Operation Model + spike 结论 | ⚠️ | ❌ |
+| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | ❌ |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ❌（需 CHAT_ARCHITECTURE 文档仲裁） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
+| 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
 ## 4. Editor GUI（Operation Model 的前端之一）
 
@@ -147,7 +150,8 @@ Operation Model (P1 地基) ──┬──► Editor undo 栈 (P1)
 
 RunPlan 持久化 (P1 地基, ADR-028) ──┬──► 逐节点成本归属 ──► 成本预估 (P1)
                                     ├──► 覆盖问责 (P1) ──► 节拍+motion 枚举 (P2)
-                                    └──► 配方 = run-plan 模板 (STRATEGY §5)
+                                    ├──► 配方 = run-plan 模板 (STRATEGY §5)
+                                    └──► 运行图检视面 (P2, ADR-028 Amendment)
 
 M3 tool-calling spike (P1) ──► Operation schema ──► Agent Interface ──► MCP (P2)
 provider 抽象 (P1, 需修订 ADR-003) ──► EU-hosted 模型选项 (P2)
