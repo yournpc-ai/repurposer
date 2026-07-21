@@ -41,3 +41,5 @@
 ## 已规划的文档（尚未撰写）
 
 - `CHAT_ARCHITECTURE.md` — Agent Interface 层：意图 → 操作 dispatch、chat 何时产生 editor 操作 vs 触发重生成
+- `METRICS.md` — 产品度量：漏斗（上传→生成→精修→发布→回流）、事件埋点、各阶段成功指标
+- `BILLING.md` — 套餐经济设计：档位 / 免费额度 / credits↔产出换算 / 对外成本预估呈现

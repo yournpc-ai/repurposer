@@ -648,3 +648,21 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 差异化叙事保留：标识自动化 + 分级精确本身成为机构采购的合规卖点。
 
 **Related**: `docs/ROADMAP.md` §7、§5；`docs/MODULE_ARCHITECTURE.md` §5 规则 5；`docs/STRATEGY.md` §2.3
+
+## ADR-027: 发布审核分级——个人免审秒发，机构强制人工确认（P2）
+
+**Status**: Decided (2026-07-22；翻案 2026-07-21 "默认全员强制人工确认")
+
+**Context**: 2026-07-21 曾定"发布前默认全员强制人工确认"（ROADMAP §5、DISTRIBUTION §5）。用户实测指出：payload 本就预填进发布对话框供修改，个人作者再去第二个页面点"通过"是纯摩擦（"作为用户我还自己审核一次吗"）。审核的真实位置是**发布对话框本身**——编辑即确认。
+
+**Decision**:
+1. **个人账号（P1）**：无审核态，发布流 `draft → scheduled → publishing → published`，秒发；确认点 = 发布对话框（payload 预填可编辑 + `ai_disclosure` 徽标可见）。
+2. **机构/团队账号（P2，团队工作区上线时）**：启用 `pending_review` / `approved` 状态，审核人 ≠ 作者，队列成为审核人的工作地点。
+3. `pending_review` / `approved` 保留在 schema 与状态机中，标注"机构模式专属"；P1 实现与 UI 均不出现。
+
+**Consequences**:
+- ADR-026 中"审核队列构成 Art.50(4) editorial control"的论据改指**发布对话框内的人工确认**（payload 可编辑 + 披露徽标可见），效力相同。
+- `publication_events` 个人流事件序列简化（无 submitted/approved）；机构模式恢复完整。
+- ROADMAP §5 审核队列行移至 P2（与团队工作区同行）；DISTRIBUTION §5/§11 按本文改写。
+
+**Related**: ADR-026；`docs/DISTRIBUTION.md` §3.3/§5/§11；`docs/ROADMAP.md` §5

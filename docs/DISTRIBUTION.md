@@ -9,7 +9,7 @@
 内容离开产品的最后一公里：**审核 → 调度 → 发布 → 数据回流**。
 
 - 与 Pipeline 平级（2027 透镜）：Pipeline 管"生成什么"，Distribution 管"去了哪里、效果如何"。
-- 审核队列是 HITL 的正确形态，机构合规刚需（2026-07-21 定：**默认全员强制人工确认**）。
+- 审核是**分级**的（ADR-027，2026-07-22）：个人免审秒发（发布对话框即确认点）；机构模式（P2）强制人工确认、审核人≠作者——审核队列是机构合规刚需，不是个人的第二页面。
 - 发布数据回流是传播潜力分**唯一的真实校准源**（闭环流转图的回流②）；表结构现在不定，闭环永远断着。
 
 ### 1.1 命名约定（2026-07-21 定）
@@ -114,7 +114,7 @@ draft ──提交审核──► pending_review ──通过──► approved 
 
 规则：
 - `published` 是终态（P1 不支持编辑/删除已发布内容，§13）。
-- 驳回必须带 reason，回到 draft 重改后可再提交。
+- **`pending_review` / `approved` 为机构模式专属状态（ADR-027，P2）**：个人流 `draft → scheduled` 直发；机构模式才经审核态，驳回必须带 reason，回到 draft 重改后可再提交。
 - 状态迁移只允许经 Distribution 服务函数；路由/其他模块不得直写 `state`。
 - `publishing` 是**时间驱动状态**：TikTok 视频处理是异步的（返回 publish_id 后需轮询状态），进入 publishing 时 `due_at` = 下次轮询时间，worker 到期再认领续查，不阻塞认领线程。
 
@@ -155,12 +155,11 @@ created_at
 
 本地联调注意：LinkedIn 允许 `http://localhost` redirect；**TikTok 要求 HTTPS**，本地需 tunnel（ngrok 等）联调。
 
-## 5. 审核队列
+## 5. 审核（分级，ADR-027）
 
-- **默认全员强制人工确认**（2026-07-21 决策）：`approved` 之前没有人肉节点不得进入调度。
-- P1 形态：自审 + 确认页（用户=审核人，团队角色等 P2 团队工作区）；机构卖点是**队列与留痕**，不是多角色本身。
-- 队列页：`pending_review` 列表，展示 payload 全文 + 媒体预览 + `ai_disclosure` 状态；通过 / 驳回（必填 reason）。
-- 文案类（LinkedIn 长文）的人工确认同时构成 Art.50(4) 披露豁免所需的 editorial control（ADR-026）。
+- **个人模式（P1 默认）**：免审秒发——确认点是**发布对话框本身**（payload 预填可编辑 + `ai_disclosure` 徽标可见），编辑即确认；无第二页面、无"待审核"tab。
+- **机构模式（P2，团队工作区）**：强制人工确认，审核人 ≠ 作者；`pending_review` 队列成为审核人的工作地点，驳回必填 reason；每次迁移写 `publication_events`（审核留痕 = 机构合规卖点）。
+- 文案类（LinkedIn 长文）Art.50(4) 的 editorial control 由**对话框内人工确认**构成（个人/机构同此，ADR-026），不依赖队列。
 
 ## 6. 定时发布与 worker 认领
 
@@ -182,7 +181,7 @@ created_at
 
 - `ai_disclosure` **由 clip-spec 分类器推导**（spec 含 dub 音轨 / AI 生成视觉 → `true`），不是用户勾选——用户永远不回答"这是不是 AI 生成"。
 - 文件层：合成轨道产物的 MP4 已嵌 C2PA（ROADMAP P0-1），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
-- TikTok 端：审核队列人工确认标识状态（API 披露字段是否暴露见 §14 开放问题）；voice-clone 内容属平台强制标记类，漏标的处罚落在用户账号上，审核页必须显式展示。
+- TikTok 端：voice-clone 内容属平台强制标记类，漏标的处罚落在用户账号上——`ai_disclosure` 徽标在**发布对话框**显式展示（个人模式）/ 机构审核页复核（机构模式）；API 披露字段是否暴露见 §14 开放问题。
 - 纯剪辑+字幕内容（真实素材标准编辑）：`ai_disclosure=false`，不嵌标、不提示（ADR-026 纯剪辑豁免）。
 
 ## 9. 发布数据回流（P2）
@@ -226,8 +225,8 @@ class PlatformAdapter(Protocol):
 | `GET /channels/{platform}/callback` | OAuth 回跳，落 channel_account | — |
 | `GET /channels` / `DELETE /channels/{id}` | 渠道列表 / 断开（删 token，历史留存） | — |
 | `POST /projects/{id}/publications` | 从 clip/derivative 建发布单（payload 预填） | → draft |
-| `POST /publications/{id}/submit` | 提交审核（**此时重新推导 ai_disclosure**） | draft → pending_review |
-| `POST /publications/{id}/approve` / `reject` | 审核（reject 必填 reason） | → approved / → draft |
+| `POST /publications/{id}/submit` | 提交审核【机构模式 P2；此时重新推导 ai_disclosure】 | draft → pending_review |
+| `POST /publications/{id}/approve` / `reject` | 审核【机构模式 P2；reject 必填 reason】 | → approved / → draft |
 | `POST /publications/{id}/schedule` | 定时或立即（写 scheduled_at + due_at） | approved → scheduled |
 | `POST /publications/{id}/cancel` | 取消（published 前任意态） | → cancelled |
 | `GET /publications?state=&project_id=` | 列表（审核队列页 = `state=pending_review`） | — |
@@ -247,8 +246,8 @@ refresh_if_needed(account) -> account        # token 过期前刷新
 # ── 发布单生命周期（每个都经 _transition 写事件）─────────
 create_publication(project_id, target, channel_id, overrides)
                                              # payload 预填快照 + idempotency_key
-submit(pub_id, user_id)                      # draft→pending_review；重推导 ai_disclosure
-approve(pub_id, reviewer) / reject(pub_id, reviewer, reason)
+submit(pub_id, user_id)                      # 【机构模式 P2】draft→pending_review；重推导 ai_disclosure
+approve(pub_id, reviewer) / reject(...)      # 【机构模式 P2】reject 必填 reason
 schedule(pub_id, user_id, when)              # approved→scheduled；due_at = scheduled_at
 cancel(pub_id, user_id)                      # published 前任意态 → cancelled
 
@@ -270,17 +269,46 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 ## 11. UI 面
 
-| 面 | 内容 |
-|---|---|
-| Clip/derivative 卡片 | "发布"入口 → 建 publication（payload 预填，可改） |
-| 审核队列页 | pending_review 列表；通过/驳回；`ai_disclosure` 显式展示 |
-| 渠道设置页 | 连接/断开 LinkedIn、TikTok；token 状态与过期重连提示 |
-| 项目页 | 各产物 publication 状态徽标（scheduled/published + 平台原帖链接） |
+> 方向（2026-07-22 定）：**主路径 = 立即发布、个人免审**（ADR-027）。calendar 视图后置（P2+ 按使用数据验证）；竞品实证：Agent Opus 的 calendar 只是 projects 页视图 toggle、排期器在其 Pro 付费墙后（`research/agent-opus.md`）——创作工具品类的主流是"创作完立刻发"。
+
+### 11.1 信息架构（三个入口 = 三种心智）
+
+| 入口 | 位置 | 心智 |
+|---|---|---|
+| "发布"按钮 | clip / derivative 卡片 | "把这条发出去"（动作起点） |
+| 发布记录页 | Sidebar **Post 组**（`nav.publishing`） | "我发了什么 / 排期中什么"（只读为主） |
+| 渠道连接 | 发布记录页第二 tab（P1 单页） | "连接账号" |
+
+### 11.2 发布对话框（主创建路径 = 唯一确认点）
+
+1. **渠道选择**：LinkedIn / TikTok 图标 + 已连接账号头像；未连接 → 就地引导。
+2. **Payload 编辑**：预填 clip 发布套件字段——**用户在输入框里改不满意的地方，编辑即确认**（ADR-027）；多渠道同发按渠道分 tab，一次提交 N 张单（一渠道一单，§3）。
+3. **AI 披露展示位**：`ai_disclosure=true` 时显式展示徽标 + 原因（"含声音克隆，将标记为 AI 生成"）——用户无勾选权，有知情权。
+4. **定时**：默认"立即发布"（= `scheduled_at` now，与定时同一代码路径）；定时（datetime picker）为次要选项。
+5. 点"发布" → toast"正在发布"，**不离开当前页**；事件序列：created → scheduled。
+
+### 11.3 发布记录页（轻量列表，不是日历）
+
+- Tabs：**全部 / 排期中 / 已发布 / 失败**（个人模式无"待审核"）。
+- 行 = 封面缩略图 + 平台图标 + 目标标题 + 时间 + 状态 Badge + 操作（取消 / 改时间 / 重试 / 外链 `platform_post_url`）。
+- token 过期与发布失败分开展示（"重新连接"而非"失败"）。
+- **日历视图后置**：P2+ 待排期行为被数据验证再加；模型已支持（`scheduled_at`/`due_at`），零迁移。
+
+### 11.4 机构模式（P2 预览，ADR-027）
+
+团队工作区上线后：列表新增"待审核"首 tab（审核人 ≠ 作者的工作地点）；无审核权成员的对话框按钮从"发布"变"提交审核"；其余组件复用，零改版。
+
+### 11.5 渠道 tab / 状态回显 / 设计纪律
+
+- 渠道卡三态：**已连接**（头像 + 名字 + token 健康度）/ **未连接**（Connect 按钮）/ **未配置**（presence-gating "即将上线"，§4.1）。
+- 项目页：clip/derivative 卡片上 scheduled / published Badge（平台图标 + 时间）；发布成功/失败 → 全局 sonner toast；列表轮询刷新（与 Clip.render_status 同款模式）。
+- `rounded-md` / `ring-1 ring-border` + `shadow-*`；Badge 一律 `className="rounded-md"`；平台图标：lucide 有 `Linkedin`，TikTok 走"第三方 logo 无替代"例外（手写 SVG）。
+- 新增 i18n keys：`nav.publishing`、`publishing.*`、`channels.*`（en 先行，zh 镜像）。
 
 ## 12. 分期路线（排期以 `ROADMAP.md` §5 为准）
 
-- **P1**：两张表 + 状态机 + 审核队列（自审形态）+ LinkedIn 个人号直发 + TikTok 直发（审核通过后）+ 定时发布 + 幂等/重试。
-- **P2**：metrics 回流校准、newsletter ESP（自有渠道，对冲 LinkedIn 单押）、源→目的地自动规则、多号、公司页、团队审核角色。
+- **P1**：两张表 + 状态机（个人流，ADR-027）+ LinkedIn 个人号直发 + TikTok 直发（审核通过后）+ 定时发布 + 幂等/重试。
+- **P2**：机构审核队列（`pending_review`/`approved`）+ metrics 回流校准、newsletter ESP（自有渠道，对冲 LinkedIn 单押）、源→目的地自动规则、多号、公司页、团队审核角色。
 
 ## 13. 范围纪律（不做什么）
 
