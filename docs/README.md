@@ -8,6 +8,7 @@
 | 信息类型 | 唯一事实源 | 规则 |
 |---|---|---|
 | 排期 / 优先级 | `ROADMAP.md` | 其他文档只准引用条目号 |
+| 战略论证（为什么做 / 不做什么） | `STRATEGY.md` | 其他文档只引用条目号（`STRATEGY §X`），不复述论证 |
 | 技术决策 | `DECISIONS.md`（ADR） | 只追加，不修改旧 ADR；翻案写新 ADR 并标注 supersedes |
 | 竞品证据 | `research/` + `DECISION_MATRIX.md` | `COMPETITIVE_ANALYSIS.md` 只做综合，不存原始事实 |
 | 产品定位 / 需求 | `PRD.md` | 技术决策内容降级为指向 ADR 的指针 |
@@ -20,6 +21,7 @@
 |---|---|---|---|
 | `PRD.md` | 产品定位、FR 需求、竞品借鉴 | 活跃（2026-07 瘦身：技术章节移至 ARCHITECTURE/API） | 动产品方向/需求前 |
 | `ROADMAP.md` | 分模块需求排期（8 模块表 + 依赖图 + P0 汇总） | 活跃（2026-07 建） | 排期/开工前 |
+| `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `ARCHITECTURE.md` | 系统现状架构 | 活跃 | 动任何子系统前 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"） | 活跃（2026-07 建） | 动模块边界/新模块前 |
 | `AGENT_ARCHITECTURE.md` | 4-layer 生成编排（Layer 4 未实现，图已标注） | 已实现 | 动 generation/agents 前 |

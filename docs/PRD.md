@@ -33,6 +33,8 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 | Unclear which segments are shareable | AI scores by virality potential and recommends, auto-generating 3 alternative hooks |
 | European institutions worry about data security | Optional EU data residency (Cast AI Kimchi), GDPR compliant |
 
+> 战略论证（2027 凭什么赢、品味/身份/信任三资产哲学）的唯一事实源是 [STRATEGY.md](./STRATEGY.md)；本表只做结论性陈述，不展开论证。
+
 ---
 
 ## 3. Background & Problem

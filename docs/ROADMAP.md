@@ -1,6 +1,6 @@
 # Roadmap — 分模块需求排期
 
-> 本文档是**排期表，不是论证场**。理由与依据只引用来源条目（`矩阵 §X` = `docs/DECISION_MATRIX.md`，`竞品` = `docs/research/`，`2027 架构` = `docs/MODULE_ARCHITECTURE.md` 的六层模块契约），论证留在原文档。
+> 本文档是**排期表，不是论证场**。理由与依据只引用来源条目（`矩阵 §X` = `docs/DECISION_MATRIX.md`，`竞品` = `docs/research/`，`2027 架构` = `docs/MODULE_ARCHITECTURE.md` 的六层模块契约，`STRATEGY §X` = `docs/STRATEGY.md` 战略论证层），论证留在原文档。
 >
 > 状态口径：✅ 已落地 / 🚧 部分实现 / 📋 已排期 / 💡 待论证 / ❌ 未开始
 >
@@ -24,9 +24,9 @@
 | 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ❌（`clients/minimax.py` 丢弃 usage 字段） |
 | 去静默 / 去口头禅 | 矩阵 §B 快赢 | **P0** | 词级时间戳（已有）；归属决策：ASR 后处理 vs editor 一键操作 | ✅ | ❌（仅 i18n 占位文案） |
 | 传播潜力分：持久化 + UI 展示 | 矩阵 §C 改造 | **P0** | `Clip` 表加列 + 前端展示位 | ✅（LLM 已产出分数） | 🚧（分数只写日志，不落库不展示） |
-| 传播潜力分：维度明细 + 打分理由 | 矩阵 §C | P1 | 上一行 | ✅ | ❌ |
-| 链接摄入子系统（Zoom / Drive / RSS） | 矩阵 §A | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
-| persona 校准打分 | 矩阵 §C | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
+| 传播潜力分：维度明细 + 打分理由 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
+| 链接摄入子系统（Zoom / Drive / RSS） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
+| persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
 | Consistency Reviser（真正的 Layer 4） | AGENT_ARCH §10.1 | P2 | Operation Model（修订即操作） | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
 
@@ -51,7 +51,7 @@
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
 | 意图 → 操作 dispatch 注册表（翻译/改短/换音乐/配音/prompt-to-clip） | 矩阵 §B P1 | P1 | Operation Model + spike 结论 | ⚠️ | ❌ |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ❌（需 CHAT_ARCHITECTURE 文档仲裁） |
-| MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载） | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
+| MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 
 ## 4. Editor GUI（Operation Model 的前端之一）
 
@@ -75,7 +75,7 @@
 | LinkedIn OAuth + 直发 | 矩阵 §H | P1 | 数据模型 | — | ❌ |
 | 定时发布（worker 第四认领源，复用 SKIP LOCKED） | 矩阵 §H | P1 | 数据模型 + 队列（已有） | — | ❌ |
 | 发布数据回流 → 校准传播潜力分 | 2027 架构 | P2 | Publication 回流字段 + 打分持久化 | ✅ | ❌ |
-| newsletter ESP 集成（owned channel） | 矩阵 §H | P2 | 数据模型 | — | ❌ |
+| newsletter ESP 集成（owned channel） | 矩阵 §H；STRATEGY §4 风险 2 | P2 | 数据模型 | — | ❌ |
 | 源 → 目的地自动规则 | 矩阵 §H | P2 | LinkedIn 直发跑通 | — | ❌ |
 
 ## 6. Memory / Context（Speaker + Brand + 术语表）
@@ -88,7 +88,7 @@
 | Brand template | — | — | — | ✅ | ✅ 已落地 |
 | 术语表 / glossary（机构级翻译质量） | 矩阵 §G "极高" | P1 | persona 注入链路（已有） | ✅ | ❌（仅一条 i18n 占位文案） |
 | 多语言文案质量（Voice DNA 跨语言保真） | 矩阵 §G "极高"；2026 B2B 趋势 | P1 | 术语表 | ✅ | ❌ |
-| persona 显化于 UI（让用户看到/编辑自己的 Voice DNA） | 2027 架构 | P2 | — | ✅ | ❌ |
+| persona 显化于 UI（让用户看到/编辑自己的 Voice DNA） | 2027 架构；STRATEGY §2.2 | P2 | — | ✅ | ❌ |
 
 ## 7. 合规底座 ⚖️ 法律时限
 
@@ -110,9 +110,20 @@
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
 | WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ❌ |
-| 成本预估展示（生成前） | 矩阵 §I | P1 | 成本计量数据积累 | — | ❌ |
-| 失败不扣费语义 | 矩阵 §I | P1 | 成本计量 | — | ❌ |
+| 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量数据积累 | — | ❌ |
+| 失败不扣费语义 | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量 | — | ❌ |
 | 团队工作区 / 多 Speaker 画像 | 矩阵 §I | P2 | auth（已有）| — | ❌ |
+
+---
+
+## 9. Gallery / 落地页（获客与激活）
+
+> 品味的陈列窗（STRATEGY §5）：**配方库而非内容流**——每张卡 = 输入 + 输出 + 参数集，"Make one like this" 预填 composer，用户只上传自己的素材。同一套组件服务匿名落地页与已登录 home 两个受众；home 的 hero 文案随之迁往匿名落地页（受众错配修复）。
+
+| 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
+|---|---|---|---|---|---|
+| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 | STRATEGY §5 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | ❌ |
+| 真实 Gallery（公开项目流入 + remix） | STRATEGY §5 | P2 | 上一行验证 + `projects`/`clips` 公开性字段（须先 MODULE_ARCH §4 登记 + ADR） | — 纯工程 | ❌ |
 
 ---
 
@@ -133,6 +144,8 @@ Distribution 数据模型 (P1) ──► 审核队列 / LinkedIn 直发 / 定时
                            └──► 披露元数据随分发携带 (P0, 合规)
 
 clip-spec 扩展 (P0 合规标识) ──► render 服务打标 ──► XML/EDL 交接 (P2)
+
+配方卡 (P1 纯前端, 无依赖) ──► 真实 Gallery (P2, 需公开性字段登记 + ADR)
 ```
 
 ## P0 汇总（下次排期会议只看这张）
