@@ -12,11 +12,13 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.models.database import Base
 from app.models.schemas import (
@@ -237,6 +239,99 @@ class WorkflowRun(Base):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class PlanNode(Base):
+    """RunPlan node: one step of a run's execution plan (ADR-028).
+
+    The plan graph is materialized at run creation by the orchestrator —
+    topology is code-determined, never LLM-chosen. ``inputs`` is the edge list
+    (upstream node ids); ``spec`` carries DB-opaque params (instruction,
+    language, counts, target ids); ``output_refs`` lists produced outputs rows;
+    ``cost`` is the per-node metering ledger (ADR-025, written by
+    services/metering.py). Node status transitions are row-level writes — the
+    retired run-context JSON blob + process lock is gone.
+    """
+
+    __tablename__ = "plan_nodes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    seq = Column(Integer, nullable=False, default=0)
+    # DAG edges: list of upstream node ids (str UUID).
+    inputs = Column(JSONB, nullable=False, default=list)
+    spec = Column(JSONB, nullable=False, default=dict)
+    # Produced outputs row ids (str UUID).
+    output_refs = Column(JSONB, nullable=False, default=list)
+    # {prompt_tokens, completion_tokens, fixed_cost} — metering ledger.
+    cost = Column(JSONB, nullable=True)
+    error = Column(Text, nullable=True)
+    attempt = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ix_plan_nodes_run_status", "run_id", "status"),
+        Index("ix_plan_nodes_kind_status", "kind", "status"),
+    )
+
+
+class Output(Base):
+    """Unified product row (ADR-030): clips and derivatives became types.
+
+    A clip is the type carrying timeline semantics (``source_ref``) and the
+    render pipeline (``render_spec``/``render_status``); derivatives are plain
+    types. Type-specific content lives in ``payload`` guarded by
+    OUTPUT_PAYLOAD_SCHEMAS; ``files`` holds produced artifacts
+    (video/srt/image object keys); ``publishing`` is the distribution metadata
+    home (title/description/hashtags/cover_image_url/topic); ``plan_node_id``
+    is read-only lineage back to the producing node.
+    """
+
+    __tablename__ = "outputs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    plan_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("plan_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    type = Column(String(50), nullable=False)
+    language = Column(String(10), default="zh")
+    status = Column(String(50), default="generated")
+    provenance = Column(String(20), nullable=False, default="real")
+    payload = Column(JSONB, nullable=False, default=dict)
+    files = Column(JSONB, nullable=False, default=dict)
+    source_ref = Column(JSONB, nullable=True)
+    render_spec = Column(JSONB, nullable=True)
+    # render_status NULL = render not requested (worker claim predicate).
+    render_status = Column(Enum(RenderStatus), nullable=True)
+    # render_status claim write-set companion (ADR-030 rule 2 — read together
+    # with render_status everywhere; falls back into payload if review objects).
+    render_error = Column(Text, nullable=True)
+    score = Column(JSONB, nullable=True)
+    publishing = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ix_outputs_project_type", "project_id", "type"),
+        Index(
+            "ix_outputs_render_status",
+            "render_status",
+            postgresql_where=text("render_status IS NOT NULL"),
+        ),
+    )
 
 
 class ChatSession(Base):

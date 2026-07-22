@@ -821,6 +821,79 @@ class ContentPlan(BaseModel):
     overall_summary: str = ""
 
 
+# ---------------------------------------------------------------------------
+# RunPlan vocabulary (ADR-028/030): plan_nodes + unified outputs.
+# ---------------------------------------------------------------------------
+
+# Phase 1 node kinds (coarse-grained; docs/tasks/runplan-phase1-implementation.md §4).
+# Reserved for Phase 2/3 — NOT registered, NOT implemented here:
+# director_understand / selection / dub / music / verify.
+PlanNodeKind = Literal[
+    "preprocess",
+    "persona_bootstrap",
+    "director_plan",
+    "clips_pipeline",
+    "post_gen",
+    "quotes_gen",
+    "carousel_gen",
+    "article_gen",
+    "script",
+    "render",
+]
+
+PlanNodeStatus = Literal["pending", "running", "done", "failed", "skipped"]
+
+OutputType = Literal["clip", "post", "quotes", "carousel", "article", "content_plan"]
+
+OutputProvenance = Literal["real", "generated"]
+
+
+class ClipPayload(BaseModel):
+    """Payload for ``outputs[type=clip]`` — the clip's creative fields.
+
+    Timeline semantics live in ``source_ref``, the render pipeline in
+    ``render_spec``/``render_status``, publishing metadata in ``publishing``
+    (ADR-030 payload rules 2/3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    hook: str = ""
+    title_options: list[str] = Field(default_factory=list)
+    music_mood: str = "calm"
+    duration: int = 30
+
+
+# ADR-030 rule 1: payload is the default home and a schema registry guards the
+# door. Write = model_dump(); read = parse back into the typed model (same
+# pattern as render_spec/ClipSpec).
+OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
+    "clip": ClipPayload,
+    "post": Post,
+    "quotes": Quotes,
+    "carousel": CarouselResponse,
+    "article": Article,
+    "content_plan": ContentPlan,
+}
+
+# Internal types are node artifacts, not user-facing products. Every read path
+# must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
+# type filter (results/library/export, and future MCP/gallery surfaces).
+INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset({"content_plan"})
+
+
+def validate_output_payload(output_type: str, payload: dict) -> dict:
+    """Validate payload against the registry schema for ``output_type``.
+
+    Returns a normalized plain dict for the JSONB column; raises ``ValueError``
+    for unknown types or malformed payloads.
+    """
+    model = OUTPUT_PAYLOAD_SCHEMAS.get(output_type)
+    if model is None:
+        raise ValueError(f"Unknown output type: {output_type}")
+    return model.model_validate(payload).model_dump(mode="json")
+
+
 class ClipDub(BaseModel):
     """Cloned-voice dubbed speech; when enabled, replaces the source's audio."""
 
@@ -888,6 +961,81 @@ class ClipSpec(BaseModel):
     brand: ClipBrand | None = None  # resolved brand values (None = default look)
     brand_ref: UUID | None = None
     target_language: str = "en"
+
+
+class PlanNodeResponse(BaseModel):
+    """One node of a run's execution plan — the user-facing step (ADR-028).
+
+    ``stage`` is an optional display hint lifted from ``node.spec["stage"]`` by
+    the serializer (e.g. selecting_segments / building_specs), letting the
+    stepper reuse existing i18n keys.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: str
+    status: str
+    seq: int
+    error: str | None = None
+    cost: dict | None = None
+    stage: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class OutputResponse(BaseModel):
+    """Unified product row (ADR-030): clips and derivatives became types.
+
+    ``payload`` is validated against ``OUTPUT_PAYLOAD_SCHEMAS`` at the API
+    boundary; ``files``/``publishing`` URLs are resolved through the storage
+    seam exactly like the retired ClipResponse did.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    plan_node_id: UUID | None = None
+    type: str
+    language: str
+    status: str
+    provenance: str
+    payload: dict
+    files: dict = Field(default_factory=dict)
+    source_ref: dict | None = None
+    render_spec: ClipSpec | None = None
+    render_status: RenderStatus | None = None
+    render_error: str | None = None
+    score: dict | None = None
+    publishing: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    @field_validator("payload", mode="before")
+    @classmethod
+    def _validate_payload(cls, value: Any, info: ValidationInfo) -> Any:
+        output_type = info.data.get("type")
+        if output_type is None or not isinstance(value, dict):
+            return value
+        model = OUTPUT_PAYLOAD_SCHEMAS.get(output_type)
+        if model is None:
+            return value
+        return model.model_validate(value).model_dump(mode="json")
+
+    @model_validator(mode="after")
+    def _resolve_file_urls(self) -> OutputResponse:
+        """Resolve stored object keys in files/publishing to public URLs."""
+        from app.services.storage import resolve_stored_url
+
+        for key in ("video", "srt", "image"):
+            if self.files.get(key):
+                self.files[key] = resolve_stored_url(self.files[key])
+        if self.publishing.get("cover_image_url"):
+            self.publishing["cover_image_url"] = resolve_stored_url(
+                self.publishing["cover_image_url"]
+            )
+        return self
 
 
 class ClipResponse(BaseModel):
@@ -1096,6 +1244,10 @@ class WorkflowRunResponse(BaseModel):
     progress: int = Field(default=0, ge=0, le=100)
     error: str | None = None
     context: dict | None = None
+    # Aggregated node metering (sum of plan_nodes.cost); None until metered.
+    cost: dict | None = None
+    # RunPlan steps, ordered by seq; empty for runs predating plan_nodes.
+    nodes: list[PlanNodeResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime | None = None
 
