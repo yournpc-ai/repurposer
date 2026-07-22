@@ -711,4 +711,32 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - chat 随 DAG 内核连带升级：dispatch 目标 = editor 操作 / 整体重生成 / plan 级（节点重跑·追加·参数），ChatCut 原则推广到计划层（CHAT_ARCHITECTURE 待写；ROADMAP §3）。
 - 运行图检视面（ADR-028 Amendment）在虚拟时代从"可选深度面"变为必需——变体集与混合图是线性清单表达不了的。
 
+**Amendment（2026-07-22）**：Decision 2"虚拟产物独立成族：新输出表（与 `clips` 平级）"修订为——虚拟产物 = **`outputs` 统一表的类型 + `provenance=generated`**（ADR-030）。原决策的实质约束全部保留：不进 clips（`clips` 表本身退役）、不进 clip-spec、parity 只覆盖包装层；变化的只是载体——产物二分（clips/derivatives）被 outputs 统一后，"独立成族"自然落为"类型+来源"，无需第二张表。
+
 **Related**: ADR-016、ADR-021、ADR-025、ADR-026、ADR-028（含 Amendment）；`docs/STRATEGY.md` §2.2/§2.5；`docs/research/elevencreative.md`；`docs/research/chatcut.md`；`docs/ROADMAP.md` §3
+
+## ADR-030: 产物统一为 outputs——clip 降级为类型，payload schema 注册表守门
+
+**Status**: Decided (2026-07-22)
+
+**Context**: 产物劈成两张表：`clips`（元数据富：发布套件 title/desc/hashtags/cover/topic + render 管线）与 `derivatives`（穷人版：content JSON + image_url）。三个不对称（元数据 / 管线 / 扩展成本）导致：Distribution 双 FK+CHECK、verifier 分数无处放、发布对话框两套表单、新输出类型要 enum 迁移+特判（quotes 图片就是这样来的）。统一词汇其实早已存在——`generation.py` 的 `KNOWN_OUTPUTS` 已把它们统称 outputs，schema 没跟上。破坏性更新（不保留数据）给了合并窗口。
+
+**Decision**:
+1. **统一 `outputs` 表**，`clips`/`derivatives` 退役。通用列：`id / project_id / plan_node_id（血统）/ type / language / status / provenance(real|generated) / payload JSONB / files JSONB / source_ref JSONB? / render_spec JSONB? / render_status? / score JSONB? / publishing JSONB`。
+   - clip = 带 `source_ref`（时间轴语义）+ `render_spec`（渲染管线）的那一类；Editor 照旧只认 `type=clip`。
+   - `render_status` 保持顶级列（worker 认领谓词），NULL = 未请求渲染（语义沿用）。
+   - **产物类型注册表 = 节点类型注册表**（加一种节点自动有产物位）。
+2. **三条 payload 规则**（防 god-table，可评审可执行）：
+   - 规则 1：**默认进 payload，schema 注册表守门**——`OUTPUT_PAYLOAD_SCHEMAS`（type→BaseModel），写入 `model_dump()`、读取 parse 回 typed model（沿用 render_spec/ClipSpec 的"JSON 列 + Pydantic 契约"先例）；
+   - 规则 2：**要查的字段升级为列**——需要 SQL 谓词/索引/认领的字段挣顶级列（`render_status` 是先例）；
+   - 规则 3：**通用列只收跨类型字段**——对 ≥2 类型或横切机制（合规/计量/分发）有意义的才配（plan_node_id / provenance / score / publishing）。
+3. **Distribution 单 FK**：`publications.output_id`，双 FK + CHECK（`ck_pub_target_*`）退役。
+4. **verifier 的家**：`score JSONB`（分数+理由+维度）——P0-3 分数落库落定于此。
+
+**Consequences**:
+- ADR-029 修订：虚拟产物 = outputs 的类型 + provenance（见 ADR-029 Amendment）。
+- 新输出类型（newsletter / avatar 视频）= 新节点类型 + payload schema 注册，零表迁移。
+- MODULE_ARCH §4 登记 outputs（Owner: Pipeline）；数据架构图见 §2.2。
+- payload 的"类型安全"未丢——从 DB 层移到 schema 层（Pydantic 校验强于 SQL CHECK）。
+
+**Related**: ADR-016、ADR-026、ADR-028、ADR-029（Amendment）；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md` §12；`docs/tasks/runplan-persistence.md`

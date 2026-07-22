@@ -24,10 +24,10 @@
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `ARCHITECTURE.md` | 系统现状架构 | 活跃 | 动任何子系统前 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"） | 活跃（2026-07 建） | 动模块边界/新模块前 |
-| `AGENT_ARCHITECTURE.md` | 4-layer 生成编排（Layer 4 未实现，图已标注） | 已实现 | 动 generation/agents 前 |
+| `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线：八概念/导演两步/质检节点/分期） | 已实现 + 📋 演进中 | 动 generation/agents 前 |
 | `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 待 Operation Model） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
-| `DECISIONS.md` | ADR-001 ~ ADR-029 | 持续追加 | 翻案/新决策时 |
+| `DECISIONS.md` | ADR-001 ~ ADR-030 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建，📋 未实现） | 动 Distribution 前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
@@ -42,4 +42,4 @@
 
 - `CHAT_ARCHITECTURE.md` — Agent Interface 层：意图 → 操作 dispatch、chat 何时产生 editor 操作 vs 触发重生成；run-plan 步骤语义（ADR-028）；plan 级意图 dispatch 三类目标（ADR-029 关联）
 - `METRICS.md` — 产品度量：漏斗（上传→生成→精修→发布→回流）、事件埋点、各阶段成功指标
-- `BILLING.md` — 套餐经济设计：档位 / 免费额度 / credits↔产出换算 / 对外成本预估呈现
+- `BILLING.md` — 套餐经济设计：档位 / 免费额度 / credits↔产出换算 / 对外成本预估呈现；预算帽路由参照（elevencreative §8 机制 6"自动低于300积分"）

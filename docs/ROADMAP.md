@@ -27,11 +27,11 @@
 | 传播潜力分：维度明细 + 打分理由 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
 | persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
-| RunPlan 持久化（`plan_nodes` 表 + Clip/Derivative 节点级血统——计划图作为一等对象，与 Operation Model 同源于"步骤皆可寻址"） | ADR-028；STRATEGY §2.5；elevencreative §3 | **P1（地基）** | 无 | — 纯工程 | ❌（计划为单趟易失对象；`current_step` 裸字符串） |
-| ContentPlan 覆盖问责（论点→资产映射 + 去重约束 = fortnight 分镜表） | STRATEGY §2.5；elevencreative | P1 | RunPlan 持久化 | ✅ | ❌（单趟 plan 无覆盖概念） |
+| RunPlan 持久化 + outputs 统一（`plan_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ❌（计划为单趟易失对象；产物劈两张表；`current_step` 裸字符串） |
+| 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | RunPlan 持久化 | ✅ | ❌（Director 单趟一坨 + project.content_plan 盲目复用 + 伪造 DerivativePlan） |
 | 结构化节拍图 + clip-spec motion 枚举（分镜入 plan：hook/body/payoff 时间戳；运镜入 spec 预设枚举——ADR-016 纪律不破，仍 CSS/libass 双端可表达） | STRATEGY §2.5；elevencreative | P2 | 覆盖问责 | ⚠️ | ❌（`visual_notes` 自由文本；crop 整条静态） |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
-| Consistency Reviser（真正的 Layer 4） | AGENT_ARCH §10.1 | P2 | Operation Model（修订即操作） | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
+| 质检节点（原"Layer 4"新形态：单产物质检——分数落库/persona 保真/术语合规，不合格带反馈打回上游 ≤2 次；全片质检——跨产物撞车；verify = plan_nodes 一种 kind） | AGENT_ARCH §12；ADR-028 | P2 | RunPlan 持久化 | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
 
 ## 2. Operation Model（操作日志层）⭐ 地基
 
@@ -49,7 +49,7 @@
 
 > chat 从 asset-scoped Modal 快捷服务升级为主交互层：人话 / agent 话 → Operation Model / WorkflowRun 的统一入口。
 >
-> **随 DAG 内核连带升级（2026-07-22）**：dispatch 目标分三类——editor 操作 / 整体重生成 / **plan 级**（节点重跑·追加·参数："重新选段"=重跑 selection 节点，"加德语版"=追加 post_gen(de) 节点）；ChatCut 原则（指令=可检查可撤销的真实操作，矩阵 §E）推广到计划层。详见 CHAT_ARCHITECTURE（待写）与 ADR-029。
+> **随 DAG 内核连带升级（2026-07-22）**：dispatch 目标分三类——editor 操作 / 整体重生成 / **plan 级**（节点重跑·追加·参数："重新选段"=重跑 selection 节点，"加德语版"=追加 post_gen(de) 节点）；ChatCut 原则（指令=可检查可撤销的真实操作，矩阵 §E）推广到计划层。chat 引用模型 = **@ 类型化对象**（产物/节点，elevencreative §8 机制 6）；plan 级指令采纳**子图词汇**——只跑此节点 / 从这里跑 / 跑到这里（机制 5）。详见 CHAT_ARCHITECTURE（待写）与 ADR-029。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -119,7 +119,7 @@
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
 | WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ❌ |
-| 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3 | P1（**提速**：对手已到动作级标价——Opus 生成按钮带价、按 part 重生成 20⚡（opusclip §8.1），再晚追不平） | 成本计量数据积累 | — | ❌ |
+| 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3；elevencreative §8 机制 5（子图级积分预览实证） | P1（**提速**：对手已到动作级标价——Opus 生成按钮带价、按 part 重生成 20⚡（opusclip §8.1），再晚追不平） | 成本计量数据积累 | — | ❌ |
 | 失败不扣费语义 | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量 | — | ❌ |
 | 套餐经济设计（档位 / 免费额度 / credits↔产出换算） | 审计 2026-07-22；Opus pricing 参照（agent-opus §5） | P1 | 成本计量；文档坑位 BILLING.md 已登记（README） | — | ❌ |
 | 产品度量地基（漏斗事件埋点：上传→生成→精修→发布→回流；各阶段成功指标） | 审计 2026-07-22 | P1（轻量，随功能落地同步埋点；验证 §9 Phase 1 激活效果的前置） | 无；文档坑位 METRICS.md 已登记（README） | — 纯工程 | ❌ |

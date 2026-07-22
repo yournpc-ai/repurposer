@@ -61,9 +61,11 @@ UniqueConstraint(user_id, platform, platform_user_id)
 id: UUID PK
 user_id: UUID FK                 # 去规范化（同 Asset 约定）：免 join 做归属校验
 project_id: UUID FK
-clip_id: UUID FK clips | NULL        # 二选一 + CHECK 约束（沿用 Asset 表
-derivative_id: UUID FK derivatives | NULL  # ck_asset_owner_set / ck_asset_owner_single
-                                     # 先例）：ck_pub_target_set + ck_pub_target_single。
+output_id: UUID FK outputs | NOT NULL    # 单 FK（ADR-030，2026-07-22 修订）：
+                                     # 产物统一为 outputs 后，原双 FK（clip_id/
+                                     # derivative_id）+ CHECK（ck_pub_target_*）退役。
+                                     # DAG 化对本模块零变化——缝=产物表，Pipeline
+                                     # 内核重建不影响 publications 设计。
                                      # 不用 target_type/target_id 多态引用——DB 无法
                                      # 强制外键完整性，clip 删除会产生孤儿行
 channel_account_id: UUID FK channel_accounts ON DELETE SET NULL

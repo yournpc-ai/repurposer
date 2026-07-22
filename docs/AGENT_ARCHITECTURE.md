@@ -2,6 +2,7 @@
 
 > Status: implemented on main
 > Last updated: 2026-07-16
+> **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
 
 ## 1. Overview
 
@@ -295,3 +296,63 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 - `app/services/generation.py` — orchestration
 - `app/agents/intent.py` — intent recognition
 - `app/routers/derivatives.py` — single-derivative regeneration
+
+## 12. 施工图视图（RunPlan 架构，2026-07-22 定型）
+
+> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（RunPlan 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
+
+### 12.1 概念表（八个，没有第九个）
+
+| 概念 | 一句话 | 老概念对应 |
+|---|---|---|
+| **任务书** | 意图归一：outputs×语言×数量×预算+instruction | run.context 参数 / infer-intent / chat 指令 |
+| **预处理** | ASR 词级时间戳 + 文本提取（机器，无 LLM） | asset_processing |
+| **导演** | 两步走：看懂素材（可复用）→ 分任务（分镜表，每 run 重排） | Content Director（单趟 → 两次调用） |
+| **班组** | executors：选段 / 编剧 / 文案 / 配音 / 渲染——每工种一个节点 | Agent Executors |
+| **质检** | 单产物（分数落库 / 保真 / 合规，打回 ≤2 次）+ 全片（跨产物撞车） | Layer 4（未实现）的新形态 |
+| **施工图** | plan_nodes：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
+| **产物** | outputs 统一表；clip = 带时间轴+渲染的那一类 | clips / derivatives（ADR-030） |
+| **分发** | 缝 = 产物表，零变化 | Distribution |
+
+### 12.2 导演两步走（两次 LLM 调用）
+
+- **看懂素材**：产出素材理解（论点带 transcript 位置 / 金句 / 主题 / 受众）。**自足契约**：产物必须足以支撑分任务，分任务不再读原稿。**asset hash 失效**：素材变才重算（§10.2 的正式实现，替代 §4.3 的盲目复用）。
+- **分任务**：吃素材理解 + 任务书 → 分镜表（论点→槽位 + 任务卡 + 未用/撞车报告），每次 run 必重排。
+- **为什么两次**：寿命不同（理解=素材级，任务=请求级）；理解要冻结，fortnight 整包才一致；可寻址（"重排任务"只重跑第二步）。首次成本差可忽略（理解 ≪ 原稿）。
+- **DerivativePlan 退役**：任务卡只含 what（论点/角度/语言/格式），how 归 executor——伪造 plan 的代码路径（`generation.py:569-585`）整体删除。
+
+### 12.3 质检节点（Layer 4 的答案）
+
+Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单产物质检**（分数+理由落库 = P0-3 的家、persona 保真、术语合规；不合格带反馈打回上游 ≤2 次，再败标"待人工"不阻塞）+ **全片质检**（跨产物矛盾/撞车）。可寻址、可计价、可单独重跑——失败只打回不合格分支，不搞全局复审。
+
+### 12.4 流程图（一次 fortnight run）
+
+```
+预处理 → 任务书 → 导演·看懂素材 → 导演·分任务
+  → 班组（选段→编剧→渲染 / 文案×N / 配音·音乐）
+  → 质检（单产物 → 全片）
+  → 产物（outputs）→ 分发（零变化）
+```
+
+每一步 = 施工图上的一个节点：pending 可估价（成本预览）、running 可看状态、done 有账可查、不满意可单独重跑（子图词汇：只跑此节点 / 从这里跑 / 跑到这里）。
+
+### 12.5 班底与机械
+
+- **会思考（LLM 班底）**：意图识别 / 导演 / 班组 / 质检 / persona / chat 意图解析
+- **不会思考（施工机械）**：processor / orchestrator（物化图+走图）/ worker（认领节点）/ Remotion / 队列 / 存储 / 分发状态机
+
+### 12.6 现状五宗罪（2026-07-22 代码核实）
+
+1. ContentPlan = project 上 JSON blob，盲目复用无失效（`generation.py:1069`）
+2. DerivativePlan 混 what/how，定向重生成靠伪造 plan（`:569-585`）
+3. output_status JSON + 进程内 asyncio 锁，跨 worker 失效（`:81`）
+4. speaker 自动创建埋在 run_generation（`:1016`）→ 变 persona_bootstrap 节点
+5. scope if-else 双形态 → 同机制小拓扑图
+
+### 12.7 分期（防范围蠕变）
+
+| 期 | 内容 | 行为变化 |
+|---|---|---|
+| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 |
+| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 |
+| Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 |

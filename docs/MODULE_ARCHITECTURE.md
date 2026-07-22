@@ -16,22 +16,36 @@
 ## 2. 六层模块图
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Agent Interface（chat 升级版 + MCP，📋 未实现）               │  ← 人话 / agent 话统一入口
-├─────────────────────────────────────────────────────────────┤
-│ Operation Model（操作日志层，📋 未实现）                      │  ← 可检查/可撤销的操作；
-│                                                             │    editor GUI / chat / MCP 共用
-├──────────────────┬───────────────────────┬──────────────────┤
-│ Pipeline         │ Editor GUI            │ Distribution     │
-│ （生成管线，      │ （Operation Model     │ （📋 未实现：     │
-│  ✅ 已落地）      │  的一个前端，✅ 主体   │  审核队列/LinkedIn│
-│                  │  已落地）              │  直发/定时发布）   │
-├──────────────────┴───────────────────────┴──────────────────┤
-│ Memory / Context（Speaker persona + Brand + 术语表，✅ 主体   │  ← 横切：director 注入 /
-│  已落地，术语表 📋）                                         │    chat 上下文 / 品牌皮肤
-├─────────────────────────────────────────────────────────────┤
-│ 合规与计费底座（AI 内容标识 / 成本计量 / EU 驻留，📋）          │  ← 横切所有模块
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────── 前端面 ──────────────────────────┐
+│ composer ✅ │ Editor GUI ✅ │ chat 🚧 │ 步骤清单 📋P1       │
+│ 运行图检视面 📋P2（信任工具） │ MCP 📋P2                     │
+└──────────────────────────────┬─────────────────────────────┘
+                               ▼ 意图
+┌──────────────── Agent Interface（chat 升级版 + MCP）────────┐
+│ dispatch 三类目标：editor 操作 / 整体重生成 / plan 级          │
+│ 表：chat_sessions/messages ✅                               │
+└───────┬──────────────────────────────┬─────────────────────┘
+        ▼                              ▼
+┌───────────────────┐   ┌─────────── Pipeline ✅ 内核升级 📋 ───────┐
+│ Operation Model 📋 │   │ 摄入/预处理（ASR）✅ │ 导演/班组 ✅        │
+│ （操作日志层，      │   │ ┌── RunPlan 内核（施工图，ADR-028）──────┐│
+│  三前端共用）      │   │ │ plan_nodes：导演两步/班组/质检节点        ││
+└─────────┬─────────┘   │ │ orchestrator 走图 · worker 认领节点       ││
+          │             │ │ 链：clip 链 ✅/文案链 ✅/虚拟链 📋A-029   ││
+          │             │ └───────────────────────────────────────────┘│
+          │             └──────────────────┬────────────────────────────┘
+          ▼ clip-spec diff                 ▼ clip-spec（唯一契约 ADR-016）
+        outputs ◄────────────── Remotion 渲染服务 ✅（黑盒）
+       （📋 统一产物表，ADR-030）
+
+┌──────────────── Distribution 📋（与 Pipeline 平级，零变化）──────┐
+│ channel_accounts / publications 状态机 / 缝 = 产物表单 FK         │
+├──────────────────────────────────────────────────────────────────┤
+│ Memory / Context ✅（persona + Brand + 术语表 📋；📋视觉身份+授权） │
+├──────────────────────────────────────────────────────────────────┤
+│ 合规与计费底座 📋（分类器读产物 provenance→C2PA / usage→           │
+│ plan_nodes.cost / EU 驻留）                                       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.1 闭环流转图（工作流闭环 = 全模块指导方针）
@@ -75,6 +89,31 @@
 
 **闭环现状：断在两条回流边上。** 正向链路（上传 → 预处理 → 生成 → 精修 → 渲染 → 导出）已全通；回流（精修痕迹、发布数据）一条都不存在——这就是 ROADMAP 把 Operation Model 标为"地基"、把 Distribution 数据模型标为"权重上调"的原因。回流不通，传播潜力分和 persona 永远没有真实校准源，三资产哲学（STRATEGY §2）就停在营销层。
 
+### 2.2 数据架构图（ADR-028/030 后）
+
+```
+users（平台层）
+
+Memory/Context：speakers（📋+视觉身份/授权）· brand_templates
+
+Pipeline：
+assets ──► workflow_runs ──► plan_nodes 📋 ──► outputs 📋（统一产物，替代 clips/derivatives）
+（上传/ASR）  （run 容器）     （施工图：计划+账簿）     type=clip 带 source_ref+render_spec
+music（AI 音乐库）                             payload/files/score/publishing/provenance
+
+Agent Interface：chat_sessions ──► messages
+Operation Model 📋：operations（clip-spec diff；目标=outputs[type=clip]）
+Distribution 📋：channel_accounts ──► publications ──► publication_events（只追加）
+                                      output_id 单 FK · due_at · metrics · ai_disclosure
+
+横切数据流：
+计量：LLM usage（ADR-025）→ plan_nodes.cost ──聚合──► workflow_runs
+合规：产物 provenance → 分类器 → C2PA（渲染嵌入）+ publications.ai_disclosure
+回流：① operations（编辑痕迹）② publications.metrics（发布数据）→ 校准打分/persona
+```
+
+读法：模块图回答"谁干活"，本图回答"记在哪"——每张表一个 owner（§4），血统经 `plan_node_id` 汇聚到 plan_nodes（DAG 内核是数据架构的中心）。
+
 ## 3. 模块职责与现状映射
 
 | 模块 | 职责 | 现状代码 | 状态 |
@@ -99,8 +138,8 @@
 | `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写 |
 | `projects` | Pipeline | `content_plan` 只由 generation 写；各模块只读 |
 | `workflow_runs` | Pipeline | **只允许两处创建**：Pipeline 生成入口、Agent Interface 的 dispatch；状态只由 worker 写。成本计量列（📋）由 LLM 接口层（ADR-025）写 |
-| `clips` | **共享聚合**（见下） | 创建 + `render_status`/`video_url` 归 Pipeline；内容字段（segments/hidden/trim，经 `render_spec`）归 Operation Model；契约 = clip-spec |
-| `derivatives` | Pipeline | 内容修订经 reviser 流程（未来归 Operation Model） |
+| `clips` / `derivatives` | （将被 📋 outputs 替代，ADR-030） | 过渡期原规则不变（clips 共享聚合细则见下）；破坏性重建后退役 |
+| （📋）outputs | Pipeline | 创建 + `render_status`/文件字段归 Pipeline；内容字段（经 `render_spec`）归 Operation Model；payload 三规则（ADR-030）；`plan_node_id` 为只读血统 |
 | `chat_sessions` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
 | `speakers` | Memory | 各模块注入用只读；persona 只由 persona agent 写 |
 | `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
@@ -117,7 +156,8 @@
 2. **读路径走 API 服务层**：模块间同步读数据经服务函数/路由，不跨域直写对方的表。
 3. **clip-spec 是 Pipeline ↔ 渲染的唯一契约**（ADR-016）：渲染服务不读 DB；Operation Model 的编辑也表达为 clip-spec diff，不引入第二个契约。
 4. **Memory 注入是单向的**：Memory 模块只暴露"注入载荷"（persona block / brand block / glossary），不知道谁在消费；消费者（director / chat / distribution）各自拉取。
-5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `workflow_runs`）；内容标识在 clip-spec 扩展字段与 Distribution 披露元数据两处落地，不分散到各模块自行实现。
+5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `plan_nodes.cost`）；内容标识在 clip-spec 扩展字段与 Distribution 披露元数据两处落地，不分散到各模块自行实现。
+6. **内核重建接缝稳定**：模块内核可重建，只要表归属与通信规则不变，其他模块零感知——2026-07-22 实证：Pipeline 的 RunPlan（DAG）化后，Distribution / Memory / Editor GUI / Operation Model 全部零改动（缝 = 产物表与 clip-spec）。新内核设计必须守住既有接缝，不得以内核升级为借口移动缝。
 
 ## 6. 演进规则
 
