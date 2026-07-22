@@ -36,13 +36,12 @@ const WORDS_PER_LINE = 7
 // Caption target languages (European-market focus per product positioning).
 const CAPTION_LANG_CODES = ['en', 'fr', 'de', 'es', 'it', 'zh'] as const
 
-interface Clip {
+interface ClipOutput {
   id: string
-  hook: string
+  payload: { hook?: string }
   render_spec: ClipSpec | null
   render_status: string | null
-  video_url: string | null
-  srt_url: string | null
+  files: { video?: string; srt?: string }
 }
 
 export const Route = createFileRoute('/projects/$id/clips/$clipId')({
@@ -105,7 +104,7 @@ function ClipEditorPage() {
   const { id, clipId } = Route.useParams()
   const { t } = useTranslation()
 
-  const [clip, setClip] = useState<Clip | null>(null)
+  const [clip, setClip] = useState<ClipOutput | null>(null)
   const [spec, setSpec] = useState<ClipSpec | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -129,9 +128,9 @@ function ClipEditorPage() {
   }, [])
 
   const loadClip = () =>
-    apiFetch(`/api/v1/clips/${clipId}`)
+    apiFetch(`/api/v1/outputs/${clipId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Clip not found'))))
-      .then((c: Clip) => {
+      .then((c: ClipOutput) => {
         setClip(c)
         setSpec((prev) => prev ?? c.render_spec)
         return c
@@ -190,7 +189,7 @@ function ClipEditorPage() {
     setSaving(true)
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/clips/${clipId}`, {
+      const res = await apiFetch(`/api/v1/outputs/${clipId}`, {
         method: 'PUT',
         body: { render_spec: spec },
       })
@@ -210,7 +209,7 @@ function ClipEditorPage() {
     if (dirty && !(await save())) return
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/clips/${clipId}/render`, { method: 'POST' })
+      const res = await apiFetch(`/api/v1/outputs/${clipId}/render`, { method: 'POST' })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.detail || 'Render failed')
@@ -228,7 +227,7 @@ function ClipEditorPage() {
     setTranslating(true)
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/clips/${clipId}/translate-captions`, {
+      const res = await apiFetch(`/api/v1/outputs/${clipId}/translate-captions`, {
         method: 'POST',
         body: { target_language: lang },
       })
@@ -236,7 +235,7 @@ function ClipEditorPage() {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.detail || 'Translate failed')
       }
-      const c: Clip = await res.json()
+      const c: ClipOutput = await res.json()
       setClip(c)
       if (c.render_spec) setSpec(c.render_spec)
       setDirty(false)
@@ -255,7 +254,7 @@ function ClipEditorPage() {
     setDubbing(true)
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/clips/${clipId}/dub`, {
+      const res = await apiFetch(`/api/v1/outputs/${clipId}/dub`, {
         method: 'POST',
         body: { target_language: lang },
       })
@@ -263,7 +262,7 @@ function ClipEditorPage() {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.detail || 'Dub failed')
       }
-      const c: Clip = await res.json()
+      const c: ClipOutput = await res.json()
       setClip(c)
       if (c.render_spec) setSpec(c.render_spec)
       setDirty(false)
@@ -288,7 +287,7 @@ function ClipEditorPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="truncate text-xl font-bold tracking-tight">
-            {clip?.hook || t('clipEditor.title')}
+            {clip?.payload.hook || t('clipEditor.title')}
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -334,30 +333,30 @@ function ClipEditorPage() {
             )}
           </div>
 
-          {clip?.video_url ? (
+          {clip?.files.video ? (
             <div className="space-y-2 rounded-xl bg-card p-3 ring-1 ring-border">
               <p className="text-xs font-medium text-muted-foreground">{t('clipEditor.rendered')}</p>
-              <video src={toAbsoluteUrl(clip.video_url) ?? undefined} controls className="w-full rounded-md" />
+              <video src={toAbsoluteUrl(clip.files.video) ?? undefined} controls className="w-full rounded-md" />
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-1.5"
                   onClick={() =>
-                    downloadFile(clip.video_url, `${clip.hook || 'clip'}.mp4`).catch((e) =>
+                    downloadFile(clip.files.video, `${clip.payload.hook || 'clip'}.mp4`).catch((e) =>
                       setError(e instanceof Error ? e.message : 'Download failed'),
                     )
                   }
                 >
                   <Download className="h-4 w-4" /> MP4
                 </Button>
-                {clip.srt_url ? (
+                {clip.files.srt ? (
                   <Button
                     variant="outline"
                     size="sm"
                     className="flex-1 gap-1.5"
                     onClick={() =>
-                      downloadFile(clip.srt_url, `${clip.hook || 'clip'}.srt`).catch((e) =>
+                      downloadFile(clip.files.srt, `${clip.payload.hook || 'clip'}.srt`).catch((e) =>
                         setError(e instanceof Error ? e.message : 'Download failed'),
                       )
                     }

@@ -29,9 +29,9 @@ import {
 } from "@/components/ui/message-scroller"
 import { apiFetch } from "@/lib/api"
 
-import type { Clip, Derivative } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
-type Asset = Clip | Derivative
+type Asset = Output
 
 interface AssetChatModalProps {
   open: boolean
@@ -180,8 +180,8 @@ export function AssetChatModal({
 
   const assetTitle =
     assetType === "clip"
-      ? (asset as Clip).hook
-      : t(`assetChat.derivativeTypes.${(asset as Derivative).type}`)
+      ? asset.payload.hook
+      : t(`assetChat.derivativeTypes.${asset.type}`)
 
   const handleSend = async () => {
     if (!input.trim() || isWorking || !asset) return

@@ -13,34 +13,34 @@ import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 import { ClipDetailModal } from "./ClipDetailModal"
 
-import type { Clip } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 interface ClipCardProps {
-  clip: Clip
+  output: Output
   onRegenerate?: () => void
 }
 
-export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
+export function ClipCard({ output, onRegenerate }: ClipCardProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [chatOpen, setChatOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [clipState, setClipState] = useState<Clip>(clip)
+  const [clipState, setClipState] = useState<Output>(output)
   const [isRendering, setIsRendering] = useState(
-    clip.render_status === "pending" || clip.render_status === "rendering"
+    output.render_status === "pending" || output.render_status === "rendering"
   )
-  const [renderError, setRenderError] = useState<string | null>(clip.render_error)
+  const [renderError, setRenderError] = useState<string | null>(output.render_error)
   const [isPlaying, setIsPlaying] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   // Keep local state in sync if the parent re-renders with updated data.
   useEffect(() => {
-    setClipState(clip)
-    setRenderError(clip.render_error)
+    setClipState(output)
+    setRenderError(output.render_error)
     setIsRendering(
-      clip.render_status === "pending" || clip.render_status === "rendering"
+      output.render_status === "pending" || output.render_status === "rendering"
     )
-  }, [clip])
+  }, [output])
 
   useEffect(() => {
     if (isPlaying && videoRef.current) {
@@ -50,17 +50,21 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     }
   }, [isPlaying])
 
+  const videoUrl = clipState.files.video ?? null
+  const title = clipState.publishing.title || clipState.payload.hook || ""
+  const coverUrl = clipState.publishing.cover_image_url ?? null
+
   const handleDownload = () => {
-    if (!clipState.video_url) return
-    const filename = `${clipState.title || clipState.hook || "clip"}.mp4`
-    downloadFile(clipState.video_url, filename).catch((e) =>
+    if (!videoUrl) return
+    const filename = `${title || "clip"}.mp4`
+    downloadFile(videoUrl, filename).catch((e) =>
       console.error("Download failed", e)
     )
   }
 
   const handleRegenerate = async () => {
     try {
-      await apiPost(`/api/v1/clips/${clipState.id}/regenerate`, {
+      await apiPost(`/api/v1/outputs/${clipState.id}/regenerate`, {
         instruction: "Regenerate this clip",
       })
       onRegenerate?.()
@@ -73,12 +77,12 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     setRenderError(null)
     setIsRendering(true)
     try {
-      const res = await apiPost(`/api/v1/clips/${clipState.id}/render`, {})
+      const res = await apiPost(`/api/v1/outputs/${clipState.id}/render`, {})
       if (!res.ok) {
         const detail = await res.json().catch(() => null)
         throw new Error(detail?.detail || "Render failed")
       }
-      const updated: Clip = await res.json()
+      const updated: Output = await res.json()
       setClipState(updated)
     } catch (e) {
       setIsRendering(false)
@@ -93,10 +97,10 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
     })
   }
 
-  const thumbnailUrl = clipState.cover_image_url
-    ? toAbsoluteUrl(clipState.cover_image_url)
-    : clipState.video_url
-      ? toAbsoluteUrl(clipState.video_url)
+  const thumbnailUrl = coverUrl
+    ? toAbsoluteUrl(coverUrl)
+    : videoUrl
+      ? toAbsoluteUrl(videoUrl)
       : null
 
   return (
@@ -120,10 +124,10 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
               <p className="text-sm text-muted-foreground">{t("chat.rendering")}</p>
             </div>
-          ) : isPlaying && clipState.video_url ? (
+          ) : isPlaying && videoUrl ? (
             <video
               ref={videoRef}
-              src={toAbsoluteUrl(clipState.video_url) || undefined}
+              src={toAbsoluteUrl(videoUrl) || undefined}
               className="h-full w-full object-contain"
               controls
               autoPlay
@@ -134,10 +138,10 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
             />
           ) : thumbnailUrl ? (
             <>
-              {clipState.cover_image_url ? (
+              {coverUrl ? (
                 <img
                   src={thumbnailUrl || undefined}
-                  alt={clipState.title || clipState.hook}
+                  alt={title}
                   className="h-full w-full object-contain transition-transform group-hover:scale-105"
                 />
               ) : (
@@ -150,14 +154,14 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
               )}
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
               <div className="absolute right-2 top-2 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                {formatDuration(clipState.duration)}
+                {formatDuration(clipState.payload.duration ?? 0)}
               </div>
               <button
                 type="button"
                 data-play-trigger
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (clipState.video_url) {
+                  if (videoUrl) {
                     setIsPlaying(true)
                   } else {
                     handleRender()
@@ -207,7 +211,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
         <div className="flex flex-1 flex-col justify-between p-3">
           <div className="space-y-1">
             <h3 className="line-clamp-2 text-sm font-medium">
-              {clipState.title || clipState.hook}
+              {title}
             </h3>
           </div>
 
@@ -215,7 +219,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
             {!isRendering && (
               <AssetActionBar
                 onEdit={handleEdit}
-                onDownload={clipState.video_url ? handleDownload : undefined}
+                onDownload={videoUrl ? handleDownload : undefined}
                 onRegenerate={handleRegenerate}
                 onChat={() => setChatOpen(true)}
               />
@@ -234,7 +238,7 @@ export function ClipCard({ clip, onRegenerate }: ClipCardProps) {
       />
 
       <ClipDetailModal
-        clip={clipState}
+        output={clipState}
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onRegenerate={onRegenerate}

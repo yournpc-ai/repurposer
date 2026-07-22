@@ -16,30 +16,40 @@ import {
 import { apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { formatDuration, cn } from "@/lib/utils"
 
-import type { Clip } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 interface ClipDetailModalProps {
-  clip: Clip
+  output: Output
   open: boolean
   onOpenChange: (open: boolean) => void
   onRegenerate?: () => void
 }
 
 export function ClipDetailModal({
-  clip,
+  output,
   open,
   onOpenChange,
   onRegenerate,
 }: ClipDetailModalProps) {
   const { t } = useTranslation()
-  const [clipState, setClipState] = useState<Clip>(clip)
+  const [clipState, setClipState] = useState<Output>(output)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   // Keep modal state in sync when the parent re-renders with updated clip data
   // (e.g., render completion, chat edits).
   useEffect(() => {
-    setClipState(clip)
-  }, [clip])
+    setClipState(output)
+  }, [output])
+
+  const videoUrl = clipState.files.video ?? null
+  const title = clipState.publishing.title || clipState.payload.hook || ""
+  const description = clipState.publishing.description ?? null
+  const hashtags = clipState.publishing.hashtags ?? []
+  const topic = clipState.publishing.topic ?? null
+  const coverUrl = clipState.publishing.cover_image_url ?? null
+  const duration = clipState.payload.duration ?? 0
+  const startTime = clipState.source_ref?.start_seconds ?? null
+  const endTime = clipState.source_ref?.end_seconds ?? null
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -49,18 +59,18 @@ export function ClipDetailModal({
   }
 
   const handleDownload = () => {
-    if (!clipState.video_url) return
-    const filename = `${clipState.title || clipState.hook || "clip"}.mp4`
-    downloadFile(clipState.video_url, filename).catch((e) =>
+    if (!videoUrl) return
+    const filename = `${title || "clip"}.mp4`
+    downloadFile(videoUrl, filename).catch((e) =>
       console.error("Download failed", e)
     )
   }
 
   const handleGenerateCover = async () => {
     try {
-      const res = await apiPost(`/api/v1/clips/${clipState.id}/cover`, {})
+      const res = await apiPost(`/api/v1/outputs/${clipState.id}/cover`, {})
       if (!res.ok) throw new Error("Cover generation failed")
-      const updated: Clip = await res.json()
+      const updated: Output = await res.json()
       setClipState(updated)
       onRegenerate?.()
     } catch (e) {
@@ -107,7 +117,7 @@ export function ClipDetailModal({
         style={{ width: "auto" }}
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>{clipState.title || clipState.hook}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div
@@ -126,14 +136,14 @@ export function ClipDetailModal({
             )}
             style={{ aspectRatio: aspectRatio }}
           >
-            {clipState.video_url ? (
+            {videoUrl ? (
               <video
-                src={toAbsoluteUrl(clipState.video_url) || undefined}
+                src={toAbsoluteUrl(videoUrl) || undefined}
                 className="h-full w-full object-contain"
                 controls
                 playsInline
                 preload="metadata"
-                poster={clipState.cover_image_url ? toAbsoluteUrl(clipState.cover_image_url) || undefined : undefined}
+                poster={coverUrl ? toAbsoluteUrl(coverUrl) || undefined : undefined}
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -154,10 +164,10 @@ export function ClipDetailModal({
           >
             {/* Meta header */}
             <div className="flex flex-col gap-1">
-              <h2 className="text-lg font-medium leading-tight">{clipState.title || clipState.hook}</h2>
+              <h2 className="text-lg font-medium leading-tight">{title}</h2>
               <span className="text-xs text-muted-foreground">
-                {formatTime(clipState.start_time)} - {formatTime(clipState.end_time)}
-                {clipState.duration > 0 && ` · ${clipState.duration}s`}
+                {formatTime(startTime)} - {formatTime(endTime)}
+                {duration > 0 && ` · ${duration}s`}
               </span>
             </div>
 
@@ -171,29 +181,29 @@ export function ClipDetailModal({
               <TabsContent value="social" className="space-y-4 pt-3">
                 <CopyField
                   label={t("results.clipDetail.title")}
-                  value={clipState.title || ""}
+                  value={clipState.publishing.title || ""}
                   copied={copiedKey === "title"}
-                  onCopy={() => handleCopy(clipState.title || "", "title")}
+                  onCopy={() => handleCopy(clipState.publishing.title || "", "title")}
                 />
                 <CopyField
                   label={t("results.clipDetail.caption")}
-                  value={clipState.description || ""}
+                  value={description || ""}
                   copied={copiedKey === "caption"}
-                  onCopy={() => handleCopy(clipState.description || "", "caption")}
+                  onCopy={() => handleCopy(description || "", "caption")}
                 />
                 <CopyField
                   label={t("results.clipDetail.hashtags")}
-                  value={(clipState.hashtags || []).map((h) => `#${h}`).join(" ")}
+                  value={hashtags.map((h) => `#${h}`).join(" ")}
                   copied={copiedKey === "hashtags"}
                   onCopy={() =>
-                    handleCopy((clipState.hashtags || []).map((h) => `#${h}`).join(" "), "hashtags")
+                    handleCopy(hashtags.map((h) => `#${h}`).join(" "), "hashtags")
                   }
                 />
               </TabsContent>
 
               <TabsContent value="topic" className="pt-3">
-                {clipState.topic ? (
-                  <p className="text-sm leading-relaxed text-foreground">{clipState.topic}</p>
+                {topic ? (
+                  <p className="text-sm leading-relaxed text-foreground">{topic}</p>
                 ) : (
                   <p className="text-sm text-muted-foreground">No topic available.</p>
                 )}
@@ -223,7 +233,7 @@ export function ClipDetailModal({
                 size="sm"
                 className="h-9"
                 onClick={handleDownload}
-                disabled={!clipState.video_url}
+                disabled={!videoUrl}
               >
                 <Download className="mr-2 h-4 w-4" />
                 {t("results.clipDetail.download")}
@@ -242,7 +252,7 @@ export function ClipDetailModal({
                 <Edit className="mr-2 h-4 w-4" />
                 {t("results.clipDetail.editClip")}
               </Button>
-              {!clipState.cover_image_url && (
+              {!coverUrl && (
                 <Button
                   variant="outline"
                   size="sm"

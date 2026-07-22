@@ -7,17 +7,17 @@ import { apiPost } from "@/lib/api"
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 
-import type { Derivative } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 interface ArticleCardProps {
-  derivative: Derivative
+  output: Output
   onRegenerate?: () => void
 }
 
-export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
+export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
   const [chatOpen, setChatOpen] = useState(false)
-  const title = derivative.content?.title || ""
-  const content = derivative.content?.content || ""
+  const title = output.payload.title || ""
+  const content = output.payload.content || ""
 
   const handleDownload = () => {
     if (!content) return
@@ -26,7 +26,7 @@ export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `article-${derivative.id}.md`
+    a.download = `article-${output.id}.md`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -35,8 +35,8 @@ export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
 
   const handleRegenerate = async () => {
     try {
-      await apiPost(`/api/v1/derivatives/${derivative.id}/regenerate`, {
-        target_language: derivative.language || "en",
+      await apiPost(`/api/v1/outputs/${output.id}/regenerate`, {
+        target_language: output.language || "en",
       })
       onRegenerate?.()
     } catch (e) {
@@ -47,7 +47,7 @@ export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
   return (
     <Card className="p-4 ring-1 ring-border">
       <div className="mb-3 flex items-center justify-between">
-        <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
+        <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
@@ -72,9 +72,9 @@ export function ArticleCard({ derivative, onRegenerate }: ArticleCardProps) {
       <AssetChatModal
         open={chatOpen}
         onOpenChange={setChatOpen}
-        asset={derivative}
+        asset={output}
         assetType="derivative"
-        projectId={derivative.project_id}
+        projectId={output.project_id}
         onUpdated={onRegenerate}
       />
     </Card>

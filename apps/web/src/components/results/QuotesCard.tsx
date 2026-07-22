@@ -8,26 +8,27 @@ import { apiPost, toAbsoluteUrl } from "@/lib/api"
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 
-import type { Derivative } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 interface QuotesCardProps {
-  derivative: Derivative
+  output: Output
   onRegenerate?: () => void
 }
 
-export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
+export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   const { t } = useTranslation()
   const [chatOpen, setChatOpen] = useState(false)
 
-  const quotes = derivative.content?.quotes || []
+  const quotes = output.payload.quotes || []
   const firstQuote = quotes[0]
+  const imageUrl = output.files.image ?? null
 
   const handleDownload = () => {
-    const url = toAbsoluteUrl(derivative.image_url)
+    const url = toAbsoluteUrl(imageUrl)
     if (!url) return
     const a = document.createElement("a")
     a.href = url
-    a.download = `quotes-${derivative.id}.png`
+    a.download = `quotes-${output.id}.png`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -35,8 +36,8 @@ export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
 
   const handleRegenerate = async () => {
     try {
-      await apiPost(`/api/v1/derivatives/${derivative.id}/regenerate`, {
-        target_language: derivative.language || "en",
+      await apiPost(`/api/v1/outputs/${output.id}/regenerate`, {
+        target_language: output.language || "en",
       })
       onRegenerate?.()
     } catch (e) {
@@ -46,10 +47,10 @@ export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
 
   return (
     <Card className="overflow-hidden ring-1 ring-border">
-      {derivative.image_url ? (
+      {imageUrl ? (
         <div className="relative aspect-square bg-muted">
           <img
-            src={toAbsoluteUrl(derivative.image_url) || undefined}
+            src={toAbsoluteUrl(imageUrl) || undefined}
             alt={firstQuote?.quote || "Quote card"}
             className="h-full w-full object-cover"
           />
@@ -77,9 +78,9 @@ export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
       )}
 
       <div className="flex items-center justify-between p-3">
-        <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
+        <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
-          onDownload={derivative.image_url ? handleDownload : undefined}
+          onDownload={imageUrl ? handleDownload : undefined}
           onRegenerate={handleRegenerate}
           onChat={() => setChatOpen(true)}
         />
@@ -88,9 +89,9 @@ export function QuotesCard({ derivative, onRegenerate }: QuotesCardProps) {
       <AssetChatModal
         open={chatOpen}
         onOpenChange={setChatOpen}
-        asset={derivative}
+        asset={output}
         assetType="derivative"
-        projectId={derivative.project_id}
+        projectId={output.project_id}
         onUpdated={onRegenerate}
       />
     </Card>

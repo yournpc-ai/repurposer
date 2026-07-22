@@ -8,17 +8,17 @@ import { apiPost } from "@/lib/api"
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 
-import type { Derivative } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 interface CarouselCardProps {
-  derivative: Derivative
+  output: Output
   onRegenerate?: () => void
 }
 
-export function CarouselCard({ derivative, onRegenerate }: CarouselCardProps) {
+export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
   const { t } = useTranslation()
   const [chatOpen, setChatOpen] = useState(false)
-  const slides = derivative.content?.slides || []
+  const slides = output.payload.slides || []
 
   const handleDownload = () => {
     const text = slides
@@ -29,7 +29,7 @@ export function CarouselCard({ derivative, onRegenerate }: CarouselCardProps) {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `carousel-${derivative.id}.md`
+    a.download = `carousel-${output.id}.md`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -38,8 +38,8 @@ export function CarouselCard({ derivative, onRegenerate }: CarouselCardProps) {
 
   const handleRegenerate = async () => {
     try {
-      await apiPost(`/api/v1/derivatives/${derivative.id}/regenerate`, {
-        target_language: derivative.language || "en",
+      await apiPost(`/api/v1/outputs/${output.id}/regenerate`, {
+        target_language: output.language || "en",
       })
       onRegenerate?.()
     } catch (e) {
@@ -50,7 +50,7 @@ export function CarouselCard({ derivative, onRegenerate }: CarouselCardProps) {
   return (
     <Card className="p-4 ring-1 ring-border">
       <div className="mb-3 flex items-center justify-between">
-        <Badge variant="outline">{derivative.language?.toUpperCase()}</Badge>
+        <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
@@ -78,9 +78,9 @@ export function CarouselCard({ derivative, onRegenerate }: CarouselCardProps) {
       <AssetChatModal
         open={chatOpen}
         onOpenChange={setChatOpen}
-        asset={derivative}
+        asset={output}
         assetType="derivative"
-        projectId={derivative.project_id}
+        projectId={output.project_id}
         onUpdated={onRegenerate}
       />
     </Card>

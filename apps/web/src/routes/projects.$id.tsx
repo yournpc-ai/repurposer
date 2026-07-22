@@ -19,14 +19,7 @@ import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
 import { resolveProjectId } from "@/lib/constants"
 
-import type { Clip, Derivative, Project } from "@/lib/types"
-
-interface OutputStatus {
-  status: "pending" | "running" | "completed" | "failed"
-  progress: number
-  error: string | null
-  stage?: string | null
-}
+import type { Output, PlanNode, Project } from "@/lib/types"
 
 interface AssetStatusEntry {
   id: string
@@ -39,18 +32,18 @@ interface WorkflowRun {
   id: string
   project_id: string
   status: "pending" | "running" | "completed" | "failed"
-  current_step: string | null
   progress: number
   error: string | null
   context: {
     outputs?: string[]
     clip_count?: number
-    output_status?: Record<string, OutputStatus>
     target_language?: string
     brand_template_id?: string | null
     instruction?: string | null
     tone_settings?: Record<string, unknown> | null
   } | null
+  cost: Record<string, number> | null
+  nodes: PlanNode[]
   created_at: string
   updated_at: string | null
 }
@@ -58,8 +51,7 @@ interface WorkflowRun {
 interface ProjectResults {
   project: Project
   prompt: string | null
-  clips: Clip[]
-  derivatives: Derivative[]
+  outputs: Output[]
   latest_job: WorkflowRun | null
   assets?: AssetStatusEntry[]
   ui_step?: UiStep | null
@@ -79,11 +71,16 @@ const OUTPUT_KEY_TO_TAB: Record<string, ResultsTab> = {
   quotes: "quotes",
   carousel: "carousel",
   article: "article",
-  // Backward compatibility for jobs created before the output rename.
-  linkedin: "post",
-  quote_cards: "quotes",
-  summary: "post",
-  blog: "article",
+}
+
+/** Node kinds that own a results tab (ADR-028); preprocess/persona/director/
+ * script/render nodes drive the stepper, not a tab. */
+const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
+  clips_pipeline: "clips",
+  post_gen: "post",
+  quotes_gen: "quotes",
+  carousel_gen: "carousel",
+  article_gen: "article",
 }
 
 export const Route = createFileRoute("/projects/$id")({
@@ -132,27 +129,22 @@ function ProjectDetailPage() {
     }
   }, [latestJob?.context?.outputs])
 
-  // Poll the latest job until the run settles AND no clip from this run is
-  // still rendering. Clip renders proceed independently of the run status.
+  // Poll the latest job until the run settles AND no output is still
+  // rendering. Renders proceed independently of the run status.
   useEffect(() => {
     if (!results?.latest_job) return
 
     const status = results.latest_job.status
 
-    const currentRunId = results.latest_job.id
-    const currentRunClips = (results?.clips ?? []).filter(
-      (c: Clip) => c.workflow_run_id === currentRunId || c.workflow_run_id === null
-    )
-
-    const hasRenderingClips = currentRunClips.some(
-      (c: Clip) => c.render_status === "pending" || c.render_status === "rendering"
+    const hasRenderingOutputs = (results.outputs ?? []).some(
+      (o: Output) => o.render_status === "pending" || o.render_status === "rendering"
     )
 
     // A settled run (completed or failed) never progresses its outputs
-    // further — stop polling regardless of what the per-output statuses say
-    // (legacy runs may carry stale pending entries). Clip renders proceed
-    // independently of the run, so keep polling only while any are active.
-    if ((status === "completed" || status === "failed") && !hasRenderingClips) {
+    // further — stop polling regardless of what the node statuses say.
+    // Renders proceed independently of the run, so keep polling only while
+    // any are active.
+    if ((status === "completed" || status === "failed") && !hasRenderingOutputs) {
       return
     }
 
@@ -160,39 +152,35 @@ function ProjectDetailPage() {
       fetchResults()
     }, 2500)
     return () => clearInterval(interval)
-  }, [results?.latest_job, results?.clips])
+  }, [results?.latest_job, results?.outputs])
 
-  const outputStatus = latestJob?.context?.output_status
-  const requestedOutputs = latestJob?.context?.outputs ?? []
+  const nodes = latestJob?.nodes ?? []
   const clipCount = latestJob?.context?.clip_count ?? 5
 
-  const requestedTabs = requestedOutputs
+  const requestedTabs = (latestJob?.context?.outputs ?? [])
     .map((o) => OUTPUT_KEY_TO_TAB[o])
     .filter(Boolean) as ResultsTab[]
 
-  // When the run itself failed, outputs that never reached a terminal state
+  // When the run itself failed, nodes that never reached a terminal state
   // are dead too — present them as failed (with a retry) instead of skeletons.
   const runFailed = latestJob?.status === "failed"
 
-  const runningTabs = outputStatus
-    ? (Object.entries(outputStatus)
-        .filter(
-          ([, s]) =>
-            !runFailed && (s.status === "running" || s.status === "pending")
-        )
-        .map(([output]) => OUTPUT_KEY_TO_TAB[output])
-        .filter(Boolean) as ResultsTab[])
-    : []
+  const runningTabs = nodes
+    .filter(
+      (n) =>
+        NODE_KIND_TO_TAB[n.kind] &&
+        !runFailed &&
+        (n.status === "running" || n.status === "pending")
+    )
+    .map((n) => NODE_KIND_TO_TAB[n.kind])
 
-  const failedTabs = outputStatus
-    ? (Object.entries(outputStatus)
-        .filter(
-          ([, s]) =>
-            s.status === "failed" || (runFailed && s.status !== "completed")
-        )
-        .map(([output]) => OUTPUT_KEY_TO_TAB[output])
-        .filter(Boolean) as ResultsTab[])
-    : []
+  const failedTabs = nodes
+    .filter(
+      (n) =>
+        NODE_KIND_TO_TAB[n.kind] &&
+        (n.status === "failed" || (runFailed && n.status !== "done"))
+    )
+    .map((n) => NODE_KIND_TO_TAB[n.kind])
 
   // The loading dialog's lifecycle is driven entirely by the backend's
   // ui_step: it covers asset processing, the generation run, and the wait
@@ -237,20 +225,15 @@ function ProjectDetailPage() {
     )
   }
 
-  const { project, prompt, clips: allClips, derivatives: allDerivatives } = results
+  const { project, prompt, outputs } = results
 
-  const currentRunId = latestJob?.id
-  const clips = allClips.filter(
-    (c) => c.workflow_run_id === currentRunId || c.workflow_run_id === null
-  )
-  const derivatives = allDerivatives.filter(
-    (d) => d.workflow_run_id === currentRunId || d.workflow_run_id === null
-  )
-
-  const posts = derivatives.filter((d) => d.type === "post")
-  const quotes = derivatives.filter((d) => d.type === "quotes")
-  const carousels = derivatives.filter((d) => d.type === "carousel")
-  const articles = derivatives.filter((d) => d.type === "article")
+  // outputs holds the project's current products (targeted runs update in
+  // place; full runs delete prior rows), so no per-run filtering is needed.
+  const clips = outputs.filter((o) => o.type === "clip")
+  const posts = outputs.filter((o) => o.type === "post")
+  const quotes = outputs.filter((o) => o.type === "quotes")
+  const carousels = outputs.filter((o) => o.type === "carousel")
+  const articles = outputs.filter((o) => o.type === "article")
 
   const counts = {
     clips: clips.length,
@@ -288,22 +271,15 @@ function ProjectDetailPage() {
   }
 
   const renderFailed = (tab: ResultsTab) => {
-    const outputKey = TAB_TO_OUTPUT_KEY[tab]
-    let status = outputStatus?.[outputKey]
-    // Fallback to legacy output keys (e.g., linkedin/summary/blog) for jobs
-    // created before the output rename.
-    if (!status && outputStatus) {
-      const legacyEntry = Object.entries(outputStatus).find(
-        ([key, s]) => OUTPUT_KEY_TO_TAB[key] === tab && s.status === "failed"
-      )
-      if (legacyEntry) {
-        status = legacyEntry[1]
-      }
-    }
+    const node = nodes.find(
+      (n) =>
+        NODE_KIND_TO_TAB[n.kind] === tab &&
+        (n.status === "failed" || (runFailed && n.status !== "done"))
+    )
     return (
       <Card className="p-8 text-center ring-1 ring-border shadow-xl">
         <p className="text-sm text-destructive">
-          {status?.error || latestJob?.error || t("results.retryFailed")}
+          {node?.error || latestJob?.error || t("results.retryFailed")}
         </p>
         <Button
           variant="outline"
@@ -331,7 +307,7 @@ function ProjectDetailPage() {
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {clips.map((clip) => (
-              <ClipCard key={clip.id} clip={clip} onRegenerate={fetchResults} />
+              <ClipCard key={clip.id} output={clip} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -345,8 +321,8 @@ function ProjectDetailPage() {
         }
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {posts.map((d) => (
-              <PostCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {posts.map((o) => (
+              <PostCard key={o.id} output={o} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -360,8 +336,8 @@ function ProjectDetailPage() {
         }
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {quotes.map((d) => (
-              <QuotesCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {quotes.map((o) => (
+              <QuotesCard key={o.id} output={o} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -375,8 +351,8 @@ function ProjectDetailPage() {
         }
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {carousels.map((d) => (
-              <CarouselCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {carousels.map((o) => (
+              <CarouselCard key={o.id} output={o} onRegenerate={fetchResults} />
             ))}
           </div>
         )
@@ -390,8 +366,8 @@ function ProjectDetailPage() {
         }
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {articles.map((d) => (
-              <ArticleCard key={d.id} derivative={d} onRegenerate={fetchResults} />
+            {articles.map((o) => (
+              <ArticleCard key={o.id} output={o} onRegenerate={fetchResults} />
             ))}
           </div>
         )
