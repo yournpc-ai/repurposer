@@ -93,19 +93,32 @@ async def _mirror_render_node(
     node_status: str,
     error: str | None = None,
 ) -> None:
-    """Mirror render lifecycle onto the run's render node, if one exists."""
-    async with AsyncSessionLocal() as db:
-        await db.execute(
-            text(
-                "UPDATE plan_nodes SET status = :st, error = :err, "
-                "finished_at = CASE WHEN :st IN ('done', 'failed') THEN now() "
-                "ELSE finished_at END, updated_at = now() "
-                "WHERE kind = 'render' AND status IN ('pending', 'running') "
-                "AND spec->>'output_id' = :oid"
-            ),
-            {"st": node_status, "err": error, "oid": str(output_id)},
+    """Mirror render lifecycle onto the run's render node, if one exists.
+
+    Best-effort: the mirror is visibility, not the ledger of record — a
+    failure here must never flip the output's own terminal state, so errors
+    are logged and swallowed.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text(
+                    "UPDATE plan_nodes SET status = CAST(:st AS varchar), error = :err, "
+                    "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
+                    "ELSE finished_at END, updated_at = now() "
+                    "WHERE kind = 'render' AND status IN ('pending', 'running') "
+                    "AND spec->>'output_id' = :oid"
+                ),
+                {"st": node_status, "err": error, "oid": str(output_id)},
+            )
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "render_node_mirror_failed",
+            output_id=str(output_id),
+            status=node_status,
+            error=str(e),
         )
-        await db.commit()
 
 
 async def render_output(output_id: UUID) -> None:

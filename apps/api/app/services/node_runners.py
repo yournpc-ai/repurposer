@@ -24,7 +24,8 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.clip_agent import clip_agent
@@ -44,6 +45,7 @@ from app.models.schemas import (
     ToneSettings,
     validate_output_payload,
 )
+from app.models.database import AsyncSessionLocal
 from app.models.tables import (
     Asset,
     BrandTemplate,
@@ -77,6 +79,28 @@ from app.services.storage import (
 logger = structlog.get_logger()
 
 KNOWN_OUTPUTS = ("clips", "post", "quotes", "article", "carousel")
+
+
+async def _set_stage(node_id: UUID, stage: str) -> None:
+    """Write the stepper's display-stage hint in its own session.
+
+    This must NOT ride the runner session: that session stays open across LLM
+    calls, and holding a row lock on ``plan_nodes`` (from a flushed spec
+    update) deadlocks the metering session — ``record_usage`` updates the same
+    row from inside ``minimax.generate`` while the runner awaits the response.
+    Stage hints are display-only, so immediate independent commits are fine.
+    """
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(PlanNode)
+            .where(PlanNode.id == node_id)
+            .values(
+                spec=func.jsonb_set(
+                    PlanNode.spec, pg_array(["stage"]), func.to_jsonb(stage), True
+                )
+            )
+        )
+        await s.commit()
 
 _OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
     "post": DerivativeType.POST,
@@ -538,8 +562,7 @@ async def run_clips_pipeline(
     clip_count = int(ctx.get("clip_count", 3))
     target_language = ctx.get("target_language", "en")
 
-    node.spec = {**(node.spec or {}), "stage": "selecting_segments"}
-    await db.flush()
+    await _set_stage(node.id, "selecting_segments")
 
     asset_texts = await collect_asset_texts(db, project.id)
     assets = await _list_assets(db, project.id)
@@ -643,8 +666,7 @@ async def run_clips_pipeline(
             )
             raise
 
-    node.spec = {**(node.spec or {}), "stage": "building_specs"}
-    await db.flush()
+    await _set_stage(node.id, "building_specs")
 
     # Idempotency: clear this project's prior clip outputs before writing new
     # ones (same semantics as the retired _delete_prior_outputs). Pending
@@ -810,8 +832,7 @@ async def run_derivative_gen(
     target_id = node.spec.get("target_id")
     target_language = node.spec.get("target_language") or ctx.get("target_language", "en")
 
-    node.spec = {**(node.spec or {}), "stage": "writing_copy"}
-    await db.flush()
+    await _set_stage(node.id, "writing_copy")
 
     asset_texts = await collect_asset_texts(db, project.id)
     speaker = await resolve_speaker(db, project)
@@ -861,8 +882,7 @@ async def run_derivative_gen(
     if derivative_type == DerivativeType.QUOTES:
         quotes = content.get("quotes", []) if isinstance(content, dict) else []
         if quotes:
-            node.spec = {**(node.spec or {}), "stage": "generating_image"}
-            await db.flush()
+            await _set_stage(node.id, "generating_image")
             first_quote = quotes[0]
             image_url = await _save_quote_card_image(
                 quote=first_quote.get("quote", ""),

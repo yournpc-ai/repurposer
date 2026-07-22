@@ -285,7 +285,7 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 
 ## 11. Critical files
 
-- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`
+- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`, RunPlan 词汇（`PlanNodeKind`/`OutputType`/`OUTPUT_PAYLOAD_SCHEMAS`）
 - `app/agents/content_director.py` — director agent
 - `app/prompts/content_director.j2` — director prompt
 - `app/agents/clip_agent.py` — clip agent
@@ -293,9 +293,13 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 - `app/agents/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
 - `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
 - `app/services/derivative_dispatch.py` — thin dispatcher registry
-- `app/services/generation.py` — orchestration
+- `app/services/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
+- `app/services/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
+- `app/services/metering.py` — 逐节点计量（usage → `plan_nodes.cost`，ADR-025）
 - `app/agents/intent.py` — intent recognition
-- `app/routers/derivatives.py` — single-derivative regeneration
+- `app/routers/outputs.py` — 统一产物 API（含单产物重生成）
+
+> 已退役（Phase 1 破坏性删除）：`services/generation.py`、`routers/clips.py`、`routers/derivatives.py`。
 
 ## 12. 施工图视图（RunPlan 架构，2026-07-22 定型）
 
@@ -341,18 +345,18 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 - **会思考（LLM 班底）**：意图识别 / 导演 / 班组 / 质检 / persona / chat 意图解析
 - **不会思考（施工机械）**：processor / orchestrator（物化图+走图）/ worker（认领节点）/ Remotion / 队列 / 存储 / 分发状态机
 
-### 12.6 现状五宗罪（2026-07-22 代码核实）
+### 12.6 现状五宗罪（2026-07-22 代码核实；Phase 1 已全部清除）
 
-1. ContentPlan = project 上 JSON blob，盲目复用无失效（`generation.py:1069`）
-2. DerivativePlan 混 what/how，定向重生成靠伪造 plan（`:569-585`）
-3. output_status JSON + 进程内 asyncio 锁，跨 worker 失效（`:81`）
-4. speaker 自动创建埋在 run_generation（`:1016`）→ 变 persona_bootstrap 节点
-5. scope if-else 双形态 → 同机制小拓扑图
+1. ~~ContentPlan = project 上 JSON blob，盲目复用无失效~~ → 内部 `outputs[type=content_plan]` 行，director_plan 节点产物（每 run 重排；asset-hash 复用是 Phase 2）
+2. ~~DerivativePlan 混 what/how，定向重生成靠伪造 plan~~ → 定向重生成 = 小拓扑 `[director_plan → X_gen(target_id)]`，伪造 plan 路径整体删除
+3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → plan_nodes 行级状态，步骤清单改读节点
+4. ~~speaker 自动创建埋在 run_generation~~ → `persona_bootstrap` 节点
+5. ~~scope if-else 双形态~~ → 同机制小拓扑图（hook/clip→`[script]`，render→`[render]`）
 
 ### 12.7 分期（防范围蠕变）
 
-| 期 | 内容 | 行为变化 |
-|---|---|---|
-| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 |
-| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 |
-| Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 |
+| 期 | 内容 | 行为变化 | 状态 |
+|---|---|---|---|
+| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 | ✅ 已落地（2026-07-22；实施计划 `docs/tasks/runplan-phase1-implementation.md`） |
+| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 📋 |
+| Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 | 📋 |

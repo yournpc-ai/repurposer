@@ -9,10 +9,11 @@ On first run the seed:
      Default brand template rather than a demo-specific one).
   2. Runs ASR on ``assets/demo/uploads/projects/{uuid}/demo_talk.mp4``.
   3. Seeds the original prompt into a project-scoped chat session.
-  4. Runs the same ``run_generation`` orchestrator the worker uses to create
-     clips, a social post, quote cards, a carousel, and an article.
-  5. Renders each clip through the Remotion render service so the results page
-     is immediately playable.
+  4. Materializes a RunPlan via ``create_run`` and executes it inline — the
+     same orchestrator + node runners the worker uses, no bypass — creating
+     five clip outputs.
+  5. Queues each clip for rendering (``render_status=PENDING``) so the worker
+     renders them in the background; startup never blocks on Remotion.
 
 Subsequent startups are no-ops unless the outputs were deleted, in which case
 the seed regenerates them.

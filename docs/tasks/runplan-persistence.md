@@ -1,6 +1,6 @@
 # RunPlan 持久化 + outputs 统一 — 实施简报
 
-> Status: Ready for dev（2026-07-22）
+> Status: **Phase 1 Implemented**（2026-07-22；实施计划与验收口径见 `runplan-phase1-implementation.md`）
 > 决策依据：ADR-028（RunPlan）/ ADR-029（双链并列，含 Amendment）/ ADR-030（产物统一）
 > 概念基线：`docs/AGENT_ARCHITECTURE.md` §12（八概念/导演两步/质检节点/分期）——开工前必读
 > 排期：ROADMAP §1 P1（地基）
@@ -77,6 +77,8 @@
 ### 4.4 防旁路：全部 run 创建点
 
 `run_generation` / `derivative_dispatch` / chat dispatch / `demo_seed` ——四处统一走 orchestrator，验收含"无旁路"。
+
+> **落地口径（2026-07-22 修正）**：实际代码中是 **3 个物理位覆盖 4 个逻辑入口**——`routers/projects.py`（/generate）、`services/chat.py`（chat dispatch；clip/derivative 的定向重生成都经 chat() 收编）、`services/demo_seed.py`（create_run + execute_run_inline）。`derivative_dispatch.py` 只是 DerivativeType→agent 注册表，不建 run。验收 grep：全库 `WorkflowRun(` 仅出现在 `orchestrator.create_run`。
 
 ## 5. Phase 2：导演两步走
 
