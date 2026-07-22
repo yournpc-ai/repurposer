@@ -1,9 +1,10 @@
 """Postgres-backed job queue primitives.
 
 The database *is* the queue: pending work lives as rows (``Asset`` rows awaiting
-processing, ``WorkflowRun`` rows awaiting generation). Workers claim a row with
-``SELECT ... FOR UPDATE SKIP LOCKED``, which lets multiple workers run
-concurrently without ever grabbing the same row. No Redis/broker required.
+processing, ``plan_nodes`` awaiting execution, ``outputs`` awaiting render).
+Workers claim a row with ``SELECT ... FOR UPDATE SKIP LOCKED``, which lets
+multiple workers run concurrently without ever grabbing the same row.
+No Redis/broker required.
 
 The claim helpers atomically flip a row out of its pending state before
 returning it, so a claimed row is invisible to other workers' claim queries.
@@ -17,11 +18,11 @@ to arq/Celery + Redis); callers stay the same.
 from uuid import UUID
 
 import structlog
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import AssetStatus, RenderStatus, WorkflowStatus
-from app.models.tables import Asset, Clip, WorkflowRun
+from app.models.schemas import AssetStatus, RenderStatus
+from app.models.tables import Asset, Output, PlanNode
 
 logger = structlog.get_logger()
 
@@ -53,67 +54,100 @@ async def claim_pending_asset(db: AsyncSession) -> UUID | None:
     return asset_id
 
 
-async def claim_pending_run(db: AsyncSession) -> UUID | None:
-    """Atomically claim one pending generation run, flipping it to RUNNING.
+async def claim_ready_node(db: AsyncSession) -> UUID | None:
+    """Atomically claim one ready plan node, flipping it to ``running``.
 
-    Returns the claimed run id, or None if no run is pending.
+    A node is ready when it is pending and every upstream node (its ``inputs``
+    edge list) is done. Render nodes are excluded — they are claimed through
+    ``outputs.render_status`` (D2: the render chain owns their lifecycle).
+    Runs whose project still has assets being processed are gated off, exactly
+    like the retired run-level claim.
 
-    Runs whose project still has assets being processed (ASR / extraction) are
-    skipped: the run must not start analyzing before the source material is
-    ready. The run stays PENDING — the results page shows this waiting window
-    as the transcribing/queued phase.
+    Single UPDATE...RETURNING statement, so the claim is atomic under
+    concurrent workers. Also flips the owning run PENDING -> RUNNING.
     """
-    assets_busy = (
-        select(Asset.id)
-        .where(
-            Asset.project_id == WorkflowRun.project_id,
-            Asset.processing_status.in_([AssetStatus.PENDING, AssetStatus.PROCESSING]),
+    node_id = (
+        await db.execute(
+            text(
+                """
+                UPDATE plan_nodes pn
+                SET status = 'running',
+                    started_at = now(),
+                    attempt = attempt + 1,
+                    updated_at = now()
+                WHERE pn.id = (
+                    SELECT pn2.id
+                    FROM plan_nodes pn2
+                    JOIN workflow_runs r ON r.id = pn2.run_id
+                    WHERE pn2.status = 'pending'
+                      AND pn2.kind <> 'render'
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements_text(pn2.inputs) AS up(id)
+                        JOIN plan_nodes upn ON upn.id = up.id::uuid
+                        WHERE upn.status <> 'done'
+                      )
+                      AND NOT EXISTS (
+                        SELECT 1 FROM assets a
+                        WHERE a.project_id = r.project_id
+                          AND a.processing_status IN ('PENDING', 'PROCESSING')
+                      )
+                    ORDER BY pn2.seq, pn2.created_at
+                    LIMIT 1
+                    FOR UPDATE OF pn2 SKIP LOCKED
+                )
+                RETURNING pn.id
+                """
+            )
         )
-        .exists()
-    )
-    result = await db.execute(
-        select(WorkflowRun.id)
-        .where(WorkflowRun.status == WorkflowStatus.PENDING)
-        .where(~assets_busy)
-        .order_by(WorkflowRun.created_at)
-        .with_for_update(skip_locked=True, of=WorkflowRun)
-        .limit(1)
-    )
-    run_id = result.scalar_one_or_none()
-    if run_id is None:
+    ).scalar_one_or_none()
+    if node_id is None:
         return None
 
-    run_id = await db.scalar(
-        update(WorkflowRun)
-        .where(WorkflowRun.id == run_id)
-        .values(status=WorkflowStatus.RUNNING)
-        .returning(WorkflowRun.id)
+    await db.execute(
+        text(
+            "UPDATE workflow_runs SET status = 'RUNNING', updated_at = now() "
+            "WHERE id = (SELECT run_id FROM plan_nodes WHERE id = :nid) "
+            "AND status = 'PENDING'"
+        ),
+        {"nid": node_id},
     )
     await db.commit()
-    return run_id
+    return node_id
 
 
 async def claim_pending_render(db: AsyncSession) -> UUID | None:
-    """Atomically claim one clip awaiting render, flipping it to RENDERING."""
+    """Atomically claim one clip output awaiting render, flipping it to RENDERING."""
     result = await db.execute(
-        select(Clip.id)
-        .where(Clip.render_status == RenderStatus.PENDING)
-        .order_by(Clip.created_at)
+        select(Output.id)
+        .where(Output.type == "clip")
+        .where(Output.render_status == RenderStatus.PENDING)
+        .order_by(Output.created_at)
         .with_for_update(skip_locked=True)
         .limit(1)
     )
-    clip_id = result.scalar_one_or_none()
-    if clip_id is None:
+    output_id = result.scalar_one_or_none()
+    if output_id is None:
         return None
 
-    clip_id = await db.scalar(
-        update(Clip)
-        .where(Clip.id == clip_id)
+    output_id = await db.scalar(
+        update(Output)
+        .where(Output.id == output_id)
         .values(render_status=RenderStatus.RENDERING, render_error=None)
-        .returning(Clip.id)
+        .returning(Output.id)
+    )
+    # Mirror the render node (if any) to running.
+    await db.execute(
+        text(
+            "UPDATE plan_nodes SET status = 'running', started_at = now(), "
+            "updated_at = now() "
+            "WHERE kind = 'render' AND status = 'pending' "
+            "AND spec->>'output_id' = :oid"
+        ),
+        {"oid": str(output_id)},
     )
     await db.commit()
-    return clip_id
+    return output_id
 
 
 async def reap_stale(db: AsyncSession) -> None:
@@ -130,24 +164,24 @@ async def reap_stale(db: AsyncSession) -> None:
         .where(Asset.processing_status == AssetStatus.PROCESSING)
         .values(processing_status=AssetStatus.PENDING)
     )
-    runs = await db.execute(
-        update(WorkflowRun)
-        .where(WorkflowRun.status == WorkflowStatus.RUNNING)
-        .values(status=WorkflowStatus.PENDING)
+    nodes = await db.execute(
+        update(PlanNode)
+        .where(PlanNode.status == "running")
+        .values(status="pending")
     )
     renders = await db.execute(
-        update(Clip)
-        .where(Clip.render_status == RenderStatus.RENDERING)
+        update(Output)
+        .where(Output.render_status == RenderStatus.RENDERING)
         .values(render_status=RenderStatus.PENDING)
     )
     await db.commit()
     asset_count = assets.rowcount if isinstance(assets, CursorResult) else 0
-    run_count = runs.rowcount if isinstance(runs, CursorResult) else 0
+    node_count = nodes.rowcount if isinstance(nodes, CursorResult) else 0
     render_count = renders.rowcount if isinstance(renders, CursorResult) else 0
-    if asset_count or run_count or render_count:
+    if asset_count or node_count or render_count:
         logger.info(
             "reaped_stale_jobs",
             assets=asset_count,
-            runs=run_count,
+            nodes=node_count,
             renders=render_count,
         )

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import ChatIntent, ChatMessageResponse, ChatRequest, ChatResponse
-from app.models.tables import ChatSession, Message, Project, WorkflowRun
+from app.models.tables import ChatSession, Message, Project
 
 
 async def _get_or_create_project_session(
@@ -218,11 +218,11 @@ async def _dispatch_intent_to_run(
     session: ChatSession,
     intent: ChatIntent,
 ) -> UUID | None:
-    """Dispatch a parsed intent to a WorkflowRun.
+    """Dispatch a parsed intent to a WorkflowRun via the orchestrator.
 
     Returns the created run id, or None if the intent needs no background work.
     """
-    from app.models.schemas import WorkflowStatus
+    from app.services.orchestrator import TaskSpec, create_run
 
     scope = "full"
     target_id = None
@@ -241,24 +241,23 @@ async def _dispatch_intent_to_run(
     elif intent.action == "revise":
         operation = intent.parameters.get("operation", "regenerate")
 
-    run = WorkflowRun(
-        project_id=UUID(str(session.project_id)),
-        status=WorkflowStatus.PENDING,
-        current_step="queued",
-        progress=0,
-        context={
-            "outputs": ["clips"] if scope == "clip" else [],
-            "clip_count": 1,
-            "target_language": intent.target_language or "en",
-            "instruction": intent.instruction,
-            "scope": scope,
-            "target_id": str(target_id) if target_id else None,
-            "operation": operation,
-        },
+    project = await db.get(Project, UUID(str(session.project_id)))
+    if project is None:
+        return None
+
+    run = await create_run(
+        db,
+        project,
+        TaskSpec(
+            outputs=["clips"] if scope == "clip" else [],
+            clip_count=1,
+            target_language=intent.target_language or "en",
+            instruction=intent.instruction,
+            scope=scope,
+            operation=operation,
+            target_id=target_id,
+        ),
     )
-    db.add(run)
-    await db.flush()
-    await db.refresh(run)
     return run.id
 
 

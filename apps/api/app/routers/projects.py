@@ -21,7 +21,6 @@ from app.models.schemas import (
     ProjectStatus,
     ProjectUpdate,
     WorkflowRunResponse,
-    WorkflowStatus,
 )
 from app.models.tables import (
     Asset,
@@ -34,6 +33,7 @@ from app.models.tables import (
 )
 from app.services.chat import get_project_prompt, seed_project_prompt
 from app.services.demo_seed import DEMO_PROJECT_ID
+from app.services.orchestrator import TaskSpec, create_run
 from app.services.project_context import get_project_for_user
 from app.services.storage import delete_file, delete_project_files, resolve_stored_url
 
@@ -394,28 +394,25 @@ async def generate_content(
     prompt_text = request.instruction or "Generate content from the uploaded assets."
     await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
 
-    run = WorkflowRun(
-        project_id=project_id,
-        status=WorkflowStatus.PENDING,
-        current_step="analyze",
-        progress=0,
-        context={
-            "outputs": request.outputs,
-            "clip_count": request.clip_count,
-            "tone_settings": (
+    run = await create_run(
+        db,
+        project,
+        TaskSpec(
+            outputs=list(request.outputs),
+            clip_count=request.clip_count,
+            target_language=request.target_language,
+            instruction=request.instruction,
+            tone_settings=(
                 request.tone_settings.model_dump() if request.tone_settings else None
             ),
-            "target_language": request.target_language,
-            "brand_template_id": (
+            brand_template_id=(
                 str(request.brand_template_id) if request.brand_template_id else None
             ),
-            "instruction": request.instruction,
-            "scope": request.scope,
-            "target_id": str(request.target_id) if request.target_id else None,
-            "operation": request.operation,
-        },
+            scope=request.scope,
+            operation=request.operation,
+            target_id=request.target_id,
+        ),
     )
-    db.add(run)
     project.status = ProjectStatus.PROCESSING
     await db.commit()
     await db.refresh(run)

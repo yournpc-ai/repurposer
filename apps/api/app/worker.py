@@ -1,36 +1,44 @@
 """Background worker process.
 
 Run as ``python -m app.worker``. Polls the database for pending work and runs
-it in a process separate from the API, so heavy jobs (text extraction today;
-ASR / OCR / video rendering later) never compete with online request handling.
+it in a process separate from the API, so heavy jobs (text extraction, LLM
+node execution, video rendering) never compete with online request handling.
 
-Each tick claims at most one asset and one generation run via the
-``FOR UPDATE SKIP LOCKED`` helpers in :mod:`app.services.jobs`; when both
-sources are empty the loop sleeps for ``settings.worker_poll_interval`` seconds.
-Processor failures are recorded on the row and never crash the loop.
+Each tick claims at most one asset, up to ``_NODE_CONCURRENCY`` ready plan
+nodes, and one render job via the ``FOR UPDATE SKIP LOCKED`` helpers in
+:mod:`app.services.jobs`. Node execution runs as asyncio tasks so sibling
+nodes of a run keep the parallelism the retired asyncio.gather fan-out had.
+When all sources are empty the loop sleeps for
+``settings.worker_poll_interval`` seconds. Processor failures are recorded on
+the row and never crash the loop.
 """
 
 import asyncio
+from uuid import UUID
 
 import structlog
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.services.asset_processing import process_asset
-from app.services.generation import run_generation
 from app.services.jobs import (
     claim_pending_asset,
     claim_pending_render,
-    claim_pending_run,
+    claim_ready_node,
     reap_stale,
 )
-from app.services.rendering import render_clip
+from app.services.orchestrator import execute_node, finalize_stuck_runs
+from app.services.rendering import render_output
 
 logger = structlog.get_logger()
 
+_NODE_CONCURRENCY = 4
+
+_running_node_tasks: set[asyncio.Task] = set()
+
 
 async def _tick() -> bool:
-    """Claim and run one unit of work. Returns True if anything was processed."""
+    """Claim and run units of work. Returns True if anything was processed."""
     did_work = False
 
     async with AsyncSessionLocal() as db:
@@ -39,17 +47,23 @@ async def _tick() -> bool:
         did_work = True
         await process_asset(asset_id)
 
-    async with AsyncSessionLocal() as db:
-        run_id = await claim_pending_run(db)
-    if run_id is not None:
+    # Fill up to the concurrency cap with ready nodes; each runs as its own
+    # asyncio task (contextvars metering stays per-node).
+    while len(_running_node_tasks) < _NODE_CONCURRENCY:
+        async with AsyncSessionLocal() as db:
+            node_id: UUID | None = await claim_ready_node(db)
+        if node_id is None:
+            break
         did_work = True
-        await run_generation(run_id)
+        task = asyncio.create_task(execute_node(node_id))
+        _running_node_tasks.add(task)
+        task.add_done_callback(_running_node_tasks.discard)
 
     async with AsyncSessionLocal() as db:
         render_id = await claim_pending_render(db)
     if render_id is not None:
         did_work = True
-        await render_clip(render_id)
+        await render_output(render_id)
 
     return did_work
 
@@ -59,6 +73,7 @@ async def run_worker() -> None:
     logger.info("worker_starting", poll_interval=settings.worker_poll_interval)
     async with AsyncSessionLocal() as db:
         await reap_stale(db)
+    await finalize_stuck_runs()
 
     while True:
         try:

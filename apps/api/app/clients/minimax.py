@@ -89,6 +89,12 @@ class MiniMaxClient:
             response.raise_for_status()
             data = response.json()
 
+        # ADR-025 metering: report usage to the bound plan node (no-op when
+        # unbound). Done before validation — tokens were consumed either way.
+        from app.services.metering import record_usage
+
+        await record_usage(data.get("usage"))
+
         raw_content = data["choices"][0]["message"]["content"]
         content = self._clean_json(raw_content)
 

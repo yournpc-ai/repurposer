@@ -1,14 +1,19 @@
-"""Drive the Remotion render service for a clip.
+"""Drive the Remotion render service for a clip output.
 
-The worker claims a clip (``render_status=PENDING`` -> RENDERING) and calls this.
-It absolutizes the clip-spec's source URL (the spec stores a relative stream URL
-via the storage seam; the render service needs an absolute URL it can fetch),
-POSTs the spec to the render service (black box: spec -> MP4+SRT), and writes the
-resulting output keys back onto the clip.
+The worker claims an output (``render_status=PENDING`` -> RENDERING) and calls
+this. It absolutizes the clip-spec's source URL (the spec stores a relative
+stream URL via the storage seam; the render service needs an absolute URL it
+can fetch), POSTs the spec to the render service (black box: spec -> MP4+SRT),
+and writes the resulting output keys back into ``output.files``.
 
-Output keys carry a per-render timestamp suffix (``<clip_id>-<ts>.mp4``) so a
+Output keys carry a per-render timestamp suffix (``<output_id>-<ts>.mp4``) so a
 re-render never overwrites the object a browser may have cached under the same
 URL. The previous render's objects are deleted once the new one succeeds.
+
+Render node mirror (RunPlan Phase 1, D2): if the output has a render plan node
+(run-scoped renders), its status mirrors the render lifecycle — the node is
+visibility + cost home, the claim stays on ``outputs.render_status`` so
+run-less re-renders (manual render / dub / translate) keep working unchanged.
 """
 
 import copy
@@ -18,12 +23,12 @@ from uuid import UUID
 
 import httpx
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Clip, Project
+from app.models.tables import Output, Project
 from app.services.storage import (
     delete,
     get_output_path,
@@ -83,37 +88,59 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     return spec
 
 
-async def render_clip(clip_id: UUID) -> None:
-    """Render a claimed clip via the render service; persist terminal state.
+async def _mirror_render_node(
+    output_id: UUID,
+    node_status: str,
+    error: str | None = None,
+) -> None:
+    """Mirror render lifecycle onto the run's render node, if one exists."""
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text(
+                "UPDATE plan_nodes SET status = :st, error = :err, "
+                "finished_at = CASE WHEN :st IN ('done', 'failed') THEN now() "
+                "ELSE finished_at END, updated_at = now() "
+                "WHERE kind = 'render' AND status IN ('pending', 'running') "
+                "AND spec->>'output_id' = :oid"
+            ),
+            {"st": node_status, "err": error, "oid": str(output_id)},
+        )
+        await db.commit()
 
-    Assumes the clip is already claimed (RENDERING). On success writes
-    video_url/srt_url + COMPLETED; on any error writes FAILED with the message.
+
+async def render_output(output_id: UUID) -> None:
+    """Render a claimed output via the render service; persist terminal state.
+
+    Assumes the output is already claimed (RENDERING). On success writes
+    files.video/files.srt + COMPLETED; on any error writes FAILED with the
+    message. Terminal state is mirrored onto the render plan node when present.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(Clip, Project.user_id)
-            .join(Project, Clip.project_id == Project.id)
-            .where(Clip.id == clip_id)
+            select(Output, Project.user_id)
+            .join(Project, Output.project_id == Project.id)
+            .where(Output.id == output_id)
         )
         row = result.one_or_none()
         if row is None:
-            logger.warning("render_clip_missing", clip_id=str(clip_id))
+            logger.warning("render_output_missing", output_id=str(output_id))
             return
-        clip, user_id = row
-        if not clip.render_spec:
-            clip.render_status = RenderStatus.FAILED
-            clip.render_error = "clip has no render_spec"
+        output, user_id = row
+        if not output.render_spec:
+            output.render_status = RenderStatus.FAILED
+            output.render_error = "output has no render_spec"
             await db.commit()
+            await _mirror_render_node(output_id, "failed", output.render_error)
             return
 
         try:
-            spec = _absolutize(copy.deepcopy(clip.render_spec))
+            spec = _absolutize(copy.deepcopy(output.render_spec))
             render_ts = int(time.time())
             video_key = await get_output_path(
-                clip.project_id, user_id, f"{clip.id}-{render_ts}.mp4"
+                output.project_id, user_id, f"{output.id}-{render_ts}.mp4"
             )
             srt_key = await get_output_path(
-                clip.project_id, user_id, f"{clip.id}-{render_ts}.srt"
+                output.project_id, user_id, f"{output.id}-{render_ts}.srt"
             )
             video_put_url = await presign_upload(
                 video_key, content_type="video/mp4", ttl=900
@@ -141,13 +168,14 @@ async def render_clip(clip_id: UUID) -> None:
                 resp.raise_for_status()
                 data = resp.json()
 
-            old_video_key = clip.video_url
-            old_srt_key = clip.srt_url
-            clip.video_url = data["video"]
-            clip.srt_url = data["srt"]
-            clip.render_status = RenderStatus.COMPLETED
-            clip.render_error = None
+            files = output.files or {}
+            old_video_key = files.get("video")
+            old_srt_key = files.get("srt")
+            output.files = {**files, "video": data["video"], "srt": data["srt"]}
+            output.render_status = RenderStatus.COMPLETED
+            output.render_error = None
             await db.commit()
+            await _mirror_render_node(output_id, "done")
 
             # Best-effort cleanup of the previous render's objects. Only bare
             # keys are deletable; legacy /api/v1 paths and absolute URLs are
@@ -164,12 +192,13 @@ async def render_clip(clip_id: UUID) -> None:
                         )
 
             logger.info(
-                "clip_rendered",
-                clip_id=str(clip_id),
-                video=output_url(clip.video_url),
+                "output_rendered",
+                output_id=str(output_id),
+                video=output_url(output.files.get("video")),
             )
         except Exception as e:  # noqa: BLE001 — record any failure on the row
-            logger.error("render_clip_failed", clip_id=str(clip_id), error=str(e))
-            clip.render_status = RenderStatus.FAILED
-            clip.render_error = str(e)
+            logger.error("render_output_failed", output_id=str(output_id), error=str(e))
+            output.render_status = RenderStatus.FAILED
+            output.render_error = str(e)
             await db.commit()
+            await _mirror_render_node(output_id, "failed", str(e)[:2000])

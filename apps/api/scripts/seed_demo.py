@@ -18,13 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import delete
 
 from app.models.database import AsyncSessionLocal
-from app.models.tables import Asset, Clip, Derivative, WorkflowRun
+from app.models.tables import Asset, Output, WorkflowRun
 from app.services.demo_seed import DEMO_PROJECT_ID, seed_demo_project
 from app.services.storage import delete_prefix, get_project_output_dir
 
 
 async def _reset_demo_outputs() -> None:
-    """Delete existing demo clips, derivatives, runs, and rendered outputs.
+    """Delete existing demo outputs, runs, and rendered files.
 
     The demo Asset row is removed too: ``seed_demo_project`` skips ASR when the
     asset is already COMPLETED, so without this a swapped demo video would be
@@ -32,8 +32,7 @@ async def _reset_demo_outputs() -> None:
     which re-triggers ASR on whatever now lives at the demo video object key.
     """
     async with AsyncSessionLocal() as db:
-        await db.execute(delete(Clip).where(Clip.project_id == DEMO_PROJECT_ID))
-        await db.execute(delete(Derivative).where(Derivative.project_id == DEMO_PROJECT_ID))
+        await db.execute(delete(Output).where(Output.project_id == DEMO_PROJECT_ID))
         await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == DEMO_PROJECT_ID))
         await db.execute(delete(Asset).where(Asset.project_id == DEMO_PROJECT_ID))
         await db.commit()

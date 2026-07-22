@@ -25,7 +25,7 @@ from app.models.schemas import (
 from app.models.tables import Asset, Clip, Project, User
 from app.services.caption_translate import translate_caption_track
 from app.services.chat import chat
-from app.services.generation import _generate_clip_cover_image
+from app.services.node_runners import generate_clip_cover_image
 from app.services.project_context import (
     resolve_clip_for_revision,
     resolve_speaker,
@@ -201,7 +201,9 @@ async def generate_clip_cover(
             detail="Project not found",
         )
 
-    image_url = await _generate_clip_cover_image(clip, project)
+    image_url = await generate_clip_cover_image(
+        clip.id, project, topic=clip.topic, title=clip.title
+    )
     if image_url is None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

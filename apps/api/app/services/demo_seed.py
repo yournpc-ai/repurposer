@@ -35,16 +35,15 @@ from app.models.schemas import (
 from app.models.tables import (
     Asset,
     BrandTemplate,
-    Clip,
+    Output,
     Project,
     Speaker,
     User,
-    WorkflowRun,
 )
 from app.services.asset_processing import process_asset
 from app.services.brand import DEFAULT_BRAND_CONFIG
 from app.services.chat import seed_project_prompt
-from app.services.generation import run_generation
+from app.services.orchestrator import TaskSpec, create_run, execute_run_inline
 from app.services.storage import (
     get_project_output_dir,
     get_project_upload_dir,
@@ -180,7 +179,10 @@ async def _get_or_create_demo_asset(db, user_id: UUID, project_id: UUID) -> Asse
 
 async def _count_clips(db) -> int:
     return await db.scalar(
-        select(func.count()).where(Clip.project_id == DEMO_PROJECT_ID)
+        select(func.count()).where(
+            Output.project_id == DEMO_PROJECT_ID,
+            Output.type == "clip",
+        )
     ) or 0
 
 
@@ -246,33 +248,29 @@ async def seed_demo_project() -> None:
         clip_count = await _count_clips(db)
 
         if clip_count == 0:
-            # Queue and immediately run the real generation orchestrator.
-            run = WorkflowRun(
-                project_id=DEMO_PROJECT_ID,
-                status=WorkflowStatus.PENDING,
-                current_step="queued",
-                progress=0,
-                context={
-                    "outputs": ["clips"],
-                    "clip_count": 5,
-                    "target_language": target_language,
-                    "brand_template_id": str(brand.id),
-                    "instruction": DEMO_USER_MESSAGE,
-                    "scope": "full",
-                    "target_id": None,
-                    "operation": "generate",
-                    "tone_settings": None,
-                },
+            # Materialize the plan graph and execute it inline — the same
+            # orchestrator + node runners the worker uses, no bypass.
+            run = await create_run(
+                db,
+                project,
+                TaskSpec(
+                    outputs=["clips"],
+                    clip_count=5,
+                    target_language=target_language,
+                    brand_template_id=str(brand.id),
+                    instruction=DEMO_USER_MESSAGE,
+                    scope="full",
+                    operation="generate",
+                ),
             )
-            db.add(run)
             project.status = ProjectStatus.PROCESSING
             await db.commit()
             await db.refresh(run)
 
             logger.info("demo_generation_started", run_id=str(run.id))
-            await run_generation(run.id)
+            await execute_run_inline(run.id)
 
-            # Refresh the run to check success (run_generation uses its own session).
+            # Refresh the run to check success (execution used its own sessions).
             await db.refresh(run)
             if run.status != WorkflowStatus.COMPLETED:
                 logger.error(
