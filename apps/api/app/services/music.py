@@ -12,7 +12,7 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import Clip, Music
+from app.models.tables import Music, Output
 from app.services.music_generation import (
     AUDIO_EXT,
     DEFAULTS_MODEL,
@@ -173,7 +173,7 @@ async def update_music_metadata(
 
 
 async def is_music_in_use(db: AsyncSession, music_id: UUID) -> int:
-    """Count clips whose render_spec.music references this piece.
+    """Count clip outputs whose render_spec.music references this piece.
 
     Portable Python-side scan (works on both Postgres and the SQLite test DB).
     On Postgres this could be a single JSONB-containment query; the library is
@@ -181,7 +181,7 @@ async def is_music_in_use(db: AsyncSession, music_id: UUID) -> int:
     """
     target = str(music_id)
     result = await db.execute(
-        select(Clip.render_spec).where(Clip.render_spec.isnot(None))
+        select(Output.render_spec).where(Output.render_spec.isnot(None))
     )
     count = 0
     for (spec,) in result.all():

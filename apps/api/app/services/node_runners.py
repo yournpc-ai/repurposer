@@ -6,7 +6,7 @@ table). Signature is uniform: ``(db, run, node, project) -> list[UUID]`` — the
 ids of the outputs rows the node produced (written to ``node.output_refs``).
 
 What changed versus the retired orchestration:
-- No run-context ``output_status`` blob, no process lock — node rows are
+- No run-context per-output status blob, no process lock — node rows are
   updated at row level by the orchestrator.
 - The fabricated-plan targeted-revision path is gone: derivative regen runs a
   real ``director_plan`` node upstream (intentional micro behavior change).

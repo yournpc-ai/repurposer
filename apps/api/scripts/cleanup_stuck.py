@@ -5,7 +5,7 @@ import asyncio
 from sqlalchemy import delete, select
 
 from app.models.database import AsyncSessionLocal
-from app.models.tables import Asset, Clip, Derivative, Project, WorkflowRun
+from app.models.tables import Asset, Output, Project, WorkflowRun
 
 
 async def cleanup() -> None:
@@ -21,9 +21,8 @@ async def cleanup() -> None:
         print(f"Found {len(runs)} stuck workflow runs for projects: {project_ids}")
 
         if project_ids:
-            # Delete derivatives, clips, assets for those projects
-            await db.execute(delete(Derivative).where(Derivative.project_id.in_(project_ids)))
-            await db.execute(delete(Clip).where(Clip.project_id.in_(project_ids)))
+            # Delete outputs and assets for those projects
+            await db.execute(delete(Output).where(Output.project_id.in_(project_ids)))
             await db.execute(delete(Asset).where(Asset.project_id.in_(project_ids)))
             await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id.in_(project_ids)))
             await db.execute(delete(Project).where(Project.id.in_(project_ids)))
@@ -41,10 +40,7 @@ async def cleanup() -> None:
             asset_project_ids = [a.project_id for a in assets if a.project_id]
             if asset_project_ids:
                 await db.execute(
-                    delete(Derivative).where(Derivative.project_id.in_(asset_project_ids))
-                )
-                await db.execute(
-                    delete(Clip).where(Clip.project_id.in_(asset_project_ids))
+                    delete(Output).where(Output.project_id.in_(asset_project_ids))
                 )
                 await db.execute(
                     delete(WorkflowRun).where(WorkflowRun.project_id.in_(asset_project_ids))

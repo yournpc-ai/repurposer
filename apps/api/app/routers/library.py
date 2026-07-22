@@ -1,5 +1,4 @@
-"""Library router: aggregates all user assets, clips, and derivatives."""
-
+"""Library router: aggregates all user uploads and outputs."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -7,46 +6,35 @@ from sqlalchemy import select
 from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     AssetResponse,
-    DerivativeResponse,
-    DerivativeType,
     LibraryItemResponse,
     LibraryItemType,
 )
-from app.models.tables import Asset, Clip, Derivative, Project, User
+from app.models.tables import Asset, Output, Project, User
+from app.services.outputs import visible_outputs_stmt
 from app.services.storage import resolve_stored_url, stream_url
 
 router = APIRouter()
 
 
-def _derivative_title(d: DerivativeResponse) -> str:
-    if d.type == DerivativeType.POST:
-        return "Social post"
-    if d.type == DerivativeType.QUOTES:
-        return "Quotes"
-    if d.type == DerivativeType.ARTICLE:
-        return "Article"
-    if d.type == DerivativeType.CAROUSEL:
-        return "Carousel"
-    return "Derivative"
+_DERIVATIVE_TITLES = {
+    "post": "Social post",
+    "quotes": "Quotes",
+    "article": "Article",
+    "carousel": "Carousel",
+}
 
 
-def _derivative_preview(d: DerivativeResponse) -> str | None:
-    content = d.content or {}
-    if d.type == DerivativeType.POST:
-        return content.get("content", "")[:200]
-    if d.type == DerivativeType.QUOTES:
-        quotes = content.get("quotes", [])
+def _output_preview(output: Output) -> str | None:
+    payload = output.payload or {}
+    if output.type == "post":
+        return (payload.get("content") or "")[:200]
+    if output.type == "quotes":
+        quotes = payload.get("quotes") or []
         if quotes:
-            return quotes[0].get("quote", "")[:200]
+            return (quotes[0].get("quote") or "")[:200]
         return None
-    if d.type == DerivativeType.ARTICLE:
-        return content.get("title", "")[:200]
-    return None
-
-
-def _derivative_download_url(d: DerivativeResponse) -> str | None:
-    if d.type == DerivativeType.QUOTES:
-        return d.image_url
+    if output.type == "article":
+        return (payload.get("title") or "")[:200]
     return None
 
 
@@ -56,17 +44,13 @@ def _upload_title(a: AssetResponse) -> str:
     return "Upload"
 
 
-def _upload_type(a: AssetResponse) -> LibraryItemType:
-    return LibraryItemType.UPLOAD
-
-
 @router.get("", response_model=list[LibraryItemResponse])
 async def list_library(
     type: LibraryItemType | None = None,  # noqa: A002
     db: DBDep = None,  # type: ignore[assignment]
     current_user: User = Depends(get_current_user_required),
 ) -> list[LibraryItemResponse]:
-    """Return the current user's assets, clips, and derivatives as a flat timeline."""
+    """Return the current user's uploads and outputs as a flat timeline."""
     db = db  # satisfy type checker when DBDep is optional
     project_ids_sub = select(Project.id).where(Project.user_id == current_user.id)
 
@@ -91,76 +75,45 @@ async def list_library(
                 )
             )
 
-    if type is None or type == LibraryItemType.CLIP:
-        result = await db.execute(
-            select(Clip)
-            .where(Clip.project_id.in_(project_ids_sub))
-            .order_by(Clip.created_at.desc())
-        )
-        for clip in result.scalars().all():
-            items.append(
-                LibraryItemResponse(
-                    id=clip.id,
-                    type=LibraryItemType.CLIP,
-                    title=clip.title or clip.hook or "Clip",
-                    project_id=clip.project_id,
-                    created_at=clip.created_at,
-                    preview=f"{clip.duration}s" if clip.duration else None,
-                    download_url=resolve_stored_url(clip.video_url),
+    if type is None or type != LibraryItemType.UPLOAD:
+        stmt = visible_outputs_stmt().where(Output.project_id.in_(project_ids_sub))
+        if type is not None:
+            stmt = stmt.where(Output.type == type.value)
+        result = await db.execute(stmt.order_by(Output.created_at.desc()))
+        for output in result.scalars().all():
+            payload = output.payload or {}
+            publishing = output.publishing or {}
+            files = output.files or {}
+            if output.type == "clip":
+                items.append(
+                    LibraryItemResponse(
+                        id=output.id,
+                        type=LibraryItemType.CLIP,
+                        title=publishing.get("title") or payload.get("hook") or "Clip",
+                        project_id=output.project_id,
+                        created_at=output.created_at,
+                        preview=(
+                            f"{payload['duration']}s" if payload.get("duration") else None
+                        ),
+                        download_url=resolve_stored_url(files.get("video")),
+                    )
                 )
-            )
-
-    if type is None or type in {
-        LibraryItemType.POST,
-        LibraryItemType.QUOTES,
-        LibraryItemType.ARTICLE,
-        LibraryItemType.CAROUSEL,
-    }:
-        type_filter: list[DerivativeType] = []
-        if type == LibraryItemType.POST:
-            type_filter = [DerivativeType.POST]
-        elif type == LibraryItemType.QUOTES:
-            type_filter = [DerivativeType.QUOTES]
-        elif type == LibraryItemType.ARTICLE:
-            type_filter = [DerivativeType.ARTICLE]
-        elif type == LibraryItemType.CAROUSEL:
-            type_filter = [DerivativeType.CAROUSEL]
-        else:
-            type_filter = [
-                DerivativeType.POST,
-                DerivativeType.QUOTES,
-                DerivativeType.ARTICLE,
-                DerivativeType.CAROUSEL,
-            ]
-
-        result = await db.execute(
-            select(Derivative)
-            .where(
-                Derivative.project_id.in_(project_ids_sub),
-                Derivative.type.in_(type_filter),
-            )
-            .order_by(Derivative.created_at.desc())
-        )
-        for derivative in result.scalars().all():
-            library_type = LibraryItemType.POST
-            if derivative.type == DerivativeType.QUOTES:
-                library_type = LibraryItemType.QUOTES
-            elif derivative.type == DerivativeType.ARTICLE:
-                library_type = LibraryItemType.ARTICLE
-            elif derivative.type == DerivativeType.CAROUSEL:
-                library_type = LibraryItemType.CAROUSEL
-
-            items.append(
-                LibraryItemResponse(
-                    id=derivative.id,
-                    type=library_type,
-                    title=_derivative_title(derivative),
-                    project_id=derivative.project_id,
-                    created_at=derivative.created_at,
-                    preview=_derivative_preview(derivative),
-                    download_url=_derivative_download_url(derivative),
+            else:
+                items.append(
+                    LibraryItemResponse(
+                        id=output.id,
+                        type=LibraryItemType(output.type),
+                        title=_DERIVATIVE_TITLES.get(output.type, "Output"),
+                        project_id=output.project_id,
+                        created_at=output.created_at,
+                        preview=_output_preview(output),
+                        download_url=(
+                            resolve_stored_url(files.get("image"))
+                            if output.type == "quotes"
+                            else None
+                        ),
+                    )
                 )
-            )
 
     # Flattened timeline: newest first.
     items.sort(key=lambda x: x.created_at, reverse=True)

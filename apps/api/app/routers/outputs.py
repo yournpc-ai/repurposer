@@ -1,4 +1,9 @@
-"""Clip router for feedback and revision."""
+"""Outputs router: the unified product API (ADR-030).
+
+Replaces the retired /clips and /derivatives routers. Clip-specific actions
+(render / cover / translate-captions / dub / revise) live as sub-paths on the
+output id; regeneration for any type goes through the chat layer.
+"""
 
 from datetime import UTC, datetime
 from uuid import UUID
@@ -15,18 +20,20 @@ from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
     ChatRequest,
-    ClipResponse,
-    ClipUpdate,
+    ClipSpec,
     DubRequest,
     FeedbackRequest,
+    OutputResponse,
     RenderStatus,
     TranslateCaptionsRequest,
+    validate_output_payload,
 )
-from app.models.tables import Asset, Clip, Project, User
+from app.models.tables import Asset, Output, Project, User
 from app.services.caption_translate import translate_caption_track
 from app.services.chat import chat
 from app.services.node_runners import generate_clip_cover_image
 from app.services.project_context import (
+    DEMO_PROJECT_ID,
     resolve_clip_for_revision,
     resolve_speaker,
     speaker_context_from_row,
@@ -36,81 +43,106 @@ from app.services.voice import clone_voice, extract_audio, synthesize
 
 router = APIRouter()
 
+CLIP_TYPES = {"clip"}
+DERIVATIVE_TYPES = {"post", "quotes", "carousel", "article"}
 
-async def _get_clip_for_user(
+
+async def _get_output_for_user(
     db: AsyncSession,
-    clip_id: UUID,
+    output_id: UUID,
     user_id: UUID | None,
-) -> Clip:
-    """Fetch a clip and ensure it belongs to the given user or is the demo."""
-    from app.services.project_context import DEMO_PROJECT_ID
-
-    clip = await db.get(Clip, clip_id)
-    if clip is None:
+) -> Output:
+    """Fetch an output and ensure it belongs to the given user or is the demo."""
+    output = await db.get(Output, output_id)
+    if output is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Clip not found",
+            detail="Output not found",
         )
-    project = await db.get(Project, clip.project_id)
+    project = await db.get(Project, output.project_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
     if user_id is not None and project.user_id == user_id:
-        return clip
+        return output
     if project.id == DEMO_PROJECT_ID:
-        return clip
+        return output
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Access denied",
     )
 
 
-@router.get("/{clip_id}", response_model=ClipResponse)
-async def get_clip(
-    clip_id: UUID,
+def _require_clip(output: Output) -> Output:
+    if output.type != "clip":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This action is only valid for clip outputs",
+        )
+    return output
+
+
+class OutputUpdate(BaseModel):
+    """Partial update for an output (editor save / content edit)."""
+
+    payload: dict | None = None
+    status: str | None = None
+    render_spec: ClipSpec | None = None
+    publishing: dict | None = None
+
+
+@router.get("/{output_id}", response_model=OutputResponse)
+async def get_output(
+    output_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> Clip:
-    """Get a single clip (editor load + render-status polling)."""
-    return await _get_clip_for_user(
-        db, clip_id, UUID(str(current_user.id)) if current_user else None
+) -> Output:
+    """Get a single output (editor load + render-status polling)."""
+    return await _get_output_for_user(
+        db, output_id, UUID(str(current_user.id)) if current_user else None
     )
 
 
-@router.put("/{clip_id}", response_model=ClipResponse)
-async def update_clip(
-    clip_id: UUID,
-    data: ClipUpdate,
+@router.put("/{output_id}", response_model=OutputResponse)
+async def update_output(
+    output_id: UUID,
+    data: OutputUpdate,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
-    """Update a clip's editable fields (editor save: render_spec, hook, etc.)."""
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+) -> Output:
+    """Update an output's editable fields (payload / render_spec / publishing)."""
+    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
 
-    updates = data.model_dump(exclude_unset=True, exclude={"render_spec"})
-    for key, value in updates.items():
-        setattr(clip, key, value)
+    if data.payload is not None:
+        output.payload = validate_output_payload(output.type, data.payload)
+    if data.status is not None:
+        output.status = data.status
     if data.render_spec is not None:
-        clip.render_spec = data.render_spec.model_dump(mode="json")
+        output.render_spec = data.render_spec.model_dump(mode="json")
+    if data.publishing is not None:
+        output.publishing = {**(output.publishing or {}), **data.publishing}
+    output.updated_at = datetime.now(UTC)
 
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
-@router.post("/{clip_id}/revise", response_model=ClipResponse)
-async def revise_clip(
-    clip_id: UUID,
+@router.post("/{output_id}/revise", response_model=OutputResponse)
+async def revise_output(
+    output_id: UUID,
     feedback: FeedbackRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
-    """Revise a clip based on feedback and return the updated clip."""
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+) -> Output:
+    """Revise a clip output based on feedback and return the updated output."""
+    output = _require_clip(
+        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
 
-    project = await db.get(Project, clip.project_id)
+    project = await db.get(Project, output.project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -118,8 +150,8 @@ async def revise_clip(
         )
 
     try:
-        clip, source_segment = await resolve_clip_for_revision(
-            db, clip_id, UUID(str(project.id))
+        output, source_segment = await resolve_clip_for_revision(
+            db, output_id, UUID(str(project.id))
         )
     except ValueError as e:
         raise HTTPException(
@@ -128,13 +160,14 @@ async def revise_clip(
         ) from e
 
     speaker = await resolve_speaker(db, project)
+    payload = output.payload or {}
 
     try:
         revised = await reviser_agent.revise(
-            clip_hook=clip.hook,
-            clip_duration=clip.duration,
-            clip_title_options=clip.title_options or [],
-            clip_music_mood=clip.music_mood,
+            clip_hook=payload.get("hook", ""),
+            clip_duration=payload.get("duration", 30),
+            clip_title_options=payload.get("title_options") or [],
+            clip_music_mood=payload.get("music_mood", "calm"),
             segment=source_segment,
             feedback=feedback,
             speaker=speaker_context_from_row(speaker),
@@ -146,63 +179,76 @@ async def revise_clip(
             detail=str(e),
         ) from e
 
-    clip.hook = revised.hook
-    clip.title_options = revised.title_options
-    clip.music_mood = revised.music_mood
-    clip.duration = revised.duration_seconds
-    clip.updated_at = datetime.now(UTC)
+    output.payload = validate_output_payload(
+        "clip",
+        {
+            "hook": revised.hook,
+            "title_options": revised.title_options,
+            "music_mood": revised.music_mood,
+            "duration": revised.duration_seconds,
+        },
+    )
+    output.updated_at = datetime.now(UTC)
 
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
 @router.post(
-    "/{clip_id}/render",
-    response_model=ClipResponse,
+    "/{output_id}/render",
+    response_model=OutputResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def render_clip(
-    clip_id: UUID,
+async def render_output_endpoint(
+    output_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
+) -> Output:
     """Queue this clip for video rendering (worker claims render_status=PENDING)."""
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
-    if not clip.render_spec:
+    output = _require_clip(
+        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
+    if not output.render_spec:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Clip has no render_spec (text-only project — no source video)",
         )
-    clip.render_status = RenderStatus.PENDING
-    clip.render_error = None
+    output.render_status = RenderStatus.PENDING
+    output.render_error = None
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
-@router.post("/{clip_id}/cover", response_model=ClipResponse)
-async def generate_clip_cover(
-    clip_id: UUID,
+@router.post("/{output_id}/cover", response_model=OutputResponse)
+async def generate_output_cover(
+    output_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
+) -> Output:
     """Generate a cover image for a clip on demand.
 
     The image is created only when requested by the UI to avoid paying
     image-generation costs for every clip.
     """
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+    output = _require_clip(
+        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
 
-    project = await db.get(Project, clip.project_id)
+    project = await db.get(Project, output.project_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
 
+    publishing = output.publishing or {}
     image_url = await generate_clip_cover_image(
-        clip.id, project, topic=clip.topic, title=clip.title
+        output.id,
+        project,
+        topic=publishing.get("topic"),
+        title=publishing.get("title"),
     )
     if image_url is None:
         raise HTTPException(
@@ -210,29 +256,31 @@ async def generate_clip_cover(
             detail="Cover image generation failed",
         )
 
-    clip.cover_image_url = image_url
-    clip.updated_at = datetime.now(UTC)
+    output.publishing = {**publishing, "cover_image_url": image_url}
+    output.updated_at = datetime.now(UTC)
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
-@router.post("/{clip_id}/translate-captions", response_model=ClipResponse)
+@router.post("/{output_id}/translate-captions", response_model=OutputResponse)
 async def translate_captions(
-    clip_id: UUID,
+    output_id: UUID,
     data: TranslateCaptionsRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
+) -> Output:
     """Re-translate the clip's caption track into ``target_language``.
 
     Operates on the persisted ``render_spec``, so the editor saves pending edits
     first. Stays word-level (see services.caption_translate) and updates the
     spec's ``target_language`` in place.
     """
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+    output = _require_clip(
+        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
 
-    spec = clip.render_spec
+    spec = output.render_spec
     if not isinstance(spec, dict):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -254,24 +302,24 @@ async def translate_captions(
         ) from e
 
     # Reassign a NEW dict so SQLAlchemy flushes the JSON column (no in-place mutation).
-    clip.render_spec = {
+    output.render_spec = {
         **spec,
         "caption_track": new_track,
         "target_language": data.target_language,
     }
-    clip.updated_at = datetime.now(UTC)
+    output.updated_at = datetime.now(UTC)
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
-@router.post("/{clip_id}/dub", response_model=ClipResponse)
-async def dub_clip(
-    clip_id: UUID,
+@router.post("/{output_id}/dub", response_model=OutputResponse)
+async def dub_output(
+    output_id: UUID,
     data: DubRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Clip:
+) -> Output:
     """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
 
     Clones from the project's voice sample (VOICE_SAMPLE > AUDIO > VIDEO audio),
@@ -279,13 +327,15 @@ async def dub_clip(
     ``dub`` track into ``render_spec`` — the renderer then mutes the source audio
     and plays the dub (overlay; no lip-sync). GDPR set aside for MVP.
     """
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+    output = _require_clip(
+        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
 
-    project = await db.get(Project, clip.project_id)
+    project = await db.get(Project, output.project_id)
     if project is None or project.user_id != UUID(str(current_user.id)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    spec = clip.render_spec
+    spec = output.render_spec
     if not isinstance(spec, dict):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Clip has no render_spec (text-only project)"
@@ -297,7 +347,7 @@ async def dub_clip(
     # Voice sample priority: explicit voice sample > talk audio > talk video.
     assets = list(
         (
-            await db.execute(select(Asset).where(Asset.project_id == clip.project_id))
+            await db.execute(select(Asset).where(Asset.project_id == output.project_id))
         ).scalars()
     )
     sample = (
@@ -353,46 +403,55 @@ async def dub_clip(
 
     out_key = str(
         get_output_path(
-            clip.project_id,
+            output.project_id,
             project.user_id,
-            f"{clip_id}_dub_{data.target_language}.mp3",
+            f"{output_id}_dub_{data.target_language}.mp3",
         )
     )
     out_key = await save(out_key, audio_bytes)
 
     # Reassign a NEW dict so SQLAlchemy flushes the JSON column.
-    clip.render_spec = {
+    output.render_spec = {
         **spec,
         "caption_track": new_track,
         "target_language": data.target_language,
         "dub": {"url": output_url(out_key), "enabled": True, "gain_db": 0.0},
     }
-    clip.updated_at = datetime.now(UTC)
+    output.updated_at = datetime.now(UTC)
     await db.commit()
-    await db.refresh(clip)
-    return clip
+    await db.refresh(output)
+    return output
 
 
-class ClipRegenerateRequest(BaseModel):
-    """Request to regenerate a clip with an optional instruction."""
+class OutputRegenerateRequest(BaseModel):
+    """Request to regenerate an output with an optional instruction."""
 
     instruction: str | None = Field(
         default=None,
         description="Steering prompt for the regeneration.",
     )
+    target_language: str = Field(
+        default="en",
+        description="Target language code, e.g. en/zh/fr/de/es/it",
+    )
 
 
-@router.post("/{clip_id}/regenerate", response_model=dict)
-async def regenerate_clip(
-    clip_id: UUID,
-    data: ClipRegenerateRequest,
+@router.post("/{output_id}/regenerate", response_model=dict)
+async def regenerate_output(
+    output_id: UUID,
+    data: OutputRegenerateRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """Queue regeneration of a single clip through the generic chat layer."""
-    clip = await _get_clip_for_user(db, clip_id, UUID(str(current_user.id)))
+    """Queue regeneration of a single output through the generic chat layer."""
+    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    if output.type not in CLIP_TYPES | DERIVATIVE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Output type {output.type} is not regenerable",
+        )
 
-    project = await db.get(Project, clip.project_id)
+    project = await db.get(Project, output.project_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -404,9 +463,9 @@ async def regenerate_clip(
         UUID(str(current_user.id)),
         ChatRequest(
             project_id=UUID(str(project.id)),
-            asset_id=clip_id,
-            asset_type="clip",
-            message=data.instruction or "Regenerate this clip",
+            asset_id=output_id,
+            asset_type="clip" if output.type == "clip" else "derivative",
+            message=data.instruction or f"Regenerate this {output.type}",
         ),
     )
 

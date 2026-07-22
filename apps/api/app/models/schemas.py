@@ -386,7 +386,6 @@ class ProjectResponse(ProjectBase):
     speaker_id: UUID | None
     status: ProjectStatus
     tone_snapshot: ToneSettings | None = None
-    content_plan: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
     # True for the seeded demo project; lets the frontend route/link by slug
@@ -1038,62 +1037,6 @@ class OutputResponse(BaseModel):
         return self
 
 
-class ClipResponse(BaseModel):
-    """Generated clip response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    project_id: UUID
-    workflow_run_id: UUID | None = None
-    hook: str
-    title_options: list[str]
-    music_mood: str
-    status: str
-    video_url: str | None = None
-    duration: int
-    language: str
-    source_segment: Segment | None = None
-    render_spec: ClipSpec | None = None
-    render_status: RenderStatus | None = None
-    render_error: str | None = None
-    srt_url: str | None = None
-    title: str | None = None
-    description: str | None = None
-    hashtags: list[str] | None = None
-    cover_image_url: str | None = None
-    topic: str | None = None
-    start_time: float | None = None
-    end_time: float | None = None
-    created_at: datetime
-    updated_at: datetime | None = None
-
-    @model_validator(mode="after")
-    def _resolve_output_urls(self) -> ClipResponse:
-        """Resolve stored object keys to public URLs at the API boundary.
-
-        The DB stores bare object keys (e.g. ``demo/outputs/<clip_id>.mp4``);
-        the frontend consumes playable URLs. Legacy rows holding absolute URLs
-        or ``/api/v1/...`` paths pass through untouched.
-        """
-        from app.services.storage import resolve_stored_url
-
-        self.video_url = resolve_stored_url(self.video_url)
-        self.srt_url = resolve_stored_url(self.srt_url)
-        self.cover_image_url = resolve_stored_url(self.cover_image_url)
-        return self
-
-
-class ClipUpdate(BaseModel):
-    """Partial update for a clip."""
-
-    hook: str | None = None
-    title_options: list[str] | None = None
-    music_mood: str | None = None
-    status: str | None = None
-    render_spec: ClipSpec | None = None
-
-
 class CaptionTranslation(BaseModel):
     """LLM caption-translation result: translated lines, parallel to the input."""
 
@@ -1112,38 +1055,6 @@ class DubRequest(BaseModel):
     """Voice-clone dub a clip into ``target_language`` (speaker's own voice)."""
 
     target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
-
-
-class DerivativeResponse(BaseModel):
-    """Generated derivative (LinkedIn post, quote cards, …)."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    project_id: UUID
-    workflow_run_id: UUID | None = None
-    type: DerivativeType
-    content: dict
-    language: str
-    image_url: str | None = None
-    status: str
-    created_at: datetime
-    updated_at: datetime | None = None
-
-    @field_validator("content", mode="before")
-    @classmethod
-    def _validate_content(cls, value: Any, info: ValidationInfo) -> Any:
-        derivative_type = info.data.get("type")
-        if derivative_type is None or not isinstance(value, dict):
-            return value
-        return validate_derivative_content(derivative_type, value)
-
-
-class DerivativeUpdate(BaseModel):
-    """Partial update for a derivative."""
-
-    content: dict | None = None
-    status: str | None = None
 
 
 class GenerateRequest(BaseModel):
@@ -1240,7 +1151,6 @@ class WorkflowRunResponse(BaseModel):
     id: UUID
     project_id: UUID
     status: WorkflowStatus
-    current_step: str | None = None
     progress: int = Field(default=0, ge=0, le=100)
     error: str | None = None
     context: dict | None = None
@@ -1283,8 +1193,7 @@ class ProjectResultsResponse(BaseModel):
 
     project: ProjectResponse
     prompt: str | None = None
-    clips: list[ClipResponse] = Field(default_factory=list)
-    derivatives: list[DerivativeResponse] = Field(default_factory=list)
+    outputs: list[OutputResponse] = Field(default_factory=list)
     latest_job: WorkflowRunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     ui_step: UiStep | None = None

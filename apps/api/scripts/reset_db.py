@@ -39,10 +39,9 @@ from app.models.tables import (  # noqa: E402
     Asset,
     BrandTemplate,
     ChatSession,
-    Clip,
-    Derivative,
     Message,
     Music,
+    Output,
     Project,
     Speaker,
     User,
@@ -60,8 +59,8 @@ def _plan() -> list[tuple[str, object, object]]:
     return [
         ("messages", Message, Message.session_id.in_(non_demo_sessions)),
         ("chat_sessions", ChatSession, ChatSession.user_id != DEMO_USER_UUID),
-        ("clips", Clip, Clip.project_id.in_(non_demo_projects)),
-        ("derivatives", Derivative, Derivative.project_id.in_(non_demo_projects)),
+        ("outputs", Output, Output.project_id.in_(non_demo_projects)),
+        # plan_nodes cascade away with workflow_runs (run_id FK ondelete=CASCADE).
         ("workflow_runs", WorkflowRun, WorkflowRun.project_id.in_(non_demo_projects)),
         ("assets", Asset, Asset.user_id != DEMO_USER_UUID),
         ("brand_templates", BrandTemplate, BrandTemplate.user_id != DEMO_USER_UUID),

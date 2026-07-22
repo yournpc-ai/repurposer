@@ -10,7 +10,6 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
-    Float,
     ForeignKey,
     Index,
     Integer,
@@ -24,7 +23,6 @@ from app.models.database import Base
 from app.models.schemas import (
     AssetStatus,
     AssetType,
-    DerivativeType,
     ProjectStatus,
     RenderStatus,
     WorkflowStatus,
@@ -111,7 +109,6 @@ class Project(Base):
     language = Column(String(10), default="zh")
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
-    content_plan = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -170,70 +167,19 @@ class BrandTemplate(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
-class Clip(Base):
-    """Generated clip table."""
-
-    __tablename__ = "clips"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    workflow_run_id = Column(
-        UUID(as_uuid=True), ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True
-    )
-    hook = Column(String(500), nullable=False)
-    title_options = Column(JSON, default=list)
-    music_mood = Column(String(50), default="calm")
-    status = Column(String(50), default="generated")
-    video_url = Column(String(512), nullable=True)
-    duration = Column(Integer, default=30)
-    language = Column(String(10), default="zh")
-    source_segment = Column(JSON, nullable=True)
-    # Vertical-clip render contract + job state (see docs/VIDEO_EDITOR.md).
-    # render_status NULL = render not requested.
-    render_spec = Column(JSON, nullable=True)
-    render_status = Column(Enum(RenderStatus), nullable=True)
-    render_error = Column(Text, nullable=True)
-    srt_url = Column(String(512), nullable=True)
-    # Publishing-suite metadata for the clip (title, caption, hashtags, cover, topic, timecode).
-    title = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    hashtags = Column(JSON, nullable=True)
-    cover_image_url = Column(String(512), nullable=True)
-    topic = Column(String(255), nullable=True)
-    start_time = Column(Float, nullable=True)
-    end_time = Column(Float, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
-class Derivative(Base):
-    """Derivative content table."""
-
-    __tablename__ = "derivatives"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    workflow_run_id = Column(
-        UUID(as_uuid=True), ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True
-    )
-    type = Column(Enum(DerivativeType), nullable=False)
-    content = Column(JSON, nullable=False)
-    language = Column(String(10), default="zh")
-    image_url = Column(String(512), nullable=True)
-    status = Column(String(50), default="generated")
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
 class WorkflowRun(Base):
-    """Workflow run table."""
+    """Workflow run table — run-level state machine only.
+
+    Per-step state lives in plan_nodes (RunPlan); ``context`` is the task
+    book (normalized intent), ``progress`` aggregates node states. The retired
+    current_step string is gone (query running nodes instead).
+    """
 
     __tablename__ = "workflow_runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     status = Column(Enum(WorkflowStatus), default=WorkflowStatus.PENDING)
-    current_step = Column(String(100), nullable=True)
     context = Column(JSON, default=dict)
     progress = Column(Integer, default=0)
     error = Column(Text, nullable=True)

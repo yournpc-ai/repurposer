@@ -5,16 +5,14 @@ import zipfile
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import delete, select
+from sqlalchemy import Integer, cast, delete, select
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
-    ClipResponse,
-    DerivativeResponse,
-    DerivativeType,
     ExportRequest,
     GenerateRequest,
+    OutputResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectResultsResponse,
@@ -24,8 +22,8 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
-    Clip,
-    Derivative,
+    Output,
+    PlanNode,
     Project,
     Speaker,
     User,
@@ -34,6 +32,13 @@ from app.models.tables import (
 from app.services.chat import get_project_prompt, seed_project_prompt
 from app.services.demo_seed import DEMO_PROJECT_ID
 from app.services.orchestrator import TaskSpec, create_run
+from app.services.outputs import (
+    aggregate_node_cost,
+    list_visible_outputs,
+    plan_node_to_response,
+    run_to_response,
+    visible_outputs_stmt,
+)
 from app.services.project_context import get_project_for_user
 from app.services.storage import delete_file, delete_project_files, resolve_stored_url
 
@@ -84,14 +89,15 @@ async def list_projects(
     """
     thumb = (
         select(
-            Clip.project_id.label("project_id"),
-            Clip.video_url.label("video_url"),
-            Clip.duration.label("duration"),
-            Clip.render_spec.label("render_spec"),
+            Output.project_id.label("project_id"),
+            Output.files["video"].as_string().label("video_url"),
+            cast(Output.payload["duration"].as_string(), Integer).label("duration"),
+            Output.render_spec.label("render_spec"),
         )
-        .distinct(Clip.project_id)
-        .where(Clip.video_url.isnot(None))
-        .order_by(Clip.project_id, Clip.created_at.asc())
+        .distinct(Output.project_id)
+        .where(Output.type == "clip")
+        .where(Output.files.has_key("video"))
+        .order_by(Output.project_id, Output.created_at.asc())
         .subquery()
     )
     # Anonymous users see only the demo project. Authenticated users see their
@@ -173,24 +179,29 @@ def _ui_steps_for_outputs(outputs: list[str]) -> list[str]:
 def _compute_ui_step(
     assets: list[Asset],
     latest_job: WorkflowRun | None,
-    clips: list[Clip],
+    nodes: list[PlanNode],
+    outputs: list[Output],
 ) -> dict | None:
     """Stepper position for the results-page loading dialog.
 
-    The stepper is a numbered list derived from the pipeline itself, so the
-    frontend only renders {key, index, total} (percent = (index + 1) / total)
-    — every step advances by the same increment, and the final step
-    (ready_to_render) sits at 100% while clips wait for the render worker.
-    None = hide the dialog (no run, run failed, or everything settled).
+    Derived from the run's plan_nodes (RunPlan Phase 1): the current step is
+    the first non-settled node by seq; node kind/stage maps onto the existing
+    i18n step keys, so the frontend contract ({key, index, total}) is
+    unchanged. None = hide the dialog (no run, run failed, or everything
+    settled).
     """
     if latest_job is None or latest_job.status == "failed":
         return None
 
     ctx = latest_job.context or {}
-    outputs = ctx.get("outputs") or ["clips"]
-    steps = _ui_steps_for_outputs(outputs)
+    outputs_requested = ctx.get("outputs") or ["clips"]
+    steps = _ui_steps_for_outputs(outputs_requested)
 
     def at(key: str) -> dict:
+        # Targeted runs (script/render) have no matching display step; park at
+        # the end of planning rather than failing the index lookup.
+        if key not in steps:
+            key = "prepare"
         return {"key": key, "index": steps.index(key), "total": len(steps)}
 
     # Assets still processing (ASR / extraction) — the run queues behind them.
@@ -200,31 +211,35 @@ def _compute_ui_step(
     if latest_job.status == "pending":
         return at("queued")
 
-    step = latest_job.current_step
-    if step in ("analyze", "plan", "prepare"):
-        return at(step)
+    current = next(
+        (n for n in nodes if n.status in ("pending", "running")), None
+    )
+    if current is not None:
+        if current.kind in ("preprocess", "persona_bootstrap"):
+            return at("analyze")
+        if current.kind == "director_plan":
+            return at("plan")
+        if current.kind == "clips_pipeline":
+            stage = (current.spec or {}).get("stage")
+            return at(stage if stage in steps else "selecting_segments")
+        if current.kind in ("post_gen", "quotes_gen", "carousel_gen", "article_gen"):
+            stage = (current.spec or {}).get("stage")
+            if stage == "generating_image":
+                return at("generating_image")
+            return at("writing_copy")
+        if current.kind == "render":
+            return at("ready_to_render")
+        return at("prepare")
 
-    if step == "clips":
-        stage = (ctx.get("output_status") or {}).get("clips", {}).get("stage")
-        return at(stage if stage in steps else "selecting_segments")
-
-    # Text derivatives run concurrently, so they share one step; quotes' image
-    # rendering is the last sub-stage.
-    if step in _UI_STEP_TEXT_OUTPUTS:
-        quotes_stage = (ctx.get("output_status") or {}).get("quotes", {}).get("stage")
-        if quotes_stage == "generating_image" and "generating_image" in steps:
-            return at("generating_image")
-        return at("writing_copy")
-
-    if step == "done" or latest_job.status == "completed":
+    if latest_job.status == "completed":
         if "ready_to_render" in steps and any(
-            c.render_status in ("pending", "rendering") for c in clips
+            o.type == "clip" and o.render_status in ("pending", "rendering")
+            for o in outputs
         ):
             return at("ready_to_render")
         return None
 
-    # Unknown step label: stay at the end of planning.
-    return at("prepare")
+    return None
 
 
 @router.get("/{project_id}/results", response_model=ProjectResultsResponse)
@@ -233,7 +248,7 @@ async def get_project_results(
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
 ) -> dict:
-    """Aggregate project results: metadata, prompt, clips, derivatives, latest job."""
+    """Aggregate project results: metadata, prompt, outputs, latest job + nodes."""
     project = await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
@@ -249,33 +264,24 @@ async def get_project_results(
     )
     latest_job = latest_job_result.scalar_one_or_none()
 
-    # Filter clips/derivatives to the latest workflow run. Rows with a NULL
-    # workflow_run_id are legacy data from before this column existed; include
-    # them so existing projects don't appear empty immediately after the
-    # migration.
-    latest_job_id = latest_job.id if latest_job is not None else None
-    clips_filter = Clip.project_id == project_id
-    derivatives_filter = Derivative.project_id == project_id
-    if latest_job_id is not None:
-        clips_filter = clips_filter & (
-            (Clip.workflow_run_id == latest_job_id) | Clip.workflow_run_id.is_(None)
-        )
-        derivatives_filter = derivatives_filter & (
-            (Derivative.workflow_run_id == latest_job_id)
-            | Derivative.workflow_run_id.is_(None)
-        )
+    # User-facing outputs only (internal node artifacts stay hidden). Outputs
+    # are replaced per type on each run, so the list is already "latest".
+    outputs = await list_visible_outputs(db, project_id)
 
-    clips_result = await db.execute(
-        select(Clip).where(clips_filter).order_by(Clip.created_at.desc())
-    )
-    clips = list(clips_result.scalars().all())
+    nodes: list[PlanNode] = []
+    if latest_job is not None:
+        nodes_result = await db.execute(
+            select(PlanNode)
+            .where(PlanNode.run_id == latest_job.id)
+            .order_by(PlanNode.seq)
+        )
+        nodes = list(nodes_result.scalars().all())
 
-    derivatives_result = await db.execute(
-        select(Derivative)
-        .where(derivatives_filter)
-        .order_by(Derivative.created_at.desc())
-    )
-    derivatives = list(derivatives_result.scalars().all())
+    latest_job_resp = None
+    if latest_job is not None:
+        latest_job_resp = WorkflowRunResponse.model_validate(latest_job)
+        latest_job_resp.nodes = [plan_node_to_response(n) for n in nodes]
+        latest_job_resp.cost = aggregate_node_cost(nodes)
 
     # Asset processing statuses power the results-page loading state (the
     # transcribing/parsing phase before the generation run starts).
@@ -287,11 +293,10 @@ async def get_project_results(
     return {
         "project": project,
         "prompt": prompt,
-        "clips": clips,
-        "derivatives": derivatives,
-        "latest_job": latest_job,
+        "outputs": outputs,
+        "latest_job": latest_job_resp,
         "assets": assets,
-        "ui_step": _compute_ui_step(assets, latest_job, clips),
+        "ui_step": _compute_ui_step(assets, latest_job, nodes, outputs),
     }
 
 
@@ -333,8 +338,7 @@ async def delete_project(
     for asset in result.scalars().all():
         await delete_file(asset.file_url)
 
-    await db.execute(delete(Clip).where(Clip.project_id == project_id))
-    await db.execute(delete(Derivative).where(Derivative.project_id == project_id))
+    await db.execute(delete(Output).where(Output.project_id == project_id))
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
     await db.execute(delete(Asset).where(Asset.project_id == project_id))
     await db.delete(project)
@@ -447,8 +451,8 @@ async def get_project_job(
     job_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> WorkflowRun:
-    """Get a single generation job's status."""
+) -> WorkflowRunResponse:
+    """Get a single generation job's status (with plan nodes + aggregated cost)."""
     await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
@@ -458,40 +462,36 @@ async def get_project_job(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Job not found",
         )
-    return run
+    return await run_to_response(db, run)
 
 
-@router.get("/{project_id}/clips", response_model=list[ClipResponse])
+@router.get("/{project_id}/clips", response_model=list[OutputResponse])
 async def list_project_clips(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> list[Clip]:
-    """List generated clips for a project."""
+) -> list[Output]:
+    """List generated clip outputs for a project."""
     await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
-
-    result = await db.execute(
-        select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
-    )
-    return list(result.scalars().all())
+    return await list_visible_outputs(db, project_id, output_type="clip")
 
 
-@router.get("/{project_id}/derivatives", response_model=list[DerivativeResponse])
+@router.get("/{project_id}/derivatives", response_model=list[OutputResponse])
 async def list_project_derivatives(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> list[Derivative]:
-    """List generated derivatives (LinkedIn posts, quote cards) for a project."""
+) -> list[Output]:
+    """List generated derivative outputs (posts, quote cards, …) for a project."""
     await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
     result = await db.execute(
-        select(Derivative)
-        .where(Derivative.project_id == project_id)
-        .order_by(Derivative.created_at.desc())
+        visible_outputs_stmt()
+        .where(Output.project_id == project_id, Output.type != "clip")
+        .order_by(Output.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -508,17 +508,9 @@ async def export_project(
         db, project_id, current_user.id, allow_demo=False
     )
 
-    clips_result = await db.execute(
-        select(Clip).where(Clip.project_id == project_id).order_by(Clip.created_at.desc())
-    )
-    clips = list(clips_result.scalars().all())
-
-    derivatives_result = await db.execute(
-        select(Derivative)
-        .where(Derivative.project_id == project_id)
-        .order_by(Derivative.created_at.desc())
-    )
-    derivatives = list(derivatives_result.scalars().all())
+    outputs = await list_visible_outputs(db, project_id)
+    clips = [o for o in outputs if o.type == "clip"]
+    derivatives = [o for o in outputs if o.type != "clip"]
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -526,48 +518,51 @@ async def export_project(
         if clips:
             lines: list[str] = [f"# Clips for {project.title}\n"]
             for idx, clip in enumerate(clips, start=1):
-                lines.append(f"\n## Clip {idx}: {clip.hook}\n")
-                lines.append(f"- Duration: {clip.duration}s\n")
-                lines.append(f"- Mood: {clip.music_mood}\n")
-                lines.append(f"- Title options: {', '.join(clip.title_options or [])}\n")
+                payload = clip.payload or {}
+                lines.append(f"\n## Clip {idx}: {payload.get('hook', '')}\n")
+                lines.append(f"- Duration: {payload.get('duration', 30)}s\n")
+                lines.append(f"- Mood: {payload.get('music_mood', 'calm')}\n")
+                lines.append(
+                    f"- Title options: {', '.join(payload.get('title_options') or [])}\n"
+                )
             zf.writestr("clips.md", "".join(lines))
 
         # Derivatives grouped by type
-        posts = [d for d in derivatives if d.type == DerivativeType.POST]
+        posts = [d for d in derivatives if d.type == "post"]
         if posts:
             lines = [f"# Social Posts for {project.title}\n"]
             for d in posts:
-                content = d.content
+                content = d.payload or {}
                 lines.append(f"\n---\n\n{content.get('content', '')}\n")
                 hashtags = content.get("hashtags", [])
                 if hashtags:
                     lines.append("\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags) + "\n")
             zf.writestr("post.md", "".join(lines))
 
-        quotes = [d for d in derivatives if d.type == DerivativeType.QUOTES]
+        quotes = [d for d in derivatives if d.type == "quotes"]
         if quotes:
             lines = [f"# Quotes for {project.title}\n"]
             for d in quotes:
-                for q in d.content.get("quotes", []):
+                for q in (d.payload or {}).get("quotes", []):
                     lines.append(f"\n> \"{q.get('quote', '')}\"\n")
                     lines.append(f"> — {q.get('attribution', '')}\n")
             zf.writestr("quotes.md", "".join(lines))
 
-        articles = [d for d in derivatives if d.type == DerivativeType.ARTICLE]
+        articles = [d for d in derivatives if d.type == "article"]
         if articles:
             lines = [f"# Articles for {project.title}\n"]
             for d in articles:
-                content = d.content
+                content = d.payload or {}
                 if content.get("title"):
                     lines.append(f"\n## {content['title']}\n")
                 lines.append(f"\n{content.get('content', '')}\n")
             zf.writestr("article.md", "".join(lines))
 
-        carousels = [d for d in derivatives if d.type == DerivativeType.CAROUSEL]
+        carousels = [d for d in derivatives if d.type == "carousel"]
         if carousels:
             lines = [f"# Carousels for {project.title}\n"]
             for d in carousels:
-                for slide in d.content.get("slides", []):
+                for slide in (d.payload or {}).get("slides", []):
                     if slide.get("title"):
                         lines.append(f"\n## {slide['title']}\n")
                     if slide.get("body"):
