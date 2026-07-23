@@ -48,6 +48,12 @@ export async function renderClip(
     codec: "h264",
     outputLocation: videoPath,
     inputProps,
+    // OffthreadVideo extracts frames by fetching the remote source through
+    // Remotion's internal asset proxy; slow origin range responses (observed
+    // 3-6 s/MB from TOS) can exceed the 28 s delayRender default and abort
+    // the whole render. Give slow origins room; the HTTP client timeout
+    // upstream (900 s) still bounds the real failure case.
+    timeoutInMilliseconds: 180_000,
   });
 
   const clipStart = keptSegments(spec)[0]?.start ?? 0;

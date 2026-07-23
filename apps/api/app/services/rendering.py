@@ -106,7 +106,12 @@ async def _mirror_render_node(
                     "UPDATE plan_nodes SET status = CAST(:st AS varchar), error = :err, "
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
                     "ELSE finished_at END, updated_at = now() "
-                    "WHERE kind = 'render' AND status IN ('pending', 'running') "
+                    "WHERE kind = 'render' "
+                    # pending/running take any mirror; a success mirror must
+                    # also recover a node left 'failed' by an earlier attempt
+                    # (re-render after failure would otherwise match 0 rows).
+                    "AND (status IN ('pending', 'running') "
+                    "     OR (CAST(:st AS varchar) = 'done' AND status = 'failed')) "
                     "AND spec->>'output_id' = :oid"
                 ),
                 {"st": node_status, "err": error, "oid": str(output_id)},
