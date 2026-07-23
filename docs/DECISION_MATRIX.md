@@ -91,7 +91,7 @@
 | 定时发布 | ✓ | ~ | ✓ | ✓ | ✓ | ✗ | ✗ | 中 | 采纳 | P2 | 路线图 | 2026-07-23 定界为边缘功能：agency 多账号运营便利，非个体刚需 |
 | newsletter 发送（ESP 对接） | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | 高 | 采纳 | P2 | 路线图 | 七家全空白；PRD 核心渠道之一 |
 | 源→目的地自动化规则 | ✗ | ✗ | ✗ | ✓ | ~ | ✗ | ✗ | 中 | 改造 | P2 | 路线图 | Repurchase workflow 模型 + Revid Workers 思想："会后自动生成资产包" |
-| TikTok 分发（直发） | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | 中 | 改造 | P2 | 设计完成（DISTRIBUTION.md） | **2026-07-21 翻案**（原"放弃"）：只做直发、应用审核墙钟先行；**2026-07-23 降级 P2**：定位纪律——核心渠道 = LinkedIn/机构网站/newsletter，应用审核留作零代码 ops。IG/Snapchat/Pinterest 仍放弃 |
+| TikTok 分发（直发） | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | 中 | 改造 | **P1** | 设计完成（DISTRIBUTION.md） | **2026-07-21 翻案**（原"放弃"）：只做直发、应用审核墙钟先行；**2026-07-23 二次翻案**：与 LinkedIn 并列为 P1 双平台（clips 需要出口，Agent Opus 默认含短视频分发）——平台范围就此两家，IG/Snapchat/Pinterest 仍放弃 |
 
 ## I. 商业模式与信任
 
@@ -121,5 +121,6 @@
 - v1.1（2026-07-22）：Opus 三产品线调研（research/opusclip §8、research/agent-opus.md）：TikTok 分发翻案（放弃→改造 P1，DISTRIBUTION.md）；新增 2 行（transcript 查找替换=采纳 P1、模型超市=💡 后排）；"AI 视频生成"放弃改判 💡 后排
 - v1.2（2026-07-22）：ElevenCreative 调研（research/elevencreative.md）：新增"节点编排画布"行（改造：对内 RunPlan 持久化 ADR-028，对外画布放弃）
 - v1.3（2026-07-23）：Virality Score 改造口径定稿为**首发推荐分**（值+理由可见，不预测传播量）；一键去静默/口头禅重估下放 P2（播客刚需 ≠ 演讲刚需，跳剪伤专业感）
-- v1.4（2026-07-23）：Distribution 定界——LinkedIn 直发保持 P1（核心 = 发布动作本身，最后一座手动桥）；定时发布 / 审核队列 / TikTok 直发 P1→P2（边缘功能：agency 便利 / 机构形态 / 定位纪律）
+- v1.4（2026-07-23）：Distribution 定界——LinkedIn 直发保持 P1（核心 = 发布动作本身，最后一座手动桥）；定时发布 / 审核队列 P1→P2（边缘功能：agency 便利 / 机构形态）
+- v1.5（2026-07-23）：TikTok 直发二次翻案 P2→P1——平台范围定为 **LinkedIn + TikTok 双平台**；边缘功能（定时/审核队列/回流）维持 P2 不变
 - v1.3（2026-07-22）：AI 生成结果终态声明——"AI 视频生成"行依据更新（identity-driven 虚拟产物族，ADR-029 双链并列）；决策不变（💡 后排）；"节点编排画布"行补注：P2+ 运行图检视面（ADR-028 Amendment，画布=信任工具非创作工具）
