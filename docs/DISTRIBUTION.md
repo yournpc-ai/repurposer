@@ -120,7 +120,9 @@ draft ──提交审核──► pending_review ──通过──► approved 
 - 状态迁移只允许经 Distribution 服务函数；路由/其他模块不得直写 `state`。
 - `publishing` 是**时间驱动状态**：TikTok 视频处理是异步的（返回 publish_id 后需轮询状态），进入 publishing 时 `due_at` = 下次轮询时间，worker 到期再认领续查，不阻塞认领线程。
 
-### 3.4 `publication_events`（状态迁移日志 = 审核留痕）
+### 3.4 `publication_events`（状态迁移日志 = 审核留痕）**（P2，2026-07-23 精简）**
+
+> P1 个人流**不建此表**：其卖点是机构审核留痕（随机构模式回补）；P1 排障靠 `publications.last_error` + `attempt_count` + worker 日志。以下 schema 为回补时的定稿。
 
 ```python
 id: UUID PK
@@ -226,7 +228,7 @@ class PlatformAdapter(Protocol):
 | `GET /channels/{platform}/oauth-url` | 生成授权链接 | — |
 | `GET /channels/{platform}/callback` | OAuth 回跳，落 channel_account | — |
 | `GET /channels` / `DELETE /channels/{id}` | 渠道列表 / 断开（删 token，历史留存） | — |
-| `POST /projects/{id}/publications` | 从 clip/derivative 建发布单（payload 预填） | → draft |
+| `POST /projects/{id}/publications` | 从 clip/derivative 建发布单（payload 预填）；**P1 个人流建单即排期（出生 = `scheduled`，立即发布），不经过 `draft`** | → draft（P1：→ scheduled） |
 | `POST /publications/{id}/submit` | 提交审核【机构模式 P2；此时重新推导 ai_disclosure】 | draft → pending_review |
 | `POST /publications/{id}/approve` / `reject` | 审核【机构模式 P2；reject 必填 reason】 | → approved / → draft |
 | `POST /publications/{id}/schedule` | 定时或立即（写 scheduled_at + due_at） | approved → scheduled |
@@ -286,7 +288,7 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 1. **渠道选择**：LinkedIn / TikTok 图标 + 已连接账号头像；未连接 → 就地引导。
 2. **Payload 编辑**：预填 clip 发布套件字段——**用户在输入框里改不满意的地方，编辑即确认**（ADR-027）；多渠道同发按渠道分 tab，一次提交 N 张单（一渠道一单，§3）。
 3. **AI 披露展示位**：`ai_disclosure=true` 时显式展示徽标 + 原因（"含声音克隆，将标记为 AI 生成"）——用户无勾选权，有知情权。
-4. **定时**：默认"立即发布"（= `scheduled_at` now，与定时同一代码路径）；定时（datetime picker）为次要选项。
+4. **定时（P2）**：P1 只有"立即发布"（= `scheduled_at` now，与定时同一代码路径，UI 不出 datetime picker）。
 5. 点"发布" → toast"正在发布"，**不离开当前页**；事件序列：created → scheduled。
 
 ### 11.3 发布记录页（轻量列表，不是日历）
@@ -309,7 +311,7 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 ## 12. 分期路线（排期以 `ROADMAP.md` §5 为准）
 
-- **P1**：两张表 + 状态机（个人流，ADR-027）+ LinkedIn 个人号直发 + TikTok 直发（审核通过后）+ 定时发布 + 幂等/重试。
+- **P1**（2026-07-23 定界后）：两张表（`publication_events` 降 P2，P1 排障靠 `last_error` + worker 日志）+ 状态机（个人流，ADR-027；建单即排期，产物出生 = `scheduled`）+ **LinkedIn 个人号 + TikTok 双平台直发**（TikTok 应用审核期间测试账号联调）+ **立即发布**（定时字段 schema 就位，datetime picker UI 入 P2）+ 幂等/重试。
 - **P2**：机构审核队列（`pending_review`/`approved`）+ metrics 回流校准、newsletter ESP（自有渠道，对冲 LinkedIn 单押）、源→目的地自动规则、多号、公司页、团队审核角色。
 
 ## 13. 范围纪律（不做什么）
