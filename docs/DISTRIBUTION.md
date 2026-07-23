@@ -176,7 +176,7 @@ created_at
 
 ## 7. 幂等、重试与失败语义
 
-- 建单即生成 `idempotency_key`（target + channel + scheduled_at 哈希）：双击、刷新、重复提交不会在我方 DB 产生两条发布单。但注意：**平台不接受我们的幂等键**，"重复发布"不是平台会返回的错误码——不能指望它兜底。
+- 建单即生成 `idempotency_key`：**立即发布**由对话框生成 `client_key`（每次发布意图一个，重试复用）——服务端 `now()` 每次不同，自身无法去重；**定时发布**用（target + channel + scheduled_at）哈希——用户选定的时间天然跨重试稳定。双击、刷新、重复提交不会在我方 DB 产生两条发布单。但注意：**平台不接受我们的幂等键**，"重复发布"不是平台会返回的错误码——不能指望它兜底。
 - **不确定结果必须对账，禁止盲重试**：请求发出后超时/5xx（平台可能已受理），先凭 `platform_job_id`（TikTok `publish_id` 状态查询 / LinkedIn video URN）查平台侧真实状态——确认未成才允许重试；确认已成则回写 `platform_post_id` 按成功处理。这是"两将军问题"的标准解法：平台 job 句柄是唯一的对账锚点。
 - 确定性失败退避：指数 backoff（如 1m/5m/30m，改写 `due_at`），`attempt_count` 超限 → `failed` 定格 + 界面提示，用户可手动重试或取消。
 - Token 类失败（401）→ 刷新后重试一次，仍失败落 `channel_accounts.status=expired` 并提示重连，**不算发布失败**。

@@ -740,3 +740,21 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - payload 的"类型安全"未丢——从 DB 层移到 schema 层（Pydantic 校验强于 SQL CHECK）。
 
 **Related**: ADR-016、ADR-026、ADR-028、ADR-029（Amendment）；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md` §12；`docs/tasks/runplan-persistence.md`
+
+## ADR-031: 渠道凭证应用级加密——Fernet + env key
+
+**Status**: Decided (2026-07-23)
+
+**Context**: Distribution 的 `channel_accounts.credentials_enc` 存 OAuth token（可代用户发帖的钥匙），泄露路径 = DB dump / 备份外泄 / 只读账号误授权。DISTRIBUTION.md §14 开放问题 2 要求随表结构落地时定案：Fernet + env key vs KMS。
+
+**Decision**:
+1. **字段级对称加密**：`credentials_enc` JSONB 中敏感值（`access_token` / `refresh_token`）以 Fernet（AES-128-CBC + HMAC）加密存储，key 来自 env `CHANNEL_CREDENTIALS_KEY`（`Fernet.generate_key()` 生成，dev/prod 各一，入 secret 管理不入 git）。
+2. **空 key = 明文（仅 dev）**：本地开发不配 key 时明文存储 + warning 日志；prod 必须配置（上线检查清单项）。
+3. **解密容忍明文**：读取遇 `InvalidToken` 按明文原样返回并记 warning——dev 期明文行与 key 轮换窗口不打断服务。
+4. **KMS 后排**：EU 驻留 / 机构采购阶段再迁 KMS——加密边界不变（字段级），迁移 = 换 key 提供方 + 批量重加密。
+
+**Consequences**:
+- 只有 Distribution 服务持有加解密路径；API 响应模型永不包含 credentials。
+- key 轮换 = 旧 key 解密 → 新 key 加密的批量任务；当前单 key 从简。
+
+**Related**: ADR-026、ADR-030；`docs/DISTRIBUTION.md` §3.1/§14

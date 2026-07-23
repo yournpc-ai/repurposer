@@ -1305,3 +1305,77 @@ class MusicMetadataUpdate(BaseModel):
     source_url: str | None = None
     attribution: str | None = None
     is_public: bool | None = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Distribution — channels & publications (docs/DISTRIBUTION.md, ADR-030/031)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ChannelPlatform(StrEnum):
+    """P1 platform scope (2026-07-23 定界): LinkedIn + TikTok only."""
+
+    LINKEDIN = "linkedin"
+    TIKTOK = "tiktok"
+
+
+class ChannelAccountStatus(StrEnum):
+    """OAuth token lifecycle states (DISTRIBUTION.md §3.1)."""
+
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+class PublicationState(StrEnum):
+    """Publish-order state machine (DISTRIBUTION.md §3.3).
+
+    ``draft`` / ``pending_review`` / ``approved`` are the P2 institutional path
+    (ADR-027); the P1 personal flow is born ``scheduled`` (create = publish
+    now) and never touches them.
+    """
+
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHING = "publishing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ChannelAccountResponse(BaseModel):
+    """Public view of a connected channel — credentials never leave the server."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    platform: ChannelPlatform
+    platform_user_id: str
+    display_name: str
+    avatar_url: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+    status: ChannelAccountStatus
+    token_expires_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class PublicationResponse(BaseModel):
+    """Publish-order view; ``payload`` is the frozen snapshot from creation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    output_id: UUID
+    channel_account_id: UUID | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    ai_disclosure: bool = False
+    state: PublicationState
+    scheduled_at: datetime | None = None
+    published_at: datetime | None = None
+    platform_post_url: str | None = None
+    attempt_count: int = 0
+    last_error: str | None = None
+    created_at: datetime | None = None

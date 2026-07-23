@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -23,7 +24,10 @@ from app.models.database import Base
 from app.models.schemas import (
     AssetStatus,
     AssetType,
+    ChannelAccountStatus,
+    ChannelPlatform,
     ProjectStatus,
+    PublicationState,
     RenderStatus,
     WorkflowStatus,
 )
@@ -375,3 +379,87 @@ class Music(Base):
     generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class ChannelAccount(Base):
+    """OAuth-connected social account (Distribution module — DISTRIBUTION.md §3.1).
+
+    One row per (user, platform, platform_user_id). ``credentials_enc`` holds
+    the token bundle with sensitive values Fernet-encrypted (ADR-031); only the
+    Distribution service touches it. P1 exposes one account per platform in the
+    UI; the schema already allows multiple.
+    """
+
+    __tablename__ = "channel_accounts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    platform = Column(Enum(ChannelPlatform), nullable=False)
+    platform_user_id = Column(String(255), nullable=False)
+    display_name = Column(String(255), nullable=False, default="")
+    avatar_url = Column(String(1024), nullable=True)
+    scopes = Column(JSONB, nullable=False, default=list)
+    credentials_enc = Column(JSONB, nullable=False, default=dict)
+    token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(Enum(ChannelAccountStatus), nullable=False, default=ChannelAccountStatus.ACTIVE)
+    last_refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "platform", "platform_user_id", name="uq_channel_account_per_user"),
+    )
+
+
+class Publication(Base):
+    """Publish order = state machine + idempotency + metrics headroom (§3.2).
+
+    Single FK to ``outputs`` (ADR-030). ``payload`` is a frozen snapshot taken
+    at creation — post-disconnect history stays readable and later output
+    edits never sync into it. ``due_at`` is the worker's sole claim predicate
+    (backoff rewrites it). ``ai_disclosure`` is derived by the clip-spec
+    classifier (ADR-026), never user-ticked. State moves only via
+    ``services.distribution._transition``; the institutional audit table
+    (``publication_events``) is deferred to P2.
+    """
+
+    __tablename__ = "publications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    output_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("outputs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    channel_account_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("channel_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    payload = Column(JSONB, nullable=False, default=dict)
+    ai_disclosure = Column(Boolean, nullable=False, default=False)
+    state = Column(Enum(PublicationState), nullable=False, default=PublicationState.SCHEDULED)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    due_at = Column(DateTime(timezone=True), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    platform_job_id = Column(String(512), nullable=True)
+    platform_post_id = Column(String(512), nullable=True)
+    platform_post_url = Column(String(1024), nullable=True)
+    idempotency_key = Column(String(128), nullable=False, unique=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    metrics = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        Index(
+            "ix_publications_claim",
+            "state",
+            "due_at",
+            postgresql_where=text("state IN ('SCHEDULED', 'PUBLISHING')"),
+        ),
+        Index("ix_publications_user_state", "user_id", "state"),
+    )

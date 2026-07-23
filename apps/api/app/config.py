@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_expire_days: int = 30
 
+    # Distribution — channel OAuth (presence-gating: empty = channel hidden in
+    # UI, docs/DISTRIBUTION.md §4.1; no feature flags)
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
+    tiktok_client_key: str = ""
+    tiktok_client_secret: str = ""
+    # Fernet key for channel token encryption (ADR-031). Empty = plaintext
+    # storage with a warning (local dev only); prod must set this.
+    channel_credentials_key: str = ""
+
     def ensure_dirs(self) -> None:
         """No local media directories are used; all persistence is object storage."""
 
