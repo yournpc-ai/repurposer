@@ -74,15 +74,17 @@
 
 ## 5. Distribution ⭐ 权重上调
 
-> 2027 透镜下与 pipeline 平级：审核队列是 HITL 的正确形态；发布数据回流是首发推荐分的外部校准源（内部校准源 = 用户选用行为，见 §1）——现在不定表结构，闭环永远断着。设计与实现细节见 `docs/DISTRIBUTION.md`。
+> 2027 透镜下与 pipeline 平级：Pipeline 管"生成什么"，Distribution 管"去了哪里"。**核心 = 发布动作本身（直发）**——"一次上传、审核即走"的"走"目前断在手动下载再上传，这是正向链路最后一座手动桥。设计与实现细节见 `docs/DISTRIBUTION.md`。
+>
+> **2026-07-23 定界**：定时发布 / 审核队列 / 发布数据回流为**边缘功能**（全部 P2）——定时是 agency 运营多账号的便利；审核队列是机构形态（ADR-027），个体 ICP 的"审核"就是自己看一眼；回流是校准精密化（内部校准源 = 用户选用行为，见 §1，不依赖本模块）。平台准入（LinkedIn 开发者应用、TikTok 应用审核）是零代码 ops，立即排队——墙钟数周，别等功能排上才启动。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| Publication / ChannelAccount 数据模型（含回流分析字段预留） | 矩阵 §H；2027 架构 | **P1（表结构先行，功能可后做）** | 无 | — 纯工程 | ❌（无任何代码） |
+| Publication / ChannelAccount 数据模型（含回流分析字段预留） | 矩阵 §H；2027 架构 | **P1（直发的载体，与直发同棒落地）** | 无 | — 纯工程 | ❌（无任何代码） |
 | 审核队列（机构模式：强制人工确认、审核人≠作者；个人免审秒发——ADR-027） | 矩阵 §H | P2 | 数据模型 + 团队工作区 | — | ❌ |
-| LinkedIn OAuth + 直发（2026-07-21 定：**个人号 w_member_social 先行**，公司页后置） | 矩阵 §H | P1 | 数据模型；LinkedIn 开发者应用注册 | — | ❌ |
-| TikTok Content Posting API 直发（2026-07-21 定：**只做直发，立即提交应用审核**——墙钟数周，期间用测试账号联调） | 矩阵 §H | P1 | 数据模型；TikTok 开发者应用审核 | — | ❌ |
-| 定时发布（worker 第四认领源，复用 SKIP LOCKED） | 矩阵 §H | P1 | 数据模型 + 队列（已有） | — | ❌ |
+| LinkedIn OAuth + 直发（2026-07-21 定：**个人号 w_member_social 先行**，公司页后置） | 矩阵 §H | **P1（Distribution 核心兑现，本模块第一棒）** | 数据模型；LinkedIn 开发者应用注册（零代码 ops，立即排队） | — | ❌ |
+| TikTok Content Posting API 直发（2026-07-21 定：只做直发；2026-07-23 降级：定位纪律——核心渠道 = LinkedIn/机构网站/newsletter；**应用审核作为零代码 ops 立即排队**，墙钟数周） | 矩阵 §H | P2 | 数据模型；TikTok 开发者应用审核 | — | ❌ |
+| 定时发布（worker 第四认领源，复用 SKIP LOCKED） | 矩阵 §H | P2（2026-07-23 定界：边缘功能——agency 多账号运营便利，非个体刚需） | 数据模型 + 队列（已有） | — | ❌ |
 | 发布数据回流 → 校准首发推荐分 | 2027 架构 | P2 | Publication 回流字段 + 打分持久化 | ✅ | ❌ |
 | newsletter ESP 集成（owned channel） | 矩阵 §H；STRATEGY §4 风险 2 | P2 | 数据模型 | — | ❌ |
 | 源 → 目的地自动规则 | 矩阵 §H | P2 | LinkedIn 直发跑通 | — | ❌ |
@@ -158,7 +160,7 @@ RunPlan 持久化 (P1 地基, ADR-028) ──┬──► 逐节点成本归属 
 M3 tool-calling spike (P1) ──► Operation schema ──► Agent Interface ──► MCP (P2)
 provider 抽象 (P1, 需修订 ADR-003) ──► EU-hosted 模型选项 (P2)
 
-Distribution 数据模型 (P1) ──► 审核队列 / LinkedIn 直发 / 定时发布 (P1)
+Distribution 数据模型 (P1) ──► LinkedIn 直发 (P1 核心) / 定时发布·审核队列 (P2 边缘)
                            └──► 披露元数据随分发携带 (P1, 合规)
 
 clip-spec 扩展 (P1 合规标识) ──► render 服务打标 ──► XML/EDL 交接 (P2)
