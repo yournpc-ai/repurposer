@@ -4,8 +4,8 @@
 
 | Item | Content |
 |:---|:---|
-| Document Version | v0.4 (Europe Edition, aligned with current implementation) |
-| Date | 2026/07/06 |
+| Document Version | v0.6 (Europe Edition, aligned with current implementation) |
+| Date | 2026/07/23 |
 | Product Name | TBD (internal codename: SpeechRepurposer) |
 | Target Audience | Product managers, tech leads, designers, Zuo, European market team |
 | Status | Draft |
@@ -172,8 +172,62 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 | **Think Tanks / Research Institutes** | Policy talks need distribution | Turn talks into policy briefs + social content | UK/German think tanks (Chatham House, DIW Berlin) have strong content distribution needs |
 | **Corporate Universities / Training Depts** | Internal training content needs reuse | Turn internal training talks into reusable learning assets | Siemens, SAP, Bosch and other European enterprises have internal knowledge management needs |
 | **Expert Assistants / Operations Teams** | Actual executors | Upload materials, review AI output, publish | Need GDPR compliance to process internal company talk content |
+| **Cross-Border Knowledge Brokers** | Influence spans 2+ language/institutional worlds | Talk → multilingual thought-leadership assets; maintained public presence | Seed ICP — see §4.2 |
 
-### 4.2 User Persona Examples
+### 4.2 Core Archetype: The Cross-Border Knowledge Broker (Seed ICP)
+
+> **Status: working hypothesis (2026-07-23)** — abstracted from seed-user research; a round of 3–5 interviews with similar users (varied language pairs) is planned to validate the trait weights before this hardens into targeting. The archetype is a **template, not a specific individual**: language pairs vary by instance (EN↔ZH, EN↔FR/DE, FR↔DE…); the kernel does not.
+
+**Definition.** Knowledge workers whose professional value *is* straddling two (or more) language/institutional worlds: diaspora professors and executives in Europe, European China-hand researchers, EU multilingual policy-circle members, international-organization experts, thought-leadership executives at multinationals. Their career is itself repurposing — re-expressing ideas from one context into another; the product automates what they already do by hand.
+
+**The kernel: their thought-leadership presence, maintained.** They need "self-media" only in the sense of a persistent public content presence — **not** creator-economy self-media. The distinction is load-bearing (mistaking them for creators rebuilds OpusClip):
+
+| | Creator-economy self-media | This archetype's presence |
+|:---|:---|:---|
+| Content is | the job itself | a tool of the job (reputation feeds the real career) |
+| Growth logic | virality, volume, trends | trust accumulation, network reach, institutional backing |
+| Failure cost | one post flops, post the next | one wrong / AI-sounding post = reputational damage |
+| Budget | personal, price-sensitive | institutional (faculty / think tank / corporate) |
+| Time available | full-time | **zero marginal time — acceptance only** |
+
+**Mental model: an on-call multilingual writing team; the expert is the editor-in-chief.** The product does the labour (cutting, writing, translating, formatting); the expert keeps the judgement (reading, tweaking, approving). Judgement is not friction to remove — it is the part they refuse to delegate.
+
+**Why this is the seed ICP:**
+- **Sharpest pain**: perishable talks × multilingual output = the highest manual conversion cost of any user group; today most of their talks end with zero output
+- **Strongest willingness to pay**: presence is their professional net worth, and institutional budgets exist
+- **Self-contained seed pool**: each broker is a node in a professional network (learned societies, conference circuits, policy networks) — one champion opens a cluster
+- **Richest persona cold-start**: years of publications, talks, and reports calibrate Voice DNA from day one; the back-catalog also unlocks self-archive search ("what did I say about X in 2024?") as a second value
+
+**Shared traits (requirement criteria):**
+1. Multilingual output **is** the influence model, not a bonus
+2. Voice fidelity is the entry ticket, not a premium — AI-tone content is a *negative* asset; risk appetite is negative (rather publish less than publish wrong)
+3. Scarcest asset = time; most perishable asset = the talk just given. Expert involvement = **acceptance (~10 min), not work**
+4. **Solo operation is the floor**: the entire loop must be completable by the expert alone — zero configuration, outputs ≥90% ready, fixes faster by direct edit than by description (§7.8). Assistant delegation is a *variant* on the same interface, not the assumption; the review queue exists only in institutional mode (ADR-027: personal instant-publish, institutional mandatory confirmation)
+5. Compliance gates "can we use it at all" (policy-sensitive material, institutional procurement, US-processed tools are non-starters)
+6. Fixed terminology translations are professional dignity → glossary is a **survival feature** for this group, not an enhancement (ROADMAP §6)
+
+**Core scenario — the 48 hours after a talk (solo main path):**
+
+```
+Talk ends (policy summit / government event / webinar)
+  → He drops in the recording himself (or link ingestion takes over)
+  → Minutes later, the talk's full aftermath package is ready:
+      EN LinkedIn posts ×2 (his voice: academically restrained)
+      Native-language long article ×1 (paste-ready export for the
+        destination editor — WeChat has no API, export IS distribution)
+      Vertical clips ×2–3 (original audio + bilingual subtitles)
+      Quote cards (his brand template)
+      Newsletter paragraph (society / institute circular)
+  → He reads everything: edits two sentences, kills one, keeps three
+  → One-click publish / export
+No queue, no approval stage, no assistant assumed.
+```
+
+**Explicit non-requirements:** virality optimization, TikTok-style expression, trend-chasing, fully-autopilot publishing. For this group "not AI-sounding" is the baseline (STRATEGY 牌 4), and control beats convenience (ADR-027).
+
+**Positioning implication.** Seed-phase ICP = this archetype; "European knowledge speakers" remains the expansion narrative. When scheduling conflicts (e.g. polishing one language pair's quality vs. adding another EU language), the seed ICP wins — **language priority follows seed customers**, while the European-institution story is unchanged.
+
+### 4.3 User Persona Examples
 
 **Professor Zhang (Europe Edition)**
 - 55 years old, AI Research Institute Director at a university, frequently attends international conferences
@@ -780,3 +834,4 @@ Reference Descript's text-editing experience:
 | v0.3 | 2026/06/24 | Europe Edition: incorporated market research, multi-language P0, EU data residency, Agent workflow, European user personas, roadmap adjustment | Product Team + Market Research Team |
 | v0.4 | 2026/06/27 | Vertical clip output + editor finalized (elevated to MVP main flow): clip-spec contract + Remotion first renderer + Descript-style transcript editor; ASR elevated to hard prerequisite (video needs streamable playback, local FS + Range sufficient; object storage still deferred to scale) (see ADR-016 / VIDEO_EDITOR.md) | Tech Team |
 | v0.5 | 2026/07/20 | Post-MVP slimming (1252→779 lines): §9 Technical Architecture / §10 Data Models / §13 API / §14.5 UX borrowing / §20 framework decision removed as duplicates — replaced with pointers to ARCHITECTURE.md / code / API.md / DECISION_MATRIX.md / DECISIONS.md (single-source principle, see docs/README.md); §17 Roadmap compressed to pointer + phase direction; FR-020 annotated with implementation status | Tech Team |
+| v0.6 | 2026/07/23 | Added §4.2 Core Archetype: Cross-Border Knowledge Broker as Seed ICP (working hypothesis, pending 3–5 validation interviews): kernel = maintained thought-leadership presence (creator-economy distinction table), solo main path (product does the labour, expert keeps the judgement; review queue only in institutional mode per ADR-027), 48-hour post-talk core scenario, requirement stack, language priority follows seed customers; §4.1 table gained broker row; persona examples renumbered to §4.3 | Tech Team |

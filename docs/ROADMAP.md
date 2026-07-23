@@ -95,7 +95,7 @@
 |---|---|---|---|---|---|
 | Speaker persona（风格记忆） | ADR-021 | — | — | ✅ | ✅ 已落地 |
 | Brand template | — | — | — | ✅ | ✅ 已落地 |
-| 术语表 / glossary（机构级翻译质量；含 transcript "Correct everywhere" 批量纠错入口——矩阵 §E） | 矩阵 §G "极高" | P1 | persona 注入链路（已有） | ✅ | ❌（仅一条 i18n 占位文案） |
+| 术语表 / glossary（机构级翻译质量；含 transcript "Correct everywhere" 批量纠错入口——矩阵 §E） | 矩阵 §G "极高"；PRD §4.2（对桥梁型 seed ICP 是生存项：固定译法 = 专业尊严） | P1 | persona 注入链路（已有） | ✅ | ❌（仅一条 i18n 占位文案） |
 | 多语言文案质量（Voice DNA 跨语言保真） | 矩阵 §G "极高"；2026 B2B 趋势 | P1 | 术语表 | ✅ | ❌ |
 | persona 显化于 UI（让用户看到/编辑自己的 Voice DNA） | 2027 架构；STRATEGY §2.2 | P2 | — | ✅ | ❌ |
 
@@ -121,7 +121,7 @@
 | WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ❌ |
 | 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3；elevencreative §8 机制 5（子图级积分预览实证） | P1（**提速**：对手已到动作级标价——Opus 生成按钮带价、按 part 重生成 20⚡（opusclip §8.1），再晚追不平） | 成本计量数据积累 | — | ❌ |
 | 失败不扣费语义 | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量 | — | ❌ |
-| 套餐经济设计（档位 / 免费额度 / credits↔产出换算） | 审计 2026-07-22；Opus pricing 参照（agent-opus §5） | P1 | 成本计量；文档坑位 BILLING.md 已登记（README） | — | ❌ |
+| 套餐经济设计（档位 / 免费额度 / credits↔产出换算；**计费形态候选 = 按结果包计价**——一场演讲 = 一套内容包，而非裸 credit；呼应 PRD §4.2 本人验收主路径与 STRATEGY §2.3 "可预期 > 便宜"） | 审计 2026-07-22；Opus pricing 参照（agent-opus §5） | P1 | 成本计量；文档坑位 BILLING.md 已登记（README） | — | ❌ |
 | 产品度量地基（漏斗事件埋点：上传→生成→精修→发布→回流；各阶段成功指标） | 审计 2026-07-22 | P1（轻量，随功能落地同步埋点；验证 §9 Phase 1 激活效果的前置） | 无；文档坑位 METRICS.md 已登记（README） | — 纯工程 | ❌ |
 | 团队工作区 / 多 Speaker 画像 | 矩阵 §I | P2 | auth（已有）| — | ❌ |
 
