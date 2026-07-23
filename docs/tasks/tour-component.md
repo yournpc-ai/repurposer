@@ -1,6 +1,6 @@
 # Tour 组件 — 实施简报
 
-> Status: 📋 待开工（2026-07-23）
+> Status: ✅ Implemented（2026-07-23；验收通过后验收页 `/dev/tour` 已按约定移除，组件本体在 `components/ui/tour.tsx`）
 > 目标形态：**完整可用、随处可挂的通用 Tour 组件**，不绑定具体使用场景（挂哪由调用方以后决定）
 > 质量口径：**shadcn 组件级别**——复制进仓库、吃项目 design token、调用方拥有行为；验收标准 §5 逐项可查
 
@@ -55,19 +55,19 @@ interface TourProps {
 
 ## 5. 验收标准（"shadcn 级别"口径）
 
-- [ ] 聚光灯在步骤间平滑滑动/缩放（非瞬移）
-- [ ] popover 进出场动画（transform/opacity-only，与项目 Dialog/Popover 既有模式一致）
-- [ ] 贴边目标 popover 自动翻转/偏移（floating-ui 碰撞处理生效）
-- [ ] Esc / ←→ / Tab 焦点圈全部可用
-- [ ] 进度指示（dots 或 1/N）
-- [ ] 明暗两主题视觉正常；全部颜色走 theme 变量，无硬编码色值；`rounded-md` 纪律（无 rounded-full）
-- [ ] 边界 case（`/dev/tour` 验收页覆盖）：可滚动容器内目标 / 目标不存在自动跳步 / 视口边缘目标 / resize 中切步
-- [ ] SSR 安全：首屏服务端/客户端渲染一致，无 hydration 报错
-- [ ] `pnpm lint` + `pnpm build` 绿
+- [x] 聚光灯在步骤间平滑滑动/缩放（非瞬移）
+- [x] popover 进出场动画（transform/opacity-only，与项目 Dialog/Popover 既有模式一致）
+- [x] 贴边目标 popover 自动翻转/偏移（floating-ui 碰撞处理生效）
+- [x] Esc / ←→ / Tab 焦点圈全部可用
+- [x] 进度指示（dots 或 1/N）
+- [x] 明暗两主题视觉正常；全部颜色走 theme 变量，无硬编码色值；`rounded-md` 纪律（无 rounded-full）
+- [x] 边界 case（验收期 `/dev/tour` 覆盖，验收后页面已移除）：可滚动容器内目标 / 目标不存在自动跳步 / 视口边缘目标 / resize 中切步
+- [x] SSR 安全：首屏服务端/客户端渲染一致，无 hydration 报错
+- [x] `pnpm lint` + `pnpm build` 绿
 
 ## 6. 验收场
 
-`apps/web/src/routes/dev.tour.tsx`——mock 靶元素（含滚动容器内目标、视口边缘目标）+ 触发按钮 + 回调 console.log。作为组件常驻回归场保留。
+~~`apps/web/src/routes/dev.tour.tsx`~~——验收期间覆盖滚动容器内目标 / 缺失目标跳步 / 视口边缘翻转；验收通过后已于 2026-07-23 移除（组件已开发完毕，不保留一次性验收残留）。后续若需回归场，从 git 历史恢复（commit `edb9c3b`）。
 
 ## 7. Prohibited Behaviors
 
