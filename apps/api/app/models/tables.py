@@ -325,7 +325,11 @@ class Message(Base):
     role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=True)
     attachments = Column(JSON, default=list)
-    workflow_run_id = Column(UUID(as_uuid=True), ForeignKey("workflow_runs.id"), nullable=True)
+    workflow_run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     intent = Column(JSON, nullable=True)  # rule-classified intent for this turn (LLM parser app/agents/intent.py is not yet wired into chat)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
