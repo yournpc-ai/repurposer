@@ -97,7 +97,7 @@ class ReviserAgent:
         logger.info(
             "clip_revision_completed",
             hook=revised.hook,
-            virality_score=revised.virality_score,
+            recommendation_score=revised.recommendation_score,
         )
         return revised
 

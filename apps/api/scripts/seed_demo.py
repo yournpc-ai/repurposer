@@ -148,6 +148,11 @@ async def _verify_demo_run() -> bool:
             problems.append("render_spec")
         if not (o.publishing or {}).get("title"):
             problems.append("publishing")
+        score = o.score or {}
+        if not isinstance(score.get("value"), int) or not 1 <= score["value"] <= 100:
+            problems.append(f"score.value={score.get('value')}")
+        if not score.get("reason"):
+            problems.append("score.reason")
         v.check(not problems, f"clip {str(o.id)[:8]} lineage+complete", ",".join(problems))
 
     # 5. Internal content_plan output from the director node.

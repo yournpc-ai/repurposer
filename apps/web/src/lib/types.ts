@@ -130,6 +130,13 @@ export interface OutputPublishing {
   topic?: string | null
 }
 
+/** First-post recommendation score (1-100) + one-sentence reason — answers
+ * "which clip is most worth posting first", never predicts views/reach. */
+export interface OutputScore {
+  value?: number
+  reason?: string | null
+}
+
 /** Unified product row (ADR-030): a clip is the type carrying timeline
  * semantics (source_ref) and the render pipeline; derivatives are plain
  * types. Creative fields live in payload, artifacts in files, publish
@@ -148,7 +155,7 @@ export interface Output {
   render_spec: unknown | null
   render_status: string | null
   render_error: string | null
-  score: Record<string, unknown> | null
+  score: OutputScore | null
   publishing: OutputPublishing
   created_at: string
   updated_at: string | null

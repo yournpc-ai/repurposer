@@ -68,8 +68,10 @@ Please output valid JSON only, with no explanations:
   "duration_seconds": {{ duration }},
   "title_options": ["Title 1", "Title 2", "Title 3"],
   "music_mood": "BGM mood",
-  "virality_score": 85
+  "recommendation_score": 85,
+  "score_reason": "One sentence, in the same language as the clip copy, naming what drove the score"
 }
 
 - Keep duration_seconds around {{ duration }} seconds
+- Re-score after revision: `recommendation_score` (1-100) judges how strongly you'd recommend posting this clip first — completeness of the argument arc, opening strength, representativeness of the talk's core thesis, delivery quality. Never predict views or reach. `score_reason` names the driving axes in one sentence and is shown to the user verbatim.
 - Output JSON only

@@ -26,11 +26,11 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 | Pain Point | Solution |
 |:---|:---|
-| Talk content is valuable but 90% goes dormant after the event | AI automatically analyzes the full talk, extracting high-virality-potential segments |
+| Talk content is valuable but 90% goes dormant after the event | AI automatically analyzes the full talk, extracting the moments most worth posting first |
 | Manual short-form video editing is costly and slow | Agent workflow auto-scripts, self-reviews, and corrects, with a human review loop |
 | Multi-language adaptation is expensive | M3 native multi-language, one-click generation for 5 European languages |
 | Ghostwriters can't capture the speaker's voice | Learns speaker voice from past materials (books, articles, old talks) |
-| Unclear which segments are shareable | AI scores by virality potential and recommends, auto-generating 3 alternative hooks |
+| Unclear which segments are shareable | AI scores which clips are most worth posting first (with visible reasons), auto-generating 3 alternative hooks |
 | European institutions worry about data security | Optional EU data residency (Cast AI Kimchi), GDPR compliant |
 
 > 战略论证（2027 凭什么赢、品味/身份/信任三资产哲学）的唯一事实源是 [STRATEGY.md](./STRATEGY.md)；本表只做结论性陈述，不展开论证。
@@ -92,7 +92,7 @@ Upload video → Configure parameters → AI generates clips → Sort by Viralit
 | Feature | Description | Borrow Value |
 |:---|:---|:---|
 | **AI Highlight Clips** | Auto-extracts 5-10 viral-potential clips | High — we also need auto-segmentation |
-| **Virality Score™** | 0-100 score predicting viral potential | High — can adapt to "virality potential score" |
+| **Virality Score™** | 0-100 score predicting viral potential | High — adapted as our first-post recommendation score (value + visible reason, never predicts reach; 矩阵 §C) |
 | **Auto Vertical** | 9:16 with face tracking | Medium — add in P1 |
 | **Dynamic Subtitles** | Keyword highlighting, emoji | Medium — can simplify in P0 |
 | **AI Hook** | Auto-generates first 3-second title | High — must-have in P0 |
@@ -253,7 +253,7 @@ No queue, no approval stage, no assistant assumed.
 - **Speaker memory auto-persistence and optional management**: After task completion, extract user persona (voice, style, preferences) from input; persist as Speaker; user can view and edit multiple historical personas at `/speakers`; can manually select during project creation, or leave unselected for auto-creation
 - Project-level talk material upload (video, audio, transcript, slides, images); input scenarios include talks / podcasts / webinars / interviews
 - Speaker past materials upload (books, articles, old talks, social content) — **optional method** to supplement or calibrate persona (not the sole P0 source)
-- AI auto-analysis: content segmentation, virality scoring, and Speaker memory extraction from task input
+- AI auto-analysis: content segmentation, recommendation scoring, and Speaker memory extraction from task input
 - **AI Generation (P0 Core Outputs):**
   - 3-5 highlight clip scripts (with Hook + subtitles + visual suggestions)
   - Social post (matching Speaker voice)
@@ -388,7 +388,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|:---|:---|
 | FR-018 | Auto-extract Speaker memory from task input | P0 | Extract values, common metaphors, sentence patterns, terminology preferences, emotional tendencies from current task materials + prompts, persist as Speaker |
 | FR-019 | Manual edit Speaker memory | P0 | User can modify, supplement, or disable certain expressions |
-| FR-020 | Content segmentation & scoring | P0 | Slice talk into shareable segments, sort by "virality potential score" (0-100). *Impl. status 2026-07: the LLM produces scores but they are not yet persisted to `Clip` or shown in the UI — see ROADMAP P0-3* |
+| FR-020 | Content segmentation & scoring | P0 | Slice talk into standalone segments, each with a first-post recommendation score (1-100) + visible reason. *Semantics 2026-07-23: the score answers "which clip is most worth posting first" (completeness / opening / representativeness / delivery), never predicts reach. Impl. status: LLM produces scores but they are not yet persisted to `outputs.score` or shown in the UI — see ROADMAP P0-3* |
 | FR-021 | Keyframe/slide page recommendation | P1 | Recommend suitable visuals from uploaded materials |
 | FR-022 | Quote extraction | P0 | Auto-extract 5-10 most viral quotes |
 
@@ -574,7 +574,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ```
 1. User views generated clips list (left list + right preview)
-   ├── Each clip displays: virality potential score, duration, language, status
+   ├── Each clip displays: recommendation score, duration, language, status
    └── Right preview: script + subtitle timestamps + visual suggestions
 2. Play/preview each clip
 3. Edit script, subtitles, hook (select from 3 alternatives or customize)
@@ -687,7 +687,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 Reference OpusClip's "left list + right preview" layout:
 
-- **Left clip list**: Displays virality potential score, duration, current status
+- **Left clip list**: Displays recommendation score, duration, current status
 - **Right preview area**: Video preview + subtitle timestamps + editing area
 - **Top tabs**: Clips / Post / Quotes / Article / Carousel
 - **Action buttons**: Export, regenerate, delete
@@ -798,7 +798,7 @@ Reference Descript's text-editing experience:
 | EU data residency | Deployment in EU region (e.g. Cast AI Kimchi or EU cloud region), data stays in EU; future differentiator, not in MVP |
 | GDPR | EU General Data Protection Regulation |
 | GPAI | General Purpose AI, general AI model (EU AI Act term) |
-| Virality Score | Virality potential score (0-100), predicts content's viral potential |
+| Recommendation Score | First-post recommendation score (1-100): which clip is most worth posting first, with a visible reason; never predicts views/reach (supersedes the competitor "Virality Score" concept, 矩阵 §C) |
 
 ---
 

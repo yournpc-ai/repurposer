@@ -21,13 +21,13 @@
 |---|---|---|---|---|---|
 | 4-layer 编排（Director/Executors） | — | — | — | ✅ | ✅ 已落地 |
 | 词级时间戳 ASR | — | — | — | ✅ | ✅ 已落地 |
-| 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ❌（`clients/minimax.py` 丢弃 usage 字段） |
+| 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ✅（2026-07-22 随 RunPlan Phase 1 落地：`services/metering.py` contextvar 绑定 plan node，usage 直落 `plan_nodes.cost`） |
 | 去静默 / 去口头禅 | 矩阵 §B 快赢 | **P0** | 词级时间戳（已有）；归属决策：ASR 后处理 vs editor 一键操作 | ✅ | ❌（仅 i18n 占位文案） |
-| 传播潜力分：持久化 + UI 展示 | 矩阵 §C 改造 | **P0** | `Clip` 表加列 + 前端展示位 | ✅（LLM 已产出分数） | 🚧（分数只写日志，不落库不展示） |
-| 传播潜力分：维度明细 + 打分理由 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
+| 首发推荐分：持久化 + UI 展示（值 + 打分理由） | 矩阵 §C 改造 | **P0** | ~~`Clip` 表加列~~ `outputs.score` 已建 + 前端展示位 | ✅（LLM 已产出分数） | ✅（2026-07-23：prompt 四维口径 + score={value,reason} 落库 + ClipCard 徽章/榜首 accent + 详情理由；简报：`tasks/score-persistence.md`） |
+| 首发推荐分：维度明细 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
 | persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
-| RunPlan 持久化 + outputs 统一（`plan_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ❌（计划为单趟易失对象；产物劈两张表；`current_step` 裸字符串） |
+| RunPlan 持久化 + outputs 统一（`plan_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ✅ Phase 1（2026-07-22：建表 + orchestrator + 创建点零旁路 + 读路径切换；后续 = 下方导演两步走/质检节点行） |
 | 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | RunPlan 持久化 | ✅ | ❌（Director 单趟一坨 + project.content_plan 盲目复用 + 伪造 DerivativePlan） |
 | 结构化节拍图 + clip-spec motion 枚举（分镜入 plan：hook/body/payoff 时间戳；运镜入 spec 预设枚举——ADR-016 纪律不破，仍 CSS/libass 双端可表达） | STRATEGY §2.5；elevencreative | P2 | 覆盖问责 | ⚠️ | ❌（`visual_notes` 自由文本；crop 整条静态） |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
@@ -74,7 +74,7 @@
 
 ## 5. Distribution ⭐ 权重上调
 
-> 2027 透镜下与 pipeline 平级：审核队列是 HITL 的正确形态；发布数据回流是传播潜力分唯一的真实校准源——现在不定表结构，闭环永远断着。设计与实现细节见 `docs/DISTRIBUTION.md`。
+> 2027 透镜下与 pipeline 平级：审核队列是 HITL 的正确形态；发布数据回流是首发推荐分的外部校准源（内部校准源 = 用户选用行为，见 §1）——现在不定表结构，闭环永远断着。设计与实现细节见 `docs/DISTRIBUTION.md`。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -83,7 +83,7 @@
 | LinkedIn OAuth + 直发（2026-07-21 定：**个人号 w_member_social 先行**，公司页后置） | 矩阵 §H | P1 | 数据模型；LinkedIn 开发者应用注册 | — | ❌ |
 | TikTok Content Posting API 直发（2026-07-21 定：**只做直发，立即提交应用审核**——墙钟数周，期间用测试账号联调） | 矩阵 §H | P1 | 数据模型；TikTok 开发者应用审核 | — | ❌ |
 | 定时发布（worker 第四认领源，复用 SKIP LOCKED） | 矩阵 §H | P1 | 数据模型 + 队列（已有） | — | ❌ |
-| 发布数据回流 → 校准传播潜力分 | 2027 架构 | P2 | Publication 回流字段 + 打分持久化 | ✅ | ❌ |
+| 发布数据回流 → 校准首发推荐分 | 2027 架构 | P2 | Publication 回流字段 + 打分持久化 | ✅ | ❌ |
 | newsletter ESP 集成（owned channel） | 矩阵 §H；STRATEGY §4 风险 2 | P2 | 数据模型 | — | ❌ |
 | 源 → 目的地自动规则 | 矩阵 §H | P2 | LinkedIn 直发跑通 | — | ❌ |
 
@@ -118,7 +118,7 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ❌ |
+| WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ✅（节点级 = `plan_nodes.cost`；run 级 = 节点聚合视图，无独立列） |
 | 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3；elevencreative §8 机制 5（子图级积分预览实证） | P1（**提速**：对手已到动作级标价——Opus 生成按钮带价、按 part 重生成 20⚡（opusclip §8.1），再晚追不平） | 成本计量数据积累 | — | ❌ |
 | 失败不扣费语义 | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量 | — | ❌ |
 | 套餐经济设计（档位 / 免费额度 / credits↔产出换算；**计费形态候选 = 按结果包计价**——一场演讲 = 一套内容包，而非裸 credit；呼应 PRD §4.2 本人验收主路径与 STRATEGY §2.3 "可预期 > 便宜"） | 审计 2026-07-22；Opus pricing 参照（agent-opus §5） | P1 | 成本计量；文档坑位 BILLING.md 已登记（README） | — | ❌ |
@@ -142,7 +142,7 @@
 
 ```
 成本计量钩子 (P0) ────────────────────────────► 成本预估 / 失败不扣费 (P1)
-传播分持久化 (P0) ──► Distribution 回流 (P2) ──► persona 校准打分 (P1)
+首发推荐分持久化 (P0) ──► Distribution 回流 (P2) ──► persona 校准打分 (P1)
 
 Operation Model (P1 地基) ──┬──► Editor undo 栈 (P1)
                             ├──► chat 意图→操作 dispatch (P1)
@@ -169,8 +169,8 @@ clip-spec 扩展 (P0 合规标识) ──► render 服务打标 ──► XML/E
 | # | 事项 | 模块 | 一句话理由 |
 |---|---|---|---|
 | 1 | AI 内容标识（C2PA/元数据 + 界面披露） | 合规 | EU AI Act Art.50，2026-08-02 生效，法律时限 |
-| 2 | 成本计量钩子 | Pipeline/计费 | 趁管线热埋点，后补成本极高；透明定价的地基 |
-| 3 | 传播潜力分：持久化 + UI | Pipeline | LLM 已产出分数，落库+展示是低成本高兑现 |
+| 2 | ~~成本计量钩子~~ ✅（2026-07-22 随 RunPlan Phase 1 落地） | Pipeline/计费 | 趁管线热埋点，后补成本极高；透明定价的地基 |
+| 3 | 首发推荐分：持久化 + UI（值+理由） | Pipeline | LLM 已产出分数，落库+展示是低成本高兑现；只答"哪条最值得你先发"，不预测传播量 |
 | 4 | 去静默 / 去口头禅 | Pipeline | 矩阵快赢，词级时间戳已有 |
 
 ---

@@ -473,7 +473,8 @@ class ClipRevision(BaseModel):
     duration_seconds: int = Field(default=30, ge=5, le=120)
     title_options: list[str] = Field(default_factory=list)
     music_mood: str = "calm"
-    virality_score: int | None = Field(default=None, ge=1, le=100)
+    recommendation_score: int | None = Field(default=None, ge=1, le=100)
+    score_reason: str | None = None
 
 
 class Segment(BaseModel):
@@ -495,7 +496,7 @@ class Segment(BaseModel):
     )
     summary: str = ""
     hook: str = ""
-    virality_score: int = Field(default=50, ge=1, le=100)
+    recommendation_score: int = Field(default=50, ge=1, le=100)
     golden_quote: str = ""
     duration_seconds: int = Field(default=30, ge=5, le=120)
 
@@ -527,7 +528,10 @@ class ClipPlan(BaseModel):
     hook: str = ""
     title: str = ""
     golden_quote: str = ""
-    virality_score: int = Field(default=50, ge=1, le=100)
+    recommendation_score: int = Field(default=50, ge=1, le=100)
+    # One-sentence justification of the score, shown to the user verbatim
+    # (STRATEGY §2.1: a visible reason is what makes the score falsifiable).
+    score_reason: str = ""
     duration_seconds: int = Field(default=30, ge=5, le=120)
     music_mood: str = "calm"
     # Music selection (see docs/MUSIC_ARCHITECTURE.md §8.3): the Clip Agent picks
@@ -559,7 +563,7 @@ class ClipPlan(BaseModel):
             end_seconds=self.end_seconds,
             summary=self.summary,
             hook=self.hook,
-            virality_score=self.virality_score,
+            recommendation_score=self.recommendation_score,
             golden_quote=self.golden_quote,
             duration_seconds=self.duration_seconds,
         )

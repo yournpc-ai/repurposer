@@ -759,6 +759,10 @@ async def run_clips_pipeline(
             },
             render_spec=spec.model_dump(mode="json") if spec else None,
             render_status=RenderStatus.PENDING if spec else None,
+            score={
+                "value": plan.recommendation_score,
+                "reason": plan.score_reason or None,
+            },
             publishing={
                 "title": plan.title or None,
                 "description": plan.description or None,
@@ -931,6 +935,11 @@ async def run_script_revision(
         music_mood=revised.music_mood,
         duration=revised.duration_seconds,
     ).model_dump(mode="json")
+    if revised.recommendation_score is not None:
+        output.score = {
+            "value": revised.recommendation_score,
+            "reason": revised.score_reason or (output.score or {}).get("reason"),
+        }
     output.updated_at = datetime.now(UTC)
     output.plan_node_id = node.id
     await db.flush()

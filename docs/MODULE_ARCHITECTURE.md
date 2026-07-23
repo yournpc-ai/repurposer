@@ -10,7 +10,7 @@
 1. **主交互面是 agent，GUI 是 client 之一**——chat、MCP、编辑器都只是 Operation Model / Pipeline 的前端。
 2. **Editor 薄化**——真正要建的是 Operation Model（可检查、可撤销的操作日志），不是编辑器本身。手动编辑占比即使萎缩，投资也沉淀在操作层。
 3. **Pipeline 是成本中心不是壁垒**——保持现有 4-layer 编排，不追加差异化投入；差异化在 Memory、Distribution、合规。
-4. **Distribution 与 Pipeline 平级**——审核队列是 HITL 的正确形态；发布数据回流是传播潜力分唯一的真实校准源。
+4. **Distribution 与 Pipeline 平级**——审核队列是 HITL 的正确形态；发布数据回流是首发推荐分的外部校准源（内部校准源 = 用户选用行为）。
 5. **合规是底座不是功能**——EU AI Act Art.50（2026-08-02 生效）的内容标识写进 clip-spec 与分发层，横切所有模块。
 
 ## 2. 六层模块图
@@ -64,7 +64,7 @@
       ┌──────────────────────────────────────────────┴─────────────────────────────┘
       │ 回流两条边（闭环的关键，均 📋）：
       │  ① 精修痕迹（删了哪条、改了哪句）→ Operation Model → 校准打分 / persona（P1）
-      │  ② 发布数据（哪条被打开/互动）  → Publication 回流字段 → 校准传播潜力分（P2）
+      │  ② 发布数据（哪条被打开/互动）  → Publication 回流字段 → 校准首发推荐分（P2）
       ▼
 ┌────────────────────────────────────────────────────────┐
 │ Memory / Context：persona · Brand · 术语表               │
@@ -83,11 +83,11 @@
 | 精修 → 渲染 | `outputs.render_status=PENDING`（worker 认领源） | ✅ |
 | 精修操作记录 | （📋）`operations` 表——Edit/Chat/MCP 三前端共用 | 📋 P1 地基 |
 | 分发 | （📋）`publications` 状态机 + `channel_accounts` | 📋 P1 |
-| 发布数据回流 | （📋）Publication 回流字段 → 传播潜力分校准 | 📋 P2 |
+| 发布数据回流 | （📋）Publication 回流字段 → 首发推荐分校准 | 📋 P2 |
 | Memory 注入 | persona block / brand block（消费者各自拉取） | ✅ |
 | 校准回流 | （📋）精修痕迹 + 发布数据 → persona agent | 📋 P1/P2 |
 
-**闭环现状：断在两条回流边上。** 正向链路（上传 → 预处理 → 生成 → 精修 → 渲染 → 导出）已全通；回流（精修痕迹、发布数据）一条都不存在——这就是 ROADMAP 把 Operation Model 标为"地基"、把 Distribution 数据模型标为"权重上调"的原因。回流不通，传播潜力分和 persona 永远没有真实校准源，三资产哲学（STRATEGY §2）就停在营销层。
+**闭环现状：断在两条回流边上。** 正向链路（上传 → 预处理 → 生成 → 精修 → 渲染 → 导出）已全通；回流（精修痕迹、发布数据）一条都不存在——这就是 ROADMAP 把 Operation Model 标为"地基"、把 Distribution 数据模型标为"权重上调"的原因。回流不通，首发推荐分和 persona 永远没有真实校准源，三资产哲学（STRATEGY §2）就停在营销层。
 
 ### 2.2 数据架构图（ADR-028/030 后）
 

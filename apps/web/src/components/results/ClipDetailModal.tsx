@@ -171,6 +171,20 @@ export function ClipDetailModal({
               </span>
             </div>
 
+            {/* Recommendation score + reason */}
+            {typeof clipState.score?.value === "number" && (
+              <div className="flex flex-col gap-1 rounded-md bg-muted p-3">
+                <span className="text-xs font-medium">
+                  {t("results.scoreLabel")} · {clipState.score.value}
+                </span>
+                {clipState.score.reason && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("results.scoreReason")}: {clipState.score.reason}
+                  </p>
+                )}
+              </div>
+            )}
+
             <Tabs defaultValue="social" className="w-full">
               <TabsList variant="line" className="w-full">
                 <TabsTrigger value="social">{t("results.clipDetail.socialCaptionTab")}</TabsTrigger>

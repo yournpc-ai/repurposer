@@ -235,6 +235,13 @@ function ProjectDetailPage() {
   const carousels = outputs.filter((o) => o.type === "carousel")
   const articles = outputs.filter((o) => o.type === "article")
 
+  // Top pick: the highest recommendation score in the batch gets the accent
+  // badge (the score's job is triage — which clip is most worth posting first).
+  const topClipScore = Math.max(
+    0,
+    ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0))
+  )
+
   const counts = {
     clips: clips.length,
     post: posts.length,
@@ -307,7 +314,14 @@ function ProjectDetailPage() {
         return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {clips.map((clip) => (
-              <ClipCard key={clip.id} output={clip} onRegenerate={fetchResults} />
+              <ClipCard
+                key={clip.id}
+                output={clip}
+                onRegenerate={fetchResults}
+                isTopPick={
+                  topClipScore > 0 && clip.score?.value === topClipScore
+                }
+              />
             ))}
           </div>
         )

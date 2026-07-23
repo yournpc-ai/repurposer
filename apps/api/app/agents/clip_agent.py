@@ -99,7 +99,7 @@ class ClipAgent(MiniMaxAgentBase):
         logger.info(
             "clip_planning_completed",
             clip_count=len(plans.clips),
-            top_score=max((c.virality_score for c in plans.clips), default=0),
+            top_score=max((c.recommendation_score for c in plans.clips), default=0),
         )
         return plans
 

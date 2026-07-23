@@ -18,9 +18,10 @@ import type { Output } from "@/lib/types"
 interface ClipCardProps {
   output: Output
   onRegenerate?: () => void
+  isTopPick?: boolean
 }
 
-export function ClipCard({ output, onRegenerate }: ClipCardProps) {
+export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [chatOpen, setChatOpen] = useState(false)
@@ -153,6 +154,21 @@ export function ClipCard({ output, onRegenerate }: ClipCardProps) {
                 />
               )}
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
+              {typeof clipState.score?.value === "number" && (
+                <div
+                  className={cn(
+                    "absolute left-2 top-2 z-20 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                    isTopPick
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-black/70 text-white"
+                  )}
+                  title={clipState.score.reason ?? undefined}
+                >
+                  {isTopPick
+                    ? `${t("results.topPick")} · ${clipState.score.value}`
+                    : clipState.score.value}
+                </div>
+              )}
               <div className="absolute right-2 top-2 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
                 {formatDuration(clipState.payload.duration ?? 0)}
               </div>

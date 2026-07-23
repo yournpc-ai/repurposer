@@ -81,6 +81,19 @@ Each clip should satisfy multiple of the following conditions:
 - Has quote potential (can be quoted on its own)
 - Aligns with the core thesis and themes above
 
+## Recommendation Score
+
+For each clip, output `recommendation_score` (1-100): **how strongly you recommend the speaker post THIS clip first**, and `score_reason` (one sentence, in the target language) explaining the score.
+
+Score only what you can actually judge from the content — never predict views, reach, or virality (those depend on the speaker's audience, timing, and platform algorithms, none of which you can see):
+
+- **Completeness**: the clip stands alone — a full argument arc (setup → point → payoff), not a fragment that only makes sense inside the full talk.
+- **Opening**: the first 3 seconds earn the next 27 — a striking claim, question, or tension (a knowledge hook, not clickbait).
+- **Representativeness**: the moment carries the talk's core thesis — if the audience sees only this clip, the speaker is well represented.
+- **Delivery**: the speaker is at their best here — articulate and confident, not a rambling or filler-heavy stretch.
+
+`score_reason` must name the axes that drove the score (e.g., "Complete argument arc with a strong opening question; delivers the talk's central claim"). It is shown to the user verbatim.
+
 {% if context.speaker %}
 ## Speaker Context
 
@@ -180,7 +193,8 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "hashtags": ["topic1", "topic2", "topic3"],
       "topic": "The single most matching theme from content_plan.themes",
       "golden_quote": "A single sentence that can be turned into a quote card",
-      "virality_score": 85,
+      "recommendation_score": 85,
+      "score_reason": "Complete argument arc with a strong opening question; delivers the talk's central claim.",
       "duration_seconds": 45,
       "music_mood": "calm | uplifting | corporate",
       "music_id": "uuid of the chosen music piece, or null",
@@ -203,7 +217,8 @@ Requirements:
 - start_seconds must be strictly less than end_seconds
 - **Every clip must be at least 5 seconds long**. If your selected words produce a segment shorter than 5 seconds, extend the segment by including additional words before or after until the duration is >= 5 seconds.
 - Each subsequent clip must start after the previous clip ends (no overlap)
-- virality_score is an integer from 1-100
+- recommendation_score is an integer from 1-100 (see Recommendation Score — judge content quality only, never predict views/reach)
+- score_reason is one sentence in the target language, naming the axes that drove the score
 - duration_seconds is an integer from 5 to 120 (estimate based on start_seconds/end_seconds)
 - music_mood must be one of: calm, uplifting, corporate
 - music_id must be one of the listed piece ids, or null
