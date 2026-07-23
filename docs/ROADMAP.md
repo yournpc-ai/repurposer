@@ -22,7 +22,7 @@
 | 4-layer 编排（Director/Executors） | — | — | — | ✅ | ✅ 已落地 |
 | 词级时间戳 ASR | — | — | — | ✅ | ✅ 已落地 |
 | 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ✅（2026-07-22 随 RunPlan Phase 1 落地：`services/metering.py` contextvar 绑定 plan node，usage 直落 `plan_nodes.cost`） |
-| 去静默 / 去口头禅 | 矩阵 §B 快赢 | **P0** | 词级时间戳（已有）；归属决策：ASR 后处理 vs editor 一键操作 | ✅ | ❌（仅 i18n 占位文案） |
+| 去静默 / 去口头禅 | 矩阵 §B（2026-07-23 重估下放：输入为排练演讲密度低 + 选段层已过滤 + 跳剪伤专业感；残余价值=停顿收紧，手动路径已存在） | P2（自 P0 下放） | 词级时间戳（已有）；随 Operation Model 一并评估（editor 一键操作方向） | ✅ | ❌（仅 i18n 占位文案） |
 | 首发推荐分：持久化 + UI 展示（值 + 打分理由） | 矩阵 §C 改造 | **P0** | ~~`Clip` 表加列~~ `outputs.score` 已建 + 前端展示位 | ✅（LLM 已产出分数） | ✅（2026-07-23：prompt 四维口径 + score={value,reason} 落库 + ClipCard 徽章/榜首 accent + 详情理由；简报：`tasks/score-persistence.md`） |
 | 首发推荐分：维度明细 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
@@ -173,7 +173,7 @@ clip-spec 扩展 (P1 合规标识) ──► render 服务打标 ──► XML/E
 | 1 | ~~AI 内容标识（C2PA/元数据 + 界面披露）~~ → **P1**（2026-07-23 降级：未上线，义务自上线日起算，上线前必须回补，见 §7） | 合规 | EU AI Act Art.50，2026-08-02 生效 |
 | 2 | ~~成本计量钩子~~ ✅（2026-07-22 随 RunPlan Phase 1 落地） | Pipeline/计费 | 趁管线热埋点，后补成本极高；透明定价的地基 |
 | 3 | ~~首发推荐分：持久化 + UI（值+理由）~~ ✅（2026-07-23 落地） | Pipeline | LLM 已产出分数，落库+展示是低成本高兑现；只答"哪条最值得你先发"，不预测传播量 |
-| 4 | 去静默 / 去口头禅 | Pipeline | 矩阵快赢，词级时间戳已有 |
+| 4 | ~~去静默 / 去口头禅~~ → **P2**（2026-07-23 重估下放：播客刚需 ≠ 演讲刚需，选段层已过滤，跳剪伤专业感；P0 清单清空） | Pipeline | 矩阵 §B 行 |
 
 ---
 
@@ -183,7 +183,7 @@ clip-spec 扩展 (P1 合规标识) ──► render 服务打标 ──► XML/E
 
 1. **Virality Score 表述** — 核实后**部分误报**：`COMPETITIVE_ANALYSIS.md` 的 "Virality Score ✅ 唯一" 指的是 **Opus 在七家竞品中独有**（表格列全是竞品），不是声称我们已有；PRD 的 "Virality Score™" 出现在竞品借鉴表中，属目标功能规格，合规。真正的缺口是没有任何地方标注实现落差 → 已在 PRD FR-020 补实现状态注记（LLM 已产出分数但未持久化/未展示，即本表 P0-3）。
 2. **`VIDEO_EDITOR.md` 承诺 undoable** — 删句剪视频已实现，undo 未实现 → 已在该句补注"undo 待 Operation Model（本表 §2）"。
-3. **前端 i18n 已预置 `removeFiller: "去除口头禅"` 文案** — 无任何逻辑，易误判功能存在。P0-4 落地前建议注释或标记（前端改动，随 P0-4 一并处理）。
+3. **前端 i18n 已预置 `removeFiller: "去除口头禅"` 文案** — 无任何逻辑，易误判功能存在。该功能 2026-07-23 已下放 P2（矩阵 §B），文案维持死占位，随 P2 落地一并处理。
 4. **`AGENT_ARCHITECTURE.md` Layer 4** — 核实后**部分误报**：图上已标注 "reserved for future"，但 `agents/reviser.py`（单 clip 修订 agent）与 Layer 4 命名易混淆 → 已在图下加命名警示注记。
 5. **`Message.intent` 列注释写 "parsed LLM intent"** — 实际是规则分类结果，LLM parser（`agents/intent.py`）未接入 chat → 已改注释如实描述。
 6. **`MUSIC_ARCHITECTURE.md` 状态仍是 Proposed** — Music 表、MiniMax music-2.6 生成、管线集成均已上线 → 状态已改为 Implemented（Layer-4 音乐校验仍标注 future）。
