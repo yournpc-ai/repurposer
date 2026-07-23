@@ -561,6 +561,13 @@ const en = {
     sendFailed: "Failed to send code",
     verifyFailed: "Invalid or expired code",
   },
+  tour: {
+    next: "Next",
+    prev: "Back",
+    skip: "Skip",
+    done: "Done",
+    stepOf: "Step {{current}} of {{total}}",
+  },
   a11y: {
     toggleSidebar: "Toggle Sidebar",
   },

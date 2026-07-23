@@ -563,6 +563,13 @@ const zh: Resources = {
     sendFailed: "发送失败",
     verifyFailed: "验证码无效或已过期",
   },
+  tour: {
+    next: "下一步",
+    prev: "上一步",
+    skip: "跳过",
+    done: "完成",
+    stepOf: "第 {{current}} 步，共 {{total}} 步",
+  },
   a11y: {
     toggleSidebar: "切换侧边栏",
   },

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BrandTemplateRouteImport } from './routes/brand-template'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as SpeakersRouteImport } from './routes/speakers'
+import { Route as DevTourRouteImport } from './routes/dev.tour'
 import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 import { Route as SpeakersIdRouteImport } from './routes/speakers.$id'
 import { Route as ProjectsIdClipsClipIdRouteImport } from './routes/projects.$id.clips.$clipId'
@@ -37,6 +38,11 @@ const SpeakersRoute = SpeakersRouteImport.update({
   path: '/speakers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevTourRoute = DevTourRouteImport.update({
+  id: '/dev/tour',
+  path: '/dev/tour',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsIdRoute = ProjectsIdRouteImport.update({
   id: '/projects/$id',
   path: '/projects/$id',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
   '/speakers': typeof SpeakersRouteWithChildren
+  '/dev/tour': typeof DevTourRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
   '/projects/$id/clips/$clipId': typeof ProjectsIdClipsClipIdRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
   '/speakers': typeof SpeakersRouteWithChildren
+  '/dev/tour': typeof DevTourRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
   '/projects/$id/clips/$clipId': typeof ProjectsIdClipsClipIdRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
   '/speakers': typeof SpeakersRouteWithChildren
+  '/dev/tour': typeof DevTourRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
   '/projects/$id/clips/$clipId': typeof ProjectsIdClipsClipIdRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/brand-template'
     | '/library'
     | '/speakers'
+    | '/dev/tour'
     | '/projects/$id'
     | '/speakers/$id'
     | '/projects/$id/clips/$clipId'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/brand-template'
     | '/library'
     | '/speakers'
+    | '/dev/tour'
     | '/projects/$id'
     | '/speakers/$id'
     | '/projects/$id/clips/$clipId'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/brand-template'
     | '/library'
     | '/speakers'
+    | '/dev/tour'
     | '/projects/$id'
     | '/speakers/$id'
     | '/projects/$id/clips/$clipId'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   BrandTemplateRoute: typeof BrandTemplateRoute
   LibraryRoute: typeof LibraryRoute
   SpeakersRoute: typeof SpeakersRouteWithChildren
+  DevTourRoute: typeof DevTourRoute
   ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
 }
 
@@ -147,6 +160,13 @@ declare module '@tanstack/react-router' {
       path: '/speakers'
       fullPath: '/speakers'
       preLoaderRoute: typeof SpeakersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/tour': {
+      id: '/dev/tour'
+      path: '/dev/tour'
+      fullPath: '/dev/tour'
+      preLoaderRoute: typeof DevTourRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$id': {
@@ -202,6 +222,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandTemplateRoute: BrandTemplateRoute,
   LibraryRoute: LibraryRoute,
   SpeakersRoute: SpeakersRouteWithChildren,
+  DevTourRoute: DevTourRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
