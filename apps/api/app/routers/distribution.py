@@ -68,12 +68,28 @@ def _raise_domain(e: dist.DistributionError) -> NoReturn:
 
 def _web_redirect(params: str) -> RedirectResponse:
     base = settings.web_public_url.rstrip("/")
-    return RedirectResponse(url=f"{base}/publishing?{params}", status_code=302)
+    return RedirectResponse(url=f"{base}/settings?{params}", status_code=302)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Channels
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+class PlatformAvailability(BaseModel):
+    platform: ChannelPlatform
+    configured: bool
+
+
+@router.get("/channels/platforms", response_model=list[PlatformAvailability])
+async def list_platforms(
+    user: User = Depends(get_current_user_required),
+) -> list[PlatformAvailability]:
+    """Per-platform presence-gating for the UI ("coming soon" state, §4.1)."""
+    return [
+        PlatformAvailability(platform=p, configured=dist.is_configured(p))
+        for p in ChannelPlatform
+    ]
 
 
 @router.get("/channels/{platform}/oauth-url", response_model=OAuthUrlResponse)

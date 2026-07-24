@@ -145,7 +145,8 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `plan_nodes` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `plan_node_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
 | （📋）operations | Operation Model | editor GUI / chat / MCP 三个前端写入；worker 消费 |
-| （📋）publications / channel_accounts / publication_events | Distribution | 状态机只由 Distribution 服务迁移；事件日志只追加；回流字段预留给分析 |
+| publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
+| `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `services/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
 
 **outputs 共享聚合的细则**：`outputs` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = payload/render_spec diff）、worker（渲染产物回写 `files.video`/`files.srt`）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
 

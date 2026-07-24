@@ -463,3 +463,32 @@ class Publication(Base):
         ),
         Index("ix_publications_user_state", "user_id", "state"),
     )
+
+
+class Notification(Base):
+    """User-facing notification (platform-layer table, MODULE_ARCHITECTURE §4).
+
+    The bell dropdown is the event stream's presentation layer — thin events
+    (publish succeeded/failed, channel expired; feature announcements later)
+    surface here instead of growing dedicated pages. ``type`` is a plain
+    string (not an enum) so new sources don't need migrations; ``payload``
+    carries whatever the renderer needs (ids, platform, urls, error).
+    """
+
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String(64), nullable=False)
+    payload = Column(JSONB, nullable=False, default=dict)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index(
+            "ix_notifications_user_unread",
+            "user_id",
+            postgresql_where=text("read_at IS NULL"),
+        ),
+    )

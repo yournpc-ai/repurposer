@@ -1379,3 +1379,20 @@ class PublicationResponse(BaseModel):
     attempt_count: int = 0
     last_error: str | None = None
     created_at: datetime | None = None
+
+
+class NotificationResponse(BaseModel):
+    """One bell-panel row; ``payload`` shape depends on ``type``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    read_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    unread_count: int

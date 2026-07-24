@@ -25,6 +25,7 @@ from app.services.distribution.channels import (
     connect_finish,
     connect_start,
     disconnect,
+    is_configured,
     list_channels,
     refresh_if_needed,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "disconnect",
     "encrypt_credentials",
     "get_publication",
+    "is_configured",
     "list_channels",
     "list_publications",
     "process_publication",

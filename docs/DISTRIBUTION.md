@@ -1,6 +1,6 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；待办 = 平台应用凭据联调 + 前端 UI（发布对话框 / 发布记录页））
+> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/publish-dialog-notifications.md`；待办 = 平台应用凭据联调）
 >
 > 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `ROADMAP.md` §5；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 
@@ -273,6 +273,8 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 ## 11. UI 面
 
+> **2026-07-24 修订（已实现）**：本节原案的"发布记录页 + sidebar `nav.publishing` 入口"**取消**——事件流（发布成功/失败/渠道过期）由**通知中心**承载（全局顶栏铃铛下拉，非页面），持续管理（渠道连接）收进 **Settings**；原则 = 通知是事件流的呈现层，只有需要持续操作的东西才配拥有页面。实现以 `tasks/publish-dialog-notifications.md` 为准；下文保留为设计演化的记录，其中发布对话框（§11.2）、三态渠道卡（§11.5）仍然有效。
+>
 > 方向（2026-07-22 定）：**主路径 = 立即发布、个人免审**（ADR-027）。calendar 视图后置（P2+ 按使用数据验证）；竞品实证：Agent Opus 的 calendar 只是 projects 页视图 toggle、排期器在其 Pro 付费墙后（`research/agent-opus.md`）——创作工具品类的主流是"创作完立刻发"。
 
 ### 11.1 信息架构（三个入口 = 三种心智）

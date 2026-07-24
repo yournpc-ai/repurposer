@@ -10,6 +10,7 @@ from app.routers.files import router as files
 from app.routers.intent import router as intent
 from app.routers.library import router as library
 from app.routers.music import router as music
+from app.routers.notifications import router as notifications
 from app.routers.outputs import router as outputs
 from app.routers.projects import router as projects
 from app.routers.speakers import router as speakers
@@ -24,6 +25,7 @@ __all__ = [
     "intent",
     "library",
     "music",
+    "notifications",
     "outputs",
     "projects",
     "speakers",

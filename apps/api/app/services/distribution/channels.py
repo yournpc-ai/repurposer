@@ -97,13 +97,17 @@ def verify_oauth_state(state: str, platform: ChannelPlatform) -> UUID:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _configured(platform: ChannelPlatform) -> None:
-    """Presence-gating (§4.1): an unconfigured channel is a 404, not a flag."""
-    configured = {
+def is_configured(platform: ChannelPlatform) -> bool:
+    """Whether the platform's OAuth app credentials are present (env)."""
+    return {
         ChannelPlatform.LINKEDIN: bool(settings.linkedin_client_id),
         ChannelPlatform.TIKTOK: bool(settings.tiktok_client_key),
     }[platform]
-    if not configured:
+
+
+def _configured(platform: ChannelPlatform) -> None:
+    """Presence-gating (§4.1): an unconfigured channel is a 404, not a flag."""
+    if not is_configured(platform):
         raise DistributionError("channel_not_configured", platform.value)
 
 

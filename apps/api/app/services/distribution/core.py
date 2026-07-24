@@ -89,12 +89,59 @@ async def _transition(
     if to_state == PublicationState.PUBLISHED:
         pub.published_at = datetime.now(UTC)
     await db.flush()
+    if to_state in (PublicationState.PUBLISHED, PublicationState.FAILED):
+        await _notify_terminal(db, pub)
     logger.info(
         "publication_transition",
         publication_id=str(pub.id),
         to_state=to_state.value,
     )
     return pub
+
+
+async def _notify_terminal(db: AsyncSession, pub: Publication) -> None:
+    """Write the bell notification for a terminal transition.
+
+    Backoff re-entries (PUBLISHING→SCHEDULED) never reach here, so users are
+    only told about final outcomes. The row rides the caller's session and
+    commits atomically with the state change. Platform/title come from the
+    frozen payload snapshot, so the notification stays readable after the
+    channel is disconnected.
+    """
+    from app.services.notifications import create_notification
+
+    payload = pub.payload or {}
+    channel = payload.get("channel") or {}
+    base = {
+        "publication_id": str(pub.id),
+        "project_id": str(pub.project_id),
+        "output_id": str(pub.output_id),
+        "platform": channel.get("platform"),
+        "title": payload.get("title") or "",
+    }
+    if pub.state == PublicationState.PUBLISHED:
+        await create_notification(
+            db,
+            user_id=pub.user_id,
+            type="publish_succeeded",
+            payload={**base, "platform_post_url": pub.platform_post_url},
+        )
+        return
+    error = pub.last_error or ""
+    if error == "channel_token_expired":
+        await create_notification(
+            db,
+            user_id=pub.user_id,
+            type="channel_expired",
+            payload={**base, "channel_account_id": str(pub.channel_account_id or "")},
+        )
+    else:
+        await create_notification(
+            db,
+            user_id=pub.user_id,
+            type="publish_failed",
+            payload={**base, "error": error},
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

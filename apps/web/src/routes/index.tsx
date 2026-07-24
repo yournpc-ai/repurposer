@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Bell, Star } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
 
-import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { LanguageSwitcher } from "@/components/language-switcher"
-import { ThemeToggle } from "@/components/theme-toggle"
 import RotatingText from "@/components/RotatingText"
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecentProjects } from "@/components/home/RecentProjects"
@@ -53,27 +48,6 @@ function Home() {
 
   return (
     <div className="flex min-h-svh flex-1 flex-col">
-      {/* Global top bar */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <SidebarTrigger className="md:hidden" />
-        <div className="ml-auto flex items-center gap-3">
-          <ThemeToggle />
-          <LanguageSwitcher />
-
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] text-destructive-foreground">
-              24
-            </span>
-          </Button>
-
-          <div className="flex h-7 items-center gap-2 rounded-md bg-card px-3 text-sm ring-1 ring-border">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
-            <span>0</span>
-          </div>
-        </div>
-      </header>
-
       {/* Hero / Prompt */}
       <section className="flex flex-col items-center px-6 pt-16 pb-10">
         <div className="w-full max-w-3xl text-center">

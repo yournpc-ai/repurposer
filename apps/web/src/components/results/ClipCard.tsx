@@ -12,6 +12,7 @@ import { formatDuration, cn } from "@/lib/utils"
 import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 import { ClipDetailModal } from "./ClipDetailModal"
+import { PublishDialog } from "@/components/publish/PublishDialog"
 
 import type { Output } from "@/lib/types"
 
@@ -26,6 +27,7 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
   const navigate = useNavigate()
   const [chatOpen, setChatOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const [clipState, setClipState] = useState<Output>(output)
   const [isRendering, setIsRendering] = useState(
     output.render_status === "pending" || output.render_status === "rendering"
@@ -238,6 +240,7 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
                 onDownload={videoUrl ? handleDownload : undefined}
                 onRegenerate={handleRegenerate}
                 onChat={() => setChatOpen(true)}
+                onPublish={videoUrl ? () => setPublishOpen(true) : undefined}
               />
             )}
           </div>
@@ -258,6 +261,12 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onRegenerate={onRegenerate}
+      />
+
+      <PublishDialog
+        output={clipState}
+        open={publishOpen}
+        onOpenChange={setPublishOpen}
       />
     </>
   )

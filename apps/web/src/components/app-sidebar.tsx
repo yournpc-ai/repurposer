@@ -216,7 +216,14 @@ export function AppSidebar() {
                     <User className="mr-2 h-4 w-4" />
                     {t("common.profile")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        to="/settings"
+                        search={{ connected: undefined, error: undefined }}
+                      />
+                    }
+                  >
                     <Settings className="mr-2 h-4 w-4" />
                     {t("common.settings")}
                   </DropdownMenuItem>

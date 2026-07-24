@@ -82,8 +82,8 @@
 |---|---|---|---|---|---|
 | Publication / ChannelAccount 数据模型（含回流分析字段预留） | 矩阵 §H；2027 架构 | **P1（直发的载体，与直发同棒落地）** | 无 | — 纯工程 | ✅（2026-07-23 Phase A 建表 + 服务骨架） |
 | 审核队列（机构模式：强制人工确认、审核人≠作者；个人免审秒发——ADR-027） | 矩阵 §H | P2 | 数据模型 + 团队工作区 | — | ❌ |
-| LinkedIn OAuth + 直发（2026-07-21 定：**个人号 w_member_social 先行**，公司页后置） | 矩阵 §H | **P1（Distribution 核心兑现，本模块第一棒）** | 数据模型；LinkedIn 开发者应用注册（零代码 ops，立即排队） | — | 🚧（2026-07-24 后端落地：OAuth/adapter/路由/worker 认领；待应用凭据联调 + 前端 UI） |
-| TikTok Content Posting API 直发（只做直发；2026-07-23 定：**与 LinkedIn 并列为 P1 双平台**——clips 需要出口；**应用审核零代码 ops 立即排队**，墙钟数周期间测试账号联调） | 矩阵 §H | **P1** | 数据模型；TikTok 开发者应用审核 | — | 🚧（2026-07-24 后端落地同上；待应用审核 + 联调） |
+| LinkedIn OAuth + 直发（2026-07-21 定：**个人号 w_member_social 先行**，公司页后置） | 矩阵 §H | **P1（Distribution 核心兑现，本模块第一棒）** | 数据模型；LinkedIn 开发者应用注册（零代码 ops，立即排队） | — | 🚧（2026-07-24 后端 + 前端已落地：OAuth/adapter/worker 认领 + 发布对话框/通知中心/Settings Channels；待应用凭据联调） |
+| TikTok Content Posting API 直发（只做直发；2026-07-23 定：**与 LinkedIn 并列为 P1 双平台**——clips 需要出口；**应用审核零代码 ops 立即排队**，墙钟数周期间测试账号联调） | 矩阵 §H | **P1** | 数据模型；TikTok 开发者应用审核 | — | 🚧（2026-07-24 后端 + 前端已落地同上；待应用审核 + 联调） |
 | 定时发布（worker 第四认领源，复用 SKIP LOCKED） | 矩阵 §H | P2（2026-07-23 定界：边缘功能——agency 多账号运营便利，非个体刚需） | 数据模型 + 队列（已有） | — | ❌ |
 | 发布数据回流 → 校准首发推荐分 | 2027 架构 | P2 | Publication 回流字段 + 打分持久化 | ✅ | ❌ |
 | newsletter ESP 集成（owned channel） | 矩阵 §H；STRATEGY §4 风险 2 | P2 | 数据模型 | — | ❌ |
@@ -137,7 +137,7 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | ❌ |
+| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；配方卡/落地页 ❌） |
 | 真实 Gallery（公开项目流入 + remix） | STRATEGY §5 | P2 | 上一行验证 + `projects`/`clips` 公开性字段（须先 MODULE_ARCH §4 登记 + ADR） | — 纯工程 | ❌ |
 
 ---

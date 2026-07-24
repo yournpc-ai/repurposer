@@ -9,22 +9,23 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as BrandTemplateRouteImport } from './routes/brand-template'
-import { Route as LibraryRouteImport } from './routes/library'
 import { Route as SpeakersRouteImport } from './routes/speakers'
-import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as LibraryRouteImport } from './routes/library'
+import { Route as BrandTemplateRouteImport } from './routes/brand-template'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpeakersIdRouteImport } from './routes/speakers.$id'
+import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 import { Route as ProjectsIdClipsClipIdRouteImport } from './routes/projects.$id.clips.$clipId'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const SpeakersRoute = SpeakersRouteImport.update({
+  id: '/speakers',
+  path: '/speakers',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BrandTemplateRoute = BrandTemplateRouteImport.update({
-  id: '/brand-template',
-  path: '/brand-template',
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryRoute = LibraryRouteImport.update({
@@ -32,20 +33,25 @@ const LibraryRoute = LibraryRouteImport.update({
   path: '/library',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SpeakersRoute = SpeakersRouteImport.update({
-  id: '/speakers',
-  path: '/speakers',
+const BrandTemplateRoute = BrandTemplateRouteImport.update({
+  id: '/brand-template',
+  path: '/brand-template',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsIdRoute = ProjectsIdRouteImport.update({
-  id: '/projects/$id',
-  path: '/projects/$id',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SpeakersIdRoute = SpeakersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => SpeakersRoute,
+} as any)
+const ProjectsIdRoute = ProjectsIdRouteImport.update({
+  id: '/projects/$id',
+  path: '/projects/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIdClipsClipIdRoute = ProjectsIdClipsClipIdRouteImport.update({
   id: '/clips/$clipId',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
+  '/settings': typeof SettingsRoute
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
+  '/settings': typeof SettingsRoute
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/brand-template': typeof BrandTemplateRoute
   '/library': typeof LibraryRoute
+  '/settings': typeof SettingsRoute
   '/speakers': typeof SpeakersRouteWithChildren
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/speakers/$id': typeof SpeakersIdRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
+    | '/settings'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
+    | '/settings'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/library'
+    | '/settings'
     | '/speakers'
     | '/projects/$id'
     | '/speakers/$id'
@@ -115,24 +127,25 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BrandTemplateRoute: typeof BrandTemplateRoute
   LibraryRoute: typeof LibraryRoute
+  SettingsRoute: typeof SettingsRoute
   SpeakersRoute: typeof SpeakersRouteWithChildren
   ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/speakers': {
+      id: '/speakers'
+      path: '/speakers'
+      fullPath: '/speakers'
+      preLoaderRoute: typeof SpeakersRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/brand-template': {
-      id: '/brand-template'
-      path: '/brand-template'
-      fullPath: '/brand-template'
-      preLoaderRoute: typeof BrandTemplateRouteImport
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library': {
@@ -142,18 +155,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/speakers': {
-      id: '/speakers'
-      path: '/speakers'
-      fullPath: '/speakers'
-      preLoaderRoute: typeof SpeakersRouteImport
+    '/brand-template': {
+      id: '/brand-template'
+      path: '/brand-template'
+      fullPath: '/brand-template'
+      preLoaderRoute: typeof BrandTemplateRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects/$id': {
-      id: '/projects/$id'
-      path: '/projects/$id'
-      fullPath: '/projects/$id'
-      preLoaderRoute: typeof ProjectsIdRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/speakers/$id': {
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/speakers/$id'
       preLoaderRoute: typeof SpeakersIdRouteImport
       parentRoute: typeof SpeakersRoute
+    }
+    '/projects/$id': {
+      id: '/projects/$id'
+      path: '/projects/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof ProjectsIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/projects/$id/clips/$clipId': {
       id: '/projects/$id/clips/$clipId'
@@ -201,18 +221,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BrandTemplateRoute: BrandTemplateRoute,
   LibraryRoute: LibraryRoute,
+  SettingsRoute: SettingsRoute,
   SpeakersRoute: SpeakersRouteWithChildren,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

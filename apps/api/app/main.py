@@ -25,6 +25,7 @@ from app.routers import (
     intent,
     library,
     music,
+    notifications,
     outputs,
     projects,
     speaker_assets,
@@ -244,6 +245,7 @@ app.include_router(
 # Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
 # resource, not the module — DISTRIBUTION.md §1.1)
 app.include_router(distribution, prefix="/api/v1", tags=["distribution"])
+app.include_router(notifications, prefix="/api/v1", tags=["notifications"])
 
 
 @app.get("/health")

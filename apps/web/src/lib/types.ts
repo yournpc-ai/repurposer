@@ -183,3 +183,66 @@ export interface BrandTemplate {
     captionColor?: string
   }
 }
+
+// ── Distribution ────────────────────────────────────────────────────────────
+
+export type ChannelPlatform = "linkedin" | "tiktok"
+
+export interface ChannelAccount {
+  id: string
+  platform: ChannelPlatform
+  platform_user_id: string
+  display_name: string
+  avatar_url: string | null
+  scopes: string[]
+  status: "active" | "expired" | "revoked"
+  token_expires_at: string | null
+  created_at: string | null
+}
+
+export interface PlatformAvailability {
+  platform: ChannelPlatform
+  configured: boolean
+}
+
+export type PublicationState =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "failed"
+  | "cancelled"
+
+// ── Notifications ───────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "publish_succeeded"
+  | "publish_failed"
+  | "channel_expired"
+
+export interface NotificationPayload {
+  publication_id?: string
+  project_id?: string
+  output_id?: string
+  platform?: ChannelPlatform
+  title?: string
+  platform_post_url?: string | null
+  channel_account_id?: string
+  error?: string
+}
+
+export interface AppNotification {
+  id: string
+  type: NotificationType | string
+  payload: NotificationPayload
+  read_at: string | null
+  created_at: string | null
+}
+
+export interface NotificationList {
+  items: AppNotification[]
+  unread_count: number
+}
+
