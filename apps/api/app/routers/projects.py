@@ -189,6 +189,11 @@ def _compute_ui_step(
     i18n step keys, so the frontend contract ({key, index, total}) is
     unchanged. None = hide the dialog (no run, run failed, or everything
     settled).
+
+    Render handoff: "ready_to_render" only shows while clips are QUEUED for
+    rendering (all pending). Once at least one clip is actively rendering, the
+    dialog closes and each clip card's own spinner takes over — the frontend
+    keeps polling while any render is active, so the cards stay live.
     """
     if latest_job is None or latest_job.status == "failed":
         return None
@@ -203,6 +208,16 @@ def _compute_ui_step(
         if key not in steps:
             key = "prepare"
         return {"key": key, "index": steps.index(key), "total": len(steps)}
+
+    def clip_render_state() -> tuple[bool, bool]:
+        """(any clip actively rendering, any clip queued for render)."""
+        rendering = any(
+            o.type == "clip" and o.render_status == "rendering" for o in outputs
+        )
+        pending = any(
+            o.type == "clip" and o.render_status == "pending" for o in outputs
+        )
+        return rendering, pending
 
     # Assets still processing (ASR / extraction) — the run queues behind them.
     if any(a.processing_status in ("pending", "processing") for a in assets):
@@ -228,15 +243,22 @@ def _compute_ui_step(
                 return at("generating_image")
             return at("writing_copy")
         if current.kind == "render":
-            return at("ready_to_render")
+            rendering, _ = clip_render_state()
+            # Targeted re-render: once the worker has claimed a clip, the
+            # card's spinner takes over and the dialog can close.
+            return None if rendering else at("ready_to_render")
         return at("prepare")
 
     if latest_job.status == "completed":
-        if "ready_to_render" in steps and any(
-            o.type == "clip" and o.render_status in ("pending", "rendering")
-            for o in outputs
-        ):
-            return at("ready_to_render")
+        if "ready_to_render" in steps:
+            rendering, pending = clip_render_state()
+            # All clips queued but none claimed yet → still "about to start
+            # rendering". Once any clip is actively rendering, hide the dialog;
+            # the clip cards show their own rendering spinners.
+            if rendering:
+                return None
+            if pending:
+                return at("ready_to_render")
         return None
 
     return None
