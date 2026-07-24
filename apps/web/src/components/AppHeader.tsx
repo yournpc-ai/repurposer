@@ -11,7 +11,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between bg-background px-6 py-4">
-      <SidebarTrigger />
+      {/* Mobile-only: on desktop the sidebar header has its own collapse
+       * button; on mobile the sidebar is a hidden sheet and this trigger is
+       * the only way to open it. */}
+      <SidebarTrigger className="md:hidden" />
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />
         <LanguageSwitcher />

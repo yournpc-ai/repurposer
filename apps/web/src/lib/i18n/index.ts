@@ -7,18 +7,19 @@ import zh from "./locales/zh"
 export const LANG_COOKIE = "repurposer-lang"
 export type Locale = "zh" | "en"
 
-if (!i18n.isInitialized) {
-  i18n.use(initReactI18next).init({
-    resources: {
-      zh: { translation: zh },
-      en: { translation: en },
-    },
-    lng: "en",
-    fallbackLng: "en",
-    interpolation: { escapeValue: false },
-    react: { useSuspense: false },
-  })
-}
+// Always (re-)init: in dev, HMR reloads the locales modules with fresh
+// resources while the i18next singleton persists — a one-time isInitialized
+// guard would keep serving stale keys after any locale edit.
+i18n.use(initReactI18next).init({
+  resources: {
+    zh: { translation: zh },
+    en: { translation: en },
+  },
+  lng: "en",
+  fallbackLng: "en",
+  interpolation: { escapeValue: false },
+  react: { useSuspense: false },
+})
 
 /** Change the active language and persist the choice to a cookie. */
 export function setLocale(lng: Locale) {

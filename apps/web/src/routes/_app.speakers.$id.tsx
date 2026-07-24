@@ -49,7 +49,7 @@ interface Asset {
   created_at: string
 }
 
-export const Route = createFileRoute("/speakers/$id")({
+export const Route = createFileRoute("/_app/speakers/$id")({
   component: SpeakerDetailPage,
 })
 

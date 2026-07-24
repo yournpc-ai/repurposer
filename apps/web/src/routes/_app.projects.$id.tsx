@@ -83,7 +83,7 @@ const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
   article_gen: "article",
 }
 
-export const Route = createFileRoute("/projects/$id")({
+export const Route = createFileRoute("/_app/projects/$id")({
   component: ProjectDetailPage,
 })
 

@@ -2,13 +2,10 @@ import { HeadContent, Scripts, createRootRoute, Outlet } from "@tanstack/react-r
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
-import { AppSidebar } from "@/components/app-sidebar"
-import { AppHeader } from "@/components/AppHeader"
 import { AuthProvider } from "@/components/AuthProvider"
 import appCss from "../styles.css?url"
 
@@ -47,17 +44,7 @@ function RootComponent() {
       <I18nProvider>
         <TooltipProvider>
           <AuthProvider>
-            <SidebarProvider defaultOpen={false}>
-              <AppSidebar />
-              <SidebarInset className="relative overflow-x-clip">
-                <AppHeader />
-                <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-                  <div className="absolute -left-[20%] -top-[10%] h-[50%] w-[50%] rounded-full bg-primary/5 blur-[120px]" />
-                  <div className="absolute -right-[20%] top-[20%] h-[40%] w-[40%] rounded-full bg-primary/3 blur-[100px]" />
-                </div>
-                <Outlet />
-              </SidebarInset>
-            </SidebarProvider>
+            <Outlet />
             <Toaster />
           </AuthProvider>
         </TooltipProvider>

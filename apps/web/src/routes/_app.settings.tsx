@@ -13,7 +13,7 @@ import { connectChannel, PLATFORMS, useChannels } from "@/lib/channels"
 
 import type { ChannelAccount, ChannelPlatform } from "@/lib/types"
 
-export const Route = createFileRoute("/settings")({
+export const Route = createFileRoute("/_app/settings")({
   // OAuth callback lands here: /settings?connected=linkedin | ?error=...
   validateSearch: (search: Record<string, unknown>) => ({
     connected: typeof search.connected === "string" ? search.connected : undefined,

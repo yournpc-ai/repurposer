@@ -52,7 +52,7 @@ const TYPE_ICONS: Record<LibraryType, typeof FileText> = {
   carousel: ImageIcon,
 }
 
-export const Route = createFileRoute("/library")({
+export const Route = createFileRoute("/_app/library")({
   component: LibraryPage,
 })
 

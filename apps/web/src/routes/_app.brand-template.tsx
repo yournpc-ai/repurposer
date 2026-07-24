@@ -51,7 +51,7 @@ import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { MusicPanel } from "@/components/brand-template/music-panel"
 
-export const Route = createFileRoute("/brand-template")({
+export const Route = createFileRoute("/_app/brand-template")({
   component: BrandTemplatePage,
 })
 

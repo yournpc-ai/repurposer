@@ -137,7 +137,7 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；配方卡/落地页 ❌） |
+| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；2026-07-25：**落地页已落地**——`/` 公开落地页（header/hero/工作流叙事/信任带/roadmap/footer，`motion` 视差），sidebar 工作台迁入 `_app` pathless layout（原 `/` → `/home`，其余 URL 不变），pricing 区按决策暂缓；配方卡 ❌） |
 | 真实 Gallery（公开项目流入 + remix） | STRATEGY §5 | P2 | 上一行验证 + `projects`/`clips` 公开性字段（须先 MODULE_ARCH §4 登记 + ADR） | — 纯工程 | ❌ |
 
 ---

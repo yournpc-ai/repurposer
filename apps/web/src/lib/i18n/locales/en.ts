@@ -21,7 +21,6 @@ const en = {
     login: "Log in",
     guest: "Guest",
     helpCenter: "Help center",
-    inviteMembers: "Invite members",
     new: "New",
     freePlan: "Free plan",
     requestFailed: "Request failed",
@@ -44,9 +43,6 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    heroPrefix: "Turn your talks into",
-    heroWords: ["video clips", "social posts", "quote cards", "articles", "carousels"],
-    heroSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs, just like you'd make it yourself.",
     uploadSource: "Upload file",
     uploadSourceTooltip: "Upload a transcript, slides, audio, video, or images",
     pastePlaceholder:
@@ -62,6 +58,99 @@ const en = {
     allProjects: "All projects ({{count}})",
     noProjects: "No projects yet — start by uploading or pasting your talk content above.",
     speakerCreateFailed: "Failed to create speaker",
+  },
+  landing: {
+    nav: {
+      features: "Features",
+      pricing: "Pricing",
+      roadmap: "Roadmap",
+    },
+    signIn: "Sign in",
+    openWorkbench: "Open workbench",
+    heroPrefix: "Turn your talks into",
+    heroWords: ["video clips", "social posts", "quote cards", "articles", "carousels"],
+    heroSubtitle:
+      "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs, just like you'd make it yourself.",
+    getStarted: "Get started free",
+    viewDemo: "View live demo",
+    workflow: {
+      heading: "One talk, every channel",
+      subheading:
+        "From raw footage to publish-ready knowledge assets in four steps.",
+      steps: [
+        {
+          title: "Upload",
+          desc: "Drop in video, audio, slides or a transcript. Word-level transcription handles English, German, French, Spanish, Italian and more.",
+        },
+        {
+          title: "Generate",
+          desc: "A team of AI agents drafts clips, LinkedIn posts, quote cards, articles and multi-language versions — in your voice, not a generic one.",
+        },
+        {
+          title: "Refine",
+          desc: "Edit the transcript to cut segments, trim on a single track, and restyle subtitles. Deleting a sentence is all it takes.",
+        },
+        {
+          title: "Publish",
+          desc: "Send straight to LinkedIn and TikTok, or export Markdown, PNG and SRT for your newsletter and website.",
+        },
+      ],
+    },
+    trust: {
+      heading: "Built for European institutions",
+      items: [
+        {
+          title: "EU data residency",
+          desc: "Your talks stay in EU regions, GDPR-ready by design.",
+        },
+        {
+          title: "5 languages, natively",
+          desc: "EN, DE, FR, ES, IT output that reads like it was written in the language.",
+        },
+        {
+          title: "Your voice, preserved",
+          desc: "Speaker memory keeps your style consistent across every asset.",
+        },
+        {
+          title: "No charge on failure",
+          desc: "See the cost before you generate; failed runs are never billed.",
+        },
+      ],
+    },
+    pricing: {
+      heading: "Predictable by design",
+      subheading:
+        "One talk, one content bundle — you see the cost before you generate, and failed runs are never billed.",
+      comingSoon: "Pricing coming soon",
+      principles: [
+        "Per-talk bundles, not raw credits",
+        "Cost shown upfront, every time",
+        "No charge on failure",
+      ],
+    },
+    roadmap: {
+      heading: "Where we're headed",
+      subheading: "What already works, and what we're building next.",
+      shippedTitle: "Shipped",
+      shipped: [
+        "4-layer AI agent pipeline for content generation",
+        "Word-level multilingual transcription",
+        "Transcript-based video editor with instant preview",
+        "Direct publishing to LinkedIn & TikTok",
+        "Speaker personas & brand templates",
+      ],
+      nextTitle: "What's next",
+      next: [
+        "EU AI Act transparency labeling",
+        "Terminology glossaries per speaker",
+        "Per-talk content bundles with upfront pricing",
+        "A public gallery of content recipes",
+      ],
+    },
+    footer: {
+      tagline: "Turning talks into knowledge assets.",
+      rights: "© {{year}} Repurposer. All rights reserved.",
+    },
   },
   composer: {
     speaker: "Speaker",

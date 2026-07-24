@@ -34,7 +34,7 @@ interface Speaker {
   created_at: string
 }
 
-export const Route = createFileRoute("/speakers")({
+export const Route = createFileRoute("/_app/speakers")({
   component: SpeakersPage,
 })
 

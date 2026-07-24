@@ -44,7 +44,7 @@ interface ClipOutput {
   files: { video?: string; srt?: string }
 }
 
-export const Route = createFileRoute('/projects/$id/clips/$clipId')({
+export const Route = createFileRoute('/_app/projects/$id/clips/$clipId')({
   component: ClipEditorPage,
 })
 

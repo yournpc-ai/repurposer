@@ -3,7 +3,6 @@ import {
   Mic2,
   Library,
   Palette,
-  UserRoundPlus,
   Crown,
   BookOpen,
   HelpCircle,
@@ -47,7 +46,7 @@ import { clearAuth, getUser } from "@/lib/auth"
 import { useAuth } from "@/components/AuthProvider"
 
 const createItems = [
-  { key: "home", url: "/", icon: Home },
+  { key: "home", url: "/home", icon: Home },
   { key: "brandTemplate", url: "/brand-template", icon: Palette },
   { key: "assetLibrary", url: "/library", icon: Library },
 ]
@@ -64,7 +63,6 @@ const accountItems = [
 
 function isActive(path: string, itemUrl: string) {
   if (itemUrl === "#") return false
-  if (itemUrl === "/") return path === "/"
   return path === itemUrl || path.startsWith(`${itemUrl}/`)
 }
 
@@ -115,14 +113,6 @@ export function AppSidebar() {
             <ArrowRightToLine className="absolute inset-0 m-auto size-4.5 opacity-0 transition-opacity group-data-[state=collapsed]:opacity-100" />
           </Button>
         </div>
-
-        <SidebarMenuButton
-          tooltip={t("common.inviteMembers")}
-          className="h-10 text-sm font-normal"
-        >
-          <UserRoundPlus className="h-4.5 w-4.5 shrink-0" />
-          <span>{t("common.inviteMembers")}</span>
-        </SidebarMenuButton>
       </SidebarHeader>
 
       <SidebarContent className="gap-4 px-2">

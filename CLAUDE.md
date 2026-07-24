@@ -66,14 +66,16 @@ Correct:
 - To express "currently selected" for an option, use the `Check` icon; for bottom overlays (dropdowns in the footer), remember `side="top"` to pop upward.
 - Pure dropdowns in forms use `Select`; parameter selection in the prompt action bar uses the pill pattern above — do not mix styles.
 
-### Card Depth: ring + shadow, no border
-- The "edge + lift" effect for cards / inputs is achieved with **two layers of box-shadow**, not a real `border`:
+### Card Depth: shadow only — NO ring, NO border
+- **Cards / panels must not have any visible outline.** `ring-1 ring-border` and `border` on cards are prohibited — the outlined-card look is a UI style this project explicitly avoids.
+- Depth comes from **soft ambient shadow + background contrast** alone:
   ```tsx
-  <Card className="ring-1 ring-border shadow-xl">
+  <Card className="shadow-lg">
   ```
-  - `ring-1 ring-border` = 1px hairline stroke (simulates border, does not affect layout, auto-adapts across themes, no blur on scaling).
-  - `shadow-xl` / `shadow-lg` = outer ambient shadow.
+  - `shadow-lg` / `shadow-xl` = outer ambient shadow that lifts the card off the background.
+  - Separation between sections comes from spacing and `bg-card` vs `bg-background` contrast, never from strokes.
 - Real `border` is only used when a "positional dividing line" is truly needed; avoid drawing dividers between sections whenever possible.
+- (Legacy note: older screens still carry `ring-1 ring-border` from the previous convention — remove it when touching those screens; do not copy it into new code.)
 
 ### Composer / Input Card
 - Structure: left side `Transcript` vertical block as the **upload entry point** (clicking triggers a hidden `<input type="file">`), right side `Textarea`.
@@ -144,6 +146,11 @@ t("home.allProjects", { count: projects.length })
 
 ## Routing
 
+### Layout Split (landing vs. workbench)
+- `/` is the **public landing page** (no sidebar); the sidebar workbench lives under the `_app` **pathless layout route** (`src/routes/_app.tsx` holds `SidebarProvider`/`AppSidebar`/`SidebarInset`/`AppHeader`). `__root.tsx` keeps only providers + `Toaster`.
+- The workbench home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.library.tsx` → `/library`, `_app.projects.$id.tsx` → `/projects/$id`, …).
+- `AuthProvider` public paths: `/` + the demo project prefix. Everything under `_app` sits behind the login wall automatically.
+
 ### Dynamic Links
 TanStack Router enforces literal type constraints on `to`. Dynamic parameters must be written as:
 ```tsx
@@ -176,11 +183,11 @@ Do not use template strings:
 - Navigation items use `SidebarMenuButton` + `render={<Link to="..." />}`, do not use `asChild`.
 - **No right border**: add `group-data-[side=left]:border-r-0` on `Sidebar`, background blends with the main area (see UI design guidelines).
 - Structural layout:
-  - **Header**: Logo + collapse button (same row) + "Invite members" `SidebarMenuButton`.
+  - **Header**: Logo + collapse button (same row). (The "Invite members" entry was removed on 2026-07-25 — do not re-add without an explicit product decision.)
   - **Content**: Navigation grouped by Create / Post — Create contains Home, Brand template, Library; Post contains Projects, Speakers.
   - **Footer**: User avatar dropdown (`DropdownMenu`, `side="top"` popping upward, containing Profile / Settings / Logout) at the top, followed by account items (Subscription / Learning / Help).
 - Navigation / account icons uniformly `h-4.5 w-4.5`; in `sidebarMenuButtonVariants`, expanded `[&_svg]:size-4.5`, collapsed `group-data-[collapsible=icon]:[&_svg]:size-4.5`, keep them consistent.
-- **Collapsed state center alignment**: avatar / invite buttons placed in Header / Footer must be centered; add `group-data-[state=collapsed]:items-center` to the container, and the button itself uses `w-12` square in collapsed state; **do not** put these buttons inside `SidebarMenu` (the list padding will limit the width, causing a 4px offset in collapsed state).
+- **Collapsed state center alignment**: buttons placed in Header / Footer (e.g. the avatar) must be centered; add `group-data-[state=collapsed]:items-center` to the container, and the button itself uses `w-12` square in collapsed state; **do not** put these buttons inside `SidebarMenu` (the list padding will limit the width, causing a 4px offset in collapsed state).
 - When adding new sidebar entries, simultaneously update the `nav.*` keys in `zh.ts` / `en.ts`.
 
 ## UI Design Guidelines
@@ -188,7 +195,7 @@ Do not use template strings:
 Overall style: restrained, lightweight, unified. Key reference points:
 
 - **Border radius**: global small radius (`rounded-md` / `rounded-lg`), avoid `rounded-full` (except for circular icon buttons and red dots).
-- **Border & shadow**: prefer `ring-1 ring-border` for hairline stroke + `shadow-*` for lift; use solid `border` sparingly; avoid drawing dividers between sections whenever possible.
+- **Border & shadow**: **no outlines on cards** — depth via `shadow-*` + background contrast only; `ring` / `border` strokes on cards are prohibited; avoid drawing dividers between sections whenever possible.
 - **Sidebar blending into main area**: `--sidebar` color equals `--background` (both themes aligned in `styles.css`), and no right border, allowing the sidebar and content area to blend seamlessly.
 - **Colors**: only use shadcn theme variables (`bg-background` / `text-foreground` / `text-muted-foreground` / `bg-card` / `ring-border`, etc.), no hard-coded color values.
 - **Font weight**: body text and controls stay at regular weight; pill / secondary button text is not bold.
