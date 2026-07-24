@@ -20,6 +20,7 @@ from app.routers import (
     auth,
     brand_templates,
     chat,
+    distribution,
     files,
     intent,
     library,
@@ -240,6 +241,9 @@ app.include_router(intent, prefix="/api/v1", tags=["intent"])
 app.include_router(
     brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )
+# Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
+# resource, not the module — DISTRIBUTION.md §1.1)
+app.include_router(distribution, prefix="/api/v1", tags=["distribution"])
 
 
 @app.get("/health")

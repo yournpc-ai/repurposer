@@ -21,6 +21,11 @@ import structlog
 from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.services.asset_processing import process_asset
+from app.services.distribution import (
+    claim_due_publication,
+    process_publication,
+    reap_stale_publications,
+)
 from app.services.jobs import (
     claim_pending_asset,
     claim_pending_render,
@@ -40,6 +45,15 @@ _running_node_tasks: set[asyncio.Task] = set()
 async def _tick() -> bool:
     """Claim and run units of work. Returns True if anything was processed."""
     did_work = False
+
+    # Publications first (DISTRIBUTION.md §6): a scheduled publish is a time
+    # promise to the user and must not queue behind ASR / nodes / renders.
+    # The table is usually empty, so the check is nearly free.
+    async with AsyncSessionLocal() as db:
+        pub_id = await claim_due_publication(db)
+    if pub_id is not None:
+        did_work = True
+        await process_publication(pub_id)
 
     async with AsyncSessionLocal() as db:
         asset_id = await claim_pending_asset(db)
@@ -73,6 +87,7 @@ async def run_worker() -> None:
     logger.info("worker_starting", poll_interval=settings.worker_poll_interval)
     async with AsyncSessionLocal() as db:
         await reap_stale(db)
+        await reap_stale_publications(db)
     await finalize_stuck_runs()
 
     while True:

@@ -290,6 +290,28 @@ async def cancel_publication(
     return await _transition(db, pub, PublicationState.CANCELLED)
 
 
+async def retry_publication(
+    db: AsyncSession, pub_id: UUID, user_id: UUID
+) -> Publication:
+    """User-initiated retry of a FAILED order: fresh claim budget, due now.
+
+    If ``platform_job_id`` is set the worker resumes by *polling* that job
+    (reconciliation, §7) rather than re-posting; otherwise it begins a new
+    publish attempt.
+    """
+    pub = await db.get(Publication, pub_id)
+    if pub is None or pub.user_id != user_id:
+        raise DistributionError("publication_not_found")
+    if pub.state != PublicationState.FAILED:
+        raise DistributionError("illegal_transition", f"{pub.state.value} -> scheduled")
+    pub.attempt_count = 0
+    pub.last_error = None
+    await _transition(db, pub, PublicationState.SCHEDULED)
+    pub.due_at = datetime.now(UTC)
+    await db.flush()
+    return pub
+
+
 async def get_publication(db: AsyncSession, pub_id: UUID, user_id: UUID) -> Publication:
     pub = await db.get(Publication, pub_id)
     if pub is None or pub.user_id != user_id:

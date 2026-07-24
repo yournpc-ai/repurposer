@@ -5,6 +5,7 @@ from app.routers.assets import speaker_assets_router as speaker_assets
 from app.routers.auth import router as auth
 from app.routers.brand_templates import router as brand_templates
 from app.routers.chat import router as chat
+from app.routers.distribution import router as distribution
 from app.routers.files import router as files
 from app.routers.intent import router as intent
 from app.routers.library import router as library
@@ -18,6 +19,7 @@ __all__ = [
     "auth",
     "brand_templates",
     "chat",
+    "distribution",
     "files",
     "intent",
     "library",

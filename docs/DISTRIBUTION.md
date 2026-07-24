@@ -1,6 +1,6 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；📋 未实现——表结构与平台决策先行）
+> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；待办 = 平台应用凭据联调 + 前端 UI（发布对话框 / 发布记录页））
 >
 > 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `ROADMAP.md` §5；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 

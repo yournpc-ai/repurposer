@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     # Public base of this API, used to absolutize source URLs the render service
     # fetches (clip-spec stores relative stream URLs via the storage seam).
     api_public_url: str = "http://localhost:8000"
+    # Public base of the web app — OAuth callbacks redirect the browser back here.
+    web_public_url: str = "http://localhost:3000"
 
     # Auth / email
     resend_api_key: str = ""
