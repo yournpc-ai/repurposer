@@ -1,6 +1,6 @@
 # Task: Synthetic Talk Video — 生成端 v1（文字稿 + 照片 → 发言视频）
 
-> **Base branch**: `main`（待 backend-module-restructure 落地后 rebase）
+> **Base branch**: `main`（backend-module-restructure 已落地，路径已按新包结构核对）
 > **Architecture reference**: `docs/AGENT_ARCHITECTURE.md` §12；ADR-029（双链并列）
 > **Naming reference**: `docs/NAMING.md`（`voice_gen` / `synth_visual` 按 §5 注册零迁移）
 > **Status**: Ready for implementation
@@ -22,9 +22,9 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 
 ### 已在
 
-- `services/voice.py`：`clone_voice()`（声纹克隆）+ `synthesize()`（T2A）+ `extract_audio()`——Step 1 全部零件。
-- `services/asr.py`：词级时间戳 ASR——合成音频回配时间戳的现成机械。
-- Remotion 渲染服务 + `services/rendering.py`：spec → MP4 黑盒。
+- `tools/voice.py`：`clone_voice()`（声纹克隆）+ `synthesize()`（T2A）+ `extract_audio()`——Step 1 全部零件。
+- `tools/asr.py`：词级时间戳 ASR——合成音频回配时间戳的现成机械。
+- Remotion 渲染服务 + `pipeline/rendering.py`：spec → MP4 黑盒。
 - `Asset.provenance` / `outputs.provenance` 字段：谱系标记已在（ADR-030）。
 - Speaker 画像：声纹挂载点（`clone_voice` 结果挂 Speaker）。
 - PlanNodeKind 注册表守门（D6）：新 kind 注册零表迁移。
