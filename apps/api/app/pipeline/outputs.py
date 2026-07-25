@@ -68,6 +68,19 @@ def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:
     return totals if seen else None
 
 
+def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
+    """Run-level rollup of step summaries, derived at read time (no column).
+
+    "Done · 3 clips · 12 fillers removed" — the settled steps' spec.summary
+    parts joined in seq order (CHAT_ARCH §8)."""
+    parts = [
+        summary
+        for node in sorted(nodes, key=lambda n: n.seq)
+        if node.status == "done" and (summary := (node.spec or {}).get("summary"))
+    ]
+    return " · ".join(parts) if parts else None
+
+
 async def run_to_response(
     db: AsyncSession,
     run: WorkflowRun,

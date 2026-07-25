@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
 import { resolveProjectId } from "@/lib/constants"
+import { useRunEvents } from "@/lib/use-run-events"
 
 import type { Output, WorkflowStep, Project } from "@/lib/types"
 
@@ -117,6 +118,15 @@ function ProjectDetailPage() {
     fetchResults()
   }, [projectId])
 
+  // SSE drives the active-run phase (CHAT_ARCH §8): snapshot + step diffs
+  // replace the 2.5s polling below. The hook no-ops without a token, so
+  // anonymous demo viewers fall through to the legacy interval.
+  const runActive =
+    latestRun != null &&
+    (latestRun.status === "pending" || latestRun.status === "running")
+  const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
+  const sseActive = runActive && sse.steps.length > 0
+
   // Default to the first requested output tab once, when a generation is running.
   useEffect(() => {
     if (tabInitializedRef.current) return
@@ -129,10 +139,12 @@ function ProjectDetailPage() {
     }
   }, [latestRun?.context?.outputs])
 
-  // Poll the latest run until it settles AND no output is still
-  // rendering. Renders proceed independently of the run status.
+  // Keep polling only for what SSE does not cover: anonymous viewers (no
+  // token → hook no-ops) and outputs still rendering after the run settled
+  // (renders proceed independently of the run status).
   useEffect(() => {
     if (!results?.latest_run) return
+    if (sseActive) return
 
     const status = results.latest_run.status
 
@@ -141,7 +153,7 @@ function ProjectDetailPage() {
     )
 
     // A settled run (completed or failed) never progresses its outputs
-    // further — stop polling regardless of what the node statuses say.
+    // further — stop polling regardless of what the step statuses say.
     // Renders proceed independently of the run, so keep polling only while
     // any are active.
     if ((status === "completed" || status === "failed") && !hasRenderingOutputs) {
@@ -152,9 +164,9 @@ function ProjectDetailPage() {
       fetchResults()
     }, 2500)
     return () => clearInterval(interval)
-  }, [results?.latest_run, results?.outputs])
+  }, [results?.latest_run, results?.outputs, sseActive])
 
-  const nodes = latestRun?.steps ?? []
+  const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
   const clipCount = latestRun?.context?.clip_count ?? 5
 
   const requestedTabs = (latestRun?.context?.outputs ?? [])
@@ -182,10 +194,29 @@ function ProjectDetailPage() {
     )
     .map((n) => NODE_KIND_TO_TAB[n.kind])
 
-  // The loading dialog's lifecycle is driven entirely by the backend's
-  // ui_step: it covers asset processing, the generation run, and the wait
-  // for the first clip render (ready_to_render at 100%), then disappears.
-  const showProgress = results?.ui_step != null
+  // While SSE is active the stepper derives from the live step stream:
+  // percent = settled/total (via the existing (index+1)/total formula),
+  // label = the running step's stage (or kind). Structure is untouched.
+  const sseUiStep = useMemo<UiStep | null>(() => {
+    if (!sseActive) return null
+    const total = sse.steps.length
+    if (!total) return null
+    const settled = sse.steps.filter(
+      (s) => s.status === "done" || s.status === "failed" || s.status === "skipped"
+    ).length
+    const running = sse.steps.find((s) => s.status === "running")
+    return {
+      key: running?.stage ?? running?.kind ?? "queued",
+      index: settled - 1,
+      total,
+    }
+  }, [sseActive, sse.steps])
+
+  // The loading dialog's lifecycle is driven by the backend's ui_step
+  // (asset processing → generation run → first render), with the live SSE
+  // derivation taking over while a run is streaming.
+  const uiStep = sseUiStep ?? results?.ui_step
+  const showProgress = uiStep != null
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
@@ -410,7 +441,7 @@ function ProjectDetailPage() {
         </div>
 
         {showProgress && (
-          <GenerationStepper open={showProgress} uiStep={results?.ui_step} />
+          <GenerationStepper open={showProgress} uiStep={uiStep} />
         )}
 
         {/* Content */}

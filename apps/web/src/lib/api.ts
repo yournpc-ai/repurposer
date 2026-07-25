@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 /** Dispatched on window when any API call answers 401, so the AuthProvider
  * can clear state and open the login dialog instead of leaving raw errors. */

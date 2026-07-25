@@ -72,7 +72,7 @@ const zh: Resources = {
     heroTitle1: "你讲完了。",
     heroTitle2: "剩下的交给我们。",
     heroSubtitle:
-      "Repurposer 是一个 AI agent：它先读懂你真实的表达——你的用词、你的术语、你的节奏。给它一段<b>视频</b>、一段录音，或只是演讲、播客、访谈的文字稿加几张照片，它就能产出切片、LinkedIn 长文、文章和 newsletter，<b>五种语言</b>。<b>你来审定，它来发布。</b>",
+      "Repurposer 是一个 AI agent：它先读懂你真实的表达——你的用词、你的术语、你的节奏。给它一段<b>视频</b>、一段录音，或只是演讲、播客、访谈的文字稿加几张照片，它就能产出切片、LinkedIn 长文、文章和 newsletter，<b>用你受众的语言</b>。<b>你来审定，它来发布。</b>",
     ctaTryBeta: "免费试用测试版",
   },
   composer: {
@@ -443,6 +443,8 @@ const zh: Resources = {
       writing_copy: "正在撰写文案…",
       generating_image: "正在生成金句卡图片…",
       ready_to_render: "即将开始渲染…",
+      removing_fillers: "正在去除口头禅…",
+      adding_music: "正在为片段配乐…",
     },
     retry: "重试",
     retryFailed: "重试失败的输出",

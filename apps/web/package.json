@@ -16,6 +16,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/inter": "^5.2.8",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@remotion/player": "^4.0.0",
     "@repurposer/clip": "workspace:*",
     "@shadcn/react": "^0.2.0",

@@ -6,6 +6,7 @@ from app.pipeline.routes.library import router as library
 from app.pipeline.routes.music import router as music
 from app.pipeline.routes.outputs import router as outputs
 from app.pipeline.routes.projects import router as projects
+from app.pipeline.routes.runs import router as runs
 
 __all__ = [
     "assets",
@@ -13,5 +14,6 @@ __all__ = [
     "music",
     "outputs",
     "projects",
+    "runs",
     "speaker_assets",
 ]

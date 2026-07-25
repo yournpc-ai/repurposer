@@ -27,6 +27,7 @@ from app.pipeline.routes import (
     music,
     outputs,
     projects,
+    runs,
     speaker_assets,
 )
 from app.platform.routes import auth_router, files_router, notifications_router
@@ -227,6 +228,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(speakers_router, prefix="/api/v1/speakers", tags=["speakers"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(runs, prefix="/api/v1/runs", tags=["runs"])
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])

@@ -70,7 +70,7 @@ const en = {
     heroTitle1: "You did the talking.",
     heroTitle2: "We do the rest.",
     heroSubtitle:
-      "Repurposer is an AI agent that studies how you actually write and speak — your habits, your terms, your rhythm. Give it a <b>video</b>, an audio file, or just the transcript and some photos from a talk, podcast or interview, and it produces clips, LinkedIn posts, articles and newsletters <b>in five languages</b>. <b>You review. It publishes.</b>",
+      "Repurposer is an AI agent that studies how you actually write and speak — your habits, your terms, your rhythm. Give it a <b>video</b>, an audio file, or just the transcript and some photos from a talk, podcast or interview, and it produces clips, LinkedIn posts, articles and newsletters <b>in the languages your audience speaks</b>. <b>You review. It publishes.</b>",
     ctaTryBeta: "Try the free beta",
   },
   composer: {
@@ -441,6 +441,8 @@ const en = {
       writing_copy: "Writing your copy…",
       generating_image: "Generating quote card images…",
       ready_to_render: "About to start rendering…",
+      removing_fillers: "Removing filler words…",
+      adding_music: "Scoring your clips…",
     },
     retry: "Retry",
     retryFailed: "Retry failed output",
