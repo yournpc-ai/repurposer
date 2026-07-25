@@ -191,6 +191,19 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] = Field(default_factory=list)
 
 
+class TaskItem(BaseModel):
+    """One LLM-proposed task: a registry skill plus its params (CHAT_ARCH §3).
+
+    The LLM proposes; ``compile_graph`` adjudicates existence, params and
+    topology against ``pipeline/registry.py`` — the LLM never writes node specs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    skill: str
+    params: dict = Field(default_factory=dict)
+
+
 class ChatResponse(BaseModel):
     """Result of sending a chat message."""
 

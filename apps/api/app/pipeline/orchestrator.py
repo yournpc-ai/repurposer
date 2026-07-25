@@ -18,20 +18,23 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import ProjectStatus, WorkflowStatus
-from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
+from app.models.schemas import AssetType, ProjectStatus, TaskItem, WorkflowStatus
+from app.models.tables import Asset, Output, WorkflowStep, Project, Speaker, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.node_runners import KNOWN_OUTPUTS, STEP_RUNNERS
+from app.pipeline.registry import (
+    SkillEntry,
+    generation_node_kinds,
+    validate_task_list,
+)
 
 logger = structlog.get_logger()
 
-GENERATION_NODE_KINDS = frozenset(
-    {"clips_pipeline", "post_gen", "quotes_gen", "carousel_gen", "article_gen"}
-)
+GENERATION_NODE_KINDS = generation_node_kinds()
 
 _OUTPUT_TO_NODE_KIND: dict[str, str] = {
     "clips": "clips_pipeline",
@@ -48,6 +51,8 @@ class TaskSpec(BaseModel):
     """The task book: normalized generation intent (任务书).
 
     Mirrors GenerateRequest/chat dispatch; stored verbatim on run.context.
+    ``tasks`` is the LLM-proposed task list (CHAT_ARCH §3) — when present,
+    compile_graph runs mode② and the fixed topologies below are bypassed.
     """
 
     outputs: list[str] = ["clips"]
@@ -59,6 +64,7 @@ class TaskSpec(BaseModel):
     scope: str = "full"
     operation: str = "regenerate"
     target_id: UUID | None = None
+    tasks: list[TaskItem] | None = None
 
 
 class _NodeSpec:
@@ -76,11 +82,16 @@ class _NodeSpec:
 def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeSpec]:
     """Lower a task book into a fixed node topology (pure, code-determined).
 
+    Mode② (task list): ``task.tasks`` is materialized via ``_compile_task_list``.
+    Mode① (fixed topology):
     Full run:   preprocess -> persona_bootstrap -> director_plan
                 -> {clips_pipeline | post_gen | quotes_gen | carousel_gen | article_gen}
     Targeted:   hook/clip -> [script];  derivative -> [director_plan -> X_gen];
                 render -> [render].
     """
+    if task.tasks:
+        return _compile_task_list(task)
+
     scope = task.scope or "full"
 
     if scope == "full":
@@ -143,6 +154,162 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
     raise ValueError(f"Targeted scope not implemented: {scope}")
 
 
+_SKILL_TO_OUTPUT: dict[str, str] = {
+    "select_clips": "clips",
+    "write_post": "post",
+    "write_quotes": "quotes",
+    "write_carousel": "carousel",
+    "write_article": "article",
+}
+
+
+def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
+    """Mode②: materialize an LLM-proposed task list into a standard graph.
+
+    Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
+    and params; topology is derived here — generation skills that need a
+    director share one deduped prelude (preprocess → persona_bootstrap →
+    director_plan); modifier skills (needs_director=False, e.g. remove_filler
+    / add_music) hang off the clips node when one exists, else get empty
+    inputs (= act on the project's existing clips). Modifiers are chained in
+    proposal order so two of them never edit the same render_spec
+    concurrently. Defaults come from the params schemas, never from the LLM.
+    """
+    entries = validate_task_list(task.tasks or [])  # raises SkillRejected
+    nodes: list[_NodeSpec] = []
+
+    if any(entry.needs_director for entry in entries):
+        nodes.extend(
+            [
+                _NodeSpec("preprocess", 1),
+                _NodeSpec("persona_bootstrap", 2, inputs=[0]),
+                _NodeSpec("director_plan", 3, inputs=[1]),
+            ]
+        )
+    director_idx = 2 if nodes else None
+
+    seq = 10
+    skill_node_idx: dict[str, int] = {}
+    modifiers: list[tuple[TaskItem, SkillEntry]] = []
+    for item, entry in zip(task.tasks or [], entries, strict=True):
+        params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
+        if not entry.needs_director and not entry.produces_outputs:
+            modifiers.append((item, entry))
+            continue
+        if entry.name == "revise_script":
+            assert params is not None
+            spec = {
+                "scope": params.scope,
+                "target_id": params.target_output_id
+                or (str(task.target_id) if task.target_id else None),
+                "instruction": params.instruction or task.instruction,
+                "operation": "revise",
+            }
+        elif entry.node_kind == "clips_pipeline":
+            spec = {"target_language": task.target_language}
+        else:
+            spec = {
+                "target_id": str(task.target_id) if task.target_id else None,
+                "target_language": task.target_language,
+                "target_type": _SKILL_TO_OUTPUT[entry.name],
+            }
+        inputs = [director_idx] if director_idx is not None else []
+        skill_node_idx[entry.name] = len(nodes)
+        nodes.append(_NodeSpec(entry.node_kind, seq, inputs=inputs, spec=spec))
+        seq += 1
+
+    # Modifiers run after the nodes named in their `after` constraints (when
+    # present in this graph) and after the previous modifier — never in
+    # parallel with each other. No edges at all = act on existing clips.
+    prev_modifier_idx: int | None = None
+    for item, entry in modifiers:
+        params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
+        inputs = [skill_node_idx[name] for name in entry.after if name in skill_node_idx]
+        if prev_modifier_idx is not None:
+            inputs.append(prev_modifier_idx)
+        prev_modifier_idx = len(nodes)
+        spec = params.model_dump(mode="json") if params else {}
+        nodes.append(_NodeSpec(entry.node_kind, seq, inputs=inputs, spec=spec))
+        seq += 1
+
+    return nodes
+
+
+def derive_context_fields(tasks: list[TaskItem]) -> dict:
+    """Backfill the mode① context fields (outputs / clip_count) from a task
+    list, so run.context consumers always see the same shape."""
+    outputs: list[str] = []
+    clip_count: int | None = None
+    for item in tasks:
+        output = _SKILL_TO_OUTPUT.get(item.skill)
+        if output and output not in outputs:
+            outputs.append(output)
+        if item.skill == "select_clips" and (item.params or {}).get("count"):
+            clip_count = int(item.params["count"])
+    fields: dict = {"outputs": outputs}
+    if clip_count is not None:
+        fields["clip_count"] = clip_count
+    return fields
+
+
+async def _validate_requires(
+    db: AsyncSession, project: Project, entries: list[SkillEntry]
+) -> None:
+    """Birthplace rejection: every input a task list's skills declare must
+    exist on the project before the run is created (CHAT_ARCH §5)."""
+    needs: set[str] = set()
+    for entry in entries:
+        needs.update(entry.requires)
+    for req in sorted(needs):
+        missing = False
+        if req == "media":
+            result = await db.execute(
+                select(Asset.id)
+                .where(
+                    Asset.project_id == project.id,
+                    Asset.type.in_(
+                        [AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES]
+                    ),
+                    Asset.file_url.isnot(None),
+                )
+                .limit(1)
+            )
+            missing = result.scalar_one_or_none() is None
+        elif req == "transcript":
+            result = await db.execute(
+                select(Asset.id)
+                .where(
+                    Asset.project_id == project.id,
+                    or_(
+                        Asset.transcript.isnot(None),
+                        Asset.meta.has_key("words"),  # noqa: W601
+                    ),
+                )
+                .limit(1)
+            )
+            missing = result.scalar_one_or_none() is None
+        elif req == "speaker_photo":
+            speaker = (
+                await db.get(Speaker, project.speaker_id) if project.speaker_id else None
+            )
+            missing = speaker is None or not speaker.avatar_url
+        elif req == "voiceprint":
+            if not project.speaker_id:
+                missing = True
+            else:
+                result = await db.execute(
+                    select(Asset.id)
+                    .where(
+                        Asset.speaker_id == project.speaker_id,
+                        Asset.type == AssetType.VOICE_SAMPLE,
+                    )
+                    .limit(1)
+                )
+                missing = result.scalar_one_or_none() is None
+        if missing:
+            raise ValueError(f"Missing required input: {req}")
+
+
 async def create_run(
     db: AsyncSession,
     project: Project,
@@ -157,6 +324,10 @@ async def create_run(
         if target.type not in _OUTPUT_TO_NODE_KIND or target.type == "clips":
             raise ValueError(f"Target output type {target.type} is not regenerable")
         target_type = target.type
+
+    if task.tasks:
+        entries = validate_task_list(task.tasks)  # raises SkillRejected
+        await _validate_requires(db, project, entries)
 
     run = WorkflowRun(
         project_id=project.id,
