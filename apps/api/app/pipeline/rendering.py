@@ -10,7 +10,7 @@ Output keys carry a per-render timestamp suffix (``<output_id>-<ts>.mp4``) so a
 re-render never overwrites the object a browser may have cached under the same
 URL. The previous render's objects are deleted once the new one succeeds.
 
-Render node mirror (RunPlan Phase 1, D2): if the output has a render plan node
+Render node mirror (RunPlan Phase 1, D2): if the output has a render workflow step
 (run-scoped renders), its status mirrors the render lifecycle — the node is
 visibility + cost home, the claim stays on ``outputs.render_status`` so
 run-less re-renders (manual render / dub / translate) keep working unchanged.
@@ -103,7 +103,7 @@ async def _mirror_render_node(
         async with AsyncSessionLocal() as db:
             await db.execute(
                 text(
-                    "UPDATE plan_nodes SET status = CAST(:st AS varchar), error = :err, "
+                    "UPDATE workflow_steps SET status = CAST(:st AS varchar), error = :err, "
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
                     "ELSE finished_at END, updated_at = now() "
                     "WHERE kind = 'render' "
@@ -131,7 +131,7 @@ async def render_output(output_id: UUID) -> None:
 
     Assumes the output is already claimed (RENDERING). On success writes
     files.video/files.srt + COMPLETED; on any error writes FAILED with the
-    message. Terminal state is mirrored onto the render plan node when present.
+    message. Terminal state is mirrored onto the render workflow step when present.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(

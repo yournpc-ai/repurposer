@@ -32,7 +32,7 @@ from app.pipeline.jobs import (
     claim_ready_node,
     reap_stale,
 )
-from app.pipeline.orchestrator import execute_node, finalize_stuck_runs
+from app.pipeline.orchestrator import execute_step, finalize_stuck_runs
 from app.pipeline.rendering import render_output
 
 logger = structlog.get_logger()
@@ -69,7 +69,7 @@ async def _tick() -> bool:
         if node_id is None:
             break
         did_work = True
-        task = asyncio.create_task(execute_node(node_id))
+        task = asyncio.create_task(execute_step(node_id))
         _running_node_tasks.add(task)
         task.add_done_callback(_running_node_tasks.discard)
 

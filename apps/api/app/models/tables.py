@@ -174,7 +174,7 @@ class BrandTemplate(Base):
 class WorkflowRun(Base):
     """Workflow run table — run-level state machine only.
 
-    Per-step state lives in plan_nodes (RunPlan); ``context`` is the task
+    Per-step state lives in workflow_steps (RunPlan); ``context`` is the task
     book (normalized intent), ``progress`` aggregates node states. The retired
     current_step string is gone (query running nodes instead).
     """
@@ -191,7 +191,7 @@ class WorkflowRun(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
-class PlanNode(Base):
+class WorkflowStep(Base):
     """RunPlan node: one step of a run's execution plan (ADR-028).
 
     The plan graph is materialized at run creation by the orchestrator —
@@ -199,11 +199,11 @@ class PlanNode(Base):
     (upstream node ids); ``spec`` carries DB-opaque params (instruction,
     language, counts, target ids); ``output_refs`` lists produced outputs rows;
     ``cost`` is the per-node metering ledger (ADR-025, written by
-    services/metering.py). Node status transitions are row-level writes — the
+    app/metering.py). Step status transitions are row-level writes — the
     retired run-context JSON blob + process lock is gone.
     """
 
-    __tablename__ = "plan_nodes"
+    __tablename__ = "workflow_steps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     run_id = Column(
@@ -229,8 +229,8 @@ class PlanNode(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
     __table_args__ = (
-        Index("ix_plan_nodes_run_status", "run_id", "status"),
-        Index("ix_plan_nodes_kind_status", "kind", "status"),
+        Index("ix_workflow_steps_run_status", "run_id", "status"),
+        Index("ix_workflow_steps_kind_status", "kind", "status"),
     )
 
 
@@ -242,7 +242,7 @@ class Output(Base):
     types. Type-specific content lives in ``payload`` guarded by
     OUTPUT_PAYLOAD_SCHEMAS; ``files`` holds produced artifacts
     (video/srt/image object keys); ``publishing`` is the distribution metadata
-    home (title/description/hashtags/cover_image_url/topic); ``plan_node_id``
+    home (title/description/hashtags/cover_image_url/topic); ``workflow_step_id``
     is read-only lineage back to the producing node.
     """
 
@@ -250,9 +250,9 @@ class Output(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    plan_node_id = Column(
+    workflow_step_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("plan_nodes.id", ondelete="SET NULL"),
+        ForeignKey("workflow_steps.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -284,15 +284,15 @@ class Output(Base):
     )
 
 
-class ChatSession(Base):
-    """A chat session scoped to a project or a specific result asset.
+class Conversation(Base):
+    """A conversation scoped to a project or a specific result asset.
 
     Provides a unified conversation container for multi-turn editing. The same
     table supports project-level brainstorming and asset-level (clip/derivative)
     quick revisions.
     """
 
-    __tablename__ = "chat_sessions"
+    __tablename__ = "conversations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -310,7 +310,7 @@ class ChatSession(Base):
 
 
 class Message(Base):
-    """A single message inside a chat session.
+    """A single message inside a conversation.
 
     Keeps chat history minimal: role, content, optional attachments, and a
     link to the workflow run that was triggered by this message (if any).
@@ -320,21 +320,24 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    session_id = Column(
+    conversation_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=True)
     attachments = Column(JSON, default=list)
+    # @ entity refs (asset/output/transcript_segment/workflow_step); the
+    # picker UI lands in a later iteration — the column is the seat.
+    mentions = Column(JSONB, nullable=False, default=list, server_default="[]")
     workflow_run_id = Column(
         UUID(as_uuid=True),
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
-    intent = Column(JSON, nullable=True)  # rule-classified intent for this turn (LLM parser app/agents/intent.py is not yet wired into chat)
+    intent = Column(JSON, nullable=True)  # IntentProposal dump for this turn (chat/intent.py ChatIntentAgent)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

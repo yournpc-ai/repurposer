@@ -470,7 +470,7 @@ async def regenerate_output(
     )
 
     return {
-        "job_id": str(result.job_id) if result.job_id else None,
+        "run_id": str(result.run_id) if result.run_id else None,
         "message_id": str(result.assistant_message.id),
-        "session_id": str(result.session_id),
+        "conversation_id": str(result.conversation_id),
     }

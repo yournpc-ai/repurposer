@@ -19,7 +19,7 @@ import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
 import { resolveProjectId } from "@/lib/constants"
 
-import type { Output, PlanNode, Project } from "@/lib/types"
+import type { Output, WorkflowStep, Project } from "@/lib/types"
 
 interface AssetStatusEntry {
   id: string
@@ -43,7 +43,7 @@ interface WorkflowRun {
     tone_settings?: Record<string, unknown> | null
   } | null
   cost: Record<string, number> | null
-  nodes: PlanNode[]
+  steps: WorkflowStep[]
   created_at: string
   updated_at: string | null
 }
@@ -52,7 +52,7 @@ interface ProjectResults {
   project: Project
   prompt: string | null
   outputs: Output[]
-  latest_job: WorkflowRun | null
+  latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
   ui_step?: UiStep | null
 }
@@ -110,7 +110,7 @@ function ProjectDetailPage() {
     }
   }
 
-  const latestJob = results?.latest_job
+  const latestRun = results?.latest_run
 
   useEffect(() => {
     setLoading(true)
@@ -120,21 +120,21 @@ function ProjectDetailPage() {
   // Default to the first requested output tab once, when a generation is running.
   useEffect(() => {
     if (tabInitializedRef.current) return
-    if (!latestJob?.context?.outputs?.length) return
-    const firstRequested = latestJob.context.outputs[0]
+    if (!latestRun?.context?.outputs?.length) return
+    const firstRequested = latestRun.context.outputs[0]
     const tab = OUTPUT_KEY_TO_TAB[firstRequested]
     if (tab) {
       setActiveTab(tab)
       tabInitializedRef.current = true
     }
-  }, [latestJob?.context?.outputs])
+  }, [latestRun?.context?.outputs])
 
-  // Poll the latest job until the run settles AND no output is still
+  // Poll the latest run until it settles AND no output is still
   // rendering. Renders proceed independently of the run status.
   useEffect(() => {
-    if (!results?.latest_job) return
+    if (!results?.latest_run) return
 
-    const status = results.latest_job.status
+    const status = results.latest_run.status
 
     const hasRenderingOutputs = (results.outputs ?? []).some(
       (o: Output) => o.render_status === "pending" || o.render_status === "rendering"
@@ -152,18 +152,18 @@ function ProjectDetailPage() {
       fetchResults()
     }, 2500)
     return () => clearInterval(interval)
-  }, [results?.latest_job, results?.outputs])
+  }, [results?.latest_run, results?.outputs])
 
-  const nodes = latestJob?.nodes ?? []
-  const clipCount = latestJob?.context?.clip_count ?? 5
+  const nodes = latestRun?.steps ?? []
+  const clipCount = latestRun?.context?.clip_count ?? 5
 
-  const requestedTabs = (latestJob?.context?.outputs ?? [])
+  const requestedTabs = (latestRun?.context?.outputs ?? [])
     .map((o) => OUTPUT_KEY_TO_TAB[o])
     .filter(Boolean) as ResultsTab[]
 
   // When the run itself failed, nodes that never reached a terminal state
   // are dead too — present them as failed (with a retry) instead of skeletons.
-  const runFailed = latestJob?.status === "failed"
+  const runFailed = latestRun?.status === "failed"
 
   const runningTabs = nodes
     .filter(
@@ -192,7 +192,7 @@ function ProjectDetailPage() {
     const outputKey = TAB_TO_OUTPUT_KEY[tab]
     setRetrying((prev) => ({ ...prev, [tab]: true }))
     try {
-      const ctx = latestJob?.context
+      const ctx = latestRun?.context
       await apiPost(`/api/v1/projects/${projectId}/generate`, {
         outputs: [outputKey],
         clip_count: outputKey === "clips" ? clipCount : undefined,
@@ -286,7 +286,7 @@ function ProjectDetailPage() {
     return (
       <Card className="p-8 text-center ring-1 ring-border shadow-xl">
         <p className="text-sm text-destructive">
-          {node?.error || latestJob?.error || t("results.retryFailed")}
+          {node?.error || latestRun?.error || t("results.retryFailed")}
         </p>
         <Button
           variant="outline"

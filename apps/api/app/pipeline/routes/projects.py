@@ -18,12 +18,12 @@ from app.models.schemas import (
     ProjectResultsResponse,
     ProjectStatus,
     ProjectUpdate,
-    WorkflowRunResponse,
+    RunResponse,
 )
 from app.models.tables import (
     Asset,
     Output,
-    PlanNode,
+    WorkflowStep,
     Project,
     Speaker,
     User,
@@ -33,9 +33,9 @@ from app.chat.service import get_project_prompt, seed_project_prompt
 from app.demo_seed import DEMO_PROJECT_ID
 from app.pipeline.orchestrator import TaskSpec, create_run
 from app.pipeline.outputs import (
-    aggregate_node_cost,
+    aggregate_step_cost,
     list_visible_outputs,
-    plan_node_to_response,
+    workflow_step_to_response,
     run_to_response,
     visible_outputs_stmt,
 )
@@ -178,13 +178,13 @@ def _ui_steps_for_outputs(outputs: list[str]) -> list[str]:
 
 def _compute_ui_step(
     assets: list[Asset],
-    latest_job: WorkflowRun | None,
-    nodes: list[PlanNode],
+    latest_run: WorkflowRun | None,
+    nodes: list[WorkflowStep],
     outputs: list[Output],
 ) -> dict | None:
     """Stepper position for the results-page loading dialog.
 
-    Derived from the run's plan_nodes (RunPlan Phase 1): the current step is
+    Derived from the run's workflow_steps (RunPlan Phase 1): the current step is
     the first non-settled node by seq; node kind/stage maps onto the existing
     i18n step keys, so the frontend contract ({key, index, total}) is
     unchanged. None = hide the dialog (no run, run failed, or everything
@@ -195,10 +195,10 @@ def _compute_ui_step(
     dialog closes and each clip card's own spinner takes over — the frontend
     keeps polling while any render is active, so the cards stay live.
     """
-    if latest_job is None or latest_job.status == "failed":
+    if latest_run is None or latest_run.status == "failed":
         return None
 
-    ctx = latest_job.context or {}
+    ctx = latest_run.context or {}
     outputs_requested = ctx.get("outputs") or ["clips"]
     steps = _ui_steps_for_outputs(outputs_requested)
 
@@ -223,7 +223,7 @@ def _compute_ui_step(
     if any(a.processing_status in ("pending", "processing") for a in assets):
         return at("transcribing")
 
-    if latest_job.status == "pending":
+    if latest_run.status == "pending":
         return at("queued")
 
     current = next(
@@ -249,7 +249,7 @@ def _compute_ui_step(
             return None if rendering else at("ready_to_render")
         return at("prepare")
 
-    if latest_job.status == "completed":
+    if latest_run.status == "completed":
         if "ready_to_render" in steps:
             rendering, pending = clip_render_state()
             # All clips queued but none claimed yet → still "about to start
@@ -270,40 +270,40 @@ async def get_project_results(
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
 ) -> dict:
-    """Aggregate project results: metadata, prompt, outputs, latest job + nodes."""
+    """Aggregate project results: metadata, prompt, outputs, latest run + steps."""
     project = await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
 
-    # The original prompt is the first user message in the project-scoped chat session.
+    # The original prompt is the first user message in the project-scoped conversation.
     prompt = await get_project_prompt(db, project_id)
 
-    latest_job_result = await db.execute(
+    latest_run_result = await db.execute(
         select(WorkflowRun)
         .where(WorkflowRun.project_id == project_id)
         .order_by(WorkflowRun.created_at.desc())
         .limit(1)
     )
-    latest_job = latest_job_result.scalar_one_or_none()
+    latest_run = latest_run_result.scalar_one_or_none()
 
     # User-facing outputs only (internal node artifacts stay hidden). Outputs
     # are replaced per type on each run, so the list is already "latest".
     outputs = await list_visible_outputs(db, project_id)
 
-    nodes: list[PlanNode] = []
-    if latest_job is not None:
+    nodes: list[WorkflowStep] = []
+    if latest_run is not None:
         nodes_result = await db.execute(
-            select(PlanNode)
-            .where(PlanNode.run_id == latest_job.id)
-            .order_by(PlanNode.seq)
+            select(WorkflowStep)
+            .where(WorkflowStep.run_id == latest_run.id)
+            .order_by(WorkflowStep.seq)
         )
         nodes = list(nodes_result.scalars().all())
 
-    latest_job_resp = None
-    if latest_job is not None:
-        latest_job_resp = WorkflowRunResponse.model_validate(latest_job)
-        latest_job_resp.nodes = [plan_node_to_response(n) for n in nodes]
-        latest_job_resp.cost = aggregate_node_cost(nodes)
+    latest_run_resp = None
+    if latest_run is not None:
+        latest_run_resp = RunResponse.model_validate(latest_run)
+        latest_run_resp.steps = [workflow_step_to_response(n) for n in nodes]
+        latest_run_resp.cost = aggregate_step_cost(nodes)
 
     # Asset processing statuses power the results-page loading state (the
     # transcribing/parsing phase before the generation run starts).
@@ -316,9 +316,9 @@ async def get_project_results(
         "project": project,
         "prompt": prompt,
         "outputs": outputs,
-        "latest_job": latest_job_resp,
+        "latest_run": latest_run_resp,
         "assets": assets,
-        "ui_step": _compute_ui_step(assets, latest_job, nodes, outputs),
+        "ui_step": _compute_ui_step(assets, latest_run, nodes, outputs),
     }
 
 
@@ -379,7 +379,7 @@ async def generate_content(
 ) -> dict:
     """Queue background generation for a project.
 
-    Ensures the project-scoped chat session exists so the original prompt is
+    Ensures the project-scoped conversation exists so the original prompt is
     persisted, then creates a PENDING WorkflowRun. The background worker claims
     and runs it (see app.worker).
     """
@@ -415,8 +415,8 @@ async def generate_content(
                 ),
             )
 
-    # Persist the original prompt in the project-scoped chat session if it is
-    # not already there. This is a no-op when the session already has messages.
+    # Persist the original prompt in the project-scoped conversation if it is
+    # not already there. This is a no-op when the conversation already has messages.
     prompt_text = request.instruction or "Generate content from the uploaded assets."
     await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
 
@@ -444,18 +444,18 @@ async def generate_content(
     await db.refresh(run)
 
     return {
-        "job_id": str(run.id),
+        "run_id": str(run.id),
         "status": run.status.value,
     }
 
 
-@router.get("/{project_id}/jobs", response_model=list[WorkflowRunResponse])
-async def list_project_jobs(
+@router.get("/{project_id}/runs", response_model=list[RunResponse])
+async def list_project_runs(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
 ) -> list[WorkflowRun]:
-    """List generation jobs for a project, newest first."""
+    """List generation runs for a project, newest first."""
     await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
@@ -467,22 +467,22 @@ async def list_project_jobs(
     return list(result.scalars().all())
 
 
-@router.get("/{project_id}/jobs/{job_id}", response_model=WorkflowRunResponse)
-async def get_project_job(
+@router.get("/{project_id}/runs/{run_id}", response_model=RunResponse)
+async def get_project_run(
     project_id: UUID,
-    job_id: UUID,
+    run_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> WorkflowRunResponse:
-    """Get a single generation job's status (with plan nodes + aggregated cost)."""
+) -> RunResponse:
+    """Get a single generation run's status (with workflow steps + aggregated cost)."""
     await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
-    run = await db.get(WorkflowRun, job_id)
+    run = await db.get(WorkflowRun, run_id)
     if run is None or run.project_id != project_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found",
+            detail="Run not found",
         )
     return await run_to_response(db, run)
 

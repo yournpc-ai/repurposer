@@ -1,11 +1,11 @@
 """Generic chat service.
 
-A chat session is the universal container. It can be project-scoped (the
+A chat conversation is the universal container. It can be project-scoped (the
 original prompt plus project-level follow-ups) or asset-scoped (a clip,
 LinkedIn post, quote card, etc.).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
-locates or creates the right session, builds the correct context, and returns
+locates or creates the right conversation, builds the correct context, and returns
 an assistant reply. Background work is dispatched through ``WorkflowRun``.
 """
 
@@ -16,84 +16,84 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import ChatIntent, ChatMessageResponse, ChatRequest, ChatResponse
-from app.models.tables import ChatSession, Message, Project
+from app.models.tables import Conversation, Message, Project
 
 
-async def _get_or_create_project_session(
+async def _get_or_create_project_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
-) -> ChatSession:
+) -> Conversation:
     result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.project_id == project_id,
-            ChatSession.asset_id.is_(None),
-            ChatSession.user_id == user_id,
+        select(Conversation).where(
+            Conversation.project_id == project_id,
+            Conversation.asset_id.is_(None),
+            Conversation.user_id == user_id,
         )
     )
-    session = result.scalar_one_or_none()
-    if session is None:
-        session = ChatSession(
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        conversation = Conversation(
             user_id=user_id,
             project_id=project_id,
             title="Project chat",
         )
-        db.add(session)
+        db.add(conversation)
         await db.flush()
-        await db.refresh(session)
-    return session
+        await db.refresh(conversation)
+    return conversation
 
 
-async def _get_or_create_asset_session(
+async def _get_or_create_asset_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
     asset_id: UUID,
     asset_type: str,
     title: str | None = None,
-) -> ChatSession:
+) -> Conversation:
     result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.project_id == project_id,
-            ChatSession.asset_id == asset_id,
-            ChatSession.asset_type == asset_type,
-            ChatSession.user_id == user_id,
+        select(Conversation).where(
+            Conversation.project_id == project_id,
+            Conversation.asset_id == asset_id,
+            Conversation.asset_type == asset_type,
+            Conversation.user_id == user_id,
         )
     )
-    session = result.scalar_one_or_none()
-    if session is None:
-        session = ChatSession(
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        conversation = Conversation(
             user_id=user_id,
             project_id=project_id,
             asset_id=asset_id,
             asset_type=asset_type,
             title=title or f"{asset_type} chat",
         )
-        db.add(session)
+        db.add(conversation)
         await db.flush()
-        await db.refresh(session)
-    return session
+        await db.refresh(conversation)
+    return conversation
 
 
-async def _get_or_create_session(
+async def _get_or_create_conversation(
     db: AsyncSession,
     user_id: UUID,
     request: ChatRequest,
-) -> ChatSession:
+) -> Conversation:
     if request.asset_id and request.asset_type:
-        return await _get_or_create_asset_session(
+        return await _get_or_create_asset_conversation(
             db,
             user_id,
             request.project_id,
             request.asset_id,
             request.asset_type,
         )
-    return await _get_or_create_project_session(db, user_id, request.project_id)
+    return await _get_or_create_project_conversation(db, user_id, request.project_id)
 
 
 async def _create_message(
     db: AsyncSession,
-    session_id: UUID,
+    conversation_id: UUID,
     role: str,
     content: str,
     *,
@@ -102,7 +102,7 @@ async def _create_message(
     intent: dict[str, Any] | None = None,
 ) -> Message:
     message = Message(
-        session_id=session_id,
+        conversation_id=conversation_id,
         role=role,
         content=content,
         attachments=attachments or [],
@@ -121,7 +121,7 @@ async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
 
 def _build_context(
     project: Project,
-    session: ChatSession,
+    conversation: Conversation,
     messages: list[Message],
 ) -> dict[str, Any]:
     """Build the context object fed to the chat intent parser."""
@@ -132,11 +132,11 @@ def _build_context(
             "event_name": project.event_name,
             "language": project.language,
         },
-        "session": {
-            "id": str(session.id),
-            "scope": "asset" if session.asset_id else "project",
-            "asset_id": str(session.asset_id) if session.asset_id else None,
-            "asset_type": session.asset_type,
+        "conversation": {
+            "id": str(conversation.id),
+            "scope": "asset" if conversation.asset_id else "project",
+            "asset_id": str(conversation.asset_id) if conversation.asset_id else None,
+            "asset_type": conversation.asset_type,
         },
         "history": [
             {"role": m.role, "content": m.content} for m in messages[-20:]
@@ -215,7 +215,7 @@ def _reply_for_intent(intent: ChatIntent, has_run: bool) -> str:
 
 async def _dispatch_intent_to_run(
     db: AsyncSession,
-    session: ChatSession,
+    conversation: Conversation,
     intent: ChatIntent,
 ) -> UUID | None:
     """Dispatch a parsed intent to a WorkflowRun via the orchestrator.
@@ -226,12 +226,12 @@ async def _dispatch_intent_to_run(
 
     scope = "full"
     target_id = None
-    if session.asset_type == "clip":
+    if conversation.asset_type == "clip":
         scope = "clip"
-        target_id = UUID(str(session.asset_id)) if session.asset_id else None
-    elif session.asset_type == "derivative":
+        target_id = UUID(str(conversation.asset_id)) if conversation.asset_id else None
+    elif conversation.asset_type == "derivative":
         scope = "derivative"
-        target_id = UUID(str(session.asset_id)) if session.asset_id else None
+        target_id = UUID(str(conversation.asset_id)) if conversation.asset_id else None
 
     operation = "regenerate"
     if intent.action == "translate":
@@ -241,7 +241,7 @@ async def _dispatch_intent_to_run(
     elif intent.action == "revise":
         operation = intent.parameters.get("operation", "regenerate")
 
-    project = await db.get(Project, UUID(str(session.project_id)))
+    project = await db.get(Project, UUID(str(conversation.project_id)))
     if project is None:
         return None
 
@@ -262,13 +262,13 @@ async def _dispatch_intent_to_run(
 
 
 async def get_project_prompt(db: AsyncSession, project_id: UUID) -> str | None:
-    """Return the original prompt from the project's chat session."""
+    """Return the original prompt from the project's chat conversation."""
     result = await db.execute(
         select(Message)
-        .join(ChatSession)
+        .join(Conversation)
         .where(
-            ChatSession.project_id == project_id,
-            ChatSession.asset_id.is_(None),
+            Conversation.project_id == project_id,
+            Conversation.asset_id.is_(None),
             Message.role == "user",
         )
         .order_by(Message.created_at.asc())
@@ -284,9 +284,9 @@ async def seed_project_prompt(
     project_id: UUID,
     prompt: str,
 ) -> Message:
-    """Create the project-scoped session and store the original prompt."""
-    session = await _get_or_create_project_session(db, user_id, project_id)
-    return await _create_message(db, UUID(str(session.id)), "user", prompt)
+    """Create the project-scoped conversation and store the original prompt."""
+    conversation = await _get_or_create_project_conversation(db, user_id, project_id)
+    return await _create_message(db, UUID(str(conversation.id)), "user", prompt)
 
 
 async def chat(
@@ -294,45 +294,45 @@ async def chat(
     user_id: UUID,
     request: ChatRequest,
 ) -> ChatResponse:
-    """Send a message to a chat session and return the assistant reply.
+    """Send a message to a chat conversation and return the assistant reply.
 
     This is the single public entry point for chat: it locates or creates the
-    session, builds the correct context, parses intent, dispatches background
+    conversation, builds the correct context, parses intent, dispatches background
     work, and returns the assistant message.
     """
-    session = await _get_or_create_session(db, user_id, request)
-    session_id = UUID(str(session.id))
+    conversation = await _get_or_create_conversation(db, user_id, request)
+    conversation_id = UUID(str(conversation.id))
 
     user_message = await _create_message(
         db,
-        session_id,
+        conversation_id,
         "user",
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
     )
 
-    project = await _load_project(db, UUID(str(session.project_id)))
+    project = await _load_project(db, UUID(str(conversation.project_id)))
     history = list(
         (
             await db.execute(
                 select(Message)
-                .where(Message.session_id == session_id)
+                .where(Message.conversation_id == conversation_id)
                 .order_by(Message.created_at.asc())
             )
         ).scalars()
     )
 
-    context = _build_context(project, session, history) if project else {}
+    context = _build_context(project, conversation, history) if project else {}
     intent = await _parse_chat_intent(context, request.message)
 
     run_id: UUID | None = None
     if intent.action not in ("toggle_music", "adjust_gain"):
-        run_id = await _dispatch_intent_to_run(db, session, intent)
+        run_id = await _dispatch_intent_to_run(db, conversation, intent)
 
     assistant_content = _reply_for_intent(intent, run_id is not None)
     assistant_message = await _create_message(
         db,
-        session_id,
+        conversation_id,
         "assistant",
         assistant_content,
         workflow_run_id=run_id,
@@ -341,44 +341,44 @@ async def chat(
 
     await db.commit()
     return ChatResponse(
-        session_id=session_id,
+        conversation_id=conversation_id,
         user_message=ChatMessageResponse.model_validate(user_message),
         assistant_message=ChatMessageResponse.model_validate(assistant_message),
-        job_id=run_id,
+        run_id=run_id,
     )
 
 
-async def find_session(
+async def find_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
     asset_id: UUID | None = None,
     asset_type: str | None = None,
-) -> ChatSession | None:
-    """Return an existing chat session for the given scope, or None."""
-    query = select(ChatSession).where(
-        ChatSession.user_id == user_id,
-        ChatSession.project_id == project_id,
+) -> Conversation | None:
+    """Return an existing chat conversation for the given scope, or None."""
+    query = select(Conversation).where(
+        Conversation.user_id == user_id,
+        Conversation.project_id == project_id,
     )
     if asset_id and asset_type:
         query = query.where(
-            ChatSession.asset_id == asset_id,
-            ChatSession.asset_type == asset_type,
+            Conversation.asset_id == asset_id,
+            Conversation.asset_type == asset_type,
         )
     else:
-        query = query.where(ChatSession.asset_id.is_(None))
+        query = query.where(Conversation.asset_id.is_(None))
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
-async def list_session_messages(
+async def list_conversation_messages(
     db: AsyncSession,
-    session_id: UUID,
+    conversation_id: UUID,
 ) -> list[Message]:
-    """Return messages in a session, oldest first."""
+    """Return messages in a conversation, oldest first."""
     result = await db.execute(
         select(Message)
-        .where(Message.session_id == session_id)
+        .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.asc())
     )
     return list(result.scalars().all())

@@ -89,7 +89,7 @@ class MiniMaxClient:
             response.raise_for_status()
             data = response.json()
 
-        # ADR-025 metering: report usage to the bound plan node (no-op when
+        # ADR-025 metering: report usage to the bound workflow step (no-op when
         # unbound). Done before validation — tokens were consumed either way.
         from app.metering import record_usage
 

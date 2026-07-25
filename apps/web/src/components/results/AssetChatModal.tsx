@@ -55,7 +55,7 @@ interface ChatMessage {
   content: string | null
 }
 
-interface ChatSession {
+interface Conversation {
   id: string
   project_id: string
   asset_id: string | null
@@ -64,19 +64,19 @@ interface ChatSession {
 }
 
 interface ChatResponse {
-  session_id: string
+  conversation_id: string
   user_message: ChatMessage
   assistant_message: ChatMessage
-  job_id: string | null
+  run_id: string | null
 }
 
-const pollJob = async (projectId: string, jobId: string) => {
+const pollRun = async (projectId: string, runId: string) => {
   for (let i = 0; i < 60; i++) {
-    const res = await apiFetch(`/api/v1/projects/${projectId}/jobs/${jobId}`)
+    const res = await apiFetch(`/api/v1/projects/${projectId}/runs/${runId}`)
     if (!res.ok) continue
-    const job = await res.json()
-    if (job.status === "completed") return true
-    if (job.status === "failed") return false
+    const run = await res.json()
+    if (run.status === "completed") return true
+    if (run.status === "failed") return false
     await new Promise((resolve) => setTimeout(resolve, 2000))
   }
   return false
@@ -118,7 +118,7 @@ export function AssetChatModal({
           asset_id: asset.id,
           asset_type: assetType,
         })
-        const sessionRes = await apiFetch(`/api/v1/chat/session?${params.toString()}`)
+        const sessionRes = await apiFetch(`/api/v1/chat/conversation?${params.toString()}`)
         if (!sessionRes.ok) {
           if (sessionRes.status === 404) {
             if (!cancelled) {
@@ -132,12 +132,12 @@ export function AssetChatModal({
             }
             return
           }
-          throw new Error("Failed to load chat session")
+          throw new Error("Failed to load conversation")
         }
 
-        const session = (await sessionRes.json()) as ChatSession
+        const conversation = (await sessionRes.json()) as Conversation
         const messagesRes = await apiFetch(
-          `/api/v1/chat/sessions/${session.id}/messages`
+          `/api/v1/chat/conversations/${conversation.id}/messages`
         )
         if (!messagesRes.ok) throw new Error("Failed to load messages")
         const messages = (await messagesRes.json()) as { items: ChatMessage[] }
@@ -216,10 +216,10 @@ export function AssetChatModal({
       if (!res.ok) throw new Error("Chat failed")
 
       const data = (await res.json()) as ChatResponse
-      const { job_id } = data
+      const { run_id } = data
 
-      if (job_id) {
-        const ok = await pollJob(projectId, job_id)
+      if (run_id) {
+        const ok = await pollRun(projectId, run_id)
         const finalContent = ok ? t("assetChat.done") : t("assetChat.failed")
         setTurns((prev) =>
           prev.map((turn) =>

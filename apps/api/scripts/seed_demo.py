@@ -23,7 +23,7 @@ from sqlalchemy import delete, select
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus, WorkflowStatus
-from app.models.tables import Asset, Output, PlanNode, WorkflowRun
+from app.models.tables import Asset, Output, WorkflowStep, WorkflowRun
 from app.demo_seed import DEMO_PROJECT_ID, seed_demo_project
 from app.tools.storage import delete_prefix, get_project_output_dir
 
@@ -76,7 +76,7 @@ async def _verify_demo_run() -> bool:
         nodes = list(
             (
                 await db.execute(
-                    select(PlanNode).where(PlanNode.run_id == run.id).order_by(PlanNode.seq)
+                    select(WorkflowStep).where(WorkflowStep.run_id == run.id).order_by(WorkflowStep.seq)
                 )
             ).scalars()
         ) if run else []
@@ -103,7 +103,7 @@ async def _verify_demo_run() -> bool:
 
     # 2. Node states: generation nodes done; render fan-out pending (the
     # worker renders in the background and mirrors terminal state later).
-    by_kind: dict[str, list[PlanNode]] = {}
+    by_kind: dict[str, list[WorkflowStep]] = {}
     for n in nodes:
         by_kind.setdefault(n.kind, []).append(n)
     for kind in GEN_NODE_KINDS:
@@ -136,8 +136,8 @@ async def _verify_demo_run() -> bool:
     v.check(len(clips) == 5, "5 clip outputs", f"count={len(clips)}")
     for o in clips:
         problems = []
-        if pipeline_id is not None and o.plan_node_id != pipeline_id:
-            problems.append("plan_node_id")
+        if pipeline_id is not None and o.workflow_step_id != pipeline_id:
+            problems.append("workflow_step_id")
         if o.render_status != RenderStatus.PENDING:
             problems.append(f"render_status={o.render_status}")
         if not o.payload.get("hook") or not o.payload.get("title_options"):
@@ -159,7 +159,7 @@ async def _verify_demo_run() -> bool:
     director_id = by_kind["director_plan"][0].id if by_kind.get("director_plan") else None
     plans = [o for o in outputs if o.type == "content_plan"]
     v.check(
-        len(plans) == 1 and plans[0].plan_node_id == director_id,
+        len(plans) == 1 and plans[0].workflow_step_id == director_id,
         "content_plan internal output present",
         f"count={len(plans)}",
     )

@@ -1,7 +1,7 @@
 """RunPlan node runners: one runner per node kind (RunPlan Phase 1).
 
 Each runner is the direct transplant of a ``generation.py`` code path onto the
-plan_nodes graph (docs/tasks/runplan-phase1-implementation.md §4 mapping
+workflow_steps graph (docs/tasks/runplan-phase1-implementation.md §4 mapping
 table). Signature is uniform: ``(db, run, node, project) -> list[UUID]`` — the
 ids of the outputs rows the node produced (written to ``node.output_refs``).
 
@@ -51,7 +51,7 @@ from app.models.tables import (
     BrandTemplate,
     Music,
     Output,
-    PlanNode,
+    WorkflowStep,
     Project,
     Speaker,
     WorkflowRun,
@@ -85,18 +85,18 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
     """Write the stepper's display-stage hint in its own session.
 
     This must NOT ride the runner session: that session stays open across LLM
-    calls, and holding a row lock on ``plan_nodes`` (from a flushed spec
+    calls, and holding a row lock on ``workflow_steps`` (from a flushed spec
     update) deadlocks the metering session — ``record_usage`` updates the same
     row from inside ``minimax.generate`` while the runner awaits the response.
     Stage hints are display-only, so immediate independent commits are fine.
     """
     async with AsyncSessionLocal() as s:
         await s.execute(
-            update(PlanNode)
-            .where(PlanNode.id == node_id)
+            update(WorkflowStep)
+            .where(WorkflowStep.id == node_id)
             .values(
                 spec=func.jsonb_set(
-                    PlanNode.spec, pg_array(["stage"]), func.to_jsonb(stage), True
+                    WorkflowStep.spec, pg_array(["stage"]), func.to_jsonb(stage), True
                 )
             )
         )
@@ -365,11 +365,11 @@ def _generation_context(
     )
 
 
-async def _load_content_plan(db: AsyncSession, node: PlanNode) -> ContentPlan:
+async def _load_content_plan(db: AsyncSession, node: WorkflowStep) -> ContentPlan:
     """Load the ContentPlan produced by this node's upstream director node."""
     if not node.inputs:
         raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director node")
-    director = await db.get(PlanNode, UUID(str(node.inputs[0])))
+    director = await db.get(WorkflowStep, UUID(str(node.inputs[0])))
     if director is None or not director.output_refs:
         raise ValueError("Upstream director_plan node has no content_plan output")
     plan_output = await db.get(Output, UUID(str(director.output_refs[0])))
@@ -424,7 +424,7 @@ async def _resolve_brand(
 
 
 async def run_preprocess(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Validate source material exists (texts or media), like the old inline check."""
     asset_texts = await collect_asset_texts(db, project.id)
@@ -442,7 +442,7 @@ async def run_preprocess(
 
 
 async def run_persona_bootstrap(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Return the project's speaker, or auto-create one from source texts.
 
@@ -504,7 +504,7 @@ async def run_persona_bootstrap(
 
 
 async def run_director_plan(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Run the Content Director once and persist the plan as an internal output.
 
@@ -538,7 +538,7 @@ async def run_director_plan(
 
     plan_output = Output(
         project_id=project.id,
-        plan_node_id=node.id,
+        workflow_step_id=node.id,
         type="content_plan",
         language=ctx.get("target_language", "en"),
         provenance="generated",
@@ -550,7 +550,7 @@ async def run_director_plan(
 
 
 async def run_clips_pipeline(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Select segments + write scripts + build render specs (composite node).
 
@@ -683,7 +683,7 @@ async def run_clips_pipeline(
     if prior_clip_ids:
         await db.execute(
             _text(
-                "UPDATE plan_nodes SET status = 'skipped', updated_at = now() "
+                "UPDATE workflow_steps SET status = 'skipped', updated_at = now() "
                 "WHERE kind = 'render' AND status = 'pending' "
                 "AND spec->>'output_id' IN :oids"
             ).bindparams(bindparam("oids", expanding=True)),
@@ -741,7 +741,7 @@ async def run_clips_pipeline(
         )
         output = Output(
             project_id=project.id,
-            plan_node_id=node.id,
+            workflow_step_id=node.id,
             type="clip",
             language=target_language,
             provenance="real",
@@ -780,7 +780,7 @@ async def run_clips_pipeline(
     max_seq = int(node.seq)
     for idx, output_id in enumerate(output_ids, start=1):
         db.add(
-            PlanNode(
+            WorkflowStep(
                 run_id=run.id,
                 kind="render",
                 status="pending",
@@ -823,7 +823,7 @@ async def _generate_derivative_with_retry(
 
 
 async def run_derivative_gen(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Generate one derivative output (post/quotes/carousel/article).
 
@@ -859,7 +859,7 @@ async def run_derivative_gen(
         output.language = target_language
         output.status = "generated"
         output.updated_at = datetime.now(UTC)
-        output.plan_node_id = node.id
+        output.workflow_step_id = node.id
         await db.flush()
         return [output.id]
 
@@ -873,7 +873,7 @@ async def run_derivative_gen(
 
     output = Output(
         project_id=project.id,
-        plan_node_id=node.id,
+        workflow_step_id=node.id,
         type=derivative_type.value,
         language=target_language,
         provenance="generated",
@@ -902,7 +902,7 @@ async def run_derivative_gen(
 
 
 async def run_script_revision(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Targeted hook/clip revision via the reviser agent (small topology)."""
     target_id = node.spec.get("target_id")
@@ -941,13 +941,13 @@ async def run_script_revision(
             "reason": revised.score_reason or (output.score or {}).get("reason"),
         }
     output.updated_at = datetime.now(UTC)
-    output.plan_node_id = node.id
+    output.workflow_step_id = node.id
     await db.flush()
     return [output.id]
 
 
 async def run_render_request(
-    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Targeted re-render: flip render_status back to PENDING (scope=render).
 
@@ -970,7 +970,7 @@ async def run_render_request(
     return []
 
 
-NODE_RUNNERS = {
+STEP_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
     "director_plan": run_director_plan,

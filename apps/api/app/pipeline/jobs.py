@@ -1,7 +1,7 @@
 """Postgres-backed job queue primitives.
 
 The database *is* the queue: pending work lives as rows (``Asset`` rows awaiting
-processing, ``plan_nodes`` awaiting execution, ``outputs`` awaiting render).
+processing, ``workflow_steps`` awaiting execution, ``outputs`` awaiting render).
 Workers claim a row with ``SELECT ... FOR UPDATE SKIP LOCKED``, which lets
 multiple workers run concurrently without ever grabbing the same row.
 No Redis/broker required.
@@ -22,7 +22,7 @@ from sqlalchemy import CursorResult, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, RenderStatus
-from app.models.tables import Asset, Output, PlanNode
+from app.models.tables import Asset, Output, WorkflowStep
 
 logger = structlog.get_logger()
 
@@ -55,7 +55,7 @@ async def claim_pending_asset(db: AsyncSession) -> UUID | None:
 
 
 async def claim_ready_node(db: AsyncSession) -> UUID | None:
-    """Atomically claim one ready plan node, flipping it to ``running``.
+    """Atomically claim one ready workflow step, flipping it to ``running``.
 
     A node is ready when it is pending and every upstream node (its ``inputs``
     edge list) is done. Render nodes are excluded — they are claimed through
@@ -70,21 +70,21 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
         await db.execute(
             text(
                 """
-                UPDATE plan_nodes pn
+                UPDATE workflow_steps pn
                 SET status = 'running',
                     started_at = now(),
                     attempt = attempt + 1,
                     updated_at = now()
                 WHERE pn.id = (
                     SELECT pn2.id
-                    FROM plan_nodes pn2
+                    FROM workflow_steps pn2
                     JOIN workflow_runs r ON r.id = pn2.run_id
                     WHERE pn2.status = 'pending'
                       AND pn2.kind <> 'render'
                       AND NOT EXISTS (
                         SELECT 1
                         FROM jsonb_array_elements_text(pn2.inputs) AS up(id)
-                        JOIN plan_nodes upn ON upn.id = up.id::uuid
+                        JOIN workflow_steps upn ON upn.id = up.id::uuid
                         WHERE upn.status <> 'done'
                       )
                       AND NOT EXISTS (
@@ -107,7 +107,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
     await db.execute(
         text(
             "UPDATE workflow_runs SET status = 'RUNNING', updated_at = now() "
-            "WHERE id = (SELECT run_id FROM plan_nodes WHERE id = :nid) "
+            "WHERE id = (SELECT run_id FROM workflow_steps WHERE id = :nid) "
             "AND status = 'PENDING'"
         ),
         {"nid": node_id},
@@ -139,7 +139,7 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
     # Mirror the render node (if any) to running.
     await db.execute(
         text(
-            "UPDATE plan_nodes SET status = 'running', started_at = now(), "
+            "UPDATE workflow_steps SET status = 'running', started_at = now(), "
             "updated_at = now() "
             "WHERE kind = 'render' AND status = 'pending' "
             "AND spec->>'output_id' = :oid"
@@ -165,8 +165,8 @@ async def reap_stale(db: AsyncSession) -> None:
         .values(processing_status=AssetStatus.PENDING)
     )
     nodes = await db.execute(
-        update(PlanNode)
-        .where(PlanNode.status == "running")
+        update(WorkflowStep)
+        .where(WorkflowStep.status == "running")
         .values(status="pending")
     )
     renders = await db.execute(

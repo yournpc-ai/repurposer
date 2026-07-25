@@ -1,9 +1,9 @@
 """Generic chat API.
 
-Sessions are the universal container for conversations, but the public API
-hides session management behind a single ``POST /api/v1/chat`` endpoint. The
-backend locates or creates the right session based on ``project_id`` and
-optional ``asset_id`` / ``asset_type``.
+Conversations are the universal container for multi-turn interaction, but the
+public API hides conversation management behind a single ``POST /api/v1/chat``
+endpoint. The backend locates or creates the right conversation based on
+``project_id`` and optional ``asset_id`` / ``asset_type``.
 """
 
 from typing import Literal
@@ -17,45 +17,46 @@ from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
     ChatResponse,
-    ChatSessionResponse,
+    ConversationResponse,
     InferIntentRequest,
     InferIntentResponse,
     MessageListResponse,
 )
-from app.models.tables import ChatSession, User
-from app.chat.service import chat, find_session, list_session_messages
+from app.models.tables import Conversation, User
+from app.chat.service import chat, find_conversation, list_conversation_messages
 from app.platform.project_context import get_project_for_user
 
 chat_router = APIRouter()
 
 
-@chat_router.get("/session", response_model=ChatSessionResponse)
-async def get_chat_session(
+@chat_router.get("/conversation", response_model=ConversationResponse)
+async def get_conversation(
     project_id: UUID,
     asset_id: UUID | None = None,
     asset_type: Literal["clip", "derivative"] | None = None,
     db: DBDep = None,
     current_user: User = Depends(get_current_user_required),
-) -> ChatSession | None:
-    """Get the existing chat session for a project or asset scope.
+) -> Conversation | None:
+    """Get the existing conversation for a project or asset scope.
 
-    Returns 404 if no session exists yet; the frontend should then show the
-    initial intro and create the session on first message via ``POST /chat``.
+    Returns 404 if no conversation exists yet; the frontend should then show
+    the initial intro and create the conversation on first message via
+    ``POST /chat``.
     """
     await get_project_for_user(db, project_id, UUID(str(current_user.id)))
-    session = await find_session(
+    conversation = await find_conversation(
         db,
         UUID(str(current_user.id)),
         project_id,
         asset_id,
         asset_type,
     )
-    if session is None:
+    if conversation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail="Conversation not found",
         )
-    return session
+    return conversation
 
 
 @chat_router.post("", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
@@ -66,27 +67,27 @@ async def send_chat_message(
 ) -> ChatResponse:
     """Send a message to a project or asset chat.
 
-    The backend automatically locates or creates the session, builds the
+    The backend automatically locates or creates the conversation, builds the
     appropriate context, and dispatches any background work.
     """
     await get_project_for_user(db, data.project_id, UUID(str(current_user.id)))
     return await chat(db, UUID(str(current_user.id)), data)
 
 
-@chat_router.get("/sessions/{session_id}/messages", response_model=MessageListResponse)
+@chat_router.get("/conversations/{id}/messages", response_model=MessageListResponse)
 async def list_chat_messages(
-    session_id: UUID,
+    id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> MessageListResponse:
-    """List messages in a chat session, oldest first."""
-    session = await db.get(ChatSession, session_id)
-    if session is None or session.user_id != current_user.id:
+    """List messages in a conversation, oldest first."""
+    conversation = await db.get(Conversation, id)
+    if conversation is None or conversation.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail="Conversation not found",
         )
-    messages = await list_session_messages(db, session_id)
+    messages = await list_conversation_messages(db, id)
     return MessageListResponse(items=[ChatMessageResponse.model_validate(m) for m in messages])
 
 

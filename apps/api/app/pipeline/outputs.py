@@ -14,10 +14,10 @@ from sqlalchemy.sql import Select
 
 from app.models.schemas import (
     INTERNAL_OUTPUT_TYPES,
-    PlanNodeResponse,
-    WorkflowRunResponse,
+    StepResponse,
+    RunResponse,
 )
-from app.models.tables import Output, PlanNode, WorkflowRun
+from app.models.tables import Output, WorkflowStep, WorkflowRun
 
 
 def visible_outputs_stmt() -> Select:
@@ -39,9 +39,9 @@ async def list_visible_outputs(
     return list(result.scalars().all())
 
 
-def plan_node_to_response(node: PlanNode) -> PlanNodeResponse:
+def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
     """Serialize a node; ``stage`` is the display hint from spec (ui_step keys)."""
-    return PlanNodeResponse(
+    return StepResponse(
         id=node.id,
         kind=node.kind,
         status=node.status,
@@ -54,7 +54,7 @@ def plan_node_to_response(node: PlanNode) -> PlanNodeResponse:
     )
 
 
-def aggregate_node_cost(nodes: list[PlanNode]) -> dict | None:
+def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:
     """Run-level cost = sum over node cost ledgers (ADR-025)."""
     totals = {"prompt_tokens": 0, "completion_tokens": 0, "fixed_cost": 0.0}
     seen = False
@@ -72,15 +72,15 @@ async def run_to_response(
     db: AsyncSession,
     run: WorkflowRun,
     *,
-    with_nodes: bool = True,
-) -> WorkflowRunResponse:
-    """Serialize a run with its plan nodes and aggregated cost."""
-    resp = WorkflowRunResponse.model_validate(run)
-    if with_nodes:
+    with_steps: bool = True,
+) -> RunResponse:
+    """Serialize a run with its workflow steps and aggregated cost."""
+    resp = RunResponse.model_validate(run)
+    if with_steps:
         result = await db.execute(
-            select(PlanNode).where(PlanNode.run_id == run.id).order_by(PlanNode.seq)
+            select(WorkflowStep).where(WorkflowStep.run_id == run.id).order_by(WorkflowStep.seq)
         )
         nodes = list(result.scalars().all())
-        resp.nodes = [plan_node_to_response(n) for n in nodes]
-        resp.cost = aggregate_node_cost(nodes)
+        resp.steps = [workflow_step_to_response(n) for n in nodes]
+        resp.cost = aggregate_step_cost(nodes)
     return resp

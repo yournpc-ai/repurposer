@@ -144,7 +144,7 @@ export interface OutputScore {
 export interface Output {
   id: string
   project_id: string
-  plan_node_id: string | null
+  workflow_step_id: string | null
   type: string
   language: string
   status: string
@@ -161,13 +161,13 @@ export interface Output {
   updated_at: string | null
 }
 
-export type PlanNodeStatus = "pending" | "running" | "done" | "failed" | "skipped"
+export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
 
-/** One node of a run's execution plan (ADR-028) — the user-facing step. */
-export interface PlanNode {
+/** One step of a run's execution plan (ADR-028) — the user-facing step. */
+export interface WorkflowStep {
   id: string
   kind: string
-  status: PlanNodeStatus
+  status: StepStatus
   seq: number
   error: string | null
   cost: Record<string, number> | null

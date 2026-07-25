@@ -103,7 +103,7 @@ class ChatAttachment(BaseModel):
     status: Literal["uploading", "uploaded", "failed"] = "uploaded"
 
 
-class ChatSessionResponse(BaseModel):
+class ConversationResponse(BaseModel):
     """Chat session response."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -131,7 +131,7 @@ class ChatMessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    session_id: UUID
+    conversation_id: UUID
     role: MessageRole
     content: str | None = None
     attachments: list[ChatAttachment] = Field(default_factory=list)
@@ -194,10 +194,10 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Result of sending a chat message."""
 
-    session_id: UUID
+    conversation_id: UUID
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
-    job_id: UUID | None = None
+    run_id: UUID | None = None
 
 
 class SpeakerContext(BaseModel):
@@ -825,13 +825,13 @@ class ContentPlan(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# RunPlan vocabulary (ADR-028/030): plan_nodes + unified outputs.
+# RunPlan vocabulary (ADR-028/030): workflow_steps + unified outputs.
 # ---------------------------------------------------------------------------
 
 # Phase 1 node kinds (coarse-grained; docs/tasks/runplan-phase1-implementation.md §4).
 # Reserved for Phase 2/3 — NOT registered, NOT implemented here:
 # director_understand / selection / dub / music / verify.
-PlanNodeKind = Literal[
+StepKind = Literal[
     "preprocess",
     "persona_bootstrap",
     "director_plan",
@@ -844,7 +844,9 @@ PlanNodeKind = Literal[
     "render",
 ]
 
-PlanNodeStatus = Literal["pending", "running", "done", "failed", "skipped"]
+# "waiting" is a seat for HITL/suspend-resume (variant_pick gate, chat-loop-v1
+# Task 4): a step parks in waiting with spec.suspend_payload until resumed.
+StepStatus = Literal["pending", "running", "done", "failed", "skipped", "waiting"]
 
 OutputType = Literal["clip", "post", "quotes", "carousel", "article", "content_plan"]
 
@@ -966,7 +968,7 @@ class ClipSpec(BaseModel):
     target_language: str = "en"
 
 
-class PlanNodeResponse(BaseModel):
+class StepResponse(BaseModel):
     """One node of a run's execution plan — the user-facing step (ADR-028).
 
     ``stage`` is an optional display hint lifted from ``node.spec["stage"]`` by
@@ -999,7 +1001,7 @@ class OutputResponse(BaseModel):
 
     id: UUID
     project_id: UUID
-    plan_node_id: UUID | None = None
+    workflow_step_id: UUID | None = None
     type: str
     language: str
     status: str
@@ -1147,7 +1149,7 @@ class FeedbackRequest(BaseModel):
     detail: str | None = None
 
 
-class WorkflowRunResponse(BaseModel):
+class RunResponse(BaseModel):
     """Workflow run response."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -1158,10 +1160,10 @@ class WorkflowRunResponse(BaseModel):
     progress: int = Field(default=0, ge=0, le=100)
     error: str | None = None
     context: dict | None = None
-    # Aggregated node metering (sum of plan_nodes.cost); None until metered.
+    # Aggregated step metering (sum of workflow_steps.cost); None until metered.
     cost: dict | None = None
-    # RunPlan steps, ordered by seq; empty for runs predating plan_nodes.
-    nodes: list[PlanNodeResponse] = Field(default_factory=list)
+    # RunPlan steps, ordered by seq; empty for runs predating RunPlan.
+    steps: list[StepResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -1198,7 +1200,7 @@ class ProjectResultsResponse(BaseModel):
     project: ProjectResponse
     prompt: str | None = None
     outputs: list[OutputResponse] = Field(default_factory=list)
-    latest_job: WorkflowRunResponse | None = None
+    latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     ui_step: UiStep | None = None
 

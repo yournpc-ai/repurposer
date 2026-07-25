@@ -3,7 +3,7 @@
 Topology is code-determined — the LLM never shapes the graph (ADR-028, task
 brief §9). Every WorkflowRun is born here (``create_run``); the worker claims
 ready nodes (``jobs.claim_ready_node``) and executes them through
-``execute_node``; ``execute_run_inline`` is the same walk for the demo seed
+``execute_step``; ``execute_run_inline`` is the same walk for the demo seed
 (single executor, no SKIP LOCKED needed).
 
 Run-level semantics preserved from the retired run_generation:
@@ -23,9 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import ProjectStatus, WorkflowStatus
-from app.models.tables import Output, PlanNode, Project, WorkflowRun
-from app.metering import bind_plan_node
-from app.pipeline.node_runners import KNOWN_OUTPUTS, NODE_RUNNERS
+from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
+from app.metering import bind_workflow_step
+from app.pipeline.node_runners import KNOWN_OUTPUTS, STEP_RUNNERS
 
 logger = structlog.get_logger()
 
@@ -168,9 +168,9 @@ async def create_run(
     await db.flush()
 
     node_specs = compile_graph(task, target_type)
-    nodes: list[PlanNode] = []
+    nodes: list[WorkflowStep] = []
     for ns in node_specs:
-        node = PlanNode(
+        node = WorkflowStep(
             run_id=run.id,
             kind=ns.kind,
             status="pending",
@@ -193,7 +193,7 @@ async def create_run(
     return run
 
 
-async def execute_node(node_id: UUID) -> None:
+async def execute_step(node_id: UUID) -> None:
     """Execute one claimed node; settle terminal state + downstream + the run.
 
     Never raises — failures land on the node row (and cascade-skip downstream).
@@ -201,7 +201,7 @@ async def execute_node(node_id: UUID) -> None:
     run_id: UUID | None = None
     try:
         async with AsyncSessionLocal() as db:
-            node = await db.get(PlanNode, node_id)
+            node = await db.get(WorkflowStep, node_id)
             if node is None or node.status not in ("pending", "running"):
                 return
             run_id = node.run_id
@@ -216,11 +216,11 @@ async def execute_node(node_id: UUID) -> None:
 
         try:
             async with AsyncSessionLocal() as db:
-                node = await db.get(PlanNode, node_id)
+                node = await db.get(WorkflowStep, node_id)
                 run = await db.get(WorkflowRun, node.run_id)
                 project = await db.get(Project, run.project_id)
-                runner = NODE_RUNNERS[node.kind]
-                with bind_plan_node(node.id):
+                runner = STEP_RUNNERS[node.kind]
+                with bind_workflow_step(node.id):
                     output_ids = await runner(db, run, node, project)
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
                 if node.kind == "render":
@@ -232,11 +232,11 @@ async def execute_node(node_id: UUID) -> None:
                     node.status = "done"
                     node.finished_at = datetime.now(UTC)
                 await db.commit()
-                logger.info("plan_node_done", node_id=str(node_id), kind=node.kind)
+                logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Exception as e:  # noqa: BLE001 — record any failure on the node
-            logger.error("plan_node_failed", node_id=str(node_id), error=str(e))
+            logger.error("workflow_step_failed", node_id=str(node_id), error=str(e))
             async with AsyncSessionLocal() as db:
-                node = await db.get(PlanNode, node_id)
+                node = await db.get(WorkflowStep, node_id)
                 node.status = "failed"
                 node.error = str(e)[:2000]
                 node.finished_at = datetime.now(UTC)
@@ -248,16 +248,16 @@ async def execute_node(node_id: UUID) -> None:
             await maybe_finalize_run(run_id)
 
 
-async def _cascade_skip(db: AsyncSession, failed_node: PlanNode) -> None:
+async def _cascade_skip(db: AsyncSession, failed_node: WorkflowStep) -> None:
     """Transitively mark downstream pending nodes as skipped."""
     frontier = [failed_node.id]
     while frontier:
         current = frontier.pop()
         result = await db.execute(
-            select(PlanNode).where(
-                PlanNode.run_id == failed_node.run_id,
-                PlanNode.status.in_(["pending", "running"]),
-                PlanNode.inputs.contains([str(current)]),
+            select(WorkflowStep).where(
+                WorkflowStep.run_id == failed_node.run_id,
+                WorkflowStep.status.in_(["pending", "running"]),
+                WorkflowStep.inputs.contains([str(current)]),
             )
         )
         for child in result.scalars():
@@ -285,7 +285,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             return
 
         nodes = list(
-            (await db.execute(select(PlanNode).where(PlanNode.run_id == run_id)))
+            (await db.execute(select(WorkflowStep).where(WorkflowStep.run_id == run_id)))
             .scalars()
             .all()
         )
@@ -339,14 +339,14 @@ async def execute_run_inline(run_id: UUID) -> None:
                 await db.execute(
                     text(
                         """
-                        SELECT pn.id FROM plan_nodes pn
+                        SELECT pn.id FROM workflow_steps pn
                         WHERE pn.run_id = :rid
                           AND pn.status = 'pending'
                           AND pn.kind <> 'render'
                           AND NOT EXISTS (
                             SELECT 1
                             FROM jsonb_array_elements_text(pn.inputs) AS up(id)
-                            JOIN plan_nodes upn ON upn.id = up.id::uuid
+                            JOIN workflow_steps upn ON upn.id = up.id::uuid
                             WHERE upn.status <> 'done'
                           )
                         ORDER BY pn.seq
@@ -358,7 +358,7 @@ async def execute_run_inline(run_id: UUID) -> None:
             ).scalar_one_or_none()
         if node_id is None:
             break
-        await execute_node(node_id)
+        await execute_step(node_id)
     await maybe_finalize_run(run_id)
 
 
@@ -372,7 +372,7 @@ async def finalize_stuck_runs() -> None:
                     SELECT r.id FROM workflow_runs r
                     WHERE r.status = 'RUNNING'
                       AND NOT EXISTS (
-                        SELECT 1 FROM plan_nodes pn
+                        SELECT 1 FROM workflow_steps pn
                         WHERE pn.run_id = r.id
                           AND pn.status IN ('pending', 'running')
                           AND pn.kind <> 'render'
