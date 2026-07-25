@@ -15,25 +15,21 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal, init_db
-from app.routers import (
+from app.chat.routes import chat_router, intent_router
+from app.distribution.routes import router as distribution_router
+from app.memory.brand import seed_default_brand_template
+from app.memory.routes import brand_templates_router, speakers_router
+from app.demo_seed import seed_demo_project
+from app.pipeline.music import seed_default_music
+from app.pipeline.routes import (
     assets,
-    auth,
-    brand_templates,
-    chat,
-    distribution,
-    files,
-    intent,
     library,
     music,
-    notifications,
     outputs,
     projects,
     speaker_assets,
-    speakers,
 )
-from app.services.brand import seed_default_brand_template
-from app.services.demo_seed import seed_demo_project
-from app.services.music import seed_default_music
+from app.platform.routes import auth_router, files_router, notifications_router
 
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
@@ -228,24 +224,24 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
-app.include_router(auth, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(speakers, prefix="/api/v1/speakers", tags=["speakers"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(speakers_router, prefix="/api/v1/speakers", tags=["speakers"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(chat, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(library, prefix="/api/v1/library", tags=["library"])
-app.include_router(files, prefix="/api/v1", tags=["files"])
+app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
-app.include_router(intent, prefix="/api/v1", tags=["intent"])
+app.include_router(intent_router, prefix="/api/v1", tags=["intent"])
 app.include_router(
-    brand_templates, prefix="/api/v1/brand-templates", tags=["brand-templates"]
+    brand_templates_router, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )
 # Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
 # resource, not the module — DISTRIBUTION.md §1.1)
-app.include_router(distribution, prefix="/api/v1", tags=["distribution"])
-app.include_router(notifications, prefix="/api/v1", tags=["notifications"])
+app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])
+app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
 
 
 @app.get("/health")

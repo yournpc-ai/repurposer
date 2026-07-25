@@ -91,7 +91,7 @@ class MiniMaxClient:
 
         # ADR-025 metering: report usage to the bound plan node (no-op when
         # unbound). Done before validation — tokens were consumed either way.
-        from app.services.metering import record_usage
+        from app.metering import record_usage
 
         await record_usage(data.get("usage"))
 

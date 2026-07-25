@@ -28,11 +28,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import structlog  # noqa: E402
 
 from app.clients.minimax import MiniMaxError  # noqa: E402
-from app.services.music import (  # noqa: E402
+from app.pipeline.music import (  # noqa: E402
     DEFAULT_MUSIC_CATALOG,
     default_music_id,
 )
-from app.services.music_generation import (  # noqa: E402
+from app.tools.music import (  # noqa: E402
     DEFAULTS_MODEL,
     generate_music,
     music_disk_path,

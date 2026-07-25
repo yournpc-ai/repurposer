@@ -118,13 +118,13 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
-| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `services/asset_processing.py`、`services/orchestrator.py`、`services/node_runners.py`、`app/agents/`、`services/rendering.py` | ✅ 已落地 |
+| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`、`app/skills/`、`pipeline/rendering.py` | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | 无（hidden 标记是雏形：`packages/clip/src/types.ts`） | 📋 ROADMAP §2 |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `services/chat.py`（规则意图→派生 WorkflowRun）、`agents/intent.py`（LLM 意图，未接入 chat） | 🚧 雏形 |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（规则意图→派生 WorkflowRun）、`chat/intent.py`（LLM 意图，未接入 chat） | 🚧 雏形 |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
-| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | 无 | 📋 ROADMAP §5；设计见 `DISTRIBUTION.md` |
-| **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `agents/persona.py`、`services/brand.py`、`routers/brand_templates.py` | ✅ 主体落地 |
-| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `services/metering.py`（usage → `plan_nodes.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露/EU 驻留 📋 ROADMAP §7/§8 |
+| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（ROADMAP §5） |
+| **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
+| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `plan_nodes.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露/EU 驻留 📋 ROADMAP §7/§8 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
 
@@ -146,7 +146,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `plan_nodes` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `plan_node_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
 | （📋）operations | Operation Model | editor GUI / chat / MCP 三个前端写入；worker 消费 |
 | publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
-| `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `services/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
+| `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
 
 **outputs 共享聚合的细则**：`outputs` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = payload/render_spec diff）、worker（渲染产物回写 `files.video`/`files.srt`）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
 

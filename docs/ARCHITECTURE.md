@@ -153,36 +153,22 @@ apps/api/
 │   ├── config.py            # Configuration management
 │   ├── dependencies.py      # Dependency injection
 │   ├── worker.py            # Standalone worker process entry point
-│   ├── routers/             # API routes
-│   │   ├── speakers.py
-│   │   ├── projects.py      # Includes generation, export, jobs, clips, derivatives, results
-│   │   ├── assets.py
-│   │   ├── clips.py         # Review, render trigger, caption translation, dub, regenerate, revise
-│   │   ├── derivatives.py
-│   │   ├── files.py         # File streaming: ownership check → 307 redirect (or ?proxy=1 byte streaming)
-│   │   ├── brand_templates.py
-│   │   ├── chat.py          # Project/asset-scoped chat sessions and intent dispatch
-│   │   └── library.py       # Cross-project output library
-│   ├── services/            # Business logic
+│   ├── chat/                # Agent Interface module
+│   │   ├── routes.py        # Chat sessions + intent inference endpoints
+│   │   ├── service.py       # Chat session logic and intent dispatch
+│   │   └── intent.py        # /infer-intent agent
+│   ├── pipeline/            # Pipeline module (RunPlan kernel)
+│   │   ├── routes/          # projects / assets / outputs / music / library endpoints
+│   │   ├── orchestrator.py  # RunPlan materialization/execution (`create_run`, `compile_plan`)
+│   │   ├── node_runners.py  # Node executor registry (NODE_RUNNERS)
 │   │   ├── jobs.py          # Queue claiming
 │   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision
-│   │   ├── generation.py    # Generation flow orchestration
-│   │   ├── rendering.py     # Calls Remotion rendering service
 │   │   ├── clip_spec.py     # clip-spec construction
-│   │   ├── brand.py         # Brand template → ClipBrand/ClipMusic + default seeds
-│   │   ├── extraction.py    # Text/PDF extraction + PyMuPDF per-page image rendering
-│   │   ├── vision.py        # M3 vision: image → key point text
-│   │   ├── voice.py         # Voice cloning + T2A synthesis + video audio track extraction
-│   │   ├── caption_translate.py  # Caption track translation
-│   │   ├── chat.py          # Chat session logic and intent parsing/dispatch
-│   │   ├── project_context.py    # Project ownership helpers
-│   │   ├── storage.py       # Storage seam
-│   │   └── asr.py           # faster-whisper
-│   ├── models/              # Database models + Pydantic schemas
-│   │   ├── database.py
-│   │   ├── schemas.py
-│   │   └── tables.py
-│   ├── agents/              # Agent steps
+│   │   ├── rendering.py     # Calls Remotion rendering service
+│   │   ├── outputs.py       # Outputs read helpers (visible_outputs)
+│   │   ├── music.py         # Music library table service + default seeds
+│   │   └── derivative_dispatch.py  # (to be merged into registry)
+│   ├── skills/              # Agent steps (LLM decision units)
 │   │   ├── base.py          # Shared MiniMax agent base + derivative plan helper
 │   │   ├── persona.py
 │   │   ├── content_director.py
@@ -192,8 +178,30 @@ apps/api/
 │   │   ├── quotes.py
 │   │   ├── carousel.py
 │   │   ├── article.py
-│   │   ├── intent.py        # /infer-intent helper
 │   │   └── caption_translate.py
+│   ├── tools/               # Deterministic executors (no LLM decisions)
+│   │   ├── asr.py           # faster-whisper
+│   │   ├── voice.py         # Voice cloning + T2A synthesis + video audio track extraction
+│   │   ├── extraction.py    # Text/PDF extraction + PyMuPDF per-page image rendering
+│   │   ├── caption_translate.py  # Caption track translation
+│   │   ├── music.py         # MiniMax music generation + persistence
+│   │   └── storage.py       # Storage seam
+│   ├── memory/              # Memory module
+│   │   ├── routes.py        # Speakers + brand templates endpoints
+│   │   └── brand.py         # Brand template → ClipBrand/ClipMusic + default seeds
+│   ├── distribution/        # Distribution module
+│   │   ├── routes.py        # Channels + publications endpoints
+│   │   └── core.py / channels.py / publishing.py / adapters/
+│   ├── platform/            # Platform layer (no module owner)
+│   │   ├── routes.py        # File streaming / auth / notifications endpoints
+│   │   ├── auth.py
+│   │   ├── email.py
+│   │   ├── notifications.py
+│   │   └── project_context.py    # Project ownership helpers
+│   ├── models/              # Database models + Pydantic schemas
+│   │   ├── database.py
+│   │   ├── schemas.py
+│   │   └── tables.py
 │   ├── prompts/             # Jinja2 templates
 │   └── clients/
 │       └── minimax.py       # MiniMax M3 wrapper

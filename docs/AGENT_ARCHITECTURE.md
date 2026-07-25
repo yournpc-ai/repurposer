@@ -36,7 +36,7 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
 └─────────────────────────────────────────────┘
 ```
 
-> **Naming caution**: `app/agents/reviser.py` is **not** Layer 4 — it is the single-clip metadata revision agent invoked by targeted revision (see §9). Layer 4 (cross-output consistency review) is unimplemented as of 2026-07; there is no `consistency` code in `app/`.
+> **Naming caution**: `app/skills/reviser.py` is **not** Layer 4 — it is the single-clip metadata revision agent invoked by targeted revision (see §9). Layer 4 (cross-output consistency review) is unimplemented as of 2026-07; there is no `consistency` code in `app/`.
 
 This design guarantees that every output is derived from the same **content plan** and **generation context**, instead of each agent independently re-analyzing the source material.
 
@@ -66,7 +66,7 @@ It is constructed in `app/services/generation.py` from the resolved `Speaker`, s
 
 ## 4. Layer 2: Content Director
 
-The `ContentDirectorAgent` (`app/agents/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentPlan`.
+The `ContentDirectorAgent` (`app/skills/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentPlan`.
 
 ### 4.1 ContentPlan
 
@@ -139,11 +139,11 @@ Each executor extracts its own guidance from `content_plan.derivatives` by match
 
 | Domain | File | Class | Output schema | Notes |
 |--------|------|-------|---------------|-------|
-| Clip | `app/agents/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentPlannerAgent` / `planner.py` |
-| Post | `app/agents/post.py` | `PostAgent` | `Post` | |
-| Quotes | `app/agents/quotes.py` | `QuotesAgent` | `Quotes` | |
-| Carousel | `app/agents/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
-| Article | `app/agents/article.py` | `ArticleAgent` | `Article` | |
+| Clip | `app/skills/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentPlannerAgent` / `planner.py` |
+| Post | `app/skills/post.py` | `PostAgent` | `Post` | |
+| Quotes | `app/skills/quotes.py` | `QuotesAgent` | `Quotes` | |
+| Carousel | `app/skills/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
+| Article | `app/skills/article.py` | `ArticleAgent` | `Article` | |
 
 ### 5.2 Clip agent constraints
 
@@ -176,7 +176,7 @@ Prompts render:
 
 ## 6. Dispatch
 
-`app/services/derivative_dispatch.py` holds the registry of derivative executors:
+`app/pipeline/derivative_dispatch.py` holds the registry of derivative executors:
 
 ```python
 _AGENTS: dict[DerivativeType, BaseDerivativeAgent] = {
@@ -268,10 +268,10 @@ After planning, `current_step` switches to the active output key (`clips`, `post
 
 The following agents are **not** part of the 4-layer executor pipeline and remain unchanged:
 
-- `app/agents/persona.py` — extracts speaker style and content memory from source texts.
-- `app/agents/reviser.py` — revises a single clip script from human feedback.
-- `app/agents/intent.py` — infers generation intent (`outputs`, `clip_count`, `language`, `tone`) from the user's prompt before generation. `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article.
-- `app/agents/caption_translate.py` — translates caption lines.
+- `app/skills/persona.py` — extracts speaker style and content memory from source texts.
+- `app/skills/reviser.py` — revises a single clip script from human feedback.
+- `app/chat/intent.py` — infers generation intent (`outputs`, `clip_count`, `language`, `tone`) from the user's prompt before generation. `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article.
+- `app/skills/caption_translate.py` — translates caption lines.
 
 ## 10. Future work
 
@@ -286,18 +286,18 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 ## 11. Critical files
 
 - `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`, RunPlan 词汇（`PlanNodeKind`/`OutputType`/`OUTPUT_PAYLOAD_SCHEMAS`）
-- `app/agents/content_director.py` — director agent
+- `app/skills/content_director.py` — director agent
 - `app/prompts/content_director.j2` — director prompt
-- `app/agents/clip_agent.py` — clip agent
+- `app/skills/clip_agent.py` — clip agent
 - `app/prompts/clip_agent.j2` — clip agent prompt
-- `app/agents/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
+- `app/skills/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
 - `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
-- `app/services/derivative_dispatch.py` — thin dispatcher registry
-- `app/services/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
-- `app/services/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
-- `app/services/metering.py` — 逐节点计量（usage → `plan_nodes.cost`，ADR-025）
-- `app/agents/intent.py` — intent recognition
-- `app/routers/outputs.py` — 统一产物 API（含单产物重生成）
+- `app/pipeline/derivative_dispatch.py` — thin dispatcher registry
+- `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
+- `app/pipeline/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
+- `app/metering.py` — 逐节点计量（usage → `plan_nodes.cost`，ADR-025）
+- `app/chat/intent.py` — intent recognition
+- `app/pipeline/routes/outputs.py` — 统一产物 API（含单产物重生成）
 
 > 已退役（Phase 1 破坏性删除）：`services/generation.py`、`routers/clips.py`、`routers/derivatives.py`。
 

@@ -6,7 +6,7 @@ node execution, video rendering) never compete with online request handling.
 
 Each tick claims at most one asset, up to ``_NODE_CONCURRENCY`` ready plan
 nodes, and one render job via the ``FOR UPDATE SKIP LOCKED`` helpers in
-:mod:`app.services.jobs`. Node execution runs as asyncio tasks so sibling
+:mod:`app.pipeline.jobs`. Node execution runs as asyncio tasks so sibling
 nodes of a run keep the parallelism the retired asyncio.gather fan-out had.
 When all sources are empty the loop sleeps for
 ``settings.worker_poll_interval`` seconds. Processor failures are recorded on
@@ -20,20 +20,20 @@ import structlog
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
-from app.services.asset_processing import process_asset
-from app.services.distribution import (
+from app.pipeline.asset_processing import process_asset
+from app.distribution import (
     claim_due_publication,
     process_publication,
     reap_stale_publications,
 )
-from app.services.jobs import (
+from app.pipeline.jobs import (
     claim_pending_asset,
     claim_pending_render,
     claim_ready_node,
     reap_stale,
 )
-from app.services.orchestrator import execute_node, finalize_stuck_runs
-from app.services.rendering import render_output
+from app.pipeline.orchestrator import execute_node, finalize_stuck_runs
+from app.pipeline.rendering import render_output
 
 logger = structlog.get_logger()
 

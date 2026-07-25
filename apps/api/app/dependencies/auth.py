@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.tables import User
-from app.services.auth import decode_access_token
+from app.platform.auth import decode_access_token
 
 DEFAULT_USER_EMAIL = "default@repurposer.local"
 DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
