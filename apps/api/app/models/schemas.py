@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -125,6 +125,21 @@ class MessageRole(StrEnum):
     SYSTEM = "system"
 
 
+class ChatMention(BaseModel):
+    """An @ entity reference pinned to a definite id (CHAT_ARCH §7).
+
+    The picker UI lands in a later iteration; the contract and the column
+    (messages.mentions) are the seat. ``workflow_step`` follows the N-15
+    rename (one concept, one name across the stack).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["asset", "output", "transcript_segment", "workflow_step"]
+    id: str
+    label: str
+
+
 class ChatMessageResponse(BaseModel):
     """A single chat message returned by the API."""
 
@@ -135,6 +150,7 @@ class ChatMessageResponse(BaseModel):
     role: MessageRole
     content: str | None = None
     attachments: list[ChatAttachment] = Field(default_factory=list)
+    mentions: list[ChatMention] = Field(default_factory=list)
     workflow_run_id: UUID | None = None
     intent: dict | None = None
     created_at: datetime
@@ -147,39 +163,63 @@ class MessageListResponse(BaseModel):
     items: list[ChatMessageResponse]
 
 
-class ChatIntent(BaseModel):
-    """Parsed intent from a user chat message.
+class TaskListProposal(BaseModel):
+    """Intent agent output, state A: run new tasks (→ compile_graph mode②).
 
-    The chat model extracts a structured action so the backend can dispatch to
-    the right reviser/translator/renderer workflow.
+    ``tasks=[]`` is the legal "ask back" state (CHAT_ARCH §7) — an ambiguous
+    instruction gets a clarifying reply in ``summary``, not a run.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal[
-        "revise",
-        "translate",
-        "regenerate",
-        "render",
-        "select_music",
-        "generate_music",
-        "toggle_music",
-        "adjust_gain",
-        "unknown",
-    ]
-    scope: Literal["clip", "derivative", "project"] | None = None
-    target_id: UUID | None = None
-    target_language: str | None = None
-    operation: str | None = None
-    instruction: str | None = None
-    parameters: dict = Field(default_factory=dict)
+    type: Literal["task_list"] = "task_list"
+    tasks: list[TaskItem] = Field(default_factory=list)
+    summary: str
+
+
+class EditOp(BaseModel):
+    """One clip-spec-level edit operation (Operation Model vocabulary, §9)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: str
+    target: str | None = None
+    params: dict = Field(default_factory=dict)
+
+
+class EditOpsProposal(BaseModel):
+    """Intent agent output, state B: edit an existing output (→ Operation
+    Model, v2 — v1 answers with the boundary text and creates no run)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["edit_ops"] = "edit_ops"
+    target_output_id: UUID
+    ops: list[EditOp] = Field(default_factory=list)
+    summary: str
+
+
+IntentProposal = Annotated[
+    TaskListProposal | EditOpsProposal, Field(discriminator="type")
+]
+"""The two-state discriminated union the chat intent agent returns (§3)."""
+
+
+class IntentResult(BaseModel):
+    """Envelope for the single tool-calling-style LLM call (MiniMax JSON mode
+    needs a concrete model, so the union lives one level down)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proposal: IntentProposal
 
 
 class ChatRequest(BaseModel):
     """Send a message to a project or asset chat.
 
-    The backend locates or creates the appropriate session, builds the right
-    context (project-level vs asset-level), and dispatches any background work.
+    The backend locates or creates the appropriate conversation, builds the
+    right context (project-level vs asset-level), and dispatches any
+    background work.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -189,6 +229,7 @@ class ChatRequest(BaseModel):
     asset_type: Literal["clip", "derivative"] | None = None
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
+    mentions: list[ChatMention] = Field(default_factory=list)
 
 
 class TaskItem(BaseModel):

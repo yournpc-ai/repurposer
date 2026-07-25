@@ -1,16 +1,21 @@
-"""Intent recognition agent.
+"""Intent agents (two distinct jobs, NAMING §5 same-name audit).
 
-Translates a free-form user prompt into structured generation parameters.
-Used by the Home composer confirmation layer so the user sees what the AI
-understood and can edit it before generating.
+``ComposerIntentAgent`` — the Home composer's /infer-intent parser: free-form
+prompt → structured generation parameters (language/outputs/tone).
+
+``ChatIntentAgent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
+user message + assembled context → a two-state ``IntentProposal`` (task_list
+/ edit_ops). Single tool-calling-style call per turn, never a ReAct loop;
+the LLM proposes and ``compile_graph`` adjudicates.
 """
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import InferredIntent
+from app.models.schemas import InferredIntent, IntentResult
+from app.pipeline.registry import dispatchable_skills
 
 
-class IntentAgent:
-    """Agent that infers structured intent from a user prompt."""
+class ComposerIntentAgent:
+    """Agent that infers structured intent from a composer prompt."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
@@ -117,4 +122,68 @@ class IntentAgent:
             )
 
 
-intent_agent = IntentAgent()
+composer_intent_agent = ComposerIntentAgent()
+
+
+class ChatIntentAgent:
+    """Proposes what to do with one chat message (propose-only, no execution).
+
+    One call per turn. The proposal space is the dispatchable skill registry;
+    empty task list = ask back (a legal answer, not a failure).
+    """
+
+    def __init__(self, client: MiniMaxClient | None = None) -> None:
+        self.client = client or MiniMaxClient()
+
+    async def propose(self, message: str, context: dict) -> IntentResult:
+        """Return the two-state proposal for one user message."""
+        skills = dispatchable_skills()
+        skill_lines = "\n".join(
+            f"- {s.name}: {s.description}"
+            + (f" (params: {list(s.params_model.model_fields)})" if s.params_model else "")
+            for s in skills
+        )
+        system_prompt = (
+            "You are the intent proposer of an AI content repurposing tool. "
+            "Given one user message and the assembled context, decide what to do "
+            "and return valid JSON only.\n\n"
+            "Return exactly one of two shapes:\n"
+            'A. {"type": "task_list", "tasks": [{"skill": "<name>", "params": {...}}], '
+            '"summary": "<one user-facing sentence>"} — run new work. Only use '
+            "skills from the list below; leave tasks EMPTY when the message is "
+            "ambiguous and you need to ask back (the summary then holds your "
+            "clarifying question — asking back is a legal answer, not a failure).\n"
+            'B. {"type": "edit_ops", "target_output_id": "<uuid>", "ops": [...], '
+            '"summary": "<one user-facing sentence>"} — the user wants a precise '
+            "edit of ONE existing output (trim a moment, cut the end, tweak a "
+            "caption). Use this shape whenever the instruction targets an existing "
+            "output with clip-level precision.\n\n"
+            "Available skills:\n" + skill_lines + "\n\n"
+            "Rules:\n"
+            "- Never invent skills or params not in the list.\n"
+            "- Prefer the fewest tasks that express the instruction.\n"
+            "- summary is written for the user, in the user's language.\n"
+            "- When the user references a mention (asset/output/segment), use its "
+            "id in params (e.g. revise_script.target_output_id) instead of guessing."
+        )
+
+        user_content = (
+            f"Context:\n{context.get('text', '')}\n\nUser message: {message}"
+        )
+        if context.get("repair_feedback"):
+            user_content += (
+                "\n\nYour previous proposal was rejected: "
+                f"{context['repair_feedback']}. Fix it and return a valid proposal."
+            )
+
+        return await self.client.generate(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            response_model=IntentResult,
+            temperature=0.2,
+        )
+
+
+chat_intent_agent = ChatIntentAgent()

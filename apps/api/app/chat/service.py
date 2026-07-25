@@ -1,12 +1,18 @@
 """Generic chat service.
 
-A chat conversation is the universal container. It can be project-scoped (the
+A conversation is the universal container. It can be project-scoped (the
 original prompt plus project-level follow-ups) or asset-scoped (a clip,
 LinkedIn post, quote card, etc.).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
-locates or creates the right conversation, builds the correct context, and returns
-an assistant reply. Background work is dispatched through ``WorkflowRun``.
+locates or creates the right conversation, assembles deterministic context,
+and lets the intent agent propose (CHAT_ARCH §3):
+
+- task_list (non-empty) → compile_graph mode② → a new WorkflowRun
+- task_list (empty)     → ask back — a legal answer, not a failure
+- edit_ops              → boundary text (Operation Model is v2), no run
+
+One LLM call per turn; the loop lives between turns, never inside one.
 """
 
 from typing import Any
@@ -15,8 +21,35 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import ChatIntent, ChatMessageResponse, ChatRequest, ChatResponse
-from app.models.tables import Conversation, Message, Project
+from app.clients.minimax import MiniMaxError
+from app.chat.intent import chat_intent_agent
+from app.models.schemas import (
+    ChatMention,
+    ChatMessageResponse,
+    ChatRequest,
+    ChatResponse,
+    EditOpsProposal,
+    TaskItem,
+    TaskListProposal,
+)
+from app.models.tables import Asset, Conversation, Message, Project, WorkflowRun
+from app.pipeline.outputs import list_visible_outputs
+from app.pipeline.registry import SkillRejected, dispatchable_skills
+
+_ASK_BACK_TEXT = (
+    "I want to make sure I do the right thing — could you be more specific? "
+    "For example: re-cut highlights, remove filler words, add music, "
+    "or rewrite a post."
+)
+
+_EDIT_OPS_BOUNDARY_TEXT = (
+    "That kind of precise edit (trimming a moment, cutting an ending) belongs "
+    "in the editor for now — conversational edit ops land with the Operation "
+    "Model. What I can do here: re-cut highlights, remove filler words, "
+    "score the clips, or revise a script."
+)
+
+_REVISE_FALLBACK_TEXT = "Got it — revising this asset based on your instruction."
 
 
 async def _get_or_create_project_conversation(
@@ -98,6 +131,7 @@ async def _create_message(
     content: str,
     *,
     attachments: list[dict[str, Any]] | None = None,
+    mentions: list[dict[str, Any]] | None = None,
     workflow_run_id: UUID | None = None,
     intent: dict[str, Any] | None = None,
 ) -> Message:
@@ -106,6 +140,7 @@ async def _create_message(
         role=role,
         content=content,
         attachments=attachments or [],
+        mentions=mentions or [],
         workflow_run_id=workflow_run_id,
         intent=intent,
     )
@@ -119,146 +154,108 @@ async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
     return await db.get(Project, project_id)
 
 
-def _build_context(
+def _output_one_liner(output: Any) -> str:
+    """A one-line label for a visible output (type + first creative line)."""
+    payload = output.payload or {}
+    for key in ("hook", "title", "body"):
+        text = payload.get(key)
+        if text:
+            return str(text).split("\n", 1)[0][:80]
+    return ""
+
+
+async def _build_context(
+    db: AsyncSession,
     project: Project,
     conversation: Conversation,
-    messages: list[Message],
+    recent: list[Message],
+    mentions: list[ChatMention],
 ) -> dict[str, Any]:
-    """Build the context object fed to the chat intent parser."""
-    return {
-        "project": {
-            "id": str(project.id),
-            "title": project.title,
-            "event_name": project.event_name,
-            "language": project.language,
-        },
-        "conversation": {
-            "id": str(conversation.id),
-            "scope": "asset" if conversation.asset_id else "project",
-            "asset_id": str(conversation.asset_id) if conversation.asset_id else None,
-            "asset_type": conversation.asset_type,
-        },
-        "history": [
-            {"role": m.role, "content": m.content} for m in messages[-20:]
-        ],
-    }
+    """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
+    project summary (assets / visible outputs / latest run) + the last 3
+    rounds + the mention list. Not a chat-history dump."""
+    lines = [
+        f"Project: {project.title} (id={project.id}, language={project.language})",
+    ]
+
+    assets = list(
+        (await db.execute(select(Asset).where(Asset.project_id == project.id)))
+        .scalars()
+        .all()
+    )
+    if assets:
+        lines.append("Assets:")
+        for a in assets:
+            lines.append(f"- {a.type} id={a.id} status={a.processing_status}")
+
+    outputs = await list_visible_outputs(db, project.id)
+    if outputs:
+        lines.append("Current outputs:")
+        for o in outputs:
+            one_liner = _output_one_liner(o)
+            lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
+
+    latest_run = (
+        await db.execute(
+            select(WorkflowRun)
+            .where(WorkflowRun.project_id == project.id)
+            .order_by(WorkflowRun.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if latest_run is not None:
+        lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
+
+    if conversation.asset_id:
+        lines.append(
+            f"This conversation is about the single {conversation.asset_type} "
+            f"output id={conversation.asset_id}."
+        )
+
+    if recent:
+        lines.append("Recent rounds:")
+        for m in recent:
+            if m.content:
+                lines.append(f"- {m.role}: {m.content[:200]}")
+
+    if mentions:
+        lines.append("Mentions (definite references):")
+        for m in mentions:
+            lines.append(f"- {m.type} id={m.id} label={m.label}")
+
+    return {"text": "\n".join(lines)}
 
 
-async def _parse_chat_intent(
-    context: dict[str, Any],
-    user_message: str,
-) -> ChatIntent:
-    """Parse a user message into a structured chat intent.
-
-    Lightweight rule-based fallback so the chat module works before the
-    LLM-based parser is wired in. The contract (ChatIntent) is stable, so
-    swapping to an LLM call later is a drop-in change.
-    """
-    text = user_message.lower()
-
-    # Translation
-    for lang in ("german", "french", "spanish", "italian", "chinese"):
-        if lang in text or f"to {lang[:2]}" in text:
-            return ChatIntent(
-                action="translate",
-                target_language=_lang_code(lang),
-                instruction=user_message,
-            )
-
-    # Render
-    if "render" in text or "export" in text or "生成视频" in text:
-        return ChatIntent(action="render", instruction=user_message)
-
-    # Shorten / lengthen
-    if "shorter" in text or "短一点" in text or "缩短" in text:
-        return ChatIntent(action="revise", operation="shorten", instruction=user_message)
-    if "longer" in text or "长一点" in text or "加长" in text:
-        return ChatIntent(action="revise", operation="lengthen", instruction=user_message)
-
-    # Music
-    if "music" in text or "音乐" in text or "bgm" in text:
-        if "remove" in text or "去掉" in text or "关" in text:
-            return ChatIntent(action="toggle_music", parameters={"enabled": False})
-        return ChatIntent(action="select_music", instruction=user_message)
-
-    # Default: generic revise/regenerate
-    return ChatIntent(action="revise", instruction=user_message)
-
-
-def _lang_code(name: str) -> str:
-    mapping = {
-        "german": "de",
-        "french": "fr",
-        "spanish": "es",
-        "italian": "it",
-        "chinese": "zh",
-    }
-    return mapping.get(name, "en")
-
-
-def _reply_for_intent(intent: ChatIntent, has_run: bool) -> str:
-    """Return a short assistant reply based on the parsed intent."""
-    if intent.action == "translate":
-        lang = intent.target_language or "the requested language"
-        return f"Translating to {lang}..." if has_run else f"Translated to {lang}."
-    if intent.action == "render":
-        return "Rendering the video..." if has_run else "Rendered."
-    if intent.action == "revise":
-        return "Revising based on your feedback..." if has_run else "Revised."
-    if intent.action in ("select_music", "generate_music"):
-        return "Updating the music..." if has_run else "Music updated."
-    if intent.action == "toggle_music":
-        enabled = intent.parameters.get("enabled", True)
-        return "Music enabled." if enabled else "Music disabled."
-    return "Got it."
-
-
-async def _dispatch_intent_to_run(
+async def _create_run_from_tasks(
     db: AsyncSession,
+    project: Project,
     conversation: Conversation,
-    intent: ChatIntent,
-) -> UUID | None:
-    """Dispatch a parsed intent to a WorkflowRun via the orchestrator.
+    tasks: list[TaskItem],
+    summary: str,
+) -> UUID:
+    """Dispatch a proposed task list through the ONLY run birthplace."""
+    from app.pipeline.orchestrator import TaskSpec, create_run, derive_context_fields
 
-    Returns the created run id, or None if the intent needs no background work.
-    """
-    from app.pipeline.orchestrator import TaskSpec, create_run
-
-    scope = "full"
-    target_id = None
-    if conversation.asset_type == "clip":
-        scope = "clip"
-        target_id = UUID(str(conversation.asset_id)) if conversation.asset_id else None
-    elif conversation.asset_type == "derivative":
-        scope = "derivative"
-        target_id = UUID(str(conversation.asset_id)) if conversation.asset_id else None
-
-    operation = "regenerate"
-    if intent.action == "translate":
-        operation = "translate"
-    elif intent.action == "render":
-        operation = "render"
-    elif intent.action == "revise":
-        operation = intent.parameters.get("operation", "regenerate")
-
-    project = await db.get(Project, UUID(str(conversation.project_id)))
-    if project is None:
-        return None
-
+    backfill = derive_context_fields(tasks)
     run = await create_run(
         db,
         project,
         TaskSpec(
-            outputs=["clips"] if scope == "clip" else [],
-            clip_count=1,
-            target_language=intent.target_language or "en",
-            instruction=intent.instruction,
-            scope=scope,
-            operation=operation,
-            target_id=target_id,
+            outputs=backfill.get("outputs") or [],
+            clip_count=backfill.get("clip_count", 5),
+            target_language=project.language or "en",
+            instruction=summary,
+            scope="full",
+            target_id=UUID(str(conversation.asset_id)) if conversation.asset_id else None,
+            tasks=tasks,
         ),
     )
     return run.id
+
+
+def _cannot_do_text() -> str:
+    available = ", ".join(entry.name for entry in dispatchable_skills())
+    return f"I can't do that yet. What I can do: {available}."
 
 
 async def get_project_prompt(db: AsyncSession, project_id: UUID) -> str | None:
@@ -296,9 +293,10 @@ async def chat(
 ) -> ChatResponse:
     """Send a message to a chat conversation and return the assistant reply.
 
-    This is the single public entry point for chat: it locates or creates the
-    conversation, builds the correct context, parses intent, dispatches background
-    work, and returns the assistant message.
+    Single public entry point: locate/create the conversation, assemble
+    context, let the intent agent propose (one call), adjudicate via
+    compile_graph (SkillRejected → one repair round → "I can't do that yet"),
+    and record the turn.
     """
     conversation = await _get_or_create_conversation(db, user_id, request)
     conversation_id = UUID(str(conversation.id))
@@ -309,6 +307,7 @@ async def chat(
         "user",
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
+        mentions=[m.model_dump(mode="json") for m in request.mentions],
     )
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
@@ -322,21 +321,97 @@ async def chat(
         ).scalars()
     )
 
-    context = _build_context(project, conversation, history) if project else {}
-    intent = await _parse_chat_intent(context, request.message)
+    context = (
+        await _build_context(db, project, conversation, history[-6:], request.mentions)
+        if project
+        else {"text": ""}
+    )
+
+    proposal: TaskListProposal | EditOpsProposal | None = None
+    try:
+        result = await chat_intent_agent.propose(request.message, context)
+        proposal = result.proposal
+    except MiniMaxError:
+        proposal = None
 
     run_id: UUID | None = None
-    if intent.action not in ("toggle_music", "adjust_gain"):
-        run_id = await _dispatch_intent_to_run(db, conversation, intent)
 
-    assistant_content = _reply_for_intent(intent, run_id is not None)
+    if proposal is None:
+        # LLM failure fallback: asset-scoped → revise_script兜底;
+        # project-scoped → ask back.
+        if conversation.asset_id and project is not None:
+            try:
+                run_id = await _create_run_from_tasks(
+                    db,
+                    project,
+                    conversation,
+                    [
+                        TaskItem(
+                            skill="revise_script",
+                            params={
+                                "target_output_id": str(conversation.asset_id),
+                                "instruction": request.message,
+                            },
+                        )
+                    ],
+                    summary=request.message,
+                )
+                assistant_content = _REVISE_FALLBACK_TEXT
+            except (SkillRejected, ValueError):
+                assistant_content = _ASK_BACK_TEXT
+        else:
+            assistant_content = _ASK_BACK_TEXT
+    elif isinstance(proposal, EditOpsProposal):
+        assistant_content = _EDIT_OPS_BOUNDARY_TEXT
+    elif not proposal.tasks:
+        assistant_content = proposal.summary or _ASK_BACK_TEXT
+    else:
+        try:
+            run_id = await _create_run_from_tasks(
+                db, project, conversation, proposal.tasks, proposal.summary
+            )
+            assistant_content = proposal.summary
+        except ValueError as e:
+            # Missing required input (media/transcript/…) — no repair round
+            # can fix that; tell the user what's missing.
+            assistant_content = f"I'm missing an input for that: {e}"
+        except SkillRejected as first_error:
+            # One bounded repair round with the rejection as feedback.
+            repaired = False
+            try:
+                retry = await chat_intent_agent.propose(
+                    request.message,
+                    {
+                        **context,
+                        "repair_feedback": (
+                            f"{first_error} "
+                            f"(available: {getattr(first_error, 'suggestions', [])})"
+                        ),
+                    },
+                )
+                if (
+                    isinstance(retry.proposal, TaskListProposal)
+                    and retry.proposal.tasks
+                ):
+                    run_id = await _create_run_from_tasks(
+                        db, project, conversation, retry.proposal.tasks, retry.proposal.summary
+                    )
+                    proposal = retry.proposal
+                    assistant_content = retry.proposal.summary
+                    repaired = True
+            except (SkillRejected, ValueError, MiniMaxError):
+                pass
+            if not repaired:
+                proposal = None
+                assistant_content = _cannot_do_text()
+
     assistant_message = await _create_message(
         db,
         conversation_id,
         "assistant",
         assistant_content,
         workflow_run_id=run_id,
-        intent=intent.model_dump(mode="json"),
+        intent=proposal.model_dump(mode="json") if proposal else None,
     )
 
     await db.commit()

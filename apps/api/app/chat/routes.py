@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.chat.intent import intent_agent
+from app.chat.intent import composer_intent_agent
 from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     ChatMessageResponse,
@@ -103,7 +103,7 @@ async def infer_intent(request: InferIntentRequest) -> InferIntentResponse:
     Returns suggested language, outputs, tone and a distilled instruction.
     The frontend presents these as an editable confirmation layer.
     """
-    intent = await intent_agent.infer(
+    intent = await composer_intent_agent.infer(
         prompt=request.prompt,
         filename=request.filename,
     )
