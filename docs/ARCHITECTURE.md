@@ -159,7 +159,7 @@ apps/api/
 │   │   └── intent.py        # /infer-intent agent
 │   ├── pipeline/            # Pipeline module (RunPlan kernel)
 │   │   ├── routes/          # projects / assets / outputs / music / library endpoints
-│   │   ├── orchestrator.py  # RunPlan materialization/execution (`create_run`, `compile_plan`)
+│   │   ├── orchestrator.py  # RunPlan materialization/execution (`create_run`, `compile_graph`)
 │   │   ├── node_runners.py  # Node executor registry (NODE_RUNNERS)
 │   │   ├── jobs.py          # Queue claiming
 │   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision

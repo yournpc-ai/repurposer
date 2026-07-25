@@ -10,12 +10,12 @@
 Agent Interface 是六层模块图里"意图 → 执行"的唯一入口。用户的三张脸——composer pills、composer 自由 prompt、chat 对话——在它这里汇成**一条机制**：
 
 ```
-task list（LLM 提议）→ compile_plan 校验/排序/补默认（代码裁决）→ plan_nodes（施工图）
+task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁决）→ plan_nodes（施工图）
 ```
 
-1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_plan`。LLM 永不直接写 node spec。
+1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_graph`。LLM 永不直接写 node spec。
 2. **轮内一次调用，轮间才是循环**。每条用户消息 = intent agent 单次 tool-calling 调用 → task list → 编译 → 跑。不做 ReAct 式多步推理；"循环"只发生在对话轮次之间。
-3. **composer = chat 的第一条消息**。数据模型早已如此（`/generate` 建 project-scoped ChatSession 并存 prompt）：pills 是 task list 的结构化快捷方式，自由 prompt 是 task list 的自然语言入口，无指令 = 输入组合推导默认 task list（compile_plan 模式①，现有 presence-gating）。
+3. **composer = chat 的第一条消息**。数据模型早已如此（`/generate` 建 project-scoped ChatSession 并存 prompt）：pills 是 task list 的结构化快捷方式，自由 prompt 是 task list 的自然语言入口，无指令 = 输入组合推导默认 task list（compile_graph 模式①，现有 presence-gating）。
 
 ## 2. 一次对话指令的完整生命
 
@@ -28,7 +28,7 @@ chat/service.py ──► intent agent（LLM 单次 tool calling，带 §6 上�
  │                   [{skill:"remove_filler"}, {skill:"select_clips",params:{count:3}}, {skill:"add_music"}]
  ▼
 pipeline/registry.py   校验：skill 已注册？参数过 schema？
-pipeline/orchestrator  compile_plan 模式②：拓扑排序（配乐殿后）+ 补默认值
+pipeline/orchestrator  compile_graph 模式②：拓扑排序（配乐殿后）+ 补默认值
  ▼
 plan_nodes（动态 DAG，3 节点 + render fan-out）── worker 认领（SKIP LOCKED）
  │
@@ -50,7 +50,7 @@ Done · 3 clips · 12 fillers removed · 1 score ── [Open in editor]（outpu
 intent agent 的轮内输出二态，JSON schema 强校验：
 
 ```jsonc
-// A. 跑新任务（→ compile_plan 模式② → 新 WorkflowRun）
+// A. 跑新任务（→ compile_graph 模式② → 新 WorkflowRun）
 {
   "type": "task_list",
   "tasks": [
@@ -116,9 +116,9 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 - **judge/verify**：Phase 3 节点 kind，非用户技能。
 - **缓议**：`adapt_to_platform`（等 Distribution 回流数据）、`insert_broll` / `motion_graphics`（talking-head 知识内容价值低）、`avatar_gen`（v2，ADR-029 已定框架）。
 
-## 5. compile_plan 模式②：任务列表物化
+## 5. compile_graph 模式②：任务列表物化
 
-现有 `compile_plan`（模式①，presence-gating）之外新增模式②：
+现有 `compile_graph`（模式①，presence-gating）之外新增模式②：
 
 1. **校验**：task list 每个 skill 必须在 registry；params 过 schema；不认识的 skill → 拒收并让 intent 修复一次（retry 1 次），仍败 → 回复用户"这个我还不会"。
 2. **拓扑排序**：registry 声明 `ports`（in/out 类型）与 `after` 约束（如 `add_music` 必须在渲染相关节点之后）；编译期校验类型边。
@@ -183,14 +183,14 @@ edit ops 初集（Operation Model 动工时评审定稿）：`trim_segment` / `r
 
 | 期 | 内容 | 依赖 |
 |---|---|---|
-| v1 | registry 初集（§4.1）+ compile_plan 模式② + intent tool-calling + SSE + 量化摘要 + `remove_filler` 实装（全链路 hello world） | backend-module-restructure |
+| v1 | registry 初集（§4.1）+ compile_graph 模式② + intent tool-calling + SSE + 量化摘要 + `remove_filler` 实装（全链路 hello world） | backend-module-restructure |
 | v2 | mentions + edit ops（Operation Model 联动）+ `make_hook` | Operation Model 📋 |
 | v3 | 成本 quote（probabilistic skill 执行前报价确认）+ context 异步摘要 | metering 扩展 |
 
 ## 12. Prohibited Behaviors
 
 - **禁止** ReAct 式多步推理 loop——轮内单次 tool calling。
-- **禁止** LLM 直接写 node spec / 自由生成执行代码——一切经 registry + compile_plan。
+- **禁止** LLM 直接写 node spec / 自由生成执行代码——一切经 registry + compile_graph。
 - **禁止**引入 agent 框架（Agno / LangGraph 等）。
 - **禁止**把 SSE 做成事件总线（事件存储 / 投递保证 / 重放）。
 - **禁止** chat 绕开 `orchestrator.create_run` 自建 run（零旁路原则不变）。

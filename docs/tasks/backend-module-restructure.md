@@ -39,7 +39,7 @@ app/
 │   │   ├── outputs.py      # ← routers/outputs.py
 │   │   ├── music.py        # ← routers/music.py
 │   │   └── library.py      # ← routers/library.py（纯读面，就近归 Pipeline）
-│   ├── orchestrator.py     # ← services/orchestrator.py（含 compile_plan，见 §4.1）
+│   ├── orchestrator.py     # ← services/orchestrator.py（含 compile_graph，见 §4.1）
 │   ├── node_runners.py     # ← services/node_runners.py
 │   ├── jobs.py             # ← services/jobs.py
 │   ├── asset_processing.py # ← services/asset_processing.py
@@ -92,7 +92,7 @@ app/
 
 ### 4.1 已定
 
-- **`lower_plan` → `compile_plan`**（判例 N-04）：`orchestrator.py` 定义处 + `create_run` 调用处 + 文档引用（`AGENT_ARCHITECTURE.md` §12、本简报）。
+- **`lower_plan` → `compile_graph`**（判例 N-04）：`orchestrator.py` 定义处 + `create_run` 调用处 + 文档引用（`AGENT_ARCHITECTURE.md` §12、本简报）。
 
 ### 4.2 music 双文件拆分（同名不同物）
 
@@ -118,7 +118,7 @@ app/
 ## 5. 执行计划（R1 纪律）
 
 1. **单 commit 纯搬运**：全部文件移动 + import 机械替换 + `main.py` include 更新 + `worker.py` / `demo_seed.py` import 更新。零行为变化，不含任何新代码（registry、chat loop 一律不在本 commit）。
-2. **同 commit 内改名仅两个**：`lower_plan` → `compile_plan`；`music_generation.py` → `tools/music.py`（其余 audit 项按 §4 结论执行）。
+2. **同 commit 内改名仅两个**：`lower_plan` → `compile_graph`；`music_generation.py` → `tools/music.py`（其余 audit 项按 §4 结论执行）。
 3. **import 更新清单**（ grep 核实）：`routers/*`（消亡）、`worker.py`、`demo_seed.py`、`agents/*`（消亡）、`services/*`（消亡）、`main.py`。迁移脚本 `migrations/` 若 import app 模块需一并检查。
 4. 验收后更新 `MODULE_ARCHITECTURE.md` §3"现状代码"列、`AGENT_ARCHITECTURE.md` §11 critical files、`CLAUDE.md` 相关路径引用。
 

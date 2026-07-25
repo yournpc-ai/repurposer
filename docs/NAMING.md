@@ -29,7 +29,7 @@
 | 导演 | director | ContentPlan 产出者 | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |
 | 提及 | mention | 对话中的 @ 实体引用 | 不是 reference、不是 entity |
-| 施工图编译 | `compile_plan()` | 任务书 → 节点列表的纯函数 | 曾名 `lower_plan`（N-04） |
+| 施工图编译 | `compile_graph()` | 任务书 → 节点图的纯函数 | 曾名 `lower_plan`（N-04）/ `compile_plan`（N-08）；不含 plan——它产出的不是"计划"，是图 |
 
 ## 3. 判例库（只追加）
 
@@ -42,6 +42,7 @@
 | N-05 | 否决 `ai/` 顶层目录 | 不拥有表、不认领队列、不对应部署单元——按技术风味分组 = `services/` 错误的高配版 | §7 |
 | N-06 | 六模块包 + routes 入住模块 | `routers/` 平顶解散，模块自包含（routes + service + 逻辑）；skills/tools 永无 routes | §7 |
 | N-07 | `services/` 目录废除 | 18 文件混四个架构层；按层分家（pipeline/chat/skills/tools/memory/platform） | §1、§7 |
+| N-08 | `compile_plan` → `compile_graph`（翻案 N-04） | 函数产出的是节点图不是"计划"——保留 plan 必与 ContentPlan/RunPlan 混淆；以产出物命名（修订 N-04 只解决了黑话、没解决撞名） | §1 |
 
 ## 4. API 命名
 

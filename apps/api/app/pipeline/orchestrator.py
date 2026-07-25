@@ -73,7 +73,7 @@ class _NodeSpec:
         self.spec = spec or {}
 
 
-def compile_plan(task: TaskSpec, target_type: str | None = None) -> list[_NodeSpec]:
+def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeSpec]:
     """Lower a task book into a fixed node topology (pure, code-determined).
 
     Full run:   preprocess -> persona_bootstrap -> director_plan
@@ -167,7 +167,7 @@ async def create_run(
     db.add(run)
     await db.flush()
 
-    node_specs = compile_plan(task, target_type)
+    node_specs = compile_graph(task, target_type)
     nodes: list[PlanNode] = []
     for ns in node_specs:
         node = PlanNode(

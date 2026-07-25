@@ -58,7 +58,7 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 | `voice_gen` | 取文字稿 asset 文本 → Speaker 声纹（无则先 `clone_voice` 样本）→ `synthesize()` → 音频 asset 落库；TTS usage 经 metering 落 `plan_nodes.cost` | audio asset |
 | `synth_visual` | 照片 assets + 音频 + 字幕（文字稿对齐）+ brand → render 服务新 composition → 视频 asset；**规则质检**：音画时长一致 / 字幕对齐率 / 分辨率达标 | video asset |
 
-### 4.2 compile_plan 输入组合 gating（模式①扩展）
+### 4.2 compile_graph 输入组合 gating（模式①扩展）
 
 clips 的合法输入从"有 video/audio/image"扩展为：
 
