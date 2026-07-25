@@ -1,0 +1,107 @@
+"""Clip Agent: select segments and write clip scripts from a content plan.
+
+This agent replaces the previous ContentPlannerAgent. It receives the shared
+GenerationContext and ContentPlan produced by the Content Director, then plans
+vertical clips that reinforce the same core thesis and brand strategy.
+"""
+
+from typing import Any
+
+import structlog
+
+from app.skills.base import MiniMaxAgentBase
+from app.clients.minimax import MiniMaxError
+from app.models.schemas import ClipPlans, ContentPlan, GenerationContext, MediaInput
+
+logger = structlog.get_logger()
+
+
+class ClipAgent(MiniMaxAgentBase):
+    """Agent that plans clips from a content plan and source texts/media."""
+
+    async def generate(
+        self,
+        asset_texts: list[str],
+        context: GenerationContext,
+        content_plan: ContentPlan,
+        asset_media: list[MediaInput] | None = None,
+        clip_count: int = 3,
+        source_words: list[dict[str, Any]] | None = None,
+        music_pieces: list[dict[str, str]] | None = None,
+    ) -> ClipPlans:
+        """Plan clips from source texts and/or raw media.
+
+        Args:
+            asset_texts: Extracted text / transcripts from project assets.
+            context: Shared generation context (speaker, brand, tone, language).
+            content_plan: Unified content plan from the Content Director.
+            asset_media: Optional images/videos/short audio snippets from assets.
+            clip_count: Number of clips to plan.
+            source_words: Optional ASR word-level timestamps for the primary source
+                so the agent can output exact ``start_seconds`` / ``end_seconds``.
+            music_pieces: Available music library pieces (``id``/``mood``/
+                ``title``/``description``) the agent selects from per clip.
+
+        Returns:
+            ClipPlans containing analysis and a list of ClipPlan objects.
+        """
+        if not asset_texts and not asset_media:
+            raise MiniMaxError("No source texts or media provided for clip planning")
+
+        asset_media = asset_media or []
+        trimmed_texts = self._trim_texts(asset_texts)
+        if not trimmed_texts and not asset_media:
+            raise MiniMaxError("No usable text or media found")
+
+        user_prompt = self.jinja_env.get_template("clip_agent.j2").render(
+            asset_texts=trimmed_texts,
+            asset_media=asset_media,
+            clip_count=clip_count,
+            context=context.model_dump(),
+            content_plan=content_plan.model_dump(),
+            source_words=source_words or [],
+            music_pieces=music_pieces or [],
+        )
+
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a senior content strategist and short-form video "
+                    "director. You output valid JSON only, with no extra commentary."
+                ),
+            },
+            self._build_user_message(user_prompt, asset_media),
+        ]
+
+        logger.info(
+            "clip_planning_started",
+            text_count=len(trimmed_texts),
+            media_count=len(asset_media),
+            clip_count=clip_count,
+            target_language=context.target_language,
+        )
+
+        try:
+            plans = await self._generate_with_fallback(
+                messages=messages,
+                user_prompt=user_prompt,
+                media_inputs=asset_media,
+                response_model=ClipPlans,
+                temperature=0.4,
+            )
+        except MiniMaxError:
+            raise
+        except Exception as e:
+            logger.error("clip_planning_failed", error=str(e))
+            raise MiniMaxError(f"Clip planning failed: {e}") from e
+
+        logger.info(
+            "clip_planning_completed",
+            clip_count=len(plans.clips),
+            top_score=max((c.recommendation_score for c in plans.clips), default=0),
+        )
+        return plans
+
+
+clip_agent = ClipAgent()
