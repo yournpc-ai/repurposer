@@ -63,7 +63,7 @@ This document proposes a unified architecture that replaces the static mood-file
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         Content Director + Clip Agent                       │
-│  ContentPlan.derivatives[].music_prompt  ← optional suggestion              │
+│  ContentBrief.derivatives[].music_prompt  ← optional suggestion              │
 │  ClipPlan.music_asset_id                ← selected from library             │
 │  ClipPlan.music_enabled                 ← per-clip override                 │
 │  ClipPlan.music_gain_db                 ← per-clip volume                   │

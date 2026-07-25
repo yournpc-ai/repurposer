@@ -14,11 +14,11 @@ Based on the following source texts and content plan, write an article. Requirem
 
 ## Content Plan
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
+- **Core thesis**: {{ content_brief.core_thesis }}
+- **Themes**: {{ content_brief.themes | join(', ') }}
+- **Target audience**: {{ content_brief.target_audience }}
 - **Key arguments**:
-{% for arg in content_plan.key_arguments %}
+{% for arg in content_brief.key_arguments %}
   - {{ arg }}
 {% endfor %}
 - **Focus for this article**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}

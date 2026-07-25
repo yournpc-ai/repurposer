@@ -144,7 +144,7 @@ export interface OutputScore {
 export interface Output {
   id: string
   project_id: string
-  plan_node_id: string | null
+  run_node_id: string | null
   type: string
   language: string
   status: string
@@ -161,13 +161,13 @@ export interface Output {
   updated_at: string | null
 }
 
-export type PlanNodeStatus = "pending" | "running" | "done" | "failed" | "skipped"
+export type RunNodeStatus = "pending" | "running" | "done" | "failed" | "skipped"
 
 /** One node of a run's execution plan (ADR-028) — the user-facing step. */
-export interface PlanNode {
+export interface RunNode {
   id: string
   kind: string
-  status: PlanNodeStatus
+  status: RunNodeStatus
   seq: number
   error: string | null
   cost: Record<string, number> | null

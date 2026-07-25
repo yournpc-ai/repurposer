@@ -1,7 +1,7 @@
 """Thin derivative agent dispatcher.
 
 Maps a ``DerivativeType`` to its executor agent and forwards a shared
-``GenerationContext`` + ``ContentPlan``. All agent-specific parameter handling
+``GenerationContext`` + ``ContentBrief``. All agent-specific parameter handling
 lives in the agents themselves; this module only provides the registry and a
 uniform call site.
 """
@@ -11,7 +11,7 @@ from app.skills.carousel import carousel_agent
 from app.skills.post import post_agent
 from app.skills.quotes import quotes_agent
 from app.models.schemas import (
-    ContentPlan,
+    ContentBrief,
     DerivativeType,
     GenerationContext,
     validate_derivative_content,
@@ -29,7 +29,7 @@ async def generate_derivative(
     derivative_type: DerivativeType,
     asset_texts: list[str],
     context: GenerationContext,
-    content_plan: ContentPlan,
+    content_brief: ContentBrief,
 ) -> dict:
     """Generate a single derivative by dispatching to the appropriate agent.
 
@@ -37,7 +37,7 @@ async def generate_derivative(
         derivative_type: The type of derivative to generate.
         asset_texts: Extracted text from project assets.
         context: Shared generation context.
-        content_plan: Unified content plan from the Content Director.
+        content_brief: Unified content plan from the Content Director.
 
     Returns:
         The agent's generated content as a plain dict. Callers are responsible
@@ -50,6 +50,6 @@ async def generate_derivative(
     result = await agent.generate(
         asset_texts=asset_texts,
         context=context,
-        content_plan=content_plan,
+        content_brief=content_brief,
     )
     return validate_derivative_content(derivative_type, result.model_dump())

@@ -23,8 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import ProjectStatus, WorkflowStatus
-from app.models.tables import Output, PlanNode, Project, WorkflowRun
-from app.metering import bind_plan_node
+from app.models.tables import Output, RunNode, Project, WorkflowRun
+from app.metering import bind_run_node
 from app.pipeline.node_runners import KNOWN_OUTPUTS, NODE_RUNNERS
 
 logger = structlog.get_logger()
@@ -76,9 +76,9 @@ class _NodeSpec:
 def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeSpec]:
     """Lower a task book into a fixed node topology (pure, code-determined).
 
-    Full run:   preprocess -> persona_bootstrap -> director_plan
+    Full run:   preprocess -> persona_bootstrap -> director_brief
                 -> {clips_pipeline | post_gen | quotes_gen | carousel_gen | article_gen}
-    Targeted:   hook/clip -> [script];  derivative -> [director_plan -> X_gen];
+    Targeted:   hook/clip -> [script];  derivative -> [director_brief -> X_gen];
                 render -> [render].
     """
     scope = task.scope or "full"
@@ -88,7 +88,7 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         nodes = [
             _NodeSpec("preprocess", 1),
             _NodeSpec("persona_bootstrap", 2, inputs=[0]),
-            _NodeSpec("director_plan", 3, inputs=[1]),
+            _NodeSpec("director_brief", 3, inputs=[1]),
         ]
         # Deterministic order keeps the step list stable across runs.
         for seq, output in enumerate(
@@ -118,7 +118,7 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         if not target_type:
             raise ValueError(f"Cannot lower scope={scope} without a target type")
         return [
-            _NodeSpec("director_plan", 1, spec={"target_type": target_type}),
+            _NodeSpec("director_brief", 1, spec={"target_type": target_type}),
             _NodeSpec(
                 _OUTPUT_TO_NODE_KIND[target_type],
                 2,
@@ -168,9 +168,9 @@ async def create_run(
     await db.flush()
 
     node_specs = compile_graph(task, target_type)
-    nodes: list[PlanNode] = []
+    nodes: list[RunNode] = []
     for ns in node_specs:
-        node = PlanNode(
+        node = RunNode(
             run_id=run.id,
             kind=ns.kind,
             status="pending",
@@ -201,7 +201,7 @@ async def execute_node(node_id: UUID) -> None:
     run_id: UUID | None = None
     try:
         async with AsyncSessionLocal() as db:
-            node = await db.get(PlanNode, node_id)
+            node = await db.get(RunNode, node_id)
             if node is None or node.status not in ("pending", "running"):
                 return
             run_id = node.run_id
@@ -216,11 +216,11 @@ async def execute_node(node_id: UUID) -> None:
 
         try:
             async with AsyncSessionLocal() as db:
-                node = await db.get(PlanNode, node_id)
+                node = await db.get(RunNode, node_id)
                 run = await db.get(WorkflowRun, node.run_id)
                 project = await db.get(Project, run.project_id)
                 runner = NODE_RUNNERS[node.kind]
-                with bind_plan_node(node.id):
+                with bind_run_node(node.id):
                     output_ids = await runner(db, run, node, project)
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
                 if node.kind == "render":
@@ -232,11 +232,11 @@ async def execute_node(node_id: UUID) -> None:
                     node.status = "done"
                     node.finished_at = datetime.now(UTC)
                 await db.commit()
-                logger.info("plan_node_done", node_id=str(node_id), kind=node.kind)
+                logger.info("run_node_done", node_id=str(node_id), kind=node.kind)
         except Exception as e:  # noqa: BLE001 — record any failure on the node
-            logger.error("plan_node_failed", node_id=str(node_id), error=str(e))
+            logger.error("run_node_failed", node_id=str(node_id), error=str(e))
             async with AsyncSessionLocal() as db:
-                node = await db.get(PlanNode, node_id)
+                node = await db.get(RunNode, node_id)
                 node.status = "failed"
                 node.error = str(e)[:2000]
                 node.finished_at = datetime.now(UTC)
@@ -248,16 +248,16 @@ async def execute_node(node_id: UUID) -> None:
             await maybe_finalize_run(run_id)
 
 
-async def _cascade_skip(db: AsyncSession, failed_node: PlanNode) -> None:
+async def _cascade_skip(db: AsyncSession, failed_node: RunNode) -> None:
     """Transitively mark downstream pending nodes as skipped."""
     frontier = [failed_node.id]
     while frontier:
         current = frontier.pop()
         result = await db.execute(
-            select(PlanNode).where(
-                PlanNode.run_id == failed_node.run_id,
-                PlanNode.status.in_(["pending", "running"]),
-                PlanNode.inputs.contains([str(current)]),
+            select(RunNode).where(
+                RunNode.run_id == failed_node.run_id,
+                RunNode.status.in_(["pending", "running"]),
+                RunNode.inputs.contains([str(current)]),
             )
         )
         for child in result.scalars():
@@ -285,7 +285,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             return
 
         nodes = list(
-            (await db.execute(select(PlanNode).where(PlanNode.run_id == run_id)))
+            (await db.execute(select(RunNode).where(RunNode.run_id == run_id)))
             .scalars()
             .all()
         )
@@ -339,14 +339,14 @@ async def execute_run_inline(run_id: UUID) -> None:
                 await db.execute(
                     text(
                         """
-                        SELECT pn.id FROM plan_nodes pn
+                        SELECT pn.id FROM run_nodes pn
                         WHERE pn.run_id = :rid
                           AND pn.status = 'pending'
                           AND pn.kind <> 'render'
                           AND NOT EXISTS (
                             SELECT 1
                             FROM jsonb_array_elements_text(pn.inputs) AS up(id)
-                            JOIN plan_nodes upn ON upn.id = up.id::uuid
+                            JOIN run_nodes upn ON upn.id = up.id::uuid
                             WHERE upn.status <> 'done'
                           )
                         ORDER BY pn.seq
@@ -372,7 +372,7 @@ async def finalize_stuck_runs() -> None:
                     SELECT r.id FROM workflow_runs r
                     WHERE r.status = 'RUNNING'
                       AND NOT EXISTS (
-                        SELECT 1 FROM plan_nodes pn
+                        SELECT 1 FROM run_nodes pn
                         WHERE pn.run_id = r.id
                           AND pn.status IN ('pending', 'running')
                           AND pn.kind <> 'render'

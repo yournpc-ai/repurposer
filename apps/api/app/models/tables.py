@@ -174,7 +174,7 @@ class BrandTemplate(Base):
 class WorkflowRun(Base):
     """Workflow run table — run-level state machine only.
 
-    Per-step state lives in plan_nodes (RunPlan); ``context`` is the task
+    Per-step state lives in run_nodes (RunPlan); ``context`` is the task
     book (normalized intent), ``progress`` aggregates node states. The retired
     current_step string is gone (query running nodes instead).
     """
@@ -191,7 +191,7 @@ class WorkflowRun(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
-class PlanNode(Base):
+class RunNode(Base):
     """RunPlan node: one step of a run's execution plan (ADR-028).
 
     The plan graph is materialized at run creation by the orchestrator —
@@ -203,7 +203,7 @@ class PlanNode(Base):
     retired run-context JSON blob + process lock is gone.
     """
 
-    __tablename__ = "plan_nodes"
+    __tablename__ = "run_nodes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     run_id = Column(
@@ -229,8 +229,8 @@ class PlanNode(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
     __table_args__ = (
-        Index("ix_plan_nodes_run_status", "run_id", "status"),
-        Index("ix_plan_nodes_kind_status", "kind", "status"),
+        Index("ix_run_nodes_run_status", "run_id", "status"),
+        Index("ix_run_nodes_kind_status", "kind", "status"),
     )
 
 
@@ -242,7 +242,7 @@ class Output(Base):
     types. Type-specific content lives in ``payload`` guarded by
     OUTPUT_PAYLOAD_SCHEMAS; ``files`` holds produced artifacts
     (video/srt/image object keys); ``publishing`` is the distribution metadata
-    home (title/description/hashtags/cover_image_url/topic); ``plan_node_id``
+    home (title/description/hashtags/cover_image_url/topic); ``run_node_id``
     is read-only lineage back to the producing node.
     """
 
@@ -250,9 +250,9 @@ class Output(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    plan_node_id = Column(
+    run_node_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("plan_nodes.id", ondelete="SET NULL"),
+        ForeignKey("run_nodes.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

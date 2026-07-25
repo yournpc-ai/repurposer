@@ -21,23 +21,23 @@
 |---|---|---|---|---|---|
 | 4-layer 编排（Director/Executors） | — | — | — | ✅ | ✅ 已落地 |
 | 词级时间戳 ASR | — | — | — | ✅ | ✅ 已落地 |
-| 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ✅（2026-07-22 随 RunPlan Phase 1 落地：`services/metering.py` contextvar 绑定 plan node，usage 直落 `plan_nodes.cost`） |
+| 成本计量钩子（minimax usage 入 WorkflowRun） | 矩阵 §I；2027 架构 | **P0** | 无（趁管线还热先埋，后补成本极高） | — 纯工程 | ✅（2026-07-22 随 run graph Phase 1 落地：`services/metering.py` contextvar 绑定 plan node，usage 直落 `run_nodes.cost`） |
 | 去静默 / 去口头禅 | 矩阵 §B（2026-07-23 重估下放：输入为排练演讲密度低 + 选段层已过滤 + 跳剪伤专业感；残余价值=停顿收紧，手动路径已存在） | P2（自 P0 下放） | 词级时间戳（已有）；随 Operation Model 一并评估（editor 一键操作方向） | ✅ | ❌（仅 i18n 占位文案） |
 | 首发推荐分：持久化 + UI 展示（值 + 打分理由） | 矩阵 §C 改造 | **P0** | ~~`Clip` 表加列~~ `outputs.score` 已建 + 前端展示位 | ✅（LLM 已产出分数） | ✅（2026-07-23：prompt 四维口径 + score={value,reason} 落库 + ClipCard 徽章/榜首 accent + 详情理由；简报：`tasks/score-persistence.md`） |
 | 首发推荐分：维度明细 | 矩阵 §C；STRATEGY §2.1 | P1 | 上一行 | ✅ | ❌ |
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
 | persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
-| RunPlan 持久化 + outputs 统一（`plan_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ✅ Phase 1（2026-07-22：建表 + orchestrator + 创建点零旁路 + 读路径切换；后续 = 下方导演两步走/质检节点行） |
-| 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | RunPlan 持久化 | ✅ | ❌（Director 单趟一坨 + project.content_plan 盲目复用 + 伪造 DerivativePlan） |
+| run graph 持久化 + outputs 统一（`run_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ✅ Phase 1（2026-07-22：建表 + orchestrator + 创建点零旁路 + 读路径切换；后续 = 下方导演两步走/质检节点行） |
+| 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | run graph 持久化 | ✅ | ❌（Director 单趟一坨 + project.content_brief 盲目复用 + 伪造 DerivativePlan） |
 | 结构化节拍图 + clip-spec motion 枚举（分镜入 plan：hook/body/payoff 时间戳；运镜入 spec 预设枚举——ADR-016 纪律不破，仍 CSS/libass 双端可表达） | STRATEGY §2.5；elevencreative | P2 | 覆盖问责 | ⚠️ | ❌（`visual_notes` 自由文本；crop 整条静态） |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
-| 质检节点（原"Layer 4"新形态：单产物质检——分数落库/persona 保真/术语合规，不合格带反馈打回上游 ≤2 次；全片质检——跨产物撞车；verify = plan_nodes 一种 kind） | AGENT_ARCH §12；ADR-028 | P2 | RunPlan 持久化 | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
+| 质检节点（原"Layer 4"新形态：单产物质检——分数落库/persona 保真/术语合规，不合格带反馈打回上游 ≤2 次；全片质检——跨产物撞车；verify = run_nodes 一种 kind） | AGENT_ARCH §12；ADR-028 | P2 | run graph 持久化 | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
 
 ## 2. Operation Model（操作日志层）⭐ 地基
 
 > 2027 架构的核心对冲：editor GUI、chat、MCP 都是操作的三个前端。即使手动编辑占比萎缩，投资全部沉淀在本层。
 >
-> **生成侧半身**：RunPlan 持久化（§1，ADR-028）与本层同一条原则——**步骤皆可寻址**——分别落在生成侧与编辑侧。
+> **生成侧半身**：run graph 持久化（§1，ADR-028）与本层同一条原则——**步骤皆可寻址**——分别落在生成侧与编辑侧。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -56,10 +56,10 @@
 | chat 接入 LLM 意图解析（`agents/intent.py` 已存在未接线） | 代码现状快赢 | **P1 快赢** | 无 | ✅ | 🚧（chat 用纯关键词规则，`Message.intent` 注释与实际不符） |
 | M3 tool-calling spike（验证原生 function calling；不可靠则走"结构化输出模拟工具调用"） | 2027 架构 | **P1（先于一切 agent 设计）** | 无 | ⚠️ 待 spike | ❌ |
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
-| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | ❌ |
+| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + run graph + spike 结论 | ⚠️ | ❌ |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ❌（需 CHAT_ARCHITECTURE 文档仲裁） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
-| 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
+| 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | run graph 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
 ## 4. Editor GUI（Operation Model 的前端之一）
 
@@ -122,7 +122,7 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ✅（节点级 = `plan_nodes.cost`；run 级 = 节点聚合视图，无独立列） |
+| WorkflowRun 成本列 + 每次 stage 计量 | 矩阵 §I | **P0**（同 §1 计量钩子，同一件事） | 无 | — | ✅（节点级 = `run_nodes.cost`；run 级 = 节点聚合视图，无独立列） |
 | 成本预估展示（生成前） | 矩阵 §I；STRATEGY §2.3；elevencreative §8 机制 5（子图级积分预览实证） | P1（**提速**：对手已到动作级标价——Opus 生成按钮带价、按 part 重生成 20⚡（opusclip §8.1），再晚追不平） | 成本计量数据积累 | — | ❌ |
 | 失败不扣费语义 | 矩阵 §I；STRATEGY §2.3 | P1 | 成本计量 | — | ❌ |
 | 套餐经济设计（档位 / 免费额度 / credits↔产出换算；**计费形态候选 = 按结果包计价**——一场演讲 = 一套内容包，而非裸 credit；呼应 PRD §4.2 本人验收主路径与 STRATEGY §2.3 "可预期 > 便宜"） | 审计 2026-07-22；Opus pricing 参照（agent-opus §5） | P1 | 成本计量；文档坑位 BILLING.md 已登记（README） | — | ❌ |
@@ -152,7 +152,7 @@ Operation Model (P1 地基) ──┬──► Editor undo 栈 (P1)
                             ├──► chat 意图→操作 dispatch (P1)
                             └──► Consistency Reviser (P2)
 
-RunPlan 持久化 (P1 地基, ADR-028) ──┬──► 逐节点成本归属 ──► 成本预估 (P1)
+run graph 持久化 (P1 地基, ADR-028) ──┬──► 逐节点成本归属 ──► 成本预估 (P1)
                                     ├──► 覆盖问责 (P1) ──► 节拍+motion 枚举 (P2)
                                     ├──► 配方 = run-plan 模板 (STRATEGY §5)
                                     └──► 运行图检视面 (P2, ADR-028 Amendment)
@@ -173,7 +173,7 @@ clip-spec 扩展 (P1 合规标识) ──► render 服务打标 ──► XML/E
 | # | 事项 | 模块 | 一句话理由 |
 |---|---|---|---|
 | 1 | ~~AI 内容标识（C2PA/元数据 + 界面披露）~~ → **P1**（2026-07-23 降级：未上线，义务自上线日起算，上线前必须回补，见 §7） | 合规 | EU AI Act Art.50，2026-08-02 生效 |
-| 2 | ~~成本计量钩子~~ ✅（2026-07-22 随 RunPlan Phase 1 落地） | Pipeline/计费 | 趁管线热埋点，后补成本极高；透明定价的地基 |
+| 2 | ~~成本计量钩子~~ ✅（2026-07-22 随 run graph Phase 1 落地） | Pipeline/计费 | 趁管线热埋点，后补成本极高；透明定价的地基 |
 | 3 | ~~首发推荐分：持久化 + UI（值+理由）~~ ✅（2026-07-23 落地） | Pipeline | LLM 已产出分数，落库+展示是低成本高兑现；只答"哪条最值得你先发"，不预测传播量 |
 | 4 | ~~去静默 / 去口头禅~~ → **P2**（2026-07-23 重估下放：播客刚需 ≠ 演讲刚需，选段层已过滤，跳剪伤专业感；P0 清单清空） | Pipeline | 矩阵 §B 行 |
 

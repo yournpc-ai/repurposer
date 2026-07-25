@@ -19,7 +19,7 @@ import { Card } from "@/components/ui/card"
 import { apiFetch, apiPost } from "@/lib/api"
 import { resolveProjectId } from "@/lib/constants"
 
-import type { Output, PlanNode, Project } from "@/lib/types"
+import type { Output, RunNode, Project } from "@/lib/types"
 
 interface AssetStatusEntry {
   id: string
@@ -43,7 +43,7 @@ interface WorkflowRun {
     tone_settings?: Record<string, unknown> | null
   } | null
   cost: Record<string, number> | null
-  nodes: PlanNode[]
+  nodes: RunNode[]
   created_at: string
   updated_at: string | null
 }

@@ -574,7 +574,7 @@ See the Data Models section in [Architecture Design](./ARCHITECTURE.md).
 Core models:
 
 - `Speaker` (= user profile: style memory + voiceprint; see ADR-021)
-- `Project` (includes `content_plan: JSON` for persisted ContentPlan)
+- `Project` (includes `content_brief: JSON` for persisted ContentBrief)
 - `Asset`
 - `Clip`
 - `Derivative`

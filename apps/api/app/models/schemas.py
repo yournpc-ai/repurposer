@@ -810,7 +810,7 @@ class DerivativePlan(BaseModel):
     count: int | None = None
 
 
-class ContentPlan(BaseModel):
+class ContentBrief(BaseModel):
     """Top-level content plan shared across all agent executors."""
 
     model_config = ConfigDict(extra="forbid")
@@ -825,16 +825,16 @@ class ContentPlan(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# RunPlan vocabulary (ADR-028/030): plan_nodes + unified outputs.
+# RunPlan vocabulary (ADR-028/030): run_nodes + unified outputs.
 # ---------------------------------------------------------------------------
 
 # Phase 1 node kinds (coarse-grained; docs/tasks/runplan-phase1-implementation.md §4).
 # Reserved for Phase 2/3 — NOT registered, NOT implemented here:
 # director_understand / selection / dub / music / verify.
-PlanNodeKind = Literal[
+RunNodeKind = Literal[
     "preprocess",
     "persona_bootstrap",
-    "director_plan",
+    "director_brief",
     "clips_pipeline",
     "post_gen",
     "quotes_gen",
@@ -844,9 +844,9 @@ PlanNodeKind = Literal[
     "render",
 ]
 
-PlanNodeStatus = Literal["pending", "running", "done", "failed", "skipped"]
+RunNodeStatus = Literal["pending", "running", "done", "failed", "skipped"]
 
-OutputType = Literal["clip", "post", "quotes", "carousel", "article", "content_plan"]
+OutputType = Literal["clip", "post", "quotes", "carousel", "article", "content_brief"]
 
 OutputProvenance = Literal["real", "generated"]
 
@@ -876,13 +876,13 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "quotes": Quotes,
     "carousel": CarouselResponse,
     "article": Article,
-    "content_plan": ContentPlan,
+    "content_brief": ContentBrief,
 }
 
 # Internal types are node artifacts, not user-facing products. Every read path
 # must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
 # type filter (results/library/export, and future MCP/gallery surfaces).
-INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset({"content_plan"})
+INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset({"content_brief"})
 
 
 def validate_output_payload(output_type: str, payload: dict) -> dict:
@@ -966,7 +966,7 @@ class ClipSpec(BaseModel):
     target_language: str = "en"
 
 
-class PlanNodeResponse(BaseModel):
+class RunNodeResponse(BaseModel):
     """One node of a run's execution plan — the user-facing step (ADR-028).
 
     ``stage`` is an optional display hint lifted from ``node.spec["stage"]`` by
@@ -999,7 +999,7 @@ class OutputResponse(BaseModel):
 
     id: UUID
     project_id: UUID
-    plan_node_id: UUID | None = None
+    run_node_id: UUID | None = None
     type: str
     language: str
     status: str
@@ -1158,10 +1158,10 @@ class WorkflowRunResponse(BaseModel):
     progress: int = Field(default=0, ge=0, le=100)
     error: str | None = None
     context: dict | None = None
-    # Aggregated node metering (sum of plan_nodes.cost); None until metered.
+    # Aggregated node metering (sum of run_nodes.cost); None until metered.
     cost: dict | None = None
-    # RunPlan steps, ordered by seq; empty for runs predating plan_nodes.
-    nodes: list[PlanNodeResponse] = Field(default_factory=list)
+    # RunPlan steps, ordered by seq; empty for runs predating run_nodes.
+    nodes: list[RunNodeResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime | None = None
 

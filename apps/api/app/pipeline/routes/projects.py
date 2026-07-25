@@ -23,7 +23,7 @@ from app.models.schemas import (
 from app.models.tables import (
     Asset,
     Output,
-    PlanNode,
+    RunNode,
     Project,
     Speaker,
     User,
@@ -35,7 +35,7 @@ from app.pipeline.orchestrator import TaskSpec, create_run
 from app.pipeline.outputs import (
     aggregate_node_cost,
     list_visible_outputs,
-    plan_node_to_response,
+    run_node_to_response,
     run_to_response,
     visible_outputs_stmt,
 )
@@ -179,12 +179,12 @@ def _ui_steps_for_outputs(outputs: list[str]) -> list[str]:
 def _compute_ui_step(
     assets: list[Asset],
     latest_job: WorkflowRun | None,
-    nodes: list[PlanNode],
+    nodes: list[RunNode],
     outputs: list[Output],
 ) -> dict | None:
     """Stepper position for the results-page loading dialog.
 
-    Derived from the run's plan_nodes (RunPlan Phase 1): the current step is
+    Derived from the run's run_nodes (RunPlan Phase 1): the current step is
     the first non-settled node by seq; node kind/stage maps onto the existing
     i18n step keys, so the frontend contract ({key, index, total}) is
     unchanged. None = hide the dialog (no run, run failed, or everything
@@ -232,7 +232,7 @@ def _compute_ui_step(
     if current is not None:
         if current.kind in ("preprocess", "persona_bootstrap"):
             return at("analyze")
-        if current.kind == "director_plan":
+        if current.kind == "director_brief":
             return at("plan")
         if current.kind == "clips_pipeline":
             stage = (current.spec or {}).get("stage")
@@ -290,19 +290,19 @@ async def get_project_results(
     # are replaced per type on each run, so the list is already "latest".
     outputs = await list_visible_outputs(db, project_id)
 
-    nodes: list[PlanNode] = []
+    nodes: list[RunNode] = []
     if latest_job is not None:
         nodes_result = await db.execute(
-            select(PlanNode)
-            .where(PlanNode.run_id == latest_job.id)
-            .order_by(PlanNode.seq)
+            select(RunNode)
+            .where(RunNode.run_id == latest_job.id)
+            .order_by(RunNode.seq)
         )
         nodes = list(nodes_result.scalars().all())
 
     latest_job_resp = None
     if latest_job is not None:
         latest_job_resp = WorkflowRunResponse.model_validate(latest_job)
-        latest_job_resp.nodes = [plan_node_to_response(n) for n in nodes]
+        latest_job_resp.nodes = [run_node_to_response(n) for n in nodes]
         latest_job_resp.cost = aggregate_node_cost(nodes)
 
     # Asset processing statuses power the results-page loading state (the

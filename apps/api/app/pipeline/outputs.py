@@ -2,7 +2,7 @@
 
 ``visible_outputs_stmt`` is THE filter every user-facing read path must use —
 results, library, export, and future MCP/gallery surfaces. Internal node
-artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the director's content_plan) are
+artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the director's content_brief) are
 node bookkeeping, never user products, and must not leak into any listing.
 """
 
@@ -14,10 +14,10 @@ from sqlalchemy.sql import Select
 
 from app.models.schemas import (
     INTERNAL_OUTPUT_TYPES,
-    PlanNodeResponse,
+    RunNodeResponse,
     WorkflowRunResponse,
 )
-from app.models.tables import Output, PlanNode, WorkflowRun
+from app.models.tables import Output, RunNode, WorkflowRun
 
 
 def visible_outputs_stmt() -> Select:
@@ -39,9 +39,9 @@ async def list_visible_outputs(
     return list(result.scalars().all())
 
 
-def plan_node_to_response(node: PlanNode) -> PlanNodeResponse:
+def run_node_to_response(node: RunNode) -> RunNodeResponse:
     """Serialize a node; ``stage`` is the display hint from spec (ui_step keys)."""
-    return PlanNodeResponse(
+    return RunNodeResponse(
         id=node.id,
         kind=node.kind,
         status=node.status,
@@ -54,7 +54,7 @@ def plan_node_to_response(node: PlanNode) -> PlanNodeResponse:
     )
 
 
-def aggregate_node_cost(nodes: list[PlanNode]) -> dict | None:
+def aggregate_node_cost(nodes: list[RunNode]) -> dict | None:
     """Run-level cost = sum over node cost ledgers (ADR-025)."""
     totals = {"prompt_tokens": 0, "completion_tokens": 0, "fixed_cost": 0.0}
     seen = False
@@ -78,9 +78,9 @@ async def run_to_response(
     resp = WorkflowRunResponse.model_validate(run)
     if with_nodes:
         result = await db.execute(
-            select(PlanNode).where(PlanNode.run_id == run.id).order_by(PlanNode.seq)
+            select(RunNode).where(RunNode.run_id == run.id).order_by(RunNode.seq)
         )
         nodes = list(result.scalars().all())
-        resp.nodes = [plan_node_to_response(n) for n in nodes]
+        resp.nodes = [run_node_to_response(n) for n in nodes]
         resp.cost = aggregate_node_cost(nodes)
     return resp

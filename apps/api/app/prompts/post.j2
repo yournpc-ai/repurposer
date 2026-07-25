@@ -18,9 +18,9 @@ Based on the following source texts and content plan, write a social long-form p
 
 ## Content Plan
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
+- **Core thesis**: {{ content_brief.core_thesis }}
+- **Themes**: {{ content_brief.themes | join(', ') }}
+- **Target audience**: {{ content_brief.target_audience }}
 - **Focus for this post**: {{ derivative_plan.focus or 'Reinforce the core thesis' }}
 - **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with an open-ended question' }}
 

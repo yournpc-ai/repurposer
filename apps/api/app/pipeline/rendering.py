@@ -103,7 +103,7 @@ async def _mirror_render_node(
         async with AsyncSessionLocal() as db:
             await db.execute(
                 text(
-                    "UPDATE plan_nodes SET status = CAST(:st AS varchar), error = :err, "
+                    "UPDATE run_nodes SET status = CAST(:st AS varchar), error = :err, "
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
                     "ELSE finished_at END, updated_at = now() "
                     "WHERE kind = 'render' "

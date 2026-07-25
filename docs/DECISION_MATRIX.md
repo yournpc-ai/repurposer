@@ -67,7 +67,7 @@
 | AI 视频生成（prompt→视频） | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ | 低 | 💡 后排 | 💡 | 不做（当前周期） | 2026-07-22 改判：非永久放弃——persona/Brand 是范式之上的身份层，生成能力接入时原样复用；Factory 红海当前不进（STRATEGY 判断 1）。2026-07-22 终态：必做，形态 = persona 驱动虚拟产物族（独立输出族，非 clip、不进 clip-spec）——ADR-029 双链并列 |
 | AI 音乐（情绪库） | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ | 中 | 改造 | P1 | 提案中（MUSIC_ARCHITECTURE） | 走自有 Music 表 + 情绪库路线（ADR-023），不接第三方铺点 |
 | AI 图像（quote card 用） | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ | 中 | 采纳 | P0 | **已实现**（quote card 输出） | 我们的 quote card 是品牌模板渲染而非通用 AI 生图 |
-| 节点编排画布（Flows 式可视化 DAG 编辑器）† | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | 中 | **改造** | P1 | ADR-028 已决 | †ElevenCreative 有（research/elevencreative.md，七列之外）：对内采纳——DAG 持久化为 RunPlan（计划图一等对象）；对外放弃——不做节点画布、不暴露模型名，用户看步骤清单（STRATEGY §2.5） |
+| 节点编排画布（Flows 式可视化 DAG 编辑器）† | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | 中 | **改造** | P1 | ADR-028 已决 | †ElevenCreative 有（research/elevencreative.md，七列之外）：对内采纳——DAG 持久化为 run graph（计划图一等对象）；对外放弃——不做节点画布、不暴露模型名，用户看步骤清单（STRATEGY §2.5） |
 
 ## G. 文案与知识资产（我们的主战场）
 
@@ -119,7 +119,7 @@
 
 - v1.0（2026-07-19）：初版，40 个功能点。新增功能点或竞品能力变化时，先改 `COMPETITIVE_ANALYSIS.md` 事实层，再同步本表决策
 - v1.1（2026-07-22）：Opus 三产品线调研（research/opusclip §8、research/agent-opus.md）：TikTok 分发翻案（放弃→改造 P1，DISTRIBUTION.md）；新增 2 行（transcript 查找替换=采纳 P1、模型超市=💡 后排）；"AI 视频生成"放弃改判 💡 后排
-- v1.2（2026-07-22）：ElevenCreative 调研（research/elevencreative.md）：新增"节点编排画布"行（改造：对内 RunPlan 持久化 ADR-028，对外画布放弃）
+- v1.2（2026-07-22）：ElevenCreative 调研（research/elevencreative.md）：新增"节点编排画布"行（改造：对内 run graph 持久化 ADR-028，对外画布放弃）
 - v1.3（2026-07-23）：Virality Score 改造口径定稿为**首发推荐分**（值+理由可见，不预测传播量）；一键去静默/口头禅重估下放 P2（播客刚需 ≠ 演讲刚需，跳剪伤专业感）
 - v1.4（2026-07-23）：Distribution 定界——LinkedIn 直发保持 P1（核心 = 发布动作本身，最后一座手动桥）；定时发布 / 审核队列 P1→P2（边缘功能：agency 便利 / 机构形态）
 - v1.5（2026-07-23）：TikTok 直发二次翻案 P2→P1——平台范围定为 **LinkedIn + TikTok 双平台**；边缘功能（定时/审核队列/回流）维持 P2 不变

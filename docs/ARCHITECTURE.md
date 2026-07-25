@@ -55,12 +55,12 @@
 | Agent | Input | Output | Description |
 |:---|:---|:---|:---|
 | `persona` | Task materials + speaker name/title | `SpeakerContext` fields | Extract speaker style and content memory |
-| `content_director` | Materials + `GenerationContext` | `ContentPlan` | Unified analysis: core thesis, themes, audience, per-output plans |
-| `clip` | Materials + `GenerationContext` + `ContentPlan` | `ClipPlans` | Select segments and write vertical clip scripts |
-| `post` | Materials + `GenerationContext` + `ContentPlan` | `Post` | Social post |
-| `quotes` | Materials + `GenerationContext` + `ContentPlan` | `Quotes` | Quote card copy |
-| `carousel` | Materials + `GenerationContext` + `ContentPlan` | `CarouselResponse` | Social carousel (cover → points → CTA) |
-| `article` | Materials + `GenerationContext` + `ContentPlan` | `Article` | Long-form article |
+| `content_director` | Materials + `GenerationContext` | `ContentBrief` | Unified analysis: core thesis, themes, audience, per-output plans |
+| `clip` | Materials + `GenerationContext` + `ContentBrief` | `ClipPlans` | Select segments and write vertical clip scripts |
+| `post` | Materials + `GenerationContext` + `ContentBrief` | `Post` | Social post |
+| `quotes` | Materials + `GenerationContext` + `ContentBrief` | `Quotes` | Quote card copy |
+| `carousel` | Materials + `GenerationContext` + `ContentBrief` | `CarouselResponse` | Social carousel (cover → points → CTA) |
+| `article` | Materials + `GenerationContext` + `ContentBrief` | `Article` | Long-form article |
 | `reviser` | Clip metadata + feedback + `SpeakerContext` | `ClipRevision` | Revised clip metadata (hook, duration, titles, music) |
 | `caption_translate` | Word-level captions + target_language | `CaptionTranslation` | Caption language swap |
 
@@ -78,7 +78,7 @@ Resolve Speaker (auto-create default memory if none selected)
     ↓
 Resolve Brand template
     ↓
-Content Director Agent → unified ContentPlan
+Content Director Agent → unified ContentBrief
     ↓
 Clip Agent → segment selection + scripts
     ↓
@@ -157,9 +157,9 @@ apps/api/
 │   │   ├── routes.py        # Chat sessions + intent inference endpoints
 │   │   ├── service.py       # Chat session logic and intent dispatch
 │   │   └── intent.py        # /infer-intent agent
-│   ├── pipeline/            # Pipeline module (RunPlan kernel)
+│   ├── pipeline/            # Pipeline module (run graph kernel)
 │   │   ├── routes/          # projects / assets / outputs / music / library endpoints
-│   │   ├── orchestrator.py  # RunPlan materialization/execution (`create_run`, `compile_graph`)
+│   │   ├── orchestrator.py  # run graph materialization/execution (`create_run`, `compile_graph`)
 │   │   ├── node_runners.py  # Node executor registry (NODE_RUNNERS)
 │   │   ├── jobs.py          # Queue claiming
 │   │   ├── asset_processing.py   # Processing dispatch: ASR / text extraction / slide page rendering / image vision
