@@ -102,6 +102,51 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
         )
         await s.commit()
 
+
+async def _set_summary(node_id: UUID, summary: str) -> None:
+    """Write the quantified one-liner (spec.summary) — same independent-session
+    jsonb_set discipline as ``_set_stage`` (never Python read-modify-write)."""
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(WorkflowStep)
+            .where(WorkflowStep.id == node_id)
+            .values(
+                spec=func.jsonb_set(
+                    WorkflowStep.spec, pg_array(["summary"]), func.to_jsonb(summary), True
+                )
+            )
+        )
+        await s.commit()
+
+
+async def _fill_summary(node_id: UUID, kind: str, **params: object) -> None:
+    """Fill spec.summary from the registry's summary_template for ``kind``.
+
+    Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8)."""
+    from app.pipeline.registry import SKILL_REGISTRY  # deferred: import cycle
+
+    template = next(
+        (e.summary_template for e in SKILL_REGISTRY.values() if e.node_kind == kind),
+        None,
+    )
+    if not template:
+        return
+    try:
+        await _set_summary(node_id, template.format(**params))
+    except KeyError:
+        logger.warning("summary_template_params_missing", kind=kind, params=list(params))
+
+
+def _count_words(value: object) -> int:
+    """Whitespace token count over every string in a payload (display-only)."""
+    if isinstance(value, str):
+        return len(value.split())
+    if isinstance(value, dict):
+        return sum(_count_words(v) for v in value.values())
+    if isinstance(value, list):
+        return sum(_count_words(v) for v in value)
+    return 0
+
 _OUTPUT_TO_DERIVATIVE_TYPE: dict[str, DerivativeType] = {
     "post": DerivativeType.POST,
     "quotes": DerivativeType.QUOTES,
@@ -791,6 +836,15 @@ async def run_clips_pipeline(
         )
     await db.flush()
 
+    await _fill_summary(
+        node.id,
+        "clips_pipeline",
+        n=len(output_ids),
+        total_seconds=sum(
+            int(plan.duration_seconds or 0) for plan in plans.clips[:clip_count]
+        ),
+    )
+
     return output_ids
 
 
@@ -861,6 +915,7 @@ async def run_derivative_gen(
         output.updated_at = datetime.now(UTC)
         output.workflow_step_id = node.id
         await db.flush()
+        await _fill_summary(node.id, node.kind, word_count=_count_words(content))
         return [output.id]
 
     # Idempotency: clear prior outputs of this type for the project.
@@ -898,6 +953,7 @@ async def run_derivative_gen(
                 output.files = {**(output.files or {}), "image": image_url}
                 await db.flush()
 
+    await _fill_summary(node.id, node.kind, word_count=_count_words(content))
     return [output.id]
 
 
@@ -943,6 +999,7 @@ async def run_script_revision(
     output.updated_at = datetime.now(UTC)
     output.workflow_step_id = node.id
     await db.flush()
+    await _fill_summary(node.id, "script", scope=node.spec.get("scope", "clip"))
     return [output.id]
 
 

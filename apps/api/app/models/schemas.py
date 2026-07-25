@@ -1047,6 +1047,9 @@ class StepResponse(BaseModel):
     error: str | None = None
     cost: dict | None = None
     stage: str | None = None
+    # Quantified one-liner from the registry summary_template (e.g. "Selected
+    # 3 clips · 87s total"), lifted from spec["summary"] like stage.
+    summary: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
 

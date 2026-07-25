@@ -49,6 +49,7 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         error=node.error,
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
+        summary=(node.spec or {}).get("summary"),
         started_at=node.started_at,
         finished_at=node.finished_at,
     )
