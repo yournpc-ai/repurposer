@@ -147,7 +147,8 @@ class ChatIntentAgent:
             "You are the intent proposer of an AI content repurposing tool. "
             "Given one user message and the assembled context, decide what to do "
             "and return valid JSON only.\n\n"
-            "Return exactly one of two shapes:\n"
+            'Return a single JSON object {"proposal": PROPOSAL} where PROPOSAL '
+            "is exactly one of two shapes:\n"
             'A. {"type": "task_list", "tasks": [{"skill": "<name>", "params": {...}}], '
             '"summary": "<one user-facing sentence>"} — run new work. Only use '
             "skills from the list below; leave tasks EMPTY when the message is "

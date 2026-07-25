@@ -282,7 +282,7 @@ async def _validate_requires(
                     Asset.project_id == project.id,
                     or_(
                         Asset.transcript.isnot(None),
-                        Asset.meta.has_key("words"),  # noqa: W601
+                        Asset.meta["words"].isnot(None),
                     ),
                 )
                 .limit(1)

@@ -207,9 +207,17 @@ IntentProposal = Annotated[
 
 class IntentResult(BaseModel):
     """Envelope for the single tool-calling-style LLM call (MiniMax JSON mode
-    needs a concrete model, so the union lives one level down)."""
+    needs a concrete model, so the union lives one level down). Tolerates a
+    bare proposal (models sometimes drop the wrapper)."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _wrap_bare_proposal(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "proposal" not in data and "type" in data:
+            return {"proposal": data}
+        return data
 
     proposal: IntentProposal
 
