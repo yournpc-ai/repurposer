@@ -20,16 +20,19 @@
 | 中文（文档） | 英文（代码） | 定义 | 不是什么 |
 |---|---|---|---|
 | 任务书 | `TaskSpec` | 意图归一：outputs × 语言 × 数量 × instruction | 不是 plan、不是 workflow |
-| 施工图 | run graph / `run_nodes` | 计划+账簿一体的 DAG 内核 | 不是 DAG 画布（用户不见图） |
-| 节点 | `RunNode` | 施工图上的一个执行单位 | 不是 job、不是 task |
+| 施工图 | RunPlan / `plan_nodes` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
+| 节点 | `PlanNode` | 施工图上的一个执行单位 | 不是 job、不是 task |
+| 内容计划 | `ContentPlan` | **创作计划**：导演 LLM 的产出（说什么、什么角度、金句给谁），executors 按它执行 | 不是 brief（brief 是输入，TaskSpec 才是） |
 | 班组 | skills | LLM 决策单元（`skills/`） | 不是 agent 框架的 agent |
 | 机械 | tools | 确定性执行单元（`tools/`），无 LLM 决策 | 不是 service、不是 util |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
-| 导演 | director | ContentBrief 产出者 | — |
+| 导演 | director | ContentPlan 产出者 | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |
 | 提及 | mention | 对话中的 @ 实体引用 | 不是 reference、不是 entity |
-| 施工图编译 | `compile_graph()` | 任务书 → 节点图的纯函数 | 曾名 `lower_plan`（N-04）/ `compile_plan`（N-08）；不含 plan——它产出的不是"计划"，是图 |
+| 施工图编译 | `compile_graph()` | 任务书 → 节点图的纯函数 | 曾名 `lower_plan`（N-04）/ `compile_plan`（N-08）；裸 plan 违规（N-11），故以产出物命名 |
+
+**两个 plan 各司其职**：RunPlan = 执行计划（工程层），ContentPlan = 内容计划（创作层）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
 ## 3. 判例库（只追加）
 
@@ -37,20 +40,21 @@
 |---|---|---|---|
 | N-01 | `outputs` 统一产物表 | clips/derivatives 词汇全库清除，`type` 区分产物种类 | §1 |
 | N-02 | `render_status NULL = 未请求` | 不加 `render_requested` 布尔列；NULL 做认领谓词 | §4 |
-| N-03 | `RunNodeKind` 用 String 列 + Literal/注册表 | 不做 PG ENUM；新 kind（`voice_gen`/`synth_visual`）零迁移注册 | §5 |
+| N-03 | `PlanNodeKind` 用 String 列 + Literal/注册表 | 不做 PG ENUM；新 kind（`voice_gen`/`synth_visual`）零迁移注册 | §5 |
 | N-04 | `lower_plan` → `compile_plan` | lowering 是编译器黑话；compile 是通用词，且与"DAG 编译期校验"既有说法衔接 | §6 |
 | N-05 | 否决 `ai/` 顶层目录 | 不拥有表、不认领队列、不对应部署单元——按技术风味分组 = `services/` 错误的高配版 | §7 |
 | N-06 | 六模块包 + routes 入住模块 | `routers/` 平顶解散，模块自包含（routes + service + 逻辑）；skills/tools 永无 routes | §7 |
 | N-07 | `services/` 目录废除 | 18 文件混四个架构层；按层分家（pipeline/chat/skills/tools/memory/platform） | §1、§7 |
-| N-08 | `compile_plan` → `compile_graph`（翻案 N-04） | 函数产出的是节点图不是"计划"——保留 plan 必与 ContentBrief/run graph 混淆；以产出物命名（修订 N-04 只解决了黑话、没解决撞名） | §1 |
-| N-09 | `ContentPlan` → `ContentBrief`（type `content_brief`） | 它是导演产出的**内容简报**（被生产的文档），不是待执行的计划；DerivativePlan 词汇随之悬置，Phase 2 退役时清除 | §1 |
-| N-10 | RunPlan → run graph；`plan_nodes` → `run_nodes`（表改名） | "计划+账簿一体"的实质是图——N-08 原则（以产出物命名）的自洽延伸；含 `PlanNode→RunNode`、`plan_node_id→run_node_id`、kind `director_plan→director_brief`；**plan 词汇整体退休**，ADR-028/029/030 中的 RunPlan 按只追加规则保留为历史 | §1 |
+| N-08 | `compile_plan` → `compile_graph`（翻案 N-04） | 裸 plan 歧义（编译的是哪个 plan？）；以产出物命名 | §1 |
+| N-09 | ~~`ContentPlan` → `ContentBrief`~~ | **误判，被 N-11 翻案**：brief 是输入规格（那是 TaskSpec），ContentPlan 是导演的决策产物，语义上就是 plan | — |
+| N-10 | ~~RunPlan → run graph；plan_nodes → run_nodes~~ | **过度清洗，被 N-11 翻案** | — |
+| N-11 | plan 词汇恢复：**plan 必须带限定词，裸用违规** | 系统有两个 plan 各司其职：RunPlan（执行计划，工程层）/ ContentPlan（内容计划，创作层）——"LLM 提出 plan、executors 执行 plan"是 agent 范式的正名；违规的只是裸 plan（`lower_plan`/`compile_plan`，哪个 plan？）。`compile_graph` 保留（N-08 成立）；表名/类名/kind/type 全部回滚（迁移 b2d6f9a53e18） | §1 |
 
 ## 4. API 命名
 
 - REST，复数资源，动作用子路径：`POST /outputs/{id}/render`、`POST /outputs/{id}/dub`。
 - 不为单个动作造 RPC 式端点（`/api/sendChat` 此类永不出现）。
-- 内部类型（如 `content_brief`）不得从任何公开响应漏出——统一经 `visible_outputs()` 过滤（ADR-030 D1）。
+- 内部类型（如 `content_plan`）不得从任何公开响应漏出——统一经 `visible_outputs()` 过滤（ADR-030 D1）。
 
 ## 5. 命名审计触发点
 

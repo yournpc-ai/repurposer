@@ -1,7 +1,7 @@
 """RunPlan node runners: one runner per node kind (RunPlan Phase 1).
 
 Each runner is the direct transplant of a ``generation.py`` code path onto the
-run_nodes graph (docs/tasks/runplan-phase1-implementation.md §4 mapping
+plan_nodes graph (docs/tasks/runplan-phase1-implementation.md §4 mapping
 table). Signature is uniform: ``(db, run, node, project) -> list[UUID]`` — the
 ids of the outputs rows the node produced (written to ``node.output_refs``).
 
@@ -9,9 +9,9 @@ What changed versus the retired orchestration:
 - No run-context per-output status blob, no process lock — node rows are
   updated at row level by the orchestrator.
 - The fabricated-plan targeted-revision path is gone: derivative regen runs a
-  real ``director_brief`` node upstream (intentional micro behavior change).
-- ``project.content_brief`` reuse is gone: the director plan is persisted as an
-  internal ``outputs[type=content_brief]`` row per run (Phase 2 brings
+  real ``director_plan`` node upstream (intentional micro behavior change).
+- ``project.content_plan`` reuse is gone: the director plan is persisted as an
+  internal ``outputs[type=content_plan]`` row per run (Phase 2 brings
   asset-hash reuse via director_understand).
 """
 
@@ -36,7 +36,7 @@ from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.schemas import (
     AssetType,
     ClipPayload,
-    ContentBrief,
+    ContentPlan,
     DerivativeType,
     GenerationContext,
     MediaInput,
@@ -51,7 +51,7 @@ from app.models.tables import (
     BrandTemplate,
     Music,
     Output,
-    RunNode,
+    PlanNode,
     Project,
     Speaker,
     WorkflowRun,
@@ -85,18 +85,18 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
     """Write the stepper's display-stage hint in its own session.
 
     This must NOT ride the runner session: that session stays open across LLM
-    calls, and holding a row lock on ``run_nodes`` (from a flushed spec
+    calls, and holding a row lock on ``plan_nodes`` (from a flushed spec
     update) deadlocks the metering session — ``record_usage`` updates the same
     row from inside ``minimax.generate`` while the runner awaits the response.
     Stage hints are display-only, so immediate independent commits are fine.
     """
     async with AsyncSessionLocal() as s:
         await s.execute(
-            update(RunNode)
-            .where(RunNode.id == node_id)
+            update(PlanNode)
+            .where(PlanNode.id == node_id)
             .values(
                 spec=func.jsonb_set(
-                    RunNode.spec, pg_array(["stage"]), func.to_jsonb(stage), True
+                    PlanNode.spec, pg_array(["stage"]), func.to_jsonb(stage), True
                 )
             )
         )
@@ -365,17 +365,17 @@ def _generation_context(
     )
 
 
-async def _load_content_brief(db: AsyncSession, node: RunNode) -> ContentBrief:
-    """Load the ContentBrief produced by this node's upstream director node."""
+async def _load_content_plan(db: AsyncSession, node: PlanNode) -> ContentPlan:
+    """Load the ContentPlan produced by this node's upstream director node."""
     if not node.inputs:
         raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director node")
-    director = await db.get(RunNode, UUID(str(node.inputs[0])))
+    director = await db.get(PlanNode, UUID(str(node.inputs[0])))
     if director is None or not director.output_refs:
-        raise ValueError("Upstream director_brief node has no content_brief output")
+        raise ValueError("Upstream director_plan node has no content_plan output")
     plan_output = await db.get(Output, UUID(str(director.output_refs[0])))
-    if plan_output is None or plan_output.type != "content_brief":
-        raise ValueError("content_brief output not found")
-    return ContentBrief.model_validate(plan_output.payload)
+    if plan_output is None or plan_output.type != "content_plan":
+        raise ValueError("content_plan output not found")
+    return ContentPlan.model_validate(plan_output.payload)
 
 
 async def _resolve_brand(
@@ -424,7 +424,7 @@ async def _resolve_brand(
 
 
 async def run_preprocess(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Validate source material exists (texts or media), like the old inline check."""
     asset_texts = await collect_asset_texts(db, project.id)
@@ -442,7 +442,7 @@ async def run_preprocess(
 
 
 async def run_persona_bootstrap(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Return the project's speaker, or auto-create one from source texts.
 
@@ -503,13 +503,13 @@ async def run_persona_bootstrap(
     return []
 
 
-async def run_director_brief(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+async def run_director_plan(
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Run the Content Director once and persist the plan as an internal output.
 
-    Phase 1: every run plans fresh (the project.content_brief blob is gone).
-    The plan is an internal outputs row (type=content_brief) so downstream
+    Phase 1: every run plans fresh (the project.content_plan blob is gone).
+    The plan is an internal outputs row (type=content_plan) so downstream
     nodes read it through the lineage graph, and Phase 2 can hang asset-hash
     reuse on the same mechanism.
     """
@@ -529,7 +529,7 @@ async def run_director_brief(
     speaker = await resolve_speaker(db, project)
     generation_context = _generation_context(run, project, speaker)
 
-    content_brief = await content_director_agent.plan(
+    content_plan = await content_director_agent.plan(
         asset_texts=asset_texts,
         context=generation_context,
         asset_media=asset_media,
@@ -538,11 +538,11 @@ async def run_director_brief(
 
     plan_output = Output(
         project_id=project.id,
-        run_node_id=node.id,
-        type="content_brief",
+        plan_node_id=node.id,
+        type="content_plan",
         language=ctx.get("target_language", "en"),
         provenance="generated",
-        payload=content_brief.model_dump(mode="json"),
+        payload=content_plan.model_dump(mode="json"),
     )
     db.add(plan_output)
     await db.flush()
@@ -550,7 +550,7 @@ async def run_director_brief(
 
 
 async def run_clips_pipeline(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Select segments + write scripts + build render specs (composite node).
 
@@ -571,7 +571,7 @@ async def run_clips_pipeline(
     generation_context = _generation_context(
         run, project, speaker, brand_music_id=brand_music_id
     )
-    content_brief = await _load_content_brief(db, node)
+    content_plan = await _load_content_plan(db, node)
 
     # Render source selection (docs/VIDEO_EDITOR.md §4).
     def _has_words(a: Asset) -> bool:
@@ -632,7 +632,7 @@ async def run_clips_pipeline(
         plans = await clip_agent.generate(
             asset_texts=asset_texts,
             context=generation_context,
-            content_brief=content_brief,
+            content_plan=content_plan,
             asset_media=await collect_asset_media(assets),
             clip_count=clip_count,
             source_words=(
@@ -648,7 +648,7 @@ async def run_clips_pipeline(
             plans = await clip_agent.generate(
                 asset_texts=asset_texts,
                 context=generation_context,
-                content_brief=content_brief,
+                content_plan=content_plan,
                 asset_media=await collect_asset_media(assets),
                 clip_count=clip_count,
                 source_words=(
@@ -683,7 +683,7 @@ async def run_clips_pipeline(
     if prior_clip_ids:
         await db.execute(
             _text(
-                "UPDATE run_nodes SET status = 'skipped', updated_at = now() "
+                "UPDATE plan_nodes SET status = 'skipped', updated_at = now() "
                 "WHERE kind = 'render' AND status = 'pending' "
                 "AND spec->>'output_id' IN :oids"
             ).bindparams(bindparam("oids", expanding=True)),
@@ -741,7 +741,7 @@ async def run_clips_pipeline(
         )
         output = Output(
             project_id=project.id,
-            run_node_id=node.id,
+            plan_node_id=node.id,
             type="clip",
             language=target_language,
             provenance="real",
@@ -780,7 +780,7 @@ async def run_clips_pipeline(
     max_seq = int(node.seq)
     for idx, output_id in enumerate(output_ids, start=1):
         db.add(
-            RunNode(
+            PlanNode(
                 run_id=run.id,
                 kind="render",
                 status="pending",
@@ -798,7 +798,7 @@ async def _generate_derivative_with_retry(
     derivative_type: DerivativeType,
     asset_texts: list[str],
     context: GenerationContext,
-    content_brief: ContentBrief,
+    content_plan: ContentPlan,
 ) -> dict:
     """Generate a derivative, retrying once on failure (preserved behavior)."""
     try:
@@ -806,7 +806,7 @@ async def _generate_derivative_with_retry(
             derivative_type=derivative_type,
             asset_texts=asset_texts,
             context=context,
-            content_brief=content_brief,
+            content_plan=content_plan,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning(
@@ -818,18 +818,18 @@ async def _generate_derivative_with_retry(
             derivative_type=derivative_type,
             asset_texts=asset_texts,
             context=context,
-            content_brief=content_brief,
+            content_plan=content_plan,
         )
 
 
 async def run_derivative_gen(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Generate one derivative output (post/quotes/carousel/article).
 
     With ``spec.target_id`` set this is a targeted regeneration: the existing
-    row is updated in place (its content_brief now comes from a real upstream
-    director_brief node — the fabricated-plan path is gone).
+    row is updated in place (its content_plan now comes from a real upstream
+    director_plan node — the fabricated-plan path is gone).
     """
     derivative_type = _DERIVATIVE_KIND_TO_TYPE[node.kind]
     ctx = run.context or {}
@@ -842,13 +842,13 @@ async def run_derivative_gen(
     speaker = await resolve_speaker(db, project)
     generation_context = _generation_context(run, project, speaker)
     generation_context.target_language = target_language
-    content_brief = await _load_content_brief(db, node)
+    content_plan = await _load_content_plan(db, node)
 
     content = await _generate_derivative_with_retry(
         derivative_type=derivative_type,
         asset_texts=asset_texts,
         context=generation_context,
-        content_brief=content_brief,
+        content_plan=content_plan,
     )
 
     if target_id:
@@ -859,7 +859,7 @@ async def run_derivative_gen(
         output.language = target_language
         output.status = "generated"
         output.updated_at = datetime.now(UTC)
-        output.run_node_id = node.id
+        output.plan_node_id = node.id
         await db.flush()
         return [output.id]
 
@@ -873,7 +873,7 @@ async def run_derivative_gen(
 
     output = Output(
         project_id=project.id,
-        run_node_id=node.id,
+        plan_node_id=node.id,
         type=derivative_type.value,
         language=target_language,
         provenance="generated",
@@ -902,7 +902,7 @@ async def run_derivative_gen(
 
 
 async def run_script_revision(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Targeted hook/clip revision via the reviser agent (small topology)."""
     target_id = node.spec.get("target_id")
@@ -941,13 +941,13 @@ async def run_script_revision(
             "reason": revised.score_reason or (output.score or {}).get("reason"),
         }
     output.updated_at = datetime.now(UTC)
-    output.run_node_id = node.id
+    output.plan_node_id = node.id
     await db.flush()
     return [output.id]
 
 
 async def run_render_request(
-    db: AsyncSession, run: WorkflowRun, node: RunNode, project: Project
+    db: AsyncSession, run: WorkflowRun, node: PlanNode, project: Project
 ) -> list[UUID]:
     """Targeted re-render: flip render_status back to PENDING (scope=render).
 
@@ -973,7 +973,7 @@ async def run_render_request(
 NODE_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
-    "director_brief": run_director_brief,
+    "director_plan": run_director_plan,
     "clips_pipeline": run_clips_pipeline,
     "post_gen": run_derivative_gen,
     "quotes_gen": run_derivative_gen,

@@ -16,9 +16,9 @@ Extract {{ count }} quotes from the following source text. Each quote must:
 
 ## Content Plan
 
-- **Core thesis**: {{ content_brief.core_thesis }}
-- **Themes**: {{ content_brief.themes | join(', ') }}
-- **Target audience**: {{ content_brief.target_audience }}
+- **Core thesis**: {{ content_plan.core_thesis }}
+- **Themes**: {{ content_plan.themes | join(', ') }}
+- **Target audience**: {{ content_plan.target_audience }}
 - **Focus for these quotes**: {{ derivative_plan.focus or 'Capture the most shareable ideas' }}
 
 {% if derivative_plan.quote_candidates %}

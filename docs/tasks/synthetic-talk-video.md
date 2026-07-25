@@ -14,7 +14,7 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 
 战略定位（STRATEGY §2.2 终态）：identity-driven 虚拟产物——用**用户的**声纹、照片、文风生成，不做 Factory 通用生成。用户痛点真实存在：大多数演讲没有录像，这类演讲者目前进不了门。
 
-架构地基（ADR-029 已定，本任务不新决策）：生成 = run graph 新 node kind，与 clip 链共享 run_nodes / worker / 计量 / 步骤清单；产物 `provenance=generated`；主轨生成物**不是 clip、不进 clip-spec**。
+架构地基（ADR-029 已定，本任务不新决策）：生成 = RunPlan 新 node kind，与 clip 链共享 plan_nodes / worker / 计量 / 步骤清单；产物 `provenance=generated`；主轨生成物**不是 clip、不进 clip-spec**。
 
 **v1 形态 = 确定性合成**（无唇形数字人）：声纹 TTS + 照片动态合成（Ken Burns / 逐句字幕 / 波形 / 品牌框），全确定性、零新 provider、成本可忽略。唇形同步 avatar 是 v2（外部 provider，ADR-029 框架已留位）。
 
@@ -27,7 +27,7 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 - Remotion 渲染服务 + `services/rendering.py`：spec → MP4 黑盒。
 - `Asset.provenance` / `outputs.provenance` 字段：谱系标记已在（ADR-030）。
 - Speaker 画像：声纹挂载点（`clone_voice` 结果挂 Speaker）。
-- RunNodeKind 注册表守门（D6）：新 kind 注册零表迁移。
+- PlanNodeKind 注册表守门（D6）：新 kind 注册零表迁移。
 
 ### 不在
 
@@ -40,7 +40,7 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 
 用户在 composer 上传**演讲文字稿 + 照片（+ 10 秒声音样本或已存声纹）**，勾选 clips：
 
-1. run 拓扑自动带生成前缀链：`preprocess → voice_gen → synth_visual → director_brief → clips_pipeline → …`
+1. run 拓扑自动带生成前缀链：`preprocess → voice_gen → synth_visual → director_plan → clips_pipeline → …`
 2. `voice_gen`：文字稿 → Speaker 声纹 TTS → 音频 asset（`provenance=generated`）。
 3. `synth_visual`：照片 + 音频 + 逐句字幕 + brand → Remotion 新 composition → **合成发言视频 asset**（`provenance=generated`，`source_ref` 指向文字稿 asset 与 Speaker）。
 4. 合成音频走现有 ASR 回配词级时间戳（TTS 音频干净，对齐近乎完美）——`clips_pipeline` 对素材是拍的还是合成的**零感知**。
@@ -51,11 +51,11 @@ Landing 副标题已承诺 "give it… just the transcript and some photos from 
 
 ### 4.1 节点注册（D6，零迁移）
 
-`RunNodeKind` 注册两个新 kind + `NODE_RUNNERS` 两个 runner：
+`PlanNodeKind` 注册两个新 kind + `NODE_RUNNERS` 两个 runner：
 
 | kind | runner 职责 | 产物 |
 |---|---|---|
-| `voice_gen` | 取文字稿 asset 文本 → Speaker 声纹（无则先 `clone_voice` 样本）→ `synthesize()` → 音频 asset 落库；TTS usage 经 metering 落 `run_nodes.cost` | audio asset |
+| `voice_gen` | 取文字稿 asset 文本 → Speaker 声纹（无则先 `clone_voice` 样本）→ `synthesize()` → 音频 asset 落库；TTS usage 经 metering 落 `plan_nodes.cost` | audio asset |
 | `synth_visual` | 照片 assets + 音频 + 字幕（文字稿对齐）+ brand → render 服务新 composition → 视频 asset；**规则质检**：音画时长一致 / 字幕对齐率 / 分辨率达标 | video asset |
 
 ### 4.2 compile_graph 输入组合 gating（模式①扩展）

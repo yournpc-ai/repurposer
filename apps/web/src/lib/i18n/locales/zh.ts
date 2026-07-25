@@ -69,89 +69,11 @@ const zh: Resources = {
     },
     signIn: "登录",
     openWorkbench: "进入工作台",
-    heroPrefix: "把你讲过的内容变成",
-    heroWords: ["视频片段", "社交长帖", "金句卡", "长文章", "轮播图"],
+    heroTitle1: "你讲完了。",
+    heroTitle2: "剩下的交给我们。",
     heroSubtitle:
-      "上传你的演讲、会议或访谈的视频片段或文字，我们会记住你的内容与风格，产出主流媒体需要的内容，就像你本人做的那样。",
-    getStarted: "免费开始",
-    viewDemo: "查看在线演示",
-    workflow: {
-      heading: "一场演讲，覆盖所有渠道",
-      subheading: "从原始素材到可发布的知识资产，只需四步。",
-      steps: [
-        {
-          title: "上传",
-          desc: "拖入视频、音频、PPT 或文字稿。词级时间戳转写支持英、德、法、西、意等多种语言。",
-        },
-        {
-          title: "生成",
-          desc: "一组 AI agent 为你起草视频片段、LinkedIn 长帖、金句卡、长文章和多语言版本——用你的风格，而不是千篇一律的腔调。",
-        },
-        {
-          title: "精修",
-          desc: "删一句话就是剪掉一个片段；单轨裁剪、字幕样式随调随看。",
-        },
-        {
-          title: "发布",
-          desc: "一键直发 LinkedIn 和 TikTok，或导出 Markdown、PNG、SRT，用于 newsletter 和官网。",
-        },
-      ],
-    },
-    trust: {
-      heading: "为欧洲机构而生",
-      items: [
-        {
-          title: "欧盟数据驻留",
-          desc: "你的内容存放在欧盟区域，从设计之初就面向 GDPR。",
-        },
-        {
-          title: "五种语言，母语水准",
-          desc: "英、德、法、西、意的输出读起来就是用这门语言写的。",
-        },
-        {
-          title: "风格始终是你的",
-          desc: "Speaker 记忆让每一份产出都保持你一贯的表达方式。",
-        },
-        {
-          title: "失败不扣费",
-          desc: "生成前先看到成本；失败的运行绝不计费。",
-        },
-      ],
-    },
-    pricing: {
-      heading: "可预期，是设计出来的",
-      subheading:
-        "一场演讲 = 一套内容包——生成前先看到成本，失败的运行绝不计费。",
-      comingSoon: "定价即将公布",
-      principles: [
-        "按演讲内容包计价，而非裸积分",
-        "每次生成都先看到成本",
-        "失败不扣费",
-      ],
-    },
-    roadmap: {
-      heading: "我们的方向",
-      subheading: "已经能用的，和正在做的。",
-      shippedTitle: "已上线",
-      shipped: [
-        "4 层 AI agent 内容生成流水线",
-        "词级时间戳多语言转写",
-        "文字稿视频编辑器，实时预览",
-        "LinkedIn 与 TikTok 直发",
-        "Speaker 画像与品牌模板",
-      ],
-      nextTitle: "接下来",
-      next: [
-        "欧盟 AI 法案透明度标注",
-        "Speaker 专属术语表",
-        "按演讲内容包计价，价格先见",
-        "公开的内容配方 Gallery",
-      ],
-    },
-    footer: {
-      tagline: "把演讲变成知识资产。",
-      rights: "© {{year}} Repurposer. 保留所有权利。",
-    },
+      "Repurposer 是一个 AI agent：它先读懂你真实的表达——你的用词、你的术语、你的节奏。给它一段<b>视频</b>、一段录音，或只是演讲、播客、访谈的文字稿加几张照片，它就能产出切片、LinkedIn 长文、文章和 newsletter，<b>五种语言</b>。<b>你来审定，它来发布。</b>",
+    ctaTryBeta: "免费试用测试版",
   },
   composer: {
     speaker: "演讲者",

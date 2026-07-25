@@ -1,7 +1,7 @@
-"""Content Director: produces a unified ContentBrief from source texts and media.
+"""Content Director: produces a unified ContentPlan from source texts and media.
 
 The director performs a single analysis pass over the project's source texts and
-media inputs, then emits a ContentBrief that all downstream agent executors
+media inputs, then emits a ContentPlan that all downstream agent executors
 share. This guarantees that clips, social posts, quote cards, carousels, and
 articles reinforce the same core thesis and brand strategy.
 """
@@ -13,7 +13,7 @@ import structlog
 from app.skills.base import MiniMaxAgentBase
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import (
-    ContentBrief,
+    ContentPlan,
     DerivativeType,
     GenerationContext,
     MediaInput,
@@ -31,8 +31,8 @@ class ContentDirectorAgent(MiniMaxAgentBase):
         context: GenerationContext,
         asset_media: list[MediaInput] | None = None,
         requested_derivatives: list[DerivativeType] | None = None,
-    ) -> ContentBrief:
-        """Generate a ContentBrief from source texts and generation context.
+    ) -> ContentPlan:
+        """Generate a ContentPlan from source texts and generation context.
 
         Args:
             asset_texts: Extracted text / transcripts from project assets.
@@ -41,7 +41,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
             requested_derivatives: Derivative types the user asked for.
 
         Returns:
-            ContentBrief containing core thesis, themes, audience, and per-output
+            ContentPlan containing core thesis, themes, audience, and per-output
             derivative plans.
         """
         if not asset_texts and not asset_media:
@@ -85,7 +85,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
                 messages=messages,
                 user_prompt=user_prompt,
                 media_inputs=asset_media,
-                response_model=ContentBrief,
+                response_model=ContentPlan,
                 temperature=0.4,
             )
         except MiniMaxError:

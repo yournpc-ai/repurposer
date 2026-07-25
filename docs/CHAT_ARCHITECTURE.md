@@ -1,7 +1,7 @@
 # Chat Architecture — Agent Interface 层
 
 > Status: 📋 设计定稿，未实现（2026-07-25）
-> 上游决策：ADR-028（run graph）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
+> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：chat_sessions/messages）
 > 前置重构：`docs/tasks/backend-module-restructure.md`（chat/ 包是本文的代码家）
 
@@ -10,7 +10,7 @@
 Agent Interface 是六层模块图里"意图 → 执行"的唯一入口。用户的三张脸——composer pills、composer 自由 prompt、chat 对话——在它这里汇成**一条机制**：
 
 ```
-task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁决）→ run_nodes（施工图）
+task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁决）→ plan_nodes（施工图）
 ```
 
 1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_graph`。LLM 永不直接写 node spec。
@@ -30,7 +30,7 @@ chat/service.py ──► intent agent（LLM 单次 tool calling，带 §6 上�
 pipeline/registry.py   校验：skill 已注册？参数过 schema？
 pipeline/orchestrator  compile_graph 模式②：拓扑排序（配乐殿后）+ 补默认值
  ▼
-run_nodes（动态 DAG，3 节点 + render fan-out）── worker 认领（SKIP LOCKED）
+plan_nodes（动态 DAG，3 节点 + render fan-out）── worker 认领（SKIP LOCKED）
  │
  ▼ 执行中
 node.spec.summary = "Removed 12 fillers · 3 repeated takes"（量化摘要，§7）
@@ -110,7 +110,7 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 
 ### 4.3 不登记
 
-- **管线内部节点**：`preprocess` / `persona_bootstrap` / `director_brief`——拓扑的组成部分，不是用户可选技能。
+- **管线内部节点**：`preprocess` / `persona_bootstrap` / `director_plan`——拓扑的组成部分，不是用户可选技能。
 - **`infer_intent`**：它是 loop 的入口，不是 loop 可调用的一项。
 - **edit ops**：Operation Model 的词汇（§9），产出 clip-spec diff 而非 run——两个家族分开登记。
 - **judge/verify**：Phase 3 节点 kind，非用户技能。
@@ -123,7 +123,7 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 1. **校验**：task list 每个 skill 必须在 registry；params 过 schema；不认识的 skill → 拒收并让 intent 修复一次（retry 1 次），仍败 → 回复用户"这个我还不会"。
 2. **拓扑排序**：registry 声明 `ports`（in/out 类型）与 `after` 约束（如 `add_music` 必须在渲染相关节点之后）；编译期校验类型边。
 3. **补默认值**：`select_clips.count` 缺省 = 项目默认 / brand 默认 music 等，全部由代码补，不信 LLM 的缺省判断。
-4. **落图**：产物是标准 `run_nodes`——之后走图、认领、计量、打勾流与模式①完全同构。**动态化只发生在编译前，编译后零差异。**
+4. **落图**：产物是标准 `plan_nodes`——之后走图、认领、计量、打勾流与模式①完全同构。**动态化只发生在编译前，编译后零差异。**
 
 ## 6. 对话上下文（context 组装）
 
@@ -146,11 +146,11 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 
 ## 8. 进度推送：SSE = 推送优化的读
 
-**定位：SSE 是 DB 状态的推送管道，不是事件总线。** 事实源唯一 = `run_nodes` 表，因此无事件存储、无投递保证、无重放——断线重连 = 重读当前节点状态，天然幂等。
+**定位：SSE 是 DB 状态的推送管道，不是事件总线。** 事实源唯一 = `plan_nodes` 表，因此无事件存储、无投递保证、无重放——断线重连 = 重读当前节点状态，天然幂等。
 
 ```
 GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
-  async generator：run 非终态期间每 1s tail run_nodes
+  async generator：run 非终态期间每 1s tail plan_nodes
   → 有变化才推：event: node.updated / run.updated
   → 15s 心跳防空闲断连
   → run 终态推完最后一帧即关流
@@ -177,7 +177,7 @@ edit ops 初集（Operation Model 动工时评审定稿）：`trim_segment` / `r
 
 - 单节点失败：打 ✗ + 对话内给替代方案（"曲库没有合适的，要上传还是换个风格？"），对话继续，不阻塞。
 - skill 拒收（§5.1 修复失败）：回复"这个我还不会"+ 列出相近可用 skill。
-- run 全败：沿用 run graph 收尾口径，对话里给出失败原因与重试入口。
+- run 全败：沿用 RunPlan 收尾口径，对话里给出失败原因与重试入口。
 
 ## 11. 分期
 

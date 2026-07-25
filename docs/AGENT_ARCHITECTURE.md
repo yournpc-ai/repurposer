@@ -2,7 +2,7 @@
 
 > Status: implemented on main
 > Last updated: 2026-07-16
-> **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 run graph（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
+> **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
 
 ## 1. Overview
 
@@ -19,7 +19,7 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
                    ▼
 ┌─────────────────────────────────────────────┐
 │ Layer 2: Content Director                   │
-│ (produces ContentBrief from source texts)    │
+│ (produces ContentPlan from source texts)    │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
@@ -66,12 +66,12 @@ It is constructed in `app/services/generation.py` from the resolved `Speaker`, s
 
 ## 4. Layer 2: Content Director
 
-The `ContentDirectorAgent` (`app/skills/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentBrief`.
+The `ContentDirectorAgent` (`app/skills/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentPlan`.
 
-### 4.1 ContentBrief
+### 4.1 ContentPlan
 
 ```python
-class ContentBrief(BaseModel):
+class ContentPlan(BaseModel):
     core_thesis: str
     themes: list[str]
     target_audience: str
@@ -95,9 +95,9 @@ Previously, the clip planner (`planner.py`) performed a rich analysis (`overall_
 
 The director centralizes analysis so that every downstream agent works from the same interpretation.
 
-### 4.3 Persistent ContentBrief
+### 4.3 Persistent ContentPlan
 
-The generated `ContentBrief` is persisted to `Project.content_brief` (JSON column) on first generation. Subsequent full regenerations reuse it instead of calling the director again, enabling faster iteration. Future work may invalidate the cache based on a materials hash.
+The generated `ContentPlan` is persisted to `Project.content_plan` (JSON column) on first generation. Subsequent full regenerations reuse it instead of calling the director again, enabling faster iteration. Future work may invalidate the cache based on a materials hash.
 
 ### 4.4 Prompt
 
@@ -106,11 +106,11 @@ The generated `ContentBrief` is persisted to `Project.content_brief` (JSON colum
 - `context` (`GenerationContext`)
 - `requested_derivatives` (the output types the user asked for)
 
-It outputs JSON matching `ContentBrief`.
+It outputs JSON matching `ContentPlan`.
 
 ### 4.5 Director output constraints
 
-`ContentBrief.derivatives` must only contain **text derivative** plans. Valid `derivative_type` values are:
+`ContentPlan.derivatives` must only contain **text derivative** plans. Valid `derivative_type` values are:
 
 - `post`
 - `quotes`
@@ -128,18 +128,18 @@ async def generate(
     self,
     asset_texts: list[str],
     context: GenerationContext,
-    content_brief: ContentBrief,
+    content_plan: ContentPlan,
 ) -> BaseModel:
     ...
 ```
 
-Each executor extracts its own guidance from `content_brief.derivatives` by matching `derivative_type`.
+Each executor extracts its own guidance from `content_plan.derivatives` by matching `derivative_type`.
 
 ### 5.1 Agents
 
 | Domain | File | Class | Output schema | Notes |
 |--------|------|-------|---------------|-------|
-| Clip | `app/skills/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentBriefnerAgent` / `planner.py` |
+| Clip | `app/skills/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentPlannerAgent` / `planner.py` |
 | Post | `app/skills/post.py` | `PostAgent` | `Post` | |
 | Quotes | `app/skills/quotes.py` | `QuotesAgent` | `Quotes` | |
 | Carousel | `app/skills/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
@@ -159,7 +159,7 @@ These constraints are enforced in `app/prompts/clip_agent.j2` and validated by `
 
 ### 5.3 Prompt templates
 
-Each prompt template receives `asset_texts`, `context`, and `content_brief`:
+Each prompt template receives `asset_texts`, `context`, and `content_plan`:
 
 - `app/prompts/clip_agent.j2`
 - `app/prompts/post.j2`
@@ -171,7 +171,7 @@ Prompts render:
 - Speaker identity and style memory from `context.speaker`
 - Tone settings and user instruction from `context`
 - Brand music default from `context.brand_music_id`
-- Core thesis, themes, and target audience from `content_brief`
+- Core thesis, themes, and target audience from `content_plan`
 - Per-output focus and CTA from the matching `DerivativePlan`
 
 ## 6. Dispatch
@@ -190,10 +190,10 @@ async def generate_derivative(
     derivative_type: DerivativeType,
     asset_texts: list[str],
     context: GenerationContext,
-    content_brief: ContentBrief,
+    content_plan: ContentPlan,
 ) -> dict:
     agent = _AGENTS[derivative_type]
-    result = await agent.generate(asset_texts, context, content_brief)
+    result = await agent.generate(asset_texts, context, content_plan)
     return validate_derivative_content(derivative_type, result.model_dump())
 ```
 
@@ -209,7 +209,7 @@ This file was previously `derivative_generation.py` and contained per-type param
 2. Resolve speaker (auto-create default memory if none selected), brand template, and tone settings.
 3. Build `GenerationContext`.
 4. Map requested `outputs` to `DerivativeType`s.
-5. Call `content_director_agent.plan(...)` → `ContentBrief`, then persist to `Project.content_brief`.
+5. Call `content_director_agent.plan(...)` → `ContentPlan`, then persist to `Project.content_plan`.
 6. Delete prior outputs for the requested types.
 7. If clips requested:
    - Call `clip_agent.generate(...)` → `ClipPlans`
@@ -260,7 +260,7 @@ After planning, `current_step` switches to the active output key (`clips`, `post
 |---------|--------|
 | `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`; `clips` is no longer forced; default `clip_count` is 5 |
 | `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
-| `Project` response | Includes `content_brief` |
+| `Project` response | Includes `content_plan` |
 | `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
 | Speaker schema | Flattened: `persona` JSON replaced with direct columns (already landed) |
 
@@ -277,15 +277,15 @@ The following agents are **not** part of the 4-layer executor pipeline and remai
 
 ### 10.1 Consistency Reviser (Layer 4)
 
-A future agent can review all generated outputs against the `ContentBrief` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the post's thesis), and trigger targeted revisions.
+A future agent can review all generated outputs against the `ContentPlan` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the post's thesis), and trigger targeted revisions.
 
-### 10.2 ContentBrief invalidation
+### 10.2 ContentPlan invalidation
 
-Currently `Project.content_brief` is reused unconditionally. Future work should invalidate/rebuild when source materials change significantly, e.g. via a hash of asset texts/media.
+Currently `Project.content_plan` is reused unconditionally. Future work should invalidate/rebuild when source materials change significantly, e.g. via a hash of asset texts/media.
 
 ## 11. Critical files
 
-- `app/models/schemas.py` — `GenerationContext`, `ContentBrief`, `DerivativePlan`, `InferredIntent`, run graph 词汇（`RunNodeKind`/`OutputType`/`OUTPUT_PAYLOAD_SCHEMAS`）
+- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`, RunPlan 词汇（`PlanNodeKind`/`OutputType`/`OUTPUT_PAYLOAD_SCHEMAS`）
 - `app/skills/content_director.py` — director agent
 - `app/prompts/content_director.j2` — director prompt
 - `app/skills/clip_agent.py` — clip agent
@@ -293,17 +293,17 @@ Currently `Project.content_brief` is reused unconditionally. Future work should 
 - `app/skills/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
 - `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
 - `app/pipeline/derivative_dispatch.py` — thin dispatcher registry
-- `app/pipeline/orchestrator.py` — run graph 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
+- `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
 - `app/pipeline/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
-- `app/metering.py` — 逐节点计量（usage → `run_nodes.cost`，ADR-025）
+- `app/metering.py` — 逐节点计量（usage → `plan_nodes.cost`，ADR-025）
 - `app/chat/intent.py` — intent recognition
 - `app/pipeline/routes/outputs.py` — 统一产物 API（含单产物重生成）
 
 > 已退役（Phase 1 破坏性删除）：`services/generation.py`、`routers/clips.py`、`routers/derivatives.py`。
 
-## 12. 施工图视图（run graph 架构，2026-07-22 定型）
+## 12. 施工图视图（RunPlan 架构，2026-07-22 定型）
 
-> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（run graph 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
+> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（RunPlan 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
 
 ### 12.1 概念表（八个，没有第九个）
 
@@ -314,7 +314,7 @@ Currently `Project.content_brief` is reused unconditionally. Future work should 
 | **导演** | 两步走：看懂素材（可复用）→ 分任务（分镜表，每 run 重排） | Content Director（单趟 → 两次调用） |
 | **班组** | executors：选段 / 编剧 / 文案 / 配音 / 渲染——每工种一个节点 | Agent Executors |
 | **质检** | 单产物（分数落库 / 保真 / 合规，打回 ≤2 次）+ 全片（跨产物撞车） | Layer 4（未实现）的新形态 |
-| **施工图** | run_nodes：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
+| **施工图** | plan_nodes：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
 | **产物** | outputs 统一表；clip = 带时间轴+渲染的那一类 | clips / derivatives（ADR-030） |
 | **分发** | 缝 = 产物表，零变化 | Distribution |
 
@@ -347,9 +347,9 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 
 ### 12.6 现状五宗罪（2026-07-22 代码核实；Phase 1 已全部清除）
 
-1. ~~ContentBrief = project 上 JSON blob，盲目复用无失效~~ → 内部 `outputs[type=content_brief]` 行，director_brief 节点产物（每 run 重排；asset-hash 复用是 Phase 2）
-2. ~~DerivativePlan 混 what/how，定向重生成靠伪造 plan~~ → 定向重生成 = 小拓扑 `[director_brief → X_gen(target_id)]`，伪造 plan 路径整体删除
-3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → run_nodes 行级状态，步骤清单改读节点
+1. ~~ContentPlan = project 上 JSON blob，盲目复用无失效~~ → 内部 `outputs[type=content_plan]` 行，director_plan 节点产物（每 run 重排；asset-hash 复用是 Phase 2）
+2. ~~DerivativePlan 混 what/how，定向重生成靠伪造 plan~~ → 定向重生成 = 小拓扑 `[director_plan → X_gen(target_id)]`，伪造 plan 路径整体删除
+3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → plan_nodes 行级状态，步骤清单改读节点
 4. ~~speaker 自动创建埋在 run_generation~~ → `persona_bootstrap` 节点
 5. ~~scope if-else 双形态~~ → 同机制小拓扑图（hook/clip→`[script]`，render→`[render]`）
 

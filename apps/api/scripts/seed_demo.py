@@ -9,7 +9,7 @@ The regular API startup also calls ``seed_demo_project()`` automatically.
 
 After seeding, the script verifies the RunPlan invariants (acceptance gate):
 run terminal state, node states, per-node metering, clip output lineage and
-completeness, and the internal content_brief output. Any failure exits 1.
+completeness, and the internal content_plan output. Any failure exits 1.
 """
 
 import argparse
@@ -23,13 +23,13 @@ from sqlalchemy import delete, select
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus, WorkflowStatus
-from app.models.tables import Asset, Output, RunNode, WorkflowRun
+from app.models.tables import Asset, Output, PlanNode, WorkflowRun
 from app.demo_seed import DEMO_PROJECT_ID, seed_demo_project
 from app.tools.storage import delete_prefix, get_project_output_dir
 
-GEN_NODE_KINDS = ("preprocess", "persona_bootstrap", "director_brief", "clips_pipeline")
+GEN_NODE_KINDS = ("preprocess", "persona_bootstrap", "director_plan", "clips_pipeline")
 # Nodes that unconditionally hit the LLM and must therefore be metered.
-METERED_NODE_KINDS = ("director_brief", "clips_pipeline")
+METERED_NODE_KINDS = ("director_plan", "clips_pipeline")
 
 
 async def _reset_demo_outputs() -> None:
@@ -76,7 +76,7 @@ async def _verify_demo_run() -> bool:
         nodes = list(
             (
                 await db.execute(
-                    select(RunNode).where(RunNode.run_id == run.id).order_by(RunNode.seq)
+                    select(PlanNode).where(PlanNode.run_id == run.id).order_by(PlanNode.seq)
                 )
             ).scalars()
         ) if run else []
@@ -103,7 +103,7 @@ async def _verify_demo_run() -> bool:
 
     # 2. Node states: generation nodes done; render fan-out pending (the
     # worker renders in the background and mirrors terminal state later).
-    by_kind: dict[str, list[RunNode]] = {}
+    by_kind: dict[str, list[PlanNode]] = {}
     for n in nodes:
         by_kind.setdefault(n.kind, []).append(n)
     for kind in GEN_NODE_KINDS:
@@ -136,8 +136,8 @@ async def _verify_demo_run() -> bool:
     v.check(len(clips) == 5, "5 clip outputs", f"count={len(clips)}")
     for o in clips:
         problems = []
-        if pipeline_id is not None and o.run_node_id != pipeline_id:
-            problems.append("run_node_id")
+        if pipeline_id is not None and o.plan_node_id != pipeline_id:
+            problems.append("plan_node_id")
         if o.render_status != RenderStatus.PENDING:
             problems.append(f"render_status={o.render_status}")
         if not o.payload.get("hook") or not o.payload.get("title_options"):
@@ -155,12 +155,12 @@ async def _verify_demo_run() -> bool:
             problems.append("score.reason")
         v.check(not problems, f"clip {str(o.id)[:8]} lineage+complete", ",".join(problems))
 
-    # 5. Internal content_brief output from the director node.
-    director_id = by_kind["director_brief"][0].id if by_kind.get("director_brief") else None
-    plans = [o for o in outputs if o.type == "content_brief"]
+    # 5. Internal content_plan output from the director node.
+    director_id = by_kind["director_plan"][0].id if by_kind.get("director_plan") else None
+    plans = [o for o in outputs if o.type == "content_plan"]
     v.check(
-        len(plans) == 1 and plans[0].run_node_id == director_id,
-        "content_brief internal output present",
+        len(plans) == 1 and plans[0].plan_node_id == director_id,
+        "content_plan internal output present",
         f"count={len(plans)}",
     )
 

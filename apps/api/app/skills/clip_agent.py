@@ -1,7 +1,7 @@
 """Clip Agent: select segments and write clip scripts from a content plan.
 
-This agent replaces the previous ContentBriefnerAgent. It receives the shared
-GenerationContext and ContentBrief produced by the Content Director, then plans
+This agent replaces the previous ContentPlannerAgent. It receives the shared
+GenerationContext and ContentPlan produced by the Content Director, then plans
 vertical clips that reinforce the same core thesis and brand strategy.
 """
 
@@ -11,7 +11,7 @@ import structlog
 
 from app.skills.base import MiniMaxAgentBase
 from app.clients.minimax import MiniMaxError
-from app.models.schemas import ClipPlans, ContentBrief, GenerationContext, MediaInput
+from app.models.schemas import ClipPlans, ContentPlan, GenerationContext, MediaInput
 
 logger = structlog.get_logger()
 
@@ -23,7 +23,7 @@ class ClipAgent(MiniMaxAgentBase):
         self,
         asset_texts: list[str],
         context: GenerationContext,
-        content_brief: ContentBrief,
+        content_plan: ContentPlan,
         asset_media: list[MediaInput] | None = None,
         clip_count: int = 3,
         source_words: list[dict[str, Any]] | None = None,
@@ -34,7 +34,7 @@ class ClipAgent(MiniMaxAgentBase):
         Args:
             asset_texts: Extracted text / transcripts from project assets.
             context: Shared generation context (speaker, brand, tone, language).
-            content_brief: Unified content plan from the Content Director.
+            content_plan: Unified content plan from the Content Director.
             asset_media: Optional images/videos/short audio snippets from assets.
             clip_count: Number of clips to plan.
             source_words: Optional ASR word-level timestamps for the primary source
@@ -58,7 +58,7 @@ class ClipAgent(MiniMaxAgentBase):
             asset_media=asset_media,
             clip_count=clip_count,
             context=context.model_dump(),
-            content_brief=content_brief.model_dump(),
+            content_plan=content_plan.model_dump(),
             source_words=source_words or [],
             music_pieces=music_pieces or [],
         )

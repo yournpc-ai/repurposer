@@ -6,6 +6,85 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Shared surface for all floating layers (Popover / DropdownMenu / Dialog /
+ * Select / Sheet): translucent popover color + backdrop blur, ElevenLabs-style
+ * frosted glass. Components still merge `className` last, so callers can
+ * override per instance (e.g. a more opaque `bg-popover/95`).
+ */
+@utility overlay-surface {
+  background-color: color-mix(in oklch, var(--popover) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: var(--popover);
+  }
+}
+
+/*
+ * Display typeface for the landing hero: SF Pro on Apple devices (what the
+ * v3 wireframe was rendered in), falling back to Inter elsewhere. Scoped to
+ * marketing surfaces — the product UI keeps Inter via --font-sans.
+ */
+@utility font-display {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "PingFang SC", sans-serif;
+}
+
+/* Iridescent ("虹") foil for the landing hero's second title line — static
+ * pearl-rainbow foil text with a soft violet glow. Motion lives only on the
+ * underline bar below (hero-underline-bar), never on the text itself. */
+@utility hero-iridescent {
+  background-image: linear-gradient(
+    100deg,
+    oklch(0.78 0.13 10),
+    oklch(0.85 0.12 75),
+    oklch(0.87 0.11 150),
+    oklch(0.82 0.12 230),
+    oklch(0.75 0.13 300),
+    oklch(0.78 0.13 10)
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px oklch(0.8 0.12 300 / 0.35));
+}
+
+/* Iridescent underline bar — a standalone empty element placed below the foil
+ * text (can't be a class on the same span: background-clip:text would clip
+ * the bar into the glyphs). Same pastel loop, slower flow. */
+@utility hero-underline-bar {
+  display: block;
+  width: 100%;
+  height: 0.07em;
+  margin-top: 0.06em;
+  border-radius: 999px;
+  background-image: linear-gradient(
+    100deg,
+    oklch(0.85 0.09 10),
+    oklch(0.88 0.08 70),
+    oklch(0.89 0.07 150),
+    oklch(0.86 0.08 230),
+    oklch(0.82 0.09 300),
+    oklch(0.85 0.09 10)
+  );
+  background-size: 200% 100%;
+  animation: hero-underline-flow 6s linear infinite;
+}
+
+@keyframes hero-underline-flow {
+  to {
+    background-position-x: 200%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-underline-bar {
+    animation: none;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

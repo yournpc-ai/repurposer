@@ -12,7 +12,7 @@
 
 `docs/MODULE_ARCHITECTURE.md` 早已定义六模块边界与表归属，但代码目录没跟上：
 
-- `services/` 是抽屉柜——18 个文件混四个架构层（run graph 内核、队列、确定性工具、业务服务），找"配乐能力"要猜 `music.py` / `music_generation.py` / `brand.py`（判例 N-07）。
+- `services/` 是抽屉柜——18 个文件混四个架构层（RunPlan 内核、队列、确定性工具、业务服务），找"配乐能力"要猜 `music.py` / `music_generation.py` / `brand.py`（判例 N-07）。
 - `routers/` 平顶排列 13 个文件，与模块归属无对应关系（判例 N-06）。
 - `services/distribution/` 证明模块包是自包含的正确形态——本次重整是把它的示范效应推广到全 backend。
 - 即将落地的 registry（CHAT_ARCHITECTURE）、voice_gen/synth_visual（synthetic-talk-video）会新增文件——**先收拾好抽屉，新东西才不会继续往缝里塞**。
@@ -32,7 +32,7 @@ app/
 │   ├── service.py          # ← services/chat.py
 │   └── intent.py           # ← agents/intent.py
 │
-├── pipeline/               # Pipeline 模块（run graph 内核）
+├── pipeline/               # Pipeline 模块（RunPlan 内核）
 │   ├── routes/
 │   │   ├── projects.py     # ← routers/projects.py
 │   │   ├── assets.py       # ← routers/assets.py
@@ -108,7 +108,7 @@ app/
 
 ### 4.4 退役词汇清除
 
-- `services/derivative_dispatch.py`：run graph 后其职责已被 `node_runners` 吸收，残留部分（`_AGENTS` 注册表 + 校验）并入后续 `pipeline/registry.py`（CHAT_ARCHITECTURE）；本重构中**不新建 registry**，只把文件搬进 `pipeline/` 并在文件头标注"待并入 registry"。`derivative` 词汇的最终清除随 registry 落地完成。
+- `services/derivative_dispatch.py`：RunPlan 后其职责已被 `node_runners` 吸收，残留部分（`_AGENTS` 注册表 + 校验）并入后续 `pipeline/registry.py`（CHAT_ARCHITECTURE）；本重构中**不新建 registry**，只把文件搬进 `pipeline/` 并在文件头标注"待并入 registry"。`derivative` 词汇的最终清除随 registry 落地完成。
 
 ### 4.5 显式不改名
 

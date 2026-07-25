@@ -67,90 +67,11 @@ const en = {
     },
     signIn: "Sign in",
     openWorkbench: "Open workbench",
-    heroPrefix: "Turn your talks into",
-    heroWords: ["video clips", "social posts", "quote cards", "articles", "carousels"],
+    heroTitle1: "You did the talking.",
+    heroTitle2: "We do the rest.",
     heroSubtitle:
-      "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs, just like you'd make it yourself.",
-    getStarted: "Get started free",
-    viewDemo: "View live demo",
-    workflow: {
-      heading: "One talk, every channel",
-      subheading:
-        "From raw footage to publish-ready knowledge assets in four steps.",
-      steps: [
-        {
-          title: "Upload",
-          desc: "Drop in video, audio, slides or a transcript. Word-level transcription handles English, German, French, Spanish, Italian and more.",
-        },
-        {
-          title: "Generate",
-          desc: "A team of AI agents drafts clips, LinkedIn posts, quote cards, articles and multi-language versions — in your voice, not a generic one.",
-        },
-        {
-          title: "Refine",
-          desc: "Edit the transcript to cut segments, trim on a single track, and restyle subtitles. Deleting a sentence is all it takes.",
-        },
-        {
-          title: "Publish",
-          desc: "Send straight to LinkedIn and TikTok, or export Markdown, PNG and SRT for your newsletter and website.",
-        },
-      ],
-    },
-    trust: {
-      heading: "Built for European institutions",
-      items: [
-        {
-          title: "EU data residency",
-          desc: "Your talks stay in EU regions, GDPR-ready by design.",
-        },
-        {
-          title: "5 languages, natively",
-          desc: "EN, DE, FR, ES, IT output that reads like it was written in the language.",
-        },
-        {
-          title: "Your voice, preserved",
-          desc: "Speaker memory keeps your style consistent across every asset.",
-        },
-        {
-          title: "No charge on failure",
-          desc: "See the cost before you generate; failed runs are never billed.",
-        },
-      ],
-    },
-    pricing: {
-      heading: "Predictable by design",
-      subheading:
-        "One talk, one content bundle — you see the cost before you generate, and failed runs are never billed.",
-      comingSoon: "Pricing coming soon",
-      principles: [
-        "Per-talk bundles, not raw credits",
-        "Cost shown upfront, every time",
-        "No charge on failure",
-      ],
-    },
-    roadmap: {
-      heading: "Where we're headed",
-      subheading: "What already works, and what we're building next.",
-      shippedTitle: "Shipped",
-      shipped: [
-        "4-layer AI agent pipeline for content generation",
-        "Word-level multilingual transcription",
-        "Transcript-based video editor with instant preview",
-        "Direct publishing to LinkedIn & TikTok",
-        "Speaker personas & brand templates",
-      ],
-      nextTitle: "What's next",
-      next: [
-        "EU AI Act transparency labeling",
-        "Terminology glossaries per speaker",
-        "Per-talk content bundles with upfront pricing",
-        "A public gallery of content recipes",
-      ],
-    },
-    footer: {
-      tagline: "Turning talks into knowledge assets.",
-      rights: "© {{year}} Repurposer. All rights reserved.",
-    },
+      "Repurposer is an AI agent that studies how you actually write and speak — your habits, your terms, your rhythm. Give it a <b>video</b>, an audio file, or just the transcript and some photos from a talk, podcast or interview, and it produces clips, LinkedIn posts, articles and newsletters <b>in five languages</b>. <b>You review. It publishes.</b>",
+    ctaTryBeta: "Try the free beta",
   },
   composer: {
     speaker: "Speaker",

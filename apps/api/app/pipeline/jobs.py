@@ -1,7 +1,7 @@
 """Postgres-backed job queue primitives.
 
 The database *is* the queue: pending work lives as rows (``Asset`` rows awaiting
-processing, ``run_nodes`` awaiting execution, ``outputs`` awaiting render).
+processing, ``plan_nodes`` awaiting execution, ``outputs`` awaiting render).
 Workers claim a row with ``SELECT ... FOR UPDATE SKIP LOCKED``, which lets
 multiple workers run concurrently without ever grabbing the same row.
 No Redis/broker required.
@@ -22,7 +22,7 @@ from sqlalchemy import CursorResult, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, RenderStatus
-from app.models.tables import Asset, Output, RunNode
+from app.models.tables import Asset, Output, PlanNode
 
 logger = structlog.get_logger()
 
@@ -70,21 +70,21 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
         await db.execute(
             text(
                 """
-                UPDATE run_nodes pn
+                UPDATE plan_nodes pn
                 SET status = 'running',
                     started_at = now(),
                     attempt = attempt + 1,
                     updated_at = now()
                 WHERE pn.id = (
                     SELECT pn2.id
-                    FROM run_nodes pn2
+                    FROM plan_nodes pn2
                     JOIN workflow_runs r ON r.id = pn2.run_id
                     WHERE pn2.status = 'pending'
                       AND pn2.kind <> 'render'
                       AND NOT EXISTS (
                         SELECT 1
                         FROM jsonb_array_elements_text(pn2.inputs) AS up(id)
-                        JOIN run_nodes upn ON upn.id = up.id::uuid
+                        JOIN plan_nodes upn ON upn.id = up.id::uuid
                         WHERE upn.status <> 'done'
                       )
                       AND NOT EXISTS (
@@ -107,7 +107,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
     await db.execute(
         text(
             "UPDATE workflow_runs SET status = 'RUNNING', updated_at = now() "
-            "WHERE id = (SELECT run_id FROM run_nodes WHERE id = :nid) "
+            "WHERE id = (SELECT run_id FROM plan_nodes WHERE id = :nid) "
             "AND status = 'PENDING'"
         ),
         {"nid": node_id},
@@ -139,7 +139,7 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
     # Mirror the render node (if any) to running.
     await db.execute(
         text(
-            "UPDATE run_nodes SET status = 'running', started_at = now(), "
+            "UPDATE plan_nodes SET status = 'running', started_at = now(), "
             "updated_at = now() "
             "WHERE kind = 'render' AND status = 'pending' "
             "AND spec->>'output_id' = :oid"
@@ -165,8 +165,8 @@ async def reap_stale(db: AsyncSession) -> None:
         .values(processing_status=AssetStatus.PENDING)
     )
     nodes = await db.execute(
-        update(RunNode)
-        .where(RunNode.status == "running")
+        update(PlanNode)
+        .where(PlanNode.status == "running")
         .values(status="pending")
     )
     renders = await db.execute(

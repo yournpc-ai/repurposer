@@ -247,7 +247,7 @@ export function Tour({
               tabIndex={-1}
               onKeyDown={trapTab}
               className={cn(
-                "flex w-80 flex-col gap-3 rounded-lg bg-popover p-4 text-popover-foreground shadow-xl ring-1 ring-border outline-hidden duration-150",
+                "overlay-surface flex w-80 flex-col gap-3 rounded-lg p-4 text-popover-foreground shadow-xl ring-1 ring-foreground/10 outline-hidden duration-150",
                 "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
               )}
             >
