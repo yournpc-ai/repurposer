@@ -180,7 +180,7 @@ chat 的另一半是"改现有产物"。边界判定：
 - 指令需要新的生成 → **task list** → 新 run（本文机制）；
 - 拿不准 → intent 反问。
 
-edit ops 初集（Operation Model 动工时评审定稿）：`trim_segment` / `remove_segment` / `reorder_segment` / `set_node_params` / `swap_slot` / `apply_preset` / `regenerate_node` / `restore_version`。本文不定稿，只钉边界。
+edit ops **已定稿并落地**（2026-07-26，ADR-032 D5 + `tasks/operation-model.md`）：产物级 op = `remove_range` / `set_trim` / `set_title` / `set_caption_style` / `set_music` / `set_crop` / `set_aspect` / `set_caption_text` / `restore_version`（+ system 内部 `snapshot` / `set_spec`），chat 已真应用（registry 校验 + message_id 血统）；**plan 级 op（`set_node_params` / `regenerate_node` / `swap_slot`）归 RunPlan 小拓扑，不进 operations 表**——两家族分开登记；`restore_range` 独立 op 被否决（判例 N-16：caption 不可复活，恢复语义归快照层）。
 
 ## 10. 失败语义
 

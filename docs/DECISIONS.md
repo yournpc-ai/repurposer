@@ -758,3 +758,24 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - key 轮换 = 旧 key 解密 → 新 key 加密的批量任务；当前单 key 从简。
 
 **Related**: ADR-026、ADR-030；`docs/DISTRIBUTION.md` §3.1/§14
+
+## ADR-032: Operation Model——operations 表 + 快照式 undo + op 集边界
+
+**Status**: Decided (2026-07-26)
+
+**Context**: 编辑侧需要与 RunPlan（生成侧"步骤皆可寻址"）同构的地基：Editor GUI / chat /（未来）MCP 三个前端共用一本操作日志，支撑 undo（VIDEO_EDITOR.md 已承诺）、chat 细粒度修改（"删掉第二句"）与精修痕迹回流校准（MODULE_ARCH 回流边①）。CHAT_ARCH §9 只钉了 edit ops 边界，op 集合与存储形态待定。关键设计问题：undo 用逆运算还是快照；op 集合的边界划在哪。
+
+**Decision**:
+1. **`operations` 表**（Owner: Operation Model）：`output_id / project_id / seq / op / params JSONB / spec_after JSONB / spec_hash / source / user_id? / message_id? / undone_at? / created_at`，`UniqueConstraint(output_id, seq)`。append-only，`undone_at` 可空时间戳是唯一可写字段（N-04）。
+2. **快照式 undo**：每行存应用后的完整 render_spec 快照（`spec_after`）+ 语义化 `op`+`params`；baseline 行（`op="snapshot", seq=0`）懒创建，不变式"op N 的 before = op N-1 的 spec_after"。否决逆运算模型：LLM op（translate/dub）无可计算的逆；`removeRange` 在 spec 内真删 caption cues，逆运算无法复活；redo 需要 after 态。params 保留语义信号供校准回流，快照提供机械保证——两者各司其职（Git 存 tree、diff 派生的同构）。
+3. **op 集边界**：operations 表只装**产物级** op（remove_range / set_trim / set_title / set_caption_style / set_music / set_crop / set_spec(system 内部) / restore_version / translate_captions / set_dub）；**plan 级 op（set_node_params / regenerate_node / swap_slot）归 RunPlan 小拓扑，两家族分开登记**。否决 `restore_range` 独立 op（NAMING 判例 N-16）：caption cues 不可复活，恢复语义全归快照层。
+4. **写纪律**：render_spec 的一切修改必须经 `operations/service.py`（MODULE_ARCH §4"内容字段修改必须能产生 operation 记录"的代码化）；`PUT /outputs/{id}` 的 render_spec 整包替换分支删除（破坏性升级，无过桥层）；漂移自愈——hash 链校验失败时自动补 `set_spec`（source=system）行，日志永不谎称现状。
+5. **并发**：应用事务内 `SELECT ... FOR UPDATE` + 客户端 `base_hash` 乐观校验（409）；批量原子应用（editor Save 模型的自然形态）。
+
+**Consequences**:
+- undo/redo/版本跳转对所有 op 类型统一成立（含 LLM op）；存储代价 ≈15–30KB/op，可接受，未来可按 spec_hash 内容寻址去重（schema 不变）。
+- chat `EditOpsProposal` 从"回边界文案"升级为真应用（chat-loop-v2 P3）；EditOp schema 收紧为 registry 校验。
+- editor 历史面板/版本时间线 UI 后置（反过度设计裁决）；undo 能力经端点 + chat 撤销按钮先行可用。
+- 校准回流的读路径（按 project/op/时间窗聚合 params）落成文档座位，消费端后建。
+
+**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/tasks/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4

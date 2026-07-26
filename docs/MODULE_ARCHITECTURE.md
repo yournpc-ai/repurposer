@@ -81,7 +81,7 @@
 | 生成计划图 | `workflow_steps`——计划作为一等对象，节点级血统/成本/重跑（ADR-028） | ✅ Phase 1 |
 | 生成 → 精修 | `outputs.render_spec` / `outputs.payload`（clip-spec 契约） | ✅ |
 | 精修 → 渲染 | `outputs.render_status=PENDING`（worker 认领源） | ✅ |
-| 精修操作记录 | （📋）`operations` 表——Edit/Chat/MCP 三前端共用 | 📋 P1 地基 |
+| 精修操作记录 | `operations` 表——Edit/Chat 已写入（MCP 座位） | ✅（2026-07-26，ADR-032） |
 | 分发 | （📋）`publications` 状态机 + `channel_accounts` | 📋 P1 |
 | 发布数据回流 | （📋）Publication 回流字段 → 首发推荐分校准 | 📋 P2 |
 | Memory 注入 | persona block / brand block（消费者各自拉取） | ✅ |
@@ -119,8 +119,8 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
 | **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`、`app/skills/`、`pipeline/rendering.py` | ✅ 已落地 |
-| **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | 无（hidden 标记是雏形：`packages/clip/src/types.ts`） | 📋 ROADMAP §2 |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（intent 二态提议→create_run）、`chat/intent.py`（ChatIntentAgent 单次 tool calling / ComposerIntentAgent）、`pipeline/registry.py`（skill 登记处） | 🚧 v1 backend 落地（chat UI 📋） |
+| **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（二态 dispatch：task_list→create_run / edit_ops→operations）、`chat/intent.py`（op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（ROADMAP §5） |
 | **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
@@ -144,7 +144,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
-| （📋）operations | Operation Model | editor GUI / chat / MCP 三个前端写入；worker 消费 |
+| operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
 | publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
 

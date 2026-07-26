@@ -41,9 +41,9 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| 操作日志表 + undo 语义（非破坏 hidden 之上） | 2027 架构；VIDEO_EDITOR.md 已承诺 undoable | **P1（地基，尽早）** | 无 | — 纯工程 | ❌（全仓无 undo 栈/操作日志表） |
-| 操作 = clip-spec diff 的映射规范 | 2027 架构 | P1 | 上一行 | — | ❌ |
-| agent 可调用的操作 schema（原子、幂等、可检查、可撤销） | 2027 架构 | P1 | 操作日志表；M3 tool-calling spike（见 §3） | ⚠️ | ❌ |
+| 操作日志表 + undo 语义（非破坏 hidden 之上） | 2027 架构；VIDEO_EDITOR.md 已承诺 undoable | **P1（地基，尽早）** | 无 | — 纯工程 | ✅（2026-07-26：`operations` 表 + 快照式 undo/redo/restore_version 端点，ADR-032；简报 `tasks/operation-model.md`） |
+| 操作 = clip-spec diff 的映射规范 | 2027 架构 | P1 | 上一行 | — | ✅（`operations/registry.py`：11 op 初集 + params schema + 纯函数应用，产物级/plan 级两家族分离） |
+| agent 可调用的操作 schema（原子、幂等、可检查、可撤销） | 2027 架构 | P1 | 操作日志表；M3 tool-calling spike（见 §3） | ⚠️ | ✅（chat edit_ops 真应用：registry 校验 + message_id 血统 + OpsCard 撤销；MCP 仍 💡） |
 
 ## 3. Agent Interface（chat 升级 + MCP）
 
@@ -53,11 +53,11 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| chat 接入 LLM 意图解析（`agents/intent.py` 已存在未接线） | 代码现状快赢 | **P1 快赢** | 无 | ✅ | 🚧（chat 用纯关键词规则，`Message.intent` 注释与实际不符） |
+| chat 接入 LLM 意图解析（`agents/intent.py` 已存在未接线） | 代码现状快赢 | **P1 快赢** | 无 | ✅ | ✅（2026-07-26 随 chat-loop-v1/v2：ChatIntentAgent 二态判别联合，规则版退役） |
 | M3 tool-calling spike（验证原生 function calling；不可靠则走"结构化输出模拟工具调用"） | 2027 架构 | **P1（先于一切 agent 设计）** | 无 | ⚠️ 待 spike | ❌ |
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
-| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | ❌ |
-| chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ❌（需 CHAT_ARCHITECTURE 文档仲裁） |
+| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——简报 `tasks/chat-loop-v2.md` §4） |
+| chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ✅（CHAT_ARCH §3 三类目标 + 两家族分离：产物级→operations 表，plan 级→RunPlan 小拓扑） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 | 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
@@ -68,7 +68,7 @@
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
 | transcript 编辑 / 单轨 trim / Remotion 预览 | — | — | — | ✅ | ✅ 已落地 |
-| undo 栈（前端接 Operation Model） | VIDEO_EDITOR.md 已承诺 | P1 | Operation Model | — | ❌ |
+| undo 栈（前端接 Operation Model） | VIDEO_EDITOR.md 已承诺 | P1 | Operation Model | — | 🚧（2026-07-26：端点 + chat 撤销按钮已通；editor 内 undo/redo 按钮 + 历史面板后置——反过度设计裁决，见简报 Phase 2b） |
 | 字幕翻译 + 校对视图（side-by-side） | 矩阵 §G | P1 | 多语言输出（已有） | ✅ | ❌ |
 | XML / EDL 交接 spec（→ CapCut/Premiere） | ADR-016 | P2 | clip-spec 稳定 | — | ❌ |
 

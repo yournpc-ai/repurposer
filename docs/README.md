@@ -27,11 +27,11 @@
 | `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线：八概念/导演两步/质检节点/分期） | 已实现 + 📋 演进中 | 动 generation/agents 前 |
 | `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 待 Operation Model） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
-| `DECISIONS.md` | ADR-001 ~ ADR-030 | 持续追加 | 翻案/新决策时 |
+| `DECISIONS.md` | ADR-001 ~ ADR-032 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建，📋 未实现） | 动 Distribution 前 |
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
-| `CHAT_ARCHITECTURE.md` | Agent Interface 层：task list 契约 / skill registry / compile_graph 动态物化 / SSE / mentions | v1 backend 已实现（2026-07-26；chat UI/打勾流 📋 下轮） | 动 chat / registry / 进度推送前 |
+| `CHAT_ARCHITECTURE.md` | Agent Interface 层：task list 契约 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现（2026-07-26：chat UI + RunCard + edit ops 接线；plan 级节点重跑 📋） | 动 chat / registry / 进度推送前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |

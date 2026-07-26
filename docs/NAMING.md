@@ -33,6 +33,10 @@
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |
 | 提及 | mention | 对话中的 @ 实体引用 | 不是 reference、不是 entity |
 | 施工图编译 | `compile_graph()` | 任务书 → 节点图的纯函数 | 曾名 `lower_plan`（N-04）/ `compile_plan`（N-08）；裸 plan 违规（N-11），故以产出物命名 |
+| 操作 | `Operation` | 产物级编辑动作的记录（op + params + spec_after 快照），operations 表 | 不是 plan 级节点操作（归 RunPlan 小拓扑） |
+| 操作源 | `source` | operation 的发起来源：editor / chat / mcp / system（注册表） | — |
+| 结果卡 | `RunCard` | assistant 消息内嵌的 run 线性投影（步骤清单 + 产物卡片 + 聚合行） | 不是 DAG 画布 |
+| 操作卡 | `OpsCard` | assistant 消息内嵌的 edit ops 应用结果（op 清单 + 撤销） | — |
 
 **两个 plan 各司其职**：RunPlan = 执行计划（工程层），ContentPlan = 内容计划（创作层）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
@@ -55,6 +59,7 @@
 | N-13 | API 层 job 词汇清除 | `/jobs→/runs`、`job_id→run_id`、`latest_job→latest_run`、`WorkflowRunResponse→RunResponse`：job 在 API 指 run，违反 v2.0"run 不是 job"与 N-11 双重原则（GitHub `actions/runs` 先例）。`workflow_runs` 表与 `WorkflowRun` 类**保留**（Mastra `workflow.createRun()`/GitHub 证明 workflow run 是行业标准执行实例全名；每 run 自带其编译出的 workflow=steps 图——改名动议记录在案并**撤回**） | §1 |
 | N-14 | `ChatIntent` 退役 → `IntentProposal` 二态判别联合 | 规则版 action 枚举整体退役；`TaskListProposal`/`EditOpsProposal` 判别联合，`tasks=[]` = 反问（合法输出，不加第三态） | §1 |
 | N-15 | `plan_nodes` → `workflow_steps` | plan 一词三用（RunPlan/ContentPlan/plan_nodes）真实歧义；表对词族统一（workflow_runs+workflow_steps）；前端早已叫 step（GenerationStepper/results.stepper.*）；Mastra workflow steps 同构。**概念层 RunPlan 不动**——这不是 N-10 翻案（N-10 否的是概念层清洗），是存储层对齐行业词；`outputs.plan_node_id→workflow_step_id`、`PlanNode→WorkflowStep`、`StepKind/StepStatus/StepResponse`（迁移 c4a9e2f17b03） | §1 |
+| N-16 | `restore_range` 独立 op 否决 | removeRange 在 spec 内真删 caption cues，独立"恢复删除"op 只能 un-hide segments、复活不了字幕——恢复出来的产物是坏的；恢复语义全归快照层（undo / restore_version，ADR-032 D1/D4）；真要做点选恢复，前置 = clip-spec 契约扩展（cues 加 hidden），属 ADR-016 级改动单独评审 | §1、ADR-032 D4 |
 
 ## 4. API 命名
 
