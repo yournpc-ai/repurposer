@@ -120,7 +120,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 |---|---|---|---|
 | **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`、`app/skills/`、`pipeline/rendering.py` | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | 无（hidden 标记是雏形：`packages/clip/src/types.ts`） | 📋 ROADMAP §2 |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（规则意图→派生 WorkflowRun）、`chat/intent.py`（LLM 意图，未接入 chat） | 🚧 雏形 |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（intent 二态提议→create_run）、`chat/intent.py`（ChatIntentAgent 单次 tool calling / ComposerIntentAgent）、`pipeline/registry.py`（skill 登记处） | 🚧 v1 backend 落地（chat UI 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（ROADMAP §5） |
 | **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
@@ -149,6 +149,27 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
 
 **outputs 共享聚合的细则**：`outputs` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = payload/render_spec diff）、worker（渲染产物回写 `files.video`/`files.srt`）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
+
+### 4.1 行业词汇对照（Mastra / Agno / OpenAI ↔ 本系统）
+
+对照唯一事实源——评估外部框架、写新文档、评审命名时以此为准，不另起炉灶。
+
+| 行业通用词 | 本系统对应 | 说明 |
+|---|---|---|
+| Agents（LLM 决策单元） | `skills/`（班组） | Mastra Agents 含 Tools/Skills 子集；我们的 agent 按 NAMING 叫 skill |
+| Tools（确定性执行） | `tools/`（机械） | 同名同物 |
+| Skills（组合能力） | `pipeline/registry.py` skill 条目 | = Mastra Skills 的登记处 |
+| Workflows（编排图+执行） | RunPlan 内核（orchestrator + workflow_steps + worker 认领） | Workflow State=run 状态机；Suspend/Resume=step `waiting` 座位；Snapshots=spec/context；HITL=variant_pick gate（📋） |
+| workflow run（执行实例） | `workflow_runs` 表 | 行业标准全名（每 run 自带其编译出的 workflow=步骤图） |
+| Agent Runtime | `app/worker.py` | 执行进程 |
+| Memory | `memory/`（speakers/brand_templates） | persona/brand block 单向注入 |
+| Evals（Scorers/Gates/Verdicts） | 📋 Phase 3 verify 节点 + variant_pick gate | verify=节点 / eval=活动，与 Mastra 兼容 |
+| Threads / Conversations | `conversations` + `messages` | OpenAI Conversations API 同款 |
+| Agent Observability | metering（workflow_steps.cost）+ structlog + 📋 METRICS.md | 横切不开包（§5） |
+| Channels | `distribution/` | 直发渠道 |
+| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | ROADMAP §7/§8 |
+
+反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
 ## 5. 跨模块通信规则
 

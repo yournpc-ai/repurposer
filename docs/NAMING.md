@@ -20,8 +20,10 @@
 | 中文（文档） | 英文（代码） | 定义 | 不是什么 |
 |---|---|---|---|
 | 任务书 | `TaskSpec` | 意图归一：outputs × 语言 × 数量 × instruction | 不是 plan、不是 workflow |
-| 施工图 | RunPlan / `plan_nodes` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
-| 节点 | `PlanNode` | 施工图上的一个执行单位 | 不是 job、不是 task |
+| 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（skill + params），compile_graph 模式②的输入 | 不是 plan、不是 node spec |
+| 施工图 | RunPlan / `workflow_steps` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
+| 步骤 | `WorkflowStep` | 施工图上的一个执行单位（曾名 PlanNode，N-15） | 不是 job、不是 task |
+| 对话 | `Conversation` | chat 的会话容器（曾名 ChatSession，N-12；session 撞 auth session） | 不是 thread、不是 session |
 | 内容计划 | `ContentPlan` | **创作计划**：导演 LLM 的产出（说什么、什么角度、金句给谁），executors 按它执行 | 不是 brief（brief 是输入，TaskSpec 才是） |
 | 班组 | skills | LLM 决策单元（`skills/`） | 不是 agent 框架的 agent |
 | 机械 | tools | 确定性执行单元（`tools/`），无 LLM 决策 | 不是 service、不是 util |
@@ -40,7 +42,7 @@
 |---|---|---|---|
 | N-01 | `outputs` 统一产物表 | clips/derivatives 词汇全库清除，`type` 区分产物种类 | §1 |
 | N-02 | `render_status NULL = 未请求` | 不加 `render_requested` 布尔列；NULL 做认领谓词 | §4 |
-| N-03 | `PlanNodeKind` 用 String 列 + Literal/注册表 | 不做 PG ENUM；新 kind（`voice_gen`/`synth_visual`）零迁移注册 | §5 |
+| N-03 | `PlanNodeKind`（现名 `StepKind`，N-15）用 String 列 + Literal/注册表 | 不做 PG ENUM；新 kind（`voice_gen`/`synth_visual`）零迁移注册 | §5 |
 | N-04 | `lower_plan` → `compile_plan` | lowering 是编译器黑话；compile 是通用词，且与"DAG 编译期校验"既有说法衔接 | §6 |
 | N-05 | 否决 `ai/` 顶层目录 | 不拥有表、不认领队列、不对应部署单元——按技术风味分组 = `services/` 错误的高配版 | §7 |
 | N-06 | 六模块包 + routes 入住模块 | `routers/` 平顶解散，模块自包含（routes + service + 逻辑）；skills/tools 永无 routes | §7 |
@@ -49,6 +51,10 @@
 | N-09 | ~~`ContentPlan` → `ContentBrief`~~ | **误判，被 N-11 翻案**：brief 是输入规格（那是 TaskSpec），ContentPlan 是导演的决策产物，语义上就是 plan | — |
 | N-10 | ~~RunPlan → run graph；plan_nodes → run_nodes~~ | **过度清洗，被 N-11 翻案** | — |
 | N-11 | plan 词汇恢复：**plan 必须带限定词，裸用违规** | 系统有两个 plan 各司其职：RunPlan（执行计划，工程层）/ ContentPlan（内容计划，创作层）——"LLM 提出 plan、executors 执行 plan"是 agent 范式的正名；违规的只是裸 plan（`lower_plan`/`compile_plan`，哪个 plan？）。`compile_graph` 保留（N-08 成立）；表名/类名/kind/type 全部回滚（迁移 b2d6f9a53e18） | §1 |
+| N-12 | `chat_sessions` → `conversations` | session 撞 auth session；OpenAI Conversations API 同款；`messages.session_id→conversation_id`、端点 `/chat/session→/chat/conversation` | §1 |
+| N-13 | API 层 job 词汇清除 | `/jobs→/runs`、`job_id→run_id`、`latest_job→latest_run`、`WorkflowRunResponse→RunResponse`：job 在 API 指 run，违反 v2.0"run 不是 job"与 N-11 双重原则（GitHub `actions/runs` 先例）。`workflow_runs` 表与 `WorkflowRun` 类**保留**（Mastra `workflow.createRun()`/GitHub 证明 workflow run 是行业标准执行实例全名；每 run 自带其编译出的 workflow=steps 图——改名动议记录在案并**撤回**） | §1 |
+| N-14 | `ChatIntent` 退役 → `IntentProposal` 二态判别联合 | 规则版 action 枚举整体退役；`TaskListProposal`/`EditOpsProposal` 判别联合，`tasks=[]` = 反问（合法输出，不加第三态） | §1 |
+| N-15 | `plan_nodes` → `workflow_steps` | plan 一词三用（RunPlan/ContentPlan/plan_nodes）真实歧义；表对词族统一（workflow_runs+workflow_steps）；前端早已叫 step（GenerationStepper/results.stepper.*）；Mastra workflow steps 同构。**概念层 RunPlan 不动**——这不是 N-10 翻案（N-10 否的是概念层清洗），是存储层对齐行业词；`outputs.plan_node_id→workflow_step_id`、`PlanNode→WorkflowStep`、`StepKind/StepStatus/StepResponse`（迁移 c4a9e2f17b03） | §1 |
 
 ## 4. API 命名
 

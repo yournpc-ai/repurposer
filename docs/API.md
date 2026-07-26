@@ -42,14 +42,14 @@ POST /api/v1/projects/{project_id}/assets
 
 POST /api/v1/projects/{project_id}/generate
   → Trigger async generation
-  → Returns { job_id, status: "pending" }
+  → Returns { run_id, status: "pending" }
 ```
 
 After that, the frontend navigates to the project detail page and polls the following endpoints to check results:
 
 ```
-GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt + clips + derivatives + latest job + assets
-GET /api/v1/projects/{project_id}/jobs/{job_id}
+GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt + clips + derivatives + latest run + assets
+GET /api/v1/projects/{project_id}/runs/{run_id}
 ```
 
 The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. It also returns `ui_step` (`{key, index, total}` or `null`): the backend-computed position for the loading stepper — percent = `(index + 1) / total`, equal increments per pipeline step, ending with `ready_to_render` at 100% while clips wait for rendering; `null` hides the dialog (run failed or fully settled). The legacy single-resource endpoints are still available:
@@ -60,7 +60,7 @@ GET /api/v1/projects/{project_id}
 GET /api/v1/projects/{project_id}/assets
 GET /api/v1/projects/{project_id}/clips
 GET /api/v1/projects/{project_id}/derivatives
-GET /api/v1/projects/{project_id}/jobs
+GET /api/v1/projects/{project_id}/runs
 ```
 
 When rendering a video, call:
@@ -316,18 +316,26 @@ Response:
 
 ```json
 {
-  "job_id": "uuid",
+  "run_id": "uuid",
   "status": "pending",
   "message": "Generation started"
 }
 ```
 
-### Query Generation Jobs
+### Query Generation Runs
 
 ```http
-GET /api/v1/projects/{project_id}/jobs
-GET /api/v1/projects/{project_id}/jobs/{job_id}
+GET /api/v1/projects/{project_id}/runs
+GET /api/v1/projects/{project_id}/runs/{run_id}
 ```
+
+### Stream Run Events (SSE)
+
+```http
+GET /api/v1/runs/{run_id}/events
+```
+
+Server-Sent Events stream of a run's state (CHAT_ARCHITECTURE §8 — a pushed read of DB state, not an event bus). On connect the server sends a full `run.snapshot` frame (`{run, steps}`, idempotent on reconnect); while the run is active it tails `workflow_steps` once per second and pushes `step.updated` (`{id, kind, seq, status, stage, summary, error}`) and `run.updated` (`{id, status, progress, error}`, terminal frame adds the derived aggregate `summary`) only on change. A `: heartbeat` comment frame is sent every 15s; the stream closes after the terminal state. There is no event store, replay, or delivery guarantee. Use `@microsoft/fetch-event-source` on the frontend — native `EventSource` cannot send the `Authorization` header.
 
 `WorkflowRun` includes `context` with per-output progress:
 
@@ -444,15 +452,15 @@ Response: a `application/zip` file download with `Content-Disposition: attachmen
 
 ## 10. Chat
 
-Project-scoped and asset-scoped chat sessions persist the original prompt and all follow-up instructions. The `/generate` endpoint automatically creates a project-scoped session and stores the user's `instruction` as the first user message.
+Project-scoped and asset-scoped conversations persist the original prompt and all follow-up instructions. The `/generate` endpoint automatically creates a project-scoped conversation and stores the user's `instruction` as the first user message.
 
-### Get or Create Session
+### Get or Create Conversation
 
 ```http
-GET /api/v1/chat/session?project_id={project_id}&asset_id={asset_id}&asset_type={asset_type}
+GET /api/v1/chat/conversation?project_id={project_id}&asset_id={asset_id}&asset_type={asset_type}
 ```
 
-Returns the existing session or creates one. `asset_type` is `clip` or `derivative` when the chat is tied to a specific asset.
+Returns the existing conversation or creates one. `asset_type` is `clip` or `derivative` when the chat is tied to a specific asset.
 
 ### Send a Message
 
@@ -468,16 +476,19 @@ Request:
   "asset_id": "uuid | null",
   "asset_type": "clip | derivative | null",
   "message": "make the hook shorter",
-  "attachments": []
+  "attachments": [],
+  "mentions": []
 }
 ```
 
-Response: `{ session_id, user_message, assistant_message, job_id }`. The assistant message parses the user's intent (translate, revise, render, select music, etc.) and may dispatch a `WorkflowRun` returned as `job_id`.
+`mentions` pins @ entity references to definite ids (`[{type, id, label}]`, `type` ∈ `asset | output | transcript_segment | workflow_step`); the picker UI lands in a later iteration. Messages echo `mentions` back.
 
-### List Session Messages
+Response: `{ conversation_id, user_message, assistant_message, run_id }`. The assistant message carries the intent agent's two-state proposal (CHAT_ARCHITECTURE §3): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); an empty `task_list` is an ask-back reply; `edit_ops` answers with the boundary text and creates no run.
+
+### List Conversation Messages
 
 ```http
-GET /api/v1/chat/sessions/{session_id}/messages
+GET /api/v1/chat/conversations/{id}/messages
 ```
 
 ## 11. Library
@@ -579,8 +590,8 @@ Core models:
 - `Clip`
 - `Derivative`
 - `WorkflowRun` (includes `context` with `outputs`, `clip_count`, `output_status`)
-- `ChatSession` (project-scoped or asset-scoped chat container)
-- `Message` (chat messages, referenced by `session_id`)
+- `Conversation` (project-scoped or asset-scoped chat container)
+- `Message` (chat messages, referenced by `conversation_id`)
 - `BrandTemplate`
 
 Removed / not yet implemented:

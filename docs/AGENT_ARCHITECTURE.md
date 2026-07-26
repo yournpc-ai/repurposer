@@ -295,7 +295,7 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 - `app/pipeline/derivative_dispatch.py` — thin dispatcher registry
 - `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
 - `app/pipeline/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
-- `app/metering.py` — 逐节点计量（usage → `plan_nodes.cost`，ADR-025）
+- `app/metering.py` — 逐节点计量（usage → `workflow_steps.cost`，ADR-025）
 - `app/chat/intent.py` — intent recognition
 - `app/pipeline/routes/outputs.py` — 统一产物 API（含单产物重生成）
 
@@ -314,7 +314,7 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 | **导演** | 两步走：看懂素材（可复用）→ 分任务（分镜表，每 run 重排） | Content Director（单趟 → 两次调用） |
 | **班组** | executors：选段 / 编剧 / 文案 / 配音 / 渲染——每工种一个节点 | Agent Executors |
 | **质检** | 单产物（分数落库 / 保真 / 合规，打回 ≤2 次）+ 全片（跨产物撞车） | Layer 4（未实现）的新形态 |
-| **施工图** | plan_nodes：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
+| **施工图** | workflow_steps：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
 | **产物** | outputs 统一表；clip = 带时间轴+渲染的那一类 | clips / derivatives（ADR-030） |
 | **分发** | 缝 = 产物表，零变化 | Distribution |
 
@@ -349,7 +349,7 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 
 1. ~~ContentPlan = project 上 JSON blob，盲目复用无失效~~ → 内部 `outputs[type=content_plan]` 行，director_plan 节点产物（每 run 重排；asset-hash 复用是 Phase 2）
 2. ~~DerivativePlan 混 what/how，定向重生成靠伪造 plan~~ → 定向重生成 = 小拓扑 `[director_plan → X_gen(target_id)]`，伪造 plan 路径整体删除
-3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → plan_nodes 行级状态，步骤清单改读节点
+3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → workflow_steps 行级状态，步骤清单改读节点
 4. ~~speaker 自动创建埋在 run_generation~~ → `persona_bootstrap` 节点
 5. ~~scope if-else 双形态~~ → 同机制小拓扑图（hook/clip→`[script]`，render→`[render]`）
 

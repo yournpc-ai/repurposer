@@ -298,7 +298,7 @@ Long-running tasks (ASR, video rendering, generation) do not run in the API proc
 └──────────────────────┘
 ```
 
-- `app/services/jobs.py`: `claim_pending_*` (atomic claiming) + `reap_stale` (startup reset of orphaned tasks). `claim_pending_run` additionally skips runs whose project still has `pending`/`processing` assets, so generation never starts before its source material is ready.
+- `app/pipeline/jobs.py`: `claim_pending_*` (atomic claiming) + `reap_stale` (startup reset of orphaned tasks). `claim_pending_run` additionally skips runs whose project still has `pending`/`processing` assets, so generation never starts before its source material is ready.
 - `app/services/asset_processing.py`: Processor dispatch by `AssetType` — **the future hook-in point for ASR/OCR/video rendering**.
 - When horizontal scaling is needed, replace claiming with arq/Celery + Redis; callers remain unchanged.
 

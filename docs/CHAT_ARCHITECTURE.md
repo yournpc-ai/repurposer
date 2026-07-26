@@ -1,16 +1,25 @@
 # Chat Architecture — Agent Interface 层
 
-> Status: 📋 设计定稿，未实现（2026-07-25）
+> Status: ✅ v1 backend 已实现（2026-07-26）；chat UI / 打勾流 / composer UI 归下轮
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
-> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：chat_sessions/messages）
+> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）
 > 前置重构：`docs/tasks/backend-module-restructure.md`（chat/ 包是本文的代码家）
+> 实施简报：`docs/tasks/chat-loop-v1.md`
+>
+> v1 落地偏离点（相对本文设计稿）：
+> - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
+> - `dub_clip` / `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发）。
+> - UI 冻结：chat UI / 打勾流 / @picker 未做；mentions 仅落契约与列。
+> - SSE 只接 results 页 loading（GenerationStepper 数据源从 2.5s 轮询换推送）；
+>   step 状态枚举加 `waiting` 座位（HITL/suspend-resume 预留）。
+> - mentions 的 type 取 `workflow_step`（本文原写 plan node——N-15 改名后全栈同名）。
 
 ## 1. 定位与三条原则
 
 Agent Interface 是六层模块图里"意图 → 执行"的唯一入口。用户的三张脸——composer pills、composer 自由 prompt、chat 对话——在它这里汇成**一条机制**：
 
 ```
-task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁决）→ plan_nodes（施工图）
+task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁决）→ workflow_steps（施工图）
 ```
 
 1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_graph`。LLM 永不直接写 node spec。
@@ -30,7 +39,7 @@ chat/service.py ──► intent agent（LLM 单次 tool calling，带 §6 上�
 pipeline/registry.py   校验：skill 已注册？参数过 schema？
 pipeline/orchestrator  compile_graph 模式②：拓扑排序（配乐殿后）+ 补默认值
  ▼
-plan_nodes（动态 DAG，3 节点 + render fan-out）── worker 认领（SKIP LOCKED）
+workflow_steps（动态 DAG，3 步骤 + render fan-out）── worker 认领（SKIP LOCKED）
  │
  ▼ 执行中
 node.spec.summary = "Removed 12 fillers · 3 repeated takes"（量化摘要，§7）
@@ -123,7 +132,7 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 1. **校验**：task list 每个 skill 必须在 registry；params 过 schema；不认识的 skill → 拒收并让 intent 修复一次（retry 1 次），仍败 → 回复用户"这个我还不会"。
 2. **拓扑排序**：registry 声明 `ports`（in/out 类型）与 `after` 约束（如 `add_music` 必须在渲染相关节点之后）；编译期校验类型边。
 3. **补默认值**：`select_clips.count` 缺省 = 项目默认 / brand 默认 music 等，全部由代码补，不信 LLM 的缺省判断。
-4. **落图**：产物是标准 `plan_nodes`——之后走图、认领、计量、打勾流与模式①完全同构。**动态化只发生在编译前，编译后零差异。**
+4. **落图**：产物是标准 `workflow_steps`——之后走图、认领、计量、打勾流与模式①完全同构。**动态化只发生在编译前，编译后零差异。**
 
 ## 6. 对话上下文（context 组装）
 
@@ -138,7 +147,7 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 
 ## 7. Mentions（@ 实体引用）
 
-多轮对话的模糊指代必须落为确定引用。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / plan node**。
+多轮对话的模糊指代必须落为确定引用。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / workflow step**。
 
 - 前端输入框 @ 触发选择器，`messages.mentions` JSONB 存 `[{type, id, label}]`；
 - intent 收到的 prompt 中 mention 已替换为确定 ID 引用，LLM 解析歧义降一个量级；
@@ -146,12 +155,12 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 
 ## 8. 进度推送：SSE = 推送优化的读
 
-**定位：SSE 是 DB 状态的推送管道，不是事件总线。** 事实源唯一 = `plan_nodes` 表，因此无事件存储、无投递保证、无重放——断线重连 = 重读当前节点状态，天然幂等。
+**定位：SSE 是 DB 状态的推送管道，不是事件总线。** 事实源唯一 = `workflow_steps` 表，因此无事件存储、无投递保证、无重放——断线重连 = 重读当前节点状态，天然幂等。
 
 ```
 GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
-  async generator：run 非终态期间每 1s tail plan_nodes
-  → 有变化才推：event: node.updated / run.updated
+  async generator：run 非终态期间每 1s tail workflow_steps
+  → 有变化才推：event: step.updated / run.updated
   → 15s 心跳防空闲断连
   → run 终态推完最后一帧即关流
 ```
@@ -161,7 +170,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 
-**量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 node.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
+**量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
 
 ## 9. Edit Ops 边界（v2，归 Operation Model）
 
