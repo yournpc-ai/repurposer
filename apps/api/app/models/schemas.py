@@ -178,11 +178,16 @@ class TaskListProposal(BaseModel):
 
 
 class EditOp(BaseModel):
-    """One clip-spec-level edit operation (Operation Model vocabulary, §9)."""
+    """One clip-spec-level edit operation (Operation Model vocabulary, §9).
 
-    model_config = ConfigDict(extra="forbid")
+    v1 only pins the boundary (edit ops → no run); the op set is finalized
+    with the Operation Model, so the op key tolerates ``type`` and extra keys
+    are stored verbatim.
+    """
 
-    op: str
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    op: str = Field(default="", validation_alias=AliasChoices("op", "type"))
     target: str | None = None
     params: dict = Field(default_factory=dict)
 
