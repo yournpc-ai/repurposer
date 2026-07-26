@@ -24,7 +24,8 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import cast, delete, func, select, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +36,9 @@ from app.skills.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.schemas import (
     AssetType,
+    ClipMusic,
     ClipPayload,
+    ClipSpec,
     ContentPlan,
     DerivativeType,
     GenerationContext,
@@ -61,17 +64,19 @@ from app.memory.brand import (
     music_from_plan,
     resolve_music_ref,
 )
-from app.pipeline.clip_spec import build_clip_spec
+from app.pipeline.clip_spec import build_clip_spec, remove_range
 from app.pipeline.derivative_dispatch import generate_derivative
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_speaker,
     speaker_context_from_row,
 )
+from app.tools.filler import detect
 from app.tools.storage import (
     download_to_temp,
     file_to_data_url,
     output_url,
+    public_url,
     save_output,
     stream_url,
 )
@@ -1027,6 +1032,238 @@ async def run_render_request(
     return []
 
 
+# ---- modifier skills (deterministic, act on existing clips) ----------------
+
+
+async def _target_clips(
+    db: AsyncSession, node: WorkflowStep, project: Project
+) -> list[Output]:
+    """Clips a modifier step acts on: the upstream steps' output_refs (same
+    run — e.g. a clips_pipeline or a previous modifier in the chain), else the
+    project's existing renderable clips."""
+    clip_ids: list[UUID] = []
+    if node.inputs:
+        upstream = list(
+            (
+                await db.execute(
+                    select(WorkflowStep).where(
+                        WorkflowStep.id.in_([UUID(str(i)) for i in node.inputs])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for step in upstream:
+            clip_ids.extend(UUID(str(ref)) for ref in (step.output_refs or []))
+    if clip_ids:
+        clips = list(
+            (
+                await db.execute(
+                    select(Output).where(Output.id.in_(clip_ids), Output.type == "clip")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    else:
+        clips = list(
+            (
+                await db.execute(
+                    select(Output).where(
+                        Output.project_id == project.id,
+                        Output.type == "clip",
+                        Output.render_spec.isnot(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return [c for c in clips if c.render_spec]
+
+
+async def _fan_out_renders(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, output_ids: list[UUID]
+) -> None:
+    """One render step per touched output (same shape as the clips fan-out):
+    claimed via outputs.render_status, terminal state mirrored back."""
+    max_seq = int(
+        (
+            await db.execute(
+                select(func.max(WorkflowStep.seq)).where(WorkflowStep.run_id == run.id)
+            )
+        ).scalar_one()
+        or node.seq
+    )
+    for idx, output_id in enumerate(output_ids, start=1):
+        db.add(
+            WorkflowStep(
+                run_id=run.id,
+                kind="render",
+                status="pending",
+                seq=max_seq + idx,
+                inputs=[str(node.id)],
+                spec={"output_id": str(output_id)},
+            )
+        )
+    await db.flush()
+
+
+async def _record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:
+    """Record the cross-run DAG edge (which outputs this step consumed) on the
+    step's spec — jsonb_set in its own session, same discipline as _set_stage."""
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(WorkflowStep)
+            .where(WorkflowStep.id == node_id)
+            .values(
+                spec=func.jsonb_set(
+                    WorkflowStep.spec,
+                    pg_array(["target_output_ids"]),
+                    cast([str(oid) for oid in output_ids], JSONB),
+                    True,
+                )
+            )
+        )
+        await s.commit()
+
+
+async def run_remove_filler(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Remove filler words + repeated takes from existing clips, then re-render.
+
+    Deterministic (tools/filler.detect + clip_spec.remove_range); never touches
+    the source media — cuts land as hidden segments in the render_spec.
+    """
+    await _set_stage(node.id, "removing_fillers")
+    clips = await _target_clips(db, node, project)
+    if not clips:
+        await _set_summary(node.id, "No clips to clean")
+        return []
+
+    total_fillers = 0
+    total_repeats = 0
+    touched: list[UUID] = []
+    for output in clips:
+        spec = ClipSpec.model_validate(output.render_spec)
+        asset_id = spec.source.asset_id or (output.source_ref or {}).get("asset_id")
+        asset = await db.get(Asset, UUID(str(asset_id))) if asset_id else None
+        words = (asset.meta or {}).get("words") if asset else None
+        if not words:
+            continue
+        language = (asset.meta or {}).get("language") or output.language or "en"
+        report = detect(words, language)
+
+        new_spec = spec
+        applied_fillers = 0
+        applied_repeats = 0
+        for start, end in report.ranges:
+            if not any(
+                not s.hidden and s.start < end and start < s.end
+                for s in new_spec.segments
+            ):
+                continue
+            new_spec = remove_range(new_spec, start, end)
+            if (start, end) in report.repeat_ranges:
+                applied_repeats += 1
+            else:
+                applied_fillers += 1
+        if new_spec is spec:
+            continue
+
+        output.render_spec = new_spec.model_dump(mode="json")
+        output.render_status = RenderStatus.PENDING
+        output.render_error = None
+        output.updated_at = datetime.now(UTC)
+        await db.flush()
+        touched.append(output.id)
+        total_fillers += applied_fillers
+        total_repeats += applied_repeats
+
+    if not touched:
+        await _set_summary(node.id, "No fillers found")
+        return []
+
+    await _fan_out_renders(db, run, node, touched)
+    await _record_target_output_ids(node.id, touched)
+    await _fill_summary(
+        node.id,
+        "remove_filler",
+        filler_count=total_fillers,
+        repeat_count=total_repeats,
+    )
+    return touched
+
+
+async def run_add_music(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Score existing clips with a music bed, then re-render.
+
+    Resolution order (all by code, never the LLM): music_id → mood → brand
+    default → "calm". A mood with no matching track fails the step with a
+    clear error (CHAT_ARCH §10: the conversation offers alternatives).
+    """
+    await _set_stage(node.id, "adding_music")
+    clips = await _target_clips(db, node, project)
+    if not clips:
+        await _set_summary(node.id, "No clips to score")
+        return []
+
+    mood = node.spec.get("mood")
+    music_id = node.spec.get("music_id")
+    gain_db = node.spec.get("gain_db")
+
+    # Resolution order (all by code, never the LLM): music_id → mood → brand
+    # default → "calm"; each unresolvable ref falls through to the next. Only
+    # a fully unresolvable chain fails the step (CHAT_ARCH §10: clear error).
+    brand_default: Any = None
+    if not music_id and not mood and project.speaker_id is not None:
+        bt = (
+            await db.execute(
+                select(BrandTemplate).where(BrandTemplate.user_id == project.user_id)
+            )
+        ).scalars().first()
+        brand_default = (
+            (bt.config or {}).get("musicId") or (bt.config or {}).get("musicMood")
+            if bt
+            else None
+        )
+
+    track = None
+    for ref in (music_id, mood, brand_default, "calm"):
+        if not ref:
+            continue
+        track = await resolve_music_ref(db, ref)
+        if track is not None:
+            break
+    if track is None:
+        raise ValueError(f"No music track found for mood '{mood}'")
+
+    music = ClipMusic(
+        music_id=str(track.id),
+        url=public_url(track.file_path),
+        enabled=True,
+        gain_db=float(gain_db) if gain_db is not None else -18.0,
+    )
+    touched: list[UUID] = []
+    for output in clips:
+        spec = ClipSpec.model_validate(output.render_spec)
+        output.render_spec = spec.model_copy(update={"music": music}).model_dump(mode="json")
+        output.render_status = RenderStatus.PENDING
+        output.render_error = None
+        output.updated_at = datetime.now(UTC)
+        await db.flush()
+        touched.append(output.id)
+
+    await _fan_out_renders(db, run, node, touched)
+    await _record_target_output_ids(node.id, touched)
+    await _fill_summary(node.id, "add_music", mood=track.mood or mood or "calm")
+    return touched
+
+
 STEP_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
@@ -1038,4 +1275,6 @@ STEP_RUNNERS = {
     "article_gen": run_derivative_gen,
     "script": run_script_revision,
     "render": run_render_request,
+    "remove_filler": run_remove_filler,
+    "add_music": run_add_music,
 }

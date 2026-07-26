@@ -17,6 +17,9 @@ importers:
       '@repurposer/clip':
         specifier: workspace:*
         version: link:../../packages/clip
+      css-loader:
+        specifier: ^7.1.4
+        version: 7.1.4(@rspack/core@1.7.11)(webpack@5.105.0(postcss@8.5.15))
       express:
         specifier: ^5.0.0
         version: 5.2.1
@@ -29,6 +32,9 @@ importers:
       remotion:
         specifier: ^4.0.0
         version: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      style-loader:
+        specifier: ^4.0.0
+        version: 4.0.0(webpack@5.105.0(postcss@8.5.15))
     devDependencies:
       '@types/express':
         specifier: ^5.0.0
@@ -5654,7 +5660,7 @@ snapshots:
       semver: 7.8.5
     optionalDependencies:
       '@rspack/core': 1.7.11
-      webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.15)
+      webpack: 5.105.0(postcss@8.5.15)
 
   css-tree@3.2.1:
     dependencies:
@@ -6918,7 +6924,7 @@ snapshots:
 
   style-loader@4.0.0(webpack@5.105.0(postcss@8.5.15)):
     dependencies:
-      webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.15)
+      webpack: 5.105.0(postcss@8.5.15)
 
   supports-color@8.1.1:
     dependencies:
@@ -6946,7 +6952,7 @@ snapshots:
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.48.0
-      webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.15)
+      webpack: 5.105.0(postcss@8.5.15)
     optionalDependencies:
       esbuild: 0.28.1
       postcss: 8.5.15
@@ -6961,6 +6967,16 @@ snapshots:
     optionalDependencies:
       esbuild: 0.28.1
     optional: true
+
+  terser-webpack-plugin@5.6.1(postcss@8.5.15)(webpack@5.105.0(postcss@8.5.15)):
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.31
+      jest-worker: 27.5.1
+      schema-utils: 4.3.3
+      terser: 5.48.0
+      webpack: 5.105.0(postcss@8.5.15)
+    optionalDependencies:
+      postcss: 8.5.15
 
   terser@5.48.0:
     dependencies:
@@ -7208,6 +7224,47 @@ snapshots:
       schema-utils: 4.3.3
       tapable: 2.3.3
       terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(postcss@8.5.15)(webpack@5.105.0(postcss@8.5.15))
+      watchpack: 2.5.2
+      webpack-sources: 3.5.0
+    transitivePeerDependencies:
+      - '@minify-html/node'
+      - '@swc/core'
+      - '@swc/css'
+      - '@swc/html'
+      - clean-css
+      - cssnano
+      - csso
+      - esbuild
+      - html-minifier-terser
+      - lightningcss
+      - postcss
+      - uglify-js
+
+  webpack@5.105.0(postcss@8.5.15):
+    dependencies:
+      '@types/eslint-scope': 3.7.7
+      '@types/estree': 1.0.9
+      '@types/json-schema': 7.0.15
+      '@webassemblyjs/ast': 1.14.1
+      '@webassemblyjs/wasm-edit': 1.14.1
+      '@webassemblyjs/wasm-parser': 1.14.1
+      acorn: 8.17.0
+      acorn-import-phases: 1.0.4(acorn@8.17.0)
+      browserslist: 4.28.4
+      chrome-trace-event: 1.0.4
+      enhanced-resolve: 5.24.1
+      es-module-lexer: 2.1.0
+      eslint-scope: 5.1.1
+      events: 3.3.0
+      glob-to-regexp: 0.4.1
+      graceful-fs: 4.2.11
+      json-parse-even-better-errors: 2.3.1
+      loader-runner: 4.3.2
+      mime-types: 2.1.35
+      neo-async: 2.6.2
+      schema-utils: 4.3.3
+      tapable: 2.3.3
+      terser-webpack-plugin: 5.6.1(postcss@8.5.15)(webpack@5.105.0(postcss@8.5.15))
       watchpack: 2.5.2
       webpack-sources: 3.5.0
     transitivePeerDependencies:

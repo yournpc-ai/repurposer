@@ -904,6 +904,8 @@ StepKind = Literal[
     "article_gen",
     "script",
     "render",
+    "remove_filler",
+    "add_music",
 ]
 
 # "waiting" is a seat for HITL/suspend-resume (variant_pick gate, chat-loop-v1

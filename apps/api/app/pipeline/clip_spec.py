@@ -240,3 +240,36 @@ def build_clip_spec(
         music=music or ClipMusic(),
         brand_ref=brand_ref,
     )
+
+
+def remove_range(spec: ClipSpec, start: float, end: float) -> ClipSpec:
+    """Python mirror of the TS ``removeRange`` (packages/clip/src/types.ts) —
+    same name across the stack (NAMING §1).
+
+    Non-destructive cut of a source time range [start, end]: the overlapped
+    part of each kept segment becomes a ``hidden`` segment (recoverable), and
+    caption cues fully inside the range are dropped. Compromise (same as TS):
+    cues are word/line-level, so a cue that straddles the boundary is kept.
+    """
+    if end <= start:
+        return spec
+    segments: list[ClipSegment] = []
+    for s in spec.segments:
+        if s.hidden:
+            segments.append(s)
+            continue
+        a = max(start, s.start)
+        b = min(end, s.end)
+        if a >= b:
+            segments.append(s)
+            continue
+        if s.start < a:
+            segments.append(ClipSegment(start=s.start, end=a, hidden=False))
+        segments.append(ClipSegment(start=a, end=b, hidden=True))
+        if b < s.end:
+            segments.append(ClipSegment(start=b, end=s.end, hidden=False))
+    eps = 1e-6
+    caption_track = [
+        c for c in spec.caption_track if not (c.start >= start - eps and c.end <= end + eps)
+    ]
+    return spec.model_copy(update={"segments": segments, "caption_track": caption_track})

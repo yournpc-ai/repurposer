@@ -21,6 +21,7 @@ from app.memory.brand import seed_default_brand_template
 from app.memory.routes import brand_templates_router, speakers_router
 from app.demo_seed import seed_demo_project
 from app.pipeline.music import seed_default_music
+from app.pipeline.registry import assert_runners_registered
 from app.pipeline.routes import (
     assets,
     library,
@@ -48,6 +49,7 @@ def _log_demo_seed_result(task: asyncio.Task) -> None:
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     settings.ensure_dirs()
+    assert_runners_registered()
     await init_db()
     await seed_default_brand_template()
     async with AsyncSessionLocal() as db:

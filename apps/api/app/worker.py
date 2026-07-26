@@ -33,6 +33,7 @@ from app.pipeline.jobs import (
     reap_stale,
 )
 from app.pipeline.orchestrator import execute_step, finalize_stuck_runs
+from app.pipeline.registry import assert_runners_registered
 from app.pipeline.rendering import render_output
 
 logger = structlog.get_logger()
@@ -84,6 +85,7 @@ async def _tick() -> bool:
 
 async def run_worker() -> None:
     """Worker entrypoint: recover orphaned jobs, then poll forever."""
+    assert_runners_registered()
     logger.info("worker_starting", poll_interval=settings.worker_poll_interval)
     async with AsyncSessionLocal() as db:
         await reap_stale(db)
