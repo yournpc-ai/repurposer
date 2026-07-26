@@ -32,6 +32,7 @@ from app.pipeline.routes import (
     speaker_assets,
 )
 from app.platform.routes import auth_router, files_router, notifications_router
+from app.operations.routes import router as operations_router
 
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
@@ -235,6 +236,7 @@ app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
+app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(library, prefix="/api/v1/library", tags=["library"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])

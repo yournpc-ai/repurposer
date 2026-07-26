@@ -273,3 +273,20 @@ def remove_range(spec: ClipSpec, start: float, end: float) -> ClipSpec:
         c for c in spec.caption_track if not (c.start >= start - eps and c.end <= end + eps)
     ]
     return spec.model_copy(update={"segments": segments, "caption_track": caption_track})
+
+
+def set_trim(spec: ClipSpec, start: float, end: float) -> ClipSpec:
+    """Python mirror of the TS ``setTrim`` (packages/clip/src/types.ts) —
+    same name across the stack (NAMING §1).
+
+    Set the outer in/out by moving the first/last kept segment boundaries.
+    """
+    if end <= start:
+        return spec
+    kept_idx = [i for i, s in enumerate(spec.segments) if not s.hidden]
+    if not kept_idx:
+        return spec
+    segments = list(spec.segments)
+    segments[kept_idx[0]] = segments[kept_idx[0]].model_copy(update={"start": start})
+    segments[kept_idx[-1]] = segments[kept_idx[-1]].model_copy(update={"end": end})
+    return spec.model_copy(update={"segments": segments})

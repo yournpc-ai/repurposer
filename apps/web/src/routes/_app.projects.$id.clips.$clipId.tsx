@@ -41,8 +41,16 @@ interface ClipOutput {
   payload: { hook?: string }
   render_spec: ClipSpec | null
   render_status: string | null
+  spec_hash: string | null
   files: { video?: string; srt?: string }
 }
+
+// One queued operation per user action (ADR-032): local TS helpers keep the
+// optimistic preview; Save submits the queue as an atomic batch. Consecutive
+// ops of the same kind coalesce (slider drags / typing) — only the final
+// value is observable from the base spec.
+type QueuedOp = { op: string; params: Record<string, unknown> }
+const COALESCIBLE = new Set(['set_trim', 'set_crop', 'set_music', 'set_title', 'set_caption_text'])
 
 export const Route = createFileRoute('/_app/projects/$id/clips/$clipId')({
   component: ClipEditorPage,
@@ -106,7 +114,8 @@ function ClipEditorPage() {
 
   const [clip, setClip] = useState<ClipOutput | null>(null)
   const [spec, setSpec] = useState<ClipSpec | null>(null)
-  const [dirty, setDirty] = useState(false)
+  const [opQueue, setOpQueue] = useState<QueuedOp[]>([])
+  const [baseHash, setBaseHash] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [rendering, setRendering] = useState(false)
   const [translating, setTranslating] = useState(false)
@@ -133,6 +142,20 @@ function ClipEditorPage() {
       .then((c: ClipOutput) => {
         setClip(c)
         setSpec((prev) => prev ?? c.render_spec)
+        setBaseHash((prev) => prev ?? c.spec_hash)
+        return c
+      })
+
+  // Hard resync after a 409 — the clip was modified elsewhere (chat, another
+  // tab); discard local edits and take the server state.
+  const forceReload = () =>
+    apiFetch(`/api/v1/outputs/${clipId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Clip not found'))))
+      .then((c: ClipOutput) => {
+        setClip(c)
+        setSpec(c.render_spec)
+        setBaseHash(c.spec_hash)
+        setOpQueue([])
         return c
       })
 
@@ -163,10 +186,47 @@ function ClipEditorPage() {
 
   const previewSpec = useMemo(() => (spec ? withAbsoluteSource(spec) : null), [spec])
   const lines = spec ? toLines(spec.caption_track) : []
+  const dirty = opQueue.length > 0
+
+  const pushOp = (item: QueuedOp) =>
+    setOpQueue((prev) => {
+      const last = prev[prev.length - 1]
+      if (
+        last &&
+        last.op === item.op &&
+        COALESCIBLE.has(item.op) &&
+        (item.op !== 'set_caption_text' || last.params.index === item.params.index)
+      ) {
+        return [...prev.slice(0, -1), item]
+      }
+      return [...prev, item]
+    })
 
   const patchSpec = (patch: Partial<ClipSpec>) => {
     setSpec((prev) => (prev ? { ...prev, ...patch } : prev))
-    setDirty(true)
+  }
+
+  // Field-group patchers: local preview + mirrored operation in one place.
+  const patchMusic = (patch: Partial<ClipSpec['music']>) => {
+    if (!spec) return
+    const music = { ...spec.music, ...patch }
+    patchSpec({ music })
+    pushOp({
+      op: 'set_music',
+      params: { music_id: music.music_id, enabled: music.enabled, gain_db: music.gain_db },
+    })
+  }
+  const patchTitle = (patch: Partial<ClipSpec['title']>) => {
+    if (!spec) return
+    const title = { ...spec.title, ...patch }
+    patchSpec({ title })
+    pushOp({ op: 'set_title', params: { text: title.text, enabled: title.enabled } })
+  }
+  const patchCrop = (patch: Partial<ClipSpec['crop']>) => {
+    if (!spec) return
+    const crop = { ...spec.crop, ...patch }
+    patchSpec({ crop })
+    pushOp({ op: 'set_crop', params: { x: crop.x, y: crop.y, scale: crop.scale } })
   }
 
   const editWord = (index: number, text: string) => {
@@ -175,26 +235,46 @@ function ClipEditorPage() {
         ? { ...prev, caption_track: prev.caption_track.map((c, i) => (i === index ? { ...c, text } : c)) }
         : prev,
     )
-    setDirty(true)
+    pushOp({ op: 'set_caption_text', params: { index, text } })
   }
 
   const deleteLine = (line: { cue: CaptionCue; index: number }[]) => {
     if (!spec || line.length === 0) return
-    setSpec(removeRange(spec, line[0].cue.start, line[line.length - 1].cue.end))
-    setDirty(true)
+    const start = line[0].cue.start
+    const end = line[line.length - 1].cue.end
+    setSpec(removeRange(spec, start, end))
+    pushOp({ op: 'remove_range', params: { start, end } })
   }
 
   const save = async (): Promise<boolean> => {
     if (!spec) return false
+    if (opQueue.length === 0) return true
     setSaving(true)
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/outputs/${clipId}`, {
-        method: 'PUT',
-        body: { render_spec: spec },
+      const res = await apiFetch(`/api/v1/outputs/${clipId}/operations`, {
+        method: 'POST',
+        body: { ops: opQueue, base_hash: baseHash },
+        toast: false,
       })
-      if (!res.ok) throw new Error('Save failed')
-      setDirty(false)
+      if (res.status === 409) {
+        await forceReload()
+        setError(t('clipEditor.conflictReload'))
+        return false
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail || 'Save failed')
+      }
+      const body = (await res.json()) as {
+        output: ClipOutput
+        operations: { spec_hash: string }[]
+      }
+      setClip(body.output)
+      if (body.output.render_spec) setSpec(body.output.render_spec)
+      const head = body.operations[body.operations.length - 1]
+      setBaseHash(head ? head.spec_hash : body.output.spec_hash)
+      setOpQueue([])
       return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -238,7 +318,8 @@ function ClipEditorPage() {
       const c: ClipOutput = await res.json()
       setClip(c)
       if (c.render_spec) setSpec(c.render_spec)
-      setDirty(false)
+      setBaseHash(c.spec_hash)
+      setOpQueue([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Translate failed')
     } finally {
@@ -265,7 +346,8 @@ function ClipEditorPage() {
       const c: ClipOutput = await res.json()
       setClip(c)
       if (c.render_spec) setSpec(c.render_spec)
-      setDirty(false)
+      setBaseHash(c.spec_hash)
+      setOpQueue([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Dub failed')
     } finally {
@@ -375,7 +457,14 @@ function ClipEditorPage() {
             <div className="grid grid-cols-1 gap-4 rounded-xl bg-card p-6 ring-1 ring-border sm:grid-cols-2">
               <label className="flex items-center justify-between gap-3 text-sm">
                 <span className="text-muted-foreground">{t('clipEditor.aspect')}</span>
-                <Select value={spec.aspect} onValueChange={(v) => patchSpec({ aspect: (v as ClipSpec['aspect']) ?? '9:16' })}>
+                <Select
+                  value={spec.aspect}
+                  onValueChange={(v) => {
+                    const aspect = (v as ClipSpec['aspect']) ?? '9:16'
+                    patchSpec({ aspect })
+                    pushOp({ op: 'set_aspect', params: { aspect } })
+                  }}
+                >
                   <SelectTrigger className="h-9 w-28 rounded-md text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="9:16">9:16</SelectItem>
@@ -388,7 +477,11 @@ function ClipEditorPage() {
                 <span className="text-muted-foreground">{t('clipEditor.captionStyle')}</span>
                 <Select
                   value={spec.caption_style_preset}
-                  onValueChange={(v) => patchSpec({ caption_style_preset: (v as ClipSpec['caption_style_preset']) ?? 'clean-bottom' })}
+                  onValueChange={(v) => {
+                    const preset = (v as ClipSpec['caption_style_preset']) ?? 'clean-bottom'
+                    patchSpec({ caption_style_preset: preset })
+                    pushOp({ op: 'set_caption_style', params: { preset } })
+                  }}
                 >
                   <SelectTrigger className="h-9 w-36 rounded-md text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -456,7 +549,7 @@ function ClipEditorPage() {
                 <span className="text-muted-foreground">{t('clipEditor.musicToggle')}</span>
                 <Switch
                   checked={spec.music.enabled}
-                  onCheckedChange={(v) => patchSpec({ music: { ...spec.music, enabled: v } })}
+                  onCheckedChange={(v) => patchMusic({ enabled: v })}
                 />
               </label>
 
@@ -465,14 +558,10 @@ function ClipEditorPage() {
                 <Select
                   value={spec.music.music_id ?? ''}
                   onValueChange={(v) => {
+                    // url is local-preview only; the op carries music_id and
+                    // the server derives the same stream URL on apply.
                     const piece = musicPieces.find((p) => p.id === v)
-                    patchSpec({
-                      music: {
-                        ...spec.music,
-                        music_id: v || null,
-                        url: piece ? piece.url : null,
-                      },
-                    })
+                    patchMusic({ music_id: v || null, url: piece ? piece.url : null })
                   }}
                   disabled={!spec.music.enabled || musicPieces.length === 0}
                 >
@@ -501,11 +590,7 @@ function ClipEditorPage() {
                   max={0}
                   step={1}
                   value={[spec.music.gain_db]}
-                  onValueChange={(v) =>
-                    patchSpec({
-                      music: { ...spec.music, gain_db: Array.isArray(v) ? v[0] : v },
-                    })
-                  }
+                  onValueChange={(v) => patchMusic({ gain_db: Array.isArray(v) ? v[0] : v })}
                   disabled={!spec.music.enabled}
                 />
               </div>
@@ -513,12 +598,12 @@ function ClipEditorPage() {
               <div className="flex items-center gap-2 sm:col-span-2">
                 <Switch
                   checked={spec.title.enabled}
-                  onCheckedChange={(v) => patchSpec({ title: { ...spec.title, enabled: v } })}
+                  onCheckedChange={(v) => patchTitle({ enabled: v })}
                   aria-label={t('clipEditor.titleToggle')}
                 />
                 <Input
                   value={spec.title.text}
-                  onChange={(e) => patchSpec({ title: { ...spec.title, text: e.target.value } })}
+                  onChange={(e) => patchTitle({ text: e.target.value })}
                   placeholder={t('clipEditor.titlePlaceholder')}
                   className="h-9 flex-1"
                 />
@@ -540,7 +625,7 @@ function ClipEditorPage() {
                   onValueChange={(v) => {
                     const arr = Array.isArray(v) ? v : [v, v]
                     setSpec(setTrim(spec, arr[0], arr[1]))
-                    setDirty(true)
+                    pushOp({ op: 'set_trim', params: { start: arr[0], end: arr[1] } })
                   }}
                 />
                 <div className="flex items-center justify-between text-sm">
@@ -553,9 +638,7 @@ function ClipEditorPage() {
                   min={0}
                   max={100}
                   value={[Math.round(spec.crop.x * 100)]}
-                  onValueChange={(v) =>
-                    patchSpec({ crop: { ...spec.crop, x: (Array.isArray(v) ? v[0] : v) / 100 } })
-                  }
+                  onValueChange={(v) => patchCrop({ x: (Array.isArray(v) ? v[0] : v) / 100 })}
                 />
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t('clipEditor.reframeZoom')}</span>
@@ -565,9 +648,7 @@ function ClipEditorPage() {
                   min={100}
                   max={250}
                   value={[Math.round(spec.crop.scale * 100)]}
-                  onValueChange={(v) =>
-                    patchSpec({ crop: { ...spec.crop, scale: (Array.isArray(v) ? v[0] : v) / 100 } })
-                  }
+                  onValueChange={(v) => patchCrop({ scale: (Array.isArray(v) ? v[0] : v) / 100 })}
                 />
               </div>
             </div>

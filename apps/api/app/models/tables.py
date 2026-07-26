@@ -30,6 +30,7 @@ from app.models.schemas import (
     PublicationState,
     RenderStatus,
     WorkflowStatus,
+    canonical_json_hash,
 )
 
 
@@ -282,6 +283,46 @@ class Output(Base):
             postgresql_where=text("render_status IS NOT NULL"),
         ),
     )
+
+    @property
+    def spec_hash(self) -> str | None:
+        """Chain-integrity hash of render_spec (ADR-032) — serialized into
+        OutputResponse as the client's base_hash for operation batches."""
+        if self.render_spec is None:
+            return None
+        return canonical_json_hash(self.render_spec)
+
+
+class Operation(Base):
+    """One product-level edit applied to an output (ADR-032).
+
+    Append-only journal shared by the editor GUI / chat / (future) MCP
+    frontends. ``op`` + ``params`` carry the semantic signal (calibration
+    feedback reads these); ``spec_after`` is the full render_spec snapshot
+    after applying — the mechanical guarantee behind undo/redo/version-jump
+    (inverse ops are rejected: LLM ops have no computable inverse). The
+    baseline row (``op="snapshot", seq=0``) is created lazily on first apply,
+    giving the invariant "before of op N = spec_after of op N-1".
+    ``undone_at`` is the only mutable field (N-04 nullable timestamp).
+    """
+
+    __tablename__ = "operations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    output_id = Column(UUID(as_uuid=True), ForeignKey("outputs.id"), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)  # per-output monotonic; baseline = 0
+    op = Column(String(50), nullable=False)  # registry-guarded (N-03)
+    params = Column(JSONB, nullable=False, default=dict)
+    spec_after = Column(JSONB, nullable=False)
+    spec_hash = Column(String(64), nullable=False)  # sha256 of canonical spec_after JSON
+    source = Column(String(20), nullable=False)  # editor | chat | mcp | system (registry)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
+    undone_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (UniqueConstraint("output_id", "seq", name="uq_operations_output_seq"),)
 
 
 class Conversation(Base):

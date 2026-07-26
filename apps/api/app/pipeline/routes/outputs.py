@@ -9,18 +9,14 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from app.skills.reviser import reviser_agent
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
-    AssetType,
     ChatRequest,
-    ClipSpec,
     DubRequest,
     FeedbackRequest,
     OutputResponse,
@@ -28,9 +24,10 @@ from app.models.schemas import (
     TranslateCaptionsRequest,
     validate_output_payload,
 )
-from app.models.tables import Asset, Output, Project, User
+from app.models.tables import Output, Project, User
 from app.tools.caption_translate import translate_caption_track
 from app.chat.service import chat
+from app.operations.service import apply_precomputed
 from app.pipeline.node_runners import generate_clip_cover_image
 from app.platform.project_context import (
     DEMO_PROJECT_ID,
@@ -38,8 +35,7 @@ from app.platform.project_context import (
     resolve_speaker,
     speaker_context_from_row,
 )
-from app.tools.storage import download_to_temp, get_output_path, output_url, save
-from app.tools.voice import clone_voice, extract_audio, synthesize
+from app.tools.dubbing import synthesize_dub
 
 router = APIRouter()
 
@@ -85,11 +81,16 @@ def _require_clip(output: Output) -> Output:
 
 
 class OutputUpdate(BaseModel):
-    """Partial update for an output (editor save / content edit)."""
+    """Partial update for an output (content edit).
+
+    render_spec edits do NOT come through here — they go through the
+    operations API (ADR-032: every render_spec write journals an operation).
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     payload: dict | None = None
     status: str | None = None
-    render_spec: ClipSpec | None = None
     publishing: dict | None = None
 
 
@@ -112,15 +113,13 @@ async def update_output(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
-    """Update an output's editable fields (payload / render_spec / publishing)."""
+    """Update an output's editable fields (payload / status / publishing)."""
     output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
 
     if data.payload is not None:
         output.payload = validate_output_payload(output.type, data.payload)
     if data.status is not None:
         output.status = data.status
-    if data.render_spec is not None:
-        output.render_spec = data.render_spec.model_dump(mode="json")
     if data.publishing is not None:
         output.publishing = {**(output.publishing or {}), **data.publishing}
     output.updated_at = datetime.now(UTC)
@@ -301,13 +300,22 @@ async def translate_captions(
             detail=str(e),
         ) from e
 
-    # Reassign a NEW dict so SQLAlchemy flushes the JSON column (no in-place mutation).
-    output.render_spec = {
+    # Journal the operation (ADR-032): every render_spec write goes through
+    # the operations service — this is what makes the edit undoable.
+    new_spec = {
         **spec,
         "caption_track": new_track,
         "target_language": data.target_language,
     }
-    output.updated_at = datetime.now(UTC)
+    await apply_precomputed(
+        db,
+        output,
+        "translate_captions",
+        {"target_language": data.target_language},
+        new_spec,
+        source="editor",
+        user_id=UUID(str(current_user.id)),
+    )
     await db.commit()
     await db.refresh(output)
     return output
@@ -322,102 +330,26 @@ async def dub_output(
 ) -> Output:
     """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
 
-    Clones from the project's voice sample (VOICE_SAMPLE > AUDIO > VIDEO audio),
-    translates the captions, synthesizes the dub via MiniMax T2A, and bakes a
-    ``dub`` track into ``render_spec`` — the renderer then mutes the source audio
-    and plays the dub (overlay; no lip-sync). GDPR set aside for MVP.
+    Pipeline lives in ``tools/dubbing.py`` (shared with the dub_clip run
+    runner); the endpoint additionally journals the operation (ADR-032).
     """
     output = _require_clip(
         await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
-
     project = await db.get(Project, output.project_id)
     if project is None or project.user_id != UUID(str(current_user.id)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    spec = output.render_spec
-    if not isinstance(spec, dict):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Clip has no render_spec (text-only project)"
-        )
-    track = spec.get("caption_track") or []
-    if not track:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Clip has no captions to dub")
-
-    # Voice sample priority: explicit voice sample > talk audio > talk video.
-    assets = list(
-        (
-            await db.execute(select(Asset).where(Asset.project_id == output.project_id))
-        ).scalars()
+    new_spec = await synthesize_dub(db, output, project, data.target_language)
+    await apply_precomputed(
+        db,
+        output,
+        "set_dub",
+        {"enabled": True, "gain_db": 0.0, "target_language": data.target_language},
+        new_spec,
+        source="editor",
+        user_id=UUID(str(current_user.id)),
     )
-    sample = (
-        next((a for a in assets if a.type == AssetType.VOICE_SAMPLE and a.file_url), None)
-        or next(
-            (
-                a
-                for a in assets
-                if a.type == AssetType.AUDIO and a.file_url and (a.meta or {}).get("words")
-            ),
-            None,
-        )
-        or next((a for a in assets if a.type == AssetType.VIDEO and a.file_url), None)
-    )
-    if sample is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "No voice sample — upload audio/video (or a voice sample) to dub",
-        )
-    src_path = await download_to_temp(sample.file_url)
-    if src_path is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Voice sample file missing")
-
-    tmp_audio_path = None
-    try:
-        # Reuse a cached cloned voice (MiniMax clones are ~168h temporary).
-        voice_id = (sample.meta or {}).get("voice_id")
-        if not voice_id:
-            audio_path = src_path
-            if sample.type == AssetType.VIDEO:
-                tmp_audio_path = await run_in_threadpool(extract_audio, src_path)
-                if tmp_audio_path is None:
-                    raise HTTPException(
-                        status.HTTP_400_BAD_REQUEST,
-                        "Could not extract audio from the video for voice cloning",
-                    )
-                audio_path = tmp_audio_path
-            voice_id = await run_in_threadpool(clone_voice, audio_path)
-            if not voice_id:
-                raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Voice cloning unavailable")
-            sample.meta = {**(sample.meta or {}), "voice_id": voice_id}
-
-        new_track = await translate_caption_track(track, data.target_language)
-        text = " ".join(str(c.get("text", "")).strip() for c in new_track).strip()
-        audio_bytes = await run_in_threadpool(synthesize, text, voice_id, data.target_language)
-    except MiniMaxError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
-    finally:
-        if tmp_audio_path is not None:
-            tmp_audio_path.unlink(missing_ok=True)
-        if src_path is not None:
-            src_path.unlink(missing_ok=True)
-
-    out_key = str(
-        get_output_path(
-            output.project_id,
-            project.user_id,
-            f"{output_id}_dub_{data.target_language}.mp3",
-        )
-    )
-    out_key = await save(out_key, audio_bytes)
-
-    # Reassign a NEW dict so SQLAlchemy flushes the JSON column.
-    output.render_spec = {
-        **spec,
-        "caption_track": new_track,
-        "target_language": data.target_language,
-        "dub": {"url": output_url(out_key), "enabled": True, "gain_db": 0.0},
-    }
-    output.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(output)
     return output

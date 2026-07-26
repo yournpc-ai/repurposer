@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
@@ -17,6 +19,18 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+
+def canonical_json_hash(value: dict) -> str:
+    """sha256 of the canonical JSON (sorted keys, tight separators).
+
+    The chain-integrity hash for the Operation Model (ADR-032) — server-side
+    single source; clients use the server-provided ``spec_hash`` as their
+    ``base_hash`` rather than reimplementing this (float formatting differs
+    across JS/Python).
+    """
+    blob = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
 
 
 class MediaInputType(StrEnum):
@@ -1057,6 +1071,9 @@ class StepResponse(BaseModel):
     # Quantified one-liner from the registry summary_template (e.g. "Selected
     # 3 clips · 87s total"), lifted from spec["summary"] like stage.
     summary: str | None = None
+    # Output row ids this node produced — the RunCard collects these on run
+    # completion to inline the product cards (chat-loop-v2).
+    output_refs: list[UUID] = Field(default_factory=list)
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -1086,6 +1103,9 @@ class OutputResponse(BaseModel):
     render_error: str | None = None
     score: dict | None = None
     publishing: dict = Field(default_factory=dict)
+    # Chain-integrity hash of render_spec (ADR-032) — the client's base_hash
+    # for operation batches. None when there is no render_spec.
+    spec_hash: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
