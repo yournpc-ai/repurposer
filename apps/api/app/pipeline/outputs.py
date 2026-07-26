@@ -50,6 +50,7 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
+        output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         started_at=node.started_at,
         finished_at=node.finished_at,
     )

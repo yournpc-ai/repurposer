@@ -76,13 +76,19 @@ export function useRunEvents(
             run: { status: string; progress: number; summary?: string | null }
             steps: WorkflowStep[]
           }
+          // Historical runs arrive terminal in the snapshot itself — the
+          // stream closes without a run.updated, so detect it here (chat
+          // RunCard history rehydration depends on this).
+          const terminal =
+            data.run.status === "completed" || data.run.status === "failed"
           setState({
             steps: data.steps,
             status: data.run.status,
             progress: data.run.progress,
             summary: data.run.summary ?? null,
-            terminal: false,
+            terminal,
           })
+          if (terminal) fireTerminal()
         } else if (msg.event === "step.updated") {
           const step = JSON.parse(msg.data) as WorkflowStep
           setState((prev) => ({

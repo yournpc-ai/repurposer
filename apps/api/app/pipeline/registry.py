@@ -54,6 +54,13 @@ class AddMusicParams(BaseModel):
 
 class DubClipParams(BaseModel):
     voice: str | None = None
+    target_output_id: str | None = None
+    target_language: str = "en"
+
+
+class TranslateClipParams(BaseModel):
+    target_output_id: str | None = None
+    target_language: str  # required — no meaningful default
 
 
 class SynthesizeTalkVideoParams(BaseModel):
@@ -168,15 +175,26 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
         ),
         SkillEntry(
             name="dub_clip",
-            description="Dub a clip with the speaker's cloned voice (sync endpoint, not a run)",
+            description="Dub existing clips with the speaker's cloned voice into a target language, then re-render",
             kind="skill",
             behavior="probabilistic",
             params_model=DubClipParams,
-            summary_template="Dubbed with cloned voice",
-            runner=None,  # seat: POST /outputs/{id}/dub is synchronous
+            summary_template="Dubbed {n} clips · {lang}",
+            runner="app.pipeline.node_runners:run_dub_clip",
             node_kind="dub",
-            requires=("media", "voiceprint"),
-            produces_outputs=True,
+            requires=("media",),
+        ),
+        SkillEntry(
+            name="translate_clip",
+            description="Translate existing clips' captions into another language, then re-render",
+            kind="skill",
+            behavior="probabilistic",
+            params_model=TranslateClipParams,
+            summary_template="Translated {n} clips · {lang}",
+            cost_hint="moderate",
+            runner="app.pipeline.node_runners:run_translate_clip",
+            node_kind="translate_clip",
+            requires=("transcript",),
         ),
         SkillEntry(
             name="remove_filler",

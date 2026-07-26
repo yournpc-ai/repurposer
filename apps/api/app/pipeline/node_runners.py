@@ -24,6 +24,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from fastapi import HTTPException
 from sqlalchemy import cast, delete, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
@@ -71,6 +72,8 @@ from app.platform.project_context import (
     resolve_speaker,
     speaker_context_from_row,
 )
+from app.tools.caption_translate import translate_caption_track
+from app.tools.dubbing import synthesize_dub
 from app.tools.filler import detect
 from app.tools.storage import (
     download_to_temp,
@@ -1264,6 +1267,103 @@ async def run_add_music(
     return touched
 
 
+async def _modifier_target_clips(
+    db: AsyncSession, node: WorkflowStep, project: Project
+) -> list[Output]:
+    """Target resolution for modifier steps: an explicit
+    ``spec.target_output_id`` (asset-scoped chat) wins; otherwise fall back to
+    the upstream/project clips (``_target_clips``)."""
+    target_id = (node.spec or {}).get("target_output_id")
+    if target_id:
+        clips = list(
+            (
+                await db.execute(
+                    select(Output).where(
+                        Output.id == UUID(str(target_id)),
+                        Output.project_id == project.id,
+                        Output.type == "clip",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [c for c in clips if c.render_spec]
+    return await _target_clips(db, node, project)
+
+
+async def run_translate_clip(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Translate existing clips' caption tracks into the target language, then
+    re-render (modifier step — acts on existing clips, not a generation)."""
+    lang = (node.spec or {}).get("target_language")
+    if not lang:
+        raise ValueError("target_language is required for translate_clip")
+    await _set_stage(node.id, "translating_captions")
+    clips = await _modifier_target_clips(db, node, project)
+    if not clips:
+        await _set_summary(node.id, "No clips to translate")
+        return []
+
+    touched: list[UUID] = []
+    for output in clips:
+        spec = output.render_spec
+        track = (spec or {}).get("caption_track") or []
+        if not track:
+            continue
+        new_track = await translate_caption_track(track, lang)
+        output.render_spec = {**spec, "caption_track": new_track, "target_language": lang}
+        output.render_status = RenderStatus.PENDING
+        output.render_error = None
+        output.updated_at = datetime.now(UTC)
+        await db.flush()
+        touched.append(output.id)
+
+    if not touched:
+        await _set_summary(node.id, "No captions to translate")
+        return []
+    await _fan_out_renders(db, run, node, touched)
+    await _record_target_output_ids(node.id, touched)
+    await _fill_summary(node.id, "translate_clip", n=len(touched), lang=lang)
+    return touched
+
+
+async def run_dub_clip(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Dub existing clips with the speaker's cloned voice (tools/dubbing.py),
+    then re-render (modifier step)."""
+    lang = (node.spec or {}).get("target_language") or "en"
+    await _set_stage(node.id, "dubbing")
+    clips = await _modifier_target_clips(db, node, project)
+    if not clips:
+        await _set_summary(node.id, "No clips to dub")
+        return []
+
+    touched: list[UUID] = []
+    for output in clips:
+        try:
+            new_spec = await synthesize_dub(db, output, project, lang)
+        except HTTPException as e:
+            # Per-clip skip (no captions / no sample usable for this one);
+            # a fully unresolvable batch fails the step below.
+            logger.info("dub_clip skip output %s: %s", output.id, e.detail)
+            continue
+        output.render_spec = new_spec
+        output.render_status = RenderStatus.PENDING
+        output.render_error = None
+        output.updated_at = datetime.now(UTC)
+        await db.flush()
+        touched.append(output.id)
+
+    if not touched:
+        raise ValueError("No clips could be dubbed (missing captions or voice sample)")
+    await _fan_out_renders(db, run, node, touched)
+    await _record_target_output_ids(node.id, touched)
+    await _fill_summary(node.id, "dub", n=len(touched), lang=lang)
+    return touched
+
 STEP_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
@@ -1277,4 +1377,7 @@ STEP_RUNNERS = {
     "render": run_render_request,
     "remove_filler": run_remove_filler,
     "add_music": run_add_music,
+    "translate_clip": run_translate_clip,
+    "dub": run_dub_clip,
 }
+

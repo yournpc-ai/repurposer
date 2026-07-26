@@ -11,6 +11,7 @@ the LLM proposes and ``compile_graph`` adjudicates.
 
 from app.clients.minimax import MiniMaxClient, MiniMaxError
 from app.models.schemas import InferredIntent, IntentResult
+from app.operations.registry import OP_REGISTRY
 from app.pipeline.registry import dispatchable_skills
 
 
@@ -143,6 +144,14 @@ class ChatIntentAgent:
             + (f" (params: {list(s.params_model.model_fields)})" if s.params_model else "")
             for s in skills
         )
+        # The edit-ops vocabulary comes from the operations registry (ADR-032)
+        # — same pattern as the skill list; precomputed ops (translate/dub)
+        # are deliberately proposed as task_list skills instead.
+        op_lines = "\n".join(
+            f"- {name}: {opdef.description} (params: {list(opdef.params_model.model_fields)})"
+            for name, opdef in OP_REGISTRY.items()
+            if opdef.client_allowed and not opdef.precomputed
+        )
         system_prompt = (
             "You are the intent proposer of an AI content repurposing tool. "
             "Given one user message and the assembled context, decide what to do "
@@ -154,15 +163,20 @@ class ChatIntentAgent:
             "skills from the list below; leave tasks EMPTY when the message is "
             "ambiguous and you need to ask back (the summary then holds your "
             "clarifying question — asking back is a legal answer, not a failure).\n"
-            'B. {"type": "edit_ops", "target_output_id": "<uuid>", "ops": [...], '
+            'B. {"type": "edit_ops", "target_output_id": "<uuid>", '
+            '"ops": [{"op": "<name>", "params": {...}}], '
             '"summary": "<one user-facing sentence>"} — the user wants a precise '
-            "edit of ONE existing output (trim a moment, cut the end, tweak a "
-            "caption). Use this shape whenever the instruction targets an existing "
-            "output with clip-level precision.\n\n"
+            "edit of ONE existing output (trim a moment, cut a time range, tweak "
+            "a caption, change title/music/crop). Use this shape whenever the "
+            "instruction targets an existing output with clip-level precision, "
+            "using ONLY the ops below.\n\n"
             "Available skills:\n" + skill_lines + "\n\n"
+            "Available edit ops (shape B only):\n" + op_lines + "\n\n"
             "Rules:\n"
-            "- Never invent skills or params not in the list.\n"
-            "- Prefer the fewest tasks that express the instruction.\n"
+            "- Never invent skills, ops, or params not in the lists.\n"
+            "- Translating captions or dubbing a voice is shape A "
+            "(translate_clip / dub_clip), never shape B.\n"
+            "- Prefer the fewest tasks/ops that express the instruction.\n"
             "- summary is written for the user, in the user's language.\n"
             "- When the user references a mention (asset/output/segment), use its "
             "id in params (e.g. revise_script.target_output_id) instead of guessing."

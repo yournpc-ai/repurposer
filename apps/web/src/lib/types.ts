@@ -172,6 +172,10 @@ export interface WorkflowStep {
   error: string | null
   cost: Record<string, number> | null
   stage?: string | null
+  /** Quantified one-liner (e.g. "Selected 3 clips · 87s total"). */
+  summary?: string | null
+  /** Output row ids this node produced (RunCard inlines these on completion). */
+  output_refs?: string[]
   started_at: string | null
   finished_at: string | null
 }

@@ -10,7 +10,9 @@ and lets the intent agent propose (CHAT_ARCH §3):
 
 - task_list (non-empty) → compile_graph mode② → a new WorkflowRun
 - task_list (empty)     → ask back — a legal answer, not a failure
-- edit_ops              → boundary text (Operation Model is v2), no run
+- edit_ops              → Operation Model (ADR-032): registry-validated ops
+                          applied to the target output, journaled with
+                          message lineage
 
 One LLM call per turn; the loop lives between turns, never inside one.
 """
@@ -18,6 +20,7 @@ One LLM call per turn; the loop lives between turns, never inside one.
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +36,8 @@ from app.models.schemas import (
     TaskListProposal,
 )
 from app.models.tables import Asset, Conversation, Message, Project, WorkflowRun
+from app.operations.registry import OP_REGISTRY, validate_op
+from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.registry import SkillRejected, dispatchable_skills
 
@@ -42,14 +47,39 @@ _ASK_BACK_TEXT = (
     "or rewrite a post."
 )
 
-_EDIT_OPS_BOUNDARY_TEXT = (
-    "That kind of precise edit (trimming a moment, cutting an ending) belongs "
-    "in the editor for now — conversational edit ops land with the Operation "
-    "Model. What I can do here: re-cut highlights, remove filler words, "
-    "score the clips, or revise a script."
-)
-
 _REVISE_FALLBACK_TEXT = "Got it — revising this asset based on your instruction."
+
+
+def _edit_op_items(proposal: EditOpsProposal) -> list[dict]:
+    """Normalize the LLM's tolerant EditOp shape into registry items.
+
+    v1 stored extras verbatim; the registry is the adjudicator (ADR-032).
+    Params may arrive nested or as top-level extras — merge, params win.
+    """
+    items = []
+    for op in proposal.ops:
+        params = {**(op.model_extra or {}), **(op.params or {})}
+        for key in ("op", "type", "target"):
+            params.pop(key, None)
+        items.append({"op": op.op, "params": params})
+    return items
+
+
+def _validate_edit_ops(items: list[dict]) -> None:
+    """Registry gate for edit ops (rejects unknown/system/precomputed ops
+    before any state is touched — the repair loop gets the reason)."""
+    if not items:
+        raise OpRejected("empty edit ops")
+    for item in items:
+        try:
+            validate_op(item["op"], item["params"], client=True)
+        except (KeyError, ValueError) as e:
+            raise OpRejected(str(e)) from e
+        if OP_REGISTRY[item["op"]].precomputed:
+            raise OpRejected(
+                f"op '{item['op']}' needs a run — propose a task_list with "
+                "translate_clip / dub_clip instead of edit_ops"
+            )
 
 
 async def _get_or_create_project_conversation(
@@ -335,6 +365,7 @@ async def chat(
         proposal = None
 
     run_id: UUID | None = None
+    assistant_message: Message | None = None
 
     if proposal is None:
         # LLM failure fallback: asset-scoped → revise_script兜底;
@@ -362,7 +393,64 @@ async def chat(
         else:
             assistant_content = _ASK_BACK_TEXT
     elif isinstance(proposal, EditOpsProposal):
-        assistant_content = _EDIT_OPS_BOUNDARY_TEXT
+        # Operation Model wiring (ADR-032): validate against the registry
+        # (one repair round on rejection), then apply with message lineage.
+        ops_items = _edit_op_items(proposal)
+        try:
+            _validate_edit_ops(ops_items)
+        except OpRejected as first_error:
+            repaired = False
+            try:
+                retry = await chat_intent_agent.propose(
+                    request.message,
+                    {**context, "repair_feedback": str(first_error)},
+                )
+                if isinstance(retry.proposal, EditOpsProposal):
+                    ops_items = _edit_op_items(retry.proposal)
+                    _validate_edit_ops(ops_items)
+                    proposal = retry.proposal
+                    repaired = True
+                elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
+                    run_id = await _create_run_from_tasks(
+                        db, project, conversation, retry.proposal.tasks, retry.proposal.summary
+                    )
+                    proposal = retry.proposal
+                    assistant_content = retry.proposal.summary
+                    repaired = True
+            except (OpRejected, SkillRejected, ValueError, MiniMaxError):
+                pass
+            if not repaired:
+                proposal = None
+                assistant_content = _cannot_do_text()
+        if isinstance(proposal, EditOpsProposal):
+            # Create the assistant message first (flush for the id), then
+            # apply with message_id lineage — one commit at the tail.
+            assistant_message = await _create_message(
+                db,
+                conversation_id,
+                "assistant",
+                proposal.summary,
+                intent=proposal.model_dump(mode="json"),
+            )
+            try:
+                await apply_operations(
+                    db,
+                    proposal.target_output_id,
+                    ops_items,
+                    source="chat",
+                    user_id=user_id,
+                    message_id=UUID(str(assistant_message.id)),
+                )
+                assistant_content = proposal.summary
+            except (OpRejected, OpConflict) as e:
+                assistant_message.content = _cannot_do_text()
+                assistant_content = assistant_message.content
+                proposal = None
+            except HTTPException as e:
+                # e.g. target has no render_spec — a legitimate "can't do that".
+                assistant_message.content = str(e.detail)
+                assistant_content = assistant_message.content
+                proposal = None
     elif not proposal.tasks:
         assistant_content = proposal.summary or _ASK_BACK_TEXT
     else:
@@ -405,14 +493,15 @@ async def chat(
                 proposal = None
                 assistant_content = _cannot_do_text()
 
-    assistant_message = await _create_message(
-        db,
-        conversation_id,
-        "assistant",
-        assistant_content,
-        workflow_run_id=run_id,
-        intent=proposal.model_dump(mode="json") if proposal else None,
-    )
+    if assistant_message is None:
+        assistant_message = await _create_message(
+            db,
+            conversation_id,
+            "assistant",
+            assistant_content,
+            workflow_run_id=run_id,
+            intent=proposal.model_dump(mode="json") if proposal else None,
+        )
 
     await db.commit()
     return ChatResponse(
