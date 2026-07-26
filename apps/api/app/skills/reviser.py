@@ -117,8 +117,14 @@ class ReviserAgent:
         Converts the instruction into a FeedbackRequest and delegates to
         :meth:`revise` so the same prompt template is reused.
         """
+        # Note: ``scope in FeedbackScope`` is Python 3.12+ only; on 3.11
+        # (our floor) enum-class membership raises TypeError — use try/except.
+        try:
+            fb_scope = FeedbackScope(scope)
+        except ValueError:
+            fb_scope = FeedbackScope.FULL_SCRIPT
         feedback = FeedbackRequest(
-            scope=FeedbackScope(scope) if scope in FeedbackScope else FeedbackScope.FULL_SCRIPT,
+            scope=fb_scope,
             reason=FeedbackReason.DIFFERENT_EXPRESSION,
             detail=instruction,
         )
