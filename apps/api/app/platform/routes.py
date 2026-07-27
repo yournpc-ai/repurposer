@@ -42,10 +42,8 @@ files_router = APIRouter()
 
 
 def _authorize_path(file_path: str, current_user: User | None) -> None:
-    """Refuse access unless the path belongs to the current user or is demo."""
+    """Refuse access unless the path belongs to the current user."""
     owner = owner_from_path(file_path)
-    if owner == "demo":
-        return
     if owner is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

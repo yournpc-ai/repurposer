@@ -33,7 +33,6 @@ from app.models.tables import (
 )
 from app.chat.intent import composer_intent_agent
 from app.chat.service import get_project_prompt, seed_project_prompt
-from app.demo_seed import DEMO_PROJECT_ID
 from app.pipeline.orchestrator import TaskSpec, create_run
 from app.pipeline.outputs import (
     aggregate_step_cost,
@@ -103,19 +102,13 @@ async def list_projects(
         .order_by(Output.project_id, Output.created_at.asc())
         .subquery()
     )
-    # Anonymous users see only the demo project. Authenticated users see their
-    # own projects plus the demo project (the demo is owned by the shared
-    # default user; nothing else of the default user leaks into anyone's list).
-    if current_user:
-        ownership_filter = (Project.user_id == current_user.id) | (
-            Project.id == DEMO_PROJECT_ID
-        )
-    else:
-        ownership_filter = Project.id == DEMO_PROJECT_ID
+    # Projects are private to their owner; anonymous users see nothing.
+    if not current_user:
+        return []
     query = (
         select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
-        .where(ownership_filter)
+        .where(Project.user_id == current_user.id)
     )
     if speaker_id:
         query = query.where(Project.speaker_id == speaker_id)
@@ -127,19 +120,9 @@ async def list_projects(
     result = await db.execute(query)
     rows = result.all()
 
-    # Demo project is an onboarding aid; hide it once the user has created real
-    # projects so the home page only shows their own work.
-    has_real_project = current_user is not None and any(
-        project.id != DEMO_PROJECT_ID and project.user_id == current_user.id
-        for project, *_ in rows
-    )
-
     responses = []
     for project, video_url, duration, render_spec in rows:
-        if has_real_project and project.id == DEMO_PROJECT_ID:
-            continue
         resp = ProjectResponse.model_validate(project)
-        resp.is_demo = project.id == DEMO_PROJECT_ID
         resp.thumbnail_url = resolve_stored_url(video_url)
         resp.thumbnail_duration = duration
         resp.thumbnail_aspect = (render_spec or {}).get("aspect")
@@ -155,9 +138,7 @@ async def get_project(
 ) -> ProjectResponse:
     """Get project by ID."""
     project = await get_project_for_user(db, project_id, current_user.id if current_user else None)
-    resp = ProjectResponse.model_validate(project)
-    resp.is_demo = project.id == DEMO_PROJECT_ID
-    return resp
+    return ProjectResponse.model_validate(project)
 
 
 # Stepper prefix phases (asset processing → planning) always exist; output
@@ -334,7 +315,7 @@ async def update_project(
 ) -> Project:
     """Update project."""
     project = await get_project_for_user(
-        db, project_id, current_user.id, allow_demo=False
+        db, project_id, current_user.id
     )
 
     update_data = data.model_dump(exclude_unset=True)
@@ -354,7 +335,7 @@ async def delete_project(
 ) -> None:
     """Delete project and all associated assets."""
     project = await get_project_for_user(
-        db, project_id, current_user.id, allow_demo=False
+        db, project_id, current_user.id
     )
 
     # Delete child rows in FK-safe order, then the project. Asset files are
@@ -388,7 +369,7 @@ async def infer_project_intent(
     the inferred task book for confirmation before calling ``/generate``.
     """
     project = await get_project_for_user(
-        db, project_id, UUID(str(current_user.id)), allow_demo=False
+        db, project_id, UUID(str(current_user.id))
     )
 
     assets = list(
@@ -453,7 +434,7 @@ async def generate_content(
     and runs it (see app.worker).
     """
     project = await get_project_for_user(
-        db, project_id, UUID(str(current_user.id)), allow_demo=False
+        db, project_id, UUID(str(current_user.id))
     )
 
     # Full-scope runs from the composer must now provide an explicit task book
@@ -614,7 +595,7 @@ async def export_project(
 ) -> Response:
     """Export all generated content for a project as a zip archive."""
     project = await get_project_for_user(
-        db, project_id, current_user.id, allow_demo=False
+        db, project_id, current_user.id
     )
 
     outputs = await list_visible_outputs(db, project_id)

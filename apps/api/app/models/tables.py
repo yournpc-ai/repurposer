@@ -44,7 +44,7 @@ class User(Base):
 
     Login is passwordless: a 6-digit email code (see ``services/auth.py``) is
     exchanged for a JWT. All product data is isolated per user; the seeded
-    default user only owns shared demo content.
+    default user only owns shared default content (brand template, speakers).
     """
 
     __tablename__ = "users"

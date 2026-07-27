@@ -50,10 +50,6 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
-    # Demo seeding
-    skip_demo_seed: bool = False
-    demo_seed_async: bool = False
-
     # Background worker
     worker_poll_interval: float = 2.0
 

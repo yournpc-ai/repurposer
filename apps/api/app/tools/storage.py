@@ -10,7 +10,6 @@ Key layout:
 - Speaker asset: ``{user_id}/speakers/{speaker_id}/{filename}``
 - Brand media: ``{user_id}/brand-media/{filename}``
 - Output: ``{user_id}/outputs/projects/{project_id}/{filename}``
-- Demo user uses the ``demo/`` prefix instead of its UUID.
 - Music library: ``music/{music_id}.{ext}``
 """
 
@@ -32,11 +31,6 @@ from app.config import settings
 
 logger = structlog.get_logger()
 
-# The seeded default user shares the "demo" storage prefix so MVP assets live
-# under the short, readable `demo/` tree instead of a long UUID path.
-_DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
-_DEMO_PROJECT_ID = "11111111-1111-1111-1111-111111111111"
-
 _s3_client: Any | None = None
 
 
@@ -56,17 +50,6 @@ def _get_s3_client() -> boto3.client:
             ),
         )
     return _s3_client
-
-
-def _storage_prefix(user_id: UUID | str) -> str:
-    """Return the top-level directory name for a user's assets."""
-    if str(user_id) == _DEFAULT_USER_ID:
-        return "demo"
-    return str(user_id)
-
-
-def _is_demo_project(project_id: UUID | str) -> bool:
-    return str(project_id) == _DEMO_PROJECT_ID
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -108,28 +91,22 @@ def _normalize_key(key: str | None) -> str:
 
 def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> str:
     """Get upload prefix for a project."""
-    prefix = _storage_prefix(user_id)
-    if _is_demo_project(project_id):
-        return f"{prefix}/uploads"
-    return f"{prefix}/uploads/projects/{project_id}"
+    return f"{user_id}/uploads/projects/{project_id}"
 
 
 def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> str:
     """Get upload prefix for a speaker."""
-    return f"{_storage_prefix(user_id)}/speakers/{speaker_id}"
+    return f"{user_id}/speakers/{speaker_id}"
 
 
 def get_brand_media_dir(user_id: UUID | str) -> str:
     """Get upload prefix for brand-template intro/outro media."""
-    return f"{_storage_prefix(user_id)}/brand-media"
+    return f"{user_id}/brand-media"
 
 
 def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> str:
     """Get output prefix for a project."""
-    prefix = _storage_prefix(user_id)
-    if _is_demo_project(project_id):
-        return f"{prefix}/outputs"
-    return f"{prefix}/outputs/projects/{project_id}"
+    return f"{user_id}/outputs/projects/{project_id}"
 
 
 async def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> str:
@@ -428,7 +405,7 @@ async def delete_speaker_files(speaker_id: UUID, user_id: UUID | str) -> None:
 
 
 def owner_from_path(key: str | None) -> str | None:
-    """Extract the owning user id (or 'demo') from a stored object key."""
+    """Extract the owning user id from a stored object key."""
     if not key:
         return None
     first = key.strip("/").split("/", 1)[0]

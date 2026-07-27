@@ -67,7 +67,7 @@ async def list_speakers(
 ) -> list[Speaker]:
     """List the current user's own speakers.
 
-    Demo/default-user speakers are intentionally excluded: project creation
+    Default-user (shared) speakers are intentionally excluded: project creation
     rejects speaker_ids the caller does not own, so listing them would offer
     options that always 404 when selected. Anonymous callers get an empty
     list (generation requires login anyway).

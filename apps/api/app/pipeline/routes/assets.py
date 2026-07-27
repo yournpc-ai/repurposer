@@ -32,9 +32,7 @@ speaker_assets_router = APIRouter()
 
 
 async def _get_user_project(project_id: UUID, user_id: UUID | None, db: DBDep) -> Project:
-    """Fetch a project and ensure it belongs to the given user or is the demo."""
-    from app.platform.project_context import DEMO_PROJECT_ID
-
+    """Fetch a project and ensure it belongs to the given user."""
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
@@ -43,8 +41,6 @@ async def _get_user_project(project_id: UUID, user_id: UUID | None, db: DBDep) -
             detail="Project not found",
         )
     if user_id is not None and project.user_id == user_id:
-        return project
-    if project.id == DEMO_PROJECT_ID:
         return project
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

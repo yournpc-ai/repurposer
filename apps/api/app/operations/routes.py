@@ -16,7 +16,6 @@ from app.dependencies import DBDep, get_current_user_required
 from app.models.tables import Output, Project, User
 from app.operations import service
 from app.operations.service import OpConflict, OpRejected
-from app.platform.project_context import DEMO_PROJECT_ID
 
 router = APIRouter()
 
@@ -61,7 +60,7 @@ async def _get_output_for_user(
     project = await db.get(Project, output.project_id)
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-    if project.user_id == user_id or project.id == DEMO_PROJECT_ID:
+    if project.user_id == user_id:
         return output
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 

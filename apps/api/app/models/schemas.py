@@ -527,9 +527,6 @@ class ProjectResponse(ProjectBase):
     tone_snapshot: ToneSettings | None = None
     created_at: datetime
     updated_at: datetime | None = None
-    # True for the seeded demo project; lets the frontend route/link by slug
-    # instead of exposing the long UUID.
-    is_demo: bool = False
     # Representative clip for the project-list card (list endpoint only; the
     # earliest rendered clip). None while no clip has finished rendering yet.
     thumbnail_url: str | None = None

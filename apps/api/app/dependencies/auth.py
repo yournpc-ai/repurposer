@@ -2,7 +2,7 @@
 
 Supports JWT bearer tokens for real users. Anonymous requests are represented
 by ``None``; routes that need public read access can fall back to shared
-default/demo data explicitly in the router. There is no local-development
+default-user data explicitly in the router. There is no local-development
 bypass: login always requires a verification code.
 """
 
@@ -47,7 +47,7 @@ async def get_current_user(
     - Raises 401 for invalid or expired tokens.
 
     Endpoints that need public read access can accept ``None`` and fall back to
-    shared default/demo data explicitly in the router.
+    shared default-user data explicitly in the router.
     """
     async with AsyncSessionLocal() as db:
         if not authorization:

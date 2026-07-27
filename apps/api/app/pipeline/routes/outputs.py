@@ -30,7 +30,6 @@ from app.chat.service import chat
 from app.operations.service import apply_precomputed
 from app.pipeline.node_runners import generate_clip_cover_image
 from app.platform.project_context import (
-    DEMO_PROJECT_ID,
     resolve_clip_for_revision,
     resolve_speaker,
     speaker_context_from_row,
@@ -48,7 +47,7 @@ async def _get_output_for_user(
     output_id: UUID,
     user_id: UUID | None,
 ) -> Output:
-    """Fetch an output and ensure it belongs to the given user or is the demo."""
+    """Fetch an output and ensure it belongs to the given user."""
     output = await db.get(Output, output_id)
     if output is None:
         raise HTTPException(
@@ -62,8 +61,6 @@ async def _get_output_for_user(
             detail="Project not found",
         )
     if user_id is not None and project.user_id == user_id:
-        return output
-    if project.id == DEMO_PROJECT_ID:
         return output
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

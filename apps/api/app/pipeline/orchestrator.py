@@ -3,8 +3,7 @@
 Topology is code-determined — the LLM never shapes the graph (ADR-028, task
 brief §9). Every WorkflowRun is born here (``create_run``); the worker claims
 ready nodes (``jobs.claim_ready_node``) and executes them through
-``execute_step``; ``execute_run_inline`` is the same walk for the demo seed
-(single executor, no SKIP LOCKED needed).
+``execute_step``.
 
 Run-level semantics preserved from the retired run_generation:
 - "all failed or nothing" — a run only fails when every generation node
@@ -504,41 +503,6 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             status=run.status.value,
             nodes=total,
         )
-
-
-async def execute_run_inline(run_id: UUID) -> None:
-    """Walk a run's graph in-process (demo seed). Same runners as the worker.
-
-    Render nodes are skipped here just like in the node claim — the worker
-    renders them in the background via outputs.render_status.
-    """
-    while True:
-        async with AsyncSessionLocal() as db:
-            node_id = (
-                await db.execute(
-                    text(
-                        """
-                        SELECT pn.id FROM workflow_steps pn
-                        WHERE pn.run_id = :rid
-                          AND pn.status = 'pending'
-                          AND pn.kind <> 'render'
-                          AND NOT EXISTS (
-                            SELECT 1
-                            FROM jsonb_array_elements_text(pn.inputs) AS up(id)
-                            JOIN workflow_steps upn ON upn.id = up.id::uuid
-                            WHERE upn.status <> 'done'
-                          )
-                        ORDER BY pn.seq
-                        LIMIT 1
-                        """
-                    ),
-                    {"rid": run_id},
-                )
-            ).scalar_one_or_none()
-        if node_id is None:
-            break
-        await execute_step(node_id)
-    await maybe_finalize_run(run_id)
 
 
 async def finalize_stuck_runs() -> None:

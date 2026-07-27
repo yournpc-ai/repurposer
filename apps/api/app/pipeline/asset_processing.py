@@ -77,7 +77,7 @@ async def _asr_processor(asset: Asset) -> ProcessResult:
 
     try:
         # Transcription is CPU-bound; run it in a thread so the async event loop
-        # stays responsive (important for the demo seed and worker concurrency).
+        # stays responsive (worker concurrency).
         result = await asyncio.to_thread(transcribe, path)
         duration = result.get("duration")
         return ProcessResult(

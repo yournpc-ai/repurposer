@@ -1,6 +1,5 @@
 """FastAPI application entry point."""
 
-import asyncio
 import json
 import logging
 import time
@@ -19,7 +18,6 @@ from app.chat.routes import chat_router, intent_router
 from app.distribution.routes import router as distribution_router
 from app.memory.brand import seed_default_brand_template
 from app.memory.routes import brand_templates_router, speakers_router
-from app.demo_seed import seed_demo_project
 from app.pipeline.music import seed_default_music
 from app.pipeline.registry import assert_runners_registered
 from app.pipeline.routes import (
@@ -37,14 +35,6 @@ logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
 
 
-def _log_demo_seed_result(task: asyncio.Task) -> None:
-    """Log any exception from the async demo seed task."""
-    try:
-        task.result()
-    except Exception as e:
-        logger.exception("demo_seed_async_failed", exc_info=e)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
@@ -54,12 +44,6 @@ async def lifespan(app: FastAPI):
     await seed_default_brand_template()
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
-    if not settings.skip_demo_seed:
-        if settings.demo_seed_async:
-            task = asyncio.create_task(seed_demo_project())
-            task.add_done_callback(_log_demo_seed_result)
-        else:
-            await seed_demo_project()
     yield
 
 

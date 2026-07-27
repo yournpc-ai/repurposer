@@ -1,19 +1,19 @@
-"""Reset the database while preserving demo/seed data (no regeneration needed).
+"""Wipe ALL data from the database — nothing is preserved.
 
-Wipes every non-demo user and all of their data, in FK-safe order. Keeps:
+Deletes every row from every table (users, projects, assets, outputs,
+operations, publications, workflow runs/steps, chat, music, channel
+accounts, notifications, verification codes), including the former demo
+user's data and platform-seeded music. Demo seed is retired, so this is a
+true clean slate.
 
-- the demo user (``DEFAULT_USER_ID``) and everything it owns — demo project,
-  demo speaker, its brand templates, assets, clips, derivatives, workflow
-  runs, chat sessions and messages
-- platform music pieces (``generated_by_user_id IS NULL``) and the demo
-  user's own pieces
-- brand templates owned by the demo user
-
-Use this on an environment that needs a clean slate WITHOUT re-running the
-demo seed (ASR + generation + rendering all cost MiniMax calls and time).
-
-Object-storage files belonging to deleted users are NOT removed (orphaned
+Object-storage files belonging to deleted rows are NOT removed (orphaned
 objects are harmless but may accumulate; clean them up separately if needed).
+
+After the wipe:
+- if the API still runs with demo seeding enabled, the next startup
+  re-creates the demo project (set SKIP_DEMO_SEED=true to prevent that)
+- default music tracks are gone; re-seed with
+  ``uv run python scripts/seed_default_music.py`` (spends MiniMax quota)
 
 Dry-run by default — prints what would be deleted. Pass ``--yes`` to execute.
 
@@ -26,54 +26,53 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from uuid import UUID
 
 # Make ``app`` importable when run as a file (apps/api on sys.path).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import delete, func, select  # noqa: E402
 
-from app.dependencies.auth import DEFAULT_USER_ID  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import (  # noqa: E402
     Asset,
     BrandTemplate,
+    ChannelAccount,
     Conversation,
     Message,
     Music,
+    Notification,
+    Operation,
     Output,
     Project,
+    Publication,
     Speaker,
     User,
     VerificationCode,
     WorkflowRun,
 )
 
-DEMO_USER_UUID = UUID(DEFAULT_USER_ID)
 
-
-def _plan() -> list[tuple[str, object, object]]:
-    """Deletion steps in FK-safe order: (label, table, where clause)."""
-    non_demo_projects = select(Project.id).where(Project.user_id != DEMO_USER_UUID)
-    non_demo_sessions = select(Conversation.id).where(Conversation.user_id != DEMO_USER_UUID)
+def _plan() -> list[tuple[str, object]]:
+    """Deletion steps in FK-safe order: (label, table). Every row goes."""
     return [
-        ("messages", Message, Message.conversation_id.in_(non_demo_sessions)),
-        ("conversations", Conversation, Conversation.user_id != DEMO_USER_UUID),
-        ("outputs", Output, Output.project_id.in_(non_demo_projects)),
+        # operations reference outputs/projects/users/messages — first.
+        ("operations", Operation),
+        # publications.output_id is RESTRICT — must precede outputs.
+        ("publications", Publication),
+        ("notifications", Notification),
+        ("messages", Message),
+        ("conversations", Conversation),
+        ("outputs", Output),
         # workflow_steps cascade away with workflow_runs (run_id FK ondelete=CASCADE).
-        ("workflow_runs", WorkflowRun, WorkflowRun.project_id.in_(non_demo_projects)),
-        ("assets", Asset, Asset.user_id != DEMO_USER_UUID),
-        ("brand_templates", BrandTemplate, BrandTemplate.user_id != DEMO_USER_UUID),
-        ("projects", Project, Project.user_id != DEMO_USER_UUID),
-        ("speakers", Speaker, Speaker.user_id != DEMO_USER_UUID),
-        (
-            "music (user-generated)",
-            Music,
-            (Music.generated_by_user_id.isnot(None))
-            & (Music.generated_by_user_id != DEMO_USER_UUID),
-        ),
-        ("users", User, User.id != DEMO_USER_UUID),
-        ("verification_codes", VerificationCode, True),
+        ("workflow_runs", WorkflowRun),
+        ("assets", Asset),
+        ("brand_templates", BrandTemplate),
+        ("projects", Project),
+        ("speakers", Speaker),
+        ("music", Music),
+        ("channel_accounts", ChannelAccount),
+        ("users", User),
+        ("verification_codes", VerificationCode),
     ]
 
 
@@ -90,23 +89,21 @@ async def main() -> None:
     async with AsyncSessionLocal() as db:
         if not args.yes:
             print("DRY-RUN — rows that would be deleted (pass --yes to execute):")
-            for label, table, where in steps:
-                count = await db.scalar(
-                    select(func.count()).select_from(table).where(where)  # type: ignore[arg-type]
-                )
+            total = 0
+            for label, table in steps:
+                count = await db.scalar(select(func.count()).select_from(table))
+                total += count or 0
                 print(f"  {label:24} {count}")
-            kept = await db.scalar(
-                select(func.count()).select_from(User).where(User.id == DEMO_USER_UUID)
-            )
-            print(f"Kept: demo user ({'exists' if kept else 'MISSING — will be re-seeded on next startup'})")
+            print(f"  {'TOTAL':24} {total}")
             return
 
-        print("Deleting non-demo data (demo/seed data is preserved)...")
-        for label, table, where in steps:
-            result = await db.execute(delete(table).where(where))  # type: ignore[arg-type]
+        print("Wiping ALL data (nothing is preserved)...")
+        for label, table in steps:
+            result = await db.execute(delete(table))
             print(f"  {label:24} deleted {result.rowcount}")
         await db.commit()
-        print("Done. Demo project, seed brand templates, and music are intact;")
+        print("Done. Database is empty.")
+        print("Note: set SKIP_DEMO_SEED=true or the next API startup re-seeds the demo project.")
 
 
 if __name__ == "__main__":
