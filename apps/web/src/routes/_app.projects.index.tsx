@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FolderKanban, Search } from "lucide-react"
 
@@ -15,7 +15,6 @@ interface Project {
   thumbnail_url?: string | null
   thumbnail_duration?: number | null
   thumbnail_aspect?: string | null
-  is_demo?: boolean
 }
 
 export const Route = createFileRoute("/_app/projects/")({
@@ -28,34 +27,28 @@ function ProjectsPage() {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    const fetchProjects = async () => {
-      try {
-        const res = await apiFetch("/api/v1/projects", { toast: false })
-        if (!res.ok) throw new Error("Failed to load projects")
-        const all = (await res.json()) as Project[]
-        if (cancelled) return
-
-        const sorted = all.sort(
-          (a, b) =>
-            new Date(b.updated_at || b.id).getTime() -
-            new Date(a.updated_at || a.id).getTime()
-        )
-        setProjects(sorted)
-      } catch {
-        // Leave the list empty if the API isn't ready yet; user can refresh.
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-    fetchProjects()
-    return () => {
-      cancelled = true
+  // Lifted so cards can refetch after a rename/delete (onChanged).
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/v1/projects", { toast: false })
+      if (!res.ok) throw new Error("Failed to load projects")
+      const all = (await res.json()) as Project[]
+      const sorted = all.sort(
+        (a, b) =>
+          new Date(b.updated_at || b.id).getTime() -
+          new Date(a.updated_at || a.id).getTime()
+      )
+      setProjects(sorted)
+    } catch {
+      // Leave the list empty if the API isn't ready yet; user can refresh.
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -93,7 +86,7 @@ function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                isDemo={project.is_demo}
+                onChanged={fetchProjects}
               />
             ))}
           </div>

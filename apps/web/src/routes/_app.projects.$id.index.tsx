@@ -16,12 +16,22 @@ import {
   type ResultsTab,
 } from "@/components/results/ResultsTabs"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Tour, type TourStep } from "@/components/ui/tour"
 import { apiFetch, apiPost } from "@/lib/api"
-import { resolveProjectId } from "@/lib/constants"
 import { useRunEvents } from "@/lib/use-run-events"
 
 import type { Output, WorkflowStep, Project } from "@/lib/types"
+
+/** A clip counts as tour-ready once its MP4 exists and no render is in
+ * flight — the same condition ClipCard uses to leave its rendering state. */
+const isClipReady = (o: Output) =>
+  o.type === "clip" &&
+  !!o.files.video &&
+  o.render_status !== "pending" &&
+  o.render_status !== "rendering"
+
+/** First-visit results tour: separate seen flag from the composer tour. */
+const RESULTS_TOUR_KEY = "repurposer-results-tour-seen"
 
 interface AssetStatusEntry {
   id: string
@@ -90,8 +100,7 @@ export const Route = createFileRoute("/_app/projects/$id/")({
 })
 
 function ProjectDetailPage() {
-  const { id } = Route.useParams()
-  const projectId = resolveProjectId(id)
+  const { id: projectId } = Route.useParams()
   const { t } = useTranslation()
   const navigate = useNavigate()
   const search = Route.useSearch() as { overlay?: "intent" }
@@ -100,7 +109,9 @@ function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState<Partial<Record<ResultsTab, boolean>>>({})
+  const [resultsTourOpen, setResultsTourOpen] = useState(false)
   const tabInitializedRef = useRef(false)
+  const resultsTourCheckedRef = useRef(false)
 
   const generationState = useMemo(() => {
     try {
@@ -145,12 +156,41 @@ function ProjectDetailPage() {
 
   // SSE drives the active-run phase (CHAT_ARCH §8): snapshot + step diffs
   // replace the 2.5s polling below. The hook no-ops without a token, so
-  // anonymous demo viewers fall through to the legacy interval.
+  // anonymous viewers fall through to the legacy interval.
   const runActive =
     latestRun != null &&
     (latestRun.status === "pending" || latestRun.status === "running")
   const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
   const sseActive = runActive && sse.steps.length > 0
+
+  // First-visit results tour. Fires whenever clips are ready and the chat
+  // overlay is closed — no matter how the user got here (fresh generation or
+  // straight from the projects list). Seen flag is its own localStorage key.
+  // The targets live on the clips tab, so the tour switches to it first; the
+  // tab grid is committed in the same render pass, before Tour queries the
+  // DOM in its own effect.
+  useEffect(() => {
+    if (resultsTourCheckedRef.current) return
+    if (loading || !results) return
+    if (search.overlay === "intent") return
+    if (!results.outputs.some(isClipReady)) return
+    resultsTourCheckedRef.current = true
+    try {
+      if (window.localStorage.getItem(RESULTS_TOUR_KEY)) return
+    } catch {
+      return // storage unavailable — tour simply never auto-opens
+    }
+    if (activeTab !== "clips") setActiveTab("clips")
+    setResultsTourOpen(true)
+  }, [loading, results, search.overlay, activeTab])
+
+  const markResultsTourSeen = () => {
+    try {
+      window.localStorage.setItem(RESULTS_TOUR_KEY, "1")
+    } catch {
+      // ignore — worst case the tour shows again next visit
+    }
+  }
 
   // Default to the first requested output tab once, when a generation is running.
   useEffect(() => {
@@ -298,6 +338,13 @@ function ProjectDetailPage() {
     ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0))
   )
 
+  // The results tour anchors to one fully-rendered clip — prefer the first
+  // that also has a score, so all three targets exist on the same card.
+  const readyClips = clips.filter(isClipReady)
+  const resultsTourClipId = (
+    readyClips.find((c) => typeof c.score?.value === "number") ?? readyClips[0]
+  )?.id
+
   const counts = {
     clips: clips.length,
     post: posts.length,
@@ -315,6 +362,30 @@ function ProjectDetailPage() {
 
   const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
   const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
+
+  // Results teaching tour: score → video area → "···" menu. Built per render
+  // so a language switch re-labels the steps (Tour reads via ref).
+  const resultsTourSteps: TourStep[] = [
+    {
+      target: "[data-tour='results-score']",
+      title: t("tour.results.scoreTitle"),
+      description: t("tour.results.scoreDesc"),
+      side: "bottom",
+    },
+    {
+      target: "[data-tour='results-video']",
+      title: t("tour.results.videoTitle"),
+      description: t("tour.results.videoDesc"),
+      side: "bottom",
+    },
+    {
+      target: "[data-tour='results-menu']",
+      title: t("tour.results.menuTitle"),
+      description: t("tour.results.menuDesc"),
+      side: "top",
+      align: "end",
+    },
+  ]
 
   const renderSkeletons = (tab: ResultsTab) => {
     if (tab === "clips") {
@@ -340,7 +411,7 @@ function ProjectDetailPage() {
         (n.status === "failed" || (runFailed && n.status !== "done"))
     )
     return (
-      <Card className="p-8 text-center ring-1 ring-border shadow-xl">
+      <div className="rounded-lg bg-muted/50 p-8 text-center">
         <p className="text-sm text-destructive">
           {node?.error || latestRun?.error || t("results.retryFailed")}
         </p>
@@ -353,7 +424,7 @@ function ProjectDetailPage() {
         >
           {retrying[tab] ? t("common.loading") : t("results.retry")}
         </Button>
-      </Card>
+      </div>
     )
   }
 
@@ -377,6 +448,7 @@ function ProjectDetailPage() {
                 isTopPick={
                   topClipScore > 0 && clip.score?.value === topClipScore
                 }
+                tourTargets={clip.id === resultsTourClipId}
               />
             ))}
           </div>
@@ -483,6 +555,10 @@ function ProjectDetailPage() {
           onClose={() => navigate({ to: "/projects" })}
           onComplete={() => {
             sessionStorage.removeItem(`repurposer-generation-${projectId}`)
+            // The overlay created the run after this page's initial fetch —
+            // refetch so latest_run/outputs are live when it unmounts
+            // (same-route search navigation does not remount the page).
+            fetchResults()
             navigate({
               to: "/projects/$id",
               params: { id: projectId },
@@ -491,14 +567,22 @@ function ProjectDetailPage() {
           }}
         />
       )}
+
+      <Tour
+        steps={resultsTourSteps}
+        open={resultsTourOpen}
+        onOpenChange={setResultsTourOpen}
+        onComplete={markResultsTourSeen}
+        onSkip={markResultsTourSeen}
+      />
     </div>
   )
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <Card className="p-8 text-center text-sm text-muted-foreground ring-1 ring-border shadow-xl">
+    <div className="rounded-lg bg-muted/50 p-8 text-center text-sm text-muted-foreground">
       {text}
-    </Card>
+    </div>
   )
 }

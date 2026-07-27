@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Copy, Download, Edit, ImageIcon, Play } from "lucide-react"
-import { Link } from "@tanstack/react-router"
+import { Copy, Download, ImageIcon, Play } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -251,20 +250,6 @@ export function ClipDetailModal({
               >
                 <Download className="mr-2 h-4 w-4" />
                 {t("results.clipDetail.download")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                render={
-                  <Link
-                    to="/projects/$id/clips/$clipId"
-                    params={{ id: clipState.project_id, clipId: clipState.id }}
-                  />
-                }
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                {t("results.clipDetail.editClip")}
               </Button>
               {!coverUrl && (
                 <Button

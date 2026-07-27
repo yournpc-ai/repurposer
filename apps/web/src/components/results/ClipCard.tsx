@@ -1,15 +1,29 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
-import { Play } from "lucide-react"
+import {
+  Download,
+  MoreHorizontal,
+  Play,
+  Send,
+  Share2,
+  Sparkles,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
-import { formatDuration, cn } from "@/lib/utils"
+import { formatDuration, formatRelativeTime, cn } from "@/lib/utils"
 
-import { AssetActionBar } from "./AssetActionBar"
 import { AssetChatModal } from "./AssetChatModal"
 import { ClipDetailModal } from "./ClipDetailModal"
 import { PublishDialog } from "@/components/publish/PublishDialog"
@@ -20,11 +34,12 @@ interface ClipCardProps {
   output: Output
   onRegenerate?: () => void
   isTopPick?: boolean
+  /** Puts the results tour's data-tour anchors on this card (first ready clip only). */
+  tourTargets?: boolean
 }
 
-export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
+export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipCardProps) {
+  const { t, i18n } = useTranslation()
   const [chatOpen, setChatOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
@@ -65,14 +80,14 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
     )
   }
 
-  const handleRegenerate = async () => {
+  const handleShare = async () => {
+    const url = toAbsoluteUrl(videoUrl)
+    if (!url) return
     try {
-      await apiPost(`/api/v1/outputs/${clipState.id}/regenerate`, {
-        instruction: "Regenerate this clip",
-      })
-      onRegenerate?.()
-    } catch (e) {
-      console.error("Regenerate failed", e)
+      await navigator.clipboard.writeText(url)
+      toast.success(t("clipMenu.shareCopied"))
+    } catch {
+      toast.error(t("chat.failed"))
     }
   }
 
@@ -93,13 +108,6 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
     }
   }
 
-  const handleEdit = () => {
-    navigate({
-      to: "/projects/$id/clips/$clipId",
-      params: { id: clipState.project_id, clipId: clipState.id },
-    })
-  }
-
   const thumbnailUrl = coverUrl
     ? toAbsoluteUrl(coverUrl)
     : videoUrl
@@ -111,6 +119,7 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
       <Card className="group flex flex-col gap-0 overflow-hidden ring-1 ring-border">
         {/* Thumbnail / player */}
         <div
+          data-tour={tourTargets ? "results-video" : undefined}
           className={cn(
             "relative aspect-square w-full overflow-hidden bg-muted",
             !isRendering && "cursor-pointer"
@@ -158,6 +167,7 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
               {typeof clipState.score?.value === "number" && (
                 <div
+                  data-tour={tourTargets ? "results-score" : undefined}
                   className={cn(
                     "absolute left-2 top-2 z-20 rounded px-1.5 py-0.5 text-[10px] font-medium",
                     isTopPick
@@ -233,15 +243,54 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
             </h3>
           </div>
 
-          <div className="mt-2">
+          {/* Bottom row: creation date on the left (Opus's "Expires" slot),
+              "···" menu on the right. The editor entry is intentionally
+              hidden — remix goes through chat. */}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-muted-foreground">
+              {formatRelativeTime(clipState.created_at, i18n.language)}
+            </span>
             {!isRendering && (
-              <AssetActionBar
-                onEdit={handleEdit}
-                onDownload={videoUrl ? handleDownload : undefined}
-                onRegenerate={handleRegenerate}
-                onChat={() => setChatOpen(true)}
-                onPublish={videoUrl ? () => setPublishOpen(true) : undefined}
-              />
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("clipMenu.more")}
+                      data-tour={tourTargets ? "results-menu" : undefined}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuGroup>
+                    {videoUrl && (
+                      <DropdownMenuItem onClick={handleDownload}>
+                        <Download className="mr-2 h-4 w-4" />
+                        {t("clipMenu.download")}
+                      </DropdownMenuItem>
+                    )}
+                    {videoUrl && (
+                      <DropdownMenuItem onClick={() => setPublishOpen(true)}>
+                        <Send className="mr-2 h-4 w-4" />
+                        {t("clipMenu.publishOnSocial")}
+                      </DropdownMenuItem>
+                    )}
+                    {videoUrl && (
+                      <DropdownMenuItem onClick={handleShare}>
+                        <Share2 className="mr-2 h-4 w-4" />
+                        {t("clipMenu.share")}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setChatOpen(true)}>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {t("clipMenu.remix")}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -260,7 +309,6 @@ export function ClipCard({ output, onRegenerate, isTopPick }: ClipCardProps) {
         output={clipState}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        onRegenerate={onRegenerate}
       />
 
       <PublishDialog

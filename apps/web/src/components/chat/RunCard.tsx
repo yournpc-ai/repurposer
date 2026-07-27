@@ -43,7 +43,7 @@ function StepRow({ step }: { step: WorkflowStep }) {
   return (
     <Marker>
       <MarkerIcon>{icon}</MarkerIcon>
-      <MarkerContent className={step.status === "running" ? "animate-pulse" : undefined}>
+      <MarkerContent className={step.status === "running" ? "shimmer" : undefined}>
         {label}
         {step.status === "failed" && step.error ? ` — ${step.error}` : ""}
       </MarkerContent>

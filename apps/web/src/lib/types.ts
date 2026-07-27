@@ -65,7 +65,6 @@ export interface Project {
   event_name: string | null
   language: string
   created_at: string
-  is_demo?: boolean
 }
 
 export interface Speaker {
