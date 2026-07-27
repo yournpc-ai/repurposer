@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -7,6 +7,7 @@ import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
+import { GenerationOverlay } from "@/components/generation/GenerationOverlay"
 import { GenerationStepper, type UiStep } from "@/components/results/GenerationStepper"
 import { PostCard } from "@/components/results/PostCard"
 import { QuotesCard } from "@/components/results/QuotesCard"
@@ -92,12 +93,36 @@ function ProjectDetailPage() {
   const { id } = Route.useParams()
   const projectId = resolveProjectId(id)
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const search = Route.useSearch() as { overlay?: "intent" }
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [activeTab, setActiveTab] = useState<ResultsTab>("clips")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState<Partial<Record<ResultsTab, boolean>>>({})
   const tabInitializedRef = useRef(false)
+
+  const generationState = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(`repurposer-generation-${projectId}`)
+      if (!raw) return null
+      return JSON.parse(raw) as {
+        prompt?: string
+        intent?: {
+          action: "generate" | "answer"
+          answer: string | null
+          language: string
+          outputs: string[]
+          clip_count: number | null
+          specific_instruction: string | null
+        }
+        needsClarification?: boolean
+        brandTemplateId?: string
+      }
+    } catch {
+      return null
+    }
+  }, [projectId])
 
   const fetchResults = async () => {
     try {
@@ -447,6 +472,25 @@ function ProjectDetailPage() {
         {/* Content */}
         <div>{renderTabContent()}</div>
       </div>
+
+      {search.overlay === "intent" && (
+        <GenerationOverlay
+          projectId={projectId}
+          prompt={generationState?.prompt ?? results?.prompt ?? ""}
+          initialIntent={generationState?.intent}
+          initialNeedsClarification={generationState?.needsClarification ?? true}
+          brandTemplateId={generationState?.brandTemplateId}
+          onClose={() => navigate({ to: "/projects" })}
+          onComplete={() => {
+            sessionStorage.removeItem(`repurposer-generation-${projectId}`)
+            navigate({
+              to: "/projects/$id",
+              params: { id: projectId },
+              replace: true,
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -219,21 +219,44 @@ export function HomeComposer({
           })
         )
 
-        // The task book (outputs / language / clip_count) is derived by the
-        // pipeline's intent step — the composer sends only the instruction.
-        const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
+        // Resolve the task book via the project-scoped intent endpoint. The
+        // overlay on the results page will confirm or edit the inferred
+        // outputs / language / clip_count before starting generation.
+        const intentRes = await apiFetch(`/api/v1/projects/${project.id}/intent`, {
           method: "POST",
-          body: {
-            brand_template_id: brandTemplateId || undefined,
-            instruction: prompt.trim(),
-          },
+          body: { prompt: prompt.trim() },
         })
-        if (!generateRes.ok) {
-          const detail = await generateRes.json().catch(() => null)
-          throw new Error(detail?.detail || "Generation failed")
+        if (!intentRes.ok) {
+          const detail = await intentRes.json().catch(() => null)
+          throw new Error(detail?.detail || "Intent inference failed")
+        }
+        const intentData = (await intentRes.json()) as {
+          intent: {
+            action: "generate" | "answer"
+            answer: string | null
+            language: string
+            outputs: string[]
+            clip_count: number | null
+            specific_instruction: string | null
+          }
+          needs_clarification: boolean
         }
 
-        navigate({ to: "/projects/$id", params: { id: project.id } })
+        sessionStorage.setItem(
+          `repurposer-generation-${project.id}`,
+          JSON.stringify({
+            prompt: prompt.trim(),
+            intent: intentData.intent,
+            needsClarification: intentData.needs_clarification,
+            brandTemplateId: brandTemplateId || undefined,
+          })
+        )
+
+        navigate({
+          to: "/projects/$id",
+          params: { id: project.id },
+          search: { overlay: "intent" },
+        })
       } catch {
         // apiFetch already toasted the server's reason; just reset the UI.
         setIsGenerating(false)
