@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
-  Plus,
+  Paperclip,
   FileText,
   Mic2,
   Palette,
@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Check,
   Sparkles,
+  User,
   Video,
   Image as ImageIcon,
 } from "lucide-react"
@@ -293,7 +294,7 @@ export function HomeComposer({
               className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent"
             >
               {files.length === 0 ? (
-                <Plus className="h-4 w-4 text-muted-foreground" />
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
               ) : (
                 (() => {
                   const Icon = fileIconFor(files[0])
@@ -329,7 +330,7 @@ export function HomeComposer({
                   <AvatarFallback>{selectedSpeaker.name.slice(0, 1)}</AvatarFallback>
                 </Avatar>
               ) : (
-                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                <User className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="mt-auto min-w-0">
                 <span className="block text-xs">{t("composer.speaker")}</span>

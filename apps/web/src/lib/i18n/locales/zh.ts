@@ -549,13 +549,13 @@ const zh: Resources = {
     done: "完成",
     stepOf: "第 {{current}} 步，共 {{total}} 步",
     composer: {
-      assetsTitle: "带上你的素材",
+      assetsTitle: "上传你的素材",
       assetsDesc:
         "上传录像、录音、文字稿或照片——有什么带什么；也可以不传文件，只写提示词。",
-      speakerTitle: "选择谁在说",
+      speakerTitle: "选择说话人",
       speakerDesc:
         "选择 AI 要模仿的写作风格与声音；「自动」会从素材中自动建立或匹配画像。",
-      promptTitle: "描述想生成什么",
+      promptTitle: "告诉我们要生成什么",
       promptDesc:
         "一句话就够——比如高光片段、LinkedIn 长文、德语文章。类型、语言、数量都会从你的话里推断。",
       sendTitle: "开始生成",
