@@ -104,6 +104,7 @@ export function HomeComposer({
   const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
+  const [isComposing, setIsComposing] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -369,8 +370,10 @@ export function HomeComposer({
               ref={textareaRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
                   e.preventDefault()
                   handleGenerate()
                 }

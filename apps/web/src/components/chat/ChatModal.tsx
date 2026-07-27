@@ -81,6 +81,7 @@ export function ChatModal({
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isComposing, setIsComposing] = useState(false)
 
   useEffect(() => {
     if (!open || !asset) return
@@ -309,8 +310,10 @@ export function ChatModal({
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
                   e.preventDefault()
                   handleSend()
                 }
