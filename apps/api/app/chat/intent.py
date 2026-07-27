@@ -54,6 +54,10 @@ class ComposerIntentAgent:
             "- language: ISO code (en/fr/de/es/it/zh). Infer from the prompt "
             "language or explicit requests like 'in German'. Default to en if "
             "unclear.\n"
+            "- language_explicit: true only when the language was clearly "
+            "inferred from the prompt (either the prompt's own language or an "
+            "explicit 'in German' / 'auf Deutsch' style request). false when "
+            "falling back to the default.\n"
             "- outputs: array of requested asset types. Valid values: clips, post, "
             "quotes, carousel, article.\n"
             "  Default to [\"clips\", \"post\", \"quotes\", \"article\"] when "
@@ -68,10 +72,15 @@ class ComposerIntentAgent:
             "excludes an output type, respect that.\n"
             "  Only include 'carousel' if the user explicitly asks for a carousel, "
             "slide deck, or swipeable post; otherwise leave it out.\n"
+            "- outputs_explicit: true only when the user explicitly asked for "
+            "specific outputs (e.g. 'just clips', 'a post and quotes', "
+            "'no carousel'). false when using the default set.\n"
             "- clip_count: integer number of clips the user wants (e.g. '5 clips' "
             "→ 5, 'a few clips' → 3, 'no clips' → 0).\n"
             "  Only set this when the user mentions a quantity of clips. Otherwise "
             "null.\n"
+            "- clip_count_explicit: true only when clip_count came from a "
+            "user-mentioned quantity. false when left as null/default.\n"
             "- tone: one of professional, thoughtLeadership, conversational, "
             "academic. Default professional.\n"
             "- specific_instruction: a short distilled instruction for the "
@@ -111,12 +120,15 @@ class ComposerIntentAgent:
                 action="generate",
                 answer=None,
                 language="en",
+                language_explicit=False,
                 outputs=(
                     ["clips", "post", "quotes", "article"]
                     if has_media
                     else ["post", "quotes", "article"]
                 ),
+                outputs_explicit=False,
                 clip_count=None,
+                clip_count_explicit=False,
                 tone="professional",
                 specific_instruction=prompt.strip() or None,
                 confidence=0.0,

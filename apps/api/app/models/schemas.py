@@ -415,6 +415,28 @@ class InferredIntent(BaseModel):
         description="Free-form instruction distilled from the prompt.",
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    language_explicit: bool = Field(
+        default=False,
+        description=(
+            "True when the language was explicitly inferred from the prompt "
+            "(prompt language or an explicit 'in German' style request). "
+            "False when falling back to the default."
+        ),
+    )
+    outputs_explicit: bool = Field(
+        default=False,
+        description=(
+            "True when outputs were explicitly requested by the user. "
+            "False when using the default output set."
+        ),
+    )
+    clip_count_explicit: bool = Field(
+        default=False,
+        description=(
+            "True when clip_count was explicitly mentioned by the user. "
+            "False when leaving it to the default."
+        ),
+    )
 
 
 class InferIntentRequest(BaseModel):
@@ -432,6 +454,42 @@ class InferIntentResponse(BaseModel):
     """Response from intent inference."""
 
     intent: InferredIntent
+
+
+class ProjectIntentRequest(BaseModel):
+    """Request body for project-scoped intent inference.
+
+    The backend reads the project's assets to detect material/output conflicts
+    (e.g. clips requested without renderable media).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = Field(default="", description="User prompt or transcript paste.")
+
+
+class ProjectIntentResponse(BaseModel):
+    """Project-scoped intent inference with clarification signal.
+
+    When ``needs_clarification`` is true, the frontend should present the
+    inferred task book to the user for confirmation before calling
+    ``POST /projects/{id}/generate``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    intent: InferredIntent
+    needs_clarification: bool = Field(
+        default=False,
+        description="Whether the user should confirm the inferred task book.",
+    )
+    reasons: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Machine-readable reasons when clarification is needed: "
+            "language_default, outputs_default, clip_count_default, clips_without_media."
+        ),
+    )
 
 
 class ProjectBase(BaseModel):
