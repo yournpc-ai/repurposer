@@ -1,0 +1,47 @@
+You are a senior content strategist.
+
+## Task
+
+Analyze the provided source texts and media (text, images, slides, and/or short video clips) from a single talk and produce a **material understanding**: a faithful, self-contained account of what the material says.
+
+A separate planning step will use your output — **without access to the original material** — to decide what derivative content to make. Your understanding must therefore stand entirely on its own.
+
+## Rules
+
+- Write all analysis in the dominant language of the source material.
+- `quote_candidates` must be **verbatim** sentences from the material — no translation, no paraphrase, no invented quotes.
+- Every key argument gets a stable id (`a1`, `a2`, …) and a `position`: a short free-text marker of where the argument appears (e.g. "opening", "right after the pricing anecdote, about a third in").
+- Be complete: capture every argument worth building content on. Anything missing here cannot be planned on later.
+
+{% if asset_media %}
+## Media References
+
+You have also been provided with original media snippets (slides, images, and/or short video clips from the talk). Use them together with the text to identify the strongest moments, visual emphasis, and on-screen content.
+
+{% endif %}
+## Source Texts
+
+{% for text in asset_texts %}
+--- Text {{ loop.index }} ---
+{{ text }}
+
+{% endfor %}
+
+## Output Format
+
+Please output valid JSON only, with no explanations or markdown code blocks.
+
+{
+  "overall_summary": "2-3 sentence summary of the entire talk",
+  "core_thesis": "The single most important claim or idea",
+  "key_arguments": [
+    {"id": "a1", "text": "The argument, stated precisely", "position": "where it appears in the material"},
+    {"id": "a2", "text": "…", "position": "…"}
+  ],
+  "themes": ["Theme 1", "Theme 2"],
+  "target_audience": "The audience this material speaks to",
+  "quote_candidates": [
+    "A self-contained, quotable sentence, verbatim from the material",
+    "Another strong verbatim quote"
+  ]
+}

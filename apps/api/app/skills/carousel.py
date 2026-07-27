@@ -5,9 +5,14 @@ from pathlib import Path
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from app.skills.base import _find_derivative_plan
+from app.skills.base import _find_slot
 from app.clients.minimax import MiniMaxClient, MiniMaxError
-from app.models.schemas import CarouselResponse, ContentPlan, GenerationContext
+from app.models.schemas import (
+    CarouselResponse,
+    GenerationContext,
+    MaterialUnderstanding,
+    Storyboard,
+)
 
 logger = structlog.get_logger()
 
@@ -30,14 +35,16 @@ class CarouselAgent:
         self,
         asset_texts: list[str],
         context: GenerationContext,
-        content_plan: ContentPlan,
+        understanding: MaterialUnderstanding,
+        storyboard: Storyboard,
     ) -> CarouselResponse:
         """Generate a carousel from source texts.
 
         Args:
             asset_texts: Extracted text from project assets.
             context: Shared generation context.
-            content_plan: Unified content plan.
+            understanding: Material understanding from director step 1.
+            storyboard: Storyboard from director step 2 (this output's slot).
 
         Returns:
             CarouselResponse model.
@@ -51,15 +58,15 @@ class CarouselAgent:
         if not trimmed_texts:
             raise MiniMaxError("No usable text found in source texts")
 
-        derivative_plan = _find_derivative_plan(content_plan, "carousel")
-        count = derivative_plan.get("count") or 6
+        slot = _find_slot(storyboard, "carousel")
+        count = slot.get("count") or 6
 
         template = _jinja_env.get_template("carousel.j2")
         user_prompt = template.render(
             asset_texts=trimmed_texts,
             context=context.model_dump(),
-            content_plan=content_plan.model_dump(),
-            derivative_plan=derivative_plan,
+            understanding=understanding.model_dump(),
+            slot=slot,
             count=count,
         )
 

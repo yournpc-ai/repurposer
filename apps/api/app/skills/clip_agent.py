@@ -1,29 +1,37 @@
-"""Clip Agent: select segments and write clip scripts from a content plan.
+"""Clip Agent: select segments and write clip scripts.
 
 This agent replaces the previous ContentPlannerAgent. It receives the shared
-GenerationContext and ContentPlan produced by the Content Director, then plans
-vertical clips that reinforce the same core thesis and brand strategy.
+GenerationContext, the director's MaterialUnderstanding (step 1), and its
+aggregate Storyboard slot (step 2), then plans vertical clips that reinforce
+the same core thesis and brand strategy.
 """
 
 from typing import Any
 
 import structlog
 
-from app.skills.base import MiniMaxAgentBase
+from app.skills.base import MiniMaxAgentBase, _find_slot
 from app.clients.minimax import MiniMaxError
-from app.models.schemas import ClipPlans, ContentPlan, GenerationContext, MediaInput
+from app.models.schemas import (
+    ClipPlans,
+    GenerationContext,
+    MaterialUnderstanding,
+    MediaInput,
+    Storyboard,
+)
 
 logger = structlog.get_logger()
 
 
 class ClipAgent(MiniMaxAgentBase):
-    """Agent that plans clips from a content plan and source texts/media."""
+    """Agent that plans clips from the understanding and source texts/media."""
 
     async def generate(
         self,
         asset_texts: list[str],
         context: GenerationContext,
-        content_plan: ContentPlan,
+        understanding: MaterialUnderstanding,
+        storyboard: Storyboard,
         asset_media: list[MediaInput] | None = None,
         clip_count: int = 3,
         source_words: list[dict[str, Any]] | None = None,
@@ -34,7 +42,8 @@ class ClipAgent(MiniMaxAgentBase):
         Args:
             asset_texts: Extracted text / transcripts from project assets.
             context: Shared generation context (speaker, brand, tone, language).
-            content_plan: Unified content plan from the Content Director.
+            understanding: Material understanding from director step 1.
+            storyboard: Storyboard from director step 2 (aggregate clips slot).
             asset_media: Optional images/videos/short audio snippets from assets.
             clip_count: Number of clips to plan.
             source_words: Optional ASR word-level timestamps for the primary source
@@ -53,12 +62,22 @@ class ClipAgent(MiniMaxAgentBase):
         if not trimmed_texts and not asset_media:
             raise MiniMaxError("No usable text or media found")
 
+        # Resolve the clips slot's argument ids to their text so the prompt
+        # reads as guidance, not cross-references.
+        slot = _find_slot(storyboard, "clips")
+        if slot.get("argument_ids"):
+            arg_text_by_id = {a.id: a.text for a in understanding.key_arguments}
+            slot["argument_texts"] = [
+                arg_text_by_id[i] for i in slot["argument_ids"] if i in arg_text_by_id
+            ]
+
         user_prompt = self.jinja_env.get_template("clip_agent.j2").render(
             asset_texts=trimmed_texts,
             asset_media=asset_media,
             clip_count=clip_count,
             context=context.model_dump(),
-            content_plan=content_plan.model_dump(),
+            understanding=understanding.model_dump(),
+            slot=slot,
             source_words=source_words or [],
             music_pieces=music_pieces or [],
         )

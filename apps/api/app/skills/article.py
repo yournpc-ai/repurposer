@@ -2,9 +2,14 @@
 
 import structlog
 
-from app.skills.base import MiniMaxAgentBase, _find_derivative_plan
+from app.skills.base import MiniMaxAgentBase, _find_slot
 from app.clients.minimax import MiniMaxError
-from app.models.schemas import Article, ContentPlan, GenerationContext
+from app.models.schemas import (
+    Article,
+    GenerationContext,
+    MaterialUnderstanding,
+    Storyboard,
+)
 
 logger = structlog.get_logger()
 
@@ -16,7 +21,8 @@ class ArticleAgent(MiniMaxAgentBase):
         self,
         asset_texts: list[str],
         context: GenerationContext,
-        content_plan: ContentPlan,
+        understanding: MaterialUnderstanding,
+        storyboard: Storyboard,
     ) -> Article:
         """Generate a title + markdown article in the target language."""
         if not asset_texts:
@@ -26,14 +32,14 @@ class ArticleAgent(MiniMaxAgentBase):
         if not trimmed_texts:
             raise MiniMaxError("No usable text found in source texts")
 
-        derivative_plan = _find_derivative_plan(content_plan, "article")
+        slot = _find_slot(storyboard, "article")
 
         template = self.jinja_env.get_template("article.j2")
         user_prompt = template.render(
             asset_texts=trimmed_texts,
             context=context.model_dump(),
-            content_plan=content_plan.model_dump(),
-            derivative_plan=derivative_plan,
+            understanding=understanding.model_dump(),
+            slot=slot,
         )
 
         messages = [

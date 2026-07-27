@@ -1,7 +1,7 @@
 import {
   Home,
   Mic2,
-  Library,
+  FolderKanban,
   Palette,
   Crown,
   BookOpen,
@@ -13,7 +13,6 @@ import {
   Settings,
   LogOut,
   LogIn,
-  Sparkles,
 } from "lucide-react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
@@ -24,7 +23,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -44,14 +42,12 @@ import { Button } from "@/components/ui/button"
 
 import { clearAuth, getUser } from "@/lib/auth"
 import { useAuth } from "@/components/AuthProvider"
+import { LogoMark } from "@/components/LogoMark"
 
-const createItems = [
+const navItems = [
   { key: "home", url: "/home", icon: Home },
+  { key: "myProjects", url: "/projects", icon: FolderKanban },
   { key: "brandTemplate", url: "/brand-template", icon: Palette },
-  { key: "assetLibrary", url: "/library", icon: Library },
-]
-
-const postItems = [
   { key: "speakers", url: "/speakers", icon: Mic2 },
 ]
 
@@ -97,9 +93,7 @@ export function AppSidebar() {
       <SidebarHeader className="gap-3 p-3 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
-            </div>
+            <LogoMark />
             <span className="font-semibold tracking-tight">Repurposer</span>
           </div>
           <Button
@@ -117,35 +111,9 @@ export function AppSidebar() {
 
       <SidebarContent className="gap-4 px-2">
         <SidebarGroup className="px-0 py-0">
-          <SidebarGroupLabel className="px-3 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/50">
-            {t("nav.create")}
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="mt-1">
+          <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {createItems.map((item) => (
-                <SidebarMenuItem key={item.key}>
-                  <SidebarMenuButton
-                    isActive={isActive(currentPath, item.url)}
-                    tooltip={t(`nav.${item.key}`)}
-                    className="h-10 text-sm"
-                    render={<Link to={item.url} />}
-                  >
-                    <item.icon className="h-4.5 w-4.5 shrink-0" />
-                    <span>{t(`nav.${item.key}`)}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="px-0 py-0">
-          <SidebarGroupLabel className="px-3 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/50">
-            {t("nav.post")}
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="mt-1">
-            <SidebarMenu className="gap-1">
-              {postItems.map((item) => (
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.key}>
                   <SidebarMenuButton
                     isActive={isActive(currentPath, item.url)}

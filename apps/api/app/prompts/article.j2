@@ -7,27 +7,27 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Based on the following source texts and content plan, write an article. Requirements:
+Based on the following source texts and material understanding, write an article. Requirements:
 - title: an engaging title that captures the theme
 - content: Markdown body with clear structure (subheadings, paragraphs, bullet points allowed), preserving the speaker's original meaning and core viewpoints, with a tone that matches the speaker's style and voice, 600–1200 words in length
 - **Output language: {{ context.target_language }}**
 
-## Content Plan
+## Material Understanding
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
+- **Core thesis**: {{ understanding.core_thesis }}
+- **Themes**: {{ understanding.themes | join(', ') }}
+- **Target audience**: {{ understanding.target_audience }}
 - **Key arguments**:
-{% for arg in content_plan.key_arguments %}
-  - {{ arg }}
+{% for arg in understanding.key_arguments %}
+  - {{ arg.text }}
 {% endfor %}
-- **Focus for this article**: {{ derivative_plan.focus or 'Expand on the core thesis with supporting arguments' }}
-- **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with a reflection or follow-up question' }}
+- **Focus for this article**: {{ slot.focus or 'Expand on the core thesis with supporting arguments' }}
+- **CTA**: {{ slot.cta or (context.speaker.cta if context.speaker else None) or 'End with a reflection or follow-up question' }}
 
-{% if derivative_plan.quote_candidates %}
+{% if slot.quote_candidates %}
 ## Quotes to Consider
 
-{% for quote in derivative_plan.quote_candidates %}
+{% for quote in slot.quote_candidates %}
 - {{ quote }}
 {% endfor %}
 

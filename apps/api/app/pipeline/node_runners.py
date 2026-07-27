@@ -1,4 +1,4 @@
-"""RunPlan node runners: one runner per node kind (RunPlan Phase 1).
+"""RunPlan node runners: one runner per node kind (RunPlan Phase 1/2).
 
 Each runner is the direct transplant of a ``generation.py`` code path onto the
 workflow_steps graph (docs/tasks/runplan-phase1-implementation.md §4 mapping
@@ -10,12 +10,14 @@ What changed versus the retired orchestration:
   updated at row level by the orchestrator.
 - The fabricated-plan targeted-revision path is gone: derivative regen runs a
   real ``director_plan`` node upstream (intentional micro behavior change).
-- ``project.content_plan`` reuse is gone: the director plan is persisted as an
-  internal ``outputs[type=content_plan]`` row per run (Phase 2 brings
-  asset-hash reuse via director_understand).
+- ``project.content_plan`` reuse is gone: Phase 2 splits the director into
+  ``director_understand`` (material-scoped, reused across runs via asset hash)
+  and ``director_plan`` (request-scoped storyboard, re-planned every run) —
+  docs/tasks/director-two-step.md.
 """
 
 import base64
+import hashlib
 import mimetypes
 import time
 from datetime import UTC, datetime
@@ -31,6 +33,7 @@ from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.skills.clip_agent import clip_agent
+from app.skills.base import _MAX_CHARS_PER_TEXT
 from app.skills.content_director import content_director_agent
 from app.skills.persona import persona_agent
 from app.skills.reviser import reviser_agent
@@ -40,12 +43,14 @@ from app.models.schemas import (
     ClipMusic,
     ClipPayload,
     ClipSpec,
-    ContentPlan,
+    CoverageReport,
     DerivativeType,
     GenerationContext,
+    MaterialUnderstanding,
     MediaInput,
     RenderStatus,
     Segment,
+    Storyboard,
     ToneSettings,
     validate_output_payload,
 )
@@ -418,17 +423,96 @@ def _generation_context(
     )
 
 
-async def _load_content_plan(db: AsyncSession, node: WorkflowStep) -> ContentPlan:
-    """Load the ContentPlan produced by this node's upstream director node."""
-    if not node.inputs:
-        raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director node")
-    director = await db.get(WorkflowStep, UUID(str(node.inputs[0])))
-    if director is None or not director.output_refs:
-        raise ValueError("Upstream director_plan node has no content_plan output")
-    plan_output = await db.get(Output, UUID(str(director.output_refs[0])))
-    if plan_output is None or plan_output.type != "content_plan":
-        raise ValueError("content_plan output not found")
-    return ContentPlan.model_validate(plan_output.payload)
+async def _upstream_by_kind(
+    db: AsyncSession, node: WorkflowStep, kind: str
+) -> WorkflowStep:
+    """Find this node's direct upstream step of the given kind.
+
+    Upstreams are matched by kind, never by position — the full-run prelude
+    fans out (persona_bootstrap ∥ director_understand), so input order is not
+    a stable contract.
+    """
+    for upstream_id in node.inputs or []:
+        upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
+        if upstream is not None and upstream.kind == kind:
+            return upstream
+    raise ValueError(f"Node {node.id} ({node.kind}) has no upstream {kind} node")
+
+
+async def _load_understanding(
+    db: AsyncSession, node: WorkflowStep
+) -> MaterialUnderstanding:
+    """Load the MaterialUnderstanding from this node's upstream
+    director_understand node (its output row may be a reused earlier one)."""
+    understand = await _upstream_by_kind(db, node, "director_understand")
+    if not understand.output_refs:
+        raise ValueError("Upstream director_understand node has no output")
+    row = await db.get(Output, UUID(str(understand.output_refs[0])))
+    if row is None or row.type != "material_understanding":
+        raise ValueError("material_understanding output not found")
+    return MaterialUnderstanding.model_validate(row.payload)
+
+
+async def _load_director_outputs(
+    db: AsyncSession, node: WorkflowStep
+) -> tuple[MaterialUnderstanding, Storyboard]:
+    """Load both director artifacts for an executor node (two upstream hops):
+    the storyboard from director_plan, the understanding from its upstream."""
+    plan_node = await _upstream_by_kind(db, node, "director_plan")
+    understanding = await _load_understanding(db, plan_node)
+    if not plan_node.output_refs:
+        raise ValueError("Upstream director_plan node has no storyboard output")
+    row = await db.get(Output, UUID(str(plan_node.output_refs[0])))
+    if row is None or row.type != "storyboard":
+        raise ValueError("storyboard output not found")
+    return understanding, Storyboard.model_validate(row.payload)
+
+
+def _asset_digest(asset_texts: list[str], assets: list[Asset]) -> str:
+    """Content hash of the understanding's exact inputs.
+
+    Texts are trimmed to the same window the prompt sees (a change beyond the
+    trim window does not alter the LLM input, so it must not invalidate).
+    Media identity = file_url (unique storage path per upload); ``words`` meta
+    is not an understanding input and stays out of the hash.
+    """
+    h = hashlib.sha256()
+    for text in asset_texts:
+        if text and text.strip():
+            h.update(text[:_MAX_CHARS_PER_TEXT].encode("utf-8"))
+            h.update(b"\x00")
+    for asset in sorted(assets, key=lambda a: str(a.id)):
+        descriptor = (
+            f"{asset.id}|{asset.type}|{asset.file_url}|{len(asset.slide_pages or [])}"
+        )
+        h.update(descriptor.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()
+
+
+def _compute_coverage(
+    storyboard: Storyboard, understanding: MaterialUnderstanding
+) -> CoverageReport:
+    """Derive argument → slot accountability from valid argument_ids.
+
+    Unknown ids (the LLM may invent them) are dropped in place first. The
+    report is informational — never a gate (gating belongs to Phase 3 verify).
+    """
+    valid_ids = {a.id for a in understanding.key_arguments}
+    assignments: dict[str, list[str]] = {}
+    for slot in storyboard.slots:
+        slot.argument_ids = [i for i in slot.argument_ids if i in valid_ids]
+        for arg_id in slot.argument_ids:
+            assignments.setdefault(arg_id, []).append(slot.slot)
+    collisions = [
+        f"{arg_id} → {', '.join(slots)}"
+        for arg_id, slots in assignments.items()
+        if len(slots) > 1
+    ]
+    unused = [a.id for a in understanding.key_arguments if a.id not in assignments]
+    return CoverageReport(
+        assignments=assignments, unused_arguments=unused, collisions=collisions
+    )
 
 
 async def _resolve_brand(
@@ -556,50 +640,132 @@ async def run_persona_bootstrap(
     return []
 
 
+def _source_language(project: Project, assets: list[Asset]) -> str:
+    """Language tag for the understanding row: the source material's language."""
+    for asset in assets:
+        lang = (asset.meta or {}).get("language")
+        if lang:
+            return str(lang)
+    return project.language or "en"
+
+
+async def run_director_understand(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Director step 1: material-scoped understanding, reused across runs.
+
+    The reuse predicate is the asset hash stored on the output row's
+    ``source_ref`` — media downloads and the (expensive, multimodal) LLM call
+    only happen when the hash misses. A reuse returns the earlier row's id, so
+    no duplicate understanding rows accumulate and the node costs nothing.
+    """
+    asset_texts = await collect_asset_texts(db, project.id)
+    assets = await _list_assets(db, project.id)
+    digest = _asset_digest(asset_texts, assets)
+
+    latest = (
+        await db.execute(
+            select(Output)
+            .where(
+                Output.project_id == project.id,
+                Output.type == "material_understanding",
+            )
+            .order_by(Output.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if latest is not None and (latest.source_ref or {}).get("asset_hash") == digest:
+        try:
+            cached = MaterialUnderstanding.model_validate(latest.payload)
+        except Exception:  # noqa: BLE001 — stale shape: fall through, regenerate
+            logger.warning(
+                "understanding_reuse_payload_invalid", output_id=str(latest.id)
+            )
+        else:
+            await _set_summary(
+                node.id,
+                f"Reused understanding · {len(cached.key_arguments)} arguments",
+            )
+            logger.info(
+                "director_understand_reused",
+                project_id=str(project.id),
+                output_id=str(latest.id),
+            )
+            return [latest.id]
+
+    asset_media = await collect_asset_media(assets)
+    understanding = await content_director_agent.understand(
+        asset_texts=asset_texts,
+        asset_media=asset_media,
+    )
+
+    row = Output(
+        project_id=project.id,
+        workflow_step_id=node.id,
+        type="material_understanding",
+        language=_source_language(project, assets),
+        provenance="generated",
+        payload=understanding.model_dump(mode="json"),
+        source_ref={"asset_hash": digest},
+    )
+    db.add(row)
+    await db.flush()
+    await _set_summary(
+        node.id,
+        f"Understood {len(understanding.key_arguments)} arguments · "
+        f"{len(understanding.quote_candidates)} quotes",
+    )
+    return [row.id]
+
+
 async def run_director_plan(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
-    """Run the Content Director once and persist the plan as an internal output.
+    """Director step 2: request-scoped storyboard, re-planned every run.
 
-    Phase 1: every run plans fresh (the project.content_plan blob is gone).
-    The plan is an internal outputs row (type=content_plan) so downstream
-    nodes read it through the lineage graph, and Phase 2 can hang asset-hash
-    reuse on the same mechanism.
+    Reads ONLY the upstream understanding (self-sufficiency contract) plus the
+    task book and speaker/tone context; coverage accountability is computed by
+    code and persisted with the storyboard.
     """
     ctx = run.context or {}
+    understanding = await _load_understanding(db, node)
+
     outputs = [o for o in ctx.get("outputs", []) if o in KNOWN_OUTPUTS]
-    requested_derivative_types = [
-        _OUTPUT_TO_DERIVATIVE_TYPE[o] for o in outputs if o in _OUTPUT_TO_DERIVATIVE_TYPE
-    ]
-    # Targeted derivative runs: the director plans only for the target type.
+    # Targeted derivative runs: the storyboard plans only for the target type.
     target_type = node.spec.get("target_type")
     if target_type in _OUTPUT_TO_DERIVATIVE_TYPE:
-        requested_derivative_types = [_OUTPUT_TO_DERIVATIVE_TYPE[target_type]]
+        outputs = [target_type]
+    task_book = {
+        "outputs": outputs or ["clips"],
+        "clip_count": int(ctx.get("clip_count", 3)),
+    }
 
-    asset_texts = await collect_asset_texts(db, project.id)
-    assets = await _list_assets(db, project.id)
-    asset_media = await collect_asset_media(assets)
     speaker = await resolve_speaker(db, project)
     generation_context = _generation_context(run, project, speaker)
 
-    content_plan = await content_director_agent.plan(
-        asset_texts=asset_texts,
+    storyboard = await content_director_agent.plan(
+        understanding=understanding,
         context=generation_context,
-        asset_media=asset_media,
-        requested_derivatives=requested_derivative_types or None,
+        task_book=task_book,
     )
+    storyboard.coverage = _compute_coverage(storyboard, understanding)
 
-    plan_output = Output(
+    row = Output(
         project_id=project.id,
         workflow_step_id=node.id,
-        type="content_plan",
+        type="storyboard",
         language=ctx.get("target_language", "en"),
         provenance="generated",
-        payload=content_plan.model_dump(mode="json"),
+        payload=storyboard.model_dump(mode="json"),
     )
-    db.add(plan_output)
+    db.add(row)
     await db.flush()
-    return [plan_output.id]
+    await _set_summary(
+        node.id,
+        f"Planned {len(storyboard.slots)} slots · "
+        f"{len(storyboard.coverage.unused_arguments)} arguments unused",
+    )
+    return [row.id]
 
 
 async def run_clips_pipeline(
@@ -624,7 +790,7 @@ async def run_clips_pipeline(
     generation_context = _generation_context(
         run, project, speaker, brand_music_id=brand_music_id
     )
-    content_plan = await _load_content_plan(db, node)
+    understanding, storyboard = await _load_director_outputs(db, node)
 
     # Render source selection (docs/VIDEO_EDITOR.md §4).
     def _has_words(a: Asset) -> bool:
@@ -685,7 +851,8 @@ async def run_clips_pipeline(
         plans = await clip_agent.generate(
             asset_texts=asset_texts,
             context=generation_context,
-            content_plan=content_plan,
+            understanding=understanding,
+            storyboard=storyboard,
             asset_media=await collect_asset_media(assets),
             clip_count=clip_count,
             source_words=(
@@ -701,7 +868,8 @@ async def run_clips_pipeline(
             plans = await clip_agent.generate(
                 asset_texts=asset_texts,
                 context=generation_context,
-                content_plan=content_plan,
+                understanding=understanding,
+                storyboard=storyboard,
                 asset_media=await collect_asset_media(assets),
                 clip_count=clip_count,
                 source_words=(
@@ -860,7 +1028,8 @@ async def _generate_derivative_with_retry(
     derivative_type: DerivativeType,
     asset_texts: list[str],
     context: GenerationContext,
-    content_plan: ContentPlan,
+    understanding: MaterialUnderstanding,
+    storyboard: Storyboard,
 ) -> dict:
     """Generate a derivative, retrying once on failure (preserved behavior)."""
     try:
@@ -868,7 +1037,8 @@ async def _generate_derivative_with_retry(
             derivative_type=derivative_type,
             asset_texts=asset_texts,
             context=context,
-            content_plan=content_plan,
+            understanding=understanding,
+            storyboard=storyboard,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning(
@@ -880,7 +1050,8 @@ async def _generate_derivative_with_retry(
             derivative_type=derivative_type,
             asset_texts=asset_texts,
             context=context,
-            content_plan=content_plan,
+            understanding=understanding,
+            storyboard=storyboard,
         )
 
 
@@ -890,7 +1061,7 @@ async def run_derivative_gen(
     """Generate one derivative output (post/quotes/carousel/article).
 
     With ``spec.target_id`` set this is a targeted regeneration: the existing
-    row is updated in place (its content_plan now comes from a real upstream
+    row is updated in place (its storyboard now comes from a real upstream
     director_plan node — the fabricated-plan path is gone).
     """
     derivative_type = _DERIVATIVE_KIND_TO_TYPE[node.kind]
@@ -904,13 +1075,14 @@ async def run_derivative_gen(
     speaker = await resolve_speaker(db, project)
     generation_context = _generation_context(run, project, speaker)
     generation_context.target_language = target_language
-    content_plan = await _load_content_plan(db, node)
+    understanding, storyboard = await _load_director_outputs(db, node)
 
     content = await _generate_derivative_with_retry(
         derivative_type=derivative_type,
         asset_texts=asset_texts,
         context=generation_context,
-        content_plan=content_plan,
+        understanding=understanding,
+        storyboard=storyboard,
     )
 
     if target_id:
@@ -1367,6 +1539,7 @@ async def run_dub_clip(
 STEP_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
+    "director_understand": run_director_understand,
     "director_plan": run_director_plan,
     "clips_pipeline": run_clips_pipeline,
     "post_gen": run_derivative_gen,

@@ -491,21 +491,6 @@ Response: `{ conversation_id, user_message, assistant_message, run_id }`. The as
 GET /api/v1/chat/conversations/{id}/messages
 ```
 
-## 11. Library
-
-The library lists all downloadable outputs across projects (clips and derivatives) for quick access.
-
-### List Library Items
-
-```http
-GET /api/v1/library
-```
-
-Query params:
-
-- `type`: `clip` | `derivative` (optional)
-- `derivative_type`: `post` | `quotes` | `carousel` | `article` (optional)
-
 ## 12. Brand Template
 
 Brand templates determine the brand overlay elements in the final video. **Full CRUD**; a default is seeded on startup. At generation time, `GenerateRequest.brand_template_id` selects one (defaults to latest), baking `aspect` / caption·title·CTA styles and **position points** / intro/outro / music mood into `render_spec`.

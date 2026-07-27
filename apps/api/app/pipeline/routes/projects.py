@@ -29,6 +29,7 @@ from app.models.tables import (
     User,
     WorkflowRun,
 )
+from app.chat.intent import composer_intent_agent
 from app.chat.service import get_project_prompt, seed_project_prompt
 from app.demo_seed import DEMO_PROJECT_ID
 from app.pipeline.orchestrator import TaskSpec, create_run
@@ -230,7 +231,7 @@ def _compute_ui_step(
         (n for n in nodes if n.status in ("pending", "running")), None
     )
     if current is not None:
-        if current.kind in ("preprocess", "persona_bootstrap"):
+        if current.kind in ("preprocess", "persona_bootstrap", "director_understand"):
             return at("analyze")
         if current.kind == "director_plan":
             return at("plan")
@@ -387,9 +388,40 @@ async def generate_content(
         db, project_id, UUID(str(current_user.id)), allow_demo=False
     )
 
+    # Task book derivation (composer path): when outputs are not explicit,
+    # the pipeline's intent step resolves outputs / language / clip_count
+    # from the instruction — the composer itself no longer runs an inference
+    # call. Explicit outputs (retries, targeted runs, API callers) skip intent.
+    outputs = request.outputs
+    target_language = request.target_language
+    clip_count = request.clip_count
+    instruction = request.instruction
+    if outputs is None and request.scope == "full":
+        file_url_result = await db.execute(
+            select(Asset.file_url)
+            .where(Asset.project_id == project_id, Asset.file_url.isnot(None))
+            .limit(1)
+        )
+        first_file_url = file_url_result.scalar_one_or_none()
+        intent = await composer_intent_agent.infer(
+            prompt=instruction or "",
+            filename=first_file_url.rsplit("/", 1)[-1] if first_file_url else None,
+        )
+        outputs = list(intent.outputs)
+        if target_language is None:
+            target_language = intent.language
+        if intent.clip_count:
+            clip_count = intent.clip_count
+        if intent.specific_instruction:
+            instruction = intent.specific_instruction
+    if outputs is None:
+        # Non-full scopes without explicit outputs keep the pre-intent default.
+        outputs = ["clips", "post", "quotes", "article"]
+    target_language = target_language or "en"
+
     # Clips need a renderable media source (video / audio / image / slides).
     # Reject early instead of letting the run produce unrenderable clips.
-    if "clips" in request.outputs and request.scope == "full":
+    if "clips" in outputs and request.scope == "full":
         media_result = await db.execute(
             select(Asset.id)
             .where(
@@ -424,10 +456,10 @@ async def generate_content(
         db,
         project,
         TaskSpec(
-            outputs=list(request.outputs),
-            clip_count=request.clip_count,
-            target_language=request.target_language,
-            instruction=request.instruction,
+            outputs=outputs,
+            clip_count=clip_count,
+            target_language=target_language,
+            instruction=instruction,
             tone_settings=(
                 request.tone_settings.model_dump() if request.tone_settings else None
             ),

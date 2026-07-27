@@ -84,9 +84,13 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
 
     Mode② (task list): ``task.tasks`` is materialized via ``_compile_task_list``.
     Mode① (fixed topology):
-    Full run:   preprocess -> persona_bootstrap -> director_plan
+    Full run:   preprocess → persona_bootstrap ↘
+                       → director_understand → director_plan
                 -> {clips_pipeline | post_gen | quotes_gen | carousel_gen | article_gen}
-    Targeted:   hook/clip -> [script];  derivative -> [director_plan -> X_gen];
+                (persona_bootstrap and director_understand both hang off
+                preprocess — they are independent and can run in parallel)
+    Targeted:   hook/clip -> [script];
+                derivative -> [director_understand -> director_plan -> X_gen];
                 render -> [render].
     """
     if task.tasks:
@@ -99,7 +103,8 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         nodes = [
             _NodeSpec("preprocess", 1),
             _NodeSpec("persona_bootstrap", 2, inputs=[0]),
-            _NodeSpec("director_plan", 3, inputs=[1]),
+            _NodeSpec("director_understand", 3, inputs=[0]),
+            _NodeSpec("director_plan", 4, inputs=[1, 2]),
         ]
         # Deterministic order keeps the step list stable across runs.
         for seq, output in enumerate(
@@ -107,7 +112,7 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         ):
             if output in outputs:
                 nodes.append(
-                    _NodeSpec(_OUTPUT_TO_NODE_KIND[output], seq, inputs=[2])
+                    _NodeSpec(_OUTPUT_TO_NODE_KIND[output], seq, inputs=[3])
                 )
         return nodes
 
@@ -129,11 +134,12 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         if not target_type:
             raise ValueError(f"Cannot lower scope={scope} without a target type")
         return [
-            _NodeSpec("director_plan", 1, spec={"target_type": target_type}),
+            _NodeSpec("director_understand", 1),
+            _NodeSpec("director_plan", 2, inputs=[0], spec={"target_type": target_type}),
             _NodeSpec(
                 _OUTPUT_TO_NODE_KIND[target_type],
-                2,
-                inputs=[0],
+                3,
+                inputs=[1],
                 spec={
                     "target_id": str(task.target_id) if task.target_id else None,
                     "target_language": task.target_language,
@@ -168,12 +174,13 @@ def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
 
     Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
     and params; topology is derived here — generation skills that need a
-    director share one deduped prelude (preprocess → persona_bootstrap →
-    director_plan); modifier skills (needs_director=False, e.g. remove_filler
-    / add_music) hang off the clips node when one exists, else get empty
-    inputs (= act on the project's existing clips). Modifiers are chained in
-    proposal order so two of them never edit the same render_spec
-    concurrently. Defaults come from the params schemas, never from the LLM.
+    director share one deduped prelude (preprocess → persona_bootstrap ∥
+    director_understand → director_plan); modifier skills (needs_director=
+    False, e.g. remove_filler / add_music) hang off the clips node when one
+    exists, else get empty inputs (= act on the project's existing clips).
+    Modifiers are chained in proposal order so two of them never edit the same
+    render_spec concurrently. Defaults come from the params schemas, never
+    from the LLM.
     """
     entries = validate_task_list(task.tasks or [])  # raises SkillRejected
     nodes: list[_NodeSpec] = []
@@ -183,10 +190,11 @@ def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
             [
                 _NodeSpec("preprocess", 1),
                 _NodeSpec("persona_bootstrap", 2, inputs=[0]),
-                _NodeSpec("director_plan", 3, inputs=[1]),
+                _NodeSpec("director_understand", 3, inputs=[0]),
+                _NodeSpec("director_plan", 4, inputs=[1, 2]),
             ]
         )
-    director_idx = 2 if nodes else None
+    director_idx = 3 if nodes else None
 
     seq = 10
     skill_node_idx: dict[str, int] = {}

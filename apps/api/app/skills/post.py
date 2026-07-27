@@ -2,9 +2,14 @@
 
 import structlog
 
-from app.skills.base import MiniMaxAgentBase, _find_derivative_plan
+from app.skills.base import MiniMaxAgentBase, _find_slot
 from app.clients.minimax import MiniMaxError
-from app.models.schemas import ContentPlan, GenerationContext, Post
+from app.models.schemas import (
+    GenerationContext,
+    MaterialUnderstanding,
+    Post,
+    Storyboard,
+)
 
 logger = structlog.get_logger()
 
@@ -16,14 +21,16 @@ class PostAgent(MiniMaxAgentBase):
         self,
         asset_texts: list[str],
         context: GenerationContext,
-        content_plan: ContentPlan,
+        understanding: MaterialUnderstanding,
+        storyboard: Storyboard,
     ) -> Post:
         """Generate a social post.
 
         Args:
             asset_texts: Extracted text from project assets.
             context: Shared generation context.
-            content_plan: Unified content plan.
+            understanding: Material understanding from director step 1.
+            storyboard: Storyboard from director step 2 (this output's slot).
 
         Returns:
             Post model.
@@ -35,14 +42,14 @@ class PostAgent(MiniMaxAgentBase):
         if not trimmed_texts:
             raise MiniMaxError("No usable text found in source texts")
 
-        derivative_plan = _find_derivative_plan(content_plan, "post")
+        slot = _find_slot(storyboard, "post")
 
         template = self.jinja_env.get_template("post.j2")
         user_prompt = template.render(
             asset_texts=trimmed_texts,
             context=context.model_dump(),
-            content_plan=content_plan.model_dump(),
-            derivative_plan=derivative_plan,
+            understanding=understanding.model_dump(),
+            slot=slot,
         )
 
         messages = [

@@ -24,7 +24,7 @@
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `ARCHITECTURE.md` | 系统现状架构 | 活跃 | 动任何子系统前 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"） | 活跃（2026-07 建） | 动模块边界/新模块前 |
-| `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线：八概念/导演两步/质检节点/分期） | 已实现 + 📋 演进中 | 动 generation/agents 前 |
+| `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线）+ §12.8 Phase 2 落地实录（导演两步走） | 已实现（Phase 2 主体 ✅；选段独立/质检节点 📋） | 动 generation/agents 前 |
 | `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 待 Operation Model） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
 | `DECISIONS.md` | ADR-001 ~ ADR-032 | 持续追加 | 翻案/新决策时 |

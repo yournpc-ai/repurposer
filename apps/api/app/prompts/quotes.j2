@@ -14,18 +14,18 @@ Extract {{ count }} quotes from the following source text. Each quote must:
 - Have clear attribution (speaker name + event/occasion)
 - **Output language: {{ context.target_language }}**
 
-## Content Plan
+## Material Understanding
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
-- **Focus for these quotes**: {{ derivative_plan.focus or 'Capture the most shareable ideas' }}
+- **Core thesis**: {{ understanding.core_thesis }}
+- **Themes**: {{ understanding.themes | join(', ') }}
+- **Target audience**: {{ understanding.target_audience }}
+- **Focus for these quotes**: {{ slot.focus or 'Capture the most shareable ideas' }}
 
-{% if derivative_plan.quote_candidates %}
+{% if slot.quote_candidates %}
 ## Candidate Quotes
 
-Consider using or adapting these candidate quotes from the content plan:
-{% for quote in derivative_plan.quote_candidates %}
+Consider using or adapting these candidate quotes assigned by the storyboard:
+{% for quote in slot.quote_candidates %}
 - {{ quote }}
 {% endfor %}
 

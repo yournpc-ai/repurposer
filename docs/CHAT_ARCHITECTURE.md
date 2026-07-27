@@ -166,7 +166,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 ```
 
 - **该 SSE 的**：results 页 run 进度、chat 打勾流（用户正盯着一个活 run）。
-- **该普通 GET 的**：library / projects 列表等一切非实时读——不为一棵树买一片森林。
+- **该普通 GET 的**：projects 列表等一切非实时读——不为一棵树买一片森林。
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 

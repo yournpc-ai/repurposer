@@ -24,12 +24,16 @@
 | 施工图 | RunPlan / `workflow_steps` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
 | 步骤 | `WorkflowStep` | 施工图上的一个执行单位（曾名 PlanNode，N-15） | 不是 job、不是 task |
 | 对话 | `Conversation` | chat 的会话容器（曾名 ChatSession，N-12；session 撞 auth session） | 不是 thread、不是 session |
-| 内容计划 | `ContentPlan` | **创作计划**：导演 LLM 的产出（说什么、什么角度、金句给谁），executors 按它执行 | 不是 brief（brief 是输入，TaskSpec 才是） |
+| 内容计划 | `ContentPlan` | **已退役（N-17，2026-07-27）**：拆分为素材理解 + 分镜表 | 不是 brief（brief 是输入，TaskSpec 才是） |
+| 素材理解 | `MaterialUnderstanding` / type `material_understanding` | 导演第一步产出：素材级理解（论点带位置/金句/主题/受众），asset-hash 复用 | 不含任务信息；不是 ContentPlan 改名 |
+| 分镜表 | `Storyboard` / type `storyboard` | 导演第二步产出：请求级派工（槽位+覆盖报告），每 run 重排 | 不是 task board（撞任务书词族）；不读原稿 |
+| 槽位 | `StoryboardSlot` | 分镜表一行：一个产物的 what（论点/角度/语言/格式） | how 归 executor |
+| 覆盖报告 | `CoverageReport` | 论点→槽位映射 + 未用/撞车，代码推导落库 | 不是门禁（门禁归 Phase 3 质检节点） |
 | 班组 | skills | LLM 决策单元（`skills/`） | 不是 agent 框架的 agent |
 | 机械 | tools | 确定性执行单元（`tools/`），无 LLM 决策 | 不是 service、不是 util |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
-| 导演 | director | ContentPlan 产出者 | — |
+| 导演 | director | 素材理解 + 分镜表的产出者（两步走，N-17） | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |
 | 提及 | mention | 对话中的 @ 实体引用 | 不是 reference、不是 entity |
 | 施工图编译 | `compile_graph()` | 任务书 → 节点图的纯函数 | 曾名 `lower_plan`（N-04）/ `compile_plan`（N-08）；裸 plan 违规（N-11），故以产出物命名 |
@@ -38,7 +42,7 @@
 | 结果卡 | `RunCard` | assistant 消息内嵌的 run 线性投影（步骤清单 + 产物卡片 + 聚合行） | 不是 DAG 画布 |
 | 操作卡 | `OpsCard` | assistant 消息内嵌的 edit ops 应用结果（op 清单 + 撤销） | — |
 
-**两个 plan 各司其职**：RunPlan = 执行计划（工程层），ContentPlan = 内容计划（创作层）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
+**plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
 ## 3. 判例库（只追加）
 
@@ -60,12 +64,13 @@
 | N-14 | `ChatIntent` 退役 → `IntentProposal` 二态判别联合 | 规则版 action 枚举整体退役；`TaskListProposal`/`EditOpsProposal` 判别联合，`tasks=[]` = 反问（合法输出，不加第三态） | §1 |
 | N-15 | `plan_nodes` → `workflow_steps` | plan 一词三用（RunPlan/ContentPlan/plan_nodes）真实歧义；表对词族统一（workflow_runs+workflow_steps）；前端早已叫 step（GenerationStepper/results.stepper.*）；Mastra workflow steps 同构。**概念层 RunPlan 不动**——这不是 N-10 翻案（N-10 否的是概念层清洗），是存储层对齐行业词；`outputs.plan_node_id→workflow_step_id`、`PlanNode→WorkflowStep`、`StepKind/StepStatus/StepResponse`（迁移 c4a9e2f17b03） | §1 |
 | N-16 | `restore_range` 独立 op 否决 | removeRange 在 spec 内真删 caption cues，独立"恢复删除"op 只能 un-hide segments、复活不了字幕——恢复出来的产物是坏的；恢复语义全归快照层（undo / restore_version，ADR-032 D1/D4）；真要做点选恢复，前置 = clip-spec 契约扩展（cues 加 hidden），属 ADR-016 级改动单独评审 | §1、ADR-032 D4 |
+| N-17 | ContentPlan 拆分：素材理解 `MaterialUnderstanding` + 分镜表 `Storyboard`；DerivativePlan 退役为槽位 `StoryboardSlot` | 导演两步走落地（`docs/tasks/director-two-step.md`）：理解=素材级（asset-hash 复用），分镜=请求级（每 run 重排）。否决 `TaskBoard`（撞 TaskSpec/TaskItem 词族，N-11 同型三撞）与 ContentPlan 沿用（理解是描述不是计划，沿用旧名不诚实）。"两个 plan 各司其职"注记改写：RunPlan 成唯一 plan | §1、§6 |
 
 ## 4. API 命名
 
 - REST，复数资源，动作用子路径：`POST /outputs/{id}/render`、`POST /outputs/{id}/dub`。
 - 不为单个动作造 RPC 式端点（`/api/sendChat` 此类永不出现）。
-- 内部类型（如 `content_plan`）不得从任何公开响应漏出——统一经 `visible_outputs()` 过滤（ADR-030 D1）。
+- 内部类型（如 `material_understanding` / `storyboard`）不得从任何公开响应漏出——统一经 `visible_outputs()` 过滤（ADR-030 D1）。
 
 ## 5. 命名审计触发点
 

@@ -24,7 +24,6 @@ from app.pipeline.music import seed_default_music
 from app.pipeline.registry import assert_runners_registered
 from app.pipeline.routes import (
     assets,
-    library,
     music,
     outputs,
     projects,
@@ -237,7 +236,6 @@ app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
-app.include_router(library, prefix="/api/v1/library", tags=["library"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
 app.include_router(intent_router, prefix="/api/v1", tags=["intent"])

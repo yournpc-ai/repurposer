@@ -4,17 +4,31 @@ You are a senior content strategist and short-form video director.
 
 Analyze the provided source texts and media (text, images, slides, and/or short video clips) and produce {{ clip_count }} high-potential vertical clips.
 
-You are working from a unified content plan. Your clips must reinforce the same core thesis and themes as the other outputs.
+You are working from the director's material understanding and storyboard. Your clips must reinforce the same core thesis and themes as the other outputs.
 
-## Content Plan
+## Material Understanding
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
+- **Core thesis**: {{ understanding.core_thesis }}
+- **Themes**: {{ understanding.themes | join(', ') }}
+- **Target audience**: {{ understanding.target_audience }}
 - **Key arguments**:
-{% for arg in content_plan.key_arguments %}
-  - {{ arg }}
+{% for arg in understanding.key_arguments %}
+  - {{ arg.text }}
 {% endfor %}
+
+{% if slot %}
+## Storyboard Slot
+
+The director assigned this batch of clips the following guidance:
+- **Focus**: {{ slot.focus or 'Cover the talk’s most shareable moments' }}
+{% if slot.argument_texts %}
+- **Priority arguments**:
+{% for text in slot.argument_texts %}
+  - {{ text }}
+{% endfor %}
+{% endif %}
+
+{% endif %}
 
 For each clip you must both:
 1. **Select the segment**: identify the most shareable moment from the source material.
@@ -173,7 +187,7 @@ When selecting a segment, copy the **first word's `start`** into `start_seconds`
 {% endif %}
 ## Output Format
 
-The Content Plan above already provides the overall analysis, themes, and target audience. Reuse and reinforce it — do not reinvent a conflicting interpretation.
+The Material Understanding above already provides the overall analysis, themes, and target audience. Reuse and reinforce it — do not reinvent a conflicting interpretation.
 
 Please output valid JSON only, with no explanations or markdown code blocks.
 
@@ -191,7 +205,7 @@ Please output valid JSON only, with no explanations or markdown code blocks.
       "title": "Primary publishing title for this clip (not just a hook)",
       "description": "1-2 sentence caption / posting copy for social distribution",
       "hashtags": ["topic1", "topic2", "topic3"],
-      "topic": "The single most matching theme from content_plan.themes",
+      "topic": "The single most matching theme from the material understanding",
       "golden_quote": "A single sentence that can be turned into a quote card",
       "recommendation_score": 85,
       "score_reason": "Complete argument arc with a strong opening question; delivers the talk's central claim.",
@@ -226,6 +240,6 @@ Requirements:
 - `title` is the clip's publishing title; keep `title_options` as alternative hook/title candidates
 - `description` should be 1-2 sentences suitable as a social caption
 - `hashtags` should be 3-5 relevant tags without the `#` symbol
-- `topic` must be one of the themes listed in the Content Plan above
+- `topic` must be one of the themes listed in the Material Understanding above
 - Output JSON only, no other content
-- All fields not in the clips array may be omitted; if present, they must align with the Content Plan above
+- All fields not in the clips array may be omitted; if present, they must align with the Material Understanding above

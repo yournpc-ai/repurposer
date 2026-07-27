@@ -13,7 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppBrandTemplateRouteImport } from './routes/_app.brand-template'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
-import { Route as AppLibraryRouteImport } from './routes/_app.library'
+import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSpeakersRouteImport } from './routes/_app.speakers'
 import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
@@ -39,9 +39,9 @@ const AppHomeRoute = AppHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppRoute,
 } as any)
-const AppLibraryRoute = AppLibraryRouteImport.update({
-  id: '/library',
-  path: '/library',
+const AppProjectsRoute = AppProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -55,9 +55,9 @@ const AppSpeakersRoute = AppSpeakersRouteImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
-  id: '/projects/$id',
-  path: '/projects/$id',
-  getParentRoute: () => AppRoute,
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppProjectsRoute,
 } as any)
 const AppSpeakersIdRoute = AppSpeakersIdRouteImport.update({
   id: '/$id',
@@ -75,7 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
-  '/library': typeof AppLibraryRoute
+  '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/speakers': typeof AppSpeakersRouteWithChildren
   '/projects/$id': typeof AppProjectsIdRouteWithChildren
@@ -86,7 +86,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
-  '/library': typeof AppLibraryRoute
+  '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/speakers': typeof AppSpeakersRouteWithChildren
   '/projects/$id': typeof AppProjectsIdRouteWithChildren
@@ -99,7 +99,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_app/brand-template': typeof AppBrandTemplateRoute
   '/_app/home': typeof AppHomeRoute
-  '/_app/library': typeof AppLibraryRoute
+  '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/speakers': typeof AppSpeakersRouteWithChildren
   '/_app/projects/$id': typeof AppProjectsIdRouteWithChildren
@@ -112,7 +112,7 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/home'
-    | '/library'
+    | '/projects'
     | '/settings'
     | '/speakers'
     | '/projects/$id'
@@ -123,7 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/home'
-    | '/library'
+    | '/projects'
     | '/settings'
     | '/speakers'
     | '/projects/$id'
@@ -135,7 +135,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_app/brand-template'
     | '/_app/home'
-    | '/_app/library'
+    | '/_app/projects'
     | '/_app/settings'
     | '/_app/speakers'
     | '/_app/projects/$id'
@@ -178,11 +178,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/library': {
-      id: '/_app/library'
-      path: '/library'
-      fullPath: '/library'
-      preLoaderRoute: typeof AppLibraryRouteImport
+    '/_app/projects': {
+      id: '/_app/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AppProjectsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -201,10 +201,10 @@ declare module '@tanstack/react-router' {
     }
     '/_app/projects/$id': {
       id: '/_app/projects/$id'
-      path: '/projects/$id'
+      path: '/$id'
       fullPath: '/projects/$id'
       preLoaderRoute: typeof AppProjectsIdRouteImport
-      parentRoute: typeof AppRoute
+      parentRoute: typeof AppProjectsRoute
     }
     '/_app/speakers/$id': {
       id: '/_app/speakers/$id'
@@ -223,18 +223,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AppSpeakersRouteChildren {
-  AppSpeakersIdRoute: typeof AppSpeakersIdRoute
-}
-
-const AppSpeakersRouteChildren: AppSpeakersRouteChildren = {
-  AppSpeakersIdRoute: AppSpeakersIdRoute,
-}
-
-const AppSpeakersRouteWithChildren = AppSpeakersRoute._addFileChildren(
-  AppSpeakersRouteChildren,
-)
-
 interface AppProjectsIdRouteChildren {
   AppProjectsIdClipsClipIdRoute: typeof AppProjectsIdClipsClipIdRoute
 }
@@ -247,22 +235,44 @@ const AppProjectsIdRouteWithChildren = AppProjectsIdRoute._addFileChildren(
   AppProjectsIdRouteChildren,
 )
 
+interface AppProjectsRouteChildren {
+  AppProjectsIdRoute: typeof AppProjectsIdRouteWithChildren
+}
+
+const AppProjectsRouteChildren: AppProjectsRouteChildren = {
+  AppProjectsIdRoute: AppProjectsIdRouteWithChildren,
+}
+
+const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
+  AppProjectsRouteChildren,
+)
+
+interface AppSpeakersRouteChildren {
+  AppSpeakersIdRoute: typeof AppSpeakersIdRoute
+}
+
+const AppSpeakersRouteChildren: AppSpeakersRouteChildren = {
+  AppSpeakersIdRoute: AppSpeakersIdRoute,
+}
+
+const AppSpeakersRouteWithChildren = AppSpeakersRoute._addFileChildren(
+  AppSpeakersRouteChildren,
+)
+
 interface AppRouteChildren {
   AppBrandTemplateRoute: typeof AppBrandTemplateRoute
   AppHomeRoute: typeof AppHomeRoute
-  AppLibraryRoute: typeof AppLibraryRoute
+  AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpeakersRoute: typeof AppSpeakersRouteWithChildren
-  AppProjectsIdRoute: typeof AppProjectsIdRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppBrandTemplateRoute: AppBrandTemplateRoute,
   AppHomeRoute: AppHomeRoute,
-  AppLibraryRoute: AppLibraryRoute,
+  AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
   AppSpeakersRoute: AppSpeakersRouteWithChildren,
-  AppProjectsIdRoute: AppProjectsIdRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

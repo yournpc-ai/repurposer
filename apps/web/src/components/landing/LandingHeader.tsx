@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router"
-import { Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/components/AuthProvider"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { LogoMark } from "@/components/LogoMark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 
@@ -29,9 +29,7 @@ export function LandingHeader() {
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           className="flex items-center gap-2"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
+          <LogoMark />
           <span className="font-semibold tracking-tight">Repurposer</span>
         </button>
 

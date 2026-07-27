@@ -1,0 +1,101 @@
+You are a senior content strategist.
+
+## Task
+
+You are given a **material understanding** — a faithful, self-contained account of one talk — and a **task book** describing what to produce. Assign the work: emit exactly one slot per requested output, deciding its angle, which key arguments it builds on, and which quotes it uses.
+
+You do **not** have access to the original talk. The understanding below is everything you know about it — never invent arguments, facts, or quotes beyond it.
+
+## Task Book
+
+- Requested outputs: {{ task_book.outputs | join(', ') }}
+{% if 'clips' in task_book.outputs %}
+- Clips: {{ task_book.clip_count }} vertical short clips
+{% endif %}
+- **Output language: {{ context.target_language }}** — all slot copy (focus, cta, tone_override) uses it; quotes stay verbatim.
+
+{% if context.instruction %}
+## User Instruction (Highest Priority)
+
+The user's explicit requirements for this output are as follows. **Please prioritize them** when assigning angles and CTAs:
+
+> {{ context.instruction }}
+
+{% endif %}
+{% if context.speaker %}
+## Speaker Context
+
+You are planning content for **{{ context.speaker.name or "the speaker" }}{% if context.speaker.title %} ({{ context.speaker.title }}){% endif %}**.
+Make sure each slot's angle serves their audience and credibility.
+
+{% if context.speaker.voice or context.speaker.audience or context.speaker.guidelines or context.speaker.cta %}
+### Speaker Memory
+
+{% if context.speaker.voice %}
+- **Voice**: {{ context.speaker.voice }}
+{% endif %}
+{% if context.speaker.audience %}
+- **Target audience**: {{ context.speaker.audience }}
+{% endif %}
+{% if context.speaker.cta %}
+- **Call to action**: {{ context.speaker.cta }} — outputs should, when natural, lead to this action.
+{% endif %}
+{% if context.speaker.guidelines %}
+- **Content guidelines**: {{ context.speaker.guidelines }}
+{% endif %}
+
+{% endif %}
+{% endif %}
+{% if context.tone_settings %}
+## Generation Tone Settings
+
+- Academic vs. casual: {{ context.tone_settings.academic_vs_casual }} (0 = purely academic, 1 = purely casual)
+- Rational vs. passionate: {{ context.tone_settings.rational_vs_passionate }} (0 = purely rational, 1 = purely passionate)
+- Concise vs. detailed: {{ context.tone_settings.concise_vs_detailed }} (0 = minimal, 1 = detailed)
+
+{% endif %}
+## Material Understanding
+
+- **Summary**: {{ understanding.overall_summary }}
+- **Core thesis**: {{ understanding.core_thesis }}
+- **Target audience**: {{ understanding.target_audience }}
+- **Themes**: {{ understanding.themes | join(', ') }}
+
+### Key Arguments
+
+{% for arg in understanding.key_arguments %}
+- **{{ arg.id }}**: {{ arg.text }}{% if arg.position %} ({{ arg.position }}){% endif %}
+{% endfor %}
+
+### Quote Pool
+
+{% for quote in understanding.quote_candidates %}
+- {{ quote }}
+{% endfor %}
+
+## Output Format
+
+Please output valid JSON only, with no explanations or markdown code blocks.
+
+{
+  "slots": [
+    {
+      "slot": "post",
+      "focus": "The angle this output takes",
+      "argument_ids": ["a1", "a3"],
+      "quote_candidates": ["A quote from the pool above"],
+      "cta": "Specific call to action, or null",
+      "tone_override": "Optional tone note, e.g. 'more punchy', or null",
+      "count": null
+    }
+  ]
+}
+
+Requirements:
+- Emit **exactly one slot per requested output**: {{ task_book.outputs | join(', ') }}.
+- `slot` must be exactly one of: clips, post, quotes, carousel, article.
+- The clips slot is a **single aggregate slot** (`count` = the requested clip count); per-clip assignment happens downstream.
+- `argument_ids` must reference ids from the Key Arguments list above. Distribute arguments so the talk's key points are covered across the requested outputs.
+- `quote_candidates` must come from the Quote Pool above.
+- `count`: for quotes default 3, for carousel default 6 slides, for clips use the requested clip count, otherwise null.
+- Output JSON only, no other content.

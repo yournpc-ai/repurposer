@@ -26,7 +26,7 @@ export function LandingHero() {
           {t("landing.heroTitle1")}
           <br />
           <span className="inline-block">
-            <span className="hero-iridescent">{t("landing.heroTitle2")}</span>
+            {t("landing.heroTitle2")}
             <span aria-hidden className="hero-underline-bar" />
           </span>
         </h1>

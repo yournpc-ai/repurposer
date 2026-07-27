@@ -7,7 +7,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.clients.minimax import MiniMaxClient
-from app.models.schemas import ContentPlan, DerivativeType, MediaInput
+from app.models.schemas import MediaInput, Storyboard
 
 logger = structlog.get_logger()
 
@@ -20,19 +20,11 @@ _jinja_env = Environment(
 _MAX_CHARS_PER_TEXT = 150_000
 
 
-def _find_derivative_plan(
-    content_plan: ContentPlan,
-    derivative_type: DerivativeType | str,
-) -> dict:
-    """Return the matching DerivativePlan as a dict, or an empty fallback."""
-    target = (
-        derivative_type.value
-        if isinstance(derivative_type, DerivativeType)
-        else derivative_type
-    )
-    for plan in content_plan.derivatives:
-        if plan.derivative_type == target:
-            return plan.model_dump()
+def _find_slot(storyboard: Storyboard, slot: str) -> dict:
+    """Return the matching StoryboardSlot as a dict, or an empty fallback."""
+    for s in storyboard.slots:
+        if s.slot == slot:
+            return s.model_dump()
     return {}
 
 

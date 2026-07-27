@@ -16,7 +16,16 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Repurposer" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      // Brand icons: SVG (dark-mode aware) for modern browsers, PNG fallbacks
+      // for Safari tabs, apple-touch for iOS. Source of truth: LogoMark.tsx.
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/icon-32.png" },
+      { rel: "icon", type: "image/png", sizes: "16x16", href: "/icon-16.png" },
+      { rel: "apple-touch-icon", href: "/icon-180.png" },
+      { rel: "manifest", href: "/manifest.json" },
+    ],
     scripts: [
       {
         children: `

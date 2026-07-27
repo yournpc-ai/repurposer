@@ -23,6 +23,26 @@
 }
 
 /*
+ * Edge glow — our own "border" simulation: an outward-fading halo hugging the
+ * element on ALL sides (incl. the top edge a downward drop shadow can't
+ * reach), layered over a soft ambient drop. For contexts where bg-card ==
+ * bg-background (light theme) and a card would otherwise blend into the page.
+ * This is the approved edge treatment — never ring-* / border (precedent:
+ * home composer card + entity blocks, 2026-07-27).
+ */
+@utility edge-glow {
+  box-shadow:
+    0 0 12px 1px rgb(0 0 0 / 0.06),
+    0 16px 40px -12px rgb(0 0 0 / 0.12);
+
+  @variant dark {
+    box-shadow:
+      0 0 12px 1px rgb(255 255 255 / 0.07),
+      0 16px 40px -12px rgb(0 0 0 / 0.5);
+  }
+}
+
+/*
  * Display typeface for the landing hero: SF Pro on Apple devices (what the
  * v3 wireframe was rendered in), falling back to Inter elsewhere. Scoped to
  * marketing surfaces — the product UI keeps Inter via --font-sans.
@@ -31,29 +51,9 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "PingFang SC", sans-serif;
 }
 
-/* Iridescent ("虹") foil for the landing hero's second title line — static
- * pearl-rainbow foil text with a soft violet glow. Motion lives only on the
- * underline bar below (hero-underline-bar), never on the text itself. */
-@utility hero-iridescent {
-  background-image: linear-gradient(
-    100deg,
-    oklch(0.78 0.13 10),
-    oklch(0.85 0.12 75),
-    oklch(0.87 0.11 150),
-    oklch(0.82 0.12 230),
-    oklch(0.75 0.13 300),
-    oklch(0.78 0.13 10)
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 14px oklch(0.8 0.12 300 / 0.35));
-}
-
-/* Iridescent underline bar — a standalone empty element placed below the foil
- * text (can't be a class on the same span: background-clip:text would clip
- * the bar into the glyphs). Same pastel loop, slower flow. */
+/* Iridescent underline bar — a standalone empty element placed below the
+ * hero's second title line. Pearl-rainbow loop, slow flow; the only moving
+ * accent on the landing hero. */
 @utility hero-underline-bar {
   display: block;
   width: 100%;

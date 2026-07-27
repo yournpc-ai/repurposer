@@ -1,8 +1,9 @@
 # Repurposer Agent Architecture
 
 > Status: implemented on main
-> Last updated: 2026-07-16
+> Last updated: 2026-07-27
 > **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
+> **2026-07-27 Phase 2 落地**：导演两步走已上线——`ContentPlan`/`DerivativePlan` 整体退役，导演拆为 `director_understand`（素材理解，asset-hash 复用）+ `director_plan`（分镜表，每 run 重排）。§4–§6 中关于 ContentPlan/DerivativePlan 的描述为 Phase 1 历史形态，现行契约以 §12.8 为准（实施简报：`docs/tasks/director-two-step.md`）。
 
 ## 1. Overview
 
@@ -358,5 +359,15 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 | 期 | 内容 | 行为变化 | 状态 |
 |---|---|---|---|
 | Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 | ✅ 已落地（2026-07-22；实施计划 `docs/tasks/runplan-phase1-implementation.md`） |
-| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 📋 |
+| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 🚧 主体已落地（2026-07-27：两步走 + DerivativePlan 退役 + 覆盖问责，简报 `docs/tasks/director-two-step.md`；persona_bootstrap 已随 Phase 1；**选段独立成节点顺延 Phase 2b**，另行简报） |
 | Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 | 📋 |
+
+### 12.8 Phase 2 落地实录（2026-07-27）
+
+- **两个内部产物类型**：`material_understanding`（素材级：`overall_summary` / `core_thesis` / `key_arguments(id+text+position)` / `themes` / `target_audience` / `quote_candidates`，素材语言、金句逐字）与 `storyboard`（请求级：`slots` + `coverage`，target_language）。`content_plan` 类型退役（旧行仍被 `INTERNAL_OUTPUT_TYPES` 过滤隐藏）。
+- **拓扑**：full = `preprocess → persona_bootstrap ∥ director_understand → director_plan → executors`（persona 与 understand 互不依赖，并行）；定向 derivative = `[understand → plan(target_type) → X_gen]`；模式② prelude 同为四节点。
+- **asset-hash 复用**：`source_ref.asset_hash` = 理解精确输入的内容 hash（trimmed texts + asset 身份）；命中即复用旧行（节点成本 0，summary="Reused understanding…"）；语言/任务书/speaker 变更不使失效。
+- **纯度纪律**：understand prompt 禁注 speaker/tone/instruction/target_language；plan prompt 禁读原稿（自足契约——只吃 understanding + 任务书 + speaker 上下文）。
+- **覆盖问责**：`storyboard.coverage` = 代码推导（论点→槽位 assignments / unused_arguments / collisions），落库 + 进 plan 节点量化摘要；是报告不是门禁（门禁归 Phase 3）。
+- **clips 槽位**：聚合一个槽（focus + argument_ids + count=任务书 clip_count），clip_agent 选段/编剧融合调用不动；逐 clip 论点→槽位归 Phase 2b 选段节点。
+- **executor 接口**：`generate(asset_texts, context, understanding, storyboard)`；缺槽位回退空槽（原 `_find_derivative_plan` 纪律，现 `_find_slot`）。

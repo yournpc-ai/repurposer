@@ -1,9 +1,13 @@
-"""Content Director: produces a unified ContentPlan from source texts and media.
+"""Content Director: two-step planning (RunPlan Phase 2).
 
-The director performs a single analysis pass over the project's source texts and
-media inputs, then emits a ContentPlan that all downstream agent executors
-share. This guarantees that clips, social posts, quote cards, carousels, and
-articles reinforce the same core thesis and brand strategy.
+Step 1 ``understand`` reads the source material (texts + media) and produces a
+material-scoped ``MaterialUnderstanding`` — pure of speaker/tone/instruction/
+language so it stays reusable across runs (asset-hash invalidation lives in
+the ``director_understand`` node runner).
+
+Step 2 ``plan`` reads ONLY the understanding plus the task book and produces a
+request-scoped ``Storyboard`` (self-sufficiency contract: it never sees the
+raw sources — the understanding must be enough).
 """
 
 from typing import Any
@@ -13,51 +17,40 @@ import structlog
 from app.skills.base import MiniMaxAgentBase
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import (
-    ContentPlan,
-    DerivativeType,
     GenerationContext,
+    MaterialUnderstanding,
     MediaInput,
+    Storyboard,
 )
 
 logger = structlog.get_logger()
 
 
 class ContentDirectorAgent(MiniMaxAgentBase):
-    """Agent that produces a unified content plan from source texts and media."""
+    """Two-step director: material understanding → storyboard."""
 
-    async def plan(
+    async def understand(
         self,
         asset_texts: list[str],
-        context: GenerationContext,
         asset_media: list[MediaInput] | None = None,
-        requested_derivatives: list[DerivativeType] | None = None,
-    ) -> ContentPlan:
-        """Generate a ContentPlan from source texts and generation context.
+    ) -> MaterialUnderstanding:
+        """Produce the material-scoped understanding from source texts/media.
 
-        Args:
-            asset_texts: Extracted text / transcripts from project assets.
-            context: Shared generation context (speaker, brand, tone, language).
-            asset_media: Optional images/videos/short audio snippets from assets.
-            requested_derivatives: Derivative types the user asked for.
-
-        Returns:
-            ContentPlan containing core thesis, themes, audience, and per-output
-            derivative plans.
+        Deliberately takes no GenerationContext: speaker, tone, instruction,
+        and target language would all poison reuse (they change per request;
+        the understanding changes only with the material).
         """
         if not asset_texts and not asset_media:
-            raise MiniMaxError("No source texts or media provided for content planning")
+            raise MiniMaxError("No source texts or media provided for understanding")
 
         asset_media = asset_media or []
-        requested_derivatives = requested_derivatives or []
         trimmed_texts = self._trim_texts(asset_texts)
         if not trimmed_texts and not asset_media:
             raise MiniMaxError("No usable text or media found")
 
-        user_prompt = self.jinja_env.get_template("content_director.j2").render(
+        user_prompt = self.jinja_env.get_template("director_understand.j2").render(
             asset_texts=trimmed_texts,
             asset_media=asset_media,
-            context=context.model_dump(),
-            requested_derivatives=[d.value for d in requested_derivatives],
         )
 
         messages: list[dict[str, Any]] = [
@@ -65,42 +58,94 @@ class ContentDirectorAgent(MiniMaxAgentBase):
                 "role": "system",
                 "content": (
                     "You are a senior content strategist. You analyze source "
-                    "texts and media and output a single coherent content plan as valid "
-                    "JSON, with no extra commentary."
+                    "material and output a faithful, self-contained material "
+                    "understanding as valid JSON, with no extra commentary."
                 ),
             },
             self._build_user_message(user_prompt, asset_media),
         ]
 
         logger.info(
-            "content_director_started",
+            "director_understand_started",
             text_count=len(trimmed_texts),
             media_count=len(asset_media),
-            derivative_count=len(requested_derivatives),
+        )
+
+        try:
+            understanding = await self._generate_with_fallback(
+                messages=messages,
+                user_prompt=user_prompt,
+                media_inputs=asset_media,
+                response_model=MaterialUnderstanding,
+                temperature=0.3,
+            )
+        except MiniMaxError:
+            raise
+        except Exception as e:
+            logger.error("director_understand_failed", error=str(e))
+            raise MiniMaxError(f"Director understand failed: {e}") from e
+
+        logger.info(
+            "director_understand_completed",
+            core_thesis=understanding.core_thesis,
+            argument_count=len(understanding.key_arguments),
+            quote_count=len(understanding.quote_candidates),
+        )
+        return understanding
+
+    async def plan(
+        self,
+        understanding: MaterialUnderstanding,
+        context: GenerationContext,
+        task_book: dict[str, Any],
+    ) -> Storyboard:
+        """Produce the request-scoped storyboard from the understanding.
+
+        Self-sufficiency contract: this call never sees the raw sources —
+        only the understanding, the shared context (speaker/tone/language/
+        instruction), and the task book (outputs × clip_count).
+        """
+        user_prompt = self.jinja_env.get_template("director_plan.j2").render(
+            understanding=understanding.model_dump(),
+            context=context.model_dump(),
+            task_book=task_book,
+        )
+
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a senior content strategist. You assign content "
+                    "work from a material understanding and output a storyboard "
+                    "as valid JSON, with no extra commentary."
+                ),
+            },
+            {"role": "user", "content": user_prompt},
+        ]
+
+        logger.info(
+            "director_plan_started",
+            outputs=task_book.get("outputs"),
             target_language=context.target_language,
         )
 
         try:
-            plan = await self._generate_with_fallback(
+            storyboard = await self.client.generate(
                 messages=messages,
-                user_prompt=user_prompt,
-                media_inputs=asset_media,
-                response_model=ContentPlan,
+                response_model=Storyboard,
                 temperature=0.4,
             )
         except MiniMaxError:
             raise
         except Exception as e:
-            logger.error("content_director_failed", error=str(e))
-            raise MiniMaxError(f"Content director failed: {e}") from e
+            logger.error("director_plan_failed", error=str(e))
+            raise MiniMaxError(f"Director plan failed: {e}") from e
 
         logger.info(
-            "content_director_completed",
-            core_thesis=plan.core_thesis,
-            theme_count=len(plan.themes),
-            derivative_count=len(plan.derivatives),
+            "director_plan_completed",
+            slot_count=len(storyboard.slots),
         )
-        return plan
+        return storyboard
 
 
 content_director_agent = ContentDirectorAgent()

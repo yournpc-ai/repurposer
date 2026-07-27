@@ -878,43 +878,94 @@ class GenerationContext(BaseModel):
     brand_music_id: str | None = None
 
 
-class DerivativePlan(BaseModel):
-    """Per-output guidance produced by the Content Director."""
+# ---------------------------------------------------------------------------
+# Director two-step (RunPlan Phase 2): the retired single-pass ContentPlan is
+# replaced by a material-scoped understanding (reusable via asset hash) and a
+# request-scoped storyboard (re-planned every run). docs/tasks/director-two-step.md
+# ---------------------------------------------------------------------------
+
+
+class KeyArgument(BaseModel):
+    """One key argument of the talk, with its transcript location."""
 
     model_config = ConfigDict(extra="forbid")
 
-    derivative_type: DerivativeType
-    focus: str = ""
-    cta: str | None = None
+    id: str = Field(description="Stable id within the understanding (a1, a2, …)")
+    text: str
+    # Free-text location marker — the director never sees word-level
+    # timestamps, so an honest text marker instead of fake seconds.
+    position: str = ""
+
+
+class MaterialUnderstanding(BaseModel):
+    """素材理解: director step 1 — what the material says (material-scoped).
+
+    Pure: built from source texts/media only — never speaker, tone,
+    instruction, or target language — so it stays reusable across runs,
+    languages, and task books (asset-hash invalidation).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    overall_summary: str = ""
+    core_thesis: str
+    key_arguments: list[KeyArgument] = Field(default_factory=list)
+    themes: list[str] = Field(default_factory=list)
+    target_audience: str = ""
+    # Verbatim sentences from the material, in the source language.
     quote_candidates: list[str] = Field(default_factory=list)
+
+
+class StoryboardSlot(BaseModel):
+    """槽位: one output's WHAT (angle/arguments/language/format). HOW is the executor's."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot: str = Field(description="clips | post | quotes | carousel | article")
+    focus: str = ""
+    # Ids referencing the understanding's key arguments; unknown ids are
+    # dropped by code before coverage is computed.
+    argument_ids: list[str] = Field(default_factory=list)
+    quote_candidates: list[str] = Field(default_factory=list)
+    cta: str | None = None
     tone_override: str | None = None
     count: int | None = None
 
 
-class ContentPlan(BaseModel):
-    """Top-level content plan shared across all agent executors."""
+class CoverageReport(BaseModel):
+    """覆盖报告: argument → slot accountability. Code-derived, never LLM output."""
 
     model_config = ConfigDict(extra="forbid")
 
-    core_thesis: str
-    themes: list[str] = Field(default_factory=list)
-    target_audience: str = ""
-    key_arguments: list[str] = Field(default_factory=list)
-    derivatives: list[DerivativePlan] = Field(default_factory=list)
-    quote_candidates: list[str] = Field(default_factory=list)
-    overall_summary: str = ""
+    assignments: dict[str, list[str]] = Field(default_factory=dict)
+    unused_arguments: list[str] = Field(default_factory=list)
+    collisions: list[str] = Field(default_factory=list)
+
+
+class Storyboard(BaseModel):
+    """分镜表: director step 2 — request-scoped assignments (re-planned every run).
+
+    The LLM proposes only ``slots``; ``coverage`` is computed by the runner
+    from valid argument_ids before persisting.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    slots: list[StoryboardSlot] = Field(default_factory=list)
+    coverage: CoverageReport = Field(default_factory=CoverageReport)
 
 
 # ---------------------------------------------------------------------------
 # RunPlan vocabulary (ADR-028/030): workflow_steps + unified outputs.
 # ---------------------------------------------------------------------------
 
-# Phase 1 node kinds (coarse-grained; docs/tasks/runplan-phase1-implementation.md §4).
-# Reserved for Phase 2/3 — NOT registered, NOT implemented here:
-# director_understand / selection / dub / music / verify.
+# Phase 1/2 node kinds (coarse-grained; docs/tasks/director-two-step.md).
+# Reserved for Phase 2b/3 — NOT registered, NOT implemented here:
+# selection / music / verify.
 StepKind = Literal[
     "preprocess",
     "persona_bootstrap",
+    "director_understand",
     "director_plan",
     "clips_pipeline",
     "post_gen",
@@ -931,7 +982,15 @@ StepKind = Literal[
 # Task 4): a step parks in waiting with spec.suspend_payload until resumed.
 StepStatus = Literal["pending", "running", "done", "failed", "skipped", "waiting"]
 
-OutputType = Literal["clip", "post", "quotes", "carousel", "article", "content_plan"]
+OutputType = Literal[
+    "clip",
+    "post",
+    "quotes",
+    "carousel",
+    "article",
+    "material_understanding",
+    "storyboard",
+]
 
 OutputProvenance = Literal["real", "generated"]
 
@@ -961,13 +1020,17 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "quotes": Quotes,
     "carousel": CarouselResponse,
     "article": Article,
-    "content_plan": ContentPlan,
+    "material_understanding": MaterialUnderstanding,
+    "storyboard": Storyboard,
 }
 
 # Internal types are node artifacts, not user-facing products. Every read path
 # must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
 # type filter (results/library/export, and future MCP/gallery surfaces).
-INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset({"content_plan"})
+# ``content_plan`` stays listed so pre-Phase-2 rows remain hidden.
+INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset(
+    {"content_plan", "material_understanding", "storyboard"}
+)
 
 
 def validate_output_payload(output_type: str, payload: dict) -> dict:
@@ -1161,22 +1224,22 @@ class GenerateRequest(BaseModel):
     clip_count: int = Field(default=5, ge=1, le=10)
     outputs: list[
         Literal["clips", "post", "quotes", "article", "carousel"]
-    ] = Field(
-        default_factory=lambda: [
-            "clips",
-            "post",
-            "quotes",
-            "article",
-        ],
+    ] | None = Field(
+        default=None,
         description=(
-            "Which asset types the user wants to generate. "
-            "Carousel is not selected by default."
+            "Requested asset types. None (the composer path) = derived from "
+            "the instruction by the pipeline's intent step "
+            "(ComposerIntentAgent); explicit lists skip intent (targeted "
+            "runs, retries, API callers)."
         ),
     )
     tone_settings: ToneSettings | None = None
-    target_language: str = Field(
-        default="en",
-        description="Target language code, e.g. en/zh/fr/de/es/it",
+    target_language: str | None = Field(
+        default=None,
+        description=(
+            "Target language code, e.g. en/zh/fr/de/es/it. None = derived "
+            "by the intent step (fallback en)."
+        ),
     )
     brand_template_id: UUID | None = Field(
         default=None,
@@ -1323,31 +1386,6 @@ class BrandTemplateResponse(BrandTemplateBase):
     id: UUID
     created_at: datetime
     updated_at: datetime | None = None
-
-
-class LibraryItemType(StrEnum):
-    """Asset types exposed by the library endpoint."""
-
-    UPLOAD = "upload"
-    CLIP = "clip"
-    POST = "post"
-    QUOTES = "quotes"
-    ARTICLE = "article"
-    CAROUSEL = "carousel"
-
-
-class LibraryItemResponse(BaseModel):
-    """A single item in the asset library."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    type: LibraryItemType
-    title: str
-    project_id: UUID
-    created_at: datetime
-    preview: str | None = None
-    download_url: str | None = None
 
 
 # ---------------------------------------------------------------------------

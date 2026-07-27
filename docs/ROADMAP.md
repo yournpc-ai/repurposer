@@ -28,7 +28,7 @@
 | 链接摄入子系统（Zoom / Drive / RSS；目标形态 = "接管源后持续自动"而非"手动贴链接"——OpusSearch/Auto import 实证，opusclip §8.2/§5.1） | 矩阵 §A；STRATEGY §1 判断 2 | P1 | 存储层（已有）；独立子系统：轮询、平台 API、失败重试 | — 纯工程 | ❌（FR-018 仅一行） |
 | persona 校准打分 | 矩阵 §C；STRATEGY §2.1/§2.2 | P1 | Speaker persona（已有）+ 发布数据回流（见 §5） | ✅ | ❌ |
 | RunPlan 持久化 + outputs 统一（`plan_nodes` 施工图 + `outputs` 统一产物表（ADR-030）+ 节点级血统——计划图作为一等对象） | ADR-028/030；STRATEGY §2.5；AGENT_ARCH §12 | **P1（地基）** | 无 | — 纯工程 | ✅ Phase 1（2026-07-22：建表 + orchestrator + 创建点零旁路 + 读路径切换；后续 = 下方导演两步走/质检节点行） |
-| 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | RunPlan 持久化 | ✅ | ❌（Director 单趟一坨 + project.content_plan 盲目复用 + 伪造 DerivativePlan） |
+| 导演两步走（看懂素材/分任务两次调用：素材理解自足契约 + asset hash 失效可复用；分任务=分镜表每 run 重排——覆盖问责：论点→槽位 + 未用/撞车报告；DerivativePlan 退役） | AGENT_ARCH §12；ADR-028 | P1 | RunPlan 持久化 | ✅ | ✅（2026-07-27 主体落地：`director_understand`（asset-hash 复用）+ `director_plan`（分镜表+覆盖问责）两节点，DerivativePlan 退役为槽位，简报 `tasks/director-two-step.md`；逐 clip 论点→槽位归 Phase 2b 选段节点） |
 | 结构化节拍图 + clip-spec motion 枚举（分镜入 plan：hook/body/payoff 时间戳；运镜入 spec 预设枚举——ADR-016 纪律不破，仍 CSS/libass 双端可表达） | STRATEGY §2.5；elevencreative | P2 | 覆盖问责 | ⚠️ | ❌（`visual_notes` 自由文本；crop 整条静态） |
 | YouTube 链接导入 | 矩阵 §A | 💡 待论证 | 反爬成本评估（Descript 已被逼退，属"别人抛弃的战场"） | — | 💡 |
 | 质检节点（原"Layer 4"新形态：单产物质检——分数落库/persona 保真/术语合规，不合格带反馈打回上游 ≤2 次；全片质检——跨产物撞车；verify = plan_nodes 一种 kind） | AGENT_ARCH §12；ADR-028 | P2 | RunPlan 持久化 | ⚠️ | ❌（现有 `agents/reviser.py` 只是单 clip 修订，勿混淆） |
@@ -54,9 +54,9 @@
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
 | chat 接入 LLM 意图解析（`agents/intent.py` 已存在未接线） | 代码现状快赢 | **P1 快赢** | 无 | ✅ | ✅（2026-07-26 随 chat-loop-v1/v2：ChatIntentAgent 二态判别联合，规则版退役） |
-| M3 tool-calling spike（验证原生 function calling；不可靠则走"结构化输出模拟工具调用"） | 2027 架构 | **P1（先于一切 agent 设计）** | 无 | ⚠️ 待 spike | ❌ |
+| M3 tool-calling spike（验证原生 function calling；不可靠则走"结构化输出模拟工具调用"） | 2027 架构 | **P1（先于一切 agent 设计）** | 无 | ⚠️ 待 spike | ✅（2026-07-27 关闭：spike 之问已被事实回答——chat v1/v2 全链走"结构化输出模拟"（`response_format=json_object` 单轮调用）并实证；原生 function calling 未采用，换 provider 时再重估） |
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
-| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——简报 `tasks/chat-loop-v2.md` §4） |
+| 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——导演两步走后 `director_plan` 已独立可寻址，"重排任务"具备重跑对象；简报 `tasks/chat-loop-v2.md` §4） |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ✅（CHAT_ARCH §3 三类目标 + 两家族分离：产物级→operations 表，plan 级→RunPlan 小拓扑） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 | 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |

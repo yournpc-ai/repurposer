@@ -9,7 +9,7 @@ Read these before touching a subsystem (check each doc's own status line — som
 - `docs/README.md` — **docs 索引与治理原则（单一事实源表）**，找文档先查这里。
 - `docs/ROADMAP.md` — 分模块需求排期的**唯一事实源**（8 模块表 + 依赖图 + P0 汇总）；排期/优先级只准引用它。
 - `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则；新表/新模块/新认领源必须在此登记。
-- `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`（Layer 4 未实现，图已标注）；the canonical map of `services/generation.py` orchestration and the `app/agents/` registry.
+- `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`（Layer 4 未实现，图已标注）；the canonical map of `app/pipeline/orchestrator.py` orchestration and the `app/skills/` registry.
 - `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table; supersedes ADR-019's filesystem-only mood library. Implemented (Layer-4 music verification still future).
 - `docs/VIDEO_EDITOR.md` + ADR-016 — clip-spec is the **sole render contract**; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec.
 - `docs/DECISIONS.md` — ADRs，只追加不修改；翻案写新 ADR（如 ADR-025 修订 ADR-004 的 provider 抽象决策）。
@@ -42,7 +42,7 @@ Correct:
 
 ### Icons
 - All icons must be imported from `lucide-react`.
-- Hand-written SVG icons are prohibited in the project (unless they are third-party logos with no lucide alternative).
+- Hand-written SVG icons are prohibited in the project, with two exceptions: third-party logos with no lucide alternative, and **the brand mark** — `src/components/LogoMark.tsx` (a solid "delta": one stream fanning out into many). Its geometry's source of truth is `LogoMark.tsx`; `public/favicon.svg` is the static baked-color copy and must be kept in sync. Logo lockups use `<LogoMark />` + the "Repurposer" wordmark — never rebuild the tile by hand.
 - Size conventions:
   - Top bar / card action icons: `h-5 w-5`
   - Inline / pill icons: `h-4 w-4`, smaller auxiliary icons: `h-3.5 w-3.5`
@@ -75,19 +75,26 @@ Correct:
   - `shadow-lg` / `shadow-xl` = outer ambient shadow that lifts the card off the background.
   - Separation between sections comes from spacing and `bg-card` vs `bg-background` contrast, never from strokes.
 - Real `border` is only used when a "positional dividing line" is truly needed; avoid drawing dividers between sections whenever possible.
+- **Edges via `edge-glow`, never `ring-*` / `border`**: in contexts where `bg-card` == `bg-background` (light theme) a downward shadow alone can't define the top edge. The approved treatment is the shared `edge-glow` utility in `styles.css` — an outward-fading halo on all sides layered over a soft ambient drop (dark theme swaps to a white halo automatically). Precedent: the home composer card + entity blocks (2026-07-27). The old `ring-1 ring-border` / `ring-foreground/*` look remains prohibited.
 - (Legacy note: older screens still carry `ring-1 ring-border` from the previous convention — remove it when touching those screens; do not copy it into new code.)
 
+### Floating Layers: frosted glass via `overlay-surface`
+- **All floating layers** (Popover / DropdownMenu / Dialog / Select / Sheet / Tour) use the shared `overlay-surface` utility defined in `styles.css` — translucent `--popover` (82%) + `backdrop-blur` + `saturate(1.5)`, with a solid fallback under `@supports not (backdrop-filter)`. Do **not** re-add `bg-popover` to overlay components; if a specific instance needs different opacity, override via its `className` (components merge it last, keeping it the open extension point).
+- Dialog / Sheet backdrops are `bg-black/50` + `backdrop-blur-sm` (not the default near-solid `bg-black/80`) so the frosted surface reads against a dimmed but visible page.
+- Tooltips and sonner toasts are intentionally excluded (small transient labels stay solid).
+
 ### Composer / Input Card
-- Structure: left side `Transcript` vertical block as the **upload entry point** (clicking triggers a hidden `<input type="file">`), right side `Textarea`.
-- Bottom action bar: parameter pills on the left (Speaker / Tone / Format…), credit chip + circular send button on the right, entire row aligned with `items-center`, controls at `h-9`.
+- Structure: **entity blocks ride the card's top edge** (negative `-mt-*` margin, `overflow-visible` on the Card — they are NOT inside the card): `Assets` block (Optional caption; opens `AssetsModal`) + `Speaker` block (current value: "Auto" default or speaker name; opens `SpeakerPickerModal`). The `Textarea` fills the remaining width to their right.
+- Both blocks are **summaries that open modals** — content management lives in the modal, never in the block: `AssetsModal` = upload zone + file grid + remove (video/audio/images/slides/transcripts); `SpeakerPickerModal` = Auto row + speaker cards with style tags / voice-clone status, single-select-and-close. **Modals are pickers/managers, not editors** — persona editing lives on `/speakers`.
+- Bottom row is **one continuous row inside the card** (no separate action-bar strip / muted background): Brand pill on the left, AI model pill (display-only, current provider) + circular send button on the right, controls at `h-9`. The composer has **no language / outputs / clip-count controls and runs no inference of its own** (see behavioral contract).
 - Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
 - Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
 
-#### Composer behavioral contract（自 MVP_SPEC §4 迁入，2026-07-20）
-- **Intent inference**: prompt input debounces **600ms** → `POST /api/v1/infer-intent` (LLM infers language / outputs / tone / specific_instruction); results surface via the pill's AI-icon tooltip, never a big confirmation panel. On failure, fall back to high-confidence defaults without blocking.
-- **Manual edits lock**: any parameter the user changes by hand is **locked** — later prompt edits must not overwrite it.
-- **Outputs are not pre-selected**: empty by default; submitting with none selected is blocked locally. Clips are only suggested when a media source (video/audio/image) exists; clips + no media file → local validation error (backend `/generate` mirrors with 422).
-- **Zero-asset quick start**: checking "Video clips" with no file attached pulls the demo talk video from TOS into the upload area.
+#### Composer behavioral contract（2026-07-27 修订：意图识别归管线，composer 瘦身）
+- **Prompt is required**: submitting with an empty prompt is blocked locally (toast), same posture as the auth gate. Files are optional (prompt-only → a `prompt.txt` transcript asset).
+- **Intent recognition lives in the pipeline, not the composer**: `POST /generate` with `outputs` / `target_language` omitted → the route runs `ComposerIntentAgent` on the instruction (the first asset's `file_url` supplies media context) → TaskSpec. The composer sends only `instruction` + `speaker_id` + `brand_template_id`. Explicit `outputs` (retries, targeted runs, API callers) skip intent.
+- **clips need media**: enforced server-side — the intent agent excludes clips for text-only input; `/generate` mirrors with 422 against the resolved outputs.
+- **Zero-asset quick start retired** (its trigger was the outputs pill); the demo remains reachable via the public demo project.
 - **Show grid ≠ tool grid**: the capability icon row below the composer is display-only — it must not switch outputs or touch composer params.
 
 ## Product Positioning
@@ -148,7 +155,7 @@ t("home.allProjects", { count: projects.length })
 
 ### Layout Split (landing vs. workbench)
 - `/` is the **public landing page** (no sidebar); the sidebar workbench lives under the `_app` **pathless layout route** (`src/routes/_app.tsx` holds `SidebarProvider`/`AppSidebar`/`SidebarInset`/`AppHeader`). `__root.tsx` keeps only providers + `Toaster`.
-- The workbench home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.library.tsx` → `/library`, `_app.projects.$id.tsx` → `/projects/$id`, …).
+- The workbench home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.projects.tsx` → `/projects`, `_app.projects.$id.tsx` → `/projects/$id`, …).
 - `AuthProvider` public paths: `/` + the demo project prefix. Everything under `_app` sits behind the login wall automatically.
 
 ### Dynamic Links
@@ -184,7 +191,7 @@ Do not use template strings:
 - **No right border**: add `group-data-[side=left]:border-r-0` on `Sidebar`, background blends with the main area (see UI design guidelines).
 - Structural layout:
   - **Header**: Logo + collapse button (same row). (The "Invite members" entry was removed on 2026-07-25 — do not re-add without an explicit product decision.)
-  - **Content**: Navigation grouped by Create / Post — Create contains Home, Brand template, Library; Post contains Projects, Speakers.
+  - **Content**: Flat navigation (no group titles): Home, My projects (`/projects`), Brand template, Speakers. The project grid lives on `/projects`, not on the home page (home is composer-only).
   - **Footer**: User avatar dropdown (`DropdownMenu`, `side="top"` popping upward, containing Profile / Settings / Logout) at the top, followed by account items (Subscription / Learning / Help).
 - Navigation / account icons uniformly `h-4.5 w-4.5`; in `sidebarMenuButtonVariants`, expanded `[&_svg]:size-4.5`, collapsed `group-data-[collapsible=icon]:[&_svg]:size-4.5`, keep them consistent.
 - **Collapsed state center alignment**: buttons placed in Header / Footer (e.g. the avatar) must be centered; add `group-data-[state=collapsed]:items-center` to the container, and the button itself uses `w-12` square in collapsed state; **do not** put these buttons inside `SidebarMenu` (the list padding will limit the width, causing a 4px offset in collapsed state).
@@ -231,7 +238,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 > See ADR-017 for details.
 
 - Time-consuming tasks (ASR / video rendering / generation) must all go into the **worker process** (`python -m app.worker`), **do not use FastAPI `BackgroundTasks`**.
-- When adding new heavy tasks: plug the processor into `PROCESSORS` in `app/services/asset_processing.py`, or add a claim source in the worker (e.g., `Clip.render_status`).
+- When adding new heavy tasks: plug the processor into `PROCESSORS` in `app/pipeline/asset_processing.py`, or add a claim source in the worker (e.g., `Clip.render_status`).
 - Use **Postgres `FOR UPDATE SKIP LOCKED`** as the queue, **do not introduce Redis / Celery** (swap when scaling horizontally, caller remains unchanged).
 
 ## Commit Messages
@@ -242,7 +249,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 ## Demo Seed
 
-`app/services/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips appear immediately. The demo requests **only the `clips` output with `clip_count=5`** (no derivatives), and treats clips as the sole completion signal. It does **not** render clips synchronously — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
+`app/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips appear immediately. The demo requests **only the `clips` output with `clip_count=5`** (no derivatives), and treats clips as the sole completion signal. It does **not** render clips synchronously — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
 
 To regenerate after swapping the demo video: upload the new object to storage, then run `python scripts/seed_demo.py --force` — it deletes the demo clips, workflow runs, **and the demo Asset row** (without the latter, ASR is skipped and generation would reuse the old transcript).
 

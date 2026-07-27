@@ -7,7 +7,7 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Based on the following source texts and content plan, write a social long-form post. Requirements:
+Based on the following source texts and material understanding, write a social long-form post. Requirements:
 - Start with a hook that captures the reader's attention
 - Clear body structure, bullet points may be used
 - Preserve the speaker's original intent and core insights
@@ -16,13 +16,13 @@ Based on the following source texts and content plan, write a social long-form p
 - 5–8 hashtags
 - **Output language: {{ context.target_language }}**
 
-## Content Plan
+## Material Understanding
 
-- **Core thesis**: {{ content_plan.core_thesis }}
-- **Themes**: {{ content_plan.themes | join(', ') }}
-- **Target audience**: {{ content_plan.target_audience }}
-- **Focus for this post**: {{ derivative_plan.focus or 'Reinforce the core thesis' }}
-- **CTA**: {{ derivative_plan.cta or (context.speaker.cta if context.speaker else None) or 'End with an open-ended question' }}
+- **Core thesis**: {{ understanding.core_thesis }}
+- **Themes**: {{ understanding.themes | join(', ') }}
+- **Target audience**: {{ understanding.target_audience }}
+- **Focus for this post**: {{ slot.focus or 'Reinforce the core thesis' }}
+- **CTA**: {{ slot.cta or (context.speaker.cta if context.speaker else None) or 'End with an open-ended question' }}
 
 ## Speaker Style Profile
 

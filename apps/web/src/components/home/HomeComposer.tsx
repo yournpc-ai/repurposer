@@ -4,7 +4,6 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  Loader2,
   ArrowUp,
   Plus,
   FileText,
@@ -13,25 +12,25 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Check,
-  Languages,
-  Wand2,
-  Users,
+  Sparkles,
   Video,
   Image as ImageIcon,
-  X,
 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
-import { DEMO_VIDEO_KEY, DEMO_VIDEO_NAME } from "@/lib/constants"
 import { useAuth } from "@/components/AuthProvider"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Stack, type StackCardData } from "@/components/Stack"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  SpeakerPickerModal,
+  type SpeakerPickerEntry,
+} from "@/components/home/SpeakerPickerModal"
+import { AssetsModal } from "@/components/home/AssetsModal"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,17 +40,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-interface Speaker {
-  id: string
-  name: string
-}
+type Speaker = SpeakerPickerEntry
 
 interface BrandTemplate {
   id: string
@@ -71,61 +61,16 @@ interface Project {
   status: string
 }
 
-interface InferredIntent {
-  action: "generate" | "answer"
-  answer: string | null
-  language: string
-  outputs: OutputKey[]
-  clip_count: number | null
-  specific_instruction: string | null
-  confidence: number
-}
-
-const OUTPUT_OPTIONS = [
-  "clips",
-  "post",
-  "quotes",
-  "article",
-  "carousel",
-] as const
-type OutputKey = (typeof OUTPUT_OPTIONS)[number]
-
-// Nothing is pre-selected: the user picks outputs explicitly (or the intent
-// inference suggests some from their prompt).
-const DEFAULT_SELECTED_OUTPUTS: OutputKey[] = []
-
-const LANGUAGES = [
-  { code: "en", labelKey: "languages.en" },
-  { code: "fr", labelKey: "languages.fr" },
-  { code: "de", labelKey: "languages.de" },
-  { code: "es", labelKey: "languages.es" },
-  { code: "it", labelKey: "languages.it" },
-  { code: "zh", labelKey: "languages.zh" },
-] as const
-
-const DEFAULT_INTENT: InferredIntent = {
-  action: "generate",
-  answer: null,
-  language: "en",
-  outputs: DEFAULT_SELECTED_OUTPUTS,
-  clip_count: null,
-  specific_instruction: null,
-  confidence: 1,
-}
-
-const DEFAULT_CLIP_COUNT = 5
-
 interface HomeComposerProps {
   speakers: Speaker[]
   brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
-  onProjectCreated?: (projectId: string) => void
 }
 
 const AUTO_GENERATE = "__auto_generate__"
 
-/** Dropdown/popover header: a short title plus a one-line explanation of what
- * this dimension controls, so first-time users understand the pill's purpose. */
+/** Dropdown header: a short title plus a one-line explanation of what this
+ * dimension controls, so first-time users understand the pill's purpose. */
 function PillHeaderText({ title, desc }: { title: string; desc: string }) {
   return (
     <>
@@ -141,7 +86,6 @@ export function HomeComposer({
   speakers,
   brandTemplates,
   onGenerateStart,
-  onProjectCreated,
 }: HomeComposerProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -149,101 +93,18 @@ export function HomeComposer({
 
   const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(AUTO_GENERATE)
-  const [outputs, setOutputs] = useState<OutputKey[]>(DEFAULT_SELECTED_OUTPUTS)
-  const [clipCount, setClipCount] = useState<number>(DEFAULT_CLIP_COUNT)
   const [brandTemplateId, setBrandTemplateId] = useState("")
-  const [language, setLanguage] = useState(DEFAULT_INTENT.language)
   const [files, setFiles] = useState<File[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
-
-  const [inferred, setInferred] = useState<InferredIntent>(DEFAULT_INTENT)
-  const [isInferring, setIsInferring] = useState(false)
-  // Track params the user has manually edited so inference doesn't overwrite
-  // them. A ref, not state: pill clicks must never retrigger the inference
-  // effect below (it fires an LLM call and re-renders mid-dropdown-animation).
-  const lockedParamsRef = useRef<Set<string>>(new Set())
+  const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false)
+  const [assetsOpen, setAssetsOpen] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  // Last prompt text we auto-filled from pill selection, so a later pill
-  // toggle can keep regenerating it without clobbering hand-typed text.
-  const autofilledPromptRef = useRef("")
-  // Live mirror of `prompt` for async callbacks: an in-flight inference
-  // response must decide against what the box contains NOW, not the stale
-  // value captured when the request started.
-  const promptRef = useRef(prompt)
-  useEffect(() => {
-    promptRef.current = prompt
-  }, [prompt])
 
-  // Sync defaults once data is loaded.
+  // Sync brand default once templates load.
   useEffect(() => {
     setBrandTemplateId((prev) => prev || (brandTemplates[0]?.id ?? ""))
   }, [brandTemplates])
-
-  // Debounced intent inference.
-  useEffect(() => {
-    const text = prompt.trim()
-    // Skip when empty, or when the text is our own autofill — pill toggles
-    // already applied their choices; re-inferring would only churn renders.
-    if (!text || prompt === autofilledPromptRef.current) {
-      if (!text) setInferred(DEFAULT_INTENT)
-      return
-    }
-
-    const controller = new AbortController()
-    const timer = setTimeout(async () => {
-      setIsInferring(true)
-      try {
-        const res = await apiFetch("/api/v1/infer-intent", {
-          method: "POST",
-          body: { prompt, filename: files[0]?.name || undefined },
-          signal: controller.signal,
-          // Silent: inference is a best-effort autofill, never worth a toast.
-          toast: false,
-        })
-        if (!res.ok) throw new Error("Intent inference failed")
-        const data = (await res.json()) as { intent: InferredIntent }
-        setInferred(data.intent)
-
-        // Apply inferred values only to params the user hasn't locked.
-        const locked = lockedParamsRef.current
-        const nextLanguage = locked.has("language") ? language : data.intent.language
-        const nextOutputs = locked.has("outputs") ? outputs : data.intent.outputs
-        const nextClipCount = locked.has("clip_count")
-          ? clipCount
-          : data.intent.clip_count ?? DEFAULT_CLIP_COUNT
-
-        setLanguage(nextLanguage)
-        setOutputs(nextOutputs)
-        setClipCount(nextClipCount)
-
-        // Refresh autofill only if the box is STILL empty or auto-generated —
-        // checked against the live prompt, so typing that happened while this
-        // request was in flight is never clobbered.
-        const live = promptRef.current
-        const canAutofill = live.trim() === "" || live === autofilledPromptRef.current
-        if (canAutofill) {
-          const filled = buildPrefillPrompt(nextOutputs, nextLanguage, nextClipCount)
-          autofilledPromptRef.current = filled
-          setPrompt(filled)
-        }
-      } catch (e) {
-        // Silent fallback: leave current values (aborted requests land here too).
-      } finally {
-        setIsInferring(false)
-      }
-    }, 600)
-
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-    }
-  }, [prompt, files])
-
-  const lockParam = (key: string) => {
-    lockedParamsRef.current = new Set(lockedParamsRef.current).add(key)
-  }
 
   const inferAssetType = (file: File): string => {
     if (file.type.startsWith("video/")) return "video"
@@ -252,38 +113,42 @@ export function HomeComposer({
     return "transcript"
   }
 
+  const fileIconFor = (file: File) => {
+    if (file.type.startsWith("video/")) return Video
+    if (file.type.startsWith("audio/")) return Mic2
+    if (file.type.startsWith("image/")) return ImageIcon
+    return FileText
+  }
+
+  const addFiles = (picked: File[]) => {
+    if (picked.length === 0) return
+    setFiles((prev) => {
+      const existing = new Set(prev.map((f) => `${f.name}:${f.size}`))
+      const additions = picked.filter((f) => !existing.has(`${f.name}:${f.size}`))
+      return [...prev, ...additions]
+    })
+  }
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleGenerate = async () => {
     await requireAuth(async () => {
-      const hasContent = files.length > 0 || prompt.trim()
-      if (!hasContent) {
-        toast.error(t("home.noContentError"))
-        return
-      }
-      if (outputs.length === 0) {
-        toast.error(t("home.noOutputError"))
-        return
-      }
-      // Clips need a renderable media source; a text-only prompt/transcript
-      // can't produce a video. Block early with a clear message.
-      if (
-        outputs.includes("clips") &&
-        !files.some((f) => ["video", "audio", "image"].includes(inferAssetType(f)))
-      ) {
-        toast.error(t("home.clipsNeedMedia"))
+      // Prompt is required — the pipeline's intent step derives the task
+      // book (outputs / language / clip count) from it server-side.
+      if (!prompt.trim()) {
+        toast.error(t("home.noPromptError"))
         return
       }
       setIsGenerating(true)
       onGenerateStart?.()
       try {
-        const instruction =
-          inferred.specific_instruction?.trim() || (prompt.trim() ? prompt.trim() : undefined)
-
         const projectRes = await apiFetch("/api/v1/projects", {
           method: "POST",
           body: {
             title: files[0]?.name || prompt.slice(0, 60) || t("common.untitled"),
             event_name: "",
-            language,
             speaker_id:
               speakerId === AUTO_GENERATE ? undefined : speakerId || undefined,
           },
@@ -330,16 +195,13 @@ export function HomeComposer({
           })
         )
 
-        // Asset processing (ASR / extraction) continues in the background;
-        // the results page loading state covers that waiting window.
+        // The task book (outputs / language / clip_count) is derived by the
+        // pipeline's intent step — the composer sends only the instruction.
         const generateRes = await apiFetch(`/api/v1/projects/${project.id}/generate`, {
           method: "POST",
           body: {
-            clip_count: clipCount,
-            outputs,
-            target_language: language,
             brand_template_id: brandTemplateId || undefined,
-            instruction,
+            instruction: prompt.trim(),
           },
         })
         if (!generateRes.ok) {
@@ -347,7 +209,6 @@ export function HomeComposer({
           throw new Error(detail?.detail || "Generation failed")
         }
 
-        onProjectCreated?.(project.id)
         navigate({ to: "/projects/$id", params: { id: project.id } })
       } catch {
         // apiFetch already toasted the server's reason; just reset the UI.
@@ -356,197 +217,124 @@ export function HomeComposer({
     })
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? [])
-    if (picked.length > 0) {
-      setFiles((prev) => {
-        const existing = new Set(prev.map((f) => `${f.name}:${f.size}`))
-        const additions = picked.filter((f) => !existing.has(`${f.name}:${f.size}`))
-        return [...prev, ...additions]
-      })
+  // First-file preview for the Assets block: object URL for image/video,
+  // type icon otherwise. URLs are revoked when the preview changes/unmounts.
+  const firstFile = files[0]
+  const firstPreviewUrl = useMemo(() => {
+    if (!firstFile) return null
+    if (firstFile.type.startsWith("image/") || firstFile.type.startsWith("video/")) {
+      return URL.createObjectURL(firstFile)
     }
-    // Reset so picking the same file again after removal still fires onChange.
-    e.target.value = ""
-  }
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const fileIconFor = (file: File) => {
-    if (file.type.startsWith("video/")) return Video
-    if (file.type.startsWith("audio/")) return Mic2
-    if (file.type.startsWith("image/")) return ImageIcon
-    return FileText
-  }
-
-  // Template-splice a prompt sentence from the selected output pills, e.g.
-  // "generate 3 short clips, write a social long-form post and create
-  // shareable quote cards from this talk". Language-aware via i18n.
-  const buildPrefillPrompt = (
-    selected: OutputKey[],
-    lang: string,
-    count: number = DEFAULT_CLIP_COUNT
-  ): string => {
-    if (selected.length === 0) return ""
-    const fragments = selected.map((key) =>
-      t(`composer.promptFragments.${key}`, key === "clips" ? { count } : undefined)
-    )
-    const last = fragments.pop() as string
-    const base =
-      fragments.length > 0
-        ? `${fragments.join(", ")} ${t("composer.promptJoinAnd")} ${last} ${t("composer.promptFromTalk")}`
-        : `${last} ${t("composer.promptFromTalk")}`
-    if (lang === "en" || lang === "auto") return base
-    const langOption = LANGUAGES.find((l) => l.code === lang)
-    const langName = langOption ? t(langOption.labelKey) : lang
-    return `${base} ${t("composer.promptInLanguage", { language: langName })}`
-  }
-
-  // Quick start: fetch the seeded demo talk video as a File so first-time
-  // users (and demos to investors) can run the clips flow with zero uploads.
-  // demo/* keys are served anonymously by the files endpoint.
-  const addDemoVideo = async () => {
-    try {
-      const res = await apiFetch(`/api/v1/files/${DEMO_VIDEO_KEY}?proxy=1`, {
-        toast: false,
-      })
-      if (!res.ok) throw new Error("demo video fetch failed")
-      const blob = await res.blob()
-      const file = new File([blob], DEMO_VIDEO_NAME, {
-        type: blob.type || "video/mp4",
-      })
-      setFiles((prev) =>
-        prev.some((f) => f.name === DEMO_VIDEO_NAME) ? prev : [...prev, file]
-      )
-    } catch {
-      toast.error(t("home.demoVideoLoadFailed"))
+    return null
+  }, [firstFile])
+  useEffect(() => {
+    return () => {
+      if (firstPreviewUrl) URL.revokeObjectURL(firstPreviewUrl)
     }
-  }
+  }, [firstPreviewUrl])
 
-  const toggleOutput = (key: OutputKey) => {
-    lockParam("outputs")
-    const checked = !outputs.includes(key)
-    const next = checked ? [...outputs, key] : outputs.filter((o) => o !== key)
-    setOutputs(next)
-
-    // Clips need a media source; when the user asks for clips with no files
-    // attached, drop the demo talk video into the upload stack for them.
-    if (key === "clips" && checked && files.length === 0) {
-      void addDemoVideo()
-    }
-
-    // Only autofill an empty box, or one we generated ourselves earlier —
-    // never overwrite text the user actually typed.
-    const canAutofill = prompt.trim() === "" || prompt === autofilledPromptRef.current
-    if (canAutofill) {
-      const filled = buildPrefillPrompt(next, language, clipCount)
-      autofilledPromptRef.current = filled
-      setPrompt(filled)
-    }
-  }
-
-  const selectedSpeakerName =
+  const selectedSpeaker =
     speakerId === AUTO_GENERATE
-      ? t("composer.autoGenerate")
-      : speakers.find((s) => s.id === speakerId)?.name ?? t("composer.speaker")
-
-  const hasIntent = prompt.trim().length > 0
-
-  const fileCards: StackCardData[] = useMemo(
-    () =>
-      files.map((file, index) => {
-        const Icon = fileIconFor(file)
-        return {
-          id: `${file.name}:${file.size}`,
-          content: (
-            <div className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-lg bg-card p-2 text-center ring-1 ring-border shadow-md">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeFile(index)
-                }}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
-              <Icon className="h-5 w-5 text-muted-foreground" />
-              <span className="max-w-full break-all px-1 text-[10px] leading-tight text-muted-foreground">
-                {file.name}
-              </span>
-            </div>
-          ),
-        }
-      }),
-    [files]
-  )
+      ? undefined
+      : speakers.find((s) => s.id === speakerId)
 
   return (
-    <Card className="overflow-hidden py-0 ring-1 ring-border shadow-xl">
+    <>
+    <Card className="overflow-visible py-0 ring-0 edge-glow">
       <CardContent className="p-4 text-left">
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          accept=".txt,.md,.pdf,.doc,.docx,.srt,.vtt,.mp3,.mp4,.wav,.m4a"
-          onChange={handleFileChange}
-        />
-
-        {/* Input area */}
+        {/* Entity blocks (Assets = source materials, Speaker = whose voice)
+            ride the card's top edge via negative margin; the textarea fills
+            the remaining width to their right. Both blocks open modals. */}
         <div className="flex items-start gap-3">
-          {files.length === 0 ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="relative flex h-28 w-20 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/50 p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  />
-                }
-              >
-                <Plus className="h-6 w-6" />
-                <span className="text-center text-[11px] leading-tight">{t("home.uploadSource")}</span>
-              </TooltipTrigger>
-              <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <div className="relative h-28 w-20 flex-shrink-0">
-              <Stack
-                cards={fileCards}
-                className="h-full w-full"
-                randomRotation
-                sendToBackOnClick
-                sensitivity={60}
-              />
-              {files.length > 1 && (
-                <Badge
-                  variant="secondary"
-                  className="pointer-events-none absolute -left-2 -top-2 z-10 px-1.5 text-[10px]"
-                >
-                  {files.length}
-                </Badge>
+          <div className="-mt-12 flex flex-shrink-0 items-start gap-2">
+            {/* Assets block */}
+            <button
+              type="button"
+              onClick={() => setAssetsOpen(true)}
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-1.5 text-left edge-glow transition-colors hover:bg-accent"
+            >
+              <span className="flex items-center justify-between px-0.5 pb-1">
+                <span className="text-[10px] leading-none text-muted-foreground">
+                  {t("composer.assets")}
+                </span>
+                {files.length > 0 && (
+                  <Badge variant="secondary" className="rounded-md px-1 text-[10px]">
+                    {files.length}
+                  </Badge>
+                )}
+              </span>
+              {files.length === 0 ? (
+                <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground">
+                  <Plus className="h-4 w-4" />
+                  <span className="text-[10px] leading-none">{t("composer.optional")}</span>
+                </span>
+              ) : firstPreviewUrl && firstFile.type.startsWith("image/") ? (
+                <img
+                  src={firstPreviewUrl}
+                  alt={firstFile.name}
+                  className="min-h-0 w-full flex-1 rounded-md object-cover"
+                />
+              ) : firstPreviewUrl ? (
+                <video
+                  src={firstPreviewUrl}
+                  muted
+                  preload="metadata"
+                  className="min-h-0 w-full flex-1 rounded-md object-cover"
+                />
+              ) : (
+                <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-muted-foreground">
+                  {(() => {
+                    const Icon = fileIconFor(firstFile)
+                    return <Icon className="h-5 w-5" />
+                  })()}
+                  <span className="max-w-full truncate px-0.5 text-[10px] leading-tight">
+                    {firstFile.name}
+                  </span>
+                </span>
               )}
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute -bottom-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
-                    />
-                  }
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </TooltipTrigger>
-                <TooltipContent>{t("home.uploadSourceTooltip")}</TooltipContent>
-              </Tooltip>
-            </div>
-          )}
+            </button>
 
-          <div className="flex h-28 flex-1 flex-col">
+            {/* Speaker block */}
+            <button
+              type="button"
+              onClick={() => setSpeakerPickerOpen(true)}
+              className="flex h-24 w-24 flex-col rounded-lg bg-card p-1.5 text-left edge-glow transition-colors hover:bg-accent"
+            >
+              <span className="px-0.5 text-[10px] leading-none text-muted-foreground">
+                {t("composer.speaker")}
+              </span>
+              <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5">
+                {selectedSpeaker ? (
+                  <>
+                    <Avatar size="sm">
+                      {selectedSpeaker.avatar_url ? (
+                        <AvatarImage
+                          src={selectedSpeaker.avatar_url}
+                          alt={selectedSpeaker.name}
+                        />
+                      ) : null}
+                      <AvatarFallback>{selectedSpeaker.name.slice(0, 1)}</AvatarFallback>
+                    </Avatar>
+                    <span className="flex w-full items-center justify-center gap-0.5 px-0.5">
+                      <span className="truncate text-xs">{selectedSpeaker.name}</span>
+                      {selectedSpeaker.voice ? (
+                        <Mic2 className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                      ) : null}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <span className="max-w-full truncate px-0.5 text-xs">
+                      {t("composer.autoGenerate")}
+                    </span>
+                  </>
+                )}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex h-20 flex-1 flex-col">
             <Textarea
               ref={textareaRef}
               value={prompt}
@@ -560,87 +348,12 @@ export function HomeComposer({
               placeholder={t("home.pastePlaceholder")}
               className="min-h-0 flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
-            <div className="flex items-center justify-end px-2 pb-2">
-              <Button
-                className="h-9 w-9 rounded-full"
-                size="icon"
-                disabled={isGenerating || isInferring}
-                onClick={handleGenerate}
-              >
-                {isGenerating ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <ArrowUp className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
           </div>
         </div>
 
-        {/* Editable intent chips */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
-            {/* Speaker */}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
-                  >
-                    <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="max-w-[120px] truncate">
-                      {selectedSpeakerName}
-                    </span>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="px-2 py-1.5">
-                    <PillHeaderText
-                      title={t("composer.speakerLabel")}
-                      desc={t("composer.speakerDesc")}
-                    />
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      lockParam("speaker")
-                      setSpeakerId(AUTO_GENERATE)
-                    }}
-                  >
-                    <Wand2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">{t("composer.autoGenerate")}</span>
-                    {speakerId === AUTO_GENERATE && (
-                      <Check className="ml-2 h-4 w-4" />
-                    )}
-                  </DropdownMenuItem>
-                  {speakers.length > 0 && <DropdownMenuSeparator />}
-                  {speakers.map((s) => (
-                    <DropdownMenuItem
-                      key={s.id}
-                      onClick={() => {
-                        lockParam("speaker")
-                        setSpeakerId(s.id)
-                      }}
-                    >
-                      <Mic2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate">{s.name}</span>
-                      {s.id === speakerId && <Check className="ml-2 h-4 w-4" />}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                <DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem render={<Link to="/speakers" />}>
-                    <Users className="mr-2 h-4 w-4" />
-                    {t("composer.manageSpeakers")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
+        {/* One continuous bottom row: brand on the left, provider + send on
+            the right — no separate action-bar strip. */}
+        <div className="mt-2 flex items-center gap-2">
             {/* Brand template */}
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -648,7 +361,7 @@ export function HomeComposer({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
+                    className="h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
                     <Palette className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="max-w-[120px] truncate">
@@ -670,7 +383,7 @@ export function HomeComposer({
                   {brandTemplates.map((b) => (
                     <DropdownMenuItem
                       key={b.id}
-                      onClick={() => { lockParam("brand"); setBrandTemplateId(b.id) }}
+                      onClick={() => setBrandTemplateId(b.id)}
                     >
                       <Palette className="mr-2 h-4 w-4 text-muted-foreground" />
                       <span className="flex-1 truncate">{b.name}</span>
@@ -688,17 +401,17 @@ export function HomeComposer({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Language */}
+            {/* AI model — display-only for now (single provider) */}
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
+                    className="ml-auto h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{t(`languages.${language as typeof LANGUAGES[number]["code"]}`)}</span>
+                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{t("composer.aiModel")}</span>
                     <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
@@ -707,114 +420,50 @@ export function HomeComposer({
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="px-2 py-1.5">
                     <PillHeaderText
-                      title={t("composer.languageLabel")}
-                      desc={t("composer.languageDesc")}
+                      title={t("composer.aiModel")}
+                      desc={t("composer.aiModelDesc")}
                     />
                   </DropdownMenuLabel>
-                  {LANGUAGES.map((lang) => (
-                    <DropdownMenuItem
-                      key={lang.code}
-                      onClick={() => { lockParam("language"); setLanguage(lang.code) }}
-                    >
-                      <span className="flex-1">{t(lang.labelKey)}</span>
-                      {lang.code === language && <Check className="ml-2 h-4 w-4" />}
-                    </DropdownMenuItem>
-                  ))}
+                  <DropdownMenuItem>
+                    <Sparkles className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1">MiniMax M3</span>
+                    <Check className="ml-2 h-4 w-4" />
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Outputs */}
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md px-2 text-xs font-normal"
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{t("composer.outputs")}</span>
-                    {outputs.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 px-1.5 text-[10px]">
-                        {outputs.length}
-                      </Badge>
-                    )}
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                }
-              />
-              <PopoverContent align="start" className="w-64 gap-1 p-1">
-                <div className="px-2 py-1.5">
-                  <PillHeaderText
-                    title={t("composer.outputsLabel")}
-                    desc={t("composer.outputsDesc")}
-                  />
-                </div>
-                {OUTPUT_OPTIONS.map((key) => {
-                  const active = outputs.includes(key)
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleOutput(key)}
-                      className={cn(
-                        "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
-                        active ? "bg-accent" : "hover:bg-accent/50"
-                      )}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs leading-tight">
-                          {t(`composer.outputOptions.${key}`)}
-                        </span>
-                        <span className="block text-[11px] leading-tight text-muted-foreground">
-                          {t(`composer.outputDesc.${key}`)}
-                        </span>
-                      </span>
-                      <span
-                        className={cn(
-                          "mt-px flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                          active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-muted-foreground/40"
-                        )}
-                      >
-                        {active && <Check className="h-2.5 w-2.5" />}
-                      </span>
-                    </button>
-                  )
-                })}
-              </PopoverContent>
-            </Popover>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    className={cn(
-                      "ml-auto flex h-8 w-8 items-center justify-center rounded-md text-primary transition-colors hover:bg-accent hover:text-foreground",
-                      isInferring && "animate-pulse"
-                    )}
-                  >
-                    {isInferring ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="h-4 w-4" />
-                    )}
-                  </button>
-                }
-              />
-              <TooltipContent side="top">
-                {isInferring
-                  ? t("composer.detectingIntent")
-                  : hasIntent
-                    ? t("composer.aiDetected")
-                    : t("composer.aiWillDetect")}
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              className="h-9 w-9 rounded-full"
+              size="icon"
+              disabled={isGenerating}
+              onClick={handleGenerate}
+            >
+              {isGenerating ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </Button>
           </div>
       </CardContent>
     </Card>
+
+    <SpeakerPickerModal
+      speakers={speakers}
+      value={speakerId}
+      autoValue={AUTO_GENERATE}
+      onSelect={setSpeakerId}
+      open={speakerPickerOpen}
+      onOpenChange={setSpeakerPickerOpen}
+    />
+    <AssetsModal
+      files={files}
+      onAdd={addFiles}
+      onRemove={removeFile}
+      open={assetsOpen}
+      onOpenChange={setAssetsOpen}
+    />
+    </>
   )
 }
