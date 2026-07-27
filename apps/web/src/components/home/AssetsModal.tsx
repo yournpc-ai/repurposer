@@ -79,7 +79,7 @@ export function AssetsModal({ files, onAdd, onRemove, open, onOpenChange }: Asse
         </button>
 
         {files.length > 0 && (
-          <div className="grid max-h-[40vh] grid-cols-3 gap-2 overflow-y-auto">
+          <div className="grid max-h-[50vh] grid-cols-3 gap-2 overflow-y-auto p-1.5">
             {files.map((file, index) => {
               const Icon = fileIconFor(file)
               return (
