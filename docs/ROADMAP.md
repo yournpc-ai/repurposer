@@ -13,9 +13,31 @@
 
 ---
 
+## 0. 模块速览（先读这张）
+
+一句话产品：**把一场演讲（视频/音频/文字稿）自动变成一整套可发布的知识内容——竖屏 clips、LinkedIn 长文、金句卡、轮播、多语言版本——并能直接发到社媒。** 九个模块各管一段：
+
+| # | 模块 | 是干什么的 | 关键技术 | 现状一句话 |
+|---|---|---|---|---|
+| 1 | Pipeline 生成管线 | 上传素材后全自动产出全套内容：ASR 转写 → 导演规划 → 选段打分 → 写稿 → 渲染 MP4 | MiniMax M3（LLM）、faster-whisper（词级 ASR）、Remotion（服务端渲染）、Postgres SKIP LOCKED 队列 + worker | 核心全绿，进入维持期 |
+| 2 | Operation Model 操作日志层 | 把每次编辑记成一条可检查、可撤销的操作（而不是直接改数据），chat / editor / 未来 MCP 共用 | `operations` 表 + registry 纯函数 + 快照式 undo/redo | 地基已落地 |
+| 3 | Agent Interface 对话层 | 用自然语言驱动一切：composer 第一句话生成计划，chat 续聊改产物、重跑任务 | ChatIntentAgent（结构化输出模拟 tool-calling）、SSE 进度推送、GenerationOverlay 全屏对话 UI | 后端 + 前端已通；plan 级节点重跑待做 |
+| 4 | Editor GUI 网页剪辑器 | 删文字稿 = 剪视频的非破坏编辑；刻意不做专业剪辑（多轨/B-roll 留给剪映/Premiere） | transcript 编辑 + 单轨 trim + Remotion Player 预览 | 核心已落地；undo 按钮待接 |
+| 5 | Distribution 分发 | 产物一键直发社媒，消灭"下载再上传"这最后一座手动桥 | LinkedIn / TikTok OAuth + 发布 API + worker 发布认领 | 双平台代码完成，等平台应用审核联调 |
+| 6 | Memory 记忆层 | 让 AI 写得像"你"：Speaker 风格画像（Voice DNA）+ Brand 视觉皮肤 + 术语表 | persona 注入生成全链、声音克隆 | persona / Brand 已落地；术语表未开始 |
+| 7 | 合规底座 | EU AI Act / GDPR 入场券：AI 内容机器可读标识、披露、数据驻留 | C2PA 打标（待选型）、clip-spec 自动分类器 | 未开始（P1，上线前必须回补） |
+| 8 | 平台与计费 | 成本透明化：每次生成花多少、失败不扣费、套餐定价 | 节点级成本计量（已落 `workflow_steps.cost`） | 计量已落地；预估 / 套餐未开始 |
+| 9 | Gallery / 落地页 | 获客面：公开落地页 + 配方卡"照这个做一个" | 纯前端 | 落地页 ✅；配方卡 ❌ |
+
+各模块详表如下。
+
+---
+
 ## 1. Pipeline（生成管线）
 
 > 定位：必需但是成本中心，不追加差异化投入；现有 4-layer 编排已超前，保持即可。
+>
+> 这一层是"演讲 → 全套内容"的生成后端。一次生成 = 一张任务图（workflow_steps）：预处理（ASR/抽取）→ 导演看懂素材 → 导演分任务 → 各执行节点（选段/写稿/渲染）→ 汇总。每步可寻址、可计量、可重跑——这是上层一切（chat 重跑、成本预估、质检）的地基。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -38,6 +60,8 @@
 > 2027 架构的核心对冲：editor GUI、chat、MCP 都是操作的三个前端。即使手动编辑占比萎缩，投资全部沉淀在本层。
 >
 > **生成侧半身**：RunPlan 持久化（§1，ADR-028）与本层同一条原则——**步骤皆可寻址**——分别落在生成侧与编辑侧。
+>
+> 人话：用户（或 AI）每做一次修改——改标题、改短、换音乐、翻译字幕——不直接改产物数据，而是往 `operations` 表追加一条"做了什么"的记录。好处：每一步可检查、可撤销（undo/redo/恢复版本），chat 和网页剪辑器操作的是同一套动作词汇。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -49,7 +73,9 @@
 
 > chat 从 asset-scoped Modal 快捷服务升级为主交互层：人话 / agent 话 → Operation Model / WorkflowRun 的统一入口。
 >
-> **随 DAG 内核连带升级（2026-07-22）**：dispatch 目标分三类——editor 操作 / 整体重生成 / **plan 级**（节点重跑·追加·参数："重新选段"=重跑 selection 节点，"加德语版"=追加 post_gen(de) 节点）；ChatCut 原则（指令=可检查可撤销的真实操作，矩阵 §E）推广到计划层。chat 引用模型 = **@ 类型化对象**（产物/节点，elevencreative §8 机制 6）；plan 级指令采纳**子图词汇**——只跑此节点 / 从这里跑 / 跑到这里（机制 5）。详见 CHAT_ARCHITECTURE（待写）与 ADR-029。
+> 用户视角的主流程：composer 写一句话（可附素材）→ 全屏对话里 AI 给出执行计划（产物类型/语言/数量可改）→ 确认后步骤逐行亮起（SSE 打勾流）→ 完成后落在结果页，可继续用自然语言改产物（"把第二条翻译成德语"）。
+>
+> **随 DAG 内核连带升级（2026-07-22）**：dispatch 目标分三类——editor 操作 / 整体重生成 / **plan 级**（节点重跑·追加·参数："重新选段"=重跑 selection 节点，"加德语版"=追加 post_gen(de) 节点）；ChatCut 原则（指令=可检查可撤销的真实操作，矩阵 §E）推广到计划层。chat 引用模型 = **@ 类型化对象**（产物/节点，elevencreative §8 机制 6）；plan 级指令采纳**子图词汇**——只跑此节点 / 从这里跑 / 跑到这里（机制 5）。详见 CHAT_ARCHITECTURE 与 ADR-029。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -58,12 +84,15 @@
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
 | 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——导演两步走后 `director_plan` 已独立可寻址，"重排任务"具备重跑对象；简报 `tasks/chat-loop-v2.md` §4） |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ✅（CHAT_ARCH §3 三类目标 + 两家族分离：产物级→operations 表，plan 级→RunPlan 小拓扑） |
+| chat 全屏 UI（GenerationOverlay：composer → 计划卡 HITL 确认 → SSE 打勾流 → 结果页；中止/续聊/附件展示；results 页 GenerationStepper 同数据源） | CHAT_ARCH §3/§8；Opus 交互参照 | P1 | chat v1/v2 后端 | — 纯前端 | ✅（2026-07-27：含失败/完成 toast、完成后结果页自动刷新、空态扁平化；results 首访 Tour 同步落地） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 | 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
 ## 4. Editor GUI（Operation Model 的前端之一）
 
 > 薄化：不追加 L3 能力（多轨/B-roll/转场明确不做），投资只投向与 Operation Model 的接线。
+>
+> 人话：网页剪辑器只保留最轻的形态——在文字稿里删一句话就等于剪掉那段视频（非破坏，可恢复），加上单轨裁剪和实时预览。专业剪辑需求明确导出到剪映/Premiere（未来的 XML/EDL 交接），我们不在浏览器里重造专业剪辑软件。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
@@ -74,6 +103,8 @@
 
 ## 5. Distribution ⭐ 权重上调
 
+> 用户视角：在 clip 的"···"菜单里点"Publish on Social"，选渠道、确认文案，直接发到 LinkedIn / TikTok——不经过下载再上传。发布结果（成功/失败/授权过期）进通知中心。
+>
 > 2027 透镜下与 pipeline 平级：Pipeline 管"生成什么"，Distribution 管"去了哪里"。**核心 = 发布动作本身（直发）**——"一次上传、审核即走"的"走"目前断在手动下载再上传，这是正向链路最后一座手动桥。设计与实现细节见 `docs/DISTRIBUTION.md`。
 >
 > **2026-07-23 定界**：**平台范围 = LinkedIn + TikTok 双平台**（其余 X/Meta/YouTube 不接，ESP P2）；定时发布 / 审核队列 / 发布数据回流为**边缘功能**（全部 P2）——定时是 agency 运营多账号的便利；审核队列是机构形态（ADR-027），个体 ICP 的"审核"就是自己看一眼；回流是校准精密化（内部校准源 = 用户选用行为，见 §1，不依赖本模块）。平台准入（LinkedIn 开发者应用、TikTok 应用审核）是零代码 ops，立即排队——墙钟数周，别等功能排上才启动。
@@ -91,6 +122,8 @@
 
 ## 6. Memory / Context（Speaker + Brand + 术语表）
 
+> 人话：这一层回答"AI 怎么写得/说得像我"。Speaker = 人的画像（写作风格、口吻、声音克隆），Brand = 视觉皮肤（字体/颜色/logo/字幕样式），术语表 = 固定译法（机构名词不翻错）。生成时这些记忆注入每个环节，产物出来就是"你的味道"而不是"通用 AI 腔"。
+>
 > 2027 最硬的资产：三个"极高"价值改造项全在这层，且横切所有模块（director 注入 / chat 上下文 / editor 品牌皮肤 / 分发调性）。LinkedIn 对"通用 AI 腔"约 94% 检测率 + 30% 触达惩罚，Voice DNA 已成 B2B 必需品——我们的 persona 恰好是正确答案，应升级为对外卖点。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
@@ -103,6 +136,8 @@
 
 ## 7. 合规底座 ⚖️ 法律时限
 
+> 人话：卖欧洲机构，法律要求 AI 生成内容必须带"机器可读的 AI 标识"（不是界面上贴个徽章，而是嵌进文件元数据，平台/工具能自动识别）。哪些内容要标可以自动判定：整条都是 AI 合成的（配音/生成视觉）要标，纯剪辑真人素材豁免。
+>
 > EU AI Act Article 50：AI 生成内容须机器可读标识 + 披露，**2026-08-02 生效**（已上市系统宽限至 2026-12-02），罚则最高 €35M / 全球营收 7%。我们是面向欧洲机构的产品，这不是加分项是入场券；七家竞品全部 structural 缺席，同时是差异化。呈现野心参照：ElevenCreative（物种不同）已把合规做成具名可购 SKU——Zero Retention mode / Data Residency options / HIPAA BAA 全挂定价档（research/elevencreative.md §2）；本节各行落地时应以"有名字的开关"形态出现，而非安全页徽章（STRATEGY §2.3）。
 >
 > **2026-07-23 降级决策**：AI 内容标识三行从 P0 降为 **P1**——产品未上线，Art.50 义务自实际上线日起适用（宽限期只覆盖 2026-08-02 前已上市的系统，不直接覆盖我们）；现阶段优先保证功能线发展。**上线前必须回补**（机构采购必问，且这是法律义务不是选项）。
@@ -118,6 +153,8 @@
 
 ## 8. 平台与计费
 
+> 人话：每次生成实际花了多少 LLM/渲染成本，系统已经逐步记录下来（每个任务节点一笔账）。在此之上做：生成前预估"这次大约花多少"、失败不扣费、套餐定价（候选形态 = 按"一场演讲一套内容包"计价，而不是裸 credit 点数）。
+>
 > "可预期 > 便宜"是矩阵定的信任差异化；不透明 credit 计费正遭全行业反弹。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
@@ -133,11 +170,13 @@
 
 ## 9. Gallery / 落地页（获客与激活）
 
+> 人话：没注册的人看到的是公开落地页（讲清楚产品怎么工作）；注册后首页是 composer 工作台。"配方卡"是预设示例——"一场 TED 演讲 → 5 条 clips + LinkedIn 长文"这样的卡片，点一下就用同样参数跑你自己的素材。
+>
 > 品味的陈列窗（STRATEGY §5）：**配方库而非内容流**——每张卡 = 输入 + 输出 + 参数集，"Make one like this" 预填 composer，用户只上传自己的素材。同一套组件服务匿名落地页与已登录 home 两个受众；home 的 hero 文案随之迁往匿名落地页（受众错配修复）。
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材复用 demo talk） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；2026-07-25：**落地页已落地**——`/` 公开落地页（header/hero/工作流叙事/信任带/roadmap/footer，`motion` 视差），sidebar 工作台迁入 `_app` pathless layout（原 `/` → `/home`，其余 URL 不变），pricing 区按决策暂缓；配方卡 ❌） |
+| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材需自备——demo talk 已随 demo seed 于 2026-07-27 退役） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；2026-07-25：**落地页已落地**——`/` 公开落地页（header/hero/工作流叙事/信任带/roadmap/footer，`motion` 视差），sidebar 工作台迁入 `_app` pathless layout（原 `/` → `/home`，其余 URL 不变），pricing 区按决策暂缓；配方卡 ❌） |
 | 真实 Gallery（公开项目流入 + remix） | STRATEGY §5 | P2 | 上一行验证 + `projects`/`clips` 公开性字段（须先 MODULE_ARCH §4 登记 + ADR） | — 纯工程 | ❌ |
 
 ---

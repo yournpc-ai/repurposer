@@ -1,6 +1,6 @@
 # Chat Architecture — Agent Interface 层
 
-> Status: ✅ v1 backend 已实现（2026-07-26）；chat UI / 打勾流 / composer UI 归下轮
+> Status: ✅ v1 全链已实现（backend 2026-07-26；前端 2026-07-27：`GenerationOverlay` 全屏对话——计划卡 HITL 确认 + SSE 打勾流 + 项目级续聊，见 §8）；@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）
 > 前置重构：`docs/tasks/backend-module-restructure.md`（chat/ 包是本文的代码家）
@@ -9,8 +9,8 @@
 > v1 落地偏离点（相对本文设计稿）：
 > - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
 > - `dub_clip` / `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发）。
-> - UI 冻结：chat UI / 打勾流 / @picker 未做；mentions 仅落契约与列。
-> - SSE 只接 results 页 loading（GenerationStepper 数据源从 2.5s 轮询换推送）；
+> - UI 冻结已解除（2026-07-27）：chat UI / 打勾流已落地（GenerationOverlay）；@picker 仍未做，mentions 仅落契约与列。
+> - SSE 接两处：results 页 GenerationStepper + GenerationOverlay 打勾流（共用 `useRunEvents` / fetch-event-source）；
 >   step 状态枚举加 `waiting` 座位（HITL/suspend-resume 预留）。
 > - mentions 的 type 取 `workflow_step`（本文原写 plan node——N-15 改名后全栈同名）。
 
@@ -169,6 +169,8 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **该普通 GET 的**：projects 列表等一切非实时读——不为一棵树买一片森林。
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
+
+**前端实现（2026-07-27）**：`useRunEvents` hook 统一消费这条流，接两处——results 页 `GenerationStepper`（顶部进度条）与 `GenerationOverlay` 打勾流（composer 发送后的全屏对话：计划卡 HITL 确认 → 步骤逐行亮起（shimmer 标记进行中）→ 终态 toast + 结果页 refetch）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
 
 **量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
 

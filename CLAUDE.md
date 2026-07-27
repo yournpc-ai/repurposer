@@ -90,12 +90,13 @@ Correct:
 - Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
 - Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
 - **Teaching lives in the Tour, not the placeholder**: the textarea placeholder stays a single short prompt — no usage instructions in it. First-visit teaching is the 4-step `Tour` (assets → speaker → prompt → send, anchored via `data-tour="composer-*"` attributes); it auto-opens only when `localStorage["repurposer-tour-seen"]` is unset, and complete/skip both write the flag (read/write inside `useEffect` only — never during SSR).
+- **Results page has its own tour** (score badge → video area → "···" menu, anchored via `data-tour="results-*"` on the first ready clip card): separate key `localStorage["repurposer-results-tour-seen"]`, fires once clips are rendered and the generation overlay is closed — no matter how the user arrived (fresh generation or from `/projects`). New first-visit tours follow the same pattern: own storage key, `data-tour` anchors, effect-only reads.
 
 #### Composer behavioral contract（2026-07-27 修订：意图识别归管线，composer 瘦身）
 - **Prompt is required**: submitting with an empty prompt is blocked locally (toast), same posture as the auth gate. Files are optional (prompt-only → a `prompt.txt` transcript asset).
 - **Intent recognition lives in the pipeline, not the composer**: `POST /generate` with `outputs` / `target_language` omitted → the route runs `ComposerIntentAgent` on the instruction (the first asset's `file_url` supplies media context) → TaskSpec. The composer sends only `instruction` + `speaker_id` + `brand_template_id`. Explicit `outputs` (retries, targeted runs, API callers) skip intent.
 - **clips need media**: enforced server-side — the intent agent excludes clips for text-only input; `/generate` mirrors with 422 against the resolved outputs.
-- **Zero-asset quick start retired** (its trigger was the outputs pill); the demo remains reachable via the public demo project.
+- **Zero-asset quick start retired** (its trigger was the outputs pill).
 - **Show grid ≠ tool grid**: the capability icon row below the composer is display-only — it must not switch outputs or touch composer params.
 
 ## Product Positioning
@@ -157,7 +158,7 @@ t("home.allProjects", { count: projects.length })
 ### Layout Split (landing vs. workbench)
 - `/` is the **public landing page** (no sidebar); the sidebar workbench lives under the `_app` **pathless layout route** (`src/routes/_app.tsx` holds `SidebarProvider`/`AppSidebar`/`SidebarInset`/`AppHeader`). `__root.tsx` keeps only providers + `Toaster`.
 - The workbench home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.projects.tsx` → `/projects`, `_app.projects.$id.tsx` → `/projects/$id`, …).
-- `AuthProvider` public paths: `/` + the demo project prefix. Everything under `_app` sits behind the login wall automatically.
+- `AuthProvider` public paths: `/` only. Everything under `_app` sits behind the login wall automatically.
 
 ### Dynamic Links
 TanStack Router enforces literal type constraints on `to`. Dynamic parameters must be written as:
@@ -248,15 +249,9 @@ Overall style: restrained, lightweight, unified. Key reference points:
   - `fix: correct SidebarMenuButton render usage`
   - `docs: update i18n and theme conventions`
 
-## Demo Seed
+## Database Reset
 
-`app/demo_seed.py` creates the demo user / speaker / brand / project and video asset on startup, runs ASR synchronously, and runs generation synchronously so the demo clips appear immediately. The demo requests **only the `clips` output with `clip_count=5`** (no derivatives), and treats clips as the sole completion signal. It does **not** render clips synchronously — demo clips are queued with `render_status=PENDING` and rendered by the worker in the background. This prevents startup from blocking on Remotion/Chromium.
-
-To regenerate after swapping the demo video: upload the new object to storage, then run `python scripts/seed_demo.py --force` — it deletes the demo clips, workflow runs, **and the demo Asset row** (without the latter, ASR is skipped and generation would reuse the old transcript).
-
-Ops notes（自 MVP_SPEC §7.5/§8 迁入）:
-- The demo project uses a **fixed UUID** (`Project.id` is UUID-typed — a string `"demo"` is impossible); demo assets live under the `demo/` storage prefix, anonymous-readable.
-- **Bucket migration warning**: seed objects' only authoritative copy is the TOS bucket. The demo video has **no regeneration path** — when provisioning a fresh bucket you must copy it from the existing one; the 3 default music tracks can be re-generated via `scripts/seed_default_music.py`, but that spends MiniMax quota.
+`apps/api/scripts/reset_db.py` wipes **all** data (dry-run by default, `--yes` to execute) — nothing is preserved, including platform music. Re-seed music afterwards with `scripts/seed_default_music.py` (spends MiniMax quota). Object-storage objects are not deleted; orphaned prefixes (including the retired `demo/` tree) can be removed from the bucket manually.
 
 ## Testing
 

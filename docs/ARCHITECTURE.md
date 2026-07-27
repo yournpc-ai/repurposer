@@ -325,7 +325,7 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic)
 
 Field-level truth lives in code: `apps/api/app/models/tables.py` (table structures) + `apps/api/migrations/` (evolution history). Docs do not duplicate field tables (the pre-2026-07 PRD copy had already drifted). Cross-cutting conventions:
 
-- **Auth & isolation**: passwordless email verification-code login (Resend); per-user data isolation across speakers / projects / assets / brand templates / chat sessions. The seeded default user remains only as the owner of shared demo content.
-- **Storage keys**: PostgreSQL stores object keys only; bytes live in TOS (ADR-024). Key prefix `{user_id}/…` carries ownership; `demo/` is anonymous-readable.
+- **Auth & isolation**: passwordless email verification-code login (Resend); per-user data isolation across speakers / projects / assets / brand templates / chat sessions. The seeded default user remains only as the owner of shared default content (brand template).
+- **Storage keys**: PostgreSQL stores object keys only; bytes live in TOS (ADR-024). Key prefix `{user_id}/…` carries ownership.
 - **EU data residency**: project-level `data_region` is a future differentiator (see `docs/ROADMAP.md` §7), not implemented.
 - **UI language preference**: future; the first screen renders in English to avoid hydration mismatch (see CLAUDE.md i18n).

@@ -7,7 +7,7 @@
 - **Base URL**: `http://localhost:8000`
 - **API Prefix**: `/api/v1`
 - **Content-Type**: `application/json`
-- **Authentication**: Passwordless email verification-code login; clients send the returned JWT as `Authorization: Bearer <token>`. The home page and demo content are readable anonymously; all write endpoints and per-user data require a valid token — there is no default-user fallback.
+- **Authentication**: Passwordless email verification-code login; clients send the returned JWT as `Authorization: Bearer <token>`. Only the landing page is public; all API reads/writes of per-user data require a valid token — there is no default-user fallback.
 
 ## 1.1 Authentication
 
@@ -24,7 +24,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 - Emails are normalized (lowercase, trimmed) and format-validated on both endpoints — malformed addresses get 400 before a code is created. A recipient rejected by Resend (4xx) also returns 400; genuine provider/5xx failures return 502.
 - send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
 - `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
-- Anonymous requests see **only the demo project** (`11111111-1111-1111-1111-111111111111`, routed as `/projects/demo`) and its clips. Logged-in list endpoints merge the caller's items with shared demo content owned by the seeded default user (`00000000-0000-0000-0000-000000000001`); the demo project is hidden once the user has real projects. **Exception**: `/speakers` returns only the caller's own speakers — project creation rejects speaker_ids the caller does not own, so demo/default speakers are never offered as selectable options.
+- Projects, speakers, brand templates and all other product data are private to their owner — anonymous requests see nothing. `/speakers` returns only the caller's own speakers: project creation rejects speaker_ids the caller does not own, so default-user (shared) speakers are never offered as selectable options.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
 ## 2. Main Flow Call Sequence
@@ -55,7 +55,7 @@ GET /api/v1/projects/{project_id}/runs/{run_id}
 The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. It also returns `ui_step` (`{key, index, total}` or `null`): the backend-computed position for the loading stepper — percent = `(index + 1) / total`, equal increments per pipeline step, ending with `ready_to_render` at 100% while clips wait for rendering; `null` hides the dialog (run failed or fully settled). The legacy single-resource endpoints are still available:
 
 ```
-GET /api/v1/projects                  → own projects + demo project (anonymous: demo project only)
+GET /api/v1/projects                  → the caller's own projects (anonymous: empty list)
 GET /api/v1/projects/{project_id}
 GET /api/v1/projects/{project_id}/assets
 GET /api/v1/projects/{project_id}/clips
@@ -71,7 +71,7 @@ POST /api/v1/clips/{clip_id}/render
 
 ## 3. File Streaming
 
-Uploads and rendered outputs live in S3-compatible object storage (Volcengine TOS). These endpoints first perform an **ownership check** (objects under `demo/` are anonymous-readable; other prefixes are owner-only, otherwise 403/404), then redirect to the storage URL — Range requests and delivery are handled by the object store:
+Uploads and rendered outputs live in S3-compatible object storage (Volcengine TOS). These endpoints first perform an **ownership check** (key prefix must be the caller's user id, otherwise 403/404), then redirect to the storage URL — Range requests and delivery are handled by the object store:
 
 ```http
 GET /api/v1/files/{file_path}            # 307 → public object URL (source uploads)
@@ -223,7 +223,6 @@ Response now includes a representative clip thumbnail for each project:
 ```
 
 - `thumbnail_url` points to the earliest rendered clip for the project.
-- Demo project is hidden from the list once the user has created any real project.
 
 ```http
 GET /api/v1/projects/{project_id}

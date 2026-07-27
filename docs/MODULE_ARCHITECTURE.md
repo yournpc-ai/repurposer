@@ -137,7 +137,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `users` | （平台层，暂不属于任何模块） | 只读 |
 | `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写 |
 | `projects` | Pipeline | 各模块只读 |
-| `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch、demo seed 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
+| `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；内部类型（`content_plan`）经 `visible_outputs()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
 | `speakers` | Memory | 各模块注入用只读；persona 只由 persona agent 写 |
