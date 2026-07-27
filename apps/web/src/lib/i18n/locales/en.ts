@@ -39,8 +39,7 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    pastePlaceholder:
-      "Paste your talk text or upload files on the left, then say what to make — e.g. “3 clips, 5 social posts, a German article”.",
+    pastePlaceholder: "Describe what to make from your talk…",
     selectSpeaker: "Speaker",
     promptSeedTool: "Turn this talk into a {{label}}…",
     promptAppendTool: "(also generate a {{label}})",
@@ -68,6 +67,7 @@ const en = {
     autoGenerate: "Auto",
     assets: "Assets",
     optional: "Optional",
+    assetsCount: "{{count}} files",
     speakerPickerTitle: "Choose speaker",
     speakerAutoDesc: "Build or match a persona from this upload",
     voiceBound: "Voice cloned",
@@ -546,6 +546,20 @@ const en = {
     skip: "Skip",
     done: "Done",
     stepOf: "Step {{current}} of {{total}}",
+    composer: {
+      assetsTitle: "Bring your materials",
+      assetsDesc:
+        "Upload a recording, audio, transcript or photos — bring whatever you have. You can also skip files and just write a prompt.",
+      speakerTitle: "Choose who's speaking",
+      speakerDesc:
+        "Pick whose writing style and voice the AI imitates. Auto builds or matches a persona from your materials.",
+      promptTitle: "Say what to make",
+      promptDesc:
+        "One sentence is enough — e.g. clips, LinkedIn posts, a German article. Type, language and count are all inferred from your words.",
+      sendTitle: "Generate",
+      sendDesc:
+        "Press Enter or click here. The pipeline plans the work and produces every asset for your review.",
+    },
   },
   notifications: {
     title: "Notifications",

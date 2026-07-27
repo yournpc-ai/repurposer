@@ -302,13 +302,14 @@ Request:
 }
 ```
 
-- `outputs`: any subset of `clips | post | quotes | article | carousel`. Clips are generated only when included.
-- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`).
+- `outputs`: any subset of `clips | post | quotes | article | carousel`. Clips are generated only when included. **Optional**: when omitted on a `full`-scope request, the route derives the task book (`outputs` / `target_language` / `clip_count` / distilled instruction) from `instruction` via `ComposerIntentAgent` — this is the composer path (the web composer sends only `instruction` + `brand_template_id`). Explicit `outputs` (retries, targeted runs, API callers) skips intent.
+- `target_language`: optional; derived by the intent step when omitted (fallback `en`).
+- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`; the intent step overrides it when the instruction names a quantity).
 - `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
 - `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
 
-Validation: for a full-scope request that includes `"clips"`, the project must have at least one renderable media asset (`video` / `audio` / `image` / `slides` with a file URL); otherwise the endpoint returns `422`. A text-only project cannot produce clips.
+Validation: for a full-scope request whose resolved `outputs` include `"clips"`, the project must have at least one renderable media asset (`video` / `audio` / `image` / `slides` with a file URL); otherwise the endpoint returns `422`. A text-only project cannot produce clips (the intent step already excludes `clips` for text-only input).
 
 Queueing note: the created run stays `pending` until every project asset has finished processing (ASR / extraction) — the worker skips runs whose assets are not ready yet. It is therefore safe to call `/generate` immediately after uploading; there is no need to wait for asset processing first.
 

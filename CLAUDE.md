@@ -84,11 +84,12 @@ Correct:
 - Tooltips and sonner toasts are intentionally excluded (small transient labels stay solid).
 
 ### Composer / Input Card
-- Structure: **entity blocks ride the card's top edge** (negative `-mt-*` margin, `overflow-visible` on the Card — they are NOT inside the card): `Assets` block (Optional caption; opens `AssetsModal`) + `Speaker` block (current value: "Auto" default or speaker name; opens `SpeakerPickerModal`). The `Textarea` fills the remaining width to their right.
+- Structure: **entity blocks ride the card's top edge** (negative `-mt-*` margin, `overflow-visible` on the Card — they are NOT inside the card): `Assets` block (opens `AssetsModal`) + `Speaker` block (opens `SpeakerPickerModal`), both `h-24 w-20`. Block anatomy (Opus-style, confirmed 2026-07-27): **icon at the top-left → spacer → title → value as the bottom-most line** (Assets: Plus / first-file type icon, value = "Optional" / "{{count}} files"; Speaker: Sparkles / avatar, value = "Auto" / speaker name). The `Textarea` fills the remaining width to their right.
 - Both blocks are **summaries that open modals** — content management lives in the modal, never in the block: `AssetsModal` = upload zone + file grid + remove (video/audio/images/slides/transcripts); `SpeakerPickerModal` = Auto row + speaker cards with style tags / voice-clone status, single-select-and-close. **Modals are pickers/managers, not editors** — persona editing lives on `/speakers`.
 - Bottom row is **one continuous row inside the card** (no separate action-bar strip / muted background): Brand pill on the left, AI model pill (display-only, current provider) + circular send button on the right, controls at `h-9`. The composer has **no language / outputs / clip-count controls and runs no inference of its own** (see behavioral contract).
 - Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
 - Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
+- **Teaching lives in the Tour, not the placeholder**: the textarea placeholder stays a single short prompt — no usage instructions in it. First-visit teaching is the 4-step `Tour` (assets → speaker → prompt → send, anchored via `data-tour="composer-*"` attributes); it auto-opens only when `localStorage["repurposer-tour-seen"]` is unset, and complete/skip both write the flag (read/write inside `useEffect` only — never during SSR).
 
 #### Composer behavioral contract（2026-07-27 修订：意图识别归管线，composer 瘦身）
 - **Prompt is required**: submitting with an empty prompt is blocked locally (toast), same posture as the auth gate. Files are optional (prompt-only → a `prompt.txt` transcript asset).

@@ -1,7 +1,7 @@
 "use client"
 
 import { Link, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
@@ -24,13 +24,13 @@ import { useAuth } from "@/components/AuthProvider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   SpeakerPickerModal,
   type SpeakerPickerEntry,
 } from "@/components/home/SpeakerPickerModal"
 import { AssetsModal } from "@/components/home/AssetsModal"
+import { Tour, type TourStep } from "@/components/ui/tour"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +69,10 @@ interface HomeComposerProps {
 
 const AUTO_GENERATE = "__auto_generate__"
 
+/** First-visit composer tour: seen flag lives in localStorage (same
+ * `repurposer-*` key family as theme/lang). Written on complete AND skip. */
+const TOUR_SEEN_KEY = "repurposer-tour-seen"
+
 /** Dropdown header: a short title plus a one-line explanation of what this
  * dimension controls, so first-time users understand the pill's purpose. */
 function PillHeaderText({ title, desc }: { title: string; desc: string }) {
@@ -98,8 +102,27 @@ export function HomeComposer({
   const [isGenerating, setIsGenerating] = useState(false)
   const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // First-visit teaching: open the composer tour once per browser. Read in
+  // an effect only — localStorage is never touched during SSR.
+  useEffect(() => {
+    try {
+      if (!window.localStorage.getItem(TOUR_SEEN_KEY)) setTourOpen(true)
+    } catch {
+      // storage unavailable (private mode) — tour simply never auto-opens
+    }
+  }, [])
+
+  const markTourSeen = () => {
+    try {
+      window.localStorage.setItem(TOUR_SEEN_KEY, "1")
+    } catch {
+      // ignore — worst case the tour shows again next visit
+    }
+  }
 
   // Sync brand default once templates load.
   useEffect(() => {
@@ -217,26 +240,40 @@ export function HomeComposer({
     })
   }
 
-  // First-file preview for the Assets block: object URL for image/video,
-  // type icon otherwise. URLs are revoked when the preview changes/unmounts.
-  const firstFile = files[0]
-  const firstPreviewUrl = useMemo(() => {
-    if (!firstFile) return null
-    if (firstFile.type.startsWith("image/") || firstFile.type.startsWith("video/")) {
-      return URL.createObjectURL(firstFile)
-    }
-    return null
-  }, [firstFile])
-  useEffect(() => {
-    return () => {
-      if (firstPreviewUrl) URL.revokeObjectURL(firstPreviewUrl)
-    }
-  }, [firstPreviewUrl])
-
   const selectedSpeaker =
     speakerId === AUTO_GENERATE
       ? undefined
       : speakers.find((s) => s.id === speakerId)
+
+  // Composer teaching tour: assets → speaker → prompt → send. Built per
+  // render so a language switch re-labels the steps (Tour reads via ref).
+  const tourSteps: TourStep[] = [
+    {
+      target: "[data-tour='composer-assets']",
+      title: t("tour.composer.assetsTitle"),
+      description: t("tour.composer.assetsDesc"),
+      side: "bottom",
+    },
+    {
+      target: "[data-tour='composer-speaker']",
+      title: t("tour.composer.speakerTitle"),
+      description: t("tour.composer.speakerDesc"),
+      side: "bottom",
+    },
+    {
+      target: "[data-tour='composer-prompt']",
+      title: t("tour.composer.promptTitle"),
+      description: t("tour.composer.promptDesc"),
+      side: "bottom",
+    },
+    {
+      target: "[data-tour='composer-send']",
+      title: t("tour.composer.sendTitle"),
+      description: t("tour.composer.sendDesc"),
+      side: "top",
+      align: "end",
+    },
+  ]
 
   return (
     <>
@@ -246,95 +283,64 @@ export function HomeComposer({
             ride the card's top edge via negative margin; the textarea fills
             the remaining width to their right. Both blocks open modals. */}
         <div className="flex items-start gap-3">
-          <div className="-mt-12 flex flex-shrink-0 items-start gap-2">
-            {/* Assets block */}
+          <div className="-mt-9 flex flex-shrink-0 items-start gap-2">
+            {/* Assets block — Opus anatomy: icon at the top, spacer, then
+                title with the info line at the very bottom. */}
             <button
               type="button"
+              data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-1.5 text-left edge-glow transition-colors hover:bg-accent"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent"
             >
-              <span className="flex items-center justify-between px-0.5 pb-1">
-                <span className="text-[10px] leading-none text-muted-foreground">
-                  {t("composer.assets")}
-                </span>
-                {files.length > 0 && (
-                  <Badge variant="secondary" className="rounded-md px-1 text-[10px]">
-                    {files.length}
-                  </Badge>
-                )}
-              </span>
               {files.length === 0 ? (
-                <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground">
-                  <Plus className="h-4 w-4" />
-                  <span className="text-[10px] leading-none">{t("composer.optional")}</span>
-                </span>
-              ) : firstPreviewUrl && firstFile.type.startsWith("image/") ? (
-                <img
-                  src={firstPreviewUrl}
-                  alt={firstFile.name}
-                  className="min-h-0 w-full flex-1 rounded-md object-cover"
-                />
-              ) : firstPreviewUrl ? (
-                <video
-                  src={firstPreviewUrl}
-                  muted
-                  preload="metadata"
-                  className="min-h-0 w-full flex-1 rounded-md object-cover"
-                />
+                <Plus className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-muted-foreground">
-                  {(() => {
-                    const Icon = fileIconFor(firstFile)
-                    return <Icon className="h-5 w-5" />
-                  })()}
-                  <span className="max-w-full truncate px-0.5 text-[10px] leading-tight">
-                    {firstFile.name}
-                  </span>
-                </span>
+                (() => {
+                  const Icon = fileIconFor(files[0])
+                  return <Icon className="h-4 w-4 text-muted-foreground" />
+                })()
               )}
+              <span className="mt-auto">
+                <span className="block text-xs">{t("composer.assets")}</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  {files.length === 0
+                    ? t("composer.optional")
+                    : t("composer.assetsCount", { count: files.length })}
+                </span>
+              </span>
             </button>
 
-            {/* Speaker block */}
+            {/* Speaker block — same anatomy: avatar/sparkle top, "Speaker"
+                title, current value at the very bottom. */}
             <button
               type="button"
+              data-tour="composer-speaker"
               onClick={() => setSpeakerPickerOpen(true)}
-              className="flex h-24 w-24 flex-col rounded-lg bg-card p-1.5 text-left edge-glow transition-colors hover:bg-accent"
+              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent"
             >
-              <span className="px-0.5 text-[10px] leading-none text-muted-foreground">
-                {t("composer.speaker")}
-              </span>
-              <span className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5">
-                {selectedSpeaker ? (
-                  <>
-                    <Avatar size="sm">
-                      {selectedSpeaker.avatar_url ? (
-                        <AvatarImage
-                          src={selectedSpeaker.avatar_url}
-                          alt={selectedSpeaker.name}
-                        />
-                      ) : null}
-                      <AvatarFallback>{selectedSpeaker.name.slice(0, 1)}</AvatarFallback>
-                    </Avatar>
-                    <span className="flex w-full items-center justify-center gap-0.5 px-0.5">
-                      <span className="truncate text-xs">{selectedSpeaker.name}</span>
-                      {selectedSpeaker.voice ? (
-                        <Mic2 className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                      ) : null}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
-                    <span className="max-w-full truncate px-0.5 text-xs">
-                      {t("composer.autoGenerate")}
-                    </span>
-                  </>
-                )}
+              {selectedSpeaker ? (
+                <Avatar size="sm">
+                  {selectedSpeaker.avatar_url ? (
+                    <AvatarImage
+                      src={selectedSpeaker.avatar_url}
+                      alt={selectedSpeaker.name}
+                    />
+                  ) : null}
+                  <AvatarFallback>{selectedSpeaker.name.slice(0, 1)}</AvatarFallback>
+                </Avatar>
+              ) : (
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span className="mt-auto min-w-0">
+                <span className="block text-xs">{t("composer.speaker")}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {selectedSpeaker ? selectedSpeaker.name : t("composer.autoGenerate")}
+                </span>
               </span>
             </button>
           </div>
 
-          <div className="flex h-20 flex-1 flex-col">
+          <div className="flex h-20 flex-1 flex-col" data-tour="composer-prompt">
             <Textarea
               ref={textareaRef}
               value={prompt}
@@ -436,6 +442,7 @@ export function HomeComposer({
             <Button
               className="h-9 w-9 rounded-full"
               size="icon"
+              data-tour="composer-send"
               disabled={isGenerating}
               onClick={handleGenerate}
             >
@@ -463,6 +470,13 @@ export function HomeComposer({
       onRemove={removeFile}
       open={assetsOpen}
       onOpenChange={setAssetsOpen}
+    />
+    <Tour
+      steps={tourSteps}
+      open={tourOpen}
+      onOpenChange={setTourOpen}
+      onComplete={markTourSeen}
+      onSkip={markTourSeen}
     />
     </>
   )
