@@ -14,6 +14,8 @@ from app.models.schemas import (
     GenerateRequest,
     OutputResponse,
     ProjectCreate,
+    ProjectIntentRequest,
+    ProjectIntentResponse,
     ProjectResponse,
     ProjectResultsResponse,
     ProjectStatus,
@@ -371,6 +373,72 @@ async def delete_project(
     await delete_project_files(project_id, current_user.id)
 
 
+@router.post("/{project_id}/intent", response_model=ProjectIntentResponse)
+async def infer_project_intent(
+    project_id: UUID,
+    data: ProjectIntentRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectIntentResponse:
+    """Infer the generation task book for a project.
+
+    Reads the project's assets so we can detect material/output conflicts
+    (e.g. clips requested without renderable media). When the intent is
+    ambiguous, ``needs_clarification`` is true and the frontend should show
+    the inferred task book for confirmation before calling ``/generate``.
+    """
+    project = await get_project_for_user(
+        db, project_id, UUID(str(current_user.id)), allow_demo=False
+    )
+
+    assets = list(
+        (
+            await db.execute(
+                select(Asset).where(
+                    Asset.project_id == project_id,
+                    Asset.file_url.isnot(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    first_file = next((a for a in assets if a.file_url), None)
+    filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
+
+    intent = await composer_intent_agent.infer(
+        prompt=data.prompt or "",
+        filename=filename,
+    )
+
+    has_renderable_media = any(
+        a.type
+        in (
+            AssetType.VIDEO,
+            AssetType.AUDIO,
+            AssetType.IMAGE,
+            AssetType.SLIDES,
+        )
+        for a in assets
+    )
+
+    reasons: list[str] = []
+    if not intent.language_explicit:
+        reasons.append("language_default")
+    if not intent.outputs_explicit:
+        reasons.append("outputs_default")
+    if "clips" in intent.outputs and not intent.clip_count_explicit:
+        reasons.append("clip_count_default")
+    if "clips" in intent.outputs and not has_renderable_media:
+        reasons.append("clips_without_media")
+
+    return ProjectIntentResponse(
+        intent=intent,
+        needs_clarification=bool(reasons),
+        reasons=reasons,
+    )
+
+
 @router.post("/{project_id}/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
 async def generate_content(
     project_id: UUID,
@@ -388,36 +456,23 @@ async def generate_content(
         db, project_id, UUID(str(current_user.id)), allow_demo=False
     )
 
-    # Task book derivation (composer path): when outputs are not explicit,
-    # the pipeline's intent step resolves outputs / language / clip_count
-    # from the instruction — the composer itself no longer runs an inference
-    # call. Explicit outputs (retries, targeted runs, API callers) skip intent.
+    # Full-scope runs from the composer must now provide an explicit task book
+    # resolved by POST /projects/{id}/intent. Retries, targeted runs and API
+    # callers continue to pass explicit outputs.
     outputs = request.outputs
     target_language = request.target_language
     clip_count = request.clip_count
     instruction = request.instruction
     if outputs is None and request.scope == "full":
-        file_url_result = await db.execute(
-            select(Asset.file_url)
-            .where(Asset.project_id == project_id, Asset.file_url.isnot(None))
-            .limit(1)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Task book must be confirmed via /projects/{id}/intent first.",
         )
-        first_file_url = file_url_result.scalar_one_or_none()
-        intent = await composer_intent_agent.infer(
-            prompt=instruction or "",
-            filename=first_file_url.rsplit("/", 1)[-1] if first_file_url else None,
-        )
-        outputs = list(intent.outputs)
-        if target_language is None:
-            target_language = intent.language
-        if intent.clip_count:
-            clip_count = intent.clip_count
-        if intent.specific_instruction:
-            instruction = intent.specific_instruction
     if outputs is None:
         # Non-full scopes without explicit outputs keep the pre-intent default.
         outputs = ["clips", "post", "quotes", "article"]
     target_language = target_language or "en"
+    instruction = instruction or "Generate content from the uploaded assets."
 
     # Clips need a renderable media source (video / audio / image / slides).
     # Reject early instead of letting the run produce unrenderable clips.
