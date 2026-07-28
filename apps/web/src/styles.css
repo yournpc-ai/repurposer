@@ -13,9 +13,9 @@
  * override per instance (e.g. a more opaque `bg-popover/95`).
  */
 @utility overlay-surface {
-  background-color: color-mix(in oklch, var(--popover) 82%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  backdrop-filter: blur(16px) saturate(1.5);
+  background-color: color-mix(in oklch, var(--popover) 75%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  backdrop-filter: blur(10px) saturate(1.5);
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: var(--popover);
