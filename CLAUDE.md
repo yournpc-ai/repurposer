@@ -61,6 +61,7 @@ Correct:
 
 ### Overlay Components (DropdownMenu / Popover / Select)
 - **List-style single-select** (select and close on click): use `DropdownMenu` + `DropdownMenuItem`.
+- **Content panels with inline actions** (buttons/links/rows that must not close on click — e.g. the notification panel): use `Popover`, never `DropdownMenu` (precedent: `NotificationBell`, 2026-07-28).
 - **Multi-control settings panel** (needs to stay open while adjusting multiple values): use `Popover`, with segmented button groups inside.
 - Triggers are always `render={<Button variant="outline" size="sm" className="h-9 …" />}`, with "icon + label + `ChevronDown`" inside the button.
 - To express "currently selected" for an option, use the `Check` icon; for bottom overlays (dropdowns in the footer), remember `side="top"` to pop upward.
@@ -79,8 +80,8 @@ Correct:
 - (Legacy note: older screens still carry `ring-1 ring-border` from the previous convention — remove it when touching those screens; do not copy it into new code.)
 
 ### Floating Layers: frosted glass via `overlay-surface`
-- **All floating layers** (Popover / DropdownMenu / Dialog / Select / Sheet / Tour) use the shared `overlay-surface` utility defined in `styles.css` — translucent `--popover` (82%) + `backdrop-blur` + `saturate(1.5)`, with a solid fallback under `@supports not (backdrop-filter)`. Do **not** re-add `bg-popover` to overlay components; if a specific instance needs different opacity, override via its `className` (components merge it last, keeping it the open extension point).
-- Dialog / Sheet backdrops are `bg-black/50` + `backdrop-blur-sm` (not the default near-solid `bg-black/80`) so the frosted surface reads against a dimmed but visible page.
+- **All floating layers** (Popover / DropdownMenu / Dialog / Select / Sheet / Tour) use the shared `overlay-surface` utility defined in `styles.css` — translucent `--popover` (75%) + `backdrop-blur` (10px) + `saturate(1.5)`, with a solid fallback under `@supports not (backdrop-filter)`. Do **not** re-add `bg-popover` to overlay components; if a specific instance needs different opacity, override via its `className` (components merge it last, keeping it the open extension point).
+- Dialog / Sheet backdrops are `bg-black/30` + `backdrop-blur-[2px]` (not the default near-solid `bg-black/80`) so the frosted surface reads against a dimmed but clearly visible page.
 - Tooltips and sonner toasts are intentionally excluded (small transient labels stay solid).
 
 ### Composer / Input Card
