@@ -8,10 +8,10 @@ import { useAuth } from "@/components/AuthProvider"
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { apiFetch, apiPost } from "@/lib/api"
 import { connectChannel } from "@/lib/channels"
 
@@ -165,8 +165,8 @@ export function NotificationBell() {
   const unread = data?.unread_count ?? 0
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
         render={
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
@@ -176,7 +176,7 @@ export function NotificationBell() {
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-96 p-0">
+      <PopoverContent align="end" className="w-96 p-0">
         <div className="px-4 pb-2 pt-3 text-sm font-semibold">
           {t("notifications.title")}
         </div>
@@ -196,7 +196,7 @@ export function NotificationBell() {
             ))
           )}
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   )
 }
