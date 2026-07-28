@@ -41,7 +41,7 @@ async def list_visible_outputs(
 
 
 def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
-    """Serialize a node; ``stage`` is the display hint from spec (ui_step keys)."""
+    """Serialize a node; ``stage`` is the display hint from spec (results.stepper.* keys)."""
     return StepResponse(
         id=node.id,
         kind=node.kind,

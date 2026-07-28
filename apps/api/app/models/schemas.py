@@ -466,6 +466,24 @@ class ProjectIntentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str = Field(default="", description="User prompt or transcript paste.")
+    brand_template_id: UUID | None = None
+
+
+class PendingIntent(BaseModel):
+    """Unconfirmed task book persisted on ``projects.pending_intent``.
+
+    Written by ``POST /projects/{id}/intent`` (every call, so chat refinements
+    update it), cleared by ``POST /projects/{id}/generate``. Lets a user who
+    left the plan-confirmation chat resume it exactly, from any device.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = ""
+    intent: InferredIntent
+    needs_clarification: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    brand_template_id: UUID | None = None
 
 
 class ProjectIntentResponse(BaseModel):
@@ -545,6 +563,7 @@ class AssetResponse(BaseModel):
     speaker_id: UUID | None = None
     type: AssetType
     file_url: str | None = None
+    title: str | None = None
     transcript: str | None = None
     extracted_text: str | None = None
     processing_status: AssetStatus
@@ -581,12 +600,22 @@ class AssetCreateRequest(BaseModel):
 
     key: str
     type: AssetType
+    # Original upload filename, used as the display title in the UI.
+    title: str | None = None
 
 
 class SpeakerAssetCreateRequest(BaseModel):
     """Create a speaker asset record after direct upload to storage."""
 
     key: str
+    # Original upload filename, used as the display title in the UI.
+    title: str | None = None
+
+
+class SpeakerAssetUpdateRequest(BaseModel):
+    """Rename a speaker asset."""
+
+    title: str
 
 
 class BrandMediaCreateRequest(BaseModel):
@@ -1282,10 +1311,9 @@ class GenerateRequest(BaseModel):
     ] | None = Field(
         default=None,
         description=(
-            "Requested asset types. None (the composer path) = derived from "
-            "the instruction by the pipeline's intent step "
-            "(ComposerIntentAgent); explicit lists skip intent (targeted "
-            "runs, retries, API callers)."
+            "Requested asset types. Required on the composer path (422 "
+            "otherwise — confirm via /projects/{id}/intent first); None is "
+            "only tolerated where the route derives intent explicitly."
         ),
     )
     tone_settings: ToneSettings | None = None
@@ -1393,15 +1421,6 @@ class ProjectAssetStatus(BaseModel):
     processing_error: str | None = None
 
 
-class UiStep(BaseModel):
-    """Stepper position for the results-page loading dialog (see
-    projects._compute_ui_step). percent = (index + 1) / total."""
-
-    key: str
-    index: int
-    total: int
-
-
 class ProjectResultsResponse(BaseModel):
     """Aggregated results for the project detail/results page."""
 
@@ -1412,7 +1431,7 @@ class ProjectResultsResponse(BaseModel):
     outputs: list[OutputResponse] = Field(default_factory=list)
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
-    ui_step: UiStep | None = None
+    pending_intent: PendingIntent | None = None
 
 
 class BrandTemplateBase(BaseModel):

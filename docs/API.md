@@ -52,7 +52,7 @@ GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt
 GET /api/v1/projects/{project_id}/runs/{run_id}
 ```
 
-The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. It also returns `ui_step` (`{key, index, total}` or `null`): the backend-computed position for the loading stepper — percent = `(index + 1) / total`, equal increments per pipeline step, ending with `ready_to_render` at 100% while clips wait for rendering; `null` hides the dialog (run failed or fully settled). The legacy single-resource endpoints are still available:
+The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. (The computed `ui_step` field was retired on 2026-07-28 together with the results-page loading dialog — live progress is the chat overlay's step stream, driven by `GET /runs/{id}/events`.) The legacy single-resource endpoints are still available:
 
 ```
 GET /api/v1/projects                  → the caller's own projects (anonymous: empty list)

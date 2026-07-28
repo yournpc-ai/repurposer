@@ -14,6 +14,7 @@ from app.models.schemas import (
     AssetUploadUrlRequest,
     AssetUploadUrlResponse,
     SpeakerAssetCreateRequest,
+    SpeakerAssetUpdateRequest,
 )
 from app.models.tables import Asset, Project, Speaker, User
 from app.tools.storage import (
@@ -133,6 +134,7 @@ async def create_asset_from_key(
         project_id=project_id,
         type=request.type,
         file_url=request.key,
+        title=request.title,
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
@@ -325,6 +327,7 @@ async def create_speaker_asset_from_key(
         speaker_id=speaker_id,
         type=AssetType.PAST_MATERIAL,
         file_url=request.key,
+        title=request.title,
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
@@ -355,6 +358,7 @@ async def upload_speaker_asset(
         speaker_id=speaker_id,
         type=AssetType.PAST_MATERIAL,
         file_url=relative_path,
+        title=file.filename or None,
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
@@ -375,6 +379,31 @@ async def list_speaker_assets(
         select(Asset).where(Asset.speaker_id == speaker_id).order_by(Asset.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@speaker_assets_router.put("/{speaker_id}/assets/{asset_id}", response_model=AssetResponse)
+async def update_speaker_asset(
+    speaker_id: UUID,
+    asset_id: UUID,
+    request: SpeakerAssetUpdateRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> Asset:
+    """Rename a speaker asset (the storage key is untouched)."""
+    await _get_user_speaker(speaker_id, current_user.id, db)
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.speaker_id == speaker_id)
+    )
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset not found",
+        )
+    asset.title = request.title
+    await db.commit()
+    await db.refresh(asset)
+    return asset
 
 
 @speaker_assets_router.delete(

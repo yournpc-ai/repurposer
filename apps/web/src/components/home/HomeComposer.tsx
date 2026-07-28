@@ -213,7 +213,7 @@ export function HomeComposer({
 
             const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
               method: "POST",
-              body: { type, key },
+              body: { type, key, title: material.name },
             })
             if (!assetRes.ok) throw new Error("Failed to create asset")
             return (await assetRes.json()) as Asset
@@ -221,37 +221,19 @@ export function HomeComposer({
         )
 
         // Resolve the task book via the project-scoped intent endpoint. The
-        // overlay on the results page will confirm or edit the inferred
-        // outputs / language / clip_count before starting generation.
+        // server persists it on the project (pending_intent), so the overlay
+        // on the results page can confirm or edit it — now or later.
         const intentRes = await apiFetch(`/api/v1/projects/${project.id}/intent`, {
           method: "POST",
-          body: { prompt: prompt.trim() },
+          body: {
+            prompt: prompt.trim(),
+            brand_template_id: brandTemplateId || undefined,
+          },
         })
         if (!intentRes.ok) {
           const detail = await intentRes.json().catch(() => null)
           throw new Error(detail?.detail || "Intent inference failed")
         }
-        const intentData = (await intentRes.json()) as {
-          intent: {
-            action: "generate" | "answer"
-            answer: string | null
-            language: string
-            outputs: string[]
-            clip_count: number | null
-            specific_instruction: string | null
-          }
-          needs_clarification: boolean
-        }
-
-        sessionStorage.setItem(
-          `repurposer-generation-${project.id}`,
-          JSON.stringify({
-            prompt: prompt.trim(),
-            intent: intentData.intent,
-            needsClarification: intentData.needs_clarification,
-            brandTemplateId: brandTemplateId || undefined,
-          })
-        )
 
         navigate({
           to: "/projects/$id",

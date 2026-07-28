@@ -21,7 +21,9 @@ import {
   Images,
   Loader2,
   Mic2,
+  Minus,
   Newspaper,
+  Plus,
   Quote,
   Sparkles,
   Square,
@@ -35,7 +37,6 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
@@ -104,6 +105,7 @@ interface ProjectAsset {
   id: string
   type: string
   file_url: string | null
+  title: string | null
   processing_status: "pending" | "processing" | "completed" | "failed"
 }
 
@@ -142,6 +144,9 @@ interface GenerationOverlayProps {
   initialIntent?: InferredIntent | null
   initialNeedsClarification?: boolean
   brandTemplateId?: string
+  /** Attach to an already-running generation (returning visitor): skips the
+   * confirm phase and the intent fallback, lands straight on the step flow. */
+  initialRunId?: string | null
   onClose: () => void
   onComplete: () => void
 }
@@ -209,7 +214,7 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
                   </AttachmentMedia>
                   <AttachmentContent>
                     <AttachmentTitle>
-                      {assetFilename(asset.file_url) || typeLabel}
+                      {asset.title || assetFilename(asset.file_url) || typeLabel}
                     </AttachmentTitle>
                     <AttachmentDescription>{typeLabel}</AttachmentDescription>
                   </AttachmentContent>
@@ -242,7 +247,8 @@ function ThinkingRow({ label }: { label: string }) {
       <MessageContent>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-          {label}
+          {/* Same text shimmer the running step markers use. */}
+          <span className="shimmer">{label}</span>
         </div>
       </MessageContent>
     </Message>
@@ -255,13 +261,18 @@ export function GenerationOverlay({
   initialIntent,
   initialNeedsClarification = true,
   brandTemplateId,
+  initialRunId,
   onClose,
   onComplete,
 }: GenerationOverlayProps) {
   const { t } = useTranslation()
 
   const [phase, setPhase] = useState<Phase>(
-    initialIntent?.action === "answer" ? "answer" : "confirm"
+    initialRunId
+      ? "running"
+      : initialIntent?.action === "answer"
+        ? "answer"
+        : "confirm"
   )
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
@@ -277,8 +288,9 @@ export function GenerationOverlay({
   )
   // The plan card renders only once a real inference has landed (the
   // composer normally hands one over; the fetch below is the fallback).
-  const [intentReady, setIntentReady] = useState(!!initialIntent)
-  const [runId, setRunId] = useState<string | null>(null)
+  // Attach mode never shows the card, so it starts ready.
+  const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
+  const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -358,9 +370,10 @@ export function GenerationOverlay({
 
   // Fallback intent fetch (direct visit without a composer-provided intent).
   // Guarded by ref — setIntent recreates handleStartGeneration, which would
-  // otherwise retrigger this effect forever.
+  // otherwise retrigger this effect forever. Attach mode skips it entirely:
+  // the run is already going, there is no plan to infer.
   useEffect(() => {
-    if (initialIntent || intentFetchedRef.current) return
+    if (initialIntent || initialRunId || intentFetchedRef.current) return
     intentFetchedRef.current = true
     apiFetch(`/api/v1/projects/${projectId}/intent`, {
       method: "POST",
@@ -388,6 +401,7 @@ export function GenerationOverlay({
   useEffect(() => {
     if (
       initialIntent &&
+      !initialRunId &&
       initialIntent.action === "generate" &&
       !initialNeedsClarification &&
       phase === "confirm" &&
@@ -396,7 +410,7 @@ export function GenerationOverlay({
       autoStartedRef.current = true
       handleStartGeneration()
     }
-  }, [initialIntent, initialNeedsClarification, phase, handleStartGeneration])
+  }, [initialIntent, initialRunId, initialNeedsClarification, phase, handleStartGeneration])
 
   const toggleOutput = (key: OutputKey) => {
     setIntent((prev) => {
@@ -421,6 +435,23 @@ export function GenerationOverlay({
     }
     return parts.join(" · ")
   }, [intent, t])
+
+  // One-line plain-language summary of the selected outputs, shown under the
+  // toggle pills so a first-time user learns what each output is.
+  const selectedOutputDescs = useMemo(
+    () =>
+      intent.outputs
+        .map((o) => t(`generationOverlay.outputDescs.${o}`, { defaultValue: "" }))
+        .filter(Boolean),
+    [intent.outputs, t]
+  )
+
+  const clipCount = intent.clip_count ?? 5
+  const setClipCount = (next: number) =>
+    setIntent((prev) => ({
+      ...prev,
+      clip_count: Math.min(10, Math.max(1, next)),
+    }))
 
   const pushMessage = (message: Omit<OverlayMessage, "id">) => {
     setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
@@ -594,8 +625,17 @@ export function GenerationOverlay({
                     <Message align="start">
                       <MessageContent>
                         <div className="w-full">
-                          <Card className="shadow-lg ring-0 edge-glow">
-                            <div className="flex flex-col gap-5 p-5">
+                          {/* Prose echo of the understood plan — the card
+                              never lands naked (Opus pattern). */}
+                          <p className="mb-3 max-w-[85%] text-sm leading-relaxed">
+                            {t("generationOverlay.planProse", { summary: planSummary })}
+                          </p>
+                          {/* No shadow/glow here: the scroller's paint
+                              containment clips the halo on the sides (it
+                              survived only on top, looking like a cut-off
+                              shadow). Depth comes from bg contrast alone. */}
+                          <Card className="ring-0 bg-muted/50">
+                            <div className="flex flex-col gap-6 p-6">
                               <div className="space-y-1">
                                 <h3 className="text-base font-semibold">
                                   {t("generationOverlay.title")}
@@ -630,56 +670,88 @@ export function GenerationOverlay({
                                     )
                                   })}
                                 </div>
+                                {selectedOutputDescs.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {selectedOutputDescs.join(" · ")}
+                                  </p>
+                                )}
                               </div>
 
-                              {/* Language */}
-                              <div className="space-y-2">
-                                <span className={sectionLabel}>
-                                  {t("generationOverlay.languageLabel")}
-                                </span>
-                                <Select
-                                  value={intent.language}
-                                  onValueChange={(value) =>
-                                    setIntent((prev) => ({
-                                      ...prev,
-                                      language: (value as string) || "en",
-                                    }))
-                                  }
-                                >
-                                  <SelectTrigger className="h-10 w-full text-sm">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {LANGUAGE_OPTIONS.map((lang) => (
-                                      <SelectItem key={lang.code} value={lang.code}>
-                                        {t(lang.labelKey)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              {/* Clip count */}
-                              {intent.outputs.includes("clips") && (
+                              {/* Language + clip count share a row on sm+ */}
+                              <div
+                                className={`grid grid-cols-1 gap-6 ${
+                                  intent.outputs.includes("clips") ? "sm:grid-cols-2" : ""
+                                }`}
+                              >
                                 <div className="space-y-2">
                                   <span className={sectionLabel}>
-                                    {t("generationOverlay.clipCountLabel")}
+                                    {t("generationOverlay.languageLabel")}
                                   </span>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={10}
-                                    value={intent.clip_count ?? 5}
-                                    onChange={(e) =>
+                                  <Select
+                                    value={intent.language}
+                                    onValueChange={(value) =>
                                       setIntent((prev) => ({
                                         ...prev,
-                                        clip_count: parseInt(e.target.value, 10) || 1,
+                                        language: (value as string) || "en",
                                       }))
                                     }
-                                    className="h-10 text-sm"
-                                  />
+                                  >
+                                    <SelectTrigger className="h-10 w-full text-sm">
+                                      <SelectValue>
+                                        {(value: string) =>
+                                          t(`languages.${value}`, { defaultValue: value })
+                                        }
+                                      </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {LANGUAGE_OPTIONS.map((lang) => (
+                                        <SelectItem key={lang.code} value={lang.code}>
+                                          {t(lang.labelKey)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-xs text-muted-foreground">
+                                    {t("generationOverlay.languageHint")}
+                                  </p>
                                 </div>
-                              )}
+
+                                {intent.outputs.includes("clips") && (
+                                  <div className="space-y-2">
+                                    <span className={sectionLabel}>
+                                      {t("generationOverlay.clipCountLabel")}
+                                    </span>
+                                    <div className="flex h-10 items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-9 w-9"
+                                        disabled={clipCount <= 1}
+                                        aria-label={t("generationOverlay.clipCountDecrease")}
+                                        onClick={() => setClipCount(clipCount - 1)}
+                                      >
+                                        <Minus className="h-4 w-4" />
+                                      </Button>
+                                      <span className="flex h-9 w-12 items-center justify-center text-sm tabular-nums">
+                                        {clipCount}
+                                      </span>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-9 w-9"
+                                        disabled={clipCount >= 10}
+                                        aria-label={t("generationOverlay.clipCountIncrease")}
+                                        onClick={() => setClipCount(clipCount + 1)}
+                                      >
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("generationOverlay.clipCountHint")}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Instruction */}
                               <div className="space-y-2">
@@ -694,6 +766,7 @@ export function GenerationOverlay({
                                       specific_instruction: e.target.value,
                                     }))
                                   }
+                                  placeholder={t("generationOverlay.instructionPlaceholder")}
                                   className="min-h-[100px] resize-none text-sm"
                                 />
                               </div>
@@ -701,29 +774,40 @@ export function GenerationOverlay({
                               {startError && (
                                 <p className="text-sm text-destructive">{startError}</p>
                               )}
+
+                              {/* Confirm footer — inside the card (Opus-style),
+                                  not a separate floating bar. "Decide later"
+                                  just closes: the plan is persisted server-side
+                                  and can be resumed from the projects list. */}
+                              <div className="space-y-2">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="flex min-w-0 items-center gap-2 text-sm">
+                                    <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                                    {t("generationOverlay.confirmQuestion")}
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <Button variant="ghost" onClick={handleClose}>
+                                      {t("generationOverlay.decideLater")}
+                                    </Button>
+                                    <Button
+                                      disabled={!canStartGeneration || isStarting}
+                                      onClick={handleStartGeneration}
+                                    >
+                                      {isStarting && (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      )}
+                                      {isStarting
+                                        ? t("generationOverlay.starting")
+                                        : t("generationOverlay.confirm")}
+                                    </Button>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {t("generationOverlay.leaveNote")}
+                                </p>
+                              </div>
                             </div>
                           </Card>
-
-                          {/* Confirm bar — a separate floating bar under the
-                              card, like Opus's "Save & continue". */}
-                          <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-card px-4 py-3 shadow-lg edge-glow">
-                            <div className="flex min-w-0 items-center gap-2 text-sm">
-                              <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-                              {t("generationOverlay.confirmQuestion")}
-                            </div>
-                            <Button
-                              className="shrink-0"
-                              disabled={!canStartGeneration || isStarting}
-                              onClick={handleStartGeneration}
-                            >
-                              {isStarting && (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              )}
-                              {isStarting
-                                ? t("generationOverlay.starting")
-                                : t("generationOverlay.confirm")}
-                            </Button>
-                          </div>
                         </div>
                       </MessageContent>
                     </Message>
@@ -737,7 +821,7 @@ export function GenerationOverlay({
                     <MessageScrollerItem>
                       <Message align="start">
                         <MessageContent>
-                          <div className="flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 shadow-md edge-glow">
+                          <div className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
                             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
                               <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                             </span>
@@ -762,12 +846,37 @@ export function GenerationOverlay({
                               {t("generationOverlay.startingLine")}
                             </p>
                             <div className="flex flex-col gap-2">
+                              {/* Run still queued (assets processing / worker
+                                  hasn't claimed it): no workflow steps exist
+                                  yet, so stand in with a friendly marker —
+                                  otherwise the flow looks dead on attach. */}
+                              {steps.length === 0 && !terminal && (
+                                <StepMarker
+                                  status="running"
+                                  label={
+                                    assets.some(
+                                      (a) =>
+                                        a.processing_status === "pending" ||
+                                        a.processing_status === "processing"
+                                    )
+                                      ? t("results.stepper.transcribing")
+                                      : t("results.stepper.queued")
+                                  }
+                                />
+                              )}
                               {steps.map((step) => (
                                 <StepMarker
                                   key={step.id}
                                   status={step.status}
                                   label={
+                                    // Same chain as RunCard: live summary →
+                                    // friendly stage copy → kind fallback.
                                     step.summary ||
+                                    (step.stage
+                                      ? t(`results.stepper.${step.stage}`, {
+                                          defaultValue: "",
+                                        })
+                                      : "") ||
                                     t(`chat.stepKinds.${step.kind}`, {
                                       defaultValue: step.kind,
                                     })
@@ -832,7 +941,7 @@ export function GenerationOverlay({
       {/* Bottom input — one floating bar in the chat column's width. */}
       <div className="shrink-0 px-4 pb-5 pt-2">
         <div className="mx-auto w-full max-w-3xl">
-          <div className="flex items-end gap-2 rounded-lg bg-card p-2 shadow-lg edge-glow">
+          <div className="flex items-end gap-2 rounded-lg bg-muted/50 p-2">
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

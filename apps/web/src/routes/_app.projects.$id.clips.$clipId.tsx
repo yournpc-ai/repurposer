@@ -505,7 +505,9 @@ function ClipEditorPage() {
                         {t('clipEditor.translating')}
                       </span>
                     ) : (
-                      <SelectValue />
+                      <SelectValue>
+                        {(value: string) => t(`languages.${value}`)}
+                      </SelectValue>
                     )}
                   </SelectTrigger>
                   <SelectContent>
@@ -532,7 +534,11 @@ function ClipEditorPage() {
                         {t('clipEditor.dubbing')}
                       </span>
                     ) : (
-                      <SelectValue placeholder={t('clipEditor.dubOff')} />
+                      <SelectValue placeholder={t('clipEditor.dubOff')}>
+                        {(value: string) =>
+                          value ? t(`languages.${value}`) : t('clipEditor.dubOff')
+                        }
+                      </SelectValue>
                     )}
                   </SelectTrigger>
                   <SelectContent>

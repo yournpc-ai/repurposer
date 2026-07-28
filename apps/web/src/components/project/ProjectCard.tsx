@@ -102,6 +102,16 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
       <Link
         to="/projects/$id"
         params={{ id: project.id }}
+        // draft ⟺ plan never confirmed → resume the confirm chat; processing
+        // ⟺ a run is live → attach the chat overlay to it instead of landing
+        // on the bare results page.
+        search={
+          project.status === "draft"
+            ? { overlay: "intent" }
+            : project.status === "processing"
+              ? { overlay: "run" }
+              : {}
+        }
         className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 transition-all hover:bg-accent"
       >
         <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-primary/10">
@@ -135,6 +145,13 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
             <p className="truncate text-xs text-muted-foreground">
               {active ? (
                 <span className="shimmer">{t(`projects.status.${project.status}`)}</span>
+              ) : project.status === "draft" ? (
+                // draft ⟺ created but generation never confirmed — the only
+                // useful action is resuming the plan-confirm chat.
+                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                  {t("projects.status.draft")}
+                </span>
               ) : project.updated_at ? (
                 formatRelativeTime(project.updated_at, i18n.language)
               ) : null}

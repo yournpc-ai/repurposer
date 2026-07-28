@@ -10,7 +10,7 @@
 > - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
 > - `dub_clip` / `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发）。
 > - UI 冻结已解除（2026-07-27）：chat UI / 打勾流已落地（GenerationOverlay）；@picker 仍未做，mentions 仅落契约与列。
-> - SSE 接两处：results 页 GenerationStepper + GenerationOverlay 打勾流（共用 `useRunEvents` / fetch-event-source）；
+> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；results 页 GenerationStepper 弹窗已于 2026-07-28 退役，processing 项目改开 `?overlay=run` attach 模式）；
 >   step 状态枚举加 `waiting` 座位（HITL/suspend-resume 预留）。
 > - mentions 的 type 取 `workflow_step`（本文原写 plan node——N-15 改名后全栈同名）。
 
@@ -171,6 +171,10 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 
 **前端实现（2026-07-27）**：`useRunEvents` hook 统一消费这条流，接两处——results 页 `GenerationStepper`（顶部进度条）与 `GenerationOverlay` 打勾流（composer 发送后的全屏对话：计划卡 HITL 确认 → 步骤逐行亮起（shimmer 标记进行中）→ 终态 toast + 结果页 refetch）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
+
+**进度面收编（2026-07-28）**：GenerationStepper 弹窗与后端 `ui_step` 退役——进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
+
+**计划确认的持久化与恢复（2026-07-28）**：`/projects/{id}/intent` 每次调用都把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 needs_clarification / reasons / brand_template_id；chat 修订走同一接口，所以离开即保存到最新版），`/generate` 确认时清除。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=intent`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
 
 **量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
 

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
@@ -8,7 +8,6 @@ import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { GenerationOverlay } from "@/components/generation/GenerationOverlay"
-import { GenerationStepper, type UiStep } from "@/components/results/GenerationStepper"
 import { PostCard } from "@/components/results/PostCard"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -60,13 +59,28 @@ interface WorkflowRun {
   updated_at: string | null
 }
 
+interface PendingIntent {
+  prompt: string
+  intent: {
+    action: "generate" | "answer"
+    answer: string | null
+    language: string
+    outputs: string[]
+    clip_count: number | null
+    specific_instruction: string | null
+  }
+  needs_clarification: boolean
+  reasons?: string[]
+  brand_template_id?: string | null
+}
+
 interface ProjectResults {
   project: Project
   prompt: string | null
   outputs: Output[]
   latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
-  ui_step?: UiStep | null
+  pending_intent?: PendingIntent | null
 }
 
 const TAB_TO_OUTPUT_KEY: Record<ResultsTab, string> = {
@@ -103,7 +117,7 @@ function ProjectDetailPage() {
   const { id: projectId } = Route.useParams()
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const search = Route.useSearch() as { overlay?: "intent" }
+  const search = Route.useSearch() as { overlay?: "intent" | "run" }
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [activeTab, setActiveTab] = useState<ResultsTab>("clips")
   const [loading, setLoading] = useState(true)
@@ -112,28 +126,6 @@ function ProjectDetailPage() {
   const [resultsTourOpen, setResultsTourOpen] = useState(false)
   const tabInitializedRef = useRef(false)
   const resultsTourCheckedRef = useRef(false)
-
-  const generationState = useMemo(() => {
-    try {
-      const raw = sessionStorage.getItem(`repurposer-generation-${projectId}`)
-      if (!raw) return null
-      return JSON.parse(raw) as {
-        prompt?: string
-        intent?: {
-          action: "generate" | "answer"
-          answer: string | null
-          language: string
-          outputs: string[]
-          clip_count: number | null
-          specific_instruction: string | null
-        }
-        needsClarification?: boolean
-        brandTemplateId?: string
-      }
-    } catch {
-      return null
-    }
-  }, [projectId])
 
   const fetchResults = async () => {
     try {
@@ -163,6 +155,27 @@ function ProjectDetailPage() {
   const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
   const sseActive = runActive && sse.steps.length > 0
 
+  // Attach-mode overlay (?overlay=run): latch the run id once an active run
+  // is seen, and keep the overlay mounted on it until IT navigates away.
+  // Gating the render on live `runActive` would unmount the overlay mid-flow
+  // the moment this page's own SSE refetch flips the run to completed —
+  // before the overlay's terminal handler can toast + navigate.
+  const [attachRunId, setAttachRunId] = useState<string | null>(null)
+  const attachableRunId = runActive && latestRun ? latestRun.id : null
+  useEffect(() => {
+    if (search.overlay === "run" && attachableRunId) {
+      setAttachRunId(attachableRunId)
+    }
+  }, [search.overlay, attachableRunId])
+  const closeAttachOverlay = () => {
+    setAttachRunId(null)
+    navigate({
+      to: "/projects/$id",
+      params: { id: projectId },
+      replace: true,
+    })
+  }
+
   // First-visit results tour. Fires whenever clips are ready and the chat
   // overlay is closed — no matter how the user got here (fresh generation or
   // straight from the projects list). Seen flag is its own localStorage key.
@@ -172,7 +185,7 @@ function ProjectDetailPage() {
   useEffect(() => {
     if (resultsTourCheckedRef.current) return
     if (loading || !results) return
-    if (search.overlay === "intent") return
+    if (search.overlay) return
     if (!results.outputs.some(isClipReady)) return
     resultsTourCheckedRef.current = true
     try {
@@ -259,30 +272,6 @@ function ProjectDetailPage() {
     )
     .map((n) => NODE_KIND_TO_TAB[n.kind])
 
-  // While SSE is active the stepper derives from the live step stream:
-  // percent = settled/total (via the existing (index+1)/total formula),
-  // label = the running step's stage (or kind). Structure is untouched.
-  const sseUiStep = useMemo<UiStep | null>(() => {
-    if (!sseActive) return null
-    const total = sse.steps.length
-    if (!total) return null
-    const settled = sse.steps.filter(
-      (s) => s.status === "done" || s.status === "failed" || s.status === "skipped"
-    ).length
-    const running = sse.steps.find((s) => s.status === "running")
-    return {
-      key: running?.stage ?? running?.kind ?? "queued",
-      index: settled - 1,
-      total,
-    }
-  }, [sseActive, sse.steps])
-
-  // The loading dialog's lifecycle is driven by the backend's ui_step
-  // (asset processing → generation run → first render), with the live SSE
-  // derivation taking over while a run is streaming.
-  const uiStep = sseUiStep ?? results?.ui_step
-  const showProgress = uiStep != null
-
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
     const outputKey = TAB_TO_OUTPUT_KEY[tab]
@@ -321,7 +310,7 @@ function ProjectDetailPage() {
     )
   }
 
-  const { project, prompt, outputs } = results
+  const { project, prompt, outputs, pending_intent: pendingIntent } = results
 
   // outputs holds the project's current products (targeted runs update in
   // place; full runs delete prior rows), so no per-run filtering is needed.
@@ -525,36 +514,60 @@ function ProjectDetailPage() {
           {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <ResultsTabs
-            active={activeTab}
-            onChange={setActiveTab}
-            counts={counts}
-            visible={visibleTabs}
-            running={runningTabs}
-            failed={failedTabs}
-          />
-        </div>
+        {/* Tabs + content only exist once a run has started; before that the
+            project is awaiting plan confirmation (or setup). */}
+        {!latestRun ? (
+          <div className="rounded-lg bg-muted/50 p-8 text-center">
+            <p className="font-medium">{t("results.pendingPlan.title")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {pendingIntent
+                ? t("results.pendingPlan.desc")
+                : t("results.pendingPlan.descNoPlan")}
+            </p>
+            <Button
+              className="mt-4"
+              onClick={() =>
+                navigate({
+                  to: "/projects/$id",
+                  params: { id: projectId },
+                  search: { overlay: "intent" },
+                })
+              }
+            >
+              {t("results.pendingPlan.cta")}
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* Tabs */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <ResultsTabs
+                active={activeTab}
+                onChange={setActiveTab}
+                counts={counts}
+                visible={visibleTabs}
+                running={runningTabs}
+                failed={failedTabs}
+              />
+            </div>
 
-        {showProgress && (
-          <GenerationStepper open={showProgress} uiStep={uiStep} />
+            {/* Content — live progress shows inline (running tab indicators,
+                skeleton grids, per-clip render spinners); the full-screen
+                progress surface is the chat overlay, opened via ?overlay=run. */}
+            <div>{renderTabContent()}</div>
+          </>
         )}
-
-        {/* Content */}
-        <div>{renderTabContent()}</div>
       </div>
 
       {search.overlay === "intent" && (
         <GenerationOverlay
           projectId={projectId}
-          prompt={generationState?.prompt ?? results?.prompt ?? ""}
-          initialIntent={generationState?.intent}
-          initialNeedsClarification={generationState?.needsClarification ?? true}
-          brandTemplateId={generationState?.brandTemplateId}
+          prompt={pendingIntent?.prompt ?? prompt ?? ""}
+          initialIntent={pendingIntent?.intent}
+          initialNeedsClarification={pendingIntent?.needs_clarification ?? true}
+          brandTemplateId={pendingIntent?.brand_template_id ?? undefined}
           onClose={() => navigate({ to: "/projects" })}
           onComplete={() => {
-            sessionStorage.removeItem(`repurposer-generation-${projectId}`)
             // The overlay created the run after this page's initial fetch —
             // refetch so latest_run/outputs are live when it unmounts
             // (same-route search navigation does not remount the page).
@@ -564,6 +577,34 @@ function ProjectDetailPage() {
               params: { id: projectId },
               replace: true,
             })
+          }}
+        />
+      )}
+
+      {/* Attach mode (processing project opened from the list): the same
+          chat overlay, but bound to the live run — no confirm phase. The
+          intent is reconstructed from the run context purely for the
+          confirmed-plan summary line. Settled runs fall through to the
+          normal results view. */}
+      {search.overlay === "run" && attachRunId && latestRun && (
+        <GenerationOverlay
+          projectId={projectId}
+          prompt={latestRun.context?.instruction ?? prompt ?? ""}
+          initialIntent={{
+            action: "generate",
+            answer: null,
+            language:
+              latestRun.context?.target_language || project.language || "en",
+            outputs: latestRun.context?.outputs ?? ["clips"],
+            clip_count: latestRun.context?.clip_count ?? null,
+            specific_instruction: latestRun.context?.instruction ?? null,
+          }}
+          brandTemplateId={latestRun.context?.brand_template_id ?? undefined}
+          initialRunId={attachRunId}
+          onClose={closeAttachOverlay}
+          onComplete={() => {
+            fetchResults()
+            closeAttachOverlay()
           }}
         />
       )}

@@ -13,6 +13,7 @@ from app.models.schemas import (
     ExportRequest,
     GenerateRequest,
     OutputResponse,
+    PendingIntent,
     ProjectCreate,
     ProjectIntentRequest,
     ProjectIntentResponse,
@@ -141,113 +142,6 @@ async def get_project(
     return ProjectResponse.model_validate(project)
 
 
-# Stepper prefix phases (asset processing → planning) always exist; output
-# phases are included only when the run requested them.
-_UI_STEP_BASE = ["transcribing", "queued", "analyze", "plan", "prepare"]
-_UI_STEP_TEXT_OUTPUTS = {"post", "quotes", "article", "carousel"}
-
-
-def _ui_steps_for_outputs(outputs: list[str]) -> list[str]:
-    steps = list(_UI_STEP_BASE)
-    if "clips" in outputs:
-        steps += ["selecting_segments", "building_specs"]
-    if any(o in _UI_STEP_TEXT_OUTPUTS for o in outputs):
-        steps.append("writing_copy")
-    if "quotes" in outputs:
-        steps.append("generating_image")
-    if "clips" in outputs:
-        steps.append("ready_to_render")
-    return steps
-
-
-def _compute_ui_step(
-    assets: list[Asset],
-    latest_run: WorkflowRun | None,
-    nodes: list[WorkflowStep],
-    outputs: list[Output],
-) -> dict | None:
-    """Stepper position for the results-page loading dialog.
-
-    Derived from the run's workflow_steps (RunPlan Phase 1): the current step is
-    the first non-settled node by seq; node kind/stage maps onto the existing
-    i18n step keys, so the frontend contract ({key, index, total}) is
-    unchanged. None = hide the dialog (no run, run failed, or everything
-    settled).
-
-    Render handoff: "ready_to_render" only shows while clips are QUEUED for
-    rendering (all pending). Once at least one clip is actively rendering, the
-    dialog closes and each clip card's own spinner takes over — the frontend
-    keeps polling while any render is active, so the cards stay live.
-    """
-    if latest_run is None or latest_run.status == "failed":
-        return None
-
-    ctx = latest_run.context or {}
-    outputs_requested = ctx.get("outputs") or ["clips"]
-    steps = _ui_steps_for_outputs(outputs_requested)
-
-    def at(key: str) -> dict:
-        # Targeted runs (script/render) have no matching display step; park at
-        # the end of planning rather than failing the index lookup.
-        if key not in steps:
-            key = "prepare"
-        return {"key": key, "index": steps.index(key), "total": len(steps)}
-
-    def clip_render_state() -> tuple[bool, bool]:
-        """(any clip actively rendering, any clip queued for render)."""
-        rendering = any(
-            o.type == "clip" and o.render_status == "rendering" for o in outputs
-        )
-        pending = any(
-            o.type == "clip" and o.render_status == "pending" for o in outputs
-        )
-        return rendering, pending
-
-    # Assets still processing (ASR / extraction) — the run queues behind them.
-    if any(a.processing_status in ("pending", "processing") for a in assets):
-        return at("transcribing")
-
-    if latest_run.status == "pending":
-        return at("queued")
-
-    current = next(
-        (n for n in nodes if n.status in ("pending", "running")), None
-    )
-    if current is not None:
-        if current.kind in ("preprocess", "persona_bootstrap", "director_understand"):
-            return at("analyze")
-        if current.kind == "director_plan":
-            return at("plan")
-        if current.kind == "clips_pipeline":
-            stage = (current.spec or {}).get("stage")
-            return at(stage if stage in steps else "selecting_segments")
-        if current.kind in ("post_gen", "quotes_gen", "carousel_gen", "article_gen"):
-            stage = (current.spec or {}).get("stage")
-            if stage == "generating_image":
-                return at("generating_image")
-            return at("writing_copy")
-        if current.kind == "render":
-            rendering, _ = clip_render_state()
-            # Targeted re-render: once the worker has claimed a clip, the
-            # card's spinner takes over and the dialog can close.
-            return None if rendering else at("ready_to_render")
-        return at("prepare")
-
-    if latest_run.status == "completed":
-        if "ready_to_render" in steps:
-            rendering, pending = clip_render_state()
-            # All clips queued but none claimed yet → still "about to start
-            # rendering". Once any clip is actively rendering, hide the dialog;
-            # the clip cards show their own rendering spinners.
-            if rendering:
-                return None
-            if pending:
-                return at("ready_to_render")
-        return None
-
-    return None
-
-
 @router.get("/{project_id}/results", response_model=ProjectResultsResponse)
 async def get_project_results(
     project_id: UUID,
@@ -289,8 +183,8 @@ async def get_project_results(
         latest_run_resp.steps = [workflow_step_to_response(n) for n in nodes]
         latest_run_resp.cost = aggregate_step_cost(nodes)
 
-    # Asset processing statuses power the results-page loading state (the
-    # transcribing/parsing phase before the generation run starts).
+    # Asset processing statuses power the overlay's pre-run placeholder (the
+    # transcribing/parsing phase before the generation run's steps exist).
     assets_result = await db.execute(
         select(Asset).where(Asset.project_id == project_id).order_by(Asset.created_at)
     )
@@ -302,7 +196,7 @@ async def get_project_results(
         "outputs": outputs,
         "latest_run": latest_run_resp,
         "assets": assets,
-        "ui_step": _compute_ui_step(assets, latest_run, nodes, outputs),
+        "pending_intent": project.pending_intent,
     }
 
 
@@ -413,9 +307,29 @@ async def infer_project_intent(
     if "clips" in intent.outputs and not has_renderable_media:
         reasons.append("clips_without_media")
 
+    needs_clarification = bool(reasons)
+
+    # A call that omits brand_template_id (chat refinements, the overlay's
+    # fallback fetch) must not clobber the brand choice the composer made.
+    brand_template_id = data.brand_template_id
+    if brand_template_id is None and isinstance(project.pending_intent, dict):
+        brand_template_id = project.pending_intent.get("brand_template_id")
+
+    # Persist the unconfirmed task book on the project: leaving the plan-
+    # confirmation chat and coming back (any device) restores this exact
+    # plan. Cleared by /generate once the run starts.
+    project.pending_intent = PendingIntent(
+        prompt=data.prompt or "",
+        intent=intent,
+        needs_clarification=needs_clarification,
+        reasons=reasons,
+        brand_template_id=brand_template_id,
+    ).model_dump(mode="json")
+    await db.commit()
+
     return ProjectIntentResponse(
         intent=intent,
-        needs_clarification=bool(reasons),
+        needs_clarification=needs_clarification,
         reasons=reasons,
     )
 
@@ -508,6 +422,8 @@ async def generate_content(
         ),
     )
     project.status = ProjectStatus.PROCESSING
+    # The task book is confirmed now — drop the unconfirmed copy.
+    project.pending_intent = None
     await db.commit()
     await db.refresh(run)
 

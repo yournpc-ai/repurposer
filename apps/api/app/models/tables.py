@@ -114,6 +114,10 @@ class Project(Base):
     language = Column(String(10), default="zh")
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
+    # Unconfirmed task book + original prompt from /projects/{id}/intent
+    # (PendingIntent shape). Cleared when /generate starts the run; its
+    # presence on a draft project is what "awaiting confirmation" means.
+    pending_intent = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -145,6 +149,9 @@ class Asset(Base):
     speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
     type = Column(Enum(AssetType), nullable=False)
     file_url = Column(String(512), nullable=True)
+    # User-facing display name (defaults to the original upload filename);
+    # the storage key in file_url stays an opaque unique identifier.
+    title = Column(String(255), nullable=True)
     transcript = Column(Text, nullable=True)
     extracted_text = Column(Text, nullable=True)
     slide_pages = Column(JSON, nullable=True)

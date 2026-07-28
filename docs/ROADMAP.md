@@ -84,7 +84,7 @@
 | LLM provider 抽象层（generate structured / chat with tools 两个方法） | 2027 架构；EU 客户可能要求 Mistral/EU-hosted | **P1** | 无；需修订 ADR-003（当前明确"不做抽象"，是有意决策，翻案要走 ADR） | ⚠️ | ❌（有意未做） |
 | 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——导演两步走后 `director_plan` 已独立可寻址，"重排任务"具备重跑对象；简报 `tasks/chat-loop-v2.md` §4） |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ✅（CHAT_ARCH §3 三类目标 + 两家族分离：产物级→operations 表，plan 级→RunPlan 小拓扑） |
-| chat 全屏 UI（GenerationOverlay：composer → 计划卡 HITL 确认 → SSE 打勾流 → 结果页；中止/续聊/附件展示；results 页 GenerationStepper 同数据源） | CHAT_ARCH §3/§8；Opus 交互参照 | P1 | chat v1/v2 后端 | — 纯前端 | ✅（2026-07-27：含失败/完成 toast、完成后结果页自动刷新、空态扁平化；results 首访 Tour 同步落地） |
+| chat 全屏 UI（GenerationOverlay：composer → 计划卡 HITL 确认 → SSE 打勾流 → 结果页；中止/续聊/附件展示） | CHAT_ARCH §3/§8；Opus 交互参照 | P1 | chat v1/v2 后端 | — 纯前端 | ✅（2026-07-27：含失败/完成 toast、完成后结果页自动刷新、空态扁平化；results 首访 Tour 同步落地。2026-07-28：GenerationStepper 弹窗 + 后端 `ui_step` 退役，processing 项目走 `?overlay=run` attach 模式，进度面只剩打勾流一处） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 | 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
@@ -130,7 +130,7 @@
 |---|---|---|---|---|---|
 | Speaker persona（风格记忆） | ADR-021 | — | — | ✅ | ✅ 已落地 |
 | Brand template | — | — | — | ✅ | ✅ 已落地 |
-| 术语表 / glossary（机构级翻译质量；含 transcript "Correct everywhere" 批量纠错入口——矩阵 §E） | 矩阵 §G "极高"；PRD §4.2（对桥梁型 seed ICP 是生存项：固定译法 = 专业尊严） | P1 | persona 注入链路（已有） | ✅ | ❌（仅一条 i18n 占位文案） |
+| 术语表 / glossary（机构级翻译质量；含 transcript "Correct everywhere" 批量纠错入口——矩阵 §E；**一份资产两消费者**：固定译法喂翻译 + 发音喂 dub——Opus Pronunciation 实证，opusclip §4 2026-07-28） | 矩阵 §G "极高"；PRD §4.2（对桥梁型 seed ICP 是生存项：固定译法 = 专业尊严） | P1 | persona 注入链路（已有） | ✅ | ❌（仅一条 i18n 占位文案） |
 | 多语言文案质量（Voice DNA 跨语言保真） | 矩阵 §G "极高"；2026 B2B 趋势 | P1 | 术语表 | ✅ | ❌ |
 | persona 显化于 UI（让用户看到/编辑自己的 Voice DNA） | 2027 架构；STRATEGY §2.2 | P2 | — | ✅ | ❌ |
 
