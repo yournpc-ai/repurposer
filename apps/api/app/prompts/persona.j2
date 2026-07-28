@@ -12,6 +12,9 @@ You are a professional speaking style analyst. Your task is to read a speaker's 
 
 Please summarize the speaker's style and content memory across 10 dimensions based on the following source texts. Write all extracted descriptions in {{ language }}.
 
+Identity (synthesize, do not copy):
+0. **Persona Name (name)**: A short descriptive persona label (2-6 words) that summarizes who this speaker is as a content persona, e.g. "Pragmatic AI evangelist" or "Academic robotics researcher". Never reuse the input name above, and never use anything that looks like a file name — distill it from the source texts.
+
 Style memory:
 1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
 2. **Favorite Metaphors (favorite_metaphors)**: Analogies, comparisons, and imagery they commonly use (e.g., "lighthouse", "bridge", "spark")
@@ -39,6 +42,7 @@ Content memory:
 Please output only valid JSON, with no explanations or markdown code blocks. The JSON structure is as follows:
 
 {
+  "name": "...",
   "core_values": ["...", "..."],
   "favorite_metaphors": ["...", "..."],
   "sentence_style": "...",

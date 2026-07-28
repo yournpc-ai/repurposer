@@ -612,7 +612,9 @@ async def run_persona_bootstrap(
 
     speaker = Speaker(
         user_id=project.user_id,
-        name=project.title or "Auto Speaker",
+        # LLM-synthesized persona label — project.title is the first uploaded
+        # file's name (see HomeComposer), which must not become the persona name.
+        name=_truncate(memory.name, 255) or project.title or "Auto Speaker",
         title=None,
         language=project.language or "en",
         core_values=memory.core_values or [],

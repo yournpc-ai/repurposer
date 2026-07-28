@@ -24,6 +24,11 @@ _MAX_CHARS_PER_TEXT = 150_000
 class _ExtractedSpeakerMemory(BaseModel):
     """Internal extraction result; maps directly to Speaker DB columns."""
 
+    # LLM-synthesized persona label (e.g. "Pragmatic AI evangelist") — used as
+    # the Speaker.name when the pipeline auto-creates a speaker, so the row is
+    # never named after an uploaded file. Ignored on manual regenerate, where
+    # the user owns the name.
+    name: str = ""
     core_values: list[str] = Field(default_factory=list)
     favorite_metaphors: list[str] = Field(default_factory=list)
     sentence_style: str = ""
