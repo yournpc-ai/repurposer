@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import { clearAuth, getUser } from "@/lib/auth"
 import { useAuth } from "@/components/AuthProvider"
@@ -66,7 +67,8 @@ export function AppSidebar() {
   const router = useRouterState()
   const currentPath = router.location.pathname
   const { t } = useTranslation()
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, state } = useSidebar()
+  const collapsed = state === "collapsed"
   const navigate = useNavigate()
   const { isAuthenticated, setLoginOpen, refreshAuth } = useAuth()
 
@@ -80,6 +82,29 @@ export function AppSidebar() {
     refreshAuth()
     navigate({ to: "/" })
   }
+
+  const avatarTrigger = (
+    <DropdownMenuTrigger
+      render={
+        <Button
+          variant="ghost"
+          className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
+        >
+          <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
+            <AvatarImage src="" alt={displayName} />
+            <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
+              {isAuthenticated ? initial : <User className="h-3 w-3" />}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
+            <span className="text-sm font-medium leading-none">{displayName}</span>
+            <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
+        </Button>
+      }
+    />
+  )
 
   return (
     <Sidebar
@@ -133,26 +158,21 @@ export function AppSidebar() {
 
       <SidebarFooter className="gap-3 p-2 group-data-[state=collapsed]:items-center">
         <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                className="h-11 w-full justify-start gap-3 rounded-xl px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0"
-              >
-                <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
-                  <AvatarImage src="" alt={displayName} />
-                  <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
-                    {isAuthenticated ? initial : <User className="h-3 w-3" />}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
-                  <span className="text-sm font-medium leading-none">{displayName}</span>
-                  <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
-                </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
-              </Button>
-            }
-          />
+          {/* Collapsed: hovering the avatar shows who is signed in (the name
+              row is hidden then); expanded it stays a plain click target. */}
+          {collapsed ? (
+            <Tooltip>
+              <TooltipTrigger render={avatarTrigger} />
+              <TooltipContent side="right">
+                <p className="text-xs font-medium">{displayName}</p>
+                {user?.email && user.email !== displayName && (
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            avatarTrigger
+          )}
           <DropdownMenuContent
             className="w-56 rounded-xl"
             side="top"
