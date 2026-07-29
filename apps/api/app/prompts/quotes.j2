@@ -8,11 +8,12 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 {% endif %}## Task
 
 Extract {{ count }} quotes from the following source text. Each quote must:
-- Be 20–80 characters in length, suitable for a graphic card
+- Be at most 25 words (or 80 CJK characters) — short enough for a graphic card
 - Be able to stand alone and resonate without context
 - Match the speaker's style and brand voice
 - Have clear attribution (speaker name + event/occasion)
 - **Output language: {{ context.target_language }}**
+- **Verbatim fidelity**: when the output language is the same as the source language, each quote must be copied word-for-word from the source text — never paraphrase, "improve", or invent a sentence and attribute it to the speaker. When translating into another language, translate faithfully without adding or inventing claims.
 
 ## Material Understanding
 
@@ -24,7 +25,7 @@ Extract {{ count }} quotes from the following source text. Each quote must:
 {% if slot.quote_candidates %}
 ## Candidate Quotes
 
-Consider using or adapting these candidate quotes assigned by the storyboard:
+Use these candidate quotes assigned by the storyboard — verbatim when the languages match:
 {% for quote in slot.quote_candidates %}
 - {{ quote }}
 {% endfor %}

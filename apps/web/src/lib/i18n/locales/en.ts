@@ -582,6 +582,8 @@ const en = {
     starting: "Starting…",
     startingLine: "I'm starting your generation — stay to refine it together, or close this and I'll finish in the background.",
     planSummaryClips: "{{count}} clips",
+    planSummaryQuotes: "{{count}} quote cards",
+    planSummaryCarousel: "{{count}}-slide carousel",
     planUpdated: "Got it — I've updated the plan above.",
     chatPlaceholder: "Chat with Repurposer…",
     chatPlaceholderConfirm: "Ask me to adjust the plan…",

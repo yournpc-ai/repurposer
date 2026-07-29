@@ -408,6 +408,8 @@ async def generate_content(
         TaskSpec(
             outputs=outputs,
             clip_count=clip_count,
+            quotes_count=request.quotes_count,
+            carousel_count=request.carousel_count,
             target_language=target_language,
             instruction=instruction,
             tone_settings=(

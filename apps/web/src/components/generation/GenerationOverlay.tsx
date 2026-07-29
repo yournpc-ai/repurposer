@@ -91,6 +91,8 @@ interface InferredIntent {
   language: string
   outputs: string[]
   clip_count: number | null
+  quotes_count: number | null
+  carousel_count: number | null
   specific_instruction: string | null
 }
 
@@ -283,6 +285,8 @@ export function GenerationOverlay({
           language: "en",
           outputs: ["post", "quotes", "article"],
           clip_count: 5,
+          quotes_count: null,
+          carousel_count: null,
           specific_instruction: prompt,
         }
   )
@@ -350,6 +354,12 @@ export function GenerationOverlay({
           target_language: intent.language,
           clip_count: intent.outputs.includes("clips")
             ? intent.clip_count ?? 5
+            : undefined,
+          quotes_count: intent.outputs.includes("quotes")
+            ? (intent.quotes_count ?? undefined)
+            : undefined,
+          carousel_count: intent.outputs.includes("carousel")
+            ? (intent.carousel_count ?? undefined)
             : undefined,
           instruction: intent.specific_instruction || prompt,
           brand_template_id: brandTemplateId || undefined,
@@ -432,6 +442,14 @@ export function GenerationOverlay({
     ]
     if (intent.outputs.includes("clips") && intent.clip_count) {
       parts.push(t("generationOverlay.planSummaryClips", { count: intent.clip_count }))
+    }
+    if (intent.outputs.includes("quotes") && intent.quotes_count) {
+      parts.push(t("generationOverlay.planSummaryQuotes", { count: intent.quotes_count }))
+    }
+    if (intent.outputs.includes("carousel") && intent.carousel_count) {
+      parts.push(
+        t("generationOverlay.planSummaryCarousel", { count: intent.carousel_count })
+      )
     }
     return parts.join(" · ")
   }, [intent, t])

@@ -12,6 +12,12 @@ You do **not** have access to the original talk. The understanding below is ever
 {% if 'clips' in task_book.outputs %}
 - Clips: {{ task_book.clip_count }} vertical short clips
 {% endif %}
+{% if 'quotes' in task_book.outputs %}
+- Quotes: {{ task_book.quotes_count or 3 }} quote cards{% if task_book.quotes_count %} (explicitly requested by the user — do not deviate){% endif %}
+{% endif %}
+{% if 'carousel' in task_book.outputs %}
+- Carousel: {{ task_book.carousel_count or 6 }} slides{% if task_book.carousel_count %} (explicitly requested by the user — do not deviate){% endif %}
+{% endif %}
 - **Output language: {{ context.target_language }}** — all slot copy (focus, cta, tone_override) uses it; quotes stay verbatim.
 
 {% if context.instruction %}
@@ -97,5 +103,5 @@ Requirements:
 - The clips slot is a **single aggregate slot** (`count` = the requested clip count); per-clip assignment happens downstream.
 - `argument_ids` must reference ids from the Key Arguments list above. Distribute arguments so the talk's key points are covered across the requested outputs.
 - `quote_candidates` must come from the Quote Pool above.
-- `count`: for quotes default 3, for carousel default 6 slides, for clips use the requested clip count, otherwise null.
+- `count`: quotes → the Task Book's quotes count (default 3 when none given); carousel → the Task Book's slide count (default 6 when none given); clips → the requested clip count; otherwise null.
 - Output JSON only, no other content.

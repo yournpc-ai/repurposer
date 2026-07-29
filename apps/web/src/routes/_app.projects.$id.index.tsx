@@ -48,6 +48,8 @@ interface WorkflowRun {
   context: {
     outputs?: string[]
     clip_count?: number
+    quotes_count?: number | null
+    carousel_count?: number | null
     target_language?: string
     brand_template_id?: string | null
     instruction?: string | null
@@ -67,6 +69,8 @@ interface PendingIntent {
     language: string
     outputs: string[]
     clip_count: number | null
+    quotes_count: number | null
+    carousel_count: number | null
     specific_instruction: string | null
   }
   needs_clarification: boolean
@@ -597,6 +601,8 @@ function ProjectDetailPage() {
               latestRun.context?.target_language || project.language || "en",
             outputs: latestRun.context?.outputs ?? ["clips"],
             clip_count: latestRun.context?.clip_count ?? null,
+            quotes_count: latestRun.context?.quotes_count ?? null,
+            carousel_count: latestRun.context?.carousel_count ?? null,
             specific_instruction: latestRun.context?.instruction ?? null,
           }}
           brandTemplateId={latestRun.context?.brand_template_id ?? undefined}

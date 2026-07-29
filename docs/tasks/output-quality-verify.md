@@ -166,7 +166,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 5. **期 3 打回**：speaker 配 avoid_words 后生成 post → post_gen attempt ≥ 2（feedback 进 prompt 日志可见）；连续失败 ≤ 2 次后产物标 needs_human、run 仍 COMPLETED、badge 显示失败项。
 6. **期 3 mode②**：chat "写个 post" 的图含 verify；modifier 链（"去口头禅加音乐"）无 verify。
 7. **成本**：verify 节点零 LLM 调用（`workflow_steps.cost` 为空）；打回重跑成本落 executor 节点。
-8. **附项·响度**：低音量源视频渲染出的 clip 实测响度 -16 LUFS ±1（ffmpeg `ebur128` 量取）；过大音量同样被压回。
+8. **附项·响度**：低音量源视频渲染出的 clip 实测响度 -16 LUFS ±1；过大音量同样被压回。测量用 loudnorm 自带测量通道（`print_format=json` 的 `input_i`，同 R128 算法）——Remotion compositor 的裁剪 ffmpeg 构建无 ebur128 滤镜。
 9. **附项·下载**：article/carousel/post 下载菜单三项齐（.md/.txt/复制），.txt 无 Markdown 语法残留。
 10. **附项·count**：prompt "给我 8 张金句卡" → storyboard quotes 槽 count=8 → 产物 8 条；未提及时默认 3/6 不变。
 11. **文档落地**：ROADMAP §1 两行状态翻 ✅（维度明细 / 质检节点首期，全片质检标注仍 ❌）；AGENT_ARCH §12.7 Phase 3 → 🚧 首期落地；NAMING 词汇表登记 §5 新词。

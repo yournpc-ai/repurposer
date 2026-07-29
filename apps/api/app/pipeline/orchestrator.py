@@ -56,6 +56,8 @@ class TaskSpec(BaseModel):
 
     outputs: list[str] = ["clips"]
     clip_count: int = 5
+    quotes_count: int | None = None
+    carousel_count: int | None = None
     target_language: str = "en"
     instruction: str | None = None
     tone_settings: dict | None = None

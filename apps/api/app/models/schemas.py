@@ -407,6 +407,20 @@ class InferredIntent(BaseModel):
             "None means the caller should use its own default."
         ),
     )
+    quotes_count: int | None = Field(
+        default=None,
+        description=(
+            "Requested number of quote cards when 'quotes' is in outputs "
+            "(e.g. '8 张金句卡'). None = default."
+        ),
+    )
+    carousel_count: int | None = Field(
+        default=None,
+        description=(
+            "Requested number of carousel slides when 'carousel' is in outputs "
+            "(e.g. '5 页轮播'). None = default."
+        ),
+    )
     tone: Literal["professional", "thoughtLeadership", "conversational", "academic"] = (
         Field(default="professional", description="Detected tone preset.")
     )
@@ -1306,6 +1320,14 @@ class GenerateRequest(BaseModel):
     """Generate content request."""
 
     clip_count: int = Field(default=5, ge=1, le=10)
+    quotes_count: int | None = Field(
+        default=None, ge=1, le=20,
+        description="Requested quote card count; None = storyboard default (3).",
+    )
+    carousel_count: int | None = Field(
+        default=None, ge=2, le=15,
+        description="Requested carousel slide count; None = storyboard default (6).",
+    )
     outputs: list[
         Literal["clips", "post", "quotes", "article", "carousel"]
     ] | None = Field(

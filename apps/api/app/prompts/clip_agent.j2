@@ -53,8 +53,10 @@ The user's explicit requirements for this output are as follows. **Please priori
 {% endif %}
 ## Output Language
 
-**All output copy (every clip's source_text, summary, hook, title, golden_quote, shot subtitles, title_options, description, hashtags, and topic) must use the target language: {{ context.target_language }}.**
+**All output copy (every clip's summary, hook, title, golden_quote, shot subtitles, title_options, description, hashtags, and topic) must use the target language: {{ context.target_language }}.**
 If the original speech is in another language but the target language is en, translate/rewrite into English.
+
+Three fields are exempt and must stay **verbatim in the source language** — they are locating anchors against the source material and the fidelity baseline for automated checks: `source_text` (the segment's exact original wording, copied word-for-word), `start_marker`, and `end_marker`.
 
 The only exception is ``music_mood``: it must stay an English key from the music library — `calm`, `uplifting`, or `corporate`.
 
@@ -169,20 +171,16 @@ Event Name: {{ context.event_name }}
 
 {% endfor %}
 
-{% if source_words %}
-## Source Word-Level Timestamps
+{% if anchored_transcript %}
+## Timestamped Transcript
 
-Use the following ASR output to pick precise clip boundaries. Each entry gives the exact word and its start/end time in seconds.
+The full source transcript with time anchors — every line is `[start_seconds-end_seconds] text`, covering the talk from beginning to end.
 
-```json
-[
-{% for w in source_words[:400] %}
-  {"word": {{ w.word | tojson }}, "start": {{ w.start | default(0) }}, "end": {{ w.end | default(0) }} }{% if not loop.last %},{% endif %}
-{% endfor %}
-]
+```
+{{ anchored_transcript }}
 ```
 
-When selecting a segment, copy the **first word's `start`** into `start_seconds` and the **last word's `end`** into `end_seconds`. These timestamps take priority over text markers. Make sure each clip's `start_seconds` is **after** the previous clip's `end_seconds` so clips do not overlap.
+When selecting a segment, copy `start_seconds` / `end_seconds` from these line anchors (coarse values are fine — code snaps them to exact word boundaries). These timestamps take priority over text markers. Make sure each clip's `start_seconds` is **after** the previous clip's `end_seconds` so clips do not overlap.
 
 {% endif %}
 ## Output Format
@@ -195,9 +193,9 @@ Please output valid JSON only, with no explanations or markdown code blocks.
   "clips": [
     {
       "id": "clip_001",
-      "source_text": "Original segment text, about 100-200 words",
-      "start_marker": "Segment start position (e.g., 'first paragraph' or 'beginning of paragraph 3')",
-      "end_marker": "Segment end position",
+      "source_text": "The segment's exact original wording, verbatim in the source language, about 100-200 words",
+      "start_marker": "Segment start position (e.g., 'first paragraph' or 'beginning of paragraph 3'), in the source language",
+      "end_marker": "Segment end position, in the source language",
       "start_seconds": 12.34,
       "end_seconds": 28.91,
       "summary": "What this segment is about, in one sentence",
@@ -227,7 +225,7 @@ Please output valid JSON only, with no explanations or markdown code blocks.
 Requirements:
 - Produce exactly {{ clip_count }} clips
 - Each clip's id must be in the format clip_001, clip_002, etc.
-- **start_seconds and end_seconds are required** and must be copied from the Source Word-Level Timestamps above
+- **start_seconds and end_seconds are required** and must be copied from the Timestamped Transcript line anchors above
 - start_seconds must be strictly less than end_seconds
 - **Every clip must be at least 5 seconds long**. If your selected words produce a segment shorter than 5 seconds, extend the segment by including additional words before or after until the duration is >= 5 seconds.
 - Each subsequent clip must start after the previous clip ends (no overlap)

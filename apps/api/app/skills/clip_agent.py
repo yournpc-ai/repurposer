@@ -34,7 +34,7 @@ class ClipAgent(MiniMaxAgentBase):
         storyboard: Storyboard,
         asset_media: list[MediaInput] | None = None,
         clip_count: int = 3,
-        source_words: list[dict[str, Any]] | None = None,
+        anchored_transcript: str | None = None,
         music_pieces: list[dict[str, str]] | None = None,
     ) -> ClipPlans:
         """Plan clips from source texts and/or raw media.
@@ -46,8 +46,9 @@ class ClipAgent(MiniMaxAgentBase):
             storyboard: Storyboard from director step 2 (aggregate clips slot).
             asset_media: Optional images/videos/short audio snippets from assets.
             clip_count: Number of clips to plan.
-            source_words: Optional ASR word-level timestamps for the primary source
-                so the agent can output exact ``start_seconds`` / ``end_seconds``.
+            anchored_transcript: Full-talk transcript with ``[start-end]`` line
+                anchors (``app.tools.transcript.build_anchored_transcript``) so
+                the agent can output exact ``start_seconds`` / ``end_seconds``.
             music_pieces: Available music library pieces (``id``/``mood``/
                 ``title``/``description``) the agent selects from per clip.
 
@@ -78,7 +79,7 @@ class ClipAgent(MiniMaxAgentBase):
             context=context.model_dump(),
             understanding=understanding.model_dump(),
             slot=slot,
-            source_words=source_words or [],
+            anchored_transcript=anchored_transcript,
             music_pieces=music_pieces or [],
         )
 

@@ -37,6 +37,7 @@ from app.skills.base import _MAX_CHARS_PER_TEXT
 from app.skills.content_director import content_director_agent
 from app.skills.persona import persona_agent
 from app.skills.reviser import reviser_agent
+from app.tools.transcript import build_anchored_transcript
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.schemas import (
     AssetType,
@@ -740,6 +741,8 @@ async def run_director_plan(
     task_book = {
         "outputs": outputs or ["clips"],
         "clip_count": int(ctx.get("clip_count", 3)),
+        "quotes_count": ctx.get("quotes_count"),
+        "carousel_count": ctx.get("carousel_count"),
     }
 
     speaker = await resolve_speaker(db, project)
@@ -849,6 +852,14 @@ async def run_clips_pipeline(
             for m in music_rows
         ]
 
+    # Full-talk anchored transcript: the clip agent copies coarse timestamps
+    # from line anchors; locate_span snaps them to word boundaries.
+    anchored_transcript = (
+        build_anchored_transcript((render_source.meta or {}).get("words") or [])
+        if render_source is not None
+        else None
+    )
+
     try:
         plans = await clip_agent.generate(
             asset_texts=asset_texts,
@@ -857,11 +868,7 @@ async def run_clips_pipeline(
             storyboard=storyboard,
             asset_media=await collect_asset_media(assets),
             clip_count=clip_count,
-            source_words=(
-                (render_source.meta or {}).get("words")
-                if render_source is not None
-                else None
-            ),
+            anchored_transcript=anchored_transcript,
             music_pieces=await _load_music_pieces(),
         )
     except Exception as e:  # noqa: BLE001
@@ -874,11 +881,7 @@ async def run_clips_pipeline(
                 storyboard=storyboard,
                 asset_media=await collect_asset_media(assets),
                 clip_count=clip_count,
-                source_words=(
-                    (render_source.meta or {}).get("words")
-                    if render_source is not None
-                    else None
-                ),
+                anchored_transcript=anchored_transcript,
                 music_pieces=await _load_music_pieces(),
             )
         except Exception as e2:  # noqa: BLE001

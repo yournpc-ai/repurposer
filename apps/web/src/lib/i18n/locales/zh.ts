@@ -584,6 +584,8 @@ const zh: Resources = {
     starting: "启动中…",
     startingLine: "我开始生成了——你可以继续和我聊，也可以关掉页面，它会在后台完成。",
     planSummaryClips: "{{count}} 条切片",
+    planSummaryQuotes: "{{count}} 张金句卡",
+    planSummaryCarousel: "{{count}} 页轮播",
     planUpdated: "好，我记下了——上面的计划已更新。",
     chatPlaceholder: "和 Repurposer 聊聊…",
     chatPlaceholderConfirm: "告诉我怎么调整计划…",

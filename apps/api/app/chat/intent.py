@@ -79,6 +79,12 @@ class ComposerIntentAgent:
             "→ 5, 'a few clips' → 3, 'no clips' → 0).\n"
             "  Only set this when the user mentions a quantity of clips. Otherwise "
             "null.\n"
+            "- quotes_count: integer number of quote cards the user wants "
+            "(e.g. '8 张金句卡' → 8, 'three quotes' → 3). Only set when the user "
+            "mentions a quantity of quotes/quote cards. Otherwise null.\n"
+            "- carousel_count: integer number of carousel slides the user wants "
+            "(e.g. '5 页轮播' → 5, 'a 10-slide carousel' → 10). Only set when the "
+            "user mentions a slide count. Otherwise null.\n"
             "- clip_count_explicit: true only when clip_count came from a "
             "user-mentioned quantity. false when left as null/default.\n"
             "- tone: one of professional, thoughtLeadership, conversational, "
@@ -129,6 +135,8 @@ class ComposerIntentAgent:
                 outputs_explicit=False,
                 clip_count=None,
                 clip_count_explicit=False,
+                quotes_count=None,
+                carousel_count=None,
                 tone="professional",
                 specific_instruction=prompt.strip() or None,
                 confidence=0.0,
