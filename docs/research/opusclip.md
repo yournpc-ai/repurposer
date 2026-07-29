@@ -119,3 +119,13 @@ Opus 是品类定义者也是我们唯一的正面对标：它验证了"打分 +
 ### 8.5 趋势判词
 
 纯切条商品化实锤（STRATEGY §1 判断 1 正在发生）：Opus 的对冲是**广度**（向上 stylize、向全 autopilot、向下生成，三条产品线 + 周级发版）；我们的对冲是**深度**（身份 + 信任 + 机构闭环）。赛道结论不变：不在他们的战场卷功能数量。
+
+## 9. Agent Opus 的 HITL 形态实证（2026-07-28/29 实测截图 ×4）
+
+> 用途：我们 ask 原语 + 停靠确认 + 方向检查点设计的直接参照（`../tasks/intent-ask-primitive.md`）。
+
+- **停靠决策条**：确认条常驻输入框正上方，不随消息滚动——解剖 = `✓ + 一句问句 + 成本（⚡70/105）+ 1~3 个动作按钮`。两例："Ready to roll, start creating video now?"（Cancel / Create Video Now / Create Storyboard——**Cancel = bail 路径的产品实证**，Create Storyboard = 提交前替代路径）；"Save the brand brief and continue?"（单按钮）。
+- **审阅与决策分层**：Transcript / Brand brief 是消息流里的**可编辑面板**（"Review your X, edit directly or ask agent to edit"，字数统计 150/1700 words），决策条另行停靠——审阅在流内、决策在 dock。
+- **结构化提问**：选项卡（A/B/C 选项由素材理解生成 + "Something else…" 自由文本回落）占据 input 层；回答后消息流留 **QA 双层存档**（"Q: 这五个切片你想做成哪种方向？ / A: 人物出镜品牌介绍短片"）。
+- **transcript 也给用户确认**：ASR 稿审阅面板（编辑或叫 agent 改）——我们归术语表线的参照。
+- **自治档与兜底**：发送键旁 "Auto" 下拉（自治档位用户可调）；离开文案两版——页面底部 "Your project will continue processing 5 minutes after you leave this page"（露怯：5 分钟后呢？）vs 消息内 "Stay to refine it together, or I'll use my best judgment to finish the video if you step away"（高明：非阻塞 + best-judgment 兜底）。
