@@ -101,6 +101,20 @@ IntentSlot = {
 - **`_backfill_context` 兼容**：mode② task items → 槽形状回填（type 从 skill、count 从 params）。
 - **零表迁移**：全在 JSON 载荷层；run.context 老行扁平形状仅前端展示容忍，后端无回填。
 
+**与 quality 期 1（1148004，已落地）的对账点**——该 commit 中将被本迭代更新的位置：
+
+| quality 期 1 触点 | 本迭代动作 |
+|---|---|
+| `schemas.py` `InferredIntent.quotes_count`/`carousel_count` | 退役 → `IntentSlot.count` |
+| `schemas.py` `GenerateRequest` 两个 count 字段 | 退役 → slots 契约 |
+| `orchestrator.py` `TaskSpec.quotes_count`/`carousel_count` | 退役 → `outputs: list[IntentSlot]` |
+| `node_runners.py` `run_director_plan` 任务书 count 透传 | 换逐槽透传（count/focus/language） |
+| `prompts/director_plan.j2` count 规则（显式优先/缺省 3/6） | 换槽规则（显式槽字段不可违背 + 同类多槽互补） |
+| `intent.py` ComposerIntentAgent 两个 count 识别规则 | 换逐槽识别（含同类多语言多槽） |
+| `GenerationOverlay.tsx` / `$id.index.tsx` count wiring + `planSummaryQuotes/Carousel` | 换逐槽编辑面板（i18n 键同步换形） |
+
+不动（期 1 成果原样保留）：锚点转写、`quality.py` 六函数、四个 prompt 修正、loudnorm。
+
 ### 2.6 checkpoint 节点（方向检查点，期 4）
 
 独立节点 kind，**瘦节点规则**——提问前不做重活（队列式重入：答案回来后从 runner 顶上重跑，靠 spec.answer 分支直达 done；不是 Mastra 的调用栈续跑）。
