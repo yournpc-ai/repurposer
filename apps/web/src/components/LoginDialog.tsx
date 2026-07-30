@@ -243,7 +243,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
               initial="initial"
               animate="animate"
               exit="exit"
-              className="flex min-h-[400px] flex-col justify-center"
+              className="flex flex-col justify-center"
             >
               <LogoMark className="h-10 w-10" />
               <h2 className="mt-5 text-xl font-semibold tracking-tight">
@@ -321,7 +321,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
               initial="initial"
               animate="animate"
               exit="exit"
-              className="flex min-h-[400px] flex-col items-center justify-center text-center"
+              className="flex flex-col items-center justify-center text-center"
             >
               <LogoMark className="h-10 w-10" />
               <h2 className="mt-5 text-xl font-semibold tracking-tight">

@@ -51,6 +51,22 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "PingFang SC", sans-serif;
 }
 
+/* Ambient glow — the landing hero's atmosphere: two soft opal-tinted radial
+ * glows (blue-violet spectrum family), blurred out. Decorative only; static,
+ * so no reduced-motion concern. Dark theme gets higher alpha to stay visible. */
+@utility ambient-glow {
+  background:
+    radial-gradient(38% 32% at 32% 34%, oklch(0.82 0.10 230 / 0.16), transparent 70%),
+    radial-gradient(30% 26% at 68% 30%, oklch(0.80 0.10 300 / 0.12), transparent 70%);
+  filter: blur(28px);
+
+  @variant dark {
+    background:
+      radial-gradient(38% 32% at 32% 34%, oklch(0.75 0.11 230 / 0.22), transparent 70%),
+      radial-gradient(30% 26% at 68% 30%, oklch(0.72 0.11 300 / 0.17), transparent 70%);
+  }
+}
+
 /* Iridescent underline bar — a standalone empty element placed below the
  * hero's second title line. Pearl-rainbow loop, slow flow; the only moving
  * accent on the landing hero. */
@@ -100,6 +116,8 @@ body {
 }
 
 @theme inline {
+  --color-inverse: var(--inverse);
+  --color-inverse-foreground: var(--inverse-foreground);
   --font-heading: var(--font-sans);
   --font-sans: 'Inter Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -175,6 +193,10 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Inverse panel (Material's "inverse surface"): dark slab used by the
+   * landing's highlighted pricing tier + final CTA. */
+  --inverse: oklch(0.155 0 0);
+  --inverse-foreground: oklch(1 0 0);
 }
 
 .dark {
@@ -209,6 +231,9 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Inverse panel: stays a dark slab in dark mode, just lifted off bg. */
+  --inverse: oklch(0.32 0 0);
+  --inverse-foreground: oklch(0.985 0 0);
 }
 
 @layer base {

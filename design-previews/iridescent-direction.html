@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" data-gray="g2">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>金属虹光方向预览 · Repurposer</title>
+<style>
+  /* ============================================================
+   * 页面本身用「冷灰」方案渲染（dogfooding），右上角可切主题
+   * ============================================================ */
+  :root {
+    --edge: 0 0 12px 1px rgb(0 0 0 / 0.06), 0 16px 40px -12px rgb(0 0 0 / 0.12);
+    color-scheme: light;
+  }
+  .dark {
+    --edge: 0 0 12px 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+
+  /* ============================================================
+   * 灰阶试衣间：12 款冷/中性灰，html[data-gray] 整页生效
+   * 全部零暖色：hue ∈ {中性, 215, 235, 240, 250, 260, 265, 275}
+   * ============================================================ */
+  /* g1 死灰（现状） */
+  html[data-gray="g1"] { --bg: oklch(1 0 0); --card: oklch(1 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.97 0 0); --muted-fg: oklch(0.556 0 0); --border: oklch(0.922 0 0); }
+  html.dark[data-gray="g1"] { --bg: oklch(0.145 0 0); --card: oklch(0.205 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.269 0 0); --muted-fg: oklch(0.708 0 0); --border: oklch(1 0 0 / 10%); }
+  /* g2 冷瓷 260（当前选择） */
+  html[data-gray="g2"] { --bg: oklch(1 0.003 260); --card: oklch(1 0.002 260); --fg: oklch(0.15 0.012 260); --muted: oklch(0.97 0.005 260); --muted-fg: oklch(0.556 0.012 260); --border: oklch(0.922 0.006 260); }
+  html.dark[data-gray="g2"] { --bg: oklch(0.16 0.008 260); --card: oklch(0.215 0.010 260); --fg: oklch(0.985 0.002 260); --muted: oklch(0.275 0.012 260); --muted-fg: oklch(0.715 0.014 260); --border: oklch(1 0 0 / 10%); }
+  /* g3 雾蓝 240 */
+  html[data-gray="g3"] { --bg: oklch(0.99 0.004 240); --card: oklch(0.998 0.002 240); --fg: oklch(0.17 0.014 240); --muted: oklch(0.962 0.006 240); --muted-fg: oklch(0.54 0.016 240); --border: oklch(0.915 0.007 240); }
+  html.dark[data-gray="g3"] { --bg: oklch(0.165 0.010 240); --card: oklch(0.22 0.013 240); --fg: oklch(0.97 0.004 240); --muted: oklch(0.28 0.015 240); --muted-fg: oklch(0.72 0.016 240); --border: oklch(1 0 0 / 10%); }
+  /* g4 靛紫灰 275 */
+  html[data-gray="g4"] { --bg: oklch(0.99 0.004 275); --card: oklch(0.998 0.003 275); --fg: oklch(0.18 0.014 275); --muted: oklch(0.962 0.007 275); --muted-fg: oklch(0.54 0.016 275); --border: oklch(0.915 0.008 275); }
+  html.dark[data-gray="g4"] { --bg: oklch(0.17 0.012 275); --card: oklch(0.225 0.015 275); --fg: oklch(0.97 0.004 275); --muted: oklch(0.285 0.017 275); --muted-fg: oklch(0.72 0.016 275); --border: oklch(1 0 0 / 10%); }
+  /* g5 青瓷 215 */
+  html[data-gray="g5"] { --bg: oklch(0.99 0.004 215); --card: oklch(0.998 0.002 215); --fg: oklch(0.17 0.013 215); --muted: oklch(0.963 0.006 215); --muted-fg: oklch(0.545 0.015 215); --border: oklch(0.918 0.006 215); }
+  html.dark[data-gray="g5"] { --bg: oklch(0.16 0.009 215); --card: oklch(0.218 0.012 215); --fg: oklch(0.97 0.003 215); --muted: oklch(0.278 0.013 215); --muted-fg: oklch(0.72 0.015 215); --border: oklch(1 0 0 / 10%); }
+  /* g6 石墨层次（零彩度强对比） */
+  html[data-gray="g6"] { --bg: oklch(0.955 0.001 260); --card: oklch(1 0 0); --fg: oklch(0.13 0 0); --muted: oklch(0.91 0.001 260); --muted-fg: oklch(0.46 0.002 260); --border: oklch(0.87 0.001 260); }
+  html.dark[data-gray="g6"] { --bg: oklch(0.125 0.001 260); --card: oklch(0.235 0.002 260); --fg: oklch(0.985 0 0); --muted: oklch(0.30 0.002 260); --muted-fg: oklch(0.70 0.004 260); --border: oklch(1 0 0 / 12%); }
+  /* g7 浅灰底白卡（Apple 式） */
+  html[data-gray="g7"] { --bg: oklch(0.94 0.002 260); --card: oklch(1 0 0); --fg: oklch(0.15 0.008 260); --muted: oklch(0.905 0.003 260); --muted-fg: oklch(0.50 0.008 260); --border: oklch(0.885 0.003 260); }
+  html.dark[data-gray="g7"] { --bg: oklch(0.135 0.005 260); --card: oklch(0.21 0.008 260); --fg: oklch(0.985 0.002 260); --muted: oklch(0.27 0.010 260); --muted-fg: oklch(0.71 0.012 260); --border: oklch(1 0 0 / 10%); }
+  /* g8 深空蓝黑（暗色主场） */
+  html[data-gray="g8"] { --bg: oklch(0.985 0.005 250); --card: oklch(0.999 0.002 250); --fg: oklch(0.16 0.018 250); --muted: oklch(0.955 0.008 250); --muted-fg: oklch(0.52 0.020 250); --border: oklch(0.91 0.008 250); }
+  html.dark[data-gray="g8"] { --bg: oklch(0.125 0.016 250); --card: oklch(0.185 0.022 250); --fg: oklch(0.965 0.005 250); --muted: oklch(0.26 0.024 250); --muted-fg: oklch(0.70 0.022 250); --border: oklch(1 0 0 / 10%); }
+  /* g9 银白高对比 */
+  html[data-gray="g9"] { --bg: oklch(1 0.001 260); --card: oklch(1 0.001 260); --fg: oklch(0.12 0.004 260); --muted: oklch(0.95 0.002 260); --muted-fg: oklch(0.48 0.006 260); --border: oklch(0.905 0.002 260); }
+  html.dark[data-gray="g9"] { --bg: oklch(0.15 0.004 260); --card: oklch(0.21 0.006 260); --fg: oklch(0.985 0.001 260); --muted: oklch(0.275 0.006 260); --muted-fg: oklch(0.72 0.008 260); --border: oklch(1 0 0 / 10%); }
+  /* g10 冰川蓝 235（蓝可见） */
+  html[data-gray="g10"] { --bg: oklch(0.978 0.008 235); --card: oklch(0.997 0.003 235); --fg: oklch(0.19 0.022 235); --muted: oklch(0.95 0.010 235); --muted-fg: oklch(0.50 0.024 235); --border: oklch(0.90 0.010 235); }
+  html.dark[data-gray="g10"] { --bg: oklch(0.17 0.018 235); --card: oklch(0.225 0.022 235); --fg: oklch(0.965 0.006 235); --muted: oklch(0.285 0.024 235); --muted-fg: oklch(0.70 0.024 235); --border: oklch(1 0 0 / 10%); }
+  /* g11 雾灰 250（柔对比） */
+  html[data-gray="g11"] { --bg: oklch(0.99 0.004 250); --card: oklch(0.999 0.002 250); --fg: oklch(0.20 0.010 250); --muted: oklch(0.965 0.005 250); --muted-fg: oklch(0.56 0.010 250); --border: oklch(0.925 0.005 250); }
+  html.dark[data-gray="g11"] { --bg: oklch(0.155 0.007 250); --card: oklch(0.212 0.009 250); --fg: oklch(0.975 0.003 250); --muted: oklch(0.28 0.010 250); --muted-fg: oklch(0.74 0.012 250); --border: oklch(1 0 0 / 10%); }
+  /* g12 月白 265（极淡） */
+  html[data-gray="g12"] { --bg: oklch(0.996 0.002 265); --card: oklch(1 0.001 265); --fg: oklch(0.17 0.008 265); --muted: oklch(0.968 0.003 265); --muted-fg: oklch(0.55 0.009 265); --border: oklch(0.928 0.004 265); }
+  html.dark[data-gray="g12"] { --bg: oklch(0.15 0.006 265); --card: oklch(0.208 0.008 265); --fg: oklch(0.978 0.002 265); --muted: oklch(0.272 0.009 265); --muted-fg: oklch(0.725 0.010 265); --border: oklch(1 0 0 / 10%); }
+
+  /* ============================================================
+   * 材质墙：12 个变体同时摊开
+   * 每个变体 = [data-v] 上的 4 个变量；亮色压暗 / 暗色提亮
+   * ============================================================ */
+  body { --brush: none; --spec-strength: 0.55; --glow: oklch(0.70 0.06 280 / 0.30); }
+  .dark body { --glow: oklch(0.80 0.06 280 / 0.35); }
+
+  /* 1 全息箔（基准） */
+  [data-v="foil"] {
+    --metal: linear-gradient(100deg, oklch(0.52 0.065 10), oklch(0.75 0.055 70), oklch(0.54 0.060 150), oklch(0.74 0.050 210), oklch(0.52 0.060 270), oklch(0.75 0.055 330), oklch(0.52 0.065 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.52 0.065 10), oklch(0.75 0.055 70), oklch(0.54 0.060 150), oklch(0.74 0.050 210), oklch(0.52 0.060 270), oklch(0.75 0.055 330), oklch(0.52 0.065 10));
+  }
+  .dark [data-v="foil"] {
+    --metal: linear-gradient(100deg, oklch(0.72 0.070 10), oklch(0.93 0.060 70), oklch(0.74 0.065 150), oklch(0.92 0.055 210), oklch(0.72 0.065 270), oklch(0.93 0.060 330), oklch(0.72 0.070 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.72 0.070 10), oklch(0.93 0.060 70), oklch(0.74 0.065 150), oklch(0.92 0.055 210), oklch(0.72 0.065 270), oklch(0.93 0.060 330), oklch(0.72 0.070 10));
+  }
+
+  /* 2 全息箔 · 淡 */
+  [data-v="foil-soft"] {
+    --metal: linear-gradient(100deg, oklch(0.52 0.040 10), oklch(0.75 0.033 70), oklch(0.54 0.036 150), oklch(0.74 0.030 210), oklch(0.52 0.036 270), oklch(0.75 0.033 330), oklch(0.52 0.040 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.52 0.040 10), oklch(0.75 0.033 70), oklch(0.54 0.036 150), oklch(0.74 0.030 210), oklch(0.52 0.036 270), oklch(0.75 0.033 330), oklch(0.52 0.040 10));
+  }
+  .dark [data-v="foil-soft"] {
+    --metal: linear-gradient(100deg, oklch(0.72 0.045 10), oklch(0.93 0.038 70), oklch(0.74 0.040 150), oklch(0.92 0.034 210), oklch(0.72 0.040 270), oklch(0.93 0.038 330), oklch(0.72 0.045 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.72 0.045 10), oklch(0.93 0.038 70), oklch(0.74 0.040 150), oklch(0.92 0.034 210), oklch(0.72 0.040 270), oklch(0.93 0.038 330), oklch(0.72 0.045 10));
+  }
+
+  /* 3 全息箔 · 浓 */
+  [data-v="foil-vivid"] {
+    --metal: linear-gradient(100deg, oklch(0.52 0.095 10), oklch(0.75 0.080 70), oklch(0.54 0.085 150), oklch(0.74 0.070 210), oklch(0.52 0.085 270), oklch(0.75 0.080 330), oklch(0.52 0.095 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.52 0.095 10), oklch(0.75 0.080 70), oklch(0.54 0.085 150), oklch(0.74 0.070 210), oklch(0.52 0.085 270), oklch(0.75 0.080 330), oklch(0.52 0.095 10));
+  }
+  .dark [data-v="foil-vivid"] {
+    --metal: linear-gradient(100deg, oklch(0.72 0.100 10), oklch(0.93 0.085 70), oklch(0.74 0.090 150), oklch(0.92 0.075 210), oklch(0.72 0.090 270), oklch(0.93 0.085 330), oklch(0.72 0.100 10));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.72 0.100 10), oklch(0.93 0.085 70), oklch(0.74 0.090 150), oklch(0.92 0.075 210), oklch(0.72 0.090 270), oklch(0.93 0.085 330), oklch(0.72 0.100 10));
+  }
+
+  /* 4 冷光谱（青→蓝→紫） */
+  [data-v="cool-spec"] {
+    --metal: linear-gradient(100deg, oklch(0.54 0.060 150), oklch(0.75 0.050 210), oklch(0.52 0.060 270), oklch(0.74 0.050 150), oklch(0.54 0.060 210), oklch(0.75 0.050 270), oklch(0.54 0.060 150));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.54 0.060 150), oklch(0.75 0.050 210), oklch(0.52 0.060 270), oklch(0.74 0.050 150), oklch(0.54 0.060 210), oklch(0.75 0.050 270), oklch(0.54 0.060 150));
+    --glow: oklch(0.65 0.06 230 / 0.30);
+  }
+  .dark [data-v="cool-spec"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.065 150), oklch(0.93 0.055 210), oklch(0.72 0.065 270), oklch(0.92 0.055 150), oklch(0.74 0.065 210), oklch(0.93 0.055 270), oklch(0.74 0.065 150));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.065 150), oklch(0.93 0.055 210), oklch(0.72 0.065 270), oklch(0.92 0.055 150), oklch(0.74 0.065 210), oklch(0.93 0.055 270), oklch(0.74 0.065 150));
+    --glow: oklch(0.80 0.06 230 / 0.35);
+  }
+
+  /* 5 暖光谱（紫→红→金） */
+  [data-v="warm-spec"] {
+    --metal: linear-gradient(100deg, oklch(0.52 0.060 300), oklch(0.75 0.055 10), oklch(0.54 0.060 70), oklch(0.74 0.050 300), oklch(0.52 0.060 10), oklch(0.75 0.055 70), oklch(0.52 0.060 300));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.52 0.060 300), oklch(0.75 0.055 10), oklch(0.54 0.060 70), oklch(0.74 0.050 300), oklch(0.52 0.060 10), oklch(0.75 0.055 70), oklch(0.52 0.060 300));
+    --glow: oklch(0.65 0.06 30 / 0.30);
+  }
+  .dark [data-v="warm-spec"] {
+    --metal: linear-gradient(100deg, oklch(0.72 0.065 300), oklch(0.93 0.060 10), oklch(0.74 0.065 70), oklch(0.92 0.055 300), oklch(0.72 0.065 10), oklch(0.93 0.060 70), oklch(0.72 0.065 300));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.72 0.065 300), oklch(0.93 0.060 10), oklch(0.74 0.065 70), oklch(0.92 0.055 300), oklch(0.72 0.065 10), oklch(0.93 0.060 70), oklch(0.72 0.065 300));
+    --glow: oklch(0.80 0.06 30 / 0.35);
+  }
+
+  /* 6 极光（绿→青→蓝，轻盈） */
+  [data-v="aurora"] {
+    --metal: linear-gradient(100deg, oklch(0.60 0.050 120), oklch(0.82 0.040 160), oklch(0.62 0.050 200), oklch(0.80 0.040 120), oklch(0.60 0.050 160), oklch(0.82 0.040 200), oklch(0.60 0.050 120));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.60 0.050 120), oklch(0.82 0.040 160), oklch(0.62 0.050 200), oklch(0.80 0.040 120), oklch(0.60 0.050 160), oklch(0.82 0.040 200), oklch(0.60 0.050 120));
+    --glow: oklch(0.70 0.06 170 / 0.30);
+  }
+  .dark [data-v="aurora"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.060 120), oklch(0.93 0.050 160), oklch(0.75 0.060 200), oklch(0.91 0.050 120), oklch(0.74 0.060 160), oklch(0.93 0.050 200), oklch(0.74 0.060 120));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.060 120), oklch(0.93 0.050 160), oklch(0.75 0.060 200), oklch(0.91 0.050 120), oklch(0.74 0.060 160), oklch(0.93 0.050 200), oklch(0.74 0.060 120));
+    --glow: oklch(0.82 0.06 170 / 0.35);
+  }
+
+  /* 7 银河（深底 + 浓彩高光） */
+  [data-v="galaxy"] {
+    --metal: linear-gradient(100deg, oklch(0.36 0.085 300), oklch(0.60 0.070 200), oklch(0.38 0.090 150), oklch(0.58 0.070 330), oklch(0.36 0.085 230), oklch(0.60 0.070 60), oklch(0.36 0.085 300));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.36 0.085 300), oklch(0.60 0.070 200), oklch(0.38 0.090 150), oklch(0.58 0.070 330), oklch(0.36 0.085 230), oklch(0.60 0.070 60), oklch(0.36 0.085 300));
+    --glow: oklch(0.55 0.08 300 / 0.40);
+  }
+  .dark [data-v="galaxy"] {
+    --metal: linear-gradient(100deg, oklch(0.42 0.090 300), oklch(0.68 0.075 200), oklch(0.44 0.095 150), oklch(0.66 0.075 330), oklch(0.42 0.090 230), oklch(0.68 0.075 60), oklch(0.42 0.090 300));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.42 0.090 300), oklch(0.68 0.075 200), oklch(0.44 0.095 150), oklch(0.66 0.075 330), oklch(0.42 0.090 230), oklch(0.68 0.075 60), oklch(0.42 0.090 300));
+    --glow: oklch(0.60 0.09 300 / 0.45);
+  }
+
+  /* 8 青紫双色 */
+  [data-v="duotone"] {
+    --metal: linear-gradient(100deg, oklch(0.50 0.060 195), oklch(0.74 0.045 280), oklch(0.53 0.055 280), oklch(0.72 0.040 195), oklch(0.50 0.060 195), oklch(0.74 0.045 280), oklch(0.50 0.060 195));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.50 0.060 195), oklch(0.74 0.045 280), oklch(0.53 0.055 280), oklch(0.72 0.040 195), oklch(0.50 0.060 195), oklch(0.74 0.045 280), oklch(0.50 0.060 195));
+    --glow: oklch(0.62 0.06 240 / 0.30);
+  }
+  .dark [data-v="duotone"] {
+    --metal: linear-gradient(100deg, oklch(0.72 0.065 195), oklch(0.93 0.050 280), oklch(0.75 0.060 280), oklch(0.91 0.045 195), oklch(0.72 0.065 195), oklch(0.93 0.050 280), oklch(0.72 0.065 195));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.72 0.065 195), oklch(0.93 0.050 280), oklch(0.75 0.060 280), oklch(0.91 0.045 195), oklch(0.72 0.065 195), oklch(0.93 0.050 280), oklch(0.72 0.065 195));
+    --glow: oklch(0.78 0.06 240 / 0.35);
+  }
+
+  /* 9 落日三色 */
+  [data-v="sunset"] {
+    --metal: linear-gradient(100deg, oklch(0.55 0.060 70), oklch(0.76 0.050 30), oklch(0.52 0.055 320), oklch(0.72 0.045 70), oklch(0.55 0.055 30), oklch(0.74 0.050 320), oklch(0.55 0.060 70));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.55 0.060 70), oklch(0.76 0.050 30), oklch(0.52 0.055 320), oklch(0.72 0.045 70), oklch(0.55 0.055 30), oklch(0.74 0.050 320), oklch(0.55 0.060 70));
+    --glow: oklch(0.65 0.06 350 / 0.30);
+  }
+  .dark [data-v="sunset"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.065 70), oklch(0.93 0.055 30), oklch(0.73 0.060 320), oklch(0.91 0.050 70), oklch(0.74 0.060 30), oklch(0.93 0.055 320), oklch(0.74 0.065 70));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.065 70), oklch(0.93 0.055 30), oklch(0.73 0.060 320), oklch(0.91 0.050 70), oklch(0.74 0.060 30), oklch(0.93 0.055 320), oklch(0.74 0.065 70));
+    --glow: oklch(0.80 0.06 350 / 0.35);
+  }
+
+  /* 10 香槟金 */
+  [data-v="champagne"] {
+    --metal: linear-gradient(100deg, oklch(0.50 0.030 85), oklch(0.75 0.026 85), oklch(0.55 0.025 70), oklch(0.72 0.020 70), oklch(0.48 0.030 85), oklch(0.70 0.027 85), oklch(0.50 0.030 85));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.50 0.030 85), oklch(0.75 0.026 85), oklch(0.55 0.025 70), oklch(0.72 0.020 70), oklch(0.48 0.030 85), oklch(0.70 0.027 85), oklch(0.50 0.030 85));
+    --glow: oklch(0.62 0.03 85 / 0.30);
+  }
+  .dark [data-v="champagne"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.032 85), oklch(0.94 0.028 85), oklch(0.78 0.027 70), oklch(0.92 0.022 70), oklch(0.72 0.032 85), oklch(0.90 0.029 85), oklch(0.74 0.032 85));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.032 85), oklch(0.94 0.028 85), oklch(0.78 0.027 70), oklch(0.92 0.022 70), oklch(0.72 0.032 85), oklch(0.90 0.029 85), oklch(0.74 0.032 85));
+    --glow: oklch(0.80 0.03 85 / 0.35);
+  }
+
+  /* 11 铂金（拉丝） */
+  [data-v="platinum"] {
+    --metal: linear-gradient(100deg, oklch(0.48 0.012 95), oklch(0.74 0.010 95), oklch(0.54 0.010 260), oklch(0.72 0.008 260), oklch(0.46 0.012 95), oklch(0.70 0.011 95), oklch(0.48 0.012 95));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.48 0.012 95), oklch(0.74 0.010 95), oklch(0.54 0.010 260), oklch(0.72 0.008 260), oklch(0.46 0.012 95), oklch(0.70 0.011 95), oklch(0.48 0.012 95));
+    --brush: repeating-linear-gradient(90deg, rgb(0 0 0 / 0.05) 0 1px, transparent 1px 3px);
+    --glow: oklch(0.62 0.02 95 / 0.30);
+  }
+  .dark [data-v="platinum"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.012 95), oklch(0.94 0.010 95), oklch(0.78 0.010 260), oklch(0.92 0.008 260), oklch(0.72 0.012 95), oklch(0.90 0.011 95), oklch(0.74 0.012 95));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.012 95), oklch(0.94 0.010 95), oklch(0.78 0.010 260), oklch(0.92 0.008 260), oklch(0.72 0.012 95), oklch(0.90 0.011 95), oklch(0.74 0.012 95));
+    --brush: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.06) 0 1px, transparent 1px 3px);
+    --glow: oklch(0.80 0.02 95 / 0.35);
+  }
+
+  /* 12 镭射细边（中性金属 + 一线彩虹） */
+  [data-v="laser-line"] {
+    --metal: linear-gradient(100deg, oklch(0.52 0.010 260), oklch(0.72 0.008 260) 40%, oklch(0.72 0.090 150) 47%, oklch(0.62 0.090 290) 53%, oklch(0.72 0.008 260) 60%, oklch(0.52 0.010 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.52 0.010 260), oklch(0.70 0.008 260) 40%, oklch(0.72 0.090 150) 47%, oklch(0.62 0.090 290) 53%, oklch(0.70 0.008 260) 60%, oklch(0.52 0.010 260));
+  }
+  .dark [data-v="laser-line"] {
+    --metal: linear-gradient(100deg, oklch(0.74 0.010 260), oklch(0.90 0.008 260) 40%, oklch(0.88 0.090 150) 47%, oklch(0.78 0.090 290) 53%, oklch(0.90 0.008 260) 60%, oklch(0.74 0.010 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.74 0.010 260), oklch(0.90 0.008 260) 40%, oklch(0.88 0.090 150) 47%, oklch(0.78 0.090 290) 53%, oklch(0.90 0.008 260) 60%, oklch(0.74 0.010 260));
+  }
+
+  /* ============ 白欧泊系：白银底 + 浓烈小峰（火彩） ============ */
+
+  /* 13 白虹 · 单峰青紫 */
+  [data-v="opal-1"] {
+    --metal: linear-gradient(100deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 38%, oklch(0.68 0.150 200) 44%, oklch(0.64 0.160 290) 49%, oklch(0.95 0.006 260) 55%, oklch(0.92 0.008 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 38%, oklch(0.68 0.150 200) 44%, oklch(0.64 0.160 290) 49%, oklch(0.95 0.006 260) 55%, oklch(0.92 0.008 260));
+    --glow: oklch(0.70 0.10 250 / 0.35);
+  }
+  .dark [data-v="opal-1"] {
+    --metal: linear-gradient(100deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 38%, oklch(0.72 0.150 200) 44%, oklch(0.68 0.160 290) 49%, oklch(0.90 0.007 260) 55%, oklch(0.85 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 38%, oklch(0.72 0.150 200) 44%, oklch(0.68 0.160 290) 49%, oklch(0.90 0.007 260) 55%, oklch(0.85 0.009 260));
+    --glow: oklch(0.78 0.10 250 / 0.40);
+  }
+
+  /* 14 白虹 · 双峰冷 */
+  [data-v="opal-2"] {
+    --metal: linear-gradient(100deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 18%, oklch(0.70 0.140 150) 23%, oklch(0.66 0.150 220) 27%, oklch(0.95 0.006 260) 33%, oklch(0.93 0.007 260) 60%, oklch(0.68 0.150 260) 66%, oklch(0.64 0.160 320) 70%, oklch(0.95 0.006 260) 76%, oklch(0.92 0.008 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 18%, oklch(0.70 0.140 150) 23%, oklch(0.66 0.150 220) 27%, oklch(0.95 0.006 260) 33%, oklch(0.93 0.007 260) 60%, oklch(0.68 0.150 260) 66%, oklch(0.64 0.160 320) 70%, oklch(0.95 0.006 260) 76%, oklch(0.92 0.008 260));
+    --glow: oklch(0.70 0.10 250 / 0.35);
+  }
+  .dark [data-v="opal-2"] {
+    --metal: linear-gradient(100deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 18%, oklch(0.74 0.140 150) 23%, oklch(0.70 0.150 220) 27%, oklch(0.90 0.007 260) 33%, oklch(0.86 0.008 260) 60%, oklch(0.72 0.150 260) 66%, oklch(0.68 0.160 320) 70%, oklch(0.90 0.007 260) 76%, oklch(0.85 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 18%, oklch(0.74 0.140 150) 23%, oklch(0.70 0.150 220) 27%, oklch(0.90 0.007 260) 33%, oklch(0.86 0.008 260) 60%, oklch(0.72 0.150 260) 66%, oklch(0.68 0.160 320) 70%, oklch(0.90 0.007 260) 76%, oklch(0.85 0.009 260));
+    --glow: oklch(0.78 0.10 250 / 0.40);
+  }
+
+  /* 15 白虹 · 双峰暖 */
+  [data-v="opal-3"] {
+    --metal: linear-gradient(100deg, oklch(0.93 0.007 260), oklch(0.95 0.006 90) 22%, oklch(0.72 0.140 70) 28%, oklch(0.68 0.150 30) 32%, oklch(0.95 0.006 90) 38%, oklch(0.93 0.007 260) 62%, oklch(0.70 0.150 350) 68%, oklch(0.66 0.150 310) 72%, oklch(0.95 0.006 260) 78%, oklch(0.92 0.008 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.93 0.007 260), oklch(0.95 0.006 90) 22%, oklch(0.72 0.140 70) 28%, oklch(0.68 0.150 30) 32%, oklch(0.95 0.006 90) 38%, oklch(0.93 0.007 260) 62%, oklch(0.70 0.150 350) 68%, oklch(0.66 0.150 310) 72%, oklch(0.95 0.006 260) 78%, oklch(0.92 0.008 260));
+    --glow: oklch(0.70 0.10 40 / 0.35);
+  }
+  .dark [data-v="opal-3"] {
+    --metal: linear-gradient(100deg, oklch(0.86 0.008 260), oklch(0.90 0.007 90) 22%, oklch(0.76 0.140 70) 28%, oklch(0.72 0.150 30) 32%, oklch(0.90 0.007 90) 38%, oklch(0.86 0.008 260) 62%, oklch(0.74 0.150 350) 68%, oklch(0.70 0.150 310) 72%, oklch(0.90 0.007 260) 78%, oklch(0.85 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.86 0.008 260), oklch(0.90 0.007 90) 22%, oklch(0.76 0.140 70) 28%, oklch(0.72 0.150 30) 32%, oklch(0.90 0.007 90) 38%, oklch(0.86 0.008 260) 62%, oklch(0.74 0.150 350) 68%, oklch(0.70 0.150 310) 72%, oklch(0.90 0.007 260) 78%, oklch(0.85 0.009 260));
+    --glow: oklch(0.78 0.10 40 / 0.40);
+  }
+
+  /* 16 白虹 · 彩虹峰（一座峰内含全色谱） */
+  [data-v="opal-4"] {
+    --metal: linear-gradient(100deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 36%, oklch(0.70 0.140 10) 41%, oklch(0.72 0.130 70) 45%, oklch(0.70 0.130 150) 49%, oklch(0.68 0.130 230) 53%, oklch(0.66 0.140 300) 57%, oklch(0.95 0.006 260) 63%, oklch(0.92 0.008 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 36%, oklch(0.70 0.140 10) 41%, oklch(0.72 0.130 70) 45%, oklch(0.70 0.130 150) 49%, oklch(0.68 0.130 230) 53%, oklch(0.66 0.140 300) 57%, oklch(0.95 0.006 260) 63%, oklch(0.92 0.008 260));
+    --glow: oklch(0.70 0.10 280 / 0.35);
+  }
+  .dark [data-v="opal-4"] {
+    --metal: linear-gradient(100deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 36%, oklch(0.74 0.140 10) 41%, oklch(0.76 0.130 70) 45%, oklch(0.74 0.130 150) 49%, oklch(0.72 0.130 230) 53%, oklch(0.70 0.140 300) 57%, oklch(0.90 0.007 260) 63%, oklch(0.85 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 36%, oklch(0.74 0.140 10) 41%, oklch(0.76 0.130 70) 45%, oklch(0.74 0.130 150) 49%, oklch(0.72 0.130 230) 53%, oklch(0.70 0.140 300) 57%, oklch(0.90 0.007 260) 63%, oklch(0.85 0.009 260));
+    --glow: oklch(0.78 0.10 280 / 0.40);
+  }
+
+  /* 17 白虹 · 极细三线 */
+  [data-v="opal-5"] {
+    --metal: linear-gradient(100deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 20%, oklch(0.66 0.170 200) 22.5%, oklch(0.95 0.006 260) 25%, oklch(0.94 0.007 260) 48%, oklch(0.64 0.170 300) 50.5%, oklch(0.94 0.007 260) 53%, oklch(0.95 0.006 90) 76%, oklch(0.68 0.160 60) 78.5%, oklch(0.95 0.006 90) 81%, oklch(0.92 0.008 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.93 0.007 260), oklch(0.95 0.006 260) 20%, oklch(0.66 0.170 200) 22.5%, oklch(0.95 0.006 260) 25%, oklch(0.94 0.007 260) 48%, oklch(0.64 0.170 300) 50.5%, oklch(0.94 0.007 260) 53%, oklch(0.95 0.006 90) 76%, oklch(0.68 0.160 60) 78.5%, oklch(0.95 0.006 90) 81%, oklch(0.92 0.008 260));
+    --glow: oklch(0.70 0.10 250 / 0.35);
+  }
+  .dark [data-v="opal-5"] {
+    --metal: linear-gradient(100deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 20%, oklch(0.70 0.170 200) 22.5%, oklch(0.90 0.007 260) 25%, oklch(0.88 0.008 260) 48%, oklch(0.68 0.170 300) 50.5%, oklch(0.88 0.008 260) 53%, oklch(0.90 0.007 90) 76%, oklch(0.72 0.160 60) 78.5%, oklch(0.90 0.007 90) 81%, oklch(0.85 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.86 0.008 260), oklch(0.90 0.007 260) 20%, oklch(0.70 0.170 200) 22.5%, oklch(0.90 0.007 260) 25%, oklch(0.88 0.008 260) 48%, oklch(0.68 0.170 300) 50.5%, oklch(0.88 0.008 260) 53%, oklch(0.90 0.007 90) 76%, oklch(0.72 0.160 60) 78.5%, oklch(0.90 0.007 90) 81%, oklch(0.85 0.009 260));
+    --glow: oklch(0.78 0.10 250 / 0.40);
+  }
+
+  /* 18 白虹 · 雾面柔峰 */
+  [data-v="opal-6"] {
+    --metal: linear-gradient(100deg, oklch(0.90 0.008 260), oklch(0.92 0.007 260) 30%, oklch(0.74 0.100 180) 40%, oklch(0.70 0.110 280) 50%, oklch(0.92 0.007 260) 60%, oklch(0.89 0.009 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.90 0.008 260), oklch(0.92 0.007 260) 30%, oklch(0.74 0.100 180) 40%, oklch(0.70 0.110 280) 50%, oklch(0.92 0.007 260) 60%, oklch(0.89 0.009 260));
+    --glow: oklch(0.72 0.08 230 / 0.30);
+  }
+  .dark [data-v="opal-6"] {
+    --metal: linear-gradient(100deg, oklch(0.84 0.009 260), oklch(0.88 0.008 260) 30%, oklch(0.76 0.100 180) 40%, oklch(0.72 0.110 280) 50%, oklch(0.88 0.008 260) 60%, oklch(0.83 0.010 260));
+    --metal-conic: conic-gradient(from 0deg, oklch(0.84 0.009 260), oklch(0.88 0.008 260) 30%, oklch(0.76 0.100 180) 40%, oklch(0.72 0.110 280) 50%, oklch(0.88 0.008 260) 60%, oklch(0.83 0.010 260));
+    --glow: oklch(0.76 0.08 230 / 0.35);
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Inter Variable", -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+    background: var(--bg); color: var(--fg);
+    padding: 48px 24px 96px;
+    transition: background .3s, color .3s;
+  }
+  main { max-width: 1080px; margin: 0 auto; }
+
+  header.top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { color: var(--muted-fg); font-size: 13.5px; margin-bottom: 48px; }
+  .theme-btn {
+    font: inherit; font-size: 13px; color: var(--fg);
+    background: var(--muted); border: none; border-radius: 8px;
+    padding: 8px 14px; cursor: pointer;
+  }
+
+  section { margin-bottom: 72px; }
+  h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .note { color: var(--muted-fg); font-size: 13px; line-height: 1.7; margin-bottom: 24px; max-width: 660px; }
+  .note code { font-size: 12px; background: var(--muted); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---------- 第一节：灰阶试衣间 ---------- */
+  .gray-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 28px; }
+  .gopt {
+    font: inherit; text-align: left; cursor: pointer; border: none;
+    background: var(--card); color: var(--fg); border-radius: 10px; box-shadow: var(--edge);
+    padding: 10px 12px;
+  }
+  .gopt .gsw { display: flex; gap: 3px; margin-bottom: 8px; }
+  .gopt .gsw i { flex: 1; height: 14px; border-radius: 3px; display: block; }
+  .gopt .gname { font-size: 12px; color: var(--muted-fg); display: block; line-height: 1.4; }
+  .gopt.sel .gname { color: var(--fg); font-weight: 550; }
+  .gopt.sel .gname::after { content: " ✓"; }
+
+  .preview-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .preview-strip { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg); border-radius: 14px; padding: 20px; transition: background .3s; }
+  .panel .tag {
+    display: inline-block; font-size: 11.5px; color: var(--muted-fg);
+    background: var(--muted); border-radius: 6px; padding: 3px 8px; margin-bottom: 16px;
+  }
+  .mini-card { background: var(--card); border-radius: 12px; box-shadow: var(--edge); padding: 16px; }
+  .mini-textarea { font-size: 13.5px; color: var(--muted-fg); margin-bottom: 14px; }
+  .mini-row { display: flex; align-items: center; gap: 8px; }
+  .mini-pill {
+    font-size: 12px; color: var(--fg); background: var(--muted);
+    border-radius: 8px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .mini-pill .chev { color: var(--muted-fg); font-size: 10px; }
+  .mini-send {
+    margin-left: auto; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--fg); color: var(--bg); display: grid; place-items: center; font-size: 14px;
+  }
+  .mini-nav { margin-top: 16px; display: grid; gap: 2px; }
+  .mini-nav div { font-size: 12.5px; color: var(--muted-fg); padding: 6px 8px; border-radius: 6px; }
+  .mini-nav div.active { color: var(--fg); background: var(--muted); }
+
+  /* ---------- 材质墙 ---------- */
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-bottom: 40px; }
+  .cell {
+    background: var(--card); border-radius: 14px; box-shadow: var(--edge);
+    padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    cursor: pointer;
+  }
+  .cell-swatch {
+    position: relative; overflow: hidden; height: 56px; width: 100%; border-radius: 8px;
+    background: var(--metal); background-size: 300% 100%;
+    animation: metal-flow 10s linear infinite;
+  }
+  .cell-swatch::before { /* 镜面高光扫过 */
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(115deg,
+      transparent 32%, rgb(255 255 255 / var(--spec-strength, .5)) 47%,
+      rgb(255 255 255 / calc(var(--spec-strength, .5) * .3)) 55%, transparent 68%);
+    background-size: 300% 100%;
+    animation: sheen 4.5s ease-in-out infinite;
+  }
+  .cell-swatch::after { content: ""; position: absolute; inset: 0; background: var(--brush, none); }
+  .cell-row { display: flex; align-items: center; gap: 16px; }
+  .score.s-sm { width: 72px; height: 72px; }
+  .score.s-sm b { font-size: 20px; }
+  .cell-name { font-size: 12px; color: var(--muted-fg); }
+  .cell.sel .cell-name { color: var(--fg); font-weight: 550; }
+  .cell.sel .cell-name::after { content: " ✓"; }
+
+  .detail-title { font-size: 13px; font-weight: 600; margin-bottom: 16px; color: var(--muted-fg); }
+
+  /* ---------- 第二节：虹光时刻 ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .demo {
+    background: var(--card); border-radius: 14px; box-shadow: var(--edge);
+    padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 18px;
+    min-height: 230px; justify-content: center;
+  }
+  .demo .label { font-size: 12px; color: var(--muted-fg); text-align: center; }
+
+  /* 1) 分数徽章：金属 CD 环 + 微光晕 */
+  .score { position: relative; width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; }
+  .score::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: var(--metal-conic);
+    animation: spin 10s linear infinite;
+    box-shadow: 0 0 24px var(--glow);
+  }
+  .score::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--card); }
+  .score b { position: relative; z-index: 1; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+  .ssr-chip {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+    padding: 4px 10px; border-radius: 6px; border: 1px solid transparent;
+    background: linear-gradient(var(--card), var(--card)) padding-box, var(--metal) border-box;
+    background-size: 100% 100%, 300% 100%;
+    animation: metal-border-flow 10s linear infinite;
+  }
+
+  /* 2) Send 按钮：generating 态金属光泽扫过 */
+  .send-row { display: flex; gap: 20px; align-items: center; }
+  .send {
+    position: relative; overflow: hidden; width: 40px; height: 40px; border-radius: 50%;
+    background: var(--fg); color: var(--bg); border: none; cursor: pointer;
+    display: grid; place-items: center; font-size: 16px;
+  }
+  .send.busy::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: var(--metal); background-size: 300% 100%;
+    animation: sheen-bg 2.2s ease-in-out infinite;
+    opacity: .9;
+  }
+  .send span { position: relative; z-index: 1; }
+  .send-cap { font-size: 11.5px; color: var(--muted-fg); text-align: center; margin-top: 6px; }
+
+  /* 3) Gallery featured 卡：金属边缘 + hover 镜面掠过 */
+  .featured {
+    position: relative; overflow: hidden; width: 100%; max-width: 260px;
+    border-radius: 12px; border: 1.5px solid transparent;
+    background: linear-gradient(var(--card), var(--card)) padding-box, var(--metal) border-box;
+    background-size: 100% 100%, 300% 100%;
+    animation: metal-border-flow 10s linear infinite;
+    box-shadow: var(--edge), 0 0 20px var(--glow);
+    padding: 16px;
+  }
+  .featured::after {
+    content: ""; position: absolute; inset: -40%;
+    background: linear-gradient(115deg, transparent 42%, rgb(255 255 255 / 0.22) 50%, transparent 58%);
+    transform: translateX(-70%);
+    transition: transform .9s ease;
+    pointer-events: none;
+  }
+  .featured:hover::after { transform: translateX(70%); }
+  .featured .thumb { height: 84px; border-radius: 8px; background: var(--muted); margin-bottom: 12px; }
+  .featured .t { font-size: 13px; font-weight: 550; margin-bottom: 4px; }
+  .featured .d { font-size: 11.5px; color: var(--muted-fg); }
+
+  /* 4) Hero 金属字 + underline bar */
+  .hero-word { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; text-align: center; line-height: 1.15; }
+  .hero-word .grad {
+    background: var(--metal); background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: metal-flow 10s linear infinite;
+  }
+  .ubar {
+    display: block; width: 220px; height: 4px; border-radius: 999px; position: relative; overflow: hidden;
+    background: var(--metal); background-size: 300% 100%;
+    animation: metal-flow 10s linear infinite;
+  }
+
+  /* ---------- 第三节：分层手法库（明 ×5 / 暗 ×5） ---------- */
+  .scenes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 36px; }
+  @media (max-width: 760px) { .scenes { grid-template-columns: 1fr; } }
+  .scene { border-radius: 14px; padding: 46px 20px 20px; position: relative; background: var(--s-bg); }
+  .scene .tag {
+    position: absolute; top: 14px; left: 14px;
+    font-size: 11.5px; border-radius: 6px; padding: 3px 8px;
+    background: var(--s-pill); color: var(--s-mfg);
+  }
+  .composer-mock {
+    border-radius: var(--s-radius, 12px); padding: 16px; position: relative; overflow: visible;
+    background: var(--s-card); box-shadow: var(--s-card-shadow, none);
+  }
+  .mock-blocks { display: flex; gap: 10px; margin-top: -34px; margin-bottom: 14px; margin-left: 2px; }
+  .block-mock {
+    width: 62px; height: 72px; border-radius: 10px; padding: 8px;
+    display: flex; flex-direction: column; font-size: 10.5px; line-height: 1.3;
+    background: var(--s-block); box-shadow: var(--s-block-shadow, none); color: var(--s-fg);
+  }
+  .block-mock .bi { font-size: 13px; margin-bottom: auto; }
+  .block-mock .bt { font-weight: 550; }
+  .block-mock .bv { opacity: 0.6; font-size: 9.5px; }
+  .mock-text { font-size: 13px; margin-bottom: 14px; color: var(--s-mfg); }
+  .mock-row { display: flex; align-items: center; gap: 8px; }
+  .mock-pill { font-size: 11.5px; border-radius: 7px; padding: 5px 9px; background: var(--s-pill); color: var(--s-fg); }
+  .mock-send {
+    margin-left: auto; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 13px;
+    background: var(--s-send-bg); color: var(--s-send-fg);
+  }
+
+  /* ==== 明色（纯平，零阴影零渐变） ==== */
+  /* L1 现状：白底白卡 + edge-glow（对照组，含阴影） */
+  .scene.l1 {
+    --s-bg: oklch(1 0 0); --s-card: oklch(1 0 0);
+    --s-card-shadow: 0 0 12px 1px rgb(0 0 0 / 0.06), 0 16px 40px -12px rgb(0 0 0 / 0.12);
+    --s-block: oklch(1 0 0);
+    --s-block-shadow: 0 0 12px 1px rgb(0 0 0 / 0.06), 0 16px 40px -12px rgb(0 0 0 / 0.12);
+    --s-fg: oklch(0.145 0 0); --s-mfg: oklch(0.556 0 0); --s-pill: oklch(0.97 0 0);
+    --s-send-bg: oklch(0.145 0 0); --s-send-fg: oklch(1 0 0);
+  }
+  /* L2 灰底白卡 · 块凹 */
+  .scene.l2 {
+    --s-bg: oklch(0.94 0.002 260); --s-card: oklch(1 0 0); --s-block: oklch(0.955 0.003 260);
+    --s-fg: oklch(0.15 0.008 260); --s-mfg: oklch(0.50 0.008 260); --s-pill: oklch(0.95 0.003 260);
+    --s-send-bg: oklch(0.15 0.008 260); --s-send-fg: oklch(1 0 0);
+  }
+  /* L3 白底灰卡 · 块再暗半级 */
+  .scene.l3 {
+    --s-bg: oklch(1 0 0); --s-card: oklch(0.972 0.002 260); --s-block: oklch(0.945 0.003 260);
+    --s-fg: oklch(0.15 0.006 260); --s-mfg: oklch(0.50 0.008 260); --s-pill: oklch(0.90 0.003 260);
+    --s-send-bg: oklch(0.15 0.006 260); --s-send-fg: oklch(1 0 0);
+  }
+  /* L4 灰卡白块 · 块凸 */
+  .scene.l4 {
+    --s-bg: oklch(1 0 0); --s-card: oklch(0.962 0.002 260); --s-block: oklch(1 0 0);
+    --s-fg: oklch(0.15 0.006 260); --s-mfg: oklch(0.50 0.008 260); --s-pill: oklch(0.905 0.003 260);
+    --s-send-bg: oklch(0.15 0.006 260); --s-send-fg: oklch(1 0 0);
+  }
+  /* L5 均匀三级阶梯（bg .93 → card .965 → block 1.0） */
+  .scene.l5 {
+    --s-bg: oklch(0.928 0.002 260); --s-card: oklch(0.964 0.002 260); --s-block: oklch(1 0 0);
+    --s-fg: oklch(0.15 0.008 260); --s-mfg: oklch(0.50 0.008 260); --s-pill: oklch(0.91 0.003 260);
+    --s-send-bg: oklch(0.15 0.008 260); --s-send-fg: oklch(1 0 0);
+  }
+
+  /* ==== 暗色（纯平，零阴影零渐变零内高光） ==== */
+  /* D1 现状：bg .145 / card .205 + edge-glow（对照组） */
+  .scene.d1 {
+    --s-bg: oklch(0.145 0 0); --s-card: oklch(0.205 0 0);
+    --s-card-shadow: 0 0 12px 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.5);
+    --s-block: oklch(0.205 0 0);
+    --s-block-shadow: 0 0 12px 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.5);
+    --s-fg: oklch(0.985 0 0); --s-mfg: oklch(0.708 0 0); --s-pill: oklch(0.269 0 0);
+    --s-send-bg: oklch(0.985 0 0); --s-send-fg: oklch(0.145 0 0);
+  }
+  /* D2 三级阶梯 .125 → .195 → .25 */
+  .scene.d2 {
+    --s-bg: oklch(0.125 0.004 260); --s-card: oklch(0.195 0.006 260); --s-block: oklch(0.25 0.008 260);
+    --s-fg: oklch(0.975 0.003 260); --s-mfg: oklch(0.71 0.012 260); --s-pill: oklch(0.30 0.010 260);
+    --s-send-bg: oklch(0.97 0.003 260); --s-send-fg: oklch(0.16 0.006 260);
+  }
+  /* D3 深底阶梯 .105 → .19 → .255 */
+  .scene.d3 {
+    --s-bg: oklch(0.105 0.006 260); --s-card: oklch(0.19 0.008 260); --s-block: oklch(0.255 0.010 260);
+    --s-fg: oklch(0.97 0.004 260); --s-mfg: oklch(0.70 0.014 260); --s-pill: oklch(0.31 0.012 260);
+    --s-send-bg: oklch(0.97 0.004 260); --s-send-fg: oklch(0.15 0.008 260);
+  }
+  /* D4 凹块（块比卡暗 .215 → .165） */
+  .scene.d4 {
+    --s-bg: oklch(0.125 0.004 260); --s-card: oklch(0.215 0.008 260); --s-block: oklch(0.165 0.006 260);
+    --s-fg: oklch(0.975 0.003 260); --s-mfg: oklch(0.71 0.012 260); --s-pill: oklch(0.27 0.010 260);
+    --s-send-bg: oklch(0.97 0.003 260); --s-send-fg: oklch(0.16 0.006 260);
+  }
+  /* D5 大步距阶梯 .11 → .22 → .30 */
+  .scene.d5 {
+    --s-bg: oklch(0.11 0.006 260); --s-card: oklch(0.22 0.009 260); --s-block: oklch(0.30 0.012 260);
+    --s-fg: oklch(0.97 0.004 260); --s-mfg: oklch(0.70 0.014 260); --s-pill: oklch(0.28 0.011 260);
+    --s-send-bg: oklch(0.97 0.004 260); --s-send-fg: oklch(0.15 0.008 260);
+  }
+  /* D6 Opus 阶梯 · 近中性微差 .19→.24→.275，大圆角 18px */
+  .scene.d6 {
+    --s-radius: 18px;
+    --s-bg: oklch(0.19 0.002 260); --s-card: oklch(0.24 0.002 260); --s-block: oklch(0.275 0.003 260);
+    --s-fg: oklch(0.96 0.002 260); --s-mfg: oklch(0.68 0.003 260); --s-pill: oklch(0.31 0.003 260);
+    --s-send-bg: oklch(0.31 0.003 260); --s-send-fg: oklch(0.95 0.002 260);
+  }
+  /* D7 Opus × 冷瓷（同阶梯，微蓝调） */
+  .scene.d7 {
+    --s-radius: 18px;
+    --s-bg: oklch(0.185 0.005 260); --s-card: oklch(0.235 0.006 260); --s-block: oklch(0.27 0.007 260);
+    --s-fg: oklch(0.965 0.003 260); --s-mfg: oklch(0.685 0.008 260); --s-pill: oklch(0.305 0.008 260);
+    --s-send-bg: oklch(0.305 0.008 260); --s-send-fg: oklch(0.95 0.003 260);
+  }
+  /* D8 Opus 深版（贴我们现有 bg 暗度 .155） */
+  .scene.d8 {
+    --s-radius: 18px;
+    --s-bg: oklch(0.155 0.004 260); --s-card: oklch(0.21 0.005 260); --s-block: oklch(0.255 0.006 260);
+    --s-fg: oklch(0.965 0.003 260); --s-mfg: oklch(0.69 0.008 260); --s-pill: oklch(0.295 0.007 260);
+    --s-send-bg: oklch(0.295 0.007 260); --s-send-fg: oklch(0.95 0.003 260);
+  }
+
+  /* ---------- 第四节：氛围光 ---------- */
+  .glowdemo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .glowdemo-grid { grid-template-columns: 1fr; } }
+  .glowdemo {
+    position: relative; overflow: hidden; border-radius: 14px; box-shadow: var(--edge);
+    background: var(--bg); padding: 56px 20px 44px; text-align: center;
+  }
+  .glowdemo .ambient { position: absolute; inset: -25%; filter: blur(28px); pointer-events: none; }
+  .glowdemo.g-none .ambient { display: none; }
+  .glowdemo.g-soft .ambient {
+    background:
+      radial-gradient(38% 32% at 32% 32%, oklch(0.82 0.10 230 / 0.16), transparent 70%),
+      radial-gradient(30% 26% at 68% 30%, oklch(0.80 0.10 300 / 0.12), transparent 70%);
+  }
+  .glowdemo.g-mid .ambient {
+    background:
+      radial-gradient(38% 32% at 32% 32%, oklch(0.82 0.10 230 / 0.30), transparent 70%),
+      radial-gradient(30% 26% at 68% 30%, oklch(0.80 0.10 300 / 0.24), transparent 70%),
+      radial-gradient(26% 22% at 52% 64%, oklch(0.85 0.08 150 / 0.16), transparent 70%);
+  }
+  .dark .glowdemo.g-soft .ambient {
+    background:
+      radial-gradient(38% 32% at 32% 32%, oklch(0.75 0.11 230 / 0.22), transparent 70%),
+      radial-gradient(30% 26% at 68% 30%, oklch(0.72 0.11 300 / 0.17), transparent 70%);
+  }
+  .dark .glowdemo.g-mid .ambient {
+    background:
+      radial-gradient(38% 32% at 32% 32%, oklch(0.75 0.11 230 / 0.40), transparent 70%),
+      radial-gradient(30% 26% at 68% 30%, oklch(0.72 0.11 300 / 0.32), transparent 70%),
+      radial-gradient(26% 22% at 52% 64%, oklch(0.78 0.09 150 / 0.22), transparent 70%);
+  }
+  .glowdemo h3 { position: relative; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+  .glowdemo .ubar { margin: 0 auto; width: 160px; position: relative; }
+  .glowdemo .gcap { position: relative; font-size: 11.5px; color: var(--muted-fg); margin-top: 16px; }
+
+  /* ---------- 动效 ---------- */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes metal-flow { to { background-position: 300% 0; } }
+  @keyframes metal-border-flow { to { background-position: 0 0, 300% 0; } }
+  @keyframes sheen { from { background-position: 150% 0; } to { background-position: -150% 0; } }
+  @keyframes sheen-bg { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  /* 纪律清单 */
+  .rules { background: var(--card); border-radius: 14px; box-shadow: var(--edge); padding: 24px 28px; }
+  .rules li { font-size: 13.5px; line-height: 2; color: var(--muted-fg); }
+  .rules li b { color: var(--fg); font-weight: 550; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>金属虹光方向预览</h1>
+    <button class="theme-btn" id="themeBtn">切换 亮 / 暗</button>
+  </header>
+  <p class="sub">主体是金属光泽，彩虹只是高光掠过时的干涉色——CD 背面 / 全息箔 / 油膜的思路。页面本身用冷灰渲染，可切主题。</p>
+
+  <!-- 第一节：灰阶试衣间 -->
+  <section>
+    <h2>① 灰阶试衣间（点选 → 整页换灰，含 ② 材质墙）</h2>
+    <p class="note">12 款全冷/中性灰，零暖色。差异轴：色温（中性 ↔ 蓝 ↔ 靛紫）、彩度（0 ↔ 微 ↔ 可见）、结构（白底白卡 ↔ 灰底白卡 ↔ 零彩强对比）。<b>点一款，整个页面（连同下面所有材质）都换成它</b>；右上角切亮暗，两态都要看。每个选项的色条＝bg / muted / muted-fg / fg。</p>
+    <div class="gray-grid" id="grayGrid">
+      <button class="gopt" data-g="g1"><span class="gsw"><i style="background:oklch(1 0 0)"></i><i style="background:oklch(0.97 0 0)"></i><i style="background:oklch(0.556 0 0)"></i><i style="background:oklch(0.145 0 0)"></i></span><span class="gname">g1 · 死灰（现状）</span></button>
+      <button class="gopt sel" data-g="g2"><span class="gsw"><i style="background:oklch(1 0.003 260)"></i><i style="background:oklch(0.97 0.005 260)"></i><i style="background:oklch(0.556 0.012 260)"></i><i style="background:oklch(0.15 0.012 260)"></i></span><span class="gname">g2 · 冷瓷 260</span></button>
+      <button class="gopt" data-g="g3"><span class="gsw"><i style="background:oklch(0.99 0.004 240)"></i><i style="background:oklch(0.962 0.006 240)"></i><i style="background:oklch(0.54 0.016 240)"></i><i style="background:oklch(0.17 0.014 240)"></i></span><span class="gname">g3 · 雾蓝 240</span></button>
+      <button class="gopt" data-g="g4"><span class="gsw"><i style="background:oklch(0.99 0.004 275)"></i><i style="background:oklch(0.962 0.007 275)"></i><i style="background:oklch(0.54 0.016 275)"></i><i style="background:oklch(0.18 0.014 275)"></i></span><span class="gname">g4 · 靛紫灰 275</span></button>
+      <button class="gopt" data-g="g5"><span class="gsw"><i style="background:oklch(0.99 0.004 215)"></i><i style="background:oklch(0.963 0.006 215)"></i><i style="background:oklch(0.545 0.015 215)"></i><i style="background:oklch(0.17 0.013 215)"></i></span><span class="gname">g5 · 青瓷 215</span></button>
+      <button class="gopt" data-g="g6"><span class="gsw"><i style="background:oklch(0.955 0.001 260)"></i><i style="background:oklch(0.91 0.001 260)"></i><i style="background:oklch(0.46 0.002 260)"></i><i style="background:oklch(0.13 0 0)"></i></span><span class="gname">g6 · 石墨层次 · 零彩强对比</span></button>
+      <button class="gopt" data-g="g7"><span class="gsw"><i style="background:oklch(0.94 0.002 260)"></i><i style="background:oklch(0.905 0.003 260)"></i><i style="background:oklch(0.50 0.008 260)"></i><i style="background:oklch(0.15 0.008 260)"></i></span><span class="gname">g7 · 灰底白卡 · Apple 式</span></button>
+      <button class="gopt" data-g="g8"><span class="gsw"><i style="background:oklch(0.985 0.005 250)"></i><i style="background:oklch(0.955 0.008 250)"></i><i style="background:oklch(0.52 0.020 250)"></i><i style="background:oklch(0.16 0.018 250)"></i></span><span class="gname">g8 · 深空蓝黑 · 暗色主场</span></button>
+      <button class="gopt" data-g="g9"><span class="gsw"><i style="background:oklch(1 0.001 260)"></i><i style="background:oklch(0.95 0.002 260)"></i><i style="background:oklch(0.48 0.006 260)"></i><i style="background:oklch(0.12 0.004 260)"></i></span><span class="gname">g9 · 银白高对比</span></button>
+      <button class="gopt" data-g="g10"><span class="gsw"><i style="background:oklch(0.978 0.008 235)"></i><i style="background:oklch(0.95 0.010 235)"></i><i style="background:oklch(0.50 0.024 235)"></i><i style="background:oklch(0.19 0.022 235)"></i></span><span class="gname">g10 · 冰川蓝 235 · 蓝可见</span></button>
+      <button class="gopt" data-g="g11"><span class="gsw"><i style="background:oklch(0.99 0.004 250)"></i><i style="background:oklch(0.965 0.005 250)"></i><i style="background:oklch(0.56 0.010 250)"></i><i style="background:oklch(0.20 0.010 250)"></i></span><span class="gname">g11 · 雾灰 250 · 柔对比</span></button>
+      <button class="gopt" data-g="g12"><span class="gsw"><i style="background:oklch(0.996 0.002 265)"></i><i style="background:oklch(0.968 0.003 265)"></i><i style="background:oklch(0.55 0.009 265)"></i><i style="background:oklch(0.17 0.008 265)"></i></span><span class="gname">g12 · 月白 265 · 极淡</span></button>
+    </div>
+
+    <div class="preview-strip">
+      <div class="panel">
+        <span class="tag">Composer 预览（跟随整页灰阶）</span>
+        <div class="mini-card">
+          <p class="mini-textarea">把这场演讲改写成 LinkedIn 长文和三条金句卡…</p>
+          <div class="mini-row">
+            <span class="mini-pill">Brand <span class="chev">▾</span></span>
+            <span class="mini-pill">MiniMax <span class="chev">▾</span></span>
+            <span class="mini-send">↑</span>
+          </div>
+        </div>
+        <div class="mini-nav">
+          <div class="active">Home</div>
+          <div>My projects</div>
+          <div>Speakers</div>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="tag">文字层级预览</span>
+        <div class="mini-card">
+          <p style="font-size:17px;font-weight:600;margin-bottom:6px;">Project title — Keynote Q3</p>
+          <p style="font-size:13.5px;margin-bottom:10px;">正文文字：生成 3 条短片、1 篇长文、5 张金句卡。</p>
+          <p style="font-size:12.5px;color:var(--muted-fg);">辅助文字：2 小时前 · 由 MiniMax 生成 · 92 分</p>
+        </div>
+        <div class="mini-nav">
+          <div class="active">Selected nav item</div>
+          <div>Normal nav item</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第二节：金属虹光 -->
+  <section>
+    <h2>② 材质墙（白欧泊系为主，点击任一款看落点细节）</h2>
+    <p class="note">方向已锁：<b>白银为底，虹是少数浓烈小峰</b>（火彩占比 ≤15%，chroma 0.13~0.17）。6 款白欧泊变体（峰的数量 / 冷暖 / 粗细 / 柔锐）+ 4 款旧方向对照。灰阶在①随时换——白底材质对灰阶色温很敏感，建议在你中意的灰阶下评审。</p>
+    <div class="wall" id="wall">
+      <div class="cell" data-v="opal-1">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 单峰青紫</p>
+      </div>
+      <div class="cell sel" data-v="opal-2">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 双峰冷</p>
+      </div>
+      <div class="cell" data-v="opal-3">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 双峰暖</p>
+      </div>
+      <div class="cell" data-v="opal-4">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 彩虹峰（一峰全谱）</p>
+      </div>
+      <div class="cell" data-v="opal-5">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 极细三线</p>
+      </div>
+      <div class="cell" data-v="opal-6">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">白虹 · 雾面柔峰</p>
+      </div>
+      <div class="cell" data-v="foil">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">对照 · 全息箔（满铺）</p>
+      </div>
+      <div class="cell" data-v="laser-line">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">对照 · 镭射细边</p>
+      </div>
+      <div class="cell" data-v="galaxy">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">对照 · 银河（深底）</p>
+      </div>
+      <div class="cell" data-v="platinum">
+        <div class="cell-swatch"></div>
+        <div class="cell-row"><div class="score s-sm"><b>92</b></div><span class="ssr-chip">SSR</span></div>
+        <p class="cell-name">对照 · 铂金拉丝（旧）</p>
+      </div>
+    </div>
+
+    <p class="detail-title">落点细节 —— 跟着选中的材质走：</p>
+    <div class="grid" id="detail" data-v="opal-2">
+      <div class="demo">
+        <div class="score"><b>92</b></div>
+        <span class="ssr-chip">VIRAL&nbsp;POTENTIAL</span>
+        <span class="label">Results 分数徽章 · 旋转金属环 + 微光晕</span>
+      </div>
+
+      <div class="demo">
+        <div class="send-row">
+          <div>
+            <button class="send"><span>↑</span></button>
+            <p class="send-cap">待命</p>
+          </div>
+          <div>
+            <button class="send busy"><span>↑</span></button>
+            <p class="send-cap">生成中</p>
+          </div>
+        </div>
+        <span class="label">Send 按钮 · 生成中的金属光泽扫过</span>
+      </div>
+
+      <div class="demo">
+        <div class="featured">
+          <div class="thumb"></div>
+          <p class="t">Keynote → LinkedIn 三件套</p>
+          <p class="d">Featured recipe · hover 看镜面掠过</p>
+        </div>
+        <span class="label">Gallery 精选卡 · 金属边缘 + 光晕</span>
+      </div>
+
+      <div class="demo">
+        <p class="hero-word">One talk,<br /><span class="grad">every language.</span></p>
+        <span class="ubar"></span>
+        <span class="label">Landing · 金属渐变字 + underline bar</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第三节：分层手法库 -->
+  <section>
+    <h2>③ 分层手法库（明色保留 edge-glow 现状；暗色学 Opus）</h2>
+    <p class="note">已确认的方向：<b>明色保留 L1 现状</b>（edge-glow 在白天成立），其余明色款留作对照。<b>暗色学 Agent Opus</b>：级差收到 ~0.04（D2-D5 的 0.06~0.09 太凶所以显丑）、近零彩度（蓝调在暗色显脏）、大圆角 18px、send 用亮灰圆而非纯白。D6-D8 是 Opus 手法的三个翻译：原色阶 / 微蓝调 / 贴我们现有 bg 深版。</p>
+
+    <p class="detail-title">明色 · 纯平</p>
+    <div class="scenes">
+      <div class="scene l1">
+        <span class="tag">L1 · 现状 · 白底白卡 + edge-glow</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene l2">
+        <span class="tag">L2 · 灰底白卡 · 块凹 .94</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene l3">
+        <span class="tag">L3 · 白底灰卡 · 块再暗半级</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene l4">
+        <span class="tag">L4 · 灰卡白块 · 块凸</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene l5">
+        <span class="tag">L5 · 均匀三级阶梯 .93→.965→1.0</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="detail-title">暗色 · 纯平</p>
+    <div class="scenes">
+      <div class="scene d1">
+        <span class="tag">D1 · 现状 · bg .145 / card .205</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d2">
+        <span class="tag">D2 · 三级阶梯 .125→.195→.25</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d3">
+        <span class="tag">D3 · 深底阶梯 .105→.19→.255</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d4">
+        <span class="tag">D4 · 凹块（块比卡暗 .215→.165）</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d5">
+        <span class="tag">D5 · 大步距阶梯 .11→.22→.30</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d6">
+        <span class="tag">D6 · Opus 阶梯 · 近中性 .19→.24→.275 · 大圆角</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d7">
+        <span class="tag">D7 · Opus × 冷瓷微蓝</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+      <div class="scene d8">
+        <span class="tag">D8 · Opus 深版 · bg .155 贴现有</span>
+        <div class="composer-mock">
+          <div class="mock-blocks">
+            <div class="block-mock"><span class="bi">📎</span><span class="bt">素材</span><span class="bv">可选</span></div>
+            <div class="block-mock"><span class="bi">👤</span><span class="bt">演讲者</span><span class="bv">自动</span></div>
+          </div>
+          <p class="mock-text">描述想从这场演讲生成什么…</p>
+          <div class="mock-row"><span class="mock-pill">Default ▾</span><span class="mock-send">↑</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第四节：氛围光 -->
+  <section>
+    <h2>④ 氛围光（landing hero 的空气感）</h2>
+    <p class="note">hero 背后铺一层白欧泊色 radial glow（blur 28px，不挡交互），解决"首屏一大张白纸"的朴素感。三档：无 / 淡 / 中。underline bar 同步换成 <b>opal-4 虹峰窄带</b>（银白带一处浓峰，替代现在的满铺彩虹带）。切暗色看——暗态的 glow 透明度已单独调高。</p>
+    <div class="glowdemo-grid">
+      <div class="glowdemo g-none" data-v="opal-4">
+        <div class="ambient"></div>
+        <h3>You did the talking</h3>
+        <span class="ubar"></span>
+        <p class="gcap">无（现状）＋ 虹峰 underline</p>
+      </div>
+      <div class="glowdemo g-soft" data-v="opal-4">
+        <div class="ambient"></div>
+        <h3>You did the talking</h3>
+        <span class="ubar"></span>
+        <p class="gcap">淡</p>
+      </div>
+      <div class="glowdemo g-mid" data-v="opal-4">
+        <div class="ambient"></div>
+        <h3>You did the talking</h3>
+        <span class="ubar"></span>
+        <p class="gcap">中</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第五节：纪律 -->
+  <section>
+    <h2>⑤ 使用纪律（如果采纳，写进 CLAUDE.md）</h2>
+    <div class="rules">
+      <ul>
+        <li><b>全产品只此一种光泽</b>：金属虹光只出现在 分数徽章 / send 生成态 / Gallery featured / landing hero，新落点需评审。</li>
+        <li><b>配方锁定</b>：结构是金属（明度大幅振荡 + 镜面扫光，这是和"整条色带"的分界线），色彩在金属结构内流动（chroma ≤ 0.07）；亮色主题金属压暗、暗色提亮，两态必须都验收。</li>
+        <li><b>日常界面零彩色</b>：按钮、导航、徽章、focus ring 维持冷灰单色，不引入第二个彩色。</li>
+        <li><b>动效礼仪</b>：流转周期 ≥ 8s（send 扫光除外），<code>prefers-reduced-motion</code> 下全部静止。</li>
+        <li><b>描边纪律不变</b>：金属边缘用 <code>padding-box / border-box</code> 双层背景实现，不算违反「卡片无 border」约定。</li>
+        <li><b>扁平分层</b>：bg → card → block 只用明度阶梯分层，禁投影 / 纵向渐变 / 内高光（拟物手法）；级差 0.03~0.09 内选，块凸（亮）凹（暗）只能选一个方向全局统一。</li>
+        <li><b>氛围光只在 landing</b>：白欧泊 radial glow（blur ≥ 24px，不挡交互）仅用于 hero 背后，产品界面内不铺。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<script>
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark');
+  });
+  const gopts = document.querySelectorAll('.gopt');
+  gopts.forEach(g => g.addEventListener('click', () => {
+    document.documentElement.dataset.gray = g.dataset.g;
+    gopts.forEach(x => x.classList.toggle('sel', x === g));
+  }));
+  const cells = document.querySelectorAll('.cell');
+  const detail = document.getElementById('detail');
+  cells.forEach(c => c.addEventListener('click', () => {
+    detail.dataset.v = c.dataset.v;
+    cells.forEach(x => x.classList.toggle('sel', x === c));
+  }));
+</script>
+</body>
+</html>
