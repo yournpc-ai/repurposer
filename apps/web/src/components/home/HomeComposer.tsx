@@ -21,6 +21,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/components/AuthProvider"
+import type { RecipeCard } from "@/lib/recipes"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -66,6 +67,9 @@ interface HomeComposerProps {
   speakers: Speaker[]
   brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
+  /** Picked recipe card (RECIPES §7.2): prefills the prompt and pins the
+   * task book (explicit slots + dub_languages prior) on send. */
+  recipe?: RecipeCard | null
 }
 
 const AUTO_GENERATE = "__auto_generate__"
@@ -91,6 +95,7 @@ export function HomeComposer({
   speakers,
   brandTemplates,
   onGenerateStart,
+  recipe,
 }: HomeComposerProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -107,6 +112,17 @@ export function HomeComposer({
   const [isComposing, setIsComposing] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Recipe pick: prefill the prompt from the card's template. The pinned
+  // task book rides the `recipe` prop straight into handleGenerate's
+  // /intent prior — the recipe's promise is delivered by the pin-merge,
+  // never re-inferred.
+  useEffect(() => {
+    if (recipe) {
+      setPrompt(t(`recipes.${recipe.id}.promptTemplate`))
+      textareaRef.current?.focus()
+    }
+  }, [recipe, t])
 
   // First-visit teaching: open the composer tour once per browser. Read in
   // an effect only — localStorage is never touched during SSR.
@@ -222,12 +238,22 @@ export function HomeComposer({
 
         // Resolve the task book via the project-scoped intent endpoint. The
         // server persists it on the project (pending_intent), so the overlay
-        // on the results page can confirm or edit it — now or later.
+        // on the results page can confirm or edit it — now or later. A
+        // recipe pick sends its pinned book as `prior`: the explicit clips
+        // slot and dub_languages pin through the merge (RECIPES §7.2).
         const intentRes = await apiFetch(`/api/v1/projects/${project.id}/intent`, {
           method: "POST",
           body: {
             prompt: prompt.trim(),
             brand_template_id: brandTemplateId || undefined,
+            ...(recipe
+              ? {
+                  prior: {
+                    outputs: recipe.slotsPrior,
+                    dub_languages: recipe.params?.dubLanguages ?? [],
+                  },
+                }
+              : {}),
           },
         })
         if (!intentRes.ok) {
@@ -284,7 +310,9 @@ export function HomeComposer({
 
   return (
     <>
-    <Card className="overflow-visible py-0 ring-0 edge-glow">
+    {/* Dark mode: flat tonal steps instead of edge-glow — card 0.195,
+        blocks 0.25 (D2 recipe). Light mode keeps edge-glow. */}
+    <Card className="overflow-visible py-0 ring-0 edge-glow dark:bg-[oklch(0.195_0.006_260)] dark:shadow-none">
       <CardContent className="p-4 text-left">
         {/* Entity blocks (Assets = source materials, Speaker = whose voice)
             ride the card's top edge via negative margin; the textarea fills
@@ -297,7 +325,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none"
             >
               {files.length === 0 ? (
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -323,7 +351,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-speaker"
               onClick={() => setSpeakerPickerOpen(true)}
-              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent"
+              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none"
             >
               {selectedSpeaker ? (
                 <Avatar size="sm">

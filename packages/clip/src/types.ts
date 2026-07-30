@@ -9,12 +9,11 @@
 
 export type Aspect = "9:16" | "1:1";
 
-export type CaptionStylePreset =
-  | "clean-bottom"
-  | "karaoke-highlight"
-  | "fade-in"
-  | "pop-in"
-  | "slide-up";
+// The preset id type is DERIVED from the catalog (captions.ts) — adding a
+// style there updates this type automatically. Re-exported here so the
+// contract mirror's surface stays stable for existing importers.
+import type { CaptionStylePreset } from "./captions";
+export type { CaptionStylePreset } from "./captions";
 
 /**
  * What backs the clip's visual: a real on-camera video, or a "stills" audiogram

@@ -11,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import type { CaptionCue, CaptionStylePreset, ClipSpec, IntroOutroCard, Point } from "./types";
+import type { CaptionCue, ClipSpec, IntroOutroCard, Point } from "./types";
 import {
   COMPOSITION_FPS,
   introSeconds,
@@ -19,6 +19,7 @@ import {
   outroSeconds,
   videoDurationSeconds,
 } from "./types";
+import { captionPreset, type CaptionEntrance } from "./captions";
 import { fontFamilyFor } from "./fonts";
 
 /** Normalized center point -> absolute-position style (CSS translate / libass \pos). */
@@ -35,6 +36,9 @@ function pointStyle(p: Point | null | undefined, fallback: Point): React.CSSProp
 
 const DEFAULT_TITLE_POS: Point = { x: 0.5, y: 0.12 };
 const DEFAULT_CAPTION_POS: Point = { x: 0.5, y: 0.84 };
+/** stack layout default: the container's TOP edge anchors here and lines
+ * flow downward (caption_position overrides the anchor the same way). */
+const DEFAULT_STACK_POS: Point = { x: 0.5, y: 0.14 };
 
 /**
  * The single source of truth for how a clip looks — consumed by BOTH the
@@ -68,27 +72,27 @@ function splitFrames(count: number, total: number): number[] {
 }
 
 /**
- * Per-line caption entrance animation for the `fade-in` / `pop-in` /
- * `slide-up` presets — `clean-bottom` / `karaoke-highlight` render statically
- * (no entry animation). Returns a transform *suffix* rather than a full
- * `transform` because the caller already centers the box via `pointStyle()`'s
- * `translate(-50%, -50%)`; the two compose into one `transform` string. All
- * three map onto a single opacity/transform pair a future libass renderer can
- * express with `\fad` + `\t(\fscx,\fscy)` or `\move` (see docs/VIDEO_EDITOR.md).
+ * Per-line caption entrance animation — the `entrance` primitive from the
+ * caption catalog (captions.ts); `none` renders statically. Returns a
+ * transform *suffix* rather than a full `transform` because the caller
+ * already centers the box via `pointStyle()`'s `translate(-50%, -50%)`; the
+ * two compose into one `transform` string. Every value maps onto a single
+ * opacity/transform pair a future libass renderer can express with `\fad` +
+ * `\t(\fscx,\fscy)` or `\move` (the catalog's libass mapping gate).
  */
 function captionEntrance(
-  preset: CaptionStylePreset,
+  entrance: CaptionEntrance,
   frame: number,
   revealFrame: number,
 ): { opacity: number; transformSuffix: string } {
-  if (preset === "fade-in") {
+  if (entrance === "fade-in") {
     const opacity = interpolate(frame, [revealFrame, revealFrame + 6], [0, 1], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
     });
     return { opacity, transformSuffix: "" };
   }
-  if (preset === "pop-in") {
+  if (entrance === "pop-in") {
     const t = interpolate(frame, [revealFrame, revealFrame + 8], [0, 1], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -96,7 +100,7 @@ function captionEntrance(
     });
     return { opacity: Math.min(1, t + 0.4), transformSuffix: `scale(${0.85 + 0.15 * t})` };
   }
-  if (preset === "slide-up") {
+  if (entrance === "slide-up") {
     const t = interpolate(frame, [revealFrame, revealFrame + 7], [0, 1], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -170,8 +174,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const captionSize = brand?.caption_size || 56;
   const captionFont = fontFamilyFor(brand?.caption_font);
   const objectFit = brand?.fill_mode === "fit" ? "contain" : "cover";
-  const accent =
-    spec.caption_style_preset === "karaoke-highlight" ? "#facc15" : captionColor;
+  // Caption style = catalog lookup (captions.ts), never a per-id branch.
+  const preset = captionPreset(spec.caption_style_preset);
+  const accent = preset.wordHighlight ? "#facc15" : captionColor;
 
   // Output timeline windows: intro card | video | outro card.
   const introDur = introSeconds(spec);
@@ -217,17 +222,28 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     [];
 
   const captionsEnabled = spec.caption_enabled !== false;
-  // Frame at which the active line's first cue becomes visible in OUTPUT
-  // time — the inverse of the sourceTime mapping above. Drives the entrance
-  // animation presets below (fade-in / pop-in / slide-up).
-  const revealFrame = (() => {
-    if (activeLine.length === 0) return 0;
-    const cueStart = activeLine[0].start;
+  // Frame at which a line's first cue becomes visible in OUTPUT time — the
+  // inverse of the sourceTime mapping above. Per-line so both layouts can
+  // drive entrance animations: `single` animates the active line, `stack`
+  // animates each revealed line by its own reveal frame.
+  const lineRevealFrame = (line: CaptionCue[]): number => {
+    if (line.length === 0) return 0;
+    const cueStart = line[0].start;
     const seg = timeline.find((t) => cueStart >= t.seg.start && cueStart <= t.seg.end) ?? current;
     if (!seg) return 0;
     const revealLocalOutput = seg.outStart + Math.max(0, cueStart - seg.seg.start);
     return Math.round((introDur + revealLocalOutput) * fpsv);
-  })();
+  };
+  const revealFrame = lineRevealFrame(activeLine);
+
+  // stack layout (堆叠): every line revealed so far stays on screen, newest
+  // at the bottom, sliding window of the last `maxLines` lines (the oldest
+  // leave without animation in v1 — no dim, no exit animation).
+  const stackMaxLines = preset.maxLines ?? 5;
+  const visibleStack =
+    preset.layout === "stack"
+      ? lines.filter((line) => lineRevealFrame(line) <= frame).slice(-stackMaxLines)
+      : [];
 
   // Background music: play the baked track when enabled, looped to fill the clip.
   const music = spec.music;
@@ -241,7 +257,44 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const dubVolume = Math.min(1, Math.pow(10, (spec.dub?.gain_db ?? 0) / 20));
 
   const captionPosStyle = pointStyle(spec.caption_position, DEFAULT_CAPTION_POS);
-  const entrance = captionEntrance(spec.caption_style_preset, frame, revealFrame);
+  // stack container: anchored by the edge nearer the anchor point so the block
+  // never grows off-canvas — a top-half anchor pins the TOP edge (lines grow
+  // downward); a bottom-half anchor (e.g. a single-layout caption_position at
+  // 0.84) pins the BOTTOM edge and lines grow upward, newest at the bottom,
+  // the sliding window exiting at the top (chat-scroll style).
+  const stackAnchor = spec.caption_position ?? DEFAULT_STACK_POS;
+  const stackPosStyle: React.CSSProperties = {
+    position: "absolute",
+    left: `${stackAnchor.x * 100}%`,
+    top: `${stackAnchor.y * 100}%`,
+    transform: stackAnchor.y > 0.5 ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+    width: "84%",
+  };
+  const entrance = captionEntrance(preset.entrance, frame, revealFrame);
+
+  // One line's cue spans — the active word takes the accent color (visible
+  // only for wordHighlight presets; otherwise accent == captionColor).
+  const renderCueSpans = (line: CaptionCue[]) =>
+    line.map((cue, i) => {
+      const isActive = sourceTime >= cue.start && sourceTime < cue.end;
+      return (
+        <span key={i} style={{ color: isActive ? accent : captionColor }}>
+          {cue.text}
+          {i < line.length - 1 ? " " : ""}
+        </span>
+      );
+    });
+
+  const captionTextStyle: React.CSSProperties = {
+    textAlign: "center",
+    fontFamily: captionFont,
+    fontSize: captionSize,
+    fontWeight: 700,
+    lineHeight: 1.25,
+    color: captionColor,
+    WebkitTextStroke: "2px rgba(0,0,0,0.55)",
+    textShadow: "0 2px 10px rgba(0,0,0,0.6)",
+  };
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -338,17 +391,42 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </div>
       ) : null}
 
-      {inVideo && captionsEnabled && activeLine.length > 0 ? (
+      {inVideo && captionsEnabled && preset.layout === "stack" && visibleStack.length > 0 ? (
         <div
           style={{
-            textAlign: "center",
-            fontFamily: captionFont,
-            fontSize: captionSize,
-            fontWeight: 700,
-            lineHeight: 1.25,
-            color: captionColor,
-            WebkitTextStroke: "2px rgba(0,0,0,0.55)",
-            textShadow: "0 2px 10px rgba(0,0,0,0.6)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 10,
+            ...stackPosStyle,
+          }}
+        >
+          {visibleStack.map((line, i) => {
+            const lineEntrance = captionEntrance(
+              preset.entrance,
+              frame,
+              lineRevealFrame(line),
+            );
+            return (
+              <div
+                key={line[0]?.start ?? i}
+                style={{
+                  ...captionTextStyle,
+                  opacity: lineEntrance.opacity,
+                  transform: lineEntrance.transformSuffix || undefined,
+                }}
+              >
+                {renderCueSpans(line)}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {inVideo && captionsEnabled && preset.layout === "single" && activeLine.length > 0 ? (
+        <div
+          style={{
+            ...captionTextStyle,
             ...captionPosStyle,
             transform: [captionPosStyle.transform, entrance.transformSuffix]
               .filter(Boolean)
@@ -356,15 +434,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             opacity: entrance.opacity,
           }}
         >
-          {activeLine.map((cue, i) => {
-            const isActive = sourceTime >= cue.start && sourceTime < cue.end;
-            return (
-              <span key={i} style={{ color: isActive ? accent : captionColor }}>
-                {cue.text}
-                {i < activeLine.length - 1 ? " " : ""}
-              </span>
-            );
-          })}
+          {renderCueSpans(activeLine)}
         </div>
       ) : null}
     </AbsoluteFill>

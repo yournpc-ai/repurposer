@@ -5,6 +5,7 @@ import { Player } from '@remotion/player'
 import {
   Clip as ClipComposition,
   ASPECT_DIMENSIONS,
+  CAPTION_PRESETS,
   COMPOSITION_FPS,
   removeRange,
   setTrim,
@@ -12,6 +13,7 @@ import {
   totalDurationSeconds,
   trimBounds,
   type CaptionCue,
+  type CaptionStylePreset,
   type ClipSpec,
 } from '@repurposer/clip'
 import { ArrowLeft, Download, FileText, Trash2 } from 'lucide-react'
@@ -483,10 +485,17 @@ function ClipEditorPage() {
                     pushOp({ op: 'set_caption_style', params: { preset } })
                   }}
                 >
-                  <SelectTrigger className="h-9 w-36 rounded-md text-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 w-36 rounded-md text-sm">
+                    <SelectValue>
+                      {(value: CaptionStylePreset) => t(`captionPresets.${value}`)}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="clean-bottom">{t('clipEditor.styleClean')}</SelectItem>
-                    <SelectItem value="karaoke-highlight">{t('clipEditor.styleKaraoke')}</SelectItem>
+                    {/* Options derive from the caption catalog — a new
+                        registered preset appears here automatically. */}
+                    {(Object.keys(CAPTION_PRESETS) as CaptionStylePreset[]).map((p) => (
+                      <SelectItem key={p} value={p}>{t(`captionPresets.${p}`)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </label>

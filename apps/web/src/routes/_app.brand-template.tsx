@@ -5,6 +5,7 @@ import { Player } from "@remotion/player"
 import {
   Clip as ClipComposition,
   ASPECT_DIMENSIONS,
+  CAPTION_PRESETS,
   COMPOSITION_FPS,
   totalDurationSeconds,
   type CaptionCue,
@@ -72,15 +73,9 @@ const FONTS = [
 const ASPECTS = ["9:16", "1:1"] as const
 // Quick-pick presets; both size and color also accept any free-form value.
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
-// MVP set: 2 existing (static / karaoke word-highlight) + 3 new entrance
-// animations. Kept deliberately small per product direction.
-const CAPTION_ANIMATIONS: readonly CaptionStylePreset[] = [
-  "clean-bottom",
-  "karaoke-highlight",
-  "fade-in",
-  "pop-in",
-  "slide-up",
-]
+// Caption styles come from the catalog (@repurposer/clip captions.ts) — a
+// new registered preset appears here automatically.
+const CAPTION_ANIMATIONS = Object.keys(CAPTION_PRESETS) as CaptionStylePreset[]
 
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
@@ -1026,15 +1021,13 @@ function BrandTemplatePage() {
                     >
                       <SelectTrigger className="h-9 w-full rounded-md text-sm">
                         <SelectValue>
-                          {(value: CaptionStylePreset) =>
-                            t(`brandTemplate.caption.animations.${value}`)
-                          }
+                          {(value: CaptionStylePreset) => t(`captionPresets.${value}`)}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {CAPTION_ANIMATIONS.map((p) => (
                           <SelectItem key={p} value={p}>
-                            {t(`brandTemplate.caption.animations.${p}`)}
+                            {t(`captionPresets.${p}`)}
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -85,6 +85,7 @@
 | 意图 → dispatch 注册表（三类目标：editor 操作——翻译/改短/换音乐/配音/prompt-to-clip；整体重生成；**plan 级**——节点重跑·追加·参数） | 矩阵 §B P1；ChatCut 原则推广到计划层 | P1 | Operation Model + RunPlan + spike 结论 | ⚠️ | 🚧（2026-07-26：editor 操作 ✅（edit ops 接线 ADR-032）+ 追加处理 ✅（模式②，含新 translate_clip/dub_clip）+ 整体重生成 ✅；**plan 级节点重跑·参数仍 ❌**——导演两步走后 `director_plan` 已独立可寻址，"重排任务"具备重跑对象；简报 `tasks/chat-loop-v2.md` §4） |
 | chat 指令落地语义：何时产生 editor 操作、何时触发重生成 | 2027 架构 | P1 | 同上 | ⚠️ | ✅（CHAT_ARCH §3 三类目标 + 两家族分离：产物级→operations 表，plan 级→RunPlan 小拓扑） |
 | chat 全屏 UI（GenerationOverlay：composer → 计划卡 HITL 确认 → SSE 打勾流 → 结果页；中止/续聊/附件展示） | CHAT_ARCH §3/§8；Opus 交互参照 | P1 | chat v1/v2 后端 | — 纯前端 | ✅（2026-07-27：含失败/完成 toast、完成后结果页自动刷新、空态扁平化；results 首访 Tour 同步落地。2026-07-28：GenerationStepper 弹窗 + 后端 `ui_step` 退役，processing 项目走 `?overlay=run` attach 模式，进度面只剩打勾流一处） |
+| ask 原语 + 任务书 slot 化 + 方向检查点（QuestionDock 停靠确认 / QA 入档 / autonomy 自治档 / 逐槽任务书——"英德两版帖"一次 run） | CHAT_ARCH §3/§8.5；矩阵 §E；opusclip §9（Opus HITL 实证）；STRATEGY §2.5 L3 | P1 | chat v2 + Operation Model + RunPlan | ⚠️ | ✅（2026-07-29 **期 1** messages question/answer + answer 端点 + QuestionDock task_book 形态 + QA 入档 + autonomy 落 run.context；**期 2** IntentSlot 全链路换形 + per-slot 扇出 + pin 合并 + 逐槽审阅面板——扁平 count 全库退役；2026-07-30 **期 3** AskProposal 三态（N-18）+ choice dock + 确定性 autoResume + answer 端点续聊 + 入口 reasons 进 question；**期 4** Suspend/waiting + 方向检查点（review 档 full run 插点）+ answer 唤醒/bail 级联 + finalize 谓词补 waiting——简报 `tasks/intent-ask-primitive.md`，NAMING N-18/19/20） |
 | MCP server（被外部 agent 调用） | 矩阵 §I P2；MCP 已成行业标准（Linux 基金会 AAIF，97M 月下载）；STRATEGY §1 判断 3 | P2 | Agent Interface 稳定 + API 幂等/结构化错误改造 | ⚠️ | ❌ |
 | 运行图检视面（只读为主的 DAG 视图：节点成本/重跑/变体检视；机构"管得住"信任工具——画布对我们是信任工具不是创作工具；无接线、无模型名、非图编辑） | ADR-028 Amendment；elevencreative §3 | P2 | RunPlan 持久化 + 混合图/变体现实（虚拟产物线，ADR-029） | — 纯工程 | ❌ |
 
@@ -176,7 +177,7 @@
 
 | 需求 | 来源 | 优先级 | 依赖 | Agent 就绪度 | 状态 |
 |---|---|---|---|---|---|
-| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材需自备——demo talk 已随 demo seed 于 2026-07-27 退役） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；2026-07-25：**落地页已落地**——`/` 公开落地页（header/hero/工作流叙事/信任带/roadmap/footer，`motion` 视差），sidebar 工作台迁入 `_app` pathless layout（原 `/` → `/home`，其余 URL 不变），pricing 区按决策暂缓；配方卡 ❌） |
+| 配方卡（3–6 个硬编码预设）+ 落地页（parallax：hero + 工作流叙事 + 信任带 + pricing 预告）+ 匿名/已登录路由分流 + 通知中心去占位（铃铛真实设计：发布结果 / 功能公告） | STRATEGY §5；agent-opus §3 | P1（纯前端、无新表，可灵活插队） | 无（预览素材需自备——demo talk 已随 demo seed 于 2026-07-27 退役） | — 纯工程 | 🚧（2026-07-24：**通知中心已提前落地**——`notifications` 表 + 全局顶栏铃铛 + 发布结果三类事件，distribution 为第一个事件源，见 `tasks/publish-dialog-notifications.md`；2026-07-25：**落地页已落地**——`/` 公开落地页（header/hero/工作流叙事/信任带/roadmap/footer，`motion` 视差），sidebar 工作台迁入 `_app` pathless layout（原 `/` → `/home`，其余 URL 不变），pricing 区按决策暂缓；配方卡 ❌ → 2026-07-30 **方向修订**：从"参数预设卡"升级为**能力演示视频卡**（dub / 图片视频 / 分镜 / 风格四张，配方=能力承诺、逐张点亮），实施架构与 R1–R4 分期见 `RECIPES.md`；2026-07-31 **R1 已落地**——caption catalog（`packages/clip` 单点）+ stacking preset + dub_languages/fork 配音接线 + 首页卡片层（dub 卡点亮，预览走 CSS blur-pad）） |
 | 真实 Gallery（公开项目流入 + remix） | STRATEGY §5 | P2 | 上一行验证 + `projects`/`clips` 公开性字段（须先 MODULE_ARCH §4 登记 + ADR） | — 纯工程 | ❌ |
 
 ---

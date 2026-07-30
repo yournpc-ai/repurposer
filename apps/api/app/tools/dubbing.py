@@ -94,7 +94,7 @@ async def synthesize_dub(
             src_path.unlink(missing_ok=True)
 
     out_key = str(
-        get_output_path(
+        await get_output_path(
             output.project_id,
             project.user_id,
             f"{output.id}_dub_{target_language}.mp3",
