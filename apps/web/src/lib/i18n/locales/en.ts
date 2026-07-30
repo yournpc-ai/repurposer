@@ -26,6 +26,7 @@ const en = {
     freePlan: "Free plan",
     requestFailed: "Request failed",
     networkError: "Network error — check your connection",
+    skipToContent: "Skip to content",
   },
   nav: {
     home: "Home",
@@ -50,17 +51,308 @@ const en = {
   },
   landing: {
     nav: {
-      features: "Features",
+      product: "Product",
+      howItWorks: "How it works",
       pricing: "Pricing",
-      roadmap: "Roadmap",
+      faq: "FAQ",
     },
     signIn: "Sign in",
     openWorkbench: "Open workbench",
-    heroTitle1: "You did the talking.",
-    heroTitle2: "We do the rest.",
+    heroTitle1: "You did the talking",
+    heroTitle2: "We do the rest",
     heroSubtitle:
       "Repurposer is an AI agent that studies how you actually write and speak — your habits, your terms, your rhythm. Give it a <b>video</b>, an audio file, or just the transcript and some photos from a talk, podcast or interview, and it produces clips, LinkedIn posts, articles and newsletters <b>in the languages your audience speaks</b>. <b>You review. It publishes.</b>",
     ctaTryBeta: "Try the free beta",
+    ctaSeeHow: "See how it works",
+    video: {
+      ariaLabel: "Product film",
+      caption: "Watch the film — one talk in, a season of content out",
+      scrollDown: "Scroll down",
+    },
+    manifesto: {
+      statement:
+        "You spent months on the research and weeks on the slides. The talk itself is over in forty minutes. Repurposer exists for everything after — the posts, the clips, the translations, the newsletter. One performance, a season of material.",
+    },
+    showcase: {
+      title: "From talk to published",
+      description:
+        "One upload runs the whole pipeline. You stay in the loop at the two moments that matter — direction and approval.",
+      steps: {
+        s1: {
+          title: "Drop in the talk",
+          body: "Keynote video, podcast audio, slides, or just the transcript. Whatever you have is enough to start.",
+        },
+        s2: {
+          title: "Direct the output",
+          body: "Tell the agent what you need — LinkedIn posts, short clips, a newsletter — and in which languages.",
+        },
+        s3: {
+          title: "Review everything",
+          body: "Every draft comes back in your voice for your eyes. Edit the transcript, retitle a clip, approve what ships.",
+        },
+        s4: {
+          title: "Publish everywhere",
+          body: "Approved pieces go out per channel and language. LinkedIn, newsletter, your institution's site — done.",
+        },
+      },
+      screens: {
+        compose: {
+          chrome: "New project",
+          prompt: "Turn my ECC keynote into 3 LinkedIn posts and a short clip, in English and German…",
+          chip1: "Video",
+          chip2: "Slides",
+          chip3: "Transcript",
+          cta: "Generate",
+        },
+        direct: {
+          chrome: "Task book",
+          summary: "5 outputs · 2 languages",
+          row1: "LinkedIn post — EN",
+          row2: "LinkedIn post — DE",
+          row3: "Short clip — 9:16",
+          row4: "Newsletter blurb — EN",
+        },
+        review: {
+          chrome: "Results",
+          score: "92 fidelity",
+          cardTitle: "Why grid storage decides the energy transition",
+          cardMeta: "LinkedIn · EN · 1,240 chars",
+          approved: "Approved",
+          pending: "Needs review",
+        },
+        publish: {
+          chrome: "Publish",
+          note: "Scheduled per channel",
+          row1: "LinkedIn — published",
+          row2: "Newsletter — queued",
+          row3: "Website — draft sent",
+        },
+      },
+      asides: {
+        a1: {
+          label: "Source",
+          title: "ecc26-keynote.mp4",
+          body: "38 min · slides attached",
+          chip: "Any format works",
+        },
+        a2: {
+          label: "Direction",
+          title: "5 outputs · EN + DE",
+          body: "Your voice, your terms",
+          chip: "Edit anytime",
+        },
+        a3: {
+          label: "Review",
+          title: "Nothing ships silently",
+          body: "Every draft waits for you",
+          chip: "Approve in one click",
+        },
+        a4: {
+          label: "Distribution",
+          title: "3 channels",
+          body: "Per-language scheduling",
+          chip: "GDPR-safe hosting",
+        },
+      },
+    },
+    gallery: {
+      title: "Made from one talk",
+      description:
+        "A single keynote, repurposed. Every card below is the kind of output a project produces — nothing staged.",
+      cards: {
+        c1: { type: "LinkedIn post", text: "Storage, not generation, is the bottleneck of the energy transition. Three numbers from my ECC keynote…" },
+        c2: { type: "Quote card", text: "“The grid of 2040 is being decided in committee rooms this year.”" },
+        c3: { type: "Short clip", text: "0:42 — the battery analogy that got the room laughing. 9:16, subtitled." },
+        c4: { type: "Newsletter", text: "This month: what grid-scale storage actually costs, and why the curve just bent…" },
+        c5: { type: "Artikel (DE)", text: "Warum Speicher — nicht Erzeugung — über die Energiewende entscheidet…" },
+        c6: { type: "Résumé (FR)", text: "Trois chiffres à retenir de la keynote ECC sur le stockage réseau…" },
+        c7: { type: "Article", text: "A longer read: the four storage myths I hear in every policy panel…" },
+        c8: { type: "Quote card", text: "“We don't have an energy problem. We have a timing problem.”" },
+        c9: { type: "Thread", text: "1/ Everything you heard about grid batteries is two years out of date…" },
+        c10: { type: "Short clip", text: "0:58 — the audience Q&A moment everyone asked about afterwards." },
+      },
+    },
+    channels: {
+      title: "Lands where your audience reads",
+      description:
+        "Outputs route straight into the channels institutions actually publish on — and in the languages your audience speaks.",
+      platforms: {
+        linkedin: { name: "LinkedIn", blurb: "Native posts" },
+        newsletter: { name: "Newsletter", blurb: "Email-ready" },
+        website: { name: "Website", blurb: "SEO articles" },
+        youtube: { name: "YouTube", blurb: "Shorts-ready" },
+        x: { name: "X", blurb: "Threads" },
+        podcast: { name: "Podcast", blurb: "Show notes" },
+      },
+      languages: {
+        en: { name: "English", blurb: "Native" },
+        fr: { name: "Français", blurb: "Native" },
+        de: { name: "Deutsch", blurb: "Native" },
+        es: { name: "Español", blurb: "Native" },
+        it: { name: "Italiano", blurb: "Native" },
+        nl: { name: "Nederlands", blurb: "Native" },
+      },
+    },
+    testimonials: {
+      title: "Speakers keep the receipts",
+      description:
+        "Researchers, keynote speakers and comms teams use Repurposer where the work has to hold up in print.",
+      items: {
+        t1: {
+          quote: "My keynote used to die on the conference page. This year it became twelve posts, two articles and a newsletter — all in my own voice.",
+          name: "Prof. Marije Albers",
+          role: "Keynote speaker, TU Delft",
+        },
+        t2: {
+          quote: "The German versions read like I wrote them. Our Berlin office checked twice that I hadn't.",
+          name: "Claire Dubois",
+          role: "Research comms lead, Paris",
+        },
+        t3: {
+          quote: "We stopped choosing which talks deserve coverage. Every session at our summit gets repurposed now.",
+          name: "Jonas Weber",
+          role: "Conference organizer, Munich",
+        },
+        t4: {
+          quote: "Review-before-publish is the whole product for me. Nothing goes out with my name until I've read it.",
+          name: "Dr. Sofia Ricci",
+          role: "Policy researcher, Milan",
+        },
+        t5: {
+          quote: "I record once, in English, and my Spanish audience gets a version that doesn't sound like a translation.",
+          name: "Diego Fernández",
+          role: "Lecturer, Madrid",
+        },
+        t6: {
+          quote: "GDPR was the first question our legal team asked. EU hosting was the answer that closed it.",
+          name: "Anke Janssen",
+          role: "University marketing, Amsterdam",
+        },
+      },
+    },
+    pricing: {
+      title: "Simple pricing",
+      description: "Start free. Upgrade when your talks start working harder than you do.",
+      monthly: "Monthly",
+      yearly: "Yearly",
+      perMonth: "/mo",
+      billedYearly: "billed yearly",
+      billedMonthly: "billed monthly",
+      freeForever: "free forever",
+      mostPopular: "Most popular",
+      footnote:
+        "Prices in EUR, VAT excluded. Cancel anytime — your plan runs to the end of the period.",
+      tiers: {
+        free: {
+          name: "Free",
+          blurb: "Try the pipeline on your next talk.",
+          features: {
+            f1: "2 talks per month",
+            f2: "3 outputs per talk",
+            f3: "English + 1 language",
+            f4: "Community support",
+          },
+          cta: "Start free",
+        },
+        pro: {
+          name: "Pro",
+          blurb: "For speakers with a full calendar.",
+          features: {
+            f1: "10 talks per month",
+            f2: "Unlimited outputs",
+            f3: "6 European languages",
+            f4: "Voice-matched dubbing",
+            f5: "Priority generation",
+          },
+          cta: "Start with Pro",
+        },
+        institution: {
+          name: "Institution",
+          blurb: "For universities and summit teams.",
+          features: {
+            f1: "Everything in Pro",
+            f2: "Unlimited seats",
+            f3: "Shared brand templates",
+            f4: "EU data residency",
+            f5: "SSO & invoicing",
+          },
+          cta: "Contact us",
+        },
+      },
+    },
+    faq: {
+      title: "Questions, answered",
+      description: "The things speakers and institutions ask before the first upload.",
+      items: {
+        q1: {
+          q: "Where is my data stored?",
+          a: "In the EU, on GDPR-compliant infrastructure. Your uploads and outputs never train third-party models, and you can delete everything at any time.",
+        },
+        q2: {
+          q: "Which languages are supported?",
+          a: "English, French, German, Spanish, Italian and Dutch today, with more European languages on the roadmap. Outputs are written natively, not translated word-for-word.",
+        },
+        q3: {
+          q: "What can I upload?",
+          a: "Keynote videos, podcast audio, slide decks, photos, or just a transcript. The more context you give, the closer the output sits to your voice.",
+        },
+        q4: {
+          q: "Does anything get published automatically?",
+          a: "No. Every output lands in a review queue first. Nothing carries your name until you explicitly approve it.",
+        },
+        q5: {
+          q: "Who owns the generated content?",
+          a: "You do, outright. Outputs are derived from your material and your persona; we claim no rights over them.",
+        },
+        q6: {
+          q: "Can I cancel anytime?",
+          a: "Yes. Plans are monthly or yearly with no lock-in, and your projects stay exportable after cancellation.",
+        },
+      },
+    },
+    finalCta: {
+      headline: "Your next talk is already a season of content",
+      subtitle:
+        "Free during beta. Upload one talk and watch it turn into posts, clips and newsletters — in every language your audience reads.",
+      ctaPrimary: "Try the free beta",
+      ctaSecondary: "See pricing",
+    },
+    footer: {
+      tagline:
+        "Turning talks into lasting knowledge assets — posts, clips and newsletters in the languages your audience speaks.",
+      cta: "Try the free beta",
+      columns: {
+        product: {
+          title: "Product",
+          l1: "Overview",
+          l2: "How it works",
+          l3: "Gallery",
+          l4: "Pricing",
+          l5: "FAQ",
+        },
+        company: {
+          title: "Company",
+          l1: "About",
+          l2: "Contact",
+          l3: "Press",
+        },
+        legal: {
+          title: "Legal",
+          l1: "Privacy Policy",
+          l2: "Terms of Service",
+          l3: "Cookie Policy",
+        },
+        social: {
+          title: "Social",
+          l1: "LinkedIn",
+          l2: "X",
+          l3: "YouTube",
+        },
+      },
+      copyright: "© {{year}} Repurposer. All rights reserved.",
+      note: "Made for speakers, hosted in the EU.",
+      wordmark: "Repurposer",
+    },
   },
   composer: {
     speaker: "Speaker",
@@ -86,6 +378,34 @@ const en = {
     brandDesc: "Colors, fonts, and logo baked into every output",
     brandDefault: "Default brand",
     manageBrand: "Manage templates…",
+  },
+  // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
+  // reserved cards keep their seats here but never render.
+  recipes: {
+    sectionTitle: "Start from a recipe",
+    dub: {
+      title: "Multilingual dub",
+      promise: "Your talk, your voice — speaking German, French and Spanish.",
+      promptTemplate:
+        "Cut highlight clips from my talk and dub them into German, French and Spanish with my voice.",
+    },
+    "image-video": {
+      title: "Photos to video",
+      promise: "No footage — photos plus your script become a narrated video.",
+      promptTemplate:
+        "Turn my script and photos into a narrated video with stacking captions and music.",
+    },
+    reframe: {
+      title: "Interview reframe",
+      promise: "Landscape two-person talk, recut vertical — camera follows the speaker.",
+      promptTemplate:
+        "Recut my two-person interview into vertical clips that follow whoever is speaking.",
+    },
+    style: {
+      title: "Style showcase",
+      promise: "One talk, many looks — caption and brand styles applied for you.",
+      promptTemplate: "Cut highlight clips from my talk with a fresh caption style.",
+    },
   },
   projects: {
     title: "Projects",
@@ -257,8 +577,6 @@ const en = {
     deleteLine: "Delete this line",
     aspect: "Aspect",
     captionStyle: "Caption style",
-    styleClean: "Clean bottom",
-    styleKaraoke: "Word highlight",
     captionLanguage: "Caption language",
     translating: "Translating...",
     dubLanguage: "Voice dub",
@@ -323,13 +641,6 @@ const en = {
       enable: "Burn captions",
       customColor: "Custom color",
       animation: "Animation",
-      animations: {
-        "clean-bottom": "Static (no animation)",
-        "karaoke-highlight": "Karaoke word highlight",
-        "fade-in": "Fade in",
-        "pop-in": "Pop in",
-        "slide-up": "Slide up",
-      },
     },
     content: {
       voice: "Brand voice",
@@ -391,6 +702,17 @@ const en = {
     de: "German",
     es: "Spanish",
     it: "Italian",
+  },
+  // Caption style labels — one entry per CAPTION_PRESETS member
+  // (@repurposer/clip captions.ts); both style selectors derive their
+  // options from the catalog and label them from here.
+  captionPresets: {
+    "clean-bottom": "Clean bottom",
+    "karaoke-highlight": "Word highlight",
+    "fade-in": "Fade in",
+    "pop-in": "Pop in",
+    "slide-up": "Slide up",
+    stacking: "Stacking",
   },
   results: {
     title: "Results",
@@ -486,6 +808,7 @@ const en = {
     intro: "Tell me how to change this — for example, make it shorter, more formal, or translate it.",
     assetPlaceholder: "e.g. make it shorter and more formal",
     loadingHistory: "Loading conversation...",
+    choicePlaceholder: "Something else…",
     derivativeTypes: {
       post: "Social post",
       quotes: "Quote card",
@@ -496,6 +819,7 @@ const en = {
       preprocess: "Analyzing your uploads…",
       persona_bootstrap: "Preparing your speaker profile…",
       director_understand: "Understanding your material…",
+      checkpoint: "Waiting for your direction…",
       director_plan: "Planning the content…",
       clips_pipeline: "Generating your clips…",
       script: "Writing the script…",
@@ -511,6 +835,15 @@ const en = {
       carousel_gen: "Building your carousel…",
       article_gen: "Writing your article…",
       synth_talk_video: "Generating your video…",
+    },
+    qa: {
+      q: "Q",
+      a: "A",
+      started: "Started generation",
+      cancelled: "Cancelled — back to draft",
+      superseded: "Superseded by a newer plan",
+      expired: "Timed out — continued with the default",
+      stopped: "Stopped generation",
     },
     retry: "Retry",
     edit: "Edit",
@@ -560,30 +893,27 @@ const en = {
     backToProjects: "Projects",
     planProse: "Here's what I understood: {{summary}}.",
     outputsLabel: "Outputs",
-    outputDescs: {
-      clips: "Clips: short vertical videos cut from your talk",
-      post: "Post: a LinkedIn-ready text post",
-      quotes: "Quotes: shareable quote cards with key lines",
-      article: "Article: a long-form article from your content",
-      carousel: "Carousel: a multi-card image carousel",
-    },
+    dubLabel: "Voice dub",
+    removeDubLanguage: "Remove this dub language",
+    planSummaryDub: "dub {{langs}}",
+    identityEcho: "Speaking as {{speaker}} · Brand: {{brand}}",
+    identitySpeakerAuto: "Auto persona",
+    identityBrandDefault: "Default brand",
+    addOutput: "Add output",
+    removeSlot: "Remove this output",
+    slotLanguageDefault: "Task book",
+    slotFocusPlaceholder: "Angle for this {{type}} (optional)",
+    countDecrease: "Decrease",
+    countIncrease: "Increase",
     languageLabel: "Language",
     languageHint: "Posts, quotes, articles and clip subtitles are written in this language.",
-    clipCountLabel: "Number of clips",
-    clipCountHint: "Between 1 and 10. More clips take longer.",
-    clipCountDecrease: "Fewer clips",
-    clipCountIncrease: "More clips",
     instructionLabel: "Focus / instruction",
     instructionPlaceholder: "e.g. Focus on the Q&A section; make the first clip a strong hook.",
     confirmQuestion: "Start generation with this plan?",
     confirm: "Start generation",
-    decideLater: "Decide later",
     leaveNote: "You can leave anytime — your plan is saved and you can continue from Projects.",
     starting: "Starting…",
     startingLine: "I'm starting your generation — stay to refine it together, or close this and I'll finish in the background.",
-    planSummaryClips: "{{count}} clips",
-    planSummaryQuotes: "{{count}} quote cards",
-    planSummaryCarousel: "{{count}}-slide carousel",
     planUpdated: "Got it — I've updated the plan above.",
     chatPlaceholder: "Chat with Repurposer…",
     chatPlaceholderConfirm: "Ask me to adjust the plan…",
@@ -595,8 +925,24 @@ const en = {
       transcript: "Transcript",
     },
     continuesInBackground: "Generation continues in the background.",
+    stopped: "Generation stopped.",
     completed: "Generation completed",
     failed: "Generation failed",
+  },
+  questionDock: {
+    autonomy: {
+      label: "Autonomy",
+      auto: "Auto",
+      review: "Review",
+    },
+    bail: "Stop generation",
+    reasons: {
+      title: "Needs your check:",
+      language_default: "I guessed the language",
+      outputs_default: "outputs are the default set",
+      clip_count_default: "clip count is a default",
+      clips_without_media: "clips need a video, audio or image source",
+    },
   },
   clipMenu: {
     more: "More actions",

@@ -52,6 +52,10 @@ class Settings(BaseSettings):
 
     # Background worker
     worker_poll_interval: float = 2.0
+    # Direction checkpoint expiry (期 4): a parked checkpoint is auto-answered
+    # with its default option after this long — the review tier degrades to
+    # best-judgment completion, never a bail and never a permanent park.
+    checkpoint_expiry_seconds: int = 1800
 
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3
@@ -70,7 +74,7 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     from_email: str = "Repurposer <no-reply@repurposer.local>"
     jwt_secret_key: str = "dev-secret-change-in-production"
-    jwt_expire_days: int = 30
+    jwt_expire_days: int = 1
 
     # Distribution — channel OAuth (presence-gating: empty = channel hidden in
     # UI, docs/DISTRIBUTION.md §4.1; no feature flags)

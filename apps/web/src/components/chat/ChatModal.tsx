@@ -36,6 +36,8 @@ import type { Output } from "@/lib/types"
 
 import { MentionPicker, type ChatMention } from "./MentionPicker"
 import { OpsCard } from "./OpsCard"
+import { QaPair, qaAnswerText, type QaAnswer } from "./QaPair"
+import { QuestionDock } from "./QuestionDock"
 import { RunCard } from "./RunCard"
 
 interface ChatModalProps {
@@ -53,6 +55,13 @@ interface ChatMessage {
   content: string | null
   workflow_run_id: string | null
   mentions?: ChatMention[]
+  question?: {
+    kind: "task_book" | "choice" | "confirm"
+    options?: { id: string; label: string }[]
+    allow_freeform?: boolean
+    cost_hint?: string | null
+  } | null
+  answer?: QaAnswer | null
   intent?: {
     type: string
     target_output_id?: string
@@ -63,6 +72,8 @@ interface ChatMessage {
 
 interface Conversation {
   id: string
+  /** The latest unanswered question (dock rebuild source). */
+  pending_question?: ChatMessage | null
 }
 
 const INTRO_ID = "intro"
@@ -82,6 +93,10 @@ export function ChatModal({
   const [isSending, setIsSending] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
+  // The docked pending question (ask primitive) — choice questions from the
+  // chat loop dock above the input; answered ones archive as QA pairs.
+  const [pendingQuestion, setPendingQuestion] = useState<ChatMessage | null>(null)
+  const [answering, setAnswering] = useState(false)
 
   useEffect(() => {
     if (!open || !asset) return
@@ -89,6 +104,7 @@ export function ChatModal({
     setInput("")
     setIsSending(false)
     setIsLoadingHistory(true)
+    setPendingQuestion(null)
 
     const intro: ChatMessage = {
       id: INTRO_ID,
@@ -118,7 +134,17 @@ export function ChatModal({
         )
         if (!messagesRes.ok) throw new Error("Failed to load messages")
         const history = ((await messagesRes.json()) as { items: ChatMessage[] }).items
-        if (!cancelled) setMessages([intro, ...history])
+        if (cancelled) return
+        setMessages([intro, ...history])
+        // The dock rebuilds from the same row query on every open (refresh /
+        // cross-device revival is free).
+        if (
+          conversation.pending_question &&
+          conversation.pending_question.question &&
+          !conversation.pending_question.answer
+        ) {
+          setPendingQuestion(conversation.pending_question)
+        }
       } catch {
         if (!cancelled) setMessages([intro])
       } finally {
@@ -173,12 +199,24 @@ export function ChatModal({
       const data = (await res.json()) as {
         user_message: ChatMessage
         assistant_message: ChatMessage
+        answered_question?: ChatMessage | null
       }
-      // Replace the optimistic user message with the persisted pair.
+      // Replace the optimistic user message with the persisted pair. An
+      // autoResumed question archives its QA pair first; a NEW pending
+      // question docks instead of entering the flow (prohibited #2).
+      const next: ChatMessage[] = [data.user_message]
+      if (data.answered_question) {
+        setPendingQuestion(null)
+        next.push(data.answered_question)
+      }
+      if (data.assistant_message.question && !data.assistant_message.answer) {
+        setPendingQuestion(data.assistant_message)
+      } else {
+        next.push(data.assistant_message)
+      }
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimisticUser.id),
-        data.user_message,
-        data.assistant_message,
+        ...next,
       ])
     } catch (e) {
       setMessages((prev) => [
@@ -192,6 +230,36 @@ export function ChatModal({
       ])
     } finally {
       setIsSending(false)
+    }
+  }
+
+  /** Docked choice question answered by a button click — the endpoint
+   * records the answer and continues the conversation (answer = resume). */
+  const handleChoiceAnswer = async (optionId: string) => {
+    if (!pendingQuestion || answering) return
+    setAnswering(true)
+    try {
+      const res = await apiFetch(
+        `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
+        { method: "POST", body: { kind: "option", option_id: optionId } },
+      )
+      if (!res.ok) return // apiFetch already toasted the server's reason
+      const data = (await res.json()) as {
+        answered_question: ChatMessage
+        follow_up: ChatMessage | null
+      }
+      setPendingQuestion(null)
+      const next: ChatMessage[] = [data.answered_question]
+      if (data.follow_up) {
+        if (data.follow_up.question && !data.follow_up.answer) {
+          setPendingQuestion(data.follow_up)
+        } else {
+          next.push(data.follow_up)
+        }
+      }
+      setMessages((prev) => [...prev, ...next])
+    } finally {
+      setAnswering(false)
     }
   }
 
@@ -210,6 +278,22 @@ export function ChatModal({
             <MessageScrollerViewport>
               <MessageScrollerContent className="gap-3 pb-2">
                 {messages.map((m) => {
+                  // Ask primitive: pending questions never render in the
+                  // flow (they live in the dock); answered ones archive as
+                  // QA pairs.
+                  if (m.question && !m.answer) return null
+                  if (m.question && m.answer) {
+                    const display = qaAnswerText(m.answer, t, !!m.workflow_run_id)
+                    return (
+                      <MessageScrollerItem key={m.id}>
+                        <QaPair
+                          question={m.content ?? ""}
+                          answer={display.text}
+                          muted={display.muted}
+                        />
+                      </MessageScrollerItem>
+                    )
+                  }
                   const isUser = m.role === "user"
                   return (
                     <MessageScrollerItem key={m.id}>
@@ -280,6 +364,16 @@ export function ChatModal({
         </MessageScrollerProvider>
 
         <div className="flex flex-col gap-2 p-4 pt-2">
+          {pendingQuestion ? (
+            <QuestionDock
+              kind="choice"
+              question={pendingQuestion.content ?? ""}
+              options={pendingQuestion.question?.options ?? []}
+              costHint={pendingQuestion.question?.cost_hint}
+              onAnswer={handleChoiceAnswer}
+              answering={answering}
+            />
+          ) : null}
           {mentions.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {mentions.map((mention) => (
@@ -318,7 +412,13 @@ export function ChatModal({
                   handleSend()
                 }
               }}
-              placeholder={t("chat.assetPlaceholder")}
+              placeholder={
+                pendingQuestion &&
+                (pendingQuestion.question?.options?.length ?? 0) > 0 &&
+                pendingQuestion.question?.allow_freeform !== false
+                  ? t("chat.choicePlaceholder")
+                  : t("chat.assetPlaceholder")
+              }
               rows={1}
               className="max-h-32 min-h-9 flex-1 resize-none"
             />

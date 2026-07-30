@@ -162,6 +162,21 @@ export interface Output {
 
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
 
+export type IntentSlotType = "clips" | "post" | "quotes" | "carousel" | "article"
+
+/** 任务槽 (IntentSlot, N-20 request layer): one line of the task book — one
+ * requested output. `null` fields mean task-book defaults (count → per-type
+ * default, language → the run's target language); `explicit` marks
+ * user-edited slots that pin through re-inference. */
+export interface IntentSlot {
+  type: IntentSlotType
+  count: number | null
+  focus: string | null
+  language: string | null
+  tone_override: string | null
+  explicit: boolean
+}
+
 /** One step of a run's execution plan (ADR-028) — the user-facing step. */
 export interface WorkflowStep {
   id: string

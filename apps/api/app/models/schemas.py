@@ -118,7 +118,11 @@ class ChatAttachment(BaseModel):
 
 
 class ConversationResponse(BaseModel):
-    """Chat session response."""
+    """Chat session response.
+
+    ``pending_question`` is the conversation's latest unanswered question
+    (NULL answer = pending) — the dock's zero-in-memory-state rebuild source.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -129,6 +133,7 @@ class ConversationResponse(BaseModel):
     title: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    pending_question: ChatMessageResponse | None = None
 
 
 class MessageRole(StrEnum):
@@ -154,6 +159,105 @@ class ChatMention(BaseModel):
     label: str
 
 
+class AskOption(BaseModel):
+    """One option on a structured ask (choice kind)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    label: str
+
+
+class AskPayload(BaseModel):
+    """The typed ``question`` payload on a message (ask primitive).
+
+    The mechanism words live here — ``kind`` carries the *use* (task book
+    confirmation, a choice, a cost quote later), never combined with the
+    mechanism (NAMING: use × mechanism combos are banned). ``content`` on the
+    message row keeps the question's human text.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["task_book", "choice", "confirm"]
+    options: list[AskOption] = Field(default_factory=list)
+    allow_freeform: bool = True
+    cost_hint: str | None = None
+
+
+class AnswerPayload(BaseModel):
+    """The typed ``answer`` payload on a message.
+
+    ``bail`` is a first-class answer kind — a graceful exit, never a failure.
+    ``start`` is the task_book confirmation (the answer that starts the run)
+    — a kind of its own, not a magic option id (C1).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["option", "freeform", "bail", "start"]
+    option_id: str | None = None
+    text: str | None = None
+    answered_at: datetime
+
+
+class OptionAnswerRequest(BaseModel):
+    """Pick one of the question's options (choice questions)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["option"]
+    option_id: str
+
+
+class FreeformAnswerRequest(BaseModel):
+    """Free-text answer (choice questions with ``allow_freeform``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["freeform"]
+    text: str
+
+
+class StartAnswerRequest(BaseModel):
+    """Confirm the docked task book and start the run (task_book questions).
+
+    Replaces the phase-1 magic ``option_id="start"`` — the confirmation is a
+    kind of its own, so the kind-specific fields (autonomy tier, the review
+    panel's edited task book) are only valid here, never silently ignored on
+    other kinds (C2).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["start"]
+    # Autonomy tier carried into the run (dock toggle, §2.7); None = auto.
+    autonomy: Literal["auto", "review"] | None = None
+    # The review panel's edited task book (hand-edited slots marked explicit).
+    # Wins over the stored pending intent, so panel edits reach the run;
+    # None = use the stored pending intent.
+    intent: InferredIntent | None = None
+
+
+class BailAnswerRequest(BaseModel):
+    """Bail — a graceful exit (back to draft / stop the parked run), never an error."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["bail"]
+
+
+# Request body for ``POST /chat/messages/{id}/answer`` — discriminated on
+# ``kind`` so kind-specific fields can't ride along where they're ignored.
+AnswerRequest = Annotated[
+    OptionAnswerRequest
+    | FreeformAnswerRequest
+    | StartAnswerRequest
+    | BailAnswerRequest,
+    Field(discriminator="kind"),
+]
+
+
 class ChatMessageResponse(BaseModel):
     """A single chat message returned by the API."""
 
@@ -167,6 +271,8 @@ class ChatMessageResponse(BaseModel):
     mentions: list[ChatMention] = Field(default_factory=list)
     workflow_run_id: UUID | None = None
     intent: dict | None = None
+    question: dict | None = None
+    answer: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -218,10 +324,50 @@ class EditOpsProposal(BaseModel):
     summary: str
 
 
+class AskProposal(BaseModel):
+    """Intent agent output, state C: a structured ask (→ QuestionDock).
+
+    N-18 (overturning N-14): the structured-ask payload is orthogonal to
+    task_list / edit_ops, so the union gains a third state. The pre-N-18
+    "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
+    ask. ``kind`` carries the *use* (NAMING N-19): choice is the chat loop's
+    question; task_book is raised by the /intent code path, never by the
+    agent; confirm is the reserved seat for the cost quote (v3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ask"] = "ask"
+    question: str
+    kind: Literal["choice", "task_book", "confirm"] = "choice"
+    options: list[AskOption] = Field(default_factory=list)
+    allow_freeform: bool = True
+    cost_hint: str | None = None
+
+
+class AnswerProposal(BaseModel):
+    """Intent agent output, state D: a direct informational answer (G-4).
+
+    Pure information — capability questions, run-progress readouts (the
+    context carries the per-step status section, G-2), explanations of
+    existing outputs, small talk. Nothing is dispatched, no run starts, no
+    question docks: the text lands as a plain assistant message, the same
+    archival shape as the /intent answer turn (B1). The boundary against
+    the other states is a prompt rule: work requests go to task_list /
+    edit_ops, ambiguous readings go to ask — answer is never the lazy out.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["answer"] = "answer"
+    text: str
+
+
 IntentProposal = Annotated[
-    TaskListProposal | EditOpsProposal, Field(discriminator="type")
+    TaskListProposal | EditOpsProposal | AskProposal | AnswerProposal,
+    Field(discriminator="type"),
 ]
-"""The two-state discriminated union the chat intent agent returns (§3)."""
+"""The four-state discriminated union the chat intent agent returns (§3, N-18 + N-21)."""
 
 
 class IntentResult(BaseModel):
@@ -239,6 +385,20 @@ class IntentResult(BaseModel):
         return data
 
     proposal: IntentProposal
+
+
+class AnswerResponse(BaseModel):
+    """Result of ``POST /chat/messages/{id}/answer``.
+
+    The answer endpoint doubles as the resume mechanism (NAMING: answer =
+    resume): ``answered_question`` is the settled question (the QA archive
+    row — same name as ``ChatResponse.answered_question``, same role), and
+    ``follow_up`` is the assistant's continuation when the answer unblocks
+    the conversation (choice kind — the pick rides into the next turn).
+    """
+
+    answered_question: ChatMessageResponse
+    follow_up: ChatMessageResponse | None = None
 
 
 class ChatRequest(BaseModel):
@@ -273,12 +433,18 @@ class TaskItem(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Result of sending a chat message."""
+    """Result of sending a chat message.
+
+    ``answered_question`` is the pending question this turn settled via
+    deterministic autoResume (option letter/number/label hit, or freeform)
+    — the frontend archives it as a QA pair before the assistant's reply.
+    """
 
     conversation_id: UUID
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
     run_id: UUID | None = None
+    answered_question: ChatMessageResponse | None = None
 
 
 class SpeakerContext(BaseModel):
@@ -359,6 +525,51 @@ class ToneSettings(BaseModel):
     audience: Literal["academic", "industry", "general", "investor"] = "industry"
 
 
+class IntentSlot(BaseModel):
+    """任务槽: one line of the task book — one requested output (request layer).
+
+    N-20 layering: the IntentSlot says WHAT the user wants; the director's
+    ``StoryboardSlot`` (派工层) says how the work is assigned. ``None`` fields
+    mean "task-book default": count → the per-type default (clips 5 / quotes 3
+    / carousel 6), language → the run's ``target_language``. Same-type multi
+    slots are how one run produces e.g. an English and a German post.
+    ``explicit`` marks user-edited slots — the pin-merge rule keeps them
+    across re-inference.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["clips", "post", "quotes", "carousel", "article"]
+    count: int | None = None
+    focus: str | None = None
+    language: str | None = None
+    tone_override: str | None = None
+    explicit: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_bare_type(cls, data: Any) -> Any:
+        """A bare type string (``"post"``) reads as a bare slot — legacy flat
+        task books (pre-slot) deserialize through this; new writes never
+        produce it (read tolerance, not a bridge layer)."""
+        if isinstance(data, str):
+            return {"type": data}
+        return data
+
+
+# Per-type count defaults for slots with ``count=None`` (task-book default).
+SLOT_DEFAULT_COUNT: dict[str, int] = {"clips": 5, "quotes": 3, "carousel": 6}
+
+# Per-type count bounds (C3) — enforced at the run birthplace (create_run).
+# Mirrors the review panel's own limits; post/article carry no count (one
+# slot = one output; same-type multi slots are how you ask for more).
+SLOT_COUNT_LIMITS: dict[str, tuple[int, int]] = {
+    "clips": (1, 10),
+    "quotes": (1, 20),
+    "carousel": (2, 15),
+}
+
+
 class InferredIntent(BaseModel):
     """AI-recognized user intent from a prompt and optional file metadata.
 
@@ -369,11 +580,41 @@ class InferredIntent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["generate", "answer"] = Field(
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_flat_shape(cls, data: Any) -> Any:
+        """Upgrade a legacy flat task book (pre-slot quality-phase-1 shape)
+        on read: string outputs become bare slots (inheriting the retired
+        flat counts) and the retired count keys are dropped. Read tolerance
+        for stored ``pending_intent`` rows only — never written."""
+        if not isinstance(data, dict):
+            return data
+        outputs = data.get("outputs")
+        if not isinstance(outputs, list) or not any(
+            isinstance(o, str) for o in outputs
+        ):
+            return data
+        flat_counts = {
+            "clips": data.get("clip_count"),
+            "quotes": data.get("quotes_count"),
+            "carousel": data.get("carousel_count"),
+        }
+        upgraded = dict(data)
+        upgraded["outputs"] = [
+            {"type": o, "count": flat_counts.get(o)} if isinstance(o, str) else o
+            for o in outputs
+        ]
+        for key in ("clip_count", "quotes_count", "carousel_count", "clip_count_explicit"):
+            upgraded.pop(key, None)
+        return upgraded
+
+    action: Literal["generate", "answer", "start"] = Field(
         default="generate",
         description=(
-            "Whether the user wants to generate content or is asking a question "
-            "about the tool's capabilities."
+            "Whether the user wants to generate content, is asking a question "
+            "about the tool's capabilities, or is confirming the proposed task "
+            "book ('start' — a prose 'looks good, go ahead' in the confirm "
+            "phase, not a revision)."
         ),
     )
     answer: str | None = Field(
@@ -384,45 +625,33 @@ class InferredIntent(BaseModel):
         default="en",
         description="ISO language code for generated outputs (en/fr/de/es/it/zh).",
     )
-    outputs: list[
-        Literal[
-            "clips", "post", "quotes", "article", "carousel"
-        ]
-    ] = Field(
+    outputs: list[IntentSlot] = Field(
         default_factory=lambda: [
-            "clips",
-            "post",
-            "quotes",
-            "article",
+            IntentSlot(type="clips"),
+            IntentSlot(type="post"),
+            IntentSlot(type="quotes"),
+            IntentSlot(type="article"),
         ],
         description=(
-            "Which asset types the user wants to generate. "
-            "Carousel is not selected by default."
-        ),
-    )
-    clip_count: int | None = Field(
-        default=None,
-        description=(
-            "Requested number of clips when 'clips' is in outputs. "
-            "None means the caller should use its own default."
-        ),
-    )
-    quotes_count: int | None = Field(
-        default=None,
-        description=(
-            "Requested number of quote cards when 'quotes' is in outputs "
-            "(e.g. '8 张金句卡'). None = default."
-        ),
-    )
-    carousel_count: int | None = Field(
-        default=None,
-        description=(
-            "Requested number of carousel slides when 'carousel' is in outputs "
-            "(e.g. '5 页轮播'). None = default."
+            "The requested task slots — one per requested output. Same-type "
+            "multi slots carry distinct language/focus (e.g. an English and a "
+            "German post in one run). Carousel is not selected by default."
         ),
     )
     tone: Literal["professional", "thoughtLeadership", "conversational", "academic"] = (
         Field(default="professional", description="Detected tone preset.")
+    )
+    # 配音语言集 (dub_languages, RECIPES §4.1): task-book-level field — the
+    # voice-dub languages for this run's clips (empty = no dubbing). NOT an
+    # IntentSlot field: dubbing is a cross-output modifier, not an output
+    # type. compile_graph fans out one dub node per language after clips.
+    dub_languages: list[str] = Field(
+        default_factory=list,
+        description=(
+            "ISO codes for voice-dub versions of the run's clips (e.g. "
+            "['de','fr']). Empty = no dubbing. Only meaningful with a clips "
+            "slot and renderable media."
+        ),
     )
     specific_instruction: str | None = Field(
         default=None,
@@ -442,13 +671,6 @@ class InferredIntent(BaseModel):
         description=(
             "True when outputs were explicitly requested by the user. "
             "False when using the default output set."
-        ),
-    )
-    clip_count_explicit: bool = Field(
-        default=False,
-        description=(
-            "True when clip_count was explicitly mentioned by the user. "
-            "False when leaving it to the default."
         ),
     )
 
@@ -481,47 +703,105 @@ class ProjectIntentRequest(BaseModel):
 
     prompt: str = Field(default="", description="User prompt or transcript paste.")
     brand_template_id: UUID | None = None
+    # The review panel's current task book (hand-edited slots marked
+    # explicit). Its explicit slots pin through this re-inference (pin-merge
+    # rule); None = pin from the stored pending intent, if any.
+    prior: InferredIntent | None = None
+    # The user's own words for THIS turn (B1) — refinement turns send an
+    # accumulated ``prompt`` for inference but only the new line is archived
+    # as the user message. None = archive ``prompt`` itself (first inference
+    # / single-shot callers).
+    turn: str | None = None
+    # The dock's autonomy tier (§2.7) — consumed only when this turn starts
+    # the run (action="start", G-1: a prose confirmation must not silently
+    # drop a review-tier choice); ignored on plan/answer turns.
+    autonomy: Literal["auto", "review"] | None = None
 
 
 class PendingIntent(BaseModel):
     """Unconfirmed task book persisted on ``projects.pending_intent``.
 
-    Written by ``POST /projects/{id}/intent`` (every call, so chat refinements
-    update it), cleared by ``POST /projects/{id}/generate``. Lets a user who
-    left the plan-confirmation chat resume it exactly, from any device.
+    Written by ``POST /projects/{id}/intent`` on generate-action turns (an
+    answer-action turn never overwrites the stored book), cleared once the
+    run starts. Lets a user who left the plan-confirmation chat resume it
+    exactly, from any device.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_flags(cls, data: Any) -> Any:
+        """Rows stored before the B4 cleanup carry a redundant
+        ``needs_clarification`` bool (always derivable from ``reasons``) —
+        drop it on read; it is never written anymore."""
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items() if k != "needs_clarification"}
+        return data
+
     prompt: str = ""
     intent: InferredIntent
-    needs_clarification: bool = False
     reasons: list[str] = Field(default_factory=list)
     brand_template_id: UUID | None = None
 
 
-class ProjectIntentResponse(BaseModel):
-    """Project-scoped intent inference with clarification signal.
+class ProjectIntentPlanResponse(BaseModel):
+    """A generate-action turn: the (refined) task book to confirm.
 
-    When ``needs_clarification`` is true, the frontend should present the
-    inferred task book to the user for confirmation before calling
-    ``POST /projects/{id}/generate``.
+    Confirmation is signalled by ``reasons`` being non-empty (the retired
+    ``needs_clarification`` bool was its verbatim copy, B4).
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal["plan"] = "plan"
     intent: InferredIntent
-    needs_clarification: bool = Field(
-        default=False,
-        description="Whether the user should confirm the inferred task book.",
-    )
     reasons: list[str] = Field(
         default_factory=list,
         description=(
-            "Machine-readable reasons when clarification is needed: "
-            "language_default, outputs_default, clip_count_default, clips_without_media."
+            "Machine-readable reasons the book needs a human check: "
+            "language_default, outputs_default, clip_count_default, "
+            "clips_without_media. Empty = safe to auto-start."
         ),
     )
+
+
+class ProjectIntentAnswerResponse(BaseModel):
+    """An answer-action turn: a capability question answered in prose (B1).
+
+    Both sides of the exchange are persisted as plain message rows, so the
+    confirm-phase conversation survives refresh like every other archive row.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["answer"] = "answer"
+    text: str
+
+
+class ProjectIntentStartedResponse(BaseModel):
+    """A start-action turn: the prose confirmation ("looks good, start it")
+    answered the docked task book (kind=start) and its run is live (G-1).
+
+    The run still comes from the only birthplace — the start branch delegates
+    to ``answer_question`` → ``create_run``; ``answered_question`` is the QA
+    archive row (same role as ``AnswerResponse.answered_question``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["started"] = "started"
+    run_id: UUID
+    answered_question: ChatMessageResponse
+
+
+# Result of ``POST /projects/{id}/intent`` — discriminated on ``type`` so a
+# plan turn never carries a meaningless answer field and vice versa (B1);
+# ``started`` is the confirm-phase prose confirmation (G-1).
+ProjectIntentResponse = Annotated[
+    ProjectIntentPlanResponse | ProjectIntentAnswerResponse | ProjectIntentStartedResponse,
+    Field(discriminator="type"),
+]
 
 
 class ProjectBase(BaseModel):
@@ -1196,11 +1476,12 @@ class ClipSpec(BaseModel):
     crop: ClipCrop = Field(default_factory=ClipCrop)
     caption_track: list[CaptionCue] = Field(default_factory=list)
     # Preset enum, NOT free styling — keeps preview=render parity and the
-    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset). The
-    # fade-in/pop-in/slide-up entrance presets are expressible with libass
-    # \fad / \t(\fscx,\fscy) / \move, so a future FFmpeg swap stays cheap.
+    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset). The preset
+    # ids MIRROR the caption catalog in packages/clip/src/captions.ts, which
+    # is the single source of truth for style BEHAVIOR; Python only validates
+    # membership. Adding a style = one catalog line + this list.
     caption_style_preset: Literal[
-        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up"
+        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up", "stacking"
     ] = "clean-bottom"
     caption_position: Point | None = None  # normalized center; None -> default (bottom)
     caption_enabled: bool = True  # when false, caption_track is not burned into video
@@ -1316,26 +1597,27 @@ class DubRequest(BaseModel):
     target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
 
 
+class GenerateResponse(BaseModel):
+    """Result of ``POST /projects/{id}/generate`` (202 Accepted) — typed so
+    the contract can evolve under schema protection (B3: was a bare dict)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: UUID
+    status: WorkflowStatus
+
+
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
-    clip_count: int = Field(default=5, ge=1, le=10)
-    quotes_count: int | None = Field(
-        default=None, ge=1, le=20,
-        description="Requested quote card count; None = storyboard default (3).",
-    )
-    carousel_count: int | None = Field(
-        default=None, ge=2, le=15,
-        description="Requested carousel slide count; None = storyboard default (6).",
-    )
-    outputs: list[
-        Literal["clips", "post", "quotes", "article", "carousel"]
-    ] | None = Field(
+    slots: list[IntentSlot] | None = Field(
         default=None,
         description=(
-            "Requested asset types. Required on the composer path (422 "
-            "otherwise — confirm via /projects/{id}/intent first); None is "
-            "only tolerated where the route derives intent explicitly."
+            "Requested task slots — one per requested output (same-type multi "
+            "slots for multi-language / multi-angle versions). Required on "
+            "the composer path (422 otherwise — confirm via "
+            "/projects/{id}/intent first); None is only tolerated where the "
+            "route derives intent explicitly."
         ),
     )
     tone_settings: ToneSettings | None = None
@@ -1349,6 +1631,17 @@ class GenerateRequest(BaseModel):
     brand_template_id: UUID | None = Field(
         default=None,
         description="Brand template to bake into clips; None = most recent.",
+    )
+    # Task-book dub languages (RECIPES §4.1) — mirrored into TaskSpec and
+    # run.context; None/[] = no dubbing. Requires a clips slot (422 mirror).
+    dub_languages: list[str] | None = None
+    autonomy: Literal["auto", "review"] | None = Field(
+        default=None,
+        description=(
+            "Autonomy tier for this run (intent-ask-primitive §2.7): auto = "
+            "no optional interruptions (default); review = full runs pause at "
+            "the direction checkpoint (phase 4). Stored verbatim on run.context."
+        ),
     )
     instruction: str | None = Field(
         default=None,

@@ -10,18 +10,25 @@ from sqlalchemy import Integer, cast, delete, select
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetType,
+    ChatMessageResponse,
     ExportRequest,
     GenerateRequest,
+    GenerateResponse,
+    IntentSlot,
     OutputResponse,
     PendingIntent,
     ProjectCreate,
+    ProjectIntentAnswerResponse,
+    ProjectIntentPlanResponse,
     ProjectIntentRequest,
     ProjectIntentResponse,
+    ProjectIntentStartedResponse,
     ProjectResponse,
     ProjectResultsResponse,
     ProjectStatus,
     ProjectUpdate,
     RunResponse,
+    StartAnswerRequest,
 )
 from app.models.tables import (
     Asset,
@@ -33,7 +40,20 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.chat.intent import composer_intent_agent
-from app.chat.service import get_project_prompt, seed_project_prompt
+from app.chat.service import (
+    answer_question,
+    finalize_bailed_runs,
+    find_conversation,
+    get_project_prompt,
+    is_pending_task_book,
+    latest_pending_question,
+    mark_task_book_started,
+    merge_explicit_slots,
+    record_intent_turn,
+    seed_project_prompt,
+    sync_task_book_question,
+)
+from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.orchestrator import TaskSpec, create_run
 from app.pipeline.outputs import (
     aggregate_step_cost,
@@ -257,10 +277,13 @@ async def infer_project_intent(
 ) -> ProjectIntentResponse:
     """Infer the generation task book for a project.
 
-    Reads the project's assets so we can detect material/output conflicts
-    (e.g. clips requested without renderable media). When the intent is
-    ambiguous, ``needs_clarification`` is true and the frontend should show
-    the inferred task book for confirmation before calling ``/generate``.
+    Returns a discriminated union (B1/B4 + G-1): ``{type:"plan", intent,
+    reasons}`` for generate turns (non-empty reasons = the book needs a human
+    check before starting), ``{type:"answer", text}`` for capability
+    questions, ``{type:"started", run_id, answered_question}`` when a prose
+    confirmation ("looks good, start it") answers the docked task book and
+    its run goes live. Reads the project's assets to detect material/output
+    conflicts (e.g. clips requested without renderable media).
     """
     project = await get_project_for_user(
         db, project_id, UUID(str(current_user.id))
@@ -286,28 +309,121 @@ async def infer_project_intent(
         filename=filename,
     )
 
-    has_renderable_media = any(
-        a.type
-        in (
-            AssetType.VIDEO,
-            AssetType.AUDIO,
-            AssetType.IMAGE,
-            AssetType.SLIDES,
-        )
-        for a in assets
-    )
+    has_media = await has_renderable_media(db, project_id)
 
+    # Pin-merge rule: user-edited slots (explicit=True) from the panel's
+    # current task book survive this re-inference; the new inference only
+    # fills the slots the user did not pin. Falls back to the stored pending
+    # intent when the caller did not send its current book.
+    prior = data.prior
+    stored_intent = None
+    if isinstance(project.pending_intent, dict):
+        try:
+            stored_intent = PendingIntent.model_validate(project.pending_intent).intent
+        except ValueError:
+            stored_intent = None
+    if prior is None:
+        prior = stored_intent
+    if prior is not None:
+        intent.outputs = merge_explicit_slots(prior.outputs, intent.outputs)
+        # dub_languages pin rule (RECIPES §4.1): pin only when the caller's
+        # book DIVERGES from the last-served book — a panel edit or a recipe
+        # prior. An untouched book follows the fresh inference, so refine can
+        # still add/drop languages (mirrors slot pin-merge: LLM-owned until
+        # edited). Removing ALL chips is therefore not pinned on refine — the
+        # accumulated prompt re-decides; the confirm path (/generate) honors
+        # an emptied list directly.
+        stored_dub = stored_intent.dub_languages if stored_intent else None
+        if prior.dub_languages and prior.dub_languages != stored_dub:
+            intent.dub_languages = prior.dub_languages
+
+    clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
     reasons: list[str] = []
     if not intent.language_explicit:
         reasons.append("language_default")
     if not intent.outputs_explicit:
         reasons.append("outputs_default")
-    if "clips" in intent.outputs and not intent.clip_count_explicit:
+    if clips_slot is not None and clips_slot.count is None:
         reasons.append("clip_count_default")
-    if "clips" in intent.outputs and not has_renderable_media:
+    if clips_slot is not None and not has_media:
         reasons.append("clips_without_media")
 
-    needs_clarification = bool(reasons)
+    # Archive the turn (B1): the user's own words (``turn`` when the caller
+    # sends an accumulated prompt, else the prompt itself), deduped against
+    # the latest user row so refresh replays never double-write.
+    turn_text = (data.turn or data.prompt or "").strip()
+
+    # An answer action without answer text is an LLM misfire — degrade to a
+    # plan turn (dock the book for confirmation) rather than clobber the
+    # stored task book with an empty answer.
+    if intent.action == "answer" and not intent.answer:
+        intent.action = "generate"
+
+    if intent.action == "start":
+        # G-1: a prose confirmation ("looks good, start it") is not a
+        # revision — it answers the docked task_book question with
+        # kind=start, so the run still comes from the only birthplace
+        # (answer_question → create_run, which also clears pending_intent in
+        # the same transaction). The user's words archive like every turn.
+        await record_intent_turn(
+            db, UUID(str(current_user.id)), UUID(str(project.id)), turn_text
+        )
+        conversation = await find_conversation(
+            db, UUID(str(current_user.id)), UUID(str(project.id))
+        )
+        pending_question = (
+            await latest_pending_question(db, UUID(str(conversation.id)))
+            if conversation is not None
+            else None
+        )
+        if is_pending_task_book(pending_question) and isinstance(
+            project.pending_intent, dict
+        ):
+            answered, _follow_up = await answer_question(
+                db,
+                UUID(str(current_user.id)),
+                UUID(str(pending_question.id)),
+                # The dock's autonomy tier rides the prose confirmation —
+                # a review-tier choice must survive it.
+                StartAnswerRequest(kind="start", autonomy=data.autonomy),
+            )
+            # answer_question commits — the run, the answer and the cleared
+            # pending intent land in one transaction.
+            return ProjectIntentStartedResponse(
+                run_id=UUID(str(answered.workflow_run_id)),
+                answered_question=ChatMessageResponse.model_validate(answered),
+            )
+        # Nothing startable. Never overwrite a stored task book with a
+        # start-action misfire's fields: re-dock the stored book unchanged
+        # when one exists; otherwise degrade to a normal plan turn (the
+        # empty-answer misfire's twin).
+        if isinstance(project.pending_intent, dict):
+            stored = PendingIntent.model_validate(project.pending_intent)
+            bailed_run_ids = await sync_task_book_question(
+                db,
+                UUID(str(current_user.id)),
+                project,
+                stored.intent,
+                stored.prompt,
+                reasons=stored.reasons,
+            )
+            await db.commit()
+            await finalize_bailed_runs(bailed_run_ids)
+            return ProjectIntentPlanResponse(
+                intent=stored.intent, reasons=stored.reasons
+            )
+        intent.action = "generate"
+
+    if intent.action == "answer" and intent.answer:
+        # Capability question: the exchange lands as plain message rows and
+        # the stored task book stays untouched — an answer turn never
+        # overwrites the plan the user is confirming.
+        await record_intent_turn(
+            db, UUID(str(current_user.id)), UUID(str(project.id)),
+            turn_text, answer=intent.answer,
+        )
+        await db.commit()
+        return ProjectIntentAnswerResponse(text=intent.answer)
 
     # A call that omits brand_template_id (chat refinements, the overlay's
     # fallback fetch) must not clobber the brand choice the composer made.
@@ -321,26 +437,39 @@ async def infer_project_intent(
     project.pending_intent = PendingIntent(
         prompt=data.prompt or "",
         intent=intent,
-        needs_clarification=needs_clarification,
         reasons=reasons,
         brand_template_id=brand_template_id,
     ).model_dump(mode="json")
+    # The task book also becomes the conversation's pending question (ask
+    # primitive): the dock above the input rebuilds from it on any device.
+    # The clarification reasons ride in the question text so the archive
+    # records WHY confirmation was asked.
+    await record_intent_turn(db, UUID(str(current_user.id)), UUID(str(project.id)), turn_text)
+    bailed_run_ids: list = []
+    if intent.action == "generate":
+        bailed_run_ids = await sync_task_book_question(
+            db, UUID(str(current_user.id)), project, intent, data.prompt or "",
+            reasons=reasons,
+        )
     await db.commit()
+    # The docked task book superseded a parked checkpoint question (single-
+    # pending invariant) — its run was cascade-bailed; settle it COMPLETED.
+    await finalize_bailed_runs(bailed_run_ids)
 
-    return ProjectIntentResponse(
-        intent=intent,
-        needs_clarification=needs_clarification,
-        reasons=reasons,
-    )
+    return ProjectIntentPlanResponse(intent=intent, reasons=reasons)
 
 
-@router.post("/{project_id}/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{project_id}/generate",
+    response_model=GenerateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def generate_content(
     project_id: UUID,
     request: GenerateRequest,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> dict:
+) -> GenerateResponse:
     """Queue background generation for a project.
 
     Ensures the project-scoped conversation exists so the original prompt is
@@ -353,86 +482,67 @@ async def generate_content(
 
     # Full-scope runs from the composer must now provide an explicit task book
     # resolved by POST /projects/{id}/intent. Retries, targeted runs and API
-    # callers continue to pass explicit outputs.
-    outputs = request.outputs
+    # callers continue to pass explicit slots.
+    slots = request.slots
     target_language = request.target_language
-    clip_count = request.clip_count
     instruction = request.instruction
-    if outputs is None and request.scope == "full":
+    if slots is None and request.scope == "full":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Task book must be confirmed via /projects/{id}/intent first.",
         )
-    if outputs is None:
-        # Non-full scopes without explicit outputs keep the pre-intent default.
-        outputs = ["clips", "post", "quotes", "article"]
+    if slots is None:
+        # Non-full scopes without explicit slots keep the pre-intent default.
+        slots = [
+            IntentSlot(type="clips"),
+            IntentSlot(type="post"),
+            IntentSlot(type="quotes"),
+            IntentSlot(type="article"),
+        ]
     target_language = target_language or "en"
     instruction = instruction or "Generate content from the uploaded assets."
-
-    # Clips need a renderable media source (video / audio / image / slides).
-    # Reject early instead of letting the run produce unrenderable clips.
-    if "clips" in outputs and request.scope == "full":
-        media_result = await db.execute(
-            select(Asset.id)
-            .where(
-                Asset.project_id == project_id,
-                Asset.type.in_(
-                    [
-                        AssetType.VIDEO,
-                        AssetType.AUDIO,
-                        AssetType.IMAGE,
-                        AssetType.SLIDES,
-                    ]
-                ),
-                Asset.file_url.isnot(None),
-            )
-            .limit(1)
-        )
-        if media_result.scalar_one_or_none() is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    "Clips need a video, audio, or image source. "
-                    "Upload one or deselect clips."
-                ),
-            )
 
     # Persist the original prompt in the project-scoped conversation if it is
     # not already there. This is a no-op when the conversation already has messages.
     prompt_text = request.instruction or "Generate content from the uploaded assets."
     await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
 
-    run = await create_run(
-        db,
-        project,
-        TaskSpec(
-            outputs=outputs,
-            clip_count=clip_count,
-            quotes_count=request.quotes_count,
-            carousel_count=request.carousel_count,
-            target_language=target_language,
-            instruction=instruction,
-            tone_settings=(
-                request.tone_settings.model_dump() if request.tone_settings else None
+    try:
+        # Entry constraints (clips-media gate, targeted-scope validity) reject
+        # at the birthplace — ValueError here is a client-facing 422.
+        run = await create_run(
+            db,
+            project,
+            TaskSpec(
+                outputs=slots,
+                target_language=target_language,
+                instruction=instruction,
+                tone_settings=(
+                    request.tone_settings.model_dump() if request.tone_settings else None
+                ),
+                brand_template_id=(
+                    str(request.brand_template_id) if request.brand_template_id else None
+                ),
+                dub_languages=request.dub_languages or [],
+                autonomy=request.autonomy or "auto",
+                scope=request.scope,
+                operation=request.operation,
+                target_id=request.target_id,
             ),
-            brand_template_id=(
-                str(request.brand_template_id) if request.brand_template_id else None
-            ),
-            scope=request.scope,
-            operation=request.operation,
-            target_id=request.target_id,
-        ),
-    )
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     project.status = ProjectStatus.PROCESSING
     # The task book is confirmed now — drop the unconfirmed copy.
     project.pending_intent = None
+    # Starting the run answers any open task_book question (QA archive).
+    await mark_task_book_started(db, UUID(str(current_user.id)), project_id, run.id)
     await db.commit()
     await db.refresh(run)
 
-    return {
-        "run_id": str(run.id),
-        "status": run.status.value,
-    }
+    return GenerateResponse(run_id=run.id, status=run.status)
 
 
 @router.get("/{project_id}/runs", response_model=list[RunResponse])

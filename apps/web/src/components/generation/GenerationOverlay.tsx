@@ -16,6 +16,8 @@ import {
   ArrowLeft,
   ArrowUp,
   Check,
+  ChevronDown,
+  CircleHelp,
   FileText,
   Image as ImageIcon,
   Images,
@@ -37,9 +39,16 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Attachment,
   AttachmentContent,
@@ -64,6 +73,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
+import { QaPair, qaAnswerText, type QaAnswer } from "@/components/chat/QaPair"
+import { QuestionDock, type Autonomy } from "@/components/chat/QuestionDock"
+import type { IntentSlot } from "@/lib/types"
 
 const OUTPUT_OPTIONS = [
   { key: "clips", labelKey: "results.tabs.clips", Icon: Video },
@@ -82,18 +94,91 @@ const LANGUAGE_OPTIONS = [
   { code: "it", labelKey: "languages.it" },
 ] as const
 
+/** Per-type count bounds (mirrors the retired flat-field limits) and the
+ * task-book defaults for `count: null` slots. */
+const SLOT_COUNT_LIMITS: Record<string, [number, number]> = {
+  clips: [1, 10],
+  quotes: [1, 20],
+  carousel: [2, 15],
+}
+const SLOT_COUNT_DEFAULT: Record<string, number> = {
+  clips: 5,
+  quotes: 3,
+  carousel: 6,
+}
+
+/** Slot-language Select sentinel for "same as the task book" (null). */
+const BOOK_LANGUAGE = "__book__"
+
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]["key"]
 type Phase = "confirm" | "running" | "answer"
 
-interface InferredIntent {
+export interface InferredIntent {
   action: "generate" | "answer"
   answer: string | null
   language: string
-  outputs: string[]
-  clip_count: number | null
-  quotes_count: number | null
-  carousel_count: number | null
+  outputs: IntentSlot[]
+  /** 配音语言集 (dub_languages, RECIPES §4.1): task-book-level voice-dub
+   * languages for the run's clips; empty = no dubbing. */
+  dub_languages: string[]
   specific_instruction: string | null
+}
+
+function bareSlot(type: string, count: number | null = null): IntentSlot {
+  return {
+    type: type as IntentSlot["type"],
+    count,
+    focus: null,
+    language: null,
+    tone_override: null,
+    explicit: false,
+  }
+}
+
+/** Tolerate both task-book shapes: new slot objects pass through; legacy flat
+ * run.context / pending_intent rows (string outputs + flat counts) upgrade to
+ * bare slots — read tolerance only, never written back. */
+export function normalizeSlots(
+  raw: unknown,
+  legacyClipCount?: number | null
+): IntentSlot[] {
+  if (!Array.isArray(raw)) return []
+  const slots: IntentSlot[] = []
+  for (const item of raw) {
+    if (typeof item === "string") {
+      if (OUTPUT_OPTIONS.some((o) => o.key === item)) {
+        slots.push(bareSlot(item, item === "clips" ? (legacyClipCount ?? null) : null))
+      }
+    } else if (item && typeof item === "object" && typeof item.type === "string") {
+      if (OUTPUT_OPTIONS.some((o) => o.key === item.type)) {
+        slots.push({
+          ...bareSlot(item.type),
+          count: item.count ?? null,
+          focus: item.focus ?? null,
+          language: item.language ?? null,
+          tone_override: item.tone_override ?? null,
+          explicit: item.explicit ?? false,
+        })
+      }
+    }
+  }
+  return slots
+}
+
+/** Normalize an intent payload of either shape (legacy flat or slot) into the
+ * slot-shaped InferredIntent the panel edits. */
+export function normalizeIntent(raw: unknown): InferredIntent {
+  const data = (raw ?? {}) as Record<string, unknown>
+  return {
+    action: data.action === "answer" ? "answer" : "generate",
+    answer: (data.answer as string | null) ?? null,
+    language: typeof data.language === "string" && data.language ? data.language : "en",
+    outputs: normalizeSlots(data.outputs, data.clip_count as number | null),
+    dub_languages: Array.isArray(data.dub_languages)
+      ? data.dub_languages.filter((l): l is string => typeof l === "string" && !!l)
+      : [],
+    specific_instruction: (data.specific_instruction as string | null) ?? null,
+  }
 }
 
 interface OverlayMessage {
@@ -101,7 +186,35 @@ interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** QA archive item (answered question collapsing into the flow). */
+  qa?: { question: string; answer: string; muted: boolean }
 }
+
+/** The typed question payload mirrored from the API (messages.question). */
+interface QuestionPayload {
+  kind: "task_book" | "choice" | "confirm"
+  options?: { id: string; label: string }[]
+  allow_freeform?: boolean
+  cost_hint?: string | null
+}
+
+/** A question-carrying chat message (ask primitive): the dock's pending
+ * question and, once answered, the QA archive of the decision. */
+interface QuestionMessage {
+  id: string
+  content: string | null
+  question: QuestionPayload | null
+  answer: QaAnswer | null
+  workflow_run_id: string | null
+}
+
+/** The /intent turn's discriminated union (B1 + G-1): a plan to confirm, a
+ * prose answer, or the docked task book started by a prose confirmation
+ * ("looks good, start it" — the QA archive row rides along). */
+type IntentTurnResponse =
+  | { type: "plan"; intent: unknown; reasons?: string[] }
+  | { type: "answer"; text: string }
+  | { type: "started"; run_id: string; answered_question: QuestionMessage }
 
 interface ProjectAsset {
   id: string
@@ -145,6 +258,9 @@ interface GenerationOverlayProps {
   prompt: string
   initialIntent?: InferredIntent | null
   initialNeedsClarification?: boolean
+  /** needs_clarification reason keys from the last inference — the dock
+   * shows them as the "needs your check" line (回显). */
+  initialReasons?: string[]
   brandTemplateId?: string
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase and the intent fallback, lands straight on the step flow. */
@@ -169,6 +285,9 @@ function StepMarker({
       <Check className="text-green-600 dark:text-green-400" />
     ) : status === "failed" ? (
       <X className="text-destructive" />
+    ) : status === "waiting" ? (
+      // Checkpoint parked for a human answer (期 4) — a question, not work.
+      <CircleHelp className="text-primary" />
     ) : (
       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
     )
@@ -262,6 +381,7 @@ export function GenerationOverlay({
   prompt,
   initialIntent,
   initialNeedsClarification = true,
+  initialReasons,
   brandTemplateId,
   initialRunId,
   onClose,
@@ -278,15 +398,13 @@ export function GenerationOverlay({
   )
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
-      ? { ...initialIntent }
+      ? normalizeIntent(initialIntent)
       : {
           action: "generate",
           answer: null,
           language: "en",
-          outputs: ["post", "quotes", "article"],
-          clip_count: 5,
-          quotes_count: null,
-          carousel_count: null,
+          outputs: [bareSlot("post"), bareSlot("quotes"), bareSlot("article")],
+          dub_languages: [],
           specific_instruction: prompt,
         }
   )
@@ -298,6 +416,16 @@ export function GenerationOverlay({
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
+  // Ask primitive: the pending question docks above the input (task_book in
+  // the confirm phase; choice questions from the chat loop afterwards); the
+  // answered one archives as a QA pair in the flow.
+  const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
+  const [questionLoaded, setQuestionLoaded] = useState(false)
+  const [answeredQuestion, setAnsweredQuestion] = useState<QuestionMessage | null>(null)
+  const [autonomy, setAutonomy] = useState<Autonomy>("auto")
+  const [answering, setAnswering] = useState(false)
+  const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
+
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
   const [input, setInput] = useState("")
@@ -305,6 +433,11 @@ export function GenerationOverlay({
   const [isComposing, setIsComposing] = useState(false)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
+  // Identity echo line (speaker voice + brand skin) — resolved once.
+  const [identity, setIdentity] = useState<{ speaker: string | null; brand: string | null }>({
+    speaker: null,
+    brand: null,
+  })
 
   const autoStartedRef = useRef(false)
   const intentFetchedRef = useRef(false)
@@ -314,6 +447,133 @@ export function GenerationOverlay({
   onCompleteRef.current = onComplete
 
   const { steps, status, terminal, summary } = useRunEvents(runId)
+
+  // The pending question is a plain DB row — fetching the project
+  // conversation rebuilds the dock after refresh / on any device, whatever
+  // the phase (task_book while confirming, choice once the chat loop asks).
+  const fetchPendingQuestion = useCallback(async (): Promise<QuestionMessage | null> => {
+    try {
+      const res = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+        toast: false,
+      })
+      if (!res.ok) return null
+      const data = (await res.json()) as { pending_question?: QuestionMessage | null }
+      return data.pending_question ?? null
+    } catch {
+      return null
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPendingQuestion().then((q) => {
+      if (!cancelled) {
+        setPendingQuestion(q)
+        setQuestionLoaded(true)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [fetchPendingQuestion])
+
+  // Confirm-phase archive replay (B1): the conversation's message rows are
+  // the durable record — on open, rebuild the flow from them so a refresh or
+  // another device no longer loses capability answers / past refinements.
+  // The opening prompt renders from the prop (it carries the attachments),
+  // so its seeded row is skipped; a still-pending question docks above the
+  // input, never in the flow. Best-effort: the live flow works without it.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+          toast: false,
+        })
+        if (!convRes.ok) return
+        const conv = (await convRes.json()) as { id?: string }
+        if (!conv.id) return
+        const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
+          toast: false,
+        })
+        if (!res.ok) return
+        const data = (await res.json()) as {
+          items?: (QuestionMessage & { role: "user" | "assistant" })[]
+        }
+        const history: OverlayMessage[] = []
+        for (const m of data.items ?? []) {
+          if (m.role === "user") {
+            if ((m.content ?? "") === prompt) continue
+            history.push({ id: m.id, role: "user", content: m.content ?? "" })
+          } else if (m.question) {
+            if (m.answer) {
+              const display = qaAnswerText(m.answer, t, !!m.workflow_run_id)
+              history.push({
+                id: m.id,
+                role: "assistant",
+                content: "",
+                qa: {
+                  question: m.content ?? "",
+                  answer: display.text,
+                  muted: display.muted,
+                },
+              })
+            }
+          } else {
+            history.push({
+              id: m.id,
+              role: "assistant",
+              content: m.content ?? "",
+              runId: m.workflow_run_id,
+            })
+          }
+        }
+        // Prepend — anything pushed locally since mount is newer.
+        if (!cancelled && history.length > 0) {
+          setMessages((prev) => [...history, ...prev])
+        }
+      } catch {
+        /* the archive replay is best-effort */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Mid-run dock revival (期 4): the direction checkpoint docks its question
+  // while the run is already streaming — when a waiting checkpoint step
+  // appears in the SSE flow, re-fetch the pending question so it docks
+  // above the input. A null fetch result keeps the dock empty (already
+  // answered elsewhere), and the step leaving waiting ends the watch.
+  useEffect(() => {
+    if (pendingQuestion) return
+    if (!steps.some((s) => s.kind === "checkpoint" && s.status === "waiting")) return
+    let cancelled = false
+    fetchPendingQuestion().then((q) => {
+      if (!cancelled && q) setPendingQuestion(q)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [steps, pendingQuestion, fetchPendingQuestion])
+
+  // Stale-dock clear: the server can settle the docked checkpoint question
+  // without a client action — the expiry sweep's auto-answer, or an answer
+  // from another device. When this run's checkpoint step leaves waiting,
+  // re-fetch and drop the dock if nothing is pending anymore.
+  useEffect(() => {
+    if (!pendingQuestion || pendingQuestion.workflow_run_id !== runId) return
+    if (steps.some((s) => s.kind === "checkpoint" && s.status === "waiting")) return
+    let cancelled = false
+    fetchPendingQuestion().then((q) => {
+      if (!cancelled && !q) setPendingQuestion(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [steps, pendingQuestion, runId, fetchPendingQuestion])
 
   // Load the project's assets once for the prompt attachments.
   useEffect(() => {
@@ -329,6 +589,36 @@ export function GenerationOverlay({
     }
   }, [projectId])
 
+  // Identity echo: resolve the speaker / brand names behind the ids once —
+  // a read-only reassurance line, never a question (ask primitive §2.1).
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      apiFetch(`/api/v1/projects/${projectId}`, { toast: false })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
+      apiFetch("/api/v1/speakers", { toast: false })
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []),
+      apiFetch("/api/v1/brand-templates", { toast: false })
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []),
+    ]).then(([project, speakers, brands]) => {
+      if (cancelled) return
+      const speaker =
+        (speakers as { id: string; name: string }[]).find(
+          (s) => s.id === (project as { speaker_id?: string } | null)?.speaker_id
+        )?.name ?? null
+      const brand =
+        (brands as { id: string; name: string }[]).find((b) => b.id === brandTemplateId)
+          ?.name ?? null
+      setIdentity({ speaker, brand })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, brandTemplateId])
+
   // Terminal: success hands off to the results page; failure stays put so
   // the step list shows what broke (the results page carries the retry).
   useEffect(() => {
@@ -342,27 +632,54 @@ export function GenerationOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminal])
 
+  /** Shared landing for every path that starts a run (the dock's Start
+   * button, a prose confirmation via /intent): the answered task book
+   * archives as QA, the dock clears, and the step flow takes over. */
+  const landOnStartedRun = useCallback((runId: string, answered: QuestionMessage | null) => {
+    setPendingQuestion(null)
+    if (answered) setAnsweredQuestion(answered)
+    setRunId(runId)
+    setPhase("running")
+  }, [])
+
   const handleStartGeneration = useCallback(async () => {
     if (runId || isStarting) return
     setStartError(null)
     setIsStarting(true)
     try {
+      if (pendingQuestion) {
+        // Ask primitive: Start IS the answer to the docked task_book
+        // question — one call answers, starts the run, and archives the QA.
+        // "start" is a first-class answer kind (no magic option id); the
+        // panel's edited task book rides along so hand edits (slots marked
+        // explicit) reach the run instead of the stale stored intent.
+        const res = await apiFetch(
+          `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
+          {
+            method: "POST",
+            body: { kind: "start", autonomy, intent },
+          },
+        )
+        if (!res.ok) {
+          const detail = await res.json().catch(() => ({}))
+          throw new Error(detail.detail || "Generation failed")
+        }
+        const answered = ((await res.json()) as { answered_question: QuestionMessage }).answered_question
+        if (!answered.workflow_run_id) throw new Error("Generation failed")
+        landOnStartedRun(answered.workflow_run_id, answered)
+        return
+      }
+      // Legacy fallback: no question row (pre-dock projects) — /generate
+      // settles the open question server-side the same way.
       const res = await apiFetch(`/api/v1/projects/${projectId}/generate`, {
         method: "POST",
         body: {
-          outputs: intent.outputs,
+          slots: intent.outputs,
           target_language: intent.language,
-          clip_count: intent.outputs.includes("clips")
-            ? intent.clip_count ?? 5
-            : undefined,
-          quotes_count: intent.outputs.includes("quotes")
-            ? (intent.quotes_count ?? undefined)
-            : undefined,
-          carousel_count: intent.outputs.includes("carousel")
-            ? (intent.carousel_count ?? undefined)
-            : undefined,
+          dub_languages: intent.dub_languages,
           instruction: intent.specific_instruction || prompt,
           brand_template_id: brandTemplateId || undefined,
+          autonomy,
         },
       })
       if (!res.ok) {
@@ -376,7 +693,19 @@ export function GenerationOverlay({
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
       setIsStarting(false)
     }
-  }, [runId, isStarting, intent, projectId, prompt, brandTemplateId, t])
+  }, [runId, isStarting, pendingQuestion, autonomy, intent, projectId, prompt, brandTemplateId, t, landOnStartedRun])
+
+  /** Cancel = bail: a graceful exit back to draft (never an error toast). */
+  const handleCancel = useCallback(async () => {
+    if (pendingQuestion) {
+      await apiFetch(`/api/v1/chat/messages/${pendingQuestion.id}/answer`, {
+        method: "POST",
+        body: { kind: "bail" },
+        toast: false,
+      }).catch(() => {})
+    }
+    onClose()
+  }, [pendingQuestion, onClose])
 
   // Fallback intent fetch (direct visit without a composer-provided intent).
   // Guarded by ref — setIntent recreates handleStartGeneration, which would
@@ -390,13 +719,26 @@ export function GenerationOverlay({
       body: { prompt },
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+      .then((data: IntentTurnResponse | null) => {
         if (!data) throw new Error(t("generationOverlay.failed"))
-        setIntent({ ...data.intent })
-        setIntentReady(true)
-        if (data.intent.action === "answer") {
+        if (data.type === "started") {
+          // Defensive: a restored session's prose confirmation may start the
+          // run straight from the fallback fetch.
+          landOnStartedRun(data.run_id, data.answered_question)
+          setIntentReady(true)
+          return
+        }
+        if (data.type === "answer") {
+          // Capability answer — archived server-side; show it in the flow.
+          pushMessage({ role: "assistant", content: data.text })
           setPhase("answer")
-        } else if (!data.needs_clarification) {
+          setIntentReady(true)
+          return
+        }
+        setIntent(normalizeIntent(data.intent))
+        setReasons(data.reasons ?? [])
+        setIntentReady(true)
+        if ((data.reasons ?? []).length === 0) {
           handleStartGeneration()
         }
       })
@@ -406,7 +748,7 @@ export function GenerationOverlay({
         setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
         setIntentReady(true)
       })
-  }, [initialIntent, projectId, prompt, t, handleStartGeneration])
+  }, [initialIntent, projectId, prompt, t, handleStartGeneration, landOnStartedRun])
 
   useEffect(() => {
     if (
@@ -415,68 +757,76 @@ export function GenerationOverlay({
       initialIntent.action === "generate" &&
       !initialNeedsClarification &&
       phase === "confirm" &&
+      questionLoaded &&
       !autoStartedRef.current
     ) {
       autoStartedRef.current = true
       handleStartGeneration()
     }
-  }, [initialIntent, initialRunId, initialNeedsClarification, phase, handleStartGeneration])
-
-  const toggleOutput = (key: OutputKey) => {
-    setIntent((prev) => {
-      const outputs = prev.outputs.includes(key)
-        ? prev.outputs.filter((o) => o !== key)
-        : [...prev.outputs, key]
-      return { ...prev, outputs }
-    })
-  }
+  }, [initialIntent, initialRunId, initialNeedsClarification, phase, questionLoaded, handleStartGeneration])
 
   const canStartGeneration = intent.outputs.length > 0 && !!intent.language
 
+  // Slot edits — every hand edit marks the slot explicit so it pins through
+  // the next re-inference (pin-merge rule).
+  const updateSlot = (index: number, patch: Partial<IntentSlot>) =>
+    setIntent((prev) => ({
+      ...prev,
+      outputs: prev.outputs.map((s, i) =>
+        i === index ? { ...s, ...patch, explicit: true } : s
+      ),
+    }))
+
+  const addSlot = (type: OutputKey) =>
+    setIntent((prev) => ({
+      ...prev,
+      outputs: [...prev.outputs, { ...bareSlot(type), explicit: true }],
+    }))
+
+  const removeSlot = (index: number) =>
+    setIntent((prev) => ({
+      ...prev,
+      outputs: prev.outputs.filter((_, i) => i !== index),
+    }))
+
+  const slotLabel = useCallback(
+    (slot: IntentSlot) => {
+      let label = t(`results.tabs.${slot.type}`, { defaultValue: slot.type })
+      if (slot.language) {
+        label += ` (${t(`languages.${slot.language}`, { defaultValue: slot.language })})`
+      }
+      if (slot.count) label += ` ×${slot.count}`
+      return label
+    },
+    [t]
+  )
+
   const planSummary = useMemo(() => {
     const parts = [
-      intent.outputs
-        .map((o) => t(`results.tabs.${o}`, { defaultValue: o }))
-        .join(", "),
+      intent.outputs.map(slotLabel).join(", "),
       t(`languages.${intent.language}`, { defaultValue: intent.language }),
     ]
-    if (intent.outputs.includes("clips") && intent.clip_count) {
-      parts.push(t("generationOverlay.planSummaryClips", { count: intent.clip_count }))
-    }
-    if (intent.outputs.includes("quotes") && intent.quotes_count) {
-      parts.push(t("generationOverlay.planSummaryQuotes", { count: intent.quotes_count }))
-    }
-    if (intent.outputs.includes("carousel") && intent.carousel_count) {
+    if (intent.dub_languages.length > 0) {
       parts.push(
-        t("generationOverlay.planSummaryCarousel", { count: intent.carousel_count })
+        t("generationOverlay.planSummaryDub", {
+          langs: intent.dub_languages
+            .map((l) => t(`languages.${l}`, { defaultValue: l }))
+            .join(", "),
+        })
       )
     }
     return parts.join(" · ")
-  }, [intent, t])
-
-  // One-line plain-language summary of the selected outputs, shown under the
-  // toggle pills so a first-time user learns what each output is.
-  const selectedOutputDescs = useMemo(
-    () =>
-      intent.outputs
-        .map((o) => t(`generationOverlay.outputDescs.${o}`, { defaultValue: "" }))
-        .filter(Boolean),
-    [intent.outputs, t]
-  )
-
-  const clipCount = intent.clip_count ?? 5
-  const setClipCount = (next: number) =>
-    setIntent((prev) => ({
-      ...prev,
-      clip_count: Math.min(10, Math.max(1, next)),
-    }))
+  }, [intent, slotLabel, t])
 
   const pushMessage = (message: Omit<OverlayMessage, "id">) => {
     setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
   }
 
-  /** Confirm-phase turn: refine the plan via intent re-inference. A question
-   * (action="answer") is answered inline and leaves the plan untouched. */
+  /** Confirm-phase turn: refine the plan via intent re-inference. The panel's
+   * current (possibly hand-edited) book rides along — its explicit slots pin
+   * through the merge. A question (action="answer") is answered inline and
+   * leaves the plan untouched; a prose confirmation (action="start") starts
+   * the run like the dock's Start button. */
   const sendPlanRefinement = async (text: string) => {
     followUpsRef.current.push(text)
     const ctrl = new AbortController()
@@ -485,7 +835,14 @@ export function GenerationOverlay({
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/intent`, {
         method: "POST",
-        body: { prompt: [prompt, ...followUpsRef.current].join("\n") },
+        body: {
+          prompt: [prompt, ...followUpsRef.current].join("\n"),
+          prior: intent,
+          turn: text,
+          // Consumed only when this turn starts the run (action="start") —
+          // the dock's tier must survive a prose confirmation.
+          autonomy,
+        },
         toast: false,
         signal: ctrl.signal,
       })
@@ -493,12 +850,23 @@ export function GenerationOverlay({
         const detail = await res.json().catch(() => ({}))
         throw new Error(detail.detail || t("generationOverlay.failed"))
       }
-      const data = await res.json()
-      if (data.intent.action === "answer" && data.intent.answer) {
-        pushMessage({ role: "assistant", content: data.intent.answer })
+      const data = (await res.json()) as IntentTurnResponse
+      if (data.type === "started") {
+        // G-1: the prose confirmation answered the docked task book
+        // server-side (kind=start) and the run is live.
+        landOnStartedRun(data.run_id, data.answered_question)
+        return
+      }
+      if (data.type === "answer") {
+        // Capability answer — the exchange is also archived server-side (B1).
+        pushMessage({ role: "assistant", content: data.text })
       } else {
-        setIntent({ ...data.intent })
+        setReasons(data.reasons ?? [])
+        setIntent(normalizeIntent(data.intent))
         setIntentReady(true)
+        // The refinement superseded the old question server-side and raised
+        // a new one — the dock must point at the new row.
+        setPendingQuestion(await fetchPendingQuestion())
         pushMessage({ role: "assistant", content: t("generationOverlay.planUpdated") })
       }
     } catch (e) {
@@ -517,8 +885,40 @@ export function GenerationOverlay({
     }
   }
 
+  /** An answered question collapses into the flow as a QA pair (ask
+   * primitive: the flow archives decisions, the dock holds the open one). */
+  const pushQaArchive = (message: QuestionMessage) => {
+    if (!message.answer) return
+    const display = qaAnswerText(message.answer, t, !!message.workflow_run_id)
+    pushMessage({
+      role: "assistant",
+      content: "",
+      qa: {
+        question: message.content ?? "",
+        answer: display.text,
+        muted: display.muted,
+      },
+    })
+  }
+
+  /** The chat loop's reply: a pending question docks (never enters the
+   * flow, prohibited-behavior #2); anything else renders as prose + an
+   * optional RunCard. */
+  const handleAssistantMessage = (message: QuestionMessage) => {
+    if (message.question && !message.answer) {
+      setPendingQuestion(message)
+      return
+    }
+    pushMessage({
+      role: "assistant",
+      content: message.content ?? "",
+      runId: message.workflow_run_id,
+    })
+  }
+
   /** Post-start turn: the project-scoped chat loop (CHAT_ARCH §3). A task
-   * list dispatch comes back with a run_id and renders as a RunCard. */
+   * list dispatch comes back with a run_id and renders as a RunCard; a
+   * pending choice question docks; an autoResumed one archives its QA. */
   const sendProjectChat = async (text: string) => {
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -535,14 +935,17 @@ export function GenerationOverlay({
         throw new Error(detail.detail || t("chat.failed"))
       }
       const data = (await res.json()) as {
-        assistant_message: { content: string | null }
+        assistant_message: QuestionMessage
         run_id: string | null
+        answered_question?: QuestionMessage | null
       }
-      pushMessage({
-        role: "assistant",
-        content: data.assistant_message.content ?? "",
-        runId: data.run_id,
-      })
+      // Deterministic autoResume settled the docked question with this very
+      // text — archive its QA pair before the assistant's continuation.
+      if (data.answered_question) {
+        setPendingQuestion(null)
+        pushQaArchive(data.answered_question)
+      }
+      handleAssistantMessage(data.assistant_message)
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return
       pushMessage({
@@ -554,6 +957,51 @@ export function GenerationOverlay({
         abortRef.current = null
         setChatBusy(false)
       }
+    }
+  }
+
+  /** Docked choice question answered by a button click — the answer
+   * endpoint records it and continues the conversation (answer = resume). */
+  const handleChoiceAnswer = async (optionId: string) => {
+    if (!pendingQuestion || answering) return
+    setAnswering(true)
+    try {
+      const res = await apiFetch(
+        `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
+        { method: "POST", body: { kind: "option", option_id: optionId } },
+      )
+      if (!res.ok) return // apiFetch already toasted the server's reason
+      const data = (await res.json()) as {
+        answered_question: QuestionMessage
+        follow_up: QuestionMessage | null
+      }
+      setPendingQuestion(null)
+      pushQaArchive(data.answered_question)
+      if (data.follow_up) handleAssistantMessage(data.follow_up)
+    } finally {
+      setAnswering(false)
+    }
+  }
+
+  /** Checkpoint bail (期 4): stop the parked run — the endpoint settles the
+   * node, skips the downstream and completes the run synchronously, so we
+   * archive the QA and leave quietly (never an error toast, #5). */
+  const handleCheckpointBail = async () => {
+    if (!pendingQuestion || answering) return
+    setAnswering(true)
+    try {
+      const res = await apiFetch(
+        `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
+        { method: "POST", body: { kind: "bail" } },
+      )
+      if (!res.ok) return
+      const data = (await res.json()) as { answered_question: QuestionMessage }
+      setPendingQuestion(null)
+      pushQaArchive(data.answered_question)
+      toast.info(t("generationOverlay.stopped"))
+      onClose()
+    } finally {
+      setAnswering(false)
     }
   }
 
@@ -595,6 +1043,20 @@ export function GenerationOverlay({
   }, [phase, terminal])
 
   const sectionLabel = "text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+
+  // The answered task_book question's QA archive display (start via dock).
+  const answeredDisplay = answeredQuestion?.answer
+    ? qaAnswerText(answeredQuestion.answer, t, !!answeredQuestion.workflow_run_id)
+    : null
+
+  // The dock's live form outside the confirm phase: a pending choice
+  // question from the chat loop (task_book docks only while confirming).
+  const pendingChoice =
+    pendingQuestion &&
+    pendingQuestion.question?.kind === "choice" &&
+    !pendingQuestion.answer
+      ? pendingQuestion
+      : null
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -663,113 +1125,274 @@ export function GenerationOverlay({
                                 </p>
                               </div>
 
-                              {/* Outputs */}
+                              {/* Identity echo — one read-only line, never a
+                                  question: whose voice, which brand skin. */}
+                              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {t("generationOverlay.identityEcho", {
+                                  speaker:
+                                    identity.speaker ??
+                                    t("generationOverlay.identitySpeakerAuto"),
+                                  brand:
+                                    identity.brand ??
+                                    t("generationOverlay.identityBrandDefault"),
+                                })}
+                              </p>
+
+                              {/* Task-book language (slot-level "same as book"
+                                  overrides live on each slot row) */}
+                              <div className="space-y-2">
+                                <span className={sectionLabel}>
+                                  {t("generationOverlay.languageLabel")}
+                                </span>
+                                <Select
+                                  value={intent.language}
+                                  onValueChange={(value) =>
+                                    setIntent((prev) => ({
+                                      ...prev,
+                                      language: (value as string) || "en",
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger className="h-10 w-full text-sm">
+                                    <SelectValue>
+                                      {(value: string) =>
+                                        t(`languages.${value}`, { defaultValue: value })
+                                      }
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {LANGUAGE_OPTIONS.map((lang) => (
+                                      <SelectItem key={lang.code} value={lang.code}>
+                                        {t(lang.labelKey)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                  {t("generationOverlay.languageHint")}
+                                </p>
+                              </div>
+
+                              {/* Task slots — one row per requested output.
+                                  Same-type siblings (e.g. an English and a
+                                  German post) are separate rows. */}
                               <div className="space-y-2">
                                 <span className={sectionLabel}>
                                   {t("generationOverlay.outputsLabel")}
                                 </span>
-                                <div className="flex flex-wrap gap-2">
-                                  {OUTPUT_OPTIONS.map(({ key, labelKey, Icon }) => {
-                                    const active = intent.outputs.includes(key)
+                                <div className="flex flex-col gap-2">
+                                  {intent.outputs.map((slot, index) => {
+                                    const meta = OUTPUT_OPTIONS.find(
+                                      (o) => o.key === slot.type
+                                    )
+                                    if (!meta) return null
+                                    const { labelKey, Icon } = meta
+                                    const limits = SLOT_COUNT_LIMITS[slot.type]
+                                    const count =
+                                      slot.count ?? SLOT_COUNT_DEFAULT[slot.type]
                                     return (
-                                      <button
-                                        key={key}
-                                        type="button"
-                                        onClick={() => toggleOutput(key)}
-                                        className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
-                                          active
-                                            ? "bg-foreground text-background"
-                                            : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-                                        }`}
+                                      <div
+                                        key={index}
+                                        className="flex flex-col gap-2 rounded-md bg-background/60 p-3"
                                       >
-                                        <Icon className="h-3.5 w-3.5" />
-                                        <span>{t(labelKey)}</span>
-                                      </button>
+                                        <div className="flex items-center gap-2">
+                                          <span className="flex items-center gap-1.5 text-sm">
+                                            <Icon className="h-3.5 w-3.5" />
+                                            {t(labelKey)}
+                                          </span>
+                                          {limits && count != null && (
+                                            <div className="flex items-center gap-1">
+                                              <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                disabled={count <= limits[0]}
+                                                aria-label={t(
+                                                  "generationOverlay.countDecrease"
+                                                )}
+                                                onClick={() =>
+                                                  updateSlot(index, {
+                                                    count: Math.max(
+                                                      limits[0],
+                                                      count - 1
+                                                    ),
+                                                  })
+                                                }
+                                              >
+                                                <Minus className="h-3.5 w-3.5" />
+                                              </Button>
+                                              <span className="w-7 text-center text-sm tabular-nums">
+                                                {count}
+                                              </span>
+                                              <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                disabled={count >= limits[1]}
+                                                aria-label={t(
+                                                  "generationOverlay.countIncrease"
+                                                )}
+                                                onClick={() =>
+                                                  updateSlot(index, {
+                                                    count: Math.min(
+                                                      limits[1],
+                                                      count + 1
+                                                    ),
+                                                  })
+                                                }
+                                              >
+                                                <Plus className="h-3.5 w-3.5" />
+                                              </Button>
+                                            </div>
+                                          )}
+                                          <div className="ml-auto flex items-center gap-1">
+                                            <Select
+                                              value={slot.language ?? BOOK_LANGUAGE}
+                                              onValueChange={(value) =>
+                                                updateSlot(index, {
+                                                  language:
+                                                    value === BOOK_LANGUAGE
+                                                      ? null
+                                                      : (value as string),
+                                                })
+                                              }
+                                            >
+                                              <SelectTrigger className="h-8 w-28 text-xs">
+                                                <SelectValue>
+                                                  {(value: string) =>
+                                                    value === BOOK_LANGUAGE
+                                                      ? t(
+                                                          "generationOverlay.slotLanguageDefault"
+                                                        )
+                                                      : t(`languages.${value}`, {
+                                                          defaultValue: value,
+                                                        })
+                                                  }
+                                                </SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value={BOOK_LANGUAGE}>
+                                                  {t(
+                                                    "generationOverlay.slotLanguageDefault"
+                                                  )}
+                                                </SelectItem>
+                                                {LANGUAGE_OPTIONS.map((lang) => (
+                                                  <SelectItem
+                                                    key={lang.code}
+                                                    value={lang.code}
+                                                  >
+                                                    {t(lang.labelKey)}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                            {intent.outputs.length > 1 && (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                aria-label={t(
+                                                  "generationOverlay.removeSlot"
+                                                )}
+                                                onClick={() => removeSlot(index)}
+                                              >
+                                                <X className="h-3.5 w-3.5" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <Input
+                                          value={slot.focus ?? ""}
+                                          onChange={(e) =>
+                                            updateSlot(index, {
+                                              focus: e.target.value || null,
+                                            })
+                                          }
+                                          placeholder={t(
+                                            "generationOverlay.slotFocusPlaceholder",
+                                            { type: t(labelKey) }
+                                          )}
+                                          className="h-8 text-xs"
+                                        />
+                                      </div>
                                     )
                                   })}
                                 </div>
-                                {selectedOutputDescs.length > 0 && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {selectedOutputDescs.join(" · ")}
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Language + clip count share a row on sm+ */}
-                              <div
-                                className={`grid grid-cols-1 gap-6 ${
-                                  intent.outputs.includes("clips") ? "sm:grid-cols-2" : ""
-                                }`}
-                              >
-                                <div className="space-y-2">
-                                  <span className={sectionLabel}>
-                                    {t("generationOverlay.languageLabel")}
-                                  </span>
-                                  <Select
-                                    value={intent.language}
-                                    onValueChange={(value) =>
-                                      setIntent((prev) => ({
-                                        ...prev,
-                                        language: (value as string) || "en",
-                                      }))
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9 gap-1.5"
+                                      />
                                     }
                                   >
-                                    <SelectTrigger className="h-10 w-full text-sm">
-                                      <SelectValue>
-                                        {(value: string) =>
-                                          t(`languages.${value}`, { defaultValue: value })
+                                    <Plus className="h-3.5 w-3.5" />
+                                    <span>{t("generationOverlay.addOutput")}</span>
+                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent>
+                                    {OUTPUT_OPTIONS.map(({ key, labelKey, Icon }) => (
+                                      <DropdownMenuItem
+                                        key={key}
+                                        disabled={
+                                          key === "clips" &&
+                                          intent.outputs.some(
+                                            (s) => s.type === "clips"
+                                          )
                                         }
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {LANGUAGE_OPTIONS.map((lang) => (
-                                        <SelectItem key={lang.code} value={lang.code}>
-                                          {t(lang.labelKey)}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-muted-foreground">
-                                    {t("generationOverlay.languageHint")}
-                                  </p>
-                                </div>
-
-                                {intent.outputs.includes("clips") && (
-                                  <div className="space-y-2">
-                                    <span className={sectionLabel}>
-                                      {t("generationOverlay.clipCountLabel")}
-                                    </span>
-                                    <div className="flex h-10 items-center gap-2">
-                                      <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-9 w-9"
-                                        disabled={clipCount <= 1}
-                                        aria-label={t("generationOverlay.clipCountDecrease")}
-                                        onClick={() => setClipCount(clipCount - 1)}
+                                        onClick={() => addSlot(key)}
                                       >
-                                        <Minus className="h-4 w-4" />
-                                      </Button>
-                                      <span className="flex h-9 w-12 items-center justify-center text-sm tabular-nums">
-                                        {clipCount}
-                                      </span>
-                                      <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-9 w-9"
-                                        disabled={clipCount >= 10}
-                                        aria-label={t("generationOverlay.clipCountIncrease")}
-                                        onClick={() => setClipCount(clipCount + 1)}
-                                      >
-                                        <Plus className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {t("generationOverlay.clipCountHint")}
-                                    </p>
-                                  </div>
-                                )}
+                                        <Icon className="h-3.5 w-3.5" />
+                                        {t(labelKey)}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
+
+                              {/* Voice dub languages (dub_languages) — one
+                                  chip per forked voice-over version. Chips
+                                  are removable (down to none = no dubbing);
+                                  adding a language goes through chat refine,
+                                  not panel editing (R1 scope). */}
+                              {intent.dub_languages.length > 0 && (
+                                <div className="space-y-2">
+                                  <span className={sectionLabel}>
+                                    {t("generationOverlay.dubLabel")}
+                                  </span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {intent.dub_languages.map((lang) => (
+                                      <span
+                                        key={lang}
+                                        className="flex items-center gap-1.5 rounded-md bg-background/60 px-2.5 py-1.5 text-sm"
+                                      >
+                                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                        {t(`languages.${lang}`, { defaultValue: lang })}
+                                        <button
+                                          type="button"
+                                          aria-label={t(
+                                            "generationOverlay.removeDubLanguage"
+                                          )}
+                                          className="text-muted-foreground transition-colors hover:text-foreground"
+                                          onClick={() =>
+                                            setIntent((prev) => ({
+                                              ...prev,
+                                              dub_languages: prev.dub_languages.filter(
+                                                (l) => l !== lang
+                                              ),
+                                            }))
+                                          }
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Instruction */}
                               <div className="space-y-2">
@@ -788,42 +1411,6 @@ export function GenerationOverlay({
                                   className="min-h-[100px] resize-none text-sm"
                                 />
                               </div>
-
-                              {startError && (
-                                <p className="text-sm text-destructive">{startError}</p>
-                              )}
-
-                              {/* Confirm footer — inside the card (Opus-style),
-                                  not a separate floating bar. "Decide later"
-                                  just closes: the plan is persisted server-side
-                                  and can be resumed from the projects list. */}
-                              <div className="space-y-2">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="flex min-w-0 items-center gap-2 text-sm">
-                                    <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-                                    {t("generationOverlay.confirmQuestion")}
-                                  </div>
-                                  <div className="flex shrink-0 items-center gap-2">
-                                    <Button variant="ghost" onClick={handleClose}>
-                                      {t("generationOverlay.decideLater")}
-                                    </Button>
-                                    <Button
-                                      disabled={!canStartGeneration || isStarting}
-                                      onClick={handleStartGeneration}
-                                    >
-                                      {isStarting && (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      )}
-                                      {isStarting
-                                        ? t("generationOverlay.starting")
-                                        : t("generationOverlay.confirm")}
-                                    </Button>
-                                  </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  {t("generationOverlay.leaveNote")}
-                                </p>
-                              </div>
                             </div>
                           </Card>
                         </div>
@@ -832,29 +1419,39 @@ export function GenerationOverlay({
                   </MessageScrollerItem>
                 )}
 
-                {/* Running: confirmed plan collapses to a summary line, the
-                    live steps light up below it. */}
+                {/* Running: the confirmed plan archives as a QA pair (start
+                    via the dock) or collapses to a summary line (attach /
+                    legacy paths rebuild it from the run context). */}
                 {phase === "running" && (
                   <>
                     <MessageScrollerItem>
-                      <Message align="start">
-                        <MessageContent>
-                          <div className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
-                              <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                            </span>
-                            <div className="min-w-0 truncate text-sm">
-                              <span className="font-medium">
-                                {t("generationOverlay.title")}
+                      {answeredQuestion && answeredDisplay ? (
+                        <QaPair
+                          question={t("generationOverlay.confirmQuestion")}
+                          questionDetail={planSummary}
+                          answer={answeredDisplay.text}
+                          muted={answeredDisplay.muted}
+                        />
+                      ) : (
+                        <Message align="start">
+                          <MessageContent>
+                            <div className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
+                                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                               </span>
-                              <span className="text-muted-foreground">
-                                {" · "}
-                                {planSummary}
-                              </span>
+                              <div className="min-w-0 truncate text-sm">
+                                <span className="font-medium">
+                                  {t("generationOverlay.title")}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {" · "}
+                                  {planSummary}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </MessageContent>
-                      </Message>
+                          </MessageContent>
+                        </Message>
+                      )}
                     </MessageScrollerItem>
                     <MessageScrollerItem>
                       <Message align="start">
@@ -928,7 +1525,13 @@ export function GenerationOverlay({
                 {/* Conversation below the pinned regions */}
                 {messages.map((m) => (
                   <MessageScrollerItem key={m.id}>
-                    {m.role === "user" ? (
+                    {m.qa ? (
+                      <QaPair
+                        question={m.qa.question}
+                        answer={m.qa.answer}
+                        muted={m.qa.muted}
+                      />
+                    ) : m.role === "user" ? (
                       <UserBubble text={m.content} />
                     ) : (
                       <>
@@ -956,9 +1559,43 @@ export function GenerationOverlay({
         </MessageScrollerProvider>
       </div>
 
-      {/* Bottom input — one floating bar in the chat column's width. */}
+      {/* Bottom input — one floating bar in the chat column's width. The
+          pending question docks directly above it (ask primitive): the flow
+          archives decisions, the dock holds the one still open. */}
       <div className="shrink-0 px-4 pb-5 pt-2">
         <div className="mx-auto w-full max-w-3xl">
+          {phase === "confirm" && intentReady && (
+            <QuestionDock
+              kind="task_book"
+              question={t("generationOverlay.confirmQuestion")}
+              reasons={reasons}
+              autonomy={autonomy}
+              onAutonomyChange={setAutonomy}
+              onStart={handleStartGeneration}
+              onCancel={handleCancel}
+              starting={isStarting}
+              startDisabled={!canStartGeneration}
+            />
+          )}
+          {phase !== "confirm" && pendingChoice && (
+            <QuestionDock
+              kind="choice"
+              question={pendingChoice.content ?? ""}
+              options={pendingChoice.question?.options ?? []}
+              costHint={pendingChoice.question?.cost_hint}
+              onAnswer={handleChoiceAnswer}
+              answering={answering}
+              onBail={
+                // Checkpoint questions (a run parked on the answer) get the
+                // bail affordance; plain chat asks don't — their graceful
+                // exit is just typing the next message.
+                pendingChoice.workflow_run_id ? handleCheckpointBail : undefined
+              }
+            />
+          )}
+          {phase === "confirm" && startError && (
+            <p className="mb-2 text-sm text-destructive">{startError}</p>
+          )}
           <div className="flex items-end gap-2 rounded-lg bg-muted/50 p-2">
             <Textarea
               value={input}
@@ -972,9 +1609,14 @@ export function GenerationOverlay({
                 }
               }}
               placeholder={
-                phase === "confirm"
-                  ? t("generationOverlay.chatPlaceholderConfirm")
-                  : t("generationOverlay.chatPlaceholder")
+                phase !== "confirm" &&
+                pendingChoice &&
+                (pendingChoice.question?.options?.length ?? 0) > 0 &&
+                pendingChoice.question?.allow_freeform !== false
+                  ? t("chat.choicePlaceholder")
+                  : phase === "confirm"
+                    ? t("generationOverlay.chatPlaceholderConfirm")
+                    : t("generationOverlay.chatPlaceholder")
               }
               rows={1}
               className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"

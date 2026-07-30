@@ -103,7 +103,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
 
         Self-sufficiency contract: this call never sees the raw sources —
         only the understanding, the shared context (speaker/tone/language/
-        instruction), and the task book (outputs × clip_count).
+        instruction), and the task book (the requested IntentSlots).
         """
         user_prompt = self.jinja_env.get_template("director_plan.j2").render(
             understanding=understanding.model_dump(),
@@ -125,7 +125,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
 
         logger.info(
             "director_plan_started",
-            outputs=task_book.get("outputs"),
+            slots=len(task_book.get("slots", [])),
             target_language=context.target_language,
         )
 

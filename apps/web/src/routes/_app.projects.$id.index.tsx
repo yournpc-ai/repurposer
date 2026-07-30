@@ -7,7 +7,7 @@ import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
-import { GenerationOverlay } from "@/components/generation/GenerationOverlay"
+import { GenerationOverlay, normalizeIntent, normalizeSlots } from "@/components/generation/GenerationOverlay"
 import { PostCard } from "@/components/results/PostCard"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -19,7 +19,7 @@ import { Tour, type TourStep } from "@/components/ui/tour"
 import { apiFetch, apiPost } from "@/lib/api"
 import { useRunEvents } from "@/lib/use-run-events"
 
-import type { Output, WorkflowStep, Project } from "@/lib/types"
+import type { IntentSlot, Output, WorkflowStep, Project } from "@/lib/types"
 
 /** A clip counts as tour-ready once its MP4 exists and no render is in
  * flight — the same condition ClipCard uses to leave its rendering state. */
@@ -46,11 +46,13 @@ interface WorkflowRun {
   progress: number
   error: string | null
   context: {
-    outputs?: string[]
+    /** Slot-shaped on new runs; legacy flat runs carry string outputs +
+     * `clip_count` — normalized through `normalizeSlots` at every read. */
+    outputs?: (string | IntentSlot)[]
     clip_count?: number
-    quotes_count?: number | null
-    carousel_count?: number | null
     target_language?: string
+    /** 配音语言集 (RECIPES §4.1): absent on pre-recipe runs. */
+    dub_languages?: string[]
     brand_template_id?: string | null
     instruction?: string | null
     tone_settings?: Record<string, unknown> | null
@@ -63,17 +65,11 @@ interface WorkflowRun {
 
 interface PendingIntent {
   prompt: string
-  intent: {
-    action: "generate" | "answer"
-    answer: string | null
-    language: string
-    outputs: string[]
-    clip_count: number | null
-    quotes_count: number | null
-    carousel_count: number | null
-    specific_instruction: string | null
-  }
-  needs_clarification: boolean
+  /** Slot-shaped on the API (the server upgrades legacy flat rows on read);
+   * typed loosely here and normalized at the overlay boundary. */
+  intent: unknown
+  /** Why the book needs a human check — confirmation is `reasons.length > 0`
+   * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
   brand_template_id?: string | null
 }
@@ -210,15 +206,19 @@ function ProjectDetailPage() {
   }
 
   // Default to the first requested output tab once, when a generation is running.
+  const runSlots = normalizeSlots(
+    latestRun?.context?.outputs,
+    latestRun?.context?.clip_count
+  )
   useEffect(() => {
     if (tabInitializedRef.current) return
-    if (!latestRun?.context?.outputs?.length) return
-    const firstRequested = latestRun.context.outputs[0]
-    const tab = OUTPUT_KEY_TO_TAB[firstRequested]
+    if (!runSlots.length) return
+    const tab = OUTPUT_KEY_TO_TAB[runSlots[0].type]
     if (tab) {
       setActiveTab(tab)
       tabInitializedRef.current = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestRun?.context?.outputs])
 
   // Keep polling only for what SSE does not cover: anonymous viewers (no
@@ -249,11 +249,13 @@ function ProjectDetailPage() {
   }, [results?.latest_run, results?.outputs, sseActive])
 
   const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
-  const clipCount = latestRun?.context?.clip_count ?? 5
+  const clipCount = runSlots.find((s) => s.type === "clips")?.count ?? 5
 
-  const requestedTabs = (latestRun?.context?.outputs ?? [])
-    .map((o) => OUTPUT_KEY_TO_TAB[o])
-    .filter(Boolean) as ResultsTab[]
+  const requestedTabs = Array.from(
+    new Set(
+      runSlots.map((s) => OUTPUT_KEY_TO_TAB[s.type]).filter(Boolean)
+    )
+  ) as ResultsTab[]
 
   // When the run itself failed, nodes that never reached a terminal state
   // are dead too — present them as failed (with a retry) instead of skeletons.
@@ -278,13 +280,22 @@ function ProjectDetailPage() {
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
-    const outputKey = TAB_TO_OUTPUT_KEY[tab]
+    const outputKey = TAB_TO_OUTPUT_KEY[tab] as IntentSlot["type"]
     setRetrying((prev) => ({ ...prev, [tab]: true }))
     try {
       const ctx = latestRun?.context
+      const priorSlot = runSlots.find((s) => s.type === outputKey)
       await apiPost(`/api/v1/projects/${projectId}/generate`, {
-        outputs: [outputKey],
-        clip_count: outputKey === "clips" ? clipCount : undefined,
+        slots: [
+          {
+            type: outputKey,
+            count: priorSlot?.count ?? null,
+            focus: null,
+            language: null,
+            tone_override: null,
+            explicit: false,
+          },
+        ],
         target_language: ctx?.target_language || results.project.language || "en",
         brand_template_id: ctx?.brand_template_id || undefined,
         instruction: ctx?.instruction || undefined,
@@ -567,8 +578,13 @@ function ProjectDetailPage() {
         <GenerationOverlay
           projectId={projectId}
           prompt={pendingIntent?.prompt ?? prompt ?? ""}
-          initialIntent={pendingIntent?.intent}
-          initialNeedsClarification={pendingIntent?.needs_clarification ?? true}
+          initialIntent={
+            pendingIntent ? normalizeIntent(pendingIntent.intent) : undefined
+          }
+          initialNeedsClarification={
+            pendingIntent ? (pendingIntent.reasons?.length ?? 0) > 0 : true
+          }
+          initialReasons={pendingIntent?.reasons ?? []}
           brandTemplateId={pendingIntent?.brand_template_id ?? undefined}
           onClose={() => navigate({ to: "/projects" })}
           onComplete={() => {
@@ -599,10 +615,10 @@ function ProjectDetailPage() {
             answer: null,
             language:
               latestRun.context?.target_language || project.language || "en",
-            outputs: latestRun.context?.outputs ?? ["clips"],
-            clip_count: latestRun.context?.clip_count ?? null,
-            quotes_count: latestRun.context?.quotes_count ?? null,
-            carousel_count: latestRun.context?.carousel_count ?? null,
+            outputs: runSlots.length ? runSlots : normalizeSlots(["clips"]),
+            dub_languages: Array.isArray(latestRun.context?.dub_languages)
+              ? (latestRun.context.dub_languages as string[])
+              : [],
             specific_instruction: latestRun.context?.instruction ?? null,
           }}
           brandTemplateId={latestRun.context?.brand_template_id ?? undefined}

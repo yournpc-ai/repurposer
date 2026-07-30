@@ -27,7 +27,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import HTTPException
-from sqlalchemy import cast, delete, func, select, update
+from sqlalchemy import cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,17 +41,22 @@ from app.tools.transcript import build_anchored_transcript
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.schemas import (
     AssetType,
+    AskOption,
+    AskPayload,
     ClipMusic,
     ClipPayload,
     ClipSpec,
     CoverageReport,
     DerivativeType,
     GenerationContext,
+    IntentSlot,
     MaterialUnderstanding,
     MediaInput,
     RenderStatus,
+    SLOT_DEFAULT_COUNT,
     Segment,
     Storyboard,
+    StoryboardSlot,
     ToneSettings,
     validate_output_payload,
 )
@@ -133,10 +138,14 @@ async def _set_summary(node_id: UUID, summary: str) -> None:
         await s.commit()
 
 
-async def _fill_summary(node_id: UUID, kind: str, **params: object) -> None:
+async def _fill_summary(
+    node_id: UUID, kind: str, *, tag: str | None = None, **params: object
+) -> None:
     """Fill spec.summary from the registry's summary_template for ``kind``.
 
-    Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8)."""
+    Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8). ``tag``
+    appends the slot's distinguishing label (language/focus) so same-kind
+    sibling steps stay distinguishable after completion."""
     from app.pipeline.registry import SKILL_REGISTRY  # deferred: import cycle
 
     template = next(
@@ -146,9 +155,45 @@ async def _fill_summary(node_id: UUID, kind: str, **params: object) -> None:
     if not template:
         return
     try:
-        await _set_summary(node_id, template.format(**params))
+        line = template.format(**params)
     except KeyError:
         logger.warning("summary_template_params_missing", kind=kind, params=list(params))
+        return
+    if tag:
+        line = f"{line} · {tag}"
+    await _set_summary(node_id, line)
+
+
+def slot_tag(slot: IntentSlot | None) -> str | None:
+    """A slot's distinguishing tag (language/focus) for step summaries.
+
+    Shared by the orchestrator (creation-time preset label) and the runners
+    (done-time quantified line) so a sibling step reads the same tag in both
+    states. ``None`` when the slot carries nothing distinguishing."""
+    if slot is None:
+        return None
+    parts = []
+    if slot.language:
+        parts.append(slot.language.upper())
+    if slot.focus:
+        parts.append(slot.focus[:40])
+    return " · ".join(parts) if parts else None
+
+
+def _node_slot(node: WorkflowStep, ctx: dict, slot_type: str) -> IntentSlot | None:
+    """The executor node's own task slot.
+
+    Mode① per-slot nodes carry it in spec; mode② / targeted nodes fall back
+    to the first same-type slot in the backfilled run context (then to None
+    = all task-book defaults)."""
+    raw = (node.spec or {}).get("slot")
+    if isinstance(raw, dict):
+        return IntentSlot.model_validate(raw)
+    for item in ctx.get("outputs") or []:
+        slot = IntentSlot.model_validate(item)
+        if slot.type == slot_type:
+            return slot
+    return None
 
 
 def _count_words(value: object) -> int:
@@ -444,8 +489,25 @@ async def _load_understanding(
     db: AsyncSession, node: WorkflowStep
 ) -> MaterialUnderstanding:
     """Load the MaterialUnderstanding from this node's upstream
-    director_understand node (its output row may be a reused earlier one)."""
-    understand = await _upstream_by_kind(db, node, "director_understand")
+    director_understand node (its output row may be a reused earlier one).
+
+    The direction checkpoint (期 4) sits transparently between plan/executor
+    nodes and the understand node — upstreams are matched by kind, so the
+    search walks through checkpoint nodes' inputs one extra hop."""
+    frontier = [str(i) for i in (node.inputs or [])]
+    visited: set[str] = set()
+    understand: WorkflowStep | None = None
+    while frontier and understand is None:
+        upstream = await db.get(WorkflowStep, UUID(frontier.pop()))
+        if upstream is None or str(upstream.id) in visited:
+            continue
+        visited.add(str(upstream.id))
+        if upstream.kind == "director_understand":
+            understand = upstream
+        elif upstream.kind == "checkpoint":
+            frontier.extend(str(i) for i in (upstream.inputs or []))
+    if understand is None:
+        raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director_understand node")
     if not understand.output_refs:
         raise ValueError("Upstream director_understand node has no output")
     row = await db.get(Output, UUID(str(understand.output_refs[0])))
@@ -721,6 +783,166 @@ async def run_director_understand(
     return [row.id]
 
 
+async def run_checkpoint(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Direction checkpoint (期 4): the run's one HITL pause, review tier only.
+
+    Thin-node rule — no heavy work before asking, and zero LLM (prohibited-
+    behavior #4): the options are code-derived from the understanding's key
+    arguments. First entry derives options → docks the question (committed in
+    its own session; ``workflow_run_id`` marks the checkpoint dispatch) →
+    raises Suspend, and execute_step parks the node in ``waiting`` with the
+    options in ``spec.suspend_payload`` and the run in WAITING_HUMAN.
+
+    Re-entry is queue-based: the answer endpoint writes ``spec.answer`` and
+    flips the node back to pending; this runner then re-runs from the top,
+    takes the answer branch below, and goes straight to done (its summary is
+    the chosen direction). director_plan reads the answer off this node's
+    spec — see ``_checkpoint_direction``.
+    """
+    from app.chat.service import (  # deferred: import cycle
+        dock_checkpoint_question,
+        finalize_bailed_runs,
+    )
+    from app.pipeline.orchestrator import Suspend  # deferred: import cycle
+
+    spec = node.spec or {}
+    answer = spec.get("answer")
+    if answer is not None:
+        # Re-entry after the human answer — record the decision as the done
+        # summary. The option's label from suspend_payload wins over
+        # answer.text, which may be a machine marker ("expired" — the expiry
+        # sweep's auto-answer) rather than a human label. The default option
+        # and freeform carry no argument id; director_plan re-derives the
+        # semantics from spec.answer itself.
+        options = (spec.get("suspend_payload") or {}).get("options") or []
+        label: str | None = None
+        if answer.get("kind") == "option":
+            by_id = {o.get("id"): o for o in options}
+            chosen = by_id.get(answer.get("option_id")) or {}
+            label = chosen.get("label")
+        label = label or answer.get("text")
+        await _set_summary(node.id, f"Direction: {_truncate(label, 60) or 'default'}")
+        return []
+
+    understanding = await _load_understanding(db, node)
+    assets = await _list_assets(db, project.id)
+    zh = _source_language(project, assets).lower().startswith("zh")
+
+    # Options (code-derived, zero LLM): up to 3 "Focus: {argument}" + the
+    # full-talk default; freeform rides via allow_freeform. The option's
+    # argument id rides only in suspend_payload (the message payload stays a
+    # plain AskOption list, same shape as a chat choice question).
+    focus_word = "聚焦：" if zh else "Focus: "
+    default_label = "全场高光" if zh else "Full-talk highlights"
+    arguments = understanding.key_arguments[:3]
+    options = [
+        AskOption(id=chr(ord("a") + i), label=f"{focus_word}{arg.text}")
+        for i, arg in enumerate(arguments)
+    ]
+    options.append(AskOption(id=chr(ord("a") + len(arguments)), label=default_label))
+
+    question_text = (
+        "这次生成想聚焦哪个方向？" if zh else "Which direction should this run focus on?"
+    )
+    payload = AskPayload(kind="choice", options=options, allow_freeform=True)
+    async with AsyncSessionLocal() as s:
+        message, bailed_run_ids = await dock_checkpoint_question(
+            s,
+            UUID(str(project.user_id)),
+            UUID(str(project.id)),
+            UUID(str(run.id)),
+            question_text,
+            payload,
+        )
+        # Commit expires the ORM instance — capture the id first.
+        question_message_id = str(message.id)
+        await s.commit()
+    # Docking superseded an older parked checkpoint (single-pending
+    # invariant) — its run was cascade-bailed in the same stroke; settle it.
+    await finalize_bailed_runs(bailed_run_ids)
+    raise Suspend(
+        {
+            "question_message_id": question_message_id,
+            "options": [
+                {
+                    "id": option.id,
+                    "label": option.label,
+                    "argument_id": (
+                        arguments[i].id if i < len(arguments) else None
+                    ),
+                }
+                for i, option in enumerate(options)
+            ],
+        }
+    )
+
+
+def _align_storyboard_slots(
+    sb_slots: list[StoryboardSlot], intent_slots: list[IntentSlot]
+) -> list[StoryboardSlot]:
+    """Zip storyboard slots 1:1 onto the task slots (same type, in order).
+
+    The task book's explicit fields (count/focus/tone_override) are binding —
+    code enforces them here so the director's remaining freedom is exactly
+    the vacancies: argument_ids / quote_candidates / cta (and focus when the
+    slot left it open). Same-type multi slots keep the canonical order both
+    sides share (executor nodes find their slot by that ordinal).
+    """
+    pool: dict[str, list[StoryboardSlot]] = {}
+    for s in sb_slots:
+        pool.setdefault(s.slot, []).append(s)
+    aligned: list[StoryboardSlot] = []
+    for islot in intent_slots:
+        candidates = pool.get(islot.type, [])
+        sb = candidates.pop(0) if candidates else StoryboardSlot(slot=islot.type)
+        if islot.count is not None:
+            sb.count = islot.count
+        if islot.focus:
+            sb.focus = islot.focus
+        if islot.tone_override:
+            sb.tone_override = islot.tone_override
+        aligned.append(sb)
+    return aligned
+
+
+async def _checkpoint_direction(
+    db: AsyncSession, node: WorkflowStep
+) -> dict | None:
+    """The direction checkpoint's answer as task-book input (期 4).
+
+    Read off the plan node's checkpoint upstream (matched by kind, never by
+    position): option → the chosen argument as a priority; freeform → the
+    guidance text verbatim; the default option (no argument id) → None, the
+    current behavior. Explicit slot focus stays binding — the priority order
+    is slot.focus > checkpoint direction > director's own assignment (§2.5).
+    """
+    for upstream_id in node.inputs or []:
+        upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
+        if upstream is None or upstream.kind != "checkpoint":
+            continue
+        spec = upstream.spec or {}
+        answer = spec.get("answer")
+        if not answer:
+            return None
+        if answer.get("kind") == "freeform":
+            text = answer.get("text")
+            return {"text": text} if text else None
+        if answer.get("kind") == "option":
+            options = (spec.get("suspend_payload") or {}).get("options") or []
+            by_id = {o.get("id"): o for o in options}
+            chosen = by_id.get(answer.get("option_id")) or {}
+            if not chosen.get("argument_id"):
+                return None  # the default option = current behavior
+            return {
+                "argument_ids": [chosen["argument_id"]],
+                "text": chosen.get("label"),
+            }
+        return None  # bail never reaches here — the plan node was skipped
+    return None
+
+
 async def run_director_plan(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
@@ -728,22 +950,33 @@ async def run_director_plan(
 
     Reads ONLY the upstream understanding (self-sufficiency contract) plus the
     task book and speaker/tone context; coverage accountability is computed by
-    code and persisted with the storyboard.
+    code and persisted with the storyboard. The task book is passed slot by
+    slot (per-slot count/focus/language); explicit slot fields are enforced
+    by code after the LLM returns.
     """
     ctx = run.context or {}
     understanding = await _load_understanding(db, node)
 
-    outputs = [o for o in ctx.get("outputs", []) if o in KNOWN_OUTPUTS]
+    from app.pipeline.orchestrator import ordered_slots  # deferred: import cycle
+
+    parsed = [IntentSlot.model_validate(s) for s in ctx.get("outputs") or []]
+    intent_slots = ordered_slots([s for s in parsed if s.type in KNOWN_OUTPUTS])
     # Targeted derivative runs: the storyboard plans only for the target type.
     target_type = node.spec.get("target_type")
     if target_type in _OUTPUT_TO_DERIVATIVE_TYPE:
-        outputs = [target_type]
+        intent_slots = [IntentSlot(type=target_type)]  # type: ignore[arg-type]
+    if not intent_slots:
+        intent_slots = [IntentSlot(type="clips")]
     task_book = {
-        "outputs": outputs or ["clips"],
-        "clip_count": int(ctx.get("clip_count", 3)),
-        "quotes_count": ctx.get("quotes_count"),
-        "carousel_count": ctx.get("carousel_count"),
+        "slots": [s.model_dump(mode="json") for s in intent_slots],
+        "target_language": ctx.get("target_language", "en"),
     }
+    # Direction checkpoint (期 4): the user's pick steers the prompt — option
+    # → priority argument, freeform → guidance text, default → absent (the
+    # current behavior). Explicit slot focus still wins (code-enforced below).
+    direction = await _checkpoint_direction(db, node)
+    if direction:
+        task_book["direction"] = direction
 
     speaker = await resolve_speaker(db, project)
     generation_context = _generation_context(run, project, speaker)
@@ -753,6 +986,7 @@ async def run_director_plan(
         context=generation_context,
         task_book=task_book,
     )
+    storyboard.slots = _align_storyboard_slots(storyboard.slots, intent_slots)
     storyboard.coverage = _compute_coverage(storyboard, understanding)
 
     row = Output(
@@ -783,8 +1017,12 @@ async def run_clips_pipeline(
     node per produced clip (claimed via outputs.render_status, D2).
     """
     ctx = run.context or {}
-    clip_count = int(ctx.get("clip_count", 3))
-    target_language = ctx.get("target_language", "en")
+    slot = _node_slot(node, ctx, "clips")
+    clip_count = (slot.count if slot else None) or SLOT_DEFAULT_COUNT["clips"]
+    # Language resolves per slot first, then the task-book language.
+    target_language = (
+        (slot.language if slot else None) or ctx.get("target_language", "en")
+    )
 
     await _set_stage(node.id, "selecting_segments")
 
@@ -795,6 +1033,7 @@ async def run_clips_pipeline(
     generation_context = _generation_context(
         run, project, speaker, brand_music_id=brand_music_id
     )
+    generation_context.target_language = target_language
     understanding, storyboard = await _load_director_outputs(db, node)
 
     # Render source selection (docs/VIDEO_EDITOR.md §4).
@@ -1020,6 +1259,7 @@ async def run_clips_pipeline(
     await _fill_summary(
         node.id,
         "clips_pipeline",
+        tag=slot_tag(slot),
         n=len(output_ids),
         total_seconds=sum(
             int(plan.duration_seconds or 0) for plan in plans.clips[:clip_count]
@@ -1071,8 +1311,15 @@ async def run_derivative_gen(
     """
     derivative_type = _DERIVATIVE_KIND_TO_TYPE[node.kind]
     ctx = run.context or {}
+    slot = _node_slot(node, ctx, derivative_type.value)
     target_id = node.spec.get("target_id")
-    target_language = node.spec.get("target_language") or ctx.get("target_language", "en")
+    # Language resolves per slot first, then the node's targeted language,
+    # then the task-book language.
+    target_language = (
+        (slot.language if slot else None)
+        or node.spec.get("target_language")
+        or ctx.get("target_language", "en")
+    )
 
     await _set_stage(node.id, "writing_copy")
 
@@ -1081,6 +1328,15 @@ async def run_derivative_gen(
     generation_context = _generation_context(run, project, speaker)
     generation_context.target_language = target_language
     understanding, storyboard = await _load_director_outputs(db, node)
+
+    # Narrow the storyboard to THIS slot: same-type sibling slots (e.g. an
+    # English and a German post) are addressed by the slot's ordinal, which
+    # compile_graph and director_plan both derive from the canonical order.
+    same_type = [s for s in storyboard.slots if s.slot == derivative_type.value]
+    if same_type:
+        slot_index = int((node.spec or {}).get("slot_index") or 0)
+        my_slot = same_type[min(slot_index, len(same_type) - 1)]
+        storyboard = storyboard.model_copy(update={"slots": [my_slot]})
 
     content = await _generate_derivative_with_retry(
         derivative_type=derivative_type,
@@ -1100,14 +1356,28 @@ async def run_derivative_gen(
         output.updated_at = datetime.now(UTC)
         output.workflow_step_id = node.id
         await db.flush()
-        await _fill_summary(node.id, node.kind, word_count=_count_words(content))
+        await _fill_summary(
+            node.id, node.kind, tag=slot_tag(slot), word_count=_count_words(content)
+        )
         return [output.id]
 
-    # Idempotency: clear prior outputs of this type for the project.
+    # Idempotency, sibling-safe (per-slot fan-out): same-type outputs produced
+    # by THIS run's same-kind nodes are their own slots' products — only prior
+    # products (other runs' steps, or step-less rows) are cleared. Two sibling
+    # post_gen nodes can therefore never delete each other's output.
+    sibling_step_ids = (
+        select(WorkflowStep.id)
+        .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
+        .scalar_subquery()
+    )
     await db.execute(
         delete(Output).where(
             Output.project_id == project.id,
             Output.type == derivative_type.value,
+            or_(
+                Output.workflow_step_id.is_(None),
+                Output.workflow_step_id.notin_(sibling_step_ids),
+            ),
         )
     )
 
@@ -1138,7 +1408,9 @@ async def run_derivative_gen(
                 output.files = {**(output.files or {}), "image": image_url}
                 await db.flush()
 
-    await _fill_summary(node.id, node.kind, word_count=_count_words(content))
+    await _fill_summary(
+        node.id, node.kind, tag=slot_tag(slot), word_count=_count_words(content)
+    )
     return [output.id]
 
 
@@ -1510,8 +1782,17 @@ async def run_dub_clip(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
     """Dub existing clips with the speaker's cloned voice (tools/dubbing.py),
-    then re-render (modifier step)."""
+    then re-render (modifier step).
+
+    Two uses ride the same mechanism (N-19 — the use lives in the spec):
+    - morph (default, chat path): rewrite each target clip's render_spec in
+      place and re-render it; sequential dubs overwrite each other.
+    - fork (``spec.fork: true``, recipe path, RECIPES §4.1): create one
+      DERIVED Output row per dubbed clip — source rows untouched — so the
+      original and N language versions coexist in one run.
+    """
     lang = (node.spec or {}).get("target_language") or "en"
+    fork = bool((node.spec or {}).get("fork"))
     await _set_stage(node.id, "dubbing")
     clips = await _modifier_target_clips(db, node, project)
     if not clips:
@@ -1527,12 +1808,40 @@ async def run_dub_clip(
             # a fully unresolvable batch fails the step below.
             logger.info("dub_clip skip output %s: %s", output.id, e.detail)
             continue
-        output.render_spec = new_spec
-        output.render_status = RenderStatus.PENDING
-        output.render_error = None
-        output.updated_at = datetime.now(UTC)
-        await db.flush()
-        touched.append(output.id)
+        if fork:
+            # Derived row: language + provenance="generated" (cloned-voice
+            # synthetic audio — honest disclosure metadata); source_ref
+            # carries the lineage pointer (derived_from_output_id, JSONB —
+            # no column); score/publishing/payload inherit the source row's
+            # content metadata (copied — sharing one dict object between two
+            # rows would silently couple their later edits); the render
+            # worker fills `files` on render.
+            derived = Output(
+                project_id=project.id,
+                workflow_step_id=node.id,
+                type="clip",
+                language=lang,
+                provenance="generated",
+                payload=dict(output.payload or {}),
+                source_ref={
+                    **(output.source_ref or {}),
+                    "derived_from_output_id": str(output.id),
+                },
+                render_spec=new_spec,
+                render_status=RenderStatus.PENDING,
+                score=dict(output.score or {}) if output.score else None,
+                publishing=dict(output.publishing or {}),
+            )
+            db.add(derived)
+            await db.flush()
+            touched.append(derived.id)
+        else:
+            output.render_spec = new_spec
+            output.render_status = RenderStatus.PENDING
+            output.render_error = None
+            output.updated_at = datetime.now(UTC)
+            await db.flush()
+            touched.append(output.id)
 
     if not touched:
         raise ValueError("No clips could be dubbed (missing captions or voice sample)")
@@ -1546,6 +1855,7 @@ STEP_RUNNERS = {
     "persona_bootstrap": run_persona_bootstrap,
     "director_understand": run_director_understand,
     "director_plan": run_director_plan,
+    "checkpoint": run_checkpoint,
     "clips_pipeline": run_clips_pipeline,
     "post_gen": run_derivative_gen,
     "quotes_gen": run_derivative_gen,

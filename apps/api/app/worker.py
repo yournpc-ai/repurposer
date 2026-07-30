@@ -32,7 +32,11 @@ from app.pipeline.jobs import (
     claim_ready_node,
     reap_stale,
 )
-from app.pipeline.orchestrator import execute_step, finalize_stuck_runs
+from app.pipeline.orchestrator import (
+    execute_step,
+    expire_stale_checkpoints,
+    finalize_stuck_runs,
+)
 from app.pipeline.registry import assert_runners_registered
 from app.pipeline.rendering import render_output
 
@@ -73,6 +77,11 @@ async def _tick() -> bool:
         task = asyncio.create_task(execute_step(node_id))
         _running_node_tasks.add(task)
         task.add_done_callback(_running_node_tasks.discard)
+
+    # Expire checkpoints parked past their TTL: the auto-answer unblocks
+    # their runs (claimed on a later tick). Silent when nothing is parked.
+    if await expire_stale_checkpoints():
+        did_work = True
 
     async with AsyncSessionLocal() as db:
         render_id = await claim_pending_render(db)

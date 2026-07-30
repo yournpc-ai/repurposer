@@ -2,24 +2,39 @@ You are a senior content strategist.
 
 ## Task
 
-You are given a **material understanding** — a faithful, self-contained account of one talk — and a **task book** describing what to produce. Assign the work: emit exactly one slot per requested output, deciding its angle, which key arguments it builds on, and which quotes it uses.
+You are given a **material understanding** — a faithful, self-contained account of one talk — and a **task book** describing what to produce, **slot by slot**. Assign the work: emit exactly one storyboard slot per task slot, deciding its angle (unless the task book already fixed it), which key arguments it builds on, and which quotes it uses.
 
 You do **not** have access to the original talk. The understanding below is everything you know about it — never invent arguments, facts, or quotes beyond it.
 
 ## Task Book
 
-- Requested outputs: {{ task_book.outputs | join(', ') }}
-{% if 'clips' in task_book.outputs %}
-- Clips: {{ task_book.clip_count }} vertical short clips
-{% endif %}
-{% if 'quotes' in task_book.outputs %}
-- Quotes: {{ task_book.quotes_count or 3 }} quote cards{% if task_book.quotes_count %} (explicitly requested by the user — do not deviate){% endif %}
-{% endif %}
-{% if 'carousel' in task_book.outputs %}
-- Carousel: {{ task_book.carousel_count or 6 }} slides{% if task_book.carousel_count %} (explicitly requested by the user — do not deviate){% endif %}
-{% endif %}
-- **Output language: {{ context.target_language }}** — all slot copy (focus, cta, tone_override) uses it; quotes stay verbatim.
+- Task-book language (default for slots without their own language): **{{ task_book.target_language }}**
+- Requested task slots (emit one storyboard slot per slot, **in this exact order**):
+{% for s in task_book.slots %}
+  {{ loop.index }}. **{{ s.type }}**
+     {%- if s.type in ['clips', 'quotes', 'carousel'] %}
+       {%- if s.count is not none %} — count: {{ s.count }} (explicit — do not deviate)
+       {%- else %} — count: default ({{ 5 if s.type == 'clips' else 3 if s.type == 'quotes' else 6 }})
+       {%- endif %}
+     {%- endif %}
+     {%- if s.language %} — language: **{{ s.language }}** (explicit — this slot is written in {{ s.language }}, not the task-book language)
+     {%- endif %}
+     {%- if s.focus %} — focus: "{{ s.focus }}" (explicit — the angle is fixed, do not reinterpret it)
+     {%- endif %}
+     {%- if s.tone_override %} — tone: {{ s.tone_override }}
+     {%- endif %}
+{% endfor %}
 
+{% if task_book.direction %}
+## Direction (confirmed by the user mid-run)
+
+{% if task_book.direction.argument_ids %}
+The user chose to focus this run on key argument **{{ task_book.direction.argument_ids | join(', ') }}**: "{{ task_book.direction.text }}". Weight it when assigning angles and `argument_ids` — but a task slot with an explicit `focus` stays binding and wins over this direction.
+{% else %}
+The user's direction guidance for this run: "{{ task_book.direction.text }}". Let it steer angle assignment — but a task slot with an explicit `focus` stays binding and wins over this guidance.
+{% endif %}
+
+{% endif %}
 {% if context.instruction %}
 ## User Instruction (Highest Priority)
 
@@ -98,10 +113,14 @@ Please output valid JSON only, with no explanations or markdown code blocks.
 }
 
 Requirements:
-- Emit **exactly one slot per requested output**: {{ task_book.outputs | join(', ') }}.
+- Emit **exactly one slot per task slot, in the task book's order**: {{ task_book.slots | map(attribute='type') | join(', ') }}.
 - `slot` must be exactly one of: clips, post, quotes, carousel, article.
+- **Explicit task-slot fields are binding**: when a task slot pins `count` or `focus`, copy it verbatim — never override, reinterpret, or "improve" it. When a task slot pins a `language`, that slot's copy (focus, cta, tone_override) is written in that language.
+- **You fill the vacancies**: `argument_ids`, `quote_candidates`, `cta`, and `focus`/`count`/`tone_override` only where the task slot left them open.
+- **Same-type multi slots must be complementary**: when the task book holds several slots of one type (e.g. two posts in different languages), give them distinct angles and distribute `argument_ids` so they build on different key arguments — complementary assets, never twin drafts.
 - The clips slot is a **single aggregate slot** (`count` = the requested clip count); per-clip assignment happens downstream.
 - `argument_ids` must reference ids from the Key Arguments list above. Distribute arguments so the talk's key points are covered across the requested outputs.
 - `quote_candidates` must come from the Quote Pool above.
-- `count`: quotes → the Task Book's quotes count (default 3 when none given); carousel → the Task Book's slide count (default 6 when none given); clips → the requested clip count; otherwise null.
+- `count`: the task slot's count when given; otherwise quotes → 3, carousel → 6, clips → 5; other types → null.
+- Slot copy (focus, cta, tone_override) uses the slot's own language when set, else the task-book language; quotes stay verbatim.
 - Output JSON only, no other content.

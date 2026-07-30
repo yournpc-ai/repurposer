@@ -23,7 +23,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 - Codes expire after 10 minutes, allow max 5 verification attempts, and are single-use.
 - Emails are normalized (lowercase, trimmed) and format-validated on both endpoints — malformed addresses get 400 before a code is created. A recipient rejected by Resend (4xx) also returns 400; genuine provider/5xx failures return 502.
 - send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
-- `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 30-day JWT (HS256).
+- `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 1-day JWT (HS256).
 - Projects, speakers, brand templates and all other product data are private to their owner — anonymous requests see nothing. `/speakers` returns only the caller's own speakers: project creation rejects speaker_ids the caller does not own, so default-user (shared) speakers are never offered as selectable options.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
@@ -483,7 +483,7 @@ Request:
 
 `mentions` pins @ entity references to definite ids (`[{type, id, label}]`, `type` ∈ `asset | output | transcript_segment | workflow_step`); the picker UI lands in a later iteration. Messages echo `mentions` back.
 
-Response: `{ conversation_id, user_message, assistant_message, run_id }`. The assistant message carries the intent agent's two-state proposal (CHAT_ARCHITECTURE §3): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); an empty `task_list` is an ask-back reply; `edit_ops` answers with the boundary text and creates no run.
+Response: `{ conversation_id, user_message, assistant_message, run_id, answered_question }`. The assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
 
 ### List Conversation Messages
 

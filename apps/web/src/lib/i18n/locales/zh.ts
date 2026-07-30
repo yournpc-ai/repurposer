@@ -28,6 +28,7 @@ const zh: Resources = {
     freePlan: "免费版",
     requestFailed: "请求失败",
     networkError: "网络错误，请检查连接",
+    skipToContent: "跳到主要内容",
   },
   nav: {
     home: "首页",
@@ -52,17 +53,306 @@ const zh: Resources = {
   },
   landing: {
     nav: {
-      features: "功能",
+      product: "产品",
+      howItWorks: "工作流程",
       pricing: "定价",
-      roadmap: "路线图",
+      faq: "常见问题",
     },
     signIn: "登录",
     openWorkbench: "进入工作台",
-    heroTitle1: "你讲完了。",
-    heroTitle2: "剩下的交给我们。",
+    heroTitle1: "你讲完了",
+    heroTitle2: "剩下的交给我们",
     heroSubtitle:
       "Repurposer 是一个 AI agent：它先读懂你真实的表达——你的用词、你的术语、你的节奏。给它一段<b>视频</b>、一段录音，或只是演讲、播客、访谈的文字稿加几张照片，它就能产出切片、LinkedIn 长文、文章和 newsletter，<b>用你受众的语言</b>。<b>你来审定，它来发布。</b>",
     ctaTryBeta: "免费试用测试版",
+    ctaSeeHow: "看看它是怎么工作的",
+    video: {
+      ariaLabel: "产品演示视频",
+      caption: "看这条片子——一次演讲进场，一整季的内容出场",
+      scrollDown: "继续滚动",
+    },
+    manifesto: {
+      statement:
+        "你花了数月做研究，数周做幻灯片，而演讲本身只有四十分钟。Repurposer 为之后的一切而生——长文、短片、多语言版本、newsletter。一次登台，一整季的内容资产。",
+    },
+    showcase: {
+      title: "从演讲到发布",
+      description:
+        "一次上传，跑完整个流水线。你只在两个关键环节介入——定方向，和最终审定。",
+      steps: {
+        s1: {
+          title: "把演讲放进来",
+          body: "主题演讲视频、播客音频、幻灯片，或只是一份文字稿。你手里有什么，就从什么开始。",
+        },
+        s2: {
+          title: "指定你想要的产出",
+          body: "告诉 agent 你要什么——LinkedIn 长文、竖屏短片、newsletter——以及要哪些语言。",
+        },
+        s3: {
+          title: "逐条审定",
+          body: "每份草稿都以你的口吻回来等你过目。改文字稿、换标题，批准可以发布的内容。",
+        },
+        s4: {
+          title: "全渠道发布",
+          body: "批准的内容按渠道、按语言发出去。LinkedIn、newsletter、机构官网——一次搞定。",
+        },
+      },
+      screens: {
+        compose: {
+          chrome: "新项目",
+          prompt: "把我的 ECC 主题演讲变成 3 篇 LinkedIn 长文和一条短片，英文和德文各一版…",
+          chip1: "视频",
+          chip2: "幻灯片",
+          chip3: "文字稿",
+          cta: "生成",
+        },
+        direct: {
+          chrome: "任务书",
+          summary: "5 个产出 · 2 种语言",
+          row1: "LinkedIn 长文 — EN",
+          row2: "LinkedIn 长文 — DE",
+          row3: "竖屏短片 — 9:16",
+          row4: "Newsletter 摘要 — EN",
+        },
+        review: {
+          chrome: "结果",
+          score: "92 保真度",
+          cardTitle: "为什么储能决定能源转型的成败",
+          cardMeta: "LinkedIn · EN · 1,240 字",
+          approved: "已批准",
+          pending: "待审定",
+        },
+        publish: {
+          chrome: "发布",
+          note: "按渠道定时发出",
+          row1: "LinkedIn — 已发布",
+          row2: "Newsletter — 排队中",
+          row3: "官网 — 草稿已发送",
+        },
+      },
+      asides: {
+        a1: {
+          label: "素材",
+          title: "ecc26-keynote.mp4",
+          body: "38 分钟 · 附幻灯片",
+          chip: "什么格式都行",
+        },
+        a2: {
+          label: "方向",
+          title: "5 个产出 · EN + DE",
+          body: "你的口吻，你的术语",
+          chip: "随时可以改",
+        },
+        a3: {
+          label: "审定",
+          title: "不会悄悄发任何东西",
+          body: "每份草稿都等你过目",
+          chip: "一键批准",
+        },
+        a4: {
+          label: "分发",
+          title: "3 个渠道",
+          body: "按语言定时发布",
+          chip: "符合 GDPR 的托管",
+        },
+      },
+    },
+    gallery: {
+      title: "全部来自同一场演讲",
+      description:
+        "一次主题演讲的再利用。下面每张卡片都是一个项目真实会产出的内容——没有任何摆拍。",
+      cards: {
+        c1: { type: "LinkedIn 长文", text: "能源转型的瓶颈不是发电，而是储能。我 ECC keynote 里的三个数字…" },
+        c2: { type: "金句卡", text: "“2040 年的电网，今年就在会议室里被决定。”" },
+        c3: { type: "竖屏短片", text: "0:42 ——让全场笑出来的电池比喻。9:16，带字幕。" },
+        c4: { type: "Newsletter", text: "本月：电网级储能的真实成本，以及曲线为什么刚刚拐弯…" },
+        c5: { type: "Artikel (DE)", text: "Warum Speicher — nicht Erzeugung — über die Energiewende entscheidet…" },
+        c6: { type: "Résumé (FR)", text: "Trois chiffres à retenir de la keynote ECC sur le stockage réseau…" },
+        c7: { type: "深度文章", text: "长篇阅读：我在每场政策圆桌都听到的四个储能迷思…" },
+        c8: { type: "金句卡", text: "“我们缺的不是能源，是时机。”" },
+        c9: { type: "Thread", text: "1/ 你听到的关于电网电池的一切，都过时两年了…" },
+        c10: { type: "竖屏短片", text: "0:58 ——散场后被追问最多的那段观众问答。" },
+      },
+    },
+    channels: {
+      title: "抵达你受众真正阅读的地方",
+      description:
+        "产出直接进入机构真正在用的发布渠道——并且用你受众的语言。",
+      platforms: {
+        linkedin: { name: "LinkedIn", blurb: "原生发布" },
+        newsletter: { name: "Newsletter", blurb: "邮件就绪" },
+        website: { name: "机构官网", blurb: "SEO 文章" },
+        youtube: { name: "YouTube", blurb: "Shorts 就绪" },
+        x: { name: "X", blurb: "Thread" },
+        podcast: { name: "播客", blurb: "Show notes" },
+      },
+      languages: {
+        en: { name: "English", blurb: "母语级" },
+        fr: { name: "Français", blurb: "母语级" },
+        de: { name: "Deutsch", blurb: "母语级" },
+        es: { name: "Español", blurb: "母语级" },
+        it: { name: "Italiano", blurb: "母语级" },
+        nl: { name: "Nederlands", blurb: "母语级" },
+      },
+    },
+    testimonials: {
+      title: "讲者们的真实反馈",
+      description:
+        "研究者、主题演讲者和传播团队，在那些必须经得起印刷检验的场合使用 Repurposer。",
+      items: {
+        t1: {
+          quote: "我的 keynote 以前开完会就躺在会议官网上。今年它变成了十二篇帖子、两篇文章和一封 newsletter——全是我自己的口吻。",
+          name: "Marije Albers 教授",
+          role: "主题演讲者，代尔夫特理工大学",
+        },
+        t2: {
+          quote: "德语版读起来就像我自己写的。我们柏林办公室反复确认了两遍，才敢相信不是。",
+          name: "Claire Dubois",
+          role: "研究传播负责人，巴黎",
+        },
+        t3: {
+          quote: "我们不用再挑哪些演讲值得报道了。峰会上每个场次现在都会被再利用。",
+          name: "Jonas Weber",
+          role: "会议组织者，慕尼黑",
+        },
+        t4: {
+          quote: "先审后发对我来说就是整个产品。不经过我阅读，任何内容都不能署我的名字发出去。",
+          name: "Sofia Ricci 博士",
+          role: "政策研究员，米兰",
+        },
+        t5: {
+          quote: "我用英语录一次，西班牙语受众拿到的版本读起来不像翻译稿。",
+          name: "Diego Fernández",
+          role: "讲师，马德里",
+        },
+        t6: {
+          quote: "GDPR 是我们法务问的第一个问题。欧盟境内托管就是终结这个话题的答案。",
+          name: "Anke Janssen",
+          role: "大学市场传播，阿姆斯特丹",
+        },
+      },
+    },
+    pricing: {
+      title: "简单的定价",
+      description: "免费开始。当你的演讲开始比你更努力地工作时，再升级。",
+      monthly: "按月付",
+      yearly: "按年付",
+      perMonth: "/月",
+      billedYearly: "按年计费",
+      billedMonthly: "按月计费",
+      freeForever: "永久免费",
+      mostPopular: "最受欢迎",
+      footnote: "价格为欧元，不含增值税。随时可取消——套餐有效期到当期末。",
+      tiers: {
+        free: {
+          name: "免费版",
+          blurb: "在你的下一场演讲上试试这条流水线。",
+          features: {
+            f1: "每月 2 场演讲",
+            f2: "每场 3 个产出",
+            f3: "英语 + 1 种语言",
+            f4: "社区支持",
+          },
+          cta: "免费开始",
+        },
+        pro: {
+          name: "Pro",
+          blurb: "为日程排满的演讲者准备。",
+          features: {
+            f1: "每月 10 场演讲",
+            f2: "不限产出数量",
+            f3: "6 种欧洲语言",
+            f4: "声纹匹配配音",
+            f5: "优先生成",
+          },
+          cta: "选择 Pro",
+        },
+        institution: {
+          name: "机构版",
+          blurb: "为高校和峰会团队准备。",
+          features: {
+            f1: "包含 Pro 全部功能",
+            f2: "不限席位",
+            f3: "共享品牌模板",
+            f4: "欧盟数据驻留",
+            f5: "SSO 与对公开票",
+          },
+          cta: "联系我们",
+        },
+      },
+    },
+    faq: {
+      title: "常见问题",
+      description: "演讲者和机构在第一次上传之前最常问的事。",
+      items: {
+        q1: {
+          q: "我的数据存在哪里？",
+          a: "欧盟境内，符合 GDPR 的基础设施。你的上传和产出不会用于训练第三方模型，随时可以全部删除。",
+        },
+        q2: {
+          q: "支持哪些语言？",
+          a: "目前支持英、法、德、西、意、荷六种语言，更多欧洲语言在路线图上。产出是按母语方式直接写成的，不是逐词翻译。",
+        },
+        q3: {
+          q: "我可以上传什么？",
+          a: "主题演讲视频、播客音频、幻灯片、照片，或只是一份文字稿。上下文给得越多，产出越贴近你的口吻。",
+        },
+        q4: {
+          q: "会有内容被自动发布吗？",
+          a: "不会。所有产出先进入审定队列。没有你明确批准，任何内容都不会署你的名字发出。",
+        },
+        q5: {
+          q: "生成的内容归谁所有？",
+          a: "完全归你。产出源自你的素材和你的画像，我们不主张任何权利。",
+        },
+        q6: {
+          q: "可以随时取消吗？",
+          a: "可以。按月或按年付费，没有锁定期；取消后你的项目仍可导出。",
+        },
+      },
+    },
+    finalCta: {
+      headline: "你的下一场演讲，已经是一整季的内容",
+      subtitle:
+        "测试期间免费。上传一场演讲，看它变成帖子、短片和 newsletter——用你受众的每一种语言。",
+      ctaPrimary: "免费试用测试版",
+      ctaSecondary: "看看定价",
+    },
+    footer: {
+      tagline: "把演讲变成可沉淀的知识资产——帖子、短片和 newsletter，用你受众的语言。",
+      cta: "免费试用测试版",
+      columns: {
+        product: {
+          title: "产品",
+          l1: "概览",
+          l2: "工作流程",
+          l3: "案例",
+          l4: "定价",
+          l5: "常见问题",
+        },
+        company: {
+          title: "公司",
+          l1: "关于我们",
+          l2: "联系我们",
+          l3: "媒体资料",
+        },
+        legal: {
+          title: "法律",
+          l1: "隐私政策",
+          l2: "服务条款",
+          l3: "Cookie 政策",
+        },
+        social: {
+          title: "社交",
+          l1: "LinkedIn",
+          l2: "X",
+          l3: "YouTube",
+        },
+      },
+      copyright: "© {{year}} Repurposer。保留所有权利。",
+      note: "为演讲者打造，托管于欧盟。",
+      wordmark: "Repurposer",
+    },
   },
   composer: {
     speaker: "演讲者",
@@ -88,6 +378,31 @@ const zh: Resources = {
     brandDesc: "融入每个产出物的配色、字体与 Logo",
     brandDefault: "默认品牌",
     manageBrand: "管理模板…",
+  },
+  // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
+  // reserved 卡在此留座但不渲染。
+  recipes: {
+    sectionTitle: "从配方开始",
+    dub: {
+      title: "多语言配音",
+      promise: "你的演讲，你的声音——开口说德语、法语和西语。",
+      promptTemplate: "把我的演讲剪成高光切片，并用我的声音配音成德语、法语和西语。",
+    },
+    "image-video": {
+      title: "照片变视频",
+      promise: "没有 footage——照片加文字稿，变成有旁白的视频。",
+      promptTemplate: "把我的文字稿和照片做成带堆叠字幕和音乐的旁白视频。",
+    },
+    reframe: {
+      title: "访谈分镜",
+      promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
+      promptTemplate: "把我的双人访谈重剪成跟着说话人切换的竖屏切片。",
+    },
+    style: {
+      title: "风格展示",
+      promise: "一场演讲，多种观感——字幕与品牌风格自动套用。",
+      promptTemplate: "用一种新的字幕风格剪出我演讲的高光切片。",
+    },
   },
   projects: {
     title: "项目",
@@ -259,8 +574,6 @@ const zh: Resources = {
     deleteLine: "删除这一行",
     aspect: "画面比例",
     captionStyle: "字幕样式",
-    styleClean: "简洁底部",
-    styleKaraoke: "逐词高亮",
     captionLanguage: "字幕语言",
     translating: "翻译中...",
     dubLanguage: "语音配音",
@@ -325,13 +638,6 @@ const zh: Resources = {
       enable: "烧录字幕",
       customColor: "自定义颜色",
       animation: "动画效果",
-      animations: {
-        "clean-bottom": "静态（无动画）",
-        "karaoke-highlight": "逐词高亮",
-        "fade-in": "淡入",
-        "pop-in": "弹出",
-        "slide-up": "上滑",
-      },
     },
     content: {
       voice: "品牌语气",
@@ -393,6 +699,17 @@ const zh: Resources = {
     de: "德语",
     es: "西班牙语",
     it: "意大利语",
+  },
+  // 字幕样式标签 —— 每个 CAPTION_PRESETS 成员一条
+  // （@repurposer/clip captions.ts）；两处样式选择器从 catalog 派生选项、
+  // 从这里取标签。
+  captionPresets: {
+    "clean-bottom": "简洁底部",
+    "karaoke-highlight": "逐词高亮",
+    "fade-in": "淡入",
+    "pop-in": "弹出",
+    "slide-up": "上滑",
+    stacking: "堆叠",
   },
   results: {
     title: "结果",
@@ -488,6 +805,7 @@ const zh: Resources = {
     intro: "告诉我你想怎么改——比如剪短一点、更正式一些，或者翻译成别的语言。",
     assetPlaceholder: "例如：再短一点、更正式一些",
     loadingHistory: "正在加载对话...",
+    choicePlaceholder: "其他想法…",
     derivativeTypes: {
       post: "社交帖子",
       quotes: "金句卡",
@@ -498,6 +816,7 @@ const zh: Resources = {
       preprocess: "正在分析上传的素材…",
       persona_bootstrap: "正在准备你的说话人画像…",
       director_understand: "正在看懂你的素材…",
+      checkpoint: "等你选定方向…",
       director_plan: "正在规划内容结构…",
       clips_pipeline: "正在生成你的短片…",
       script: "正在撰写脚本…",
@@ -513,6 +832,15 @@ const zh: Resources = {
       carousel_gen: "正在制作轮播图…",
       article_gen: "正在撰写文章…",
       synth_talk_video: "正在生成视频…",
+    },
+    qa: {
+      q: "问",
+      a: "答",
+      started: "已开始生成",
+      cancelled: "已取消——回到草稿",
+      superseded: "已被更新的计划取代",
+      expired: "超时未选——已按默认方向继续",
+      stopped: "已停止生成",
     },
     retry: "重试",
     edit: "编辑",
@@ -562,30 +890,27 @@ const zh: Resources = {
     backToProjects: "项目",
     planProse: "我的理解：{{summary}}。",
     outputsLabel: "输出类型",
-    outputDescs: {
-      clips: "切片：从演讲中剪出的竖屏短视频",
-      post: "帖子：可直接发布的 LinkedIn 文案",
-      quotes: "金句：可分享的观点金句卡片",
-      article: "文章：由内容整理成的长文",
-      carousel: "图集：多卡片图片轮播",
-    },
+    dubLabel: "配音",
+    removeDubLanguage: "移除此配音语言",
+    planSummaryDub: "配音 {{langs}}",
+    identityEcho: "以 {{speaker}} 的口吻 · 品牌：{{brand}}",
+    identitySpeakerAuto: "自动画像",
+    identityBrandDefault: "默认品牌",
+    addOutput: "添加产物",
+    removeSlot: "移除此产物",
+    slotLanguageDefault: "同任务书",
+    slotFocusPlaceholder: "这个{{type}}的角度（可选）",
+    countDecrease: "减少",
+    countIncrease: "增加",
     languageLabel: "语言",
     languageHint: "帖子、金句、文章和切片字幕都使用这种语言。",
-    clipCountLabel: "片段数量",
-    clipCountHint: "1 到 10 条，数量越多耗时越长。",
-    clipCountDecrease: "减少数量",
-    clipCountIncrease: "增加数量",
     instructionLabel: "重点 / 指令",
     instructionPlaceholder: "例如：重点保留问答环节；第一条切片要有悬念。",
     confirmQuestion: "按这个计划开始生成？",
     confirm: "开始生成",
-    decideLater: "稍后再定",
     leaveNote: "随时可以离开——计划已保存，之后可从项目列表继续。",
     starting: "启动中…",
     startingLine: "我开始生成了——你可以继续和我聊，也可以关掉页面，它会在后台完成。",
-    planSummaryClips: "{{count}} 条切片",
-    planSummaryQuotes: "{{count}} 张金句卡",
-    planSummaryCarousel: "{{count}} 页轮播",
     planUpdated: "好，我记下了——上面的计划已更新。",
     chatPlaceholder: "和 Repurposer 聊聊…",
     chatPlaceholderConfirm: "告诉我怎么调整计划…",
@@ -597,8 +922,24 @@ const zh: Resources = {
       transcript: "文字稿",
     },
     continuesInBackground: "生成将在后台继续。",
+    stopped: "已停止生成。",
     completed: "生成完成",
     failed: "生成失败",
+  },
+  questionDock: {
+    autonomy: {
+      label: "自治档",
+      auto: "自动",
+      review: "审阅",
+    },
+    bail: "放弃生成",
+    reasons: {
+      title: "需要你确认：",
+      language_default: "语言是我猜的",
+      outputs_default: "产物是默认组合",
+      clip_count_default: "切片数量是默认值",
+      clips_without_media: "切片需要视频、音频或图片素材",
+    },
   },
   clipMenu: {
     more: "更多操作",

@@ -1,6 +1,11 @@
 # Chat Architecture — Agent Interface 层
 
 > Status: ✅ v1 全链已实现（backend 2026-07-26；前端 2026-07-27：`GenerationOverlay` 全屏对话——计划卡 HITL 确认 + SSE 打勾流 + 项目级续聊，见 §8）；@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）
+> **2026-07-30 期 4 补四（缺口清扫）**：IntentProposal 第四态 `answer`（N-21，纯信息直答）+ `_build_context` 节点级进度注入（G-2）+ `InferredIntent.action` 第三值 `"start"` 与 `/intent` 响应联合第三态 `{type:"started"}`（G-1，确认相位原话确认直接起 run）——见简报 `tasks/intent-ask-primitive.md` 期 4 补四。
+> **2026-07-30 ask 原语期 4 落地**：Suspend/waiting + 方向检查点（review 档 full run 在 understand→plan 间插 checkpoint）+ answer 唤醒/bail 级联 + finalize 谓词补 waiting（§8.5）。
+> **2026-07-29 ask 原语期 1 落地**：messages question/answer + `POST /chat/messages/{id}/answer` + QuestionDock（task_book 形态，计划卡 Start 决策移入 dock）+ QA 双层入档 + autonomy 落 run.context（§8.5）；期 4 checkpoint 见简报 `tasks/intent-ask-primitive.md`。
+> **2026-07-30 期 3 ask 三态落地**：`AskProposal` 第三态（N-18 落代码）+ ChatIntentAgent ask 形态规则 + choice dock（选项按钮组）+ 确定性 autoResume（字母/序号/原文命中 → option，freeform 回落，零 LLM）+ answer 端点续聊（`AnswerResponse{answered_question, follow_up}`，answer = resume）+ 入口 clarification reasons 进 question 人话原文；"tasks=[] 反问" 迁移为 freeform ask。
+> **2026-07-29 期 2 任务书 slot 化落地**：`IntentSlot`（任务槽，N-20 请求层）全链路换形——`InferredIntent.outputs` / `GenerateRequest.slots` / `TaskSpec.outputs` / run.context；扁平 count 字段全库退役（宪法 §1）；compile_graph per-slot 扇出（一槽一节点，`spec.slot` + `spec.slot_index`）；director_plan 逐槽透传（显式槽字段代码兜底）；幂等删除改兄弟安全；pin 合并（explicit 槽抗 re-inference）；审阅面板换逐槽行 + 身份回响行。
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）
 > 前置重构：`docs/tasks/backend-module-restructure.md`（chat/ 包是本文的代码家）
@@ -56,7 +61,7 @@ Done · 3 clips · 12 fillers removed · 1 score ── [Open in editor]（outpu
 
 ## 3. Task List 契约
 
-intent agent 的轮内输出二态，JSON schema 强校验：
+intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代码），JSON schema 强校验：
 
 ```jsonc
 // A. 跑新任务（→ compile_graph 模式② → 新 WorkflowRun）
@@ -77,9 +82,29 @@ intent agent 的轮内输出二态，JSON schema 强校验：
   "ops": [{ "op": "trim_segment", "target": "seg_03", "params": { "end_delta": -2.0 } }],
   "summary": "把第二段结尾剪掉 2 秒"
 }
+
+// C. 结构化提问（→ QuestionDock；N-18 翻案 N-14，期 3 已落代码）
+{
+  "type": "ask",
+  "question": "这五个切片你想做成哪种方向？",
+  "kind": "choice",                 // choice | task_book | confirm（成本 quote 预留）
+  "options": [{"id": "a", "label": "…"}, …],
+  "allow_freeform": true,
+  "cost_hint": null
+}
+
+// D. 纯信息直答（→ 普通 assistant 消息；N-21，期 4 补四已落代码）
+{
+  "type": "answer",
+  "text": "发布不在 chat 里——产物卡上有发布按钮。"
+}
 ```
 
 `summary` 字段必填——它是打勾流的标题文案，也是消息记录里"这轮干了什么"的人话存档。
+
+**answer 态边界（写死在 agent 规则里）**：只在无工作请求且无歧义时用（能力/进度/解释/闲聊）；要干活 → task_list/edit_ops；读数有歧义 → ask——answer 永不当偷懒出口。进度问题凭 §6 的节点级进度段照实答；发布意图 → 引导到产物卡发布按钮；品牌/说话人等身份设置 → 导航到对应页面。
+
+**answer 契约**（期 1 已落，期 4 补修订）：`{kind: "option"|"freeform"|"bail"|"start", option_id?, text?, answered_at}`。bail 是一等公民——入口回 draft 可重开、checkpoint 下游级联 skipped（期 4），**永不标 failed**；`start` 是 task_book 确认的一等 kind（取代期 1 的魔法 `option_id="start"`）。请求体 `AnswerRequest` 是按 `kind` 判别的联合（option/freeform/start/bail）——`autonomy`/`intent` 只存在于 `start` 上，其他 kind 带 kind 外字段直接 422，不再静默忽略；task_book 问题只接受 start/bail，其他问题不接受 start。N-14 的"tasks=[] 反问"届时迁移为 ask 的 freeform 形态（options 空 + allow_freeform）——反问仍是合法输出，只是有了类型座位。
 
 ## 4. Skill Registry 初集
 
@@ -140,7 +165,7 @@ intent agent 的轮内输出二态，JSON schema 强校验：
 
 | 部分 | 内容 | 来源 | 预算 |
 |---|---|---|---|
-| 项目摘要 | 素材清单、当前 outputs 列表（type + 一句话）、run 状态 | DB 确定性生成 | 4k |
+| 项目摘要 | 素材清单、当前 outputs 列表（type + 一句话）、latest run 状态 + **节点级进度**（每步一行 `kind: status — summary`，≤12 行，G-2） | DB 确定性生成 | 4k |
 | 最近操作 | 近 3 轮的 task list / edit ops 及结果摘要 | messages | 2k |
 | mention 清单 | 本会话可 @ 实体（§7） | DB | 1k |
 | 早期摘要 | 超窗对话压缩 | LLM 异步生成存 messages | 2k |
@@ -174,7 +199,21 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 **进度面收编（2026-07-28）**：GenerationStepper 弹窗与后端 `ui_step` 退役——进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
 
-**计划确认的持久化与恢复（2026-07-28）**：`/projects/{id}/intent` 每次调用都把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 needs_clarification / reasons / brand_template_id；chat 修订走同一接口，所以离开即保存到最新版），`/generate` 确认时清除。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=intent`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
+**计划确认的持久化与恢复（2026-07-28，2026-07-30 B 组修订）**：`/projects/{id}/intent` 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 reasons / brand_template_id；answer 回合不写，免得覆盖用户在确认的计划），`/generate` 确认时清除。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=intent`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
+
+### 8.5 QuestionDock 与 question/answer（ask 原语，期 1/3 已落）
+
+> **消息列表是"已决"的历史，输入框上方是"待决"的现在。**
+
+- **一行两态**：`messages.question` JSONB（typed payload：`{kind: task_book|choice|confirm, options, allow_freeform, cost_hint}`）+ `messages.answer` JSONB nullable（**NULL = 待决**，宪法 §4）；`content` 存问题人话原文（自然进 LLM 上下文历史）。
+- **停靠法则**：待决问题永远停靠 input 正上方的 **QuestionDock**（✓ + 问句 + cost_hint? + 按钮组含 bail）；**同一时间最多一个待决**——新题落库前旧题 auto-bail（`answer.text="superseded"` 机器标记）。回答瞬间坍缩成 **QA 双层消息**入档（`QaPair`）。
+- **待决重建零内存态**：`latest_pending_question` = 会话最新未答 question 的行查询（Mastra `listSuspendedRuns` 同款），GET `/chat/conversation` 带 `pending_question`——刷新/跨设备 dock 复活免费。
+- **answer 端点即恢复**：`POST /chat/messages/{id}/answer` 写答案即解除阻塞（不显式命名 resume）。task_book 分派：bail → 清 pending_intent 回 draft（prompt 已 seed 进会话，可重开）；`start`（一等 answer kind）→ 从 pending_intent 起 run 并写 `workflow_run_id`。choice 分派（期 3）：记录后续聊——响应 `AnswerResponse{answered_question, follow_up}`（与 `ChatResponse.answered_question` 同角色同名，B2），option 答案回填 label 进 `answer.text`。重复回答 409。`/generate` 兜底 settle（`mark_task_book_started`）——两路径共用"一行一答"不变量。
+- **/intent 响应判别联合（B1/B4 + G-1）**：`POST /projects/{id}/intent` 返回 `{type:"plan", intent, reasons} | {type:"answer", text} | {type:"started", run_id, answered_question}`——answer 回合的问答双方落普通消息行（确认相位对话从此与"一切皆消息行"一致，刷新可重放），且 **answer 回合不覆盖 stored 任务书**；`started` 是确认相位的原话确认（G-1：`InferredIntent.action="start"` → 复用 answer kind=start 路径起 run，dock 的 autonomy 档随 `ProjectIntentRequest.autonomy` 透传不丢档；用户原话经 `record_intent_turn` 入档，无可启动对象时 re-dock 存量书或降级 plan，同样不覆盖 stored 任务书）。`needs_clarification` 布尔已摘除（`reasons.length > 0` 可推导，存量行读取容忍）。请求带 `turn`（本轮用户原文）——refinement 发累积 prompt 做推理但只把新行入档。
+- **入口约束归出生地（期 4 补）**：clips-media 门、slot count 边界（`SLOT_COUNT_LIMITS`：clips 1-10 / quotes 1-20 / carousel 2-15）、targeted scope 校验、mode② requires 全部在 `create_run` 内拒绝（ValueError → 请求层 422 / chat 层反问兜底）——`/generate`、task_book start、chat 派发三条入口不再各持一份 guard。`create_run` 只 flush 不 commit：run、启动它的 answer、project 状态落在同一请求事务里，提交点唯一。
+- **task_book 形态（期 1）**：计划卡留在消息流做审阅面板（编辑属流内），Start/Cancel 决策 + **Auto/Review 自治档**移入 dock；`autonomy` 经 AnswerRequest/GenerateRequest/`TaskSpec` 落 run.context（行为期 4 生效：review 档 full run 插方向 checkpoint，auto/targeted/mode② 不插）。needs_clarification reasons（期 3）随 question 人话原文落库（数据存键，渲染时本地化）。
+- **choice 形态与 autoResume（期 3）**：dock 渲染选项按钮组（字母徽章镜像映射规则）；待决中自由文本确定性映射——命中选项字母/序号/原文 → option 回答，否则 allow_freeform → freeform，否则按新 intent 处理、问题保持待决（零 LLM；task_book 待决不参与）。`ChatResponse.answered_question` 携带本回合掉的问题行供 QA 入档。成本 quote（confirm 形态，cost_hint 解剖位已预留）归 v3。
+- **checkpoint 形态（期 4）**：方向检查点是 choice 问题 + `workflow_run_id` 分派标记。`Suspend` 异常把瘦节点停进 `waiting`（选项住 `spec.suspend_payload`）、run 停进 `WAITING_HUMAN`；答案端点/autoResume 写 `spec.answer`、节点回 pending、run 回 RUNNING——队列式重入（runner 从顶上重跑，answer 分支直达 done），不是调用栈续跑。选项代码派生自 `key_arguments`（零 LLM）；bail = 节点 done(spec.bailed) + 下游级联 skipped("user bailed") + run COMPLETED（永不 failed）；`director_plan` 经 `task_book.direction` 消费（option → 优先论点，freeform → 指引原文，默认 → 现状；slot.focus > checkpoint > director）。**过期**：park 超过 `checkpoint_expiry_seconds`（默认 30 分钟）由 worker 扫描自动以默认项回答并续跑（`answer.text="expired"` 机器标记；review 档超时降级为 auto 档，兑现"离开不中断"，永不 auto-bail）。**多 run 并停**：新题 dock 取代开口 checkpoint 题时同笔级联 bail 那个 run（`finalize_bailed_runs` 收官 COMPLETED）——单待决不变量不会搁浅 run。
 
 **量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
 

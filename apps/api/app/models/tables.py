@@ -385,7 +385,14 @@ class Message(Base):
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
-    intent = Column(JSON, nullable=True)  # IntentProposal dump for this turn (chat/intent.py ChatIntentAgent)
+    intent = Column(JSON(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py ChatIntentAgent)
+    # One row, two states (ask primitive): ``question`` is the typed payload
+    # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
+    # pending questions live in the dock, answered ones archive as QA pairs.
+    # none_as_null: Python None must persist as SQL NULL — the pending
+    # predicate (question IS NOT NULL / answer IS NULL) depends on it.
+    question = Column(JSONB(none_as_null=True), nullable=True)
+    answer = Column(JSONB(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { Check, Loader2, Minus, X } from "lucide-react"
+import { Check, CircleHelp, Loader2, Minus, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
@@ -33,6 +33,10 @@ function StepRow({ step }: { step: WorkflowStep }) {
       <Check className="text-green-600 dark:text-green-400" />
     ) : step.status === "failed" ? (
       <X className="text-destructive" />
+    ) : step.status === "waiting" ? (
+      // Checkpoint parked for a human answer (期 4) — same glyph as the
+      // generation overlay's StepMarker.
+      <CircleHelp className="text-primary" />
     ) : (
       <Minus className="text-muted-foreground/50" />
     )

@@ -45,6 +45,22 @@ class MiniMaxError(Exception):
     pass
 
 
+def _raise_for_status(response: httpx.Response) -> None:
+    """``raise_for_status`` that speaks MiniMaxError.
+
+    Callers up the stack (intent agents, chat loop) all catch MiniMaxError to
+    degrade gracefully — a raw httpx.HTTPStatusError (402/429/5xx from the
+    provider) would slip past every one of them and surface as a bare 500.
+    """
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise MiniMaxError(
+            f"MiniMax HTTP {exc.response.status_code}: "
+            f"{exc.response.text[:300]}"
+        ) from exc
+
+
 class MiniMaxClient:
     """MiniMax M3 API client with structured output."""
 
@@ -86,7 +102,7 @@ class MiniMaxClient:
                 },
                 json=payload,
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             data = response.json()
 
         # ADR-025 metering: report usage to the bound workflow step (no-op when
@@ -154,7 +170,7 @@ class MiniMaxClient:
                 },
                 json=payload,
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             data = response.json()
 
         base_resp = data.get("base_resp") or {}
@@ -210,7 +226,7 @@ class MiniMaxClient:
                 },
                 json=payload,
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             data = response.json()
 
         base_resp = data.get("base_resp") or {}
