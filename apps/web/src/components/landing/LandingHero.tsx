@@ -57,6 +57,17 @@ export function LandingHero(): ReactNode {
         <div aria-hidden data-slot="hero-background" className="absolute inset-0 ambient-glow" />
 
         <div className="relative z-10 flex max-w-3xl flex-col items-center px-6 text-center">
+          {/* Legibility veil — radial background tint that quiets the ASCII
+              field behind the text only. Sized off THIS content box (as in
+              the Sentinel hero), so the field stays vivid at the edges. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-1/2 -z-[1] h-[150%] w-[160%] -translate-x-1/2 -translate-y-1/2"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, var(--background) 0%, color-mix(in srgb, var(--background) 78%, transparent) 45%, transparent 72%)",
+            }}
+          />
           <motion.h1
             {...fadeUp(0.1)}
             className="font-display text-[clamp(44px,7.5vw,84px)] leading-[1.02] font-medium tracking-tight text-balance text-foreground"
@@ -64,7 +75,6 @@ export function LandingHero(): ReactNode {
             {t("landing.heroTitle1")}
             <br />
             {t("landing.heroTitle2")}
-            <span aria-hidden className="hero-underline-bar" />
           </motion.h1>
           <motion.p
             {...fadeUp(0.24)}

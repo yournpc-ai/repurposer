@@ -53,8 +53,7 @@ const zh: Resources = {
   },
   landing: {
     nav: {
-      product: "产品",
-      howItWorks: "工作流程",
+      features: "功能",
       pricing: "定价",
       faq: "常见问题",
     },
@@ -82,19 +81,19 @@ const zh: Resources = {
       steps: {
         s1: {
           title: "把演讲放进来",
-          body: "主题演讲视频、播客音频、幻灯片，或只是一份文字稿。你手里有什么，就从什么开始。",
+          body: "主题演讲视频、播客音频、幻灯片，或只是一份文字稿。要什么产出、哪些语言，直接在输入框里告诉 agent。",
         },
         s2: {
-          title: "指定你想要的产出",
-          body: "告诉 agent 你要什么——LinkedIn 长文、竖屏短片、newsletter——以及要哪些语言。",
+          title: "拿到整套草稿",
+          body: "LinkedIn 长文、短片、文章和 newsletter——每一份都用你的口吻、按你要的语言写好。",
         },
         s3: {
-          title: "逐条审定",
-          body: "每份草稿都以你的口吻回来等你过目。改文字稿、换标题，批准可以发布的内容。",
+          title: "在对话里打磨",
+          body: "直接对结果提要求：帖子再短一点、短片换个标题、角度再犀利些。agent 改到你点头为止。",
         },
         s4: {
           title: "全渠道发布",
-          body: "批准的内容按渠道、按语言发出去。LinkedIn、newsletter、机构官网——一次搞定。",
+          body: "批准的内容按渠道、按语言发出去。LinkedIn、TikTok、newsletter——一次搞定。",
         },
       },
       screens: {
@@ -106,28 +105,25 @@ const zh: Resources = {
           chip3: "文字稿",
           cta: "生成",
         },
-        direct: {
-          chrome: "任务书",
-          summary: "5 个产出 · 2 种语言",
-          row1: "LinkedIn 长文 — EN",
-          row2: "LinkedIn 长文 — DE",
-          row3: "竖屏短片 — 9:16",
-          row4: "Newsletter 摘要 — EN",
-        },
-        review: {
+        results: {
           chrome: "结果",
           score: "92 保真度",
           cardTitle: "为什么储能决定能源转型的成败",
           cardMeta: "LinkedIn · EN · 1,240 字",
-          approved: "已批准",
-          pending: "待审定",
+          row2: "LinkedIn 长文 — DE",
+          row3: "竖屏短片 — 9:16",
+        },
+        chat: {
+          chrome: "对话",
+          user: "LinkedIn 那篇再短一点，三个数字保留。",
+          agent: "改好了——收紧到 680 字，三个数字都在。",
         },
         publish: {
           chrome: "发布",
           note: "按渠道定时发出",
           row1: "LinkedIn — 已发布",
           row2: "Newsletter — 排队中",
-          row3: "官网 — 草稿已发送",
+          row3: "TikTok — 草稿已发送",
         },
       },
       asides: {
@@ -138,16 +134,16 @@ const zh: Resources = {
           chip: "什么格式都行",
         },
         a2: {
-          label: "方向",
+          label: "草稿",
           title: "5 个产出 · EN + DE",
           body: "你的口吻，你的术语",
-          chip: "随时可以改",
+          chip: "母语级写作",
         },
         a3: {
-          label: "审定",
-          title: "不会悄悄发任何东西",
-          body: "每份草稿都等你过目",
-          chip: "一键批准",
+          label: "打磨",
+          title: "和结果对话",
+          body: "每次修改就是一句话",
+          chip: "不会悄悄发布",
         },
         a4: {
           label: "分发",
@@ -183,6 +179,7 @@ const zh: Resources = {
         newsletter: { name: "Newsletter", blurb: "邮件就绪" },
         website: { name: "机构官网", blurb: "SEO 文章" },
         youtube: { name: "YouTube", blurb: "Shorts 就绪" },
+        tiktok: { name: "TikTok", blurb: "竖屏短片" },
         x: { name: "X", blurb: "Thread" },
         podcast: { name: "播客", blurb: "Show notes" },
       },
@@ -322,8 +319,8 @@ const zh: Resources = {
       tagline: "把演讲变成可沉淀的知识资产——帖子、短片和 newsletter，用你受众的语言。",
       cta: "免费试用测试版",
       columns: {
-        product: {
-          title: "产品",
+        features: {
+          title: "功能",
           l1: "概览",
           l2: "工作流程",
           l3: "案例",

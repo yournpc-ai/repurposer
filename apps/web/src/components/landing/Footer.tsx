@@ -16,13 +16,13 @@ export function Footer(): ReactNode {
 
   const columns: { titleKey: string; links: FooterLink[] }[] = [
     {
-      titleKey: "landing.footer.columns.product.title",
+      titleKey: "landing.footer.columns.features.title",
       links: [
-        { labelKey: "landing.footer.columns.product.l1", href: "#product" },
-        { labelKey: "landing.footer.columns.product.l2", href: "#how-it-works" },
-        { labelKey: "landing.footer.columns.product.l3", href: "#gallery" },
-        { labelKey: "landing.footer.columns.product.l4", href: "#pricing" },
-        { labelKey: "landing.footer.columns.product.l5", href: "#faq" },
+        { labelKey: "landing.footer.columns.features.l1", href: "#features" },
+        { labelKey: "landing.footer.columns.features.l2", href: "#how-it-works" },
+        { labelKey: "landing.footer.columns.features.l3", href: "#gallery" },
+        { labelKey: "landing.footer.columns.features.l4", href: "#pricing" },
+        { labelKey: "landing.footer.columns.features.l5", href: "#faq" },
       ],
     },
     {

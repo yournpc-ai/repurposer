@@ -67,40 +67,6 @@
   }
 }
 
-/* Iridescent underline bar — a standalone empty element placed below the
- * hero's second title line. Pearl-rainbow loop, slow flow; the only moving
- * accent on the landing hero. */
-@utility hero-underline-bar {
-  display: block;
-  width: 100%;
-  height: 0.07em;
-  margin-top: 0.06em;
-  border-radius: 999px;
-  background-image: linear-gradient(
-    100deg,
-    oklch(0.85 0.09 10),
-    oklch(0.88 0.08 70),
-    oklch(0.89 0.07 150),
-    oklch(0.86 0.08 230),
-    oklch(0.82 0.09 300),
-    oklch(0.85 0.09 10)
-  );
-  background-size: 200% 100%;
-  animation: hero-underline-flow 6s linear infinite;
-}
-
-@keyframes hero-underline-flow {
-  to {
-    background-position-x: 200%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-underline-bar {
-    animation: none;
-  }
-}
-
 * {
   box-sizing: border-box;
 }

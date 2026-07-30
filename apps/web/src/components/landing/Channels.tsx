@@ -10,6 +10,7 @@ import {
   Linkedin,
   Mail,
   MessageSquareText,
+  Music2,
   Podcast,
   Youtube,
   type LucideIcon,
@@ -30,6 +31,7 @@ const PLATFORMS: { key: string; icon: LucideIcon }[] = [
   { key: "newsletter", icon: Mail },
   { key: "website", icon: Globe },
   { key: "youtube", icon: Youtube },
+  { key: "tiktok", icon: Music2 },
   { key: "x", icon: MessageSquareText },
   { key: "podcast", icon: Podcast },
 ]

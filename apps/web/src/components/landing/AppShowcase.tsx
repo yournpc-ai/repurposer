@@ -5,7 +5,7 @@ import {
   useTransform,
   type MotionValue,
 } from "motion/react"
-import { BadgeCheck, Check, Clock3, Globe, Sparkles } from "lucide-react"
+import { BadgeCheck, Check, Globe, Sparkles } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -68,7 +68,7 @@ function BrowserFrame({ children }: { children: ReactNode }): ReactNode {
           <span className="size-2.5 rounded-full bg-foreground/15" />
         </div>
         <span className="flex-1 rounded-md bg-background px-3 py-1 text-center font-mono text-[10px] text-muted-foreground">
-          repurposer.app
+          repurposer.ai
         </span>
       </div>
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -124,75 +124,65 @@ function ComposeScreen(): ReactNode {
   )
 }
 
-function DirectScreen(): ReactNode {
+function ResultsScreen(): ReactNode {
   const { t } = useTranslation()
   const rows = [
-    t("landing.showcase.screens.direct.row1"),
-    t("landing.showcase.screens.direct.row2"),
-    t("landing.showcase.screens.direct.row3"),
-    t("landing.showcase.screens.direct.row4"),
+    t("landing.showcase.screens.results.row2"),
+    t("landing.showcase.screens.results.row3"),
   ]
   return (
     <div className="flex h-full flex-col px-5 pb-5">
-      <ScreenChrome label={t("landing.showcase.screens.direct.chrome")} />
-      <p className="px-1 font-mono text-[11px] font-medium text-muted-foreground">
-        {t("landing.showcase.screens.direct.summary")}
-      </p>
-      <div className="mt-3 flex flex-col gap-2">
-        {rows.map((row, i) => (
-          <div
-            key={row}
-            className="flex items-center justify-between rounded-xl border border-border bg-background px-3.5 py-2.5"
-          >
-            <span className="text-[12px] font-medium text-foreground">{row}</span>
-            {i < 3 ? (
-              <Check className="size-3.5 text-foreground" aria-hidden="true" />
-            ) : (
-              <span className="size-3.5 animate-pulse rounded-full bg-foreground/20" aria-hidden="true" />
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="flex-1" />
-      <div className="mx-1 h-1 overflow-hidden rounded-full bg-foreground/10">
-        <div className="h-full w-3/4 rounded-full bg-foreground" />
-      </div>
-    </div>
-  )
-}
-
-function ReviewScreen(): ReactNode {
-  const { t } = useTranslation()
-  return (
-    <div className="flex h-full flex-col px-5 pb-5">
-      <ScreenChrome label={t("landing.showcase.screens.review.chrome")} />
+      <ScreenChrome label={t("landing.showcase.screens.results.chrome")} />
       <div className="mx-1 rounded-xl border border-border bg-background p-4">
         <div className="flex items-center justify-between">
           <span className="rounded-full bg-foreground px-2.5 py-1 font-mono text-[10px] text-background">
-            {t("landing.showcase.screens.review.score")}
+            {t("landing.showcase.screens.results.score")}
           </span>
           <BadgeCheck className="size-4 text-foreground" aria-hidden="true" />
         </div>
         <p className="mt-3 text-[14px] leading-snug font-medium text-foreground">
-          {t("landing.showcase.screens.review.cardTitle")}
+          {t("landing.showcase.screens.results.cardTitle")}
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {t("landing.showcase.screens.review.cardMeta")}
+          {t("landing.showcase.screens.results.cardMeta")}
         </p>
       </div>
-      <div className="mx-1 mt-2.5 flex items-center gap-2.5 rounded-xl border border-border bg-background p-3">
-        <Check className="size-3.5 shrink-0 text-foreground" aria-hidden="true" />
-        <p className="text-[12px] text-foreground">
-          {t("landing.showcase.screens.review.approved")}
-        </p>
-      </div>
-      <div className="mx-1 mt-2 flex items-center gap-2.5 rounded-xl border border-border bg-background p-3 opacity-70">
-        <Clock3 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <p className="text-[12px] text-muted-foreground">
-          {t("landing.showcase.screens.review.pending")}
-        </p>
+      <div className="mt-2.5 flex flex-col gap-2">
+        {rows.map((row) => (
+          <div
+            key={row}
+            className="mx-1 flex items-center justify-between rounded-xl border border-border bg-background px-3.5 py-2.5"
+          >
+            <span className="text-[12px] font-medium text-foreground">{row}</span>
+            <Check className="size-3.5 text-foreground" aria-hidden="true" />
+          </div>
+        ))}
       </div>
       <div className="flex-1" />
+    </div>
+  )
+}
+
+function ChatScreen(): ReactNode {
+  const { t } = useTranslation()
+  return (
+    <div className="flex h-full flex-col px-5 pb-5">
+      <ScreenChrome label={t("landing.showcase.screens.chat.chrome")} />
+      <div className="mx-1 self-end rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-[12px] leading-snug text-background">
+        {t("landing.showcase.screens.chat.user")}
+      </div>
+      <div className="mx-1 mt-2.5 flex items-start gap-2">
+        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground/10">
+          <Sparkles className="size-3 text-foreground" aria-hidden="true" />
+        </span>
+        <div className="rounded-2xl rounded-tl-md border border-border bg-background px-3.5 py-2.5 text-[12px] leading-snug text-foreground">
+          {t("landing.showcase.screens.chat.agent")}
+        </div>
+      </div>
+      <div className="flex-1" />
+      <div className="mx-1 flex h-9 items-center rounded-full border border-border bg-background px-3.5">
+        <span className="h-3 w-px animate-pulse bg-foreground" aria-hidden="true" />
+      </div>
     </div>
   )
 }
@@ -228,8 +218,8 @@ function PublishScreen(): ReactNode {
 
 const SCREENS: ReactNode[] = [
   <ComposeScreen key="compose" />,
-  <DirectScreen key="direct" />,
-  <ReviewScreen key="review" />,
+  <ResultsScreen key="results" />,
+  <ChatScreen key="chat" />,
   <PublishScreen key="publish" />,
 ]
 
@@ -474,7 +464,7 @@ export function AppShowcase(): ReactNode {
         <div className="mx-auto mt-14 flex max-w-[1440px] flex-col gap-16 px-5 sm:px-8 lg:px-10">
           <div className="flex justify-center">
             <BrowserFrame>
-              <div className="absolute inset-0">{SCREENS[2]}</div>
+              <div className="absolute inset-0">{SCREENS[1]}</div>
             </BrowserFrame>
           </div>
           <ol className="flex flex-col gap-12">

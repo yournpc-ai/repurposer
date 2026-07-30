@@ -51,8 +51,7 @@ const en = {
   },
   landing: {
     nav: {
-      product: "Product",
-      howItWorks: "How it works",
+      features: "Features",
       pricing: "Pricing",
       faq: "FAQ",
     },
@@ -80,19 +79,19 @@ const en = {
       steps: {
         s1: {
           title: "Drop in the talk",
-          body: "Keynote video, podcast audio, slides, or just the transcript. Whatever you have is enough to start.",
+          body: "Keynote video, podcast audio, slides, or just the transcript. Tell the agent what you need right in the composer — outputs and languages included.",
         },
         s2: {
-          title: "Direct the output",
-          body: "Tell the agent what you need — LinkedIn posts, short clips, a newsletter — and in which languages.",
+          title: "Get a full set of drafts",
+          body: "LinkedIn posts, clips, articles and newsletters — every output written in your voice, in every language you asked for.",
         },
         s3: {
-          title: "Review everything",
-          body: "Every draft comes back in your voice for your eyes. Edit the transcript, retitle a clip, approve what ships.",
+          title: "Refine in chat",
+          body: "Talk to the results: shorten a post, retitle a clip, push a different angle. The agent rewrites until you approve.",
         },
         s4: {
           title: "Publish everywhere",
-          body: "Approved pieces go out per channel and language. LinkedIn, newsletter, your institution's site — done.",
+          body: "Approved pieces go out per channel and language. LinkedIn, TikTok, newsletter — done.",
         },
       },
       screens: {
@@ -104,28 +103,25 @@ const en = {
           chip3: "Transcript",
           cta: "Generate",
         },
-        direct: {
-          chrome: "Task book",
-          summary: "5 outputs · 2 languages",
-          row1: "LinkedIn post — EN",
-          row2: "LinkedIn post — DE",
-          row3: "Short clip — 9:16",
-          row4: "Newsletter blurb — EN",
-        },
-        review: {
+        results: {
           chrome: "Results",
           score: "92 fidelity",
           cardTitle: "Why grid storage decides the energy transition",
           cardMeta: "LinkedIn · EN · 1,240 chars",
-          approved: "Approved",
-          pending: "Needs review",
+          row2: "LinkedIn post — DE",
+          row3: "Short clip — 9:16",
+        },
+        chat: {
+          chrome: "Chat",
+          user: "Make the LinkedIn post shorter — keep the three numbers.",
+          agent: "Done — tightened to 680 chars, all three numbers kept.",
         },
         publish: {
           chrome: "Publish",
           note: "Scheduled per channel",
           row1: "LinkedIn — published",
           row2: "Newsletter — queued",
-          row3: "Website — draft sent",
+          row3: "TikTok — draft sent",
         },
       },
       asides: {
@@ -136,16 +132,16 @@ const en = {
           chip: "Any format works",
         },
         a2: {
-          label: "Direction",
+          label: "Drafts",
           title: "5 outputs · EN + DE",
           body: "Your voice, your terms",
-          chip: "Edit anytime",
+          chip: "Written natively",
         },
         a3: {
-          label: "Review",
-          title: "Nothing ships silently",
-          body: "Every draft waits for you",
-          chip: "Approve in one click",
+          label: "Refine",
+          title: "Chat with the results",
+          body: "Every edit is one message",
+          chip: "Nothing ships silently",
         },
         a4: {
           label: "Distribution",
@@ -181,6 +177,7 @@ const en = {
         newsletter: { name: "Newsletter", blurb: "Email-ready" },
         website: { name: "Website", blurb: "SEO articles" },
         youtube: { name: "YouTube", blurb: "Shorts-ready" },
+        tiktok: { name: "TikTok", blurb: "Short clips" },
         x: { name: "X", blurb: "Threads" },
         podcast: { name: "Podcast", blurb: "Show notes" },
       },
@@ -322,8 +319,8 @@ const en = {
         "Turning talks into lasting knowledge assets — posts, clips and newsletters in the languages your audience speaks.",
       cta: "Try the free beta",
       columns: {
-        product: {
-          title: "Product",
+        features: {
+          title: "Features",
           l1: "Overview",
           l2: "How it works",
           l3: "Gallery",

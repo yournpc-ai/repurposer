@@ -141,7 +141,7 @@ export function VideoShowcase(): ReactNode {
   if (prefersReducedMotion) {
     return (
       <section
-        id="product"
+        id="features"
         aria-label={t("landing.video.ariaLabel")}
         className="flex min-h-svh flex-col items-center justify-center gap-8 px-6 py-24"
       >
@@ -162,7 +162,7 @@ export function VideoShowcase(): ReactNode {
   return (
     <section
       ref={sectionRef}
-      id="product"
+      id="features"
       aria-label={t("landing.video.ariaLabel")}
       className="pointer-events-none relative z-20 [margin-top:-100svh] h-[180svh]"
     >
