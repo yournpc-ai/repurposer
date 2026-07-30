@@ -1,89 +1,102 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { Mic2, Video } from "lucide-react"
+import { Volume2, VolumeX, Wand2 } from "lucide-react"
 
 import type { RecipeCard as RecipeCardData } from "@/lib/recipes"
 
 /**
- * One recipe card (RECIPES §7.3): poster (+ hover video preview when
- * harvested), title, one-line promise, output chips. The whole card is a
- * single click target — clicking prefills the composer with the recipe's
- * prompt template and pins its task book (see HomeComposer's recipe prop).
+ * One recipe card (RECIPES §7.3, Opus-style gallery): a full-bleed vertical
+ * (9:16) auto-playing preview with the recipe type at the top-left, an
+ * inverse sound toggle circle at the top-right (one card sounds at a time —
+ * the parent owns `soundingId`), and a hover-revealed bottom panel carrying
+ * the promise + the Remix action (reserved cards show a Soon pill instead —
+ * a promise is never clickable before its capability is real).
  */
 export function RecipeCard({
   card,
+  sounding,
+  onToggleSound,
   onSelect,
 }: {
   card: RecipeCardData
+  sounding: boolean
+  onToggleSound: (id: string) => void
   onSelect: (card: RecipeCardData) => void
 }) {
   const { t } = useTranslation()
-  const [hover, setHover] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const live = card.status === "live"
+
+  // React's `muted` prop is unreliable after mount (attribute vs property) —
+  // drive it imperatively so the sound toggle always lands.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = !sounding
+  }, [sounding])
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(card)}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className="group flex flex-col overflow-hidden rounded-lg bg-card text-left shadow-lg transition-shadow edge-glow hover:shadow-xl dark:shadow-none"
+    <div
+      role={live ? "button" : undefined}
+      tabIndex={live ? 0 : undefined}
+      onClick={() => live && onSelect(card)}
+      onKeyDown={(e) => {
+        if (live && (e.key === "Enter" || e.key === " ")) onSelect(card)
+      }}
+      className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-card shadow-lg edge-glow dark:shadow-none"
     >
-      <div className="relative aspect-video w-full overflow-hidden bg-muted">
-        {/* CSS blur-pad: the vertical (9:16) preview sits object-contain over a
-            blurred copy of the poster, so no ffmpeg letterboxing step is needed. */}
-        <img
-          src={card.preview.posterUrl}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
-        />
-        {hover && card.preview.videoUrl ? (
-          <video
-            src={card.preview.videoUrl}
-            poster={card.preview.posterUrl}
-            className="relative h-full w-full object-contain"
-            autoPlay
-            muted
-            loop
-            playsInline
-          />
+      <video
+        ref={videoRef}
+        src={card.preview.videoUrl}
+        poster={card.preview.posterUrl}
+        className="h-full w-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+      />
+
+      {/* Top-left: recipe type */}
+      <span className="absolute left-3 top-3 text-sm font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+        {t(`recipes.${card.id}.title`)}
+      </span>
+
+      {/* Top-right: inverse sound toggle */}
+      <button
+        type="button"
+        aria-label={sounding ? t("recipes.mute") : t("recipes.unmute")}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleSound(card.id)
+        }}
+        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+      >
+        {sounding ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+      </button>
+
+      {/* Hover: promise + action rise from the bottom */}
+      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 pt-10 transition-transform duration-300 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
+        <p className="mb-2.5 text-sm leading-snug text-white/90">
+          {t(`recipes.${card.id}.promise`)}
+        </p>
+        {live ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(card)
+            }}
+            className="flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-sm text-black transition-colors hover:bg-white"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {t("recipes.remix")}
+          </button>
         ) : (
-          <img
-            src={card.preview.posterUrl}
-            alt={t(`recipes.${card.id}.title`)}
-            className="relative h-full w-full object-contain"
-            loading="lazy"
-          />
+          <span className="inline-flex items-center rounded-md bg-white/15 px-2.5 py-1 text-xs text-white/80 backdrop-blur-sm">
+            {t("recipes.soon")}
+          </span>
         )}
       </div>
-      <div className="flex flex-col gap-1.5 p-4">
-        <span className="text-sm font-medium">{t(`recipes.${card.id}.title`)}</span>
-        <span className="text-sm text-muted-foreground">
-          {t(`recipes.${card.id}.promise`)}
-        </span>
-        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {card.slotsPrior.map((slot) => (
-            <span
-              key={slot.type}
-              className="flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
-            >
-              <Video className="h-3 w-3" />
-              {t(`results.tabs.${slot.type}`)}
-            </span>
-          ))}
-          {card.params?.dubLanguages?.map((lang) => (
-            <span
-              key={lang}
-              className="flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
-            >
-              <Mic2 className="h-3 w-3" />
-              {t(`languages.${lang}`, { defaultValue: lang })}
-            </span>
-          ))}
-        </span>
-      </div>
-    </button>
+    </div>
   )
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
-import { liveRecipeCards, type RecipeCard } from "@/lib/recipes"
+import { RECIPE_CARDS, type RecipeCard } from "@/lib/recipes"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecipeCard as RecipeCardView } from "@/components/home/RecipeCard"
@@ -27,6 +27,9 @@ function Home() {
   // The picked recipe lives here — the common parent of the card grid and
   // the composer (state lift stops at Home, never goes global).
   const [recipe, setRecipe] = useState<RecipeCard | null>(null)
+  // The one card currently sounding (autoplay is muted; the toggle circle
+  // unmutes one card at a time).
+  const [soundingId, setSoundingId] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -51,23 +54,30 @@ function Home() {
         </div>
       </section>
 
-      {/* Recipe cards (RECIPES §7): capability demos that prefill the
-          composer and pin the task book. Only live cards render — a card
-          ships when its capability is real (点亮纪律). */}
-      {liveRecipeCards.length > 0 && (
-        <section className="flex flex-col items-center px-6 pb-16">
-          <div className="w-full max-w-3xl">
-            <h2 className="mb-4 text-sm text-muted-foreground">
-              {t("recipes.sectionTitle")}
-            </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {liveRecipeCards.map((card) => (
-                <RecipeCardView key={card.id} card={card} onSelect={setRecipe} />
-              ))}
-            </div>
+      {/* Recipe gallery (RECIPES §7.3): vertical auto-playing teasers, one
+          row of four — remixing a live card prefills the composer and pins
+          the task book; reserved cards stay visible with a Soon pill
+          (presence over gating, 2026-07-31). */}
+      <section className="flex flex-col items-center px-6 pb-16">
+        <div className="w-full max-w-5xl">
+          <h2 className="mb-4 text-sm text-muted-foreground">
+            {t("recipes.sectionTitle")}
+          </h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {RECIPE_CARDS.map((card) => (
+              <RecipeCardView
+                key={card.id}
+                card={card}
+                sounding={soundingId === card.id}
+                onToggleSound={(id) =>
+                  setSoundingId((prev) => (prev === id ? null : id))
+                }
+                onSelect={setRecipe}
+              />
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </div>
   )
 }

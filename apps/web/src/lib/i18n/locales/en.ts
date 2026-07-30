@@ -383,6 +383,10 @@ const en = {
   // reserved cards keep their seats here but never render.
   recipes: {
     sectionTitle: "Start from a recipe",
+    remix: "Remix",
+    soon: "Soon",
+    mute: "Mute preview sound",
+    unmute: "Play preview sound",
     dub: {
       title: "Multilingual dub",
       promise: "Your talk, your voice — speaking German, French and Spanish.",

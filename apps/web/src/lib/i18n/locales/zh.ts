@@ -383,6 +383,10 @@ const zh: Resources = {
   // reserved 卡在此留座但不渲染。
   recipes: {
     sectionTitle: "从配方开始",
+    remix: "再创作",
+    soon: "即将推出",
+    mute: "关闭预览声音",
+    unmute: "播放预览声音",
     dub: {
       title: "多语言配音",
       promise: "你的演讲，你的声音——开口说德语、法语和西语。",

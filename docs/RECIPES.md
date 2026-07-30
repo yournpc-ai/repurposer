@@ -24,7 +24,7 @@
 ## 1. 原则
 
 1. **配方 = 待填素材的任务书模板**（Phase 1 形态）。配方与素材的关系只有两层：展示素材（卡片预览，不进管线）+ 类型化输入槽位（"需要一段演讲视频"的约束）。素材是配方留给用户的唯一空格。升级为"待填素材的施工图模板"是 Phase 2（STRATEGY §5，依赖公开性字段 + ADR，不在本文档范围）。
-2. **点亮纪律**：能力未兑现的卡不上首页（裁决①）。首页卡数随能力逐张点亮，不要求四张齐发。
+2. **点亮纪律（2026-07-31 修订）**：四张卡**全部渲染**（presence over gating——画廊存在感优先）；纪律的保留线是**承诺不可点**——能力未兑现的卡（reserved）hover 只给 Soon 标记，不出 Remix 按钮。点亮 = `status` 翻 `live` + Remix 解锁，不要求四张齐发。
 3. **DAG 编排全复用**：每个新动词（节点/契约扩展）落地即免费获得编排、逐节点计量、SSE 打勾流、失败重试、子图重跑。零新表——一切住 JSON 载荷层（clip-spec / node.spec / run.context）。
 4. **可扩展词汇一律注册表化**：字幕样式、skill、节点 kind 同纪律（`SKILL_REGISTRY` / `NODE_RUNNERS` 先例）——加成员是填注册项，不是加分支。
 5. **内容定位**：卡片围绕 LinkedIn / 多语言 / 知识资产（欧洲 ICP），不做 TikTok 风（CLAUDE.md 产品定位）。
@@ -129,8 +129,10 @@ type RecipeCard = {
   slotsPrior: IntentSlot[]            // explicit 钉死的任务槽（承诺确定性兑现）
   params?: { captionPreset?: string; music?: boolean; dubLanguages?: string[] }
   preview: { posterUrl: string; videoUrl?: string }  // 公开可读静态资源
-  status: "live" | "reserved"         // 点亮纪律：能力未兑现 = reserved 不上线
+  status: "live" | "reserved"         // reserved = 可见但 Soon 置灰（§1 点亮纪律修订）
 }
+// R1 实施注：inputSlots 与 params.captionPreset/music 按 YAGNI 修剪（无人
+// 读取即不入码），随首张真正消费它们的 live 卡回归；promptTemplate 住 i18n。
 ```
 
 ### 7.2 点击链路（与 composer 主流程零分叉）
@@ -147,7 +149,7 @@ type RecipeCard = {
 
 ### 7.3 布局与素材
 
-- home：composer 区下方卡片区（4 卡横排/网格，响应式折行；遵循 CLAUDE.md：rounded-lg、无 ring/border、shadow-lg、edge-glow）。
+- home：composer 区下方卡片画廊（Opus 式 2026-07-31 改版）：**9:16 竖屏卡一排四张**（`grid-cols-2 sm:grid-cols-4`，容器 max-w-5xl），视频**自动播放**（静音循环）；**左上**配方类型名，**右上**反色圆形声音开关（同时只响一张），**hover 底部浮出**承诺句 + Remix 按钮（reserved 卡 = Soon pill）。遵循 CLAUDE.md：rounded-lg、无 ring/border、shadow-lg、edge-glow。
 - 预览资源必须**公开可读**（落地页匿名受众）：`apps/web/public/` 或对象存储公开前缀——现有 asset 端点全是登录态，不可用。
 - 素材策展总账：① demo talk 恢复（桶 `demo/` 树，✅ 已核实：`demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲）；② 双人访谈横屏视频（✅ 已策展：`demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，R3 分镜卡源）；③ PPT 大型登台演讲（✅ 已策展：`demo/uploads/xy_2.mp4` 63MB，风格卡/图片视频卡源）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。3–4 张卡复用 1–2 场源演讲。
 
@@ -172,7 +174,7 @@ type RecipeCard = {
 
 ## 10. Prohibited Behaviors
 
-1. **禁**上未兑现能力的卡（点亮纪律；reserved 卡不进首页渲染）。
+1. **禁**未兑现能力的卡可点（点亮纪律修订后：reserved 卡渲染但 Remix 必须置灰/替换为 Soon——承诺永远先于能力）。
 2. **禁**配方承诺靠 LLM 从 prompt 重新推断——必须 explicit 槽 pin-merge 确定性兑现。
 3. **禁**新表——卡片数据硬编码前端，能力扩展全住 JSON 载荷层。
 4. **禁**字幕样式绕过 catalog 加一次性分支；新原语值必须过 libass 映射检查。
