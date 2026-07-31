@@ -14,6 +14,14 @@
 
 import type { IntentSlot } from "@/lib/types"
 
+/** Remix interaction is parked (2026-07-31): a recipe delivering its promise
+ * needs more than a prefilled prompt — the invisible pin-merge prior bit us
+ * in practice (a picked card silently steered a later plain composer run).
+ * All cards render with the Soon pill until the flow is redesigned. The
+ * machinery (slotsPrior / params / promptTemplate, the composer's prior
+ * payload) stays in place, unreachable, for the next iteration. */
+export const RECIPE_REMIX_ENABLED = false
+
 export interface RecipeCard {
   /** i18n key root: recipes.<id>.title / .promise / .promptTemplate */
   id: string
@@ -21,7 +29,7 @@ export interface RecipeCard {
   slotsPrior: IntentSlot[]
   /** Cross-output task-book params pinned alongside the slots. */
   params?: { dubLanguages?: string[] }
-  /** Public-readable static assets (apps/web/public/recipes/) — the landing
+  /** Public-readable assets on the TOS demo tree (demo/outputs/) — the landing
    * audience is anonymous, so signed/login-gated asset endpoints are banned. */
   preview: { posterUrl: string; videoUrl?: string }
   status: "live" | "reserved"
@@ -36,6 +44,8 @@ const CLIPS_SLOT: IntentSlot = {
   explicit: true,
 }
 
+const RECIPE_MEDIA_BASE = "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs"
+
 export const RECIPE_CARDS: RecipeCard[] = [
   {
     // R1: one talk -> clips + your cloned voice speaking DE/FR/ES (fork
@@ -44,8 +54,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     slotsPrior: [CLIPS_SLOT],
     params: { dubLanguages: ["de", "fr", "es"] },
     preview: {
-      posterUrl: "/recipes/dub-poster.jpg",
-      videoUrl: "/recipes/dub-preview.mp4",
+      posterUrl: `${RECIPE_MEDIA_BASE}/dub-poster.jpg`,
+      videoUrl: `${RECIPE_MEDIA_BASE}/dub-preview.mp4`,
     },
     status: "live",
   },
@@ -54,8 +64,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "image-video",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: "/recipes/image-video-poster.jpg",
-      videoUrl: "/recipes/image-video-preview.mp4",
+      posterUrl: `${RECIPE_MEDIA_BASE}/image-video-poster.jpg`,
+      videoUrl: `${RECIPE_MEDIA_BASE}/image-video-preview.mp4`,
     },
     status: "reserved",
   },
@@ -64,8 +74,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "reframe",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: "/recipes/reframe-poster.jpg",
-      videoUrl: "/recipes/reframe-preview.mp4",
+      posterUrl: `${RECIPE_MEDIA_BASE}/reframe-poster.jpg`,
+      videoUrl: `${RECIPE_MEDIA_BASE}/reframe-preview.mp4`,
     },
     status: "reserved",
   },
@@ -74,8 +84,19 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "style",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: "/recipes/style-poster.jpg",
-      videoUrl: "/recipes/style-preview.mp4",
+      posterUrl: `${RECIPE_MEDIA_BASE}/style-poster.jpg`,
+      videoUrl: `${RECIPE_MEDIA_BASE}/style-preview.mp4`,
+    },
+    status: "reserved",
+  },
+  {
+    // R5 seat: nothing but a talk — every scene AI-generated (MiniMax video),
+    // the zero-asset end of the source-material spectrum.
+    id: "ai-visuals",
+    slotsPrior: [CLIPS_SLOT],
+    preview: {
+      posterUrl: `${RECIPE_MEDIA_BASE}/ai-visuals-poster.jpg`,
+      // No preview video until the capability itself exists — poster only.
     },
     status: "reserved",
   },
