@@ -27,7 +27,6 @@ import {
   Newspaper,
   Plus,
   Quote,
-  Sparkles,
   Square,
   Video,
   X,
@@ -224,16 +223,6 @@ interface ProjectAsset {
   processing_status: "pending" | "processing" | "completed" | "failed"
 }
 
-const ATTACHMENT_STATE: Record<
-  ProjectAsset["processing_status"],
-  "uploading" | "processing" | "error" | "done"
-> = {
-  pending: "uploading",
-  processing: "processing",
-  failed: "error",
-  completed: "done",
-}
-
 function assetTypeIcon(type: string) {
   switch (type) {
     case "video":
@@ -328,7 +317,11 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
                 <Attachment
                   key={asset.id}
                   size="sm"
-                  state={ATTACHMENT_STATE[asset.processing_status] ?? "done"}
+                  // An archived message is a historical record — it never
+                  // animates. Live processing/uploading states (which make
+                  // AttachmentTitle shimmer) belong to the composer, not the
+                  // flow; only a genuine failure stays visible, statically.
+                  state={asset.processing_status === "failed" ? "error" : "done"}
                 >
                   <AttachmentMedia>
                     <Icon />
@@ -367,7 +360,7 @@ function ThinkingRow({ label }: { label: string }) {
     <Message align="start">
       <MessageContent>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
           {/* Same text shimmer the running step markers use. */}
           <span className="shimmer">{label}</span>
         </div>
@@ -422,7 +415,11 @@ export function GenerationOverlay({
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [questionLoaded, setQuestionLoaded] = useState(false)
   const [answeredQuestion, setAnsweredQuestion] = useState<QuestionMessage | null>(null)
-  const [autonomy, setAutonomy] = useState<Autonomy>("auto")
+  // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
+  // so every run goes out at the review tier — the direction checkpoint
+  // parks mid-run for the user's pick. The state stays so re-exposing the
+  // picker is a one-flag flip.
+  const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
   const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
 
@@ -1115,7 +1112,7 @@ export function GenerationOverlay({
                               survived only on top, looking like a cut-off
                               shadow). Depth comes from bg contrast alone. */}
                           <Card className="ring-0 bg-muted/50">
-                            <div className="flex flex-col gap-6 p-6">
+                            <div className="flex flex-col gap-7 p-6">
                               <div className="space-y-1">
                                 <h3 className="text-base font-semibold">
                                   {t("generationOverlay.title")}
@@ -1128,7 +1125,7 @@ export function GenerationOverlay({
                               {/* Identity echo — one read-only line, never a
                                   question: whose voice, which brand skin. */}
                               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Sparkles className="h-3.5 w-3.5" />
+                                <Mic2 className="h-3.5 w-3.5" />
                                 {t("generationOverlay.identityEcho", {
                                   speaker:
                                     identity.speaker ??
@@ -1141,7 +1138,7 @@ export function GenerationOverlay({
 
                               {/* Task-book language (slot-level "same as book"
                                   overrides live on each slot row) */}
-                              <div className="space-y-2">
+                              <div className="flex flex-col gap-4">
                                 <span className={sectionLabel}>
                                   {t("generationOverlay.languageLabel")}
                                 </span>
@@ -1177,7 +1174,7 @@ export function GenerationOverlay({
                               {/* Task slots — one row per requested output.
                                   Same-type siblings (e.g. an English and a
                                   German post) are separate rows. */}
-                              <div className="space-y-2">
+                              <div className="flex flex-col gap-4">
                                 <span className={sectionLabel}>
                                   {t("generationOverlay.outputsLabel")}
                                 </span>
@@ -1325,7 +1322,10 @@ export function GenerationOverlay({
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-9 gap-1.5"
+                                        // self-start: the section is a flex
+                                        // column — without this the trigger
+                                        // would stretch to full width.
+                                        className="h-9 gap-1.5 self-start"
                                       />
                                     }
                                   >
@@ -1359,7 +1359,7 @@ export function GenerationOverlay({
                                   adding a language goes through chat refine,
                                   not panel editing (R1 scope). */}
                               {intent.dub_languages.length > 0 && (
-                                <div className="space-y-2">
+                                <div className="flex flex-col gap-4">
                                   <span className={sectionLabel}>
                                     {t("generationOverlay.dubLabel")}
                                   </span>
@@ -1395,7 +1395,7 @@ export function GenerationOverlay({
                               )}
 
                               {/* Instruction */}
-                              <div className="space-y-2">
+                              <div className="flex flex-col gap-4">
                                 <span className={sectionLabel}>
                                   {t("generationOverlay.instructionLabel")}
                                 </span>

@@ -16,6 +16,7 @@ import {
 } from "@/components/results/ResultsTabs"
 import { Button } from "@/components/ui/button"
 import { Tour, type TourStep } from "@/components/ui/tour"
+import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import { apiFetch, apiPost } from "@/lib/api"
 import { useRunEvents } from "@/lib/use-run-events"
 
@@ -29,8 +30,33 @@ const isClipReady = (o: Output) =>
   o.render_status !== "pending" &&
   o.render_status !== "rendering"
 
-/** First-visit results tour: separate seen flag from the composer tour. */
+/** First-visit results tour: separate seen key from the composer tour, same
+ * content-hash rule (lib/tour.ts) — any step or copy change replays once. */
 const RESULTS_TOUR_KEY = "repurposer-results-tour-seen"
+
+const RESULTS_TOUR_STEPS: TourStepDef[] = [
+  {
+    target: "[data-tour='results-score']",
+    titleKey: "tour.results.scoreTitle",
+    descKey: "tour.results.scoreDesc",
+    side: "bottom",
+  },
+  {
+    target: "[data-tour='results-video']",
+    titleKey: "tour.results.videoTitle",
+    descKey: "tour.results.videoDesc",
+    side: "bottom",
+  },
+  {
+    target: "[data-tour='results-menu']",
+    titleKey: "tour.results.menuTitle",
+    descKey: "tour.results.menuDesc",
+    side: "top",
+    align: "end",
+  },
+]
+
+const RESULTS_TOUR_VERSION = tourVersionOf(RESULTS_TOUR_STEPS, tourCopy.results)
 
 interface AssetStatusEntry {
   id: string
@@ -189,7 +215,8 @@ function ProjectDetailPage() {
     if (!results.outputs.some(isClipReady)) return
     resultsTourCheckedRef.current = true
     try {
-      if (window.localStorage.getItem(RESULTS_TOUR_KEY)) return
+      if (window.localStorage.getItem(RESULTS_TOUR_KEY) === RESULTS_TOUR_VERSION)
+        return
     } catch {
       return // storage unavailable — tour simply never auto-opens
     }
@@ -199,7 +226,7 @@ function ProjectDetailPage() {
 
   const markResultsTourSeen = () => {
     try {
-      window.localStorage.setItem(RESULTS_TOUR_KEY, "1")
+      window.localStorage.setItem(RESULTS_TOUR_KEY, RESULTS_TOUR_VERSION)
     } catch {
       // ignore — worst case the tour shows again next visit
     }
@@ -367,29 +394,15 @@ function ProjectDetailPage() {
   const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
   const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
 
-  // Results teaching tour: score → video area → "···" menu. Built per render
-  // so a language switch re-labels the steps (Tour reads via ref).
-  const resultsTourSteps: TourStep[] = [
-    {
-      target: "[data-tour='results-score']",
-      title: t("tour.results.scoreTitle"),
-      description: t("tour.results.scoreDesc"),
-      side: "bottom",
-    },
-    {
-      target: "[data-tour='results-video']",
-      title: t("tour.results.videoTitle"),
-      description: t("tour.results.videoDesc"),
-      side: "bottom",
-    },
-    {
-      target: "[data-tour='results-menu']",
-      title: t("tour.results.menuTitle"),
-      description: t("tour.results.menuDesc"),
-      side: "top",
-      align: "end",
-    },
-  ]
+  // Results teaching tour: score → video area → "···" menu. Built per
+  // render from the static config so a language switch re-labels the steps.
+  const resultsTourSteps: TourStep[] = RESULTS_TOUR_STEPS.map((step) => ({
+    target: step.target,
+    side: step.side,
+    align: step.align,
+    title: t(step.titleKey),
+    description: t(step.descKey),
+  }))
 
   const renderSkeletons = (tab: ResultsTab) => {
     if (tab === "clips") {

@@ -147,14 +147,16 @@ class MessageRole(StrEnum):
 class ChatMention(BaseModel):
     """An @ entity reference pinned to a definite id (CHAT_ARCH §7).
 
-    The picker UI lands in a later iteration; the contract and the column
-    (messages.mentions) are the seat. ``workflow_step`` follows the N-15
-    rename (one concept, one name across the stack).
+    The contract and the column (messages.mentions) are the seat; the picker
+    UI is the registry-driven composer surface (docs/tasks/recipe-mention.md).
+    ``recipe`` is the fifth mention type — the task-book pin family, resolved
+    only server-side (``pipeline/recipes.py``). ``workflow_step`` follows the
+    N-15 rename (one concept, one name across the stack).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["asset", "output", "transcript_segment", "workflow_step"]
+    type: Literal["asset", "output", "transcript_segment", "workflow_step", "recipe"]
     id: str
     label: str
 
@@ -703,6 +705,10 @@ class ProjectIntentRequest(BaseModel):
 
     prompt: str = Field(default="", description="User prompt or transcript paste.")
     brand_template_id: UUID | None = None
+    # The composer's fourth payload field (2026-08-01, recipe-mention brief):
+    # @-entity chips. A recipe mention is resolved server-side into a pinned
+    # task book (resolve_recipe_mentions) — the client never builds a prior.
+    mentions: list[ChatMention] = Field(default_factory=list)
     # The review panel's current task book (hand-edited slots marked
     # explicit). Its explicit slots pin through this re-inference (pin-merge
     # rule); None = pin from the stored pending intent, if any.

@@ -42,12 +42,12 @@ from app.models.tables import (
 from app.chat.intent import composer_intent_agent
 from app.chat.service import (
     answer_question,
+    discard_unanswered_task_book,
     finalize_bailed_runs,
     find_conversation,
     get_project_prompt,
     is_pending_task_book,
     latest_pending_question,
-    mark_task_book_started,
     merge_explicit_slots,
     record_intent_turn,
     seed_project_prompt,
@@ -55,6 +55,7 @@ from app.chat.service import (
 )
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.orchestrator import TaskSpec, create_run
+from app.pipeline.recipes import resolve_recipe_mentions
 from app.pipeline.outputs import (
     aggregate_step_cost,
     list_visible_outputs,
@@ -304,6 +305,13 @@ async def infer_project_intent(
     first_file = next((a for a in assets if a.file_url), None)
     filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
 
+    # Recipe mention validation (fail-fast, BEFORE inference): a rejected pin
+    # (reserved / unknown / multiple recipes) must not burn an intent call.
+    try:
+        recipe = resolve_recipe_mentions(data.mentions)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     intent = await composer_intent_agent.infer(
         prompt=data.prompt or "",
         filename=filename,
@@ -336,6 +344,15 @@ async def infer_project_intent(
         stored_dub = stored_intent.dub_languages if stored_intent else None
         if prior.dub_languages and prior.dub_languages != stored_dub:
             intent.dub_languages = prior.dub_languages
+
+    # Recipe mention pin (docs/tasks/recipe-mention.md §2.3): a recipe is a
+    # definite reference — resolved server-side into explicit slots + dub
+    # languages and pin-merged like a prior, AFTER the panel prior so the
+    # named recipe wins. The LLM never interprets it (validated pre-inference).
+    if recipe is not None:
+        intent.outputs = merge_explicit_slots(recipe.outputs, intent.outputs)
+        intent.dub_languages = list(recipe.dub_languages)
+        intent.outputs_explicit = True
 
     clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
     reasons: list[str] = []
@@ -537,8 +554,9 @@ async def generate_content(
     project.status = ProjectStatus.PROCESSING
     # The task book is confirmed now — drop the unconfirmed copy.
     project.pending_intent = None
-    # Starting the run answers any open task_book question (QA archive).
-    await mark_task_book_started(db, UUID(str(current_user.id)), project_id, run.id)
+    # /generate starts the run without a human answer — discard the open
+    # task_book question instead of archiving a fabricated QA pair.
+    await discard_unanswered_task_book(db, UUID(str(current_user.id)), project_id)
     await db.commit()
     await db.refresh(run)
 

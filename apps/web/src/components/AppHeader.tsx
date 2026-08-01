@@ -1,5 +1,3 @@
-import { Star } from "lucide-react"
-
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -21,10 +19,6 @@ export function AppHeader() {
         <ThemeToggle />
         <LanguageSwitcher />
         <NotificationBell />
-        <div className="flex h-7 items-center gap-2 rounded-md bg-card px-3 text-sm ring-1 ring-border">
-          <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
-          <span>0</span>
-        </div>
       </div>
     </header>
   )

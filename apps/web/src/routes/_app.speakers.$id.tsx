@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
   FileText,
+  Fingerprint,
   Pencil,
   Save,
-  Sparkles,
   Trash2,
   Upload,
   Wand2,
@@ -323,7 +323,7 @@ function SpeakerDetailPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" />
+                    <Fingerprint className="h-4 w-4" />
                     {t("speakerDetail.personaTitle")}
                   </CardTitle>
                   <CardDescription>{t("speakerDetail.personaDesc")}</CardDescription>

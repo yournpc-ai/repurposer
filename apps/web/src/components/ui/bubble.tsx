@@ -9,7 +9,11 @@ function BubbleGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="bubble-group"
-      className={cn("flex min-w-0 flex-col gap-2", className)}
+      // w-full is load-bearing: Bubble's max-w-[80%] must resolve against the
+      // full message column. Without it, self-end shrink-to-fit makes the
+      // group content-sized, and every bubble wraps at 80% of its own
+      // natural width. Alignment lives on Bubble's own self-end/self-start.
+      className={cn("flex w-full min-w-0 flex-col gap-2", className)}
       {...props}
     />
   )

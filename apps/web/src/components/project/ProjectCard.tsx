@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiDelete, apiPut } from "@/lib/api"
+import { BrandLoader } from "@/components/BrandLoader"
+import { ProcessingTile } from "@/components/ProcessingTile"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -60,9 +62,14 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
     : null
   const showVideo = thumbnailSrc && !videoFailed
 
-  // Bottom line: live statuses get a shimmering label; settled projects show
-  // the relative update time (the raw enum never leaks into the UI).
+  // Bottom line: live statuses show the current stage as plain text (the
+  // animated tile carries the motion); settled projects show the relative
+  // update time (the raw enum never leaks into the UI).
   const active = project.status === "processing" || project.status === "uploading"
+  // Unsettled projects (draft included) never show a bare static tile: the
+  // card stays alive — drifting glow + brand fill. A draft is "waiting on
+  // you", a live run is "working"; the label below disambiguates.
+  const live = active || project.status === "draft"
 
   const handleRename = async () => {
     const title = renameValue.trim()
@@ -114,29 +121,46 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         }
         className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 transition-all hover:bg-accent"
       >
-        <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-primary/10">
-          {showVideo ? (
-            <video
-              src={thumbnailSrc}
-              muted
-              playsInline
-              preload="metadata"
-              onLoadedData={() => setVideoReady(true)}
-              onError={() => setVideoFailed(true)}
-              className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                videoReady ? "opacity-100" : "opacity-0"
-              }`}
-            />
-          ) : null}
-          {!showVideo || !videoReady ? (
-            <FolderKanban className="absolute h-7 w-7 text-primary" />
-          ) : null}
-          {showVideo && videoReady && project.thumbnail_duration != null && (
-            <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-              <Badge variant="secondary" className="rounded-md tabular-nums">
-                {formatDuration(project.thumbnail_duration)}
-              </Badge>
-            </div>
+        <div
+          className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
+            // Neutral base for the live mist — bg-primary/10 would leak hue
+            // through it; the tinted base is only for the settled thumbnail.
+            live ? "bg-muted" : "bg-primary/10"
+          }`}
+        >
+          {live ? (
+            // Unsettled project — the layered processing tile is the life
+            // signal (matte base, light shaft, mist, grain, halo), so the
+            // stage label below stays plain text.
+            <ProcessingTile>
+              <BrandLoader className="relative h-8 w-8" />
+            </ProcessingTile>
+          ) : (
+            <>
+              {showVideo ? (
+                <video
+                  src={thumbnailSrc}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onLoadedData={() => setVideoReady(true)}
+                  onError={() => setVideoFailed(true)}
+                  className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                    videoReady ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              ) : null}
+              {!showVideo || !videoReady ? (
+                <FolderKanban className="absolute h-7 w-7 text-primary" />
+              ) : null}
+              {showVideo && videoReady && project.thumbnail_duration != null && (
+                <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+                  <Badge variant="secondary" className="rounded-md tabular-nums">
+                    {formatDuration(project.thumbnail_duration)}
+                  </Badge>
+                </div>
+              )}
+            </>
           )}
         </div>
         <div className="min-w-0">
@@ -144,14 +168,13 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
           <div className="mt-0.5 flex items-center justify-between gap-1">
             <p className="truncate text-xs text-muted-foreground">
               {active ? (
-                <span className="shimmer">{t(`projects.status.${project.status}`)}</span>
+                // Plain text — the animated tile above already carries the
+                // "working" signal, so the stage label doesn't shimmer.
+                t(`projects.status.${project.status}`)
               ) : project.status === "draft" ? (
-                // draft ⟺ created but generation never confirmed — the only
-                // useful action is resuming the plan-confirm chat.
-                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                  {t("projects.status.draft")}
-                </span>
+                // Same muted gray as every other status in this slot — no
+                // amber dot, no color coding.
+                t("projects.status.draft")
               ) : project.updated_at ? (
                 formatRelativeTime(project.updated_at, i18n.language)
               ) : null}
@@ -193,13 +216,18 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
                       <Pencil className="mr-2 h-4 w-4" />
                       {t("projects.rename")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      {t("common.delete")}
-                    </DropdownMenuItem>
+                    {/* Hidden while a run is live: deleting mid-run races the
+                        worker — it would finish rendering and re-write objects
+                        under the already-swept TOS prefixes, leaving orphans. */}
+                    {!active && (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setDeleteOpen(true)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {t("common.delete")}
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>

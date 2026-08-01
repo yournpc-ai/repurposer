@@ -7,13 +7,15 @@ import {
   Play,
   Send,
   Share2,
-  Sparkles,
+  MessageSquare,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { BrandLoader } from "@/components/BrandLoader"
+import { ProcessingTile } from "@/components/ProcessingTile"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -132,9 +134,11 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
           }}
         >
           {isRendering ? (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <p className="text-sm text-muted-foreground">{t("chat.rendering")}</p>
+            <div className="relative h-full w-full p-6 text-center">
+              <ProcessingTile>
+                <BrandLoader className="relative h-10 w-10" />
+                <p className="relative text-sm text-muted-foreground">{t("chat.rendering")}</p>
+              </ProcessingTile>
             </div>
           ) : isPlaying && videoUrl ? (
             <video
@@ -199,11 +203,7 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
                 className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  {isRendering ? (
-                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  ) : (
-                    <Play className="h-5 w-5 fill-current" />
-                  )}
+                  <Play className="h-5 w-5 fill-current" />
                 </span>
               </button>
             </>
@@ -218,18 +218,12 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
               className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center transition-colors hover:bg-accent/50 disabled:cursor-not-allowed"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border">
-                {isRendering ? (
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <Play className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Play className="h-5 w-5 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground">
-                {isRendering
-                  ? t("chat.rendering")
-                  : renderError
-                    ? t("projectDetail.renderFailed")
-                    : t("results.clipNotRendered")}
+                {renderError
+                  ? t("projectDetail.renderFailed")
+                  : t("results.clipNotRendered")}
               </p>
             </button>
           )}
@@ -285,7 +279,7 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={() => setChatOpen(true)}>
-                      <Sparkles className="mr-2 h-4 w-4" />
+                      <MessageSquare className="mr-2 h-4 w-4" />
                       {t("clipMenu.remix")}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>

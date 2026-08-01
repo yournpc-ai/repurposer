@@ -10,9 +10,13 @@ import type { RecipeCard as RecipeCardData } from "@/lib/recipes"
  * One recipe card (RECIPES §7.3, Opus-style gallery): a full-bleed vertical
  * (9:16) auto-playing preview with the recipe type at the top-left, an
  * inverse sound toggle circle at the top-right (one card sounds at a time —
- * the parent owns `soundingId`), and a hover-revealed bottom panel carrying
- * the promise + the Remix action (reserved cards show a Soon pill instead —
- * a promise is never clickable before its capability is real).
+ * the parent owns `soundingId`), and a hover-revealed bottom action — Remix
+ * for live cards, a Soon pill for reserved (a promise is never clickable
+ * before its capability is real). No promise copy on hover (2026-08-02).
+ *
+ * Remix (2026-08-01, docs/tasks/recipe-mention.md): inserts a recipe mention
+ * chip into the composer — the pinned task book resolves server-side, never
+ * from a client-built prior.
  */
 export function RecipeCard({
   card,
@@ -56,12 +60,14 @@ export function RecipeCard({
         playsInline
       />
 
-      {/* Top-left: recipe type */}
-      <span className="absolute left-3 top-3 text-sm font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+      {/* Top-left: recipe type — a faint frosted chip (same family as the
+          sound circle) so it never floats bare over busy footage */}
+      <span className="absolute left-3 top-3 rounded-md bg-black/45 px-2 py-1 text-sm font-medium text-white backdrop-blur-sm">
         {t(`recipes.${card.id}.title`)}
       </span>
 
-      {/* Top-right: inverse sound toggle */}
+      {/* Top-right: inverse sound toggle — fades in on hover, but stays
+          visible while this card is the one sounding */}
       <button
         type="button"
         aria-label={sounding ? t("recipes.mute") : t("recipes.unmute")}
@@ -69,16 +75,19 @@ export function RecipeCard({
           e.stopPropagation()
           onToggleSound(card.id)
         }}
-        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+        className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-all hover:bg-black/80 ${
+          sounding
+            ? "opacity-100"
+            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        }`}
       >
         {sounding ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
       </button>
 
-      {/* Hover: promise + action rise from the bottom */}
-      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 pt-10 transition-transform duration-300 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
-        <p className="mb-2.5 text-sm leading-snug text-white/90">
-          {t(`recipes.${card.id}.promise`)}
-        </p>
+      {/* Hover: the centered action rises from the bottom (Remix for live
+          cards, a Soon pill for reserved) over a barely-there scrim — no
+          promise copy, no heavy backdrop */}
+      <div className="absolute inset-x-0 bottom-0 flex translate-y-full justify-center bg-gradient-to-t from-black/40 via-black/15 to-transparent p-3 pt-8 transition-transform duration-300 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
         {live ? (
           <button
             type="button"
@@ -86,7 +95,7 @@ export function RecipeCard({
               e.stopPropagation()
               onSelect(card)
             }}
-            className="flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-sm text-black transition-colors hover:bg-white"
+            className="flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-1.5 text-sm text-white backdrop-blur-sm transition-colors hover:bg-white/25"
           >
             <Wand2 className="h-3.5 w-3.5" />
             {t("recipes.remix")}

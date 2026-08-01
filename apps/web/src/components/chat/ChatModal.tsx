@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useState } from "react"
-import { Send, Sparkles, X } from "lucide-react"
+import { Send, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { LogoMark } from "@/components/LogoMark"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -268,7 +269,7 @@ export function ChatModal({
       <DialogContent className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-2xl">
         <DialogHeader className="px-4 pb-2 pt-4">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <LogoMark className="h-5 w-5" />
             {t("chat.assetModalTitle", { asset: assetTitle })}
           </DialogTitle>
         </DialogHeader>

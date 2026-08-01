@@ -67,7 +67,7 @@ export function QaPair({ question, questionDetail, answer, muted }: QaPairProps)
   return (
     <Message align="start">
       <MessageContent>
-        <div className="w-full max-w-[85%] space-y-2 text-sm">
+        <div className="w-full max-w-[85%] space-y-2 rounded-lg bg-muted/50 px-3 py-2.5 text-sm">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {t("chat.qa.q")}

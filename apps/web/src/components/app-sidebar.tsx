@@ -98,7 +98,6 @@ export function AppSidebar() {
           </Avatar>
           <div className="flex flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
             <span className="text-sm font-medium leading-none">{displayName}</span>
-            <span className="mt-1 text-xs text-muted-foreground">0 credits</span>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=collapsed]:hidden" />
         </Button>

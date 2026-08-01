@@ -171,7 +171,10 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   // Brand (baked into the spec by the API; absent -> default look).
   const brand = spec.brand ?? undefined;
   const captionColor = brand?.caption_color || "#ffffff";
-  const captionSize = brand?.caption_size || 56;
+  // Default 68px on the 1080-wide canvas (≈6.3% of width) — 56 read small on
+  // phone screens; this matches the text-card weight and the TikTok/CapCut
+  // caption norm. Brand caption_size still overrides.
+  const captionSize = brand?.caption_size || 68;
   const captionFont = fontFamilyFor(brand?.caption_font);
   const objectFit = brand?.fill_mode === "fit" ? "contain" : "cover";
   // Caption style = catalog lookup (captions.ts), never a per-id branch.

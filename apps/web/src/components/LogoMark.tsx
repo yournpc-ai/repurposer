@@ -10,6 +10,13 @@ import { cn } from "@/lib/utils"
  * inverts with the theme like every other control. Keep the geometry in sync
  * with public/favicon.svg (the static, baked-color version of this mark).
  */
+
+/** The delta glyph path — the single source of truth for the mark's geometry.
+ * Shared by LogoMark (tiled lockups) and BrandLoader (the fill animation);
+ * public/favicon.svg carries a static baked copy of the same path. */
+export const LOGO_GLYPH_PATH =
+  "M4.5 9.9 C8.5 9.9 9.4 6.7 18.8 5.9 L15.4 12 L18.8 18.1 C9.4 17.3 8.5 14.1 4.5 14.1 Z"
+
 export function LogoMark({ className }: { className?: string }) {
   return (
     <span
@@ -20,7 +27,7 @@ export function LogoMark({ className }: { className?: string }) {
     >
       <svg viewBox="0 0 24 24" className="h-[86%] w-[86%]" aria-hidden="true">
         <path
-          d="M4.5 9.9 C8.5 9.9 9.4 6.7 18.8 5.9 L15.4 12 L18.8 18.1 C9.4 17.3 8.5 14.1 4.5 14.1 Z"
+          d={LOGO_GLYPH_PATH}
           fill="currentColor"
           stroke="currentColor"
           strokeWidth="0.9"

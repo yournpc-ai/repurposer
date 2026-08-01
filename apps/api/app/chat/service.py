@@ -677,17 +677,20 @@ async def dock_checkpoint_question(
     return message, bailed_run_ids
 
 
-async def mark_task_book_started(
+async def discard_unanswered_task_book(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
-    run_id: UUID,
 ) -> None:
-    """Settle any open task_book question as started (``/generate`` path).
+    """Drop an unanswered task_book question on the ``/generate`` path.
 
-    Starting the run IS the answer; this keeps the QA archive honest for
-    callers that go through /generate directly (retries, API callers, the
-    auto-start fallback). Flush-only — caller commits.
+    /generate means the run started WITHOUT the user answering the docked
+    question (auto-start on an explicit instruction, retries, targeted runs,
+    API callers). No QA interaction happened, so the archive must not carry
+    a fabricated Q/A pair — the question row is deleted outright. Genuine
+    confirmations (the dock's Start button, a prose "looks good, start it")
+    go through ``answer_question`` and still archive their QA pair.
+    Flush-only — caller commits.
     """
     conversation = await find_conversation(db, user_id, project_id)
     if conversation is None:
@@ -695,10 +698,7 @@ async def mark_task_book_started(
     pending = await latest_pending_question(db, UUID(str(conversation.id)))
     if pending is None or (pending.question or {}).get("kind") != "task_book":
         return
-    pending.answer = AnswerPayload(
-        kind="start", answered_at=datetime.now(UTC)
-    ).model_dump(mode="json")
-    pending.workflow_run_id = run_id
+    await db.delete(pending)
 
 
 async def answer_question(

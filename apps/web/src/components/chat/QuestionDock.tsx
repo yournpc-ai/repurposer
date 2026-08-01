@@ -5,7 +5,8 @@
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
  * - task_book: the plan's Start/Cancel decision plus the autonomy tier
- *   (Auto/Review), the needs-your-check reasons, and the leave note.
+ *   (Auto/Review — picker currently hidden, see SHOW_AUTONOMY_PICKER), the
+ *   needs-your-check reasons, and the leave note.
  * - choice: the question line plus its options as a button group (letter
  *   badges mirror the deterministic autoResume mapping — typing "a" picks
  *   option a); free text rides the input (autoResume).
@@ -24,6 +25,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export type Autonomy = "auto" | "review"
+
+/** The autonomy tier picker is hidden, not retired (2026-07-31): the concept
+ * read as noise at confirm time ("switching it changes nothing"). The
+ * plumbing stays — the tier still rides the start answer; flip this flag to
+ * re-expose the picker. */
+const SHOW_AUTONOMY_PICKER = false
 
 /** One option on a choice question (mirrors the API's AskOption). */
 export interface DockOption {
@@ -88,32 +95,34 @@ function TaskBookForm({
           <span className="truncate">{question}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1.5"
-                  aria-label={t("questionDock.autonomy.label")}
-                />
-              }
-            >
-              <span>{t(`questionDock.autonomy.${autonomy}`)}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="end">
-              {AUTONOMY_TIERS.map((tier) => (
-                <DropdownMenuItem
-                  key={tier}
-                  onClick={() => onAutonomyChange(tier)}
-                >
-                  <span className="flex-1">{t(`questionDock.autonomy.${tier}`)}</span>
-                  {tier === autonomy ? <Check className="h-4 w-4" /> : null}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {SHOW_AUTONOMY_PICKER ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-1.5"
+                    aria-label={t("questionDock.autonomy.label")}
+                  />
+                }
+              >
+                <span>{t(`questionDock.autonomy.${autonomy}`)}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="end">
+                {AUTONOMY_TIERS.map((tier) => (
+                  <DropdownMenuItem
+                    key={tier}
+                    onClick={() => onAutonomyChange(tier)}
+                  >
+                    <span className="flex-1">{t(`questionDock.autonomy.${tier}`)}</span>
+                    {tier === autonomy ? <Check className="h-4 w-4" /> : null}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           <Button variant="ghost" onClick={onCancel} disabled={starting}>
             {t("common.cancel")}
           </Button>

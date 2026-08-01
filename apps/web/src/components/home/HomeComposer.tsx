@@ -1,7 +1,7 @@
 "use client"
 
 import { Link, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Check,
-  Sparkles,
+  Cpu,
   User,
   Video,
   Image as ImageIcon,
@@ -21,11 +21,14 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/components/AuthProvider"
-import type { RecipeCard } from "@/lib/recipes"
+import type { ChatMention } from "@/lib/mentions"
+import {
+  MentionEditor,
+  type MentionEditorHandle,
+} from "@/components/mentions/MentionEditor"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   SpeakerPickerModal,
@@ -33,6 +36,7 @@ import {
 } from "@/components/home/SpeakerPickerModal"
 import { AssetsModal } from "@/components/home/AssetsModal"
 import { Tour, type TourStep } from "@/components/ui/tour"
+import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,16 +71,62 @@ interface HomeComposerProps {
   speakers: Speaker[]
   brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
-  /** Picked recipe card (RECIPES §7.2): prefills the prompt and pins the
-   * task book (explicit slots + dub_languages prior) on send. */
-  recipe?: RecipeCard | null
+  /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
+   * owns the text (MentionEditor); Home keeps it only as the send payload
+   * and so a card's Remix can act through `editorRef`. */
+  prompt: string
+  onPromptChange: (value: string) => void
+  mentions: ChatMention[]
+  onMentionsChange: (value: ChatMention[]) => void
+  editorRef: RefObject<MentionEditorHandle | null>
 }
 
 const AUTO_GENERATE = "__auto_generate__"
 
-/** First-visit composer tour: seen flag lives in localStorage (same
- * `repurposer-*` key family as theme/lang). Written on complete AND skip. */
+/** First-visit composer tour: the seen flag stores the tour's content hash
+ * (version = a pure function of content, lib/tour.ts) — any step or copy
+ * change replays the tour exactly once per user, zero manual versioning.
+ * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
+
+/** Composer teaching: assets → speaker → prompt → send, then the recipe
+ * gallery as the alternative entry (lands last; Tour skips the step if the
+ * cards haven't loaded yet). */
+const COMPOSER_TOUR_STEPS: TourStepDef[] = [
+  {
+    target: "[data-tour='composer-assets']",
+    titleKey: "tour.composer.assetsTitle",
+    descKey: "tour.composer.assetsDesc",
+    side: "bottom",
+  },
+  {
+    target: "[data-tour='composer-speaker']",
+    titleKey: "tour.composer.speakerTitle",
+    descKey: "tour.composer.speakerDesc",
+    side: "bottom",
+  },
+  {
+    target: "[data-tour='composer-prompt']",
+    titleKey: "tour.composer.promptTitle",
+    descKey: "tour.composer.promptDesc",
+    side: "bottom",
+  },
+  {
+    target: "[data-tour='composer-send']",
+    titleKey: "tour.composer.sendTitle",
+    descKey: "tour.composer.sendDesc",
+    side: "top",
+    align: "end",
+  },
+  {
+    target: "[data-tour='home-recipes']",
+    titleKey: "tour.composer.recipesTitle",
+    descKey: "tour.composer.recipesDesc",
+    side: "top",
+  },
+]
+
+const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 
 /** Dropdown header: a short title plus a one-line explanation of what this
  * dimension controls, so first-time users understand the pill's purpose. */
@@ -95,13 +145,16 @@ export function HomeComposer({
   speakers,
   brandTemplates,
   onGenerateStart,
-  recipe,
+  prompt,
+  onPromptChange,
+  mentions,
+  onMentionsChange,
+  editorRef,
 }: HomeComposerProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { requireAuth } = useAuth()
 
-  const [prompt, setPrompt] = useState("")
   const [speakerId, setSpeakerId] = useState(AUTO_GENERATE)
   const [brandTemplateId, setBrandTemplateId] = useState("")
   const [files, setFiles] = useState<File[]>([])
@@ -109,26 +162,13 @@ export function HomeComposer({
   const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
-  const [isComposing, setIsComposing] = useState(false)
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  // Recipe pick: prefill the prompt from the card's template. The pinned
-  // task book rides the `recipe` prop straight into handleGenerate's
-  // /intent prior — the recipe's promise is delivered by the pin-merge,
-  // never re-inferred.
-  useEffect(() => {
-    if (recipe) {
-      setPrompt(t(`recipes.${recipe.id}.promptTemplate`))
-      textareaRef.current?.focus()
-    }
-  }, [recipe, t])
-
-  // First-visit teaching: open the composer tour once per browser. Read in
-  // an effect only — localStorage is never touched during SSR.
+  // First-visit teaching: open the composer tour once per tour version. Read
+  // in an effect only — localStorage is never touched during SSR.
   useEffect(() => {
     try {
-      if (!window.localStorage.getItem(TOUR_SEEN_KEY)) setTourOpen(true)
+      if (window.localStorage.getItem(TOUR_SEEN_KEY) !== TOUR_VERSION)
+        setTourOpen(true)
     } catch {
       // storage unavailable (private mode) — tour simply never auto-opens
     }
@@ -136,7 +176,7 @@ export function HomeComposer({
 
   const markTourSeen = () => {
     try {
-      window.localStorage.setItem(TOUR_SEEN_KEY, "1")
+      window.localStorage.setItem(TOUR_SEEN_KEY, TOUR_VERSION)
     } catch {
       // ignore — worst case the tour shows again next visit
     }
@@ -174,6 +214,11 @@ export function HomeComposer({
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
+  // Mention chip laws (docs/tasks/recipe-mention.md §2.4): visible (inline
+  // chip in the sentence, MentionEditor), consumed on send (handleGenerate
+  // clears the draft on success, before navigating), × purifies (removing
+  // the chip removes every trace — no residual pin).
+
   const handleGenerate = async () => {
     await requireAuth(async () => {
       // Prompt is required — the pipeline's intent step derives the task
@@ -185,10 +230,17 @@ export function HomeComposer({
       setIsGenerating(true)
       onGenerateStart?.()
       try {
+        // Project title = a 15-char split of the user's prompt + "…" — the
+        // chat-app convention (a conversation is named from the user's own
+        // words), NEVER the material's filename.
+        const promptLine = prompt.trim().replace(/\s+/g, " ")
+        const title =
+          (promptLine.length > 15 ? `${promptLine.slice(0, 15)}…` : promptLine) ||
+          t("common.untitled")
         const projectRes = await apiFetch("/api/v1/projects", {
           method: "POST",
           body: {
-            title: files[0]?.name || prompt.slice(0, 60) || t("common.untitled"),
+            title,
             event_name: "",
             speaker_id:
               speakerId === AUTO_GENERATE ? undefined : speakerId || undefined,
@@ -238,28 +290,25 @@ export function HomeComposer({
 
         // Resolve the task book via the project-scoped intent endpoint. The
         // server persists it on the project (pending_intent), so the overlay
-        // on the results page can confirm or edit it — now or later. A
-        // recipe pick sends its pinned book as `prior`: the explicit clips
-        // slot and dub_languages pin through the merge (RECIPES §7.2).
+        // on the results page can confirm or edit it — now or later.
+        // Mentions are the composer's fourth payload field: a recipe mention
+        // is pinned server-side (resolve_recipe_mentions) — the composer
+        // never builds a prior (docs/tasks/recipe-mention.md, prohibition #1).
         const intentRes = await apiFetch(`/api/v1/projects/${project.id}/intent`, {
           method: "POST",
           body: {
             prompt: prompt.trim(),
             brand_template_id: brandTemplateId || undefined,
-            ...(recipe
-              ? {
-                  prior: {
-                    outputs: recipe.slotsPrior,
-                    dub_languages: recipe.params?.dubLanguages ?? [],
-                  },
-                }
-              : {}),
+            mentions,
           },
         })
         if (!intentRes.ok) {
           const detail = await intentRes.json().catch(() => null)
           throw new Error(detail?.detail || "Intent inference failed")
         }
+
+        // Send consumes the draft (chip law ②): one clear, before navigating.
+        editorRef.current?.clear()
 
         navigate({
           to: "/projects/$id",
@@ -278,35 +327,15 @@ export function HomeComposer({
       ? undefined
       : speakers.find((s) => s.id === speakerId)
 
-  // Composer teaching tour: assets → speaker → prompt → send. Built per
-  // render so a language switch re-labels the steps (Tour reads via ref).
-  const tourSteps: TourStep[] = [
-    {
-      target: "[data-tour='composer-assets']",
-      title: t("tour.composer.assetsTitle"),
-      description: t("tour.composer.assetsDesc"),
-      side: "bottom",
-    },
-    {
-      target: "[data-tour='composer-speaker']",
-      title: t("tour.composer.speakerTitle"),
-      description: t("tour.composer.speakerDesc"),
-      side: "bottom",
-    },
-    {
-      target: "[data-tour='composer-prompt']",
-      title: t("tour.composer.promptTitle"),
-      description: t("tour.composer.promptDesc"),
-      side: "bottom",
-    },
-    {
-      target: "[data-tour='composer-send']",
-      title: t("tour.composer.sendTitle"),
-      description: t("tour.composer.sendDesc"),
-      side: "top",
-      align: "end",
-    },
-  ]
+  // Composer teaching tour: built per render from the static config so a
+  // language switch re-labels the steps (Tour reads via ref).
+  const tourSteps: TourStep[] = COMPOSER_TOUR_STEPS.map((step) => ({
+    target: step.target,
+    side: step.side,
+    align: step.align,
+    title: t(step.titleKey),
+    description: t(step.descKey),
+  }))
 
   return (
     <>
@@ -345,7 +374,7 @@ export function HomeComposer({
               </span>
             </button>
 
-            {/* Speaker block — same anatomy: avatar/sparkle top, "Speaker"
+            {/* Speaker block — same anatomy: avatar/user-icon top, "Speaker"
                 title, current value at the very bottom. */}
             <button
               type="button"
@@ -375,21 +404,16 @@ export function HomeComposer({
             </button>
           </div>
 
-          <div className="flex h-20 flex-1 flex-col" data-tour="composer-prompt">
-            <Textarea
-              ref={textareaRef}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
-                  e.preventDefault()
-                  handleGenerate()
-                }
-              }}
+          <div className="relative flex h-20 flex-1 flex-col" data-tour="composer-prompt">
+            <MentionEditor
+              ref={editorRef}
               placeholder={t("home.pastePlaceholder")}
-              className="min-h-0 flex-1 resize-none border-0 bg-transparent p-2 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
+              disabled={isGenerating}
+              onChange={(text, ms) => {
+                onPromptChange(text)
+                onMentionsChange(ms)
+              }}
+              onSubmit={handleGenerate}
             />
           </div>
         </div>
@@ -453,7 +477,7 @@ export function HomeComposer({
                     size="sm"
                     className="ml-auto h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{t("composer.aiModel")}</span>
                     <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
@@ -468,7 +492,7 @@ export function HomeComposer({
                     />
                   </DropdownMenuLabel>
                   <DropdownMenuItem>
-                    <Sparkles className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <Cpu className="mr-2 h-4 w-4 text-muted-foreground" />
                     <span className="flex-1">MiniMax M3</span>
                     <Check className="ml-2 h-4 w-4" />
                   </DropdownMenuItem>

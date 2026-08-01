@@ -25,6 +25,7 @@ from app.pipeline.routes import (
     music,
     outputs,
     projects,
+    recipes,
     runs,
     speaker_assets,
 )
@@ -222,6 +223,7 @@ app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
+app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
 app.include_router(intent_router, prefix="/api/v1", tags=["intent"])
 app.include_router(
     brand_templates_router, prefix="/api/v1/brand-templates", tags=["brand-templates"]

@@ -5,7 +5,7 @@ import { AppHeader } from "@/components/AppHeader"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 /**
- * Pathless layout route for the authenticated workbench: everything under
+ * Pathless layout route for the authenticated studio: everything under
  * `_app` gets the sidebar chrome. The public landing page (`/`) lives
  * outside this layout.
  */
