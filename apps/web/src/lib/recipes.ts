@@ -46,6 +46,12 @@ const CLIPS_SLOT: IntentSlot = {
 
 const RECIPE_MEDIA_BASE = "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs"
 
+/** Bump on every teaser regeneration: same-key overwrites stick in browser
+ * media cache (Chrome never revalidates <video> range requests, even on hard
+ * refresh), so the URL itself must change to flush stale copies. */
+const RECIPE_MEDIA_VERSION = 2
+const asset = (name: string) => `${RECIPE_MEDIA_BASE}/${name}?v=${RECIPE_MEDIA_VERSION}`
+
 export const RECIPE_CARDS: RecipeCard[] = [
   {
     // R1: one talk -> clips + your cloned voice speaking DE/FR/ES (fork
@@ -54,8 +60,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     slotsPrior: [CLIPS_SLOT],
     params: { dubLanguages: ["de", "fr", "es"] },
     preview: {
-      posterUrl: `${RECIPE_MEDIA_BASE}/dub-poster.jpg`,
-      videoUrl: `${RECIPE_MEDIA_BASE}/dub-preview.mp4`,
+      posterUrl: asset("dub-poster.jpg"),
+      videoUrl: asset("dub-preview.mp4"),
     },
     status: "live",
   },
@@ -64,8 +70,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "image-video",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: `${RECIPE_MEDIA_BASE}/image-video-poster.jpg`,
-      videoUrl: `${RECIPE_MEDIA_BASE}/image-video-preview.mp4`,
+      posterUrl: asset("image-video-poster.jpg"),
+      videoUrl: asset("image-video-preview.mp4"),
     },
     status: "reserved",
   },
@@ -74,8 +80,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "reframe",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: `${RECIPE_MEDIA_BASE}/reframe-poster.jpg`,
-      videoUrl: `${RECIPE_MEDIA_BASE}/reframe-preview.mp4`,
+      posterUrl: asset("reframe-poster.jpg"),
+      videoUrl: asset("reframe-preview.mp4"),
     },
     status: "reserved",
   },
@@ -84,8 +90,8 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "style",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: `${RECIPE_MEDIA_BASE}/style-poster.jpg`,
-      videoUrl: `${RECIPE_MEDIA_BASE}/style-preview.mp4`,
+      posterUrl: asset("style-poster.jpg"),
+      videoUrl: asset("style-preview.mp4"),
     },
     status: "reserved",
   },
@@ -95,7 +101,7 @@ export const RECIPE_CARDS: RecipeCard[] = [
     id: "ai-visuals",
     slotsPrior: [CLIPS_SLOT],
     preview: {
-      posterUrl: `${RECIPE_MEDIA_BASE}/ai-visuals-poster.jpg`,
+      posterUrl: asset("ai-visuals-poster.jpg"),
       // No preview video until the capability itself exists — poster only.
     },
     status: "reserved",
