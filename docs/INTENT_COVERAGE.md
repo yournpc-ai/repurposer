@@ -1,9 +1,9 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（2026-07-30 建，随 intent-ask 迭代 1-4 + API 面收口落地后的现状；**2026-07-30 期 4 补四**：G-1/G-4/G-2 修复 + G-5/G-6 收编，见 `tasks/intent-ask-primitive.md` 期 4 补四）
+> Status: 活跃（2026-07-30 建，随 intent-ask 迭代 1-4 + API 面收口落地后的现状；**2026-07-30 期 4 补四**：G-1/G-4/G-2 修复 + G-5/G-6 收编，见 `tasks/done/intent-ask-primitive.md` 期 4 补四）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
-> 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/intent-ask-primitive.md`。
+> 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md`。
 
 ---
 
@@ -163,4 +163,4 @@
 
 - 新 skill/op/问题形态落地时：更新 §2 分类（若新类）、§3 矩阵、§6 矩阵。
 - 发现用户话术走错路：先登记 §5（含重现话术），再谈修。
-- 本表只登记"用户→路由"映射与状态；机制怎么实现看 `CHAT_ARCHITECTURE.md`，为什么这么设计看 `tasks/intent-ask-primitive.md` 与各 ADR。
+- 本表只登记"用户→路由"映射与状态；机制怎么实现看 `CHAT_ARCHITECTURE.md`，为什么这么设计看 `tasks/done/intent-ask-primitive.md` 与各 ADR。

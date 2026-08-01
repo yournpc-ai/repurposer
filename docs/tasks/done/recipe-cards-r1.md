@@ -1,6 +1,6 @@
 # recipe-cards-r1 实施简报——caption catalog + stacking preset + dub 配方接线 + 首页卡片层
 
-> Status: 📋 Ready for implementation（评审后开工）
+> Status: ✅ 已落地（2026-07-31：caption catalog + stacking preset + dub 接线 + 首页卡片层，见 RECIPES.md §8）
 > 依据：`docs/RECIPES.md` §2（三层正交）/§3（caption catalog）/§4.1（dub 卡）/§7（卡片层）/§8 R1/§10（禁令）；`CHAT_ARCHITECTURE.md` §4（registry 纪律）；`NAMING.md`（宪法 + §5 审计触发）
 > 迁移：**零表迁移**——dub_languages 全住 JSON 载荷层（pending_intent / GenerateRequest / TaskSpec / run.context）；catalog 是代码层收编
 > 用户裁决（RECIPES 头部①–④）适用本期：配方 = 能力承诺；dub 卡上了就必须能用用户素材跑出同款

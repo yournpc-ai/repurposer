@@ -1,23 +1,14 @@
 # Chat Architecture — Agent Interface 层
 
-> Status: ✅ v1 全链已实现（backend 2026-07-26；前端 2026-07-27：`GenerationOverlay` 全屏对话——计划卡 HITL 确认 + SSE 打勾流 + 项目级续聊，见 §8）；@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）
-> **2026-07-30 期 4 补四（缺口清扫）**：IntentProposal 第四态 `answer`（N-21，纯信息直答）+ `_build_context` 节点级进度注入（G-2）+ `InferredIntent.action` 第三值 `"start"` 与 `/intent` 响应联合第三态 `{type:"started"}`（G-1，确认相位原话确认直接起 run）——见简报 `tasks/intent-ask-primitive.md` 期 4 补四。
-> **2026-07-30 ask 原语期 4 落地**：Suspend/waiting + 方向检查点（review 档 full run 在 understand→plan 间插 checkpoint）+ answer 唤醒/bail 级联 + finalize 谓词补 waiting（§8.5）。
-> **2026-07-29 ask 原语期 1 落地**：messages question/answer + `POST /chat/messages/{id}/answer` + QuestionDock（task_book 形态，计划卡 Start 决策移入 dock）+ QA 双层入档 + autonomy 落 run.context（§8.5）；期 4 checkpoint 见简报 `tasks/intent-ask-primitive.md`。
-> **2026-07-30 期 3 ask 三态落地**：`AskProposal` 第三态（N-18 落代码）+ ChatIntentAgent ask 形态规则 + choice dock（选项按钮组）+ 确定性 autoResume（字母/序号/原文命中 → option，freeform 回落，零 LLM）+ answer 端点续聊（`AnswerResponse{answered_question, follow_up}`，answer = resume）+ 入口 clarification reasons 进 question 人话原文；"tasks=[] 反问" 迁移为 freeform ask。
-> **2026-07-29 期 2 任务书 slot 化落地**：`IntentSlot`（任务槽，N-20 请求层）全链路换形——`InferredIntent.outputs` / `GenerateRequest.slots` / `TaskSpec.outputs` / run.context；扁平 count 字段全库退役（宪法 §1）；compile_graph per-slot 扇出（一槽一节点，`spec.slot` + `spec.slot_index`）；director_plan 逐槽透传（显式槽字段代码兜底）；幂等删除改兄弟安全；pin 合并（explicit 槽抗 re-inference）；审阅面板换逐槽行 + 身份回响行。
-> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）
-> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）
-> 前置重构：`docs/tasks/backend-module-restructure.md`（chat/ 包是本文的代码家）
-> 实施简报：`docs/tasks/chat-loop-v1.md`
+> Status: ✅ v2 已实现（2026-07-26 backend + edit ops 接线；2026-07-27 GenerationOverlay 前端；2026-07-29/30 ask 原语期 1–4 + 期 4 补四全落地）。实施史见简报 `docs/tasks/done/chat-loop-v1.md` / `chat-loop-v2.md` / `intent-ask-primitive.md`；意图覆盖现状见 `INTENT_COVERAGE.md`。@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）。
+> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）
+> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；前置重构：`docs/tasks/done/backend-module-restructure.md`（chat/ 包是本文的代码家）
 >
-> v1 落地偏离点（相对本文设计稿）：
+> 落地偏离点（相对本文设计稿）：
 > - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
-> - `dub_clip` / `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发）。
-> - UI 冻结已解除（2026-07-27）：chat UI / 打勾流已落地（GenerationOverlay）；@picker 仍未做，mentions 仅落契约与列。
-> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；results 页 GenerationStepper 弹窗已于 2026-07-28 退役，processing 项目改开 `?overlay=run` attach 模式）；
->   step 状态枚举加 `waiting` 座位（HITL/suspend-resume 预留）。
-> - mentions 的 type 取 `workflow_step`（本文原写 plan node——N-15 改名后全栈同名）。
+> - `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发；归 R2，见 RECIPES §8）；`dub_clip` 已实装（2026-07-31 R1）。
+> - @picker 注册表化落地（2026-08-01 修订）：提及系统升级为**双端注册表架构**（前端 `MENTION_REGISTRY` + 服务端解析注册表），recipe 为第一注册成员、第五提及类型，任务书钉死收归服务端解析（简报 `docs/tasks/recipe-mention.md`）；此前 mentions 仅落契约与列（type 取 `workflow_step`，N-15 改名后全栈同名）。
+> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；results 页 GenerationStepper 弹窗已于 2026-07-28 退役，processing 项目改开 `?overlay=run` attach 模式）；step 状态枚举加 `waiting` 座位（HITL/suspend-resume 已用，§8.5）。
 
 ## 1. 定位与三条原则
 
@@ -172,6 +163,8 @@ intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代
 
 ## 7. Mentions（@ 实体引用）
 
+> **2026-08-01 注册表化修订**：提及系统 = 双端注册表（前端 `MENTION_REGISTRY`：icon / i18n / 候选源；服务端：效果注册表——**上下文富化**族通用注入已免费，**任务书钉死**族为 recipe 专属，解析唯一发生地 = 服务端 `resolve_recipe_mentions`）。`recipe` 为第五提及类型（前四 = asset / output / transcript_segment / workflow_step）；LLM 不解释 recipe 提及——确定性引用直接钉，不占 intent 调用。后续 @ 类型 = 双端各一条注册项，无类型分支（扩展证明见简报 `docs/tasks/recipe-mention.md` §2.5）。以下为本节的原始契约描述，机制不变。
+
 多轮对话的模糊指代必须落为确定引用。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / workflow step**。
 
 - 前端输入框 @ 触发选择器，`messages.mentions` JSONB 存 `[{type, id, label}]`；
@@ -221,11 +214,11 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 chat 的另一半是"改现有产物"。边界判定：
 
-- 指令能表达为对某个 output 的 clip-spec diff → **edit ops** → Operation Model（operations 表，📋 ROADMAP §2）；
+- 指令能表达为对某个 output 的 clip-spec diff → **edit ops** → Operation Model（operations 表，✅ 已落地）；
 - 指令需要新的生成 → **task list** → 新 run（本文机制）；
 - 拿不准 → intent 反问。
 
-edit ops **已定稿并落地**（2026-07-26，ADR-032 D5 + `tasks/operation-model.md`）：产物级 op = `remove_range` / `set_trim` / `set_title` / `set_caption_style` / `set_music` / `set_crop` / `set_aspect` / `set_caption_text` / `restore_version`（+ system 内部 `snapshot` / `set_spec`），chat 已真应用（registry 校验 + message_id 血统）；**plan 级 op（`set_node_params` / `regenerate_node` / `swap_slot`）归 RunPlan 小拓扑，不进 operations 表**——两家族分开登记；`restore_range` 独立 op 被否决（判例 N-16：caption 不可复活，恢复语义归快照层）。
+edit ops **已定稿并落地**（2026-07-26，ADR-032 D5 + `tasks/done/operation-model.md`）：产物级 op = `remove_range` / `set_trim` / `set_title` / `set_caption_style` / `set_music` / `set_crop` / `set_aspect` / `set_caption_text` / `restore_version`（+ system 内部 `snapshot` / `set_spec`），chat 已真应用（registry 校验 + message_id 血统）；**plan 级 op（`set_node_params` / `regenerate_node` / `swap_slot`）归 RunPlan 小拓扑，不进 operations 表**——两家族分开登记；`restore_range` 独立 op 被否决（判例 N-16：caption 不可复活，恢复语义归快照层）。
 
 ## 10. 失败语义
 

@@ -1,7 +1,7 @@
 # chat-loop-v2 实施简报——chat 主交互面（UI + DAG 内核接线）
 
 > Status: ✅ 已落地（2026-07-26：P1 ChatModal+RunCard / P2 translate_clip+dub_clip+MentionPicker / P3 edit ops 接线+OpsCard 全通并实测；regenerate_output 未注册——revise_script 已覆盖"再来一版"，防重叠）
-> 依据：`docs/CHAT_ARCHITECTURE.md` §3（dispatch 三类目标）/§7（mentions）；`docs/tasks/chat-loop-v1.md`（v1 地基已在 main）；`docs/tasks/operation-model.md`（edit ops 地基，并行简报）
+> 依据：`docs/CHAT_ARCHITECTURE.md` §3（dispatch 三类目标）/§7（mentions）；`docs/tasks/done/chat-loop-v1.md`（v1 地基已在 main）；`docs/tasks/done/operation-model.md`（edit ops 地基，并行简报）
 > 无新表 / 无新队列认领源 → 无需 ADR（v1 同判例）；新名词登记见 §7
 > 用户裁决（2026-07-26）：①用户感知面 = **一个 chat 对话窗**（modal），窗内展示动作状态 + 产物结果；②产物结果**与 results 页的 outputs 卡片是同一组件**，不做缩略图特化；③chat 改完关掉窗，外面 results 该项即是最新（同一 output 行，无第二数据源）；④窗可关可开，对话继续（历史持久化已在）；⑤UI 用 shadcn chat 组件（已装）；⑥DAG 画布 UI 不做，只做内核（chat 操作 DAG = plan 级 dispatch + edit ops）
 

@@ -1,8 +1,8 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/publish-dialog-notifications.md`；待办 = 平台应用凭据联调）
+> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/done/publish-dialog-notifications.md`；待办 = 平台应用凭据联调）
 >
-> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `ROADMAP.md` §5；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
+> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第 9 周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 
 ## 1. 模块职责与定位
 
@@ -184,14 +184,14 @@ created_at
 ## 8. AI 内容披露（ADR-026 落地）
 
 - `ai_disclosure` **由 clip-spec 分类器推导**（spec 含 dub 音轨 / AI 生成视觉 → `true`），不是用户勾选——用户永远不回答"这是不是 AI 生成"。
-- 文件层：合成轨道产物的 MP4 已嵌 C2PA（ROADMAP P0-1），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
+- 文件层：合成轨道产物的 MP4 已嵌 C2PA（PROGRESS 第 9 周合规标识），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
 - TikTok 端：voice-clone 内容属平台强制标记类，漏标的处罚落在用户账号上——`ai_disclosure` 徽标在**发布对话框**显式展示（个人模式）/ 机构审核页复核（机构模式）；API 披露字段是否暴露见 §14 开放问题。
 - 纯剪辑+字幕内容（真实素材标准编辑）：`ai_disclosure=false`，不嵌标、不提示（ADR-026 纯剪辑豁免）。
 
 ## 9. 发布数据回流（P2）
 
 - `metrics` 字段本期预留：发布后经 adapter `fetch_metrics` 按 T+1h / T+24h / T+7d 节奏拉取（worker 周期任务，非认领源），以 `{t1h: {...}, t24h: {...}, t7d: {...}}` 结构存 JSONB——保留"首小时 vs 首日"的速度信号，这是校准的重要特征。
-- 数据用途唯一：校准首发推荐分（`ROADMAP.md` §5 末行 → §1 persona/打分校准）；**不做面向用户的 analytics dashboard**（§13）。
+- 数据用途唯一：校准首发推荐分（PROGRESS 明确不在本周期 → 需求池·persona 校准）；**不做面向用户的 analytics dashboard**（§13）。
 - 升级路径：若校准需要跨发布单的时序查询（JSONB 不便聚合），再拆 `publication_metrics(publication_id, pulled_at, ...)` 明细表——P2 按校准的实际查询模式定，现在不过度设计。
 
 ## 10. 平台 adapter 接口与 REST 路由
@@ -273,7 +273,7 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 ## 11. UI 面
 
-> **2026-07-24 修订（已实现）**：本节原案的"发布记录页 + sidebar `nav.publishing` 入口"**取消**——事件流（发布成功/失败/渠道过期）由**通知中心**承载（全局顶栏铃铛下拉，非页面），持续管理（渠道连接）收进 **Settings**；原则 = 通知是事件流的呈现层，只有需要持续操作的东西才配拥有页面。实现以 `tasks/publish-dialog-notifications.md` 为准；下文保留为设计演化的记录，其中发布对话框（§11.2）、三态渠道卡（§11.5）仍然有效。
+> **2026-07-24 修订（已实现）**：本节原案的"发布记录页 + sidebar `nav.publishing` 入口"**取消**——事件流（发布成功/失败/渠道过期）由**通知中心**承载（全局顶栏铃铛下拉，非页面），持续管理（渠道连接）收进 **Settings**；原则 = 通知是事件流的呈现层，只有需要持续操作的东西才配拥有页面。实现以 `tasks/done/publish-dialog-notifications.md` 为准；下文保留为设计演化的记录，其中发布对话框（§11.2）、三态渠道卡（§11.5）仍然有效。
 >
 > 方向（2026-07-22 定）：**主路径 = 立即发布、个人免审**（ADR-027）。calendar 视图后置（P2+ 按使用数据验证）；竞品实证：Agent Opus 的 calendar 只是 projects 页视图 toggle、排期器在其 Pro 付费墙后（`research/agent-opus.md`）——创作工具品类的主流是"创作完立刻发"。
 
@@ -311,7 +311,7 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 - `rounded-md` / `ring-1 ring-border` + `shadow-*`；Badge 一律 `className="rounded-md"`；平台图标：lucide 有 `Linkedin`，TikTok 走"第三方 logo 无替代"例外（手写 SVG）。
 - 新增 i18n keys：`nav.publishing`、`publishing.*`、`channels.*`（en 先行，zh 镜像）。
 
-## 12. 分期路线（排期以 `ROADMAP.md` §5 为准）
+## 12. 分期路线（排期以 `PROGRESS.md` 为准）
 
 - **P1**（2026-07-23 定界后）：两张表（`publication_events` 降 P2，P1 排障靠 `last_error` + worker 日志）+ 状态机（个人流，ADR-027；建单即排期，产物出生 = `scheduled`）+ **LinkedIn 个人号 + TikTok 双平台直发**（TikTok 应用审核期间测试账号联调）+ **立即发布**（定时字段 schema 就位，datetime picker UI 入 P2）+ 幂等/重试。
 - **P2**：机构审核队列（`pending_review`/`approved`）+ metrics 回流校准、newsletter ESP（自有渠道，对冲 LinkedIn 单押）、源→目的地自动规则、多号、公司页、团队审核角色。

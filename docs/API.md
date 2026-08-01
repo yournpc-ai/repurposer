@@ -565,7 +565,7 @@ to store in `config.introMediaUrl` / `config.outroMediaUrl`.
 
 ## 13. Data Models
 
-See the Data Models section in [Architecture Design](./ARCHITECTURE.md).
+Field-level truth lives in code (`apps/api/app/models/tables.py`); cross-cutting data conventions and table ownership are in [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md) §4 / §7.3.
 
 Core models:
 

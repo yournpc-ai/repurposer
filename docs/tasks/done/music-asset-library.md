@@ -3,7 +3,7 @@
 > **Base branch**: `main` (current)  
 > **Architecture reference**: `docs/MUSIC_ARCHITECTURE.md`  
 > **Decision record**: `docs/DECISIONS.md` ADR-023  
-> **Status**: Ready for implementation  
+> **Status**: ✅ Implemented（2026-07，见 MUSIC_ARCHITECTURE.md）
 > **Owner**: TBD  
 
 ---

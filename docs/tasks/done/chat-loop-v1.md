@@ -1,8 +1,8 @@
 # CHAT_ARCHITECTURE §11 v1 实施简报——agent loop 地基（UI 冻结版）
 
-> Status: 方案定稿（2026-07-26，评审 5 轮后冻结），待实施
+> Status: ✅ 已落地（2026-07-26 backend；前端 GenerationOverlay 2026-07-27，见 CHAT_ARCHITECTURE.md）
 > 依据：`docs/CHAT_ARCHITECTURE.md` §11 v1；命名过 `docs/NAMING.md` 八条；无新表/无新认领源 → 无需 ADR
-> 实施第一步：将本文件复制为 `docs/tasks/chat-loop-v1.md`（任务简报入库，docs/README.md 清单登记）
+> 实施第一步：将本文件复制为 `docs/tasks/done/chat-loop-v1.md`（任务简报入库，docs/README.md 清单登记）
 
 ## 0. Context 与范围裁决
 
@@ -185,7 +185,7 @@ Backend：`pipeline/routes/runs.py`（新）`GET /api/v1/runs/{run_id}/events`�
 
   反对照：`pipeline/` 模块 ≠ Mastra Workflows（Pipeline = 摄入+ASR+编排+渲染，大于 Workflows）；`chat/` ≈ Agno Interfaces。
 - `docs/API.md`：`POST /api/v1/chat` 契约变更 + `GET /api/v1/runs/{id}/events` + `/jobs→/runs` 改名。
-- 本简报入 `docs/tasks/chat-loop-v1.md` 并在 `docs/README.md` 清单登记。
+- 本简报入 `docs/tasks/done/chat-loop-v1.md` 并在 `docs/README.md` 清单登记。
 
 ## 4. 命名审计（NAMING §5 触发点）
 

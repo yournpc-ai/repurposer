@@ -122,7 +122,7 @@ Opus 是品类定义者也是我们唯一的正面对标：它验证了"打分 +
 
 ## 9. Agent Opus 的 HITL 形态实证（2026-07-28/29 实测截图 ×4）
 
-> 用途：我们 ask 原语 + 停靠确认 + 方向检查点设计的直接参照（`../tasks/intent-ask-primitive.md`）。
+> 用途：我们 ask 原语 + 停靠确认 + 方向检查点设计的直接参照（`../tasks/done/intent-ask-primitive.md`）。
 
 - **停靠决策条**：确认条常驻输入框正上方，不随消息滚动——解剖 = `✓ + 一句问句 + 成本（⚡70/105）+ 1~3 个动作按钮`。两例："Ready to roll, start creating video now?"（Cancel / Create Video Now / Create Storyboard——**Cancel = bail 路径的产品实证**，Create Storyboard = 提交前替代路径）；"Save the brand brief and continue?"（单按钮）。
 - **审阅与决策分层**：Transcript / Brand brief 是消息流里的**可编辑面板**（"Review your X, edit directly or ask agent to edit"，字数统计 150/1700 words），决策条另行停靠——审阅在流内、决策在 dock。

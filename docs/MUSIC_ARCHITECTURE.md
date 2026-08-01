@@ -1,27 +1,16 @@
 # Repurposer Music Architecture
 
-> Status: Implemented (core landed 2026-07: `Music` table, MiniMax music-2.6 generation, pipeline integration; the Layer-4 music verification pass below remains future work)  
-> Last updated: 2026-07-20  
-> Author: Claude + Product Team  
-> Related: ADR-019 (built-in mood music library), ADR-022 (music library CRUD), `docs/tasks/todo.md`
+> Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现）
+> Last updated: 2026-07-31（瘦身：提案时代章节压缩，ContentPlan / services 时代引用修正）
+> Related: ADR-019 / ADR-022（被本文取代）、ADR-023（AI 生成音乐库决策）、实施简报 `docs/tasks/done/music-asset-library.md`
 
 ---
 
 ## 1. Background
 
-Background music is a critical creative layer for vertical clips generated from speeches and conference talks. It influences emotional tone, watch-through rate, and the perceived professionalism of the final output.
+早期音乐是 Brand 模板里的静态 mood 枚举（`musicMood: "calm"` → 磁盘文件），问题：版权采集脆弱、选择静态、生成/精修两侧都无智能。本架构将其替换为 **AI 生成音乐库 + 专用 `Music` 表**。
 
-Historically, Repurposer treated music as a static brand-template setting (`musicMood: "calm"`) resolved to a file on disk (`data/music/{mood}.<ext>`). This created several problems:
-
-1. **Copyright risk**: Curating a royalty-free music library is expensive and legally fragile (see Opus Pro’s "license expiry" warnings).
-2. **Static selection**: A dropdown of a few moods cannot match the emotional arc of diverse clips.
-3. **No generation-time intelligence**: The clip planner had no say in which music fit which segment.
-4. **No user-driven refinement**: Chat and editor could not regenerate or fine-tune music.
-5. **Upload ambiguity**: User-uploaded music introduced unclear copyright liability.
-
-This document proposes a unified architecture that replaces the static mood-file approach with an **AI-generated music library backed by a dedicated `Music` table**.
-
-> **Naming note**: `Music` is the internal table/entity name for a music library item. User-facing language and API paths use "music" (e.g., `/api/v1/music`, "Music panel"). A `Music` is **not** an audio track in the video-editing timeline sense; it is one piece of background music stored in the library.
+> **命名**：`Music` 是音乐库条目的内部表/实体名；用户侧文案与 API 路径用 "music"（`/api/v1/music`）。一条 Music 是库里的**一首背景乐**，不是视频时间线意义上的音轨。
 
 ---
 
@@ -39,7 +28,7 @@ This document proposes a unified architecture that replaces the static mood-file
 ## 3. Non-Goals
 
 1. **No user-uploaded music in MVP.** The legal and product overhead exceeds MVP value.
-2. **No manual audio timeline editing in MVP.** Trim/offset/fade are Phase 2+ features.
+2. **No manual audio timeline editing in MVP.** Trim/offset/fade are Phase 4+ features.
 3. **No real-time music generation during clip generation.** Music is selected from pre-generated assets; generation only happens on explicit user request via chat/editor.
 
 ---
@@ -47,48 +36,23 @@ This document proposes a unified architecture that replaces the static mood-file
 ## 4. High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Music Library                                       │
-│  (pre-generated AI music + user-generated music in future)                  │
-│  Stored as: Music row + audio object in S3-compatible object storage         │
-└───────────────────────────────┬─────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Brand Template                                      │
-│  musicEnabled: bool                                                           │
-│  musicAssetId: UUID | null  ← default music for this brand                  │
-└───────────────────────────────┬─────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Content Director + Clip Agent                       │
-│  ContentPlan.derivatives[].music_prompt  ← optional suggestion              │
-│  ClipPlan.music_asset_id                ← selected from library             │
-│  ClipPlan.music_enabled                 ← per-clip override                 │
-│  ClipPlan.music_gain_db                 ← per-clip volume                   │
-└───────────────────────────────┬─────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         services/generation.py                              │
-│  Resolve selected asset → ClipMusic                                           │
-│  Bake into render_spec.music                                                  │
-└───────────────────────────────┬─────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Remotion Renderer                                   │
-│  Play spec.music.url via <Audio />                                          │
-└───────────────────────────────┬─────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Result Editor / Chat                                │
-│  - Switch to another existing music asset                                     │
-│  - Toggle music / adjust gain                                                 │
-│  - Provide prompt → generate new music asset → update clip → re-render        │
-└─────────────────────────────────────────────────────────────────────────────┘
+Music Library（Music 表 + 对象存储 music/ 前缀，预生成 + 用户触发生成）
+        │
+        ▼
+Brand Template（musicEnabled / musicId / musicGainDb = 品牌默认曲）
+        │
+        ▼
+Clip Agent 生成时选曲（看到库清单 + 品牌默认，输出 music_id / enabled / gain_db）
+        │
+        ▼
+烘焙进 outputs[type=clip].render_spec.music（渲染器唯一契约，不读 DB）
+        │
+        ▼
+Remotion <Audio url>（loop + gain_db 混音）
+        │
+        ▼
+精修（chat / editor）：set_music 换曲/开关/增益 → 重渲染；
+                      自定义新曲 → MiniMax 生成入库 → set_music 应用
 ```
 
 ---
@@ -97,128 +61,38 @@ This document proposes a unified architecture that replaces the static mood-file
 
 | Data | Source of Truth | Rationale |
 |---|---|---|
-| **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | Current `main` stores uploads/outputs in object storage. Music follows the same convention; legacy `data/music/` is deprecated. |
-| **Music metadata** | `music` table (`Music` model) | Dedicated table for music-specific fields (mood, prompt, license, duration, attribution, is_public, generated_by_user_id). |
-| **Brand default music** | `BrandTemplate.config.musicId` | Explicit reference to a `Music.id`. User-facing: "default music". |
-| **Per-clip music choice** | `Clip.render_spec.music` | The render contract is the runtime source of truth. |
-| **Which music is available** | `music` table | DB queries are fast and support search/filter in the UI. |
+| **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | 与 uploads/outputs 同约定（ADR-024） |
+| **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 speaker） |
+| **Brand default music** | `BrandTemplate.config.musicId` | 用户侧 = "default music" |
+| **Per-clip music choice** | `outputs[type=clip].render_spec.music` | 渲染契约是运行时事实源 |
 
 ---
 
 ## 6. Data Model
 
-### 6.1 Music Table
+字段级事实源 = 代码（`app/models/tables.py` + `migrations/`），此处只记归属与绑定模型。
 
-**File**: `apps/api/app/models/tables.py`
+**`music` 表归属 Pipeline**（渲染资产库，MODULE_ARCH §4 已登记）。三种行：
 
-Why a dedicated table instead of `Asset`?
-- The existing `Asset` table requires every row to belong to either a `project_id` or a `speaker_id`. Music library items are global/shared resources, not tied to a specific project or speaker.
-- Music has structured metadata (mood, prompt, license, duration, attribution, is_public) that deserves typed columns rather than a JSON blob.
+- **Platform/default pieces**: `generated_by_user_id = NULL`, `is_public = TRUE`。平台所有，全员可用。
+- **User-generated pieces (MiniMax)**: `generated_by_user_id = <user_id>`, `is_public = TRUE` 默认。用户触发生成，但进入共享库。
+- **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` 默认。私有，显式分享 + 审核后才公开。
 
-**Binding model**:
-- **Platform/default music pieces**: `generated_by_user_id = NULL`, `is_public = TRUE`. Owned by the platform, available to all users.
-- **User-generated music pieces via MiniMax**: `generated_by_user_id = <user_id>`, `is_public = TRUE` by default. The user generated it, but it enters the shared library.
-- **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` by default. Private until explicitly shared and reviewed.
+**Brand Template config**：`musicEnabled: bool`、`musicId: str | null`（替代旧 `musicMood`）、`musicGainDb: float = -18.0`。
 
-```python
-class Music(Base):
-    """Background music piece (DB-backed; audio bytes stay in object storage)."""
-
-    __tablename__ = "music"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    mood = Column(String(50), nullable=False, unique=True)
-    title = Column(String(255), nullable=False)
-    ext = Column(String(8), nullable=False)
-    file_path = Column(String(512), nullable=False)  # object storage key, e.g. "music/{music_id}.mp3"
-    size_bytes = Column(Integer, nullable=False)
-    duration_seconds = Column(Integer, nullable=True)
-    prompt = Column(Text, nullable=True)
-    model = Column(String(100), nullable=True)
-    generation_id = Column(String(255), nullable=True)
-    license = Column(String(100), nullable=True)
-    source_url = Column(String(512), nullable=True)
-    attribution = Column(Text, nullable=True)
-    is_public = Column(Boolean, default=True, nullable=False)
-    generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-```
-
-### 6.2 Response Schemas
-
-**File**: `apps/api/app/models/schemas.py`
-
-```python
-class MusicResponse(BaseModel):
-    id: str
-    mood: str
-    title: str
-    ext: str
-    url: str
-    size_bytes: int
-    duration_seconds: int | None
-    prompt: str | None
-    license: str | None
-    source_url: str | None
-    attribution: str | None
-    is_public: bool
-    created_at: datetime
-
-
-class MusicGenerateRequest(BaseModel):
-    prompt: str
-    mood: str | None = None
-
-
-class MusicMetadataUpdate(BaseModel):
-    title: str | None = None
-    license: str | None = None
-    source_url: str | None = None
-    attribution: str | None = None
-    is_public: bool | None = None
-```
-
-### 6.3 Brand Template Config
-
-```python
-class BrandTemplateConfig(BaseModel):
-    ...
-    musicEnabled: bool = True
-    musicId: str | None = None            # NEW: replaces musicMood
-    musicGainDb: float = -18.0                 # NEW
-```
-
-**Migration note**: Existing templates with `musicMood` should be migrated to point to the corresponding pre-generated AI music piece, or left as `musicId=None` and resolved by the Clip Agent.
-
-### 6.4 Clip Plan Extension
-
-```python
-class ClipPlan(BaseModel):
-    ...
-    music_id: str | None = None
-    music_enabled: bool = True
-    music_gain_db: float = -18.0
-```
-
-### 6.5 Render Spec Contract
-
-`render_spec.music` remains:
+**Render spec contract（不变）**：
 
 ```typescript
 interface ClipMusic {
   music_id: string | null;
-  url: string | null;
+  url: string | null;   // 音乐文件的公开对象 URL（生成时从 Music.file_path 烘焙）
   enabled: boolean;
   gain_db: number;
-  // Future (not implemented):
-  // start_in_video_seconds?: number;
-  // start_in_music_seconds?: number;
-  // end_in_music_seconds?: number;
+  // Future (not implemented): start/end trim fields
 }
 ```
 
-The renderer does not know about music pieces, moods, or the music library. It only plays `url` when `enabled` is true.
+渲染器不知道音乐库、mood、Music 行的存在——`enabled` 为真时播 `url`，仅此而已。
 
 ---
 
@@ -243,20 +117,7 @@ Users who want custom music can trigger generation later via chat/editor.
 
 ### 7.3 Seeding
 
-Default music pieces are created at application startup if they do not exist:
-
-```python
-async def seed_default_music(db: AsyncSession) -> None:
-    """Ensure the 3 default AI-generated music pieces exist."""
-    for spec in DEFAULT_MUSIC_SPECS:
-        existing = await db.scalar(
-            select(Music).where(Music.mood == spec.mood)
-        )
-        if existing is None:
-            await create_music_from_file(db, spec)
-```
-
-Audio files live at `music/{music_id}.{ext}` in object storage.
+Default music pieces are created at application startup if they do not exist（按 `mood` 唯一键查重，`scripts/seed_default_music.py`；reset_db 会清空包括平台音乐，需重新 seed，花费 MiniMax 配额）。Audio files live at `music/{music_id}.{ext}` in object storage.
 
 ### 7.4 Artist-Generated Music Pieces (Future)
 
@@ -271,135 +132,23 @@ When the platform has artists or power users, their generated music pieces can a
 
 ## 8. Generation Flow
 
-### 8.1 Building the Generation Context
-
-```python
-async def build_generation_context(...) -> GenerationContext:
-    ...
-    return GenerationContext(
-        ...
-        music_prompt=None,              # Not used as default; brand default is explicit music piece
-        brand_music_id=bt.config.get("musicId") if bt else None,
-    )
-```
-
-### 8.2 Content Director
-
-The Director may optionally suggest a music mood in `DerivativePlan`:
-
-```python
-class DerivativePlan(BaseModel):
-    ...
-    music_mood: str | None = None      # "calm", "uplifting", "corporate"
-```
-
-This is a hint, not a binding selection.
-
-### 8.3 Clip Agent Selection
-
-The Clip Agent prompt receives:
-
-```jinja2
-Available music pieces in the library:
-- calm: minimal ambient piano, suitable for academic/reflective content
-- uplifting: inspiring strings, suitable for emotional peaks and calls to action
-- corporate: modern electronic beat, suitable for business/data content
-
-Brand template default music: {{ context.brand_music_id or "none" }}
-Content director suggests mood: {{ derivative_plan.music_mood or "none" }}
-
-For this clip, choose:
-- music_id: the UUID of the best-fitting music piece
-- music_enabled: true/false
-- music_gain_db: default -18.0
-```
-
-Selection logic:
-1. If the brand template has a default music piece and it fits the clip mood, use it.
-2. If the Director suggested a mood, pick the music piece with that mood.
-3. Otherwise, infer from clip content tone.
-
-### 8.4 Baking into Render Spec
-
-```python
-async def build_clip_spec(..., plan: ClipPlan, ...):
-    music = ClipMusic(enabled=False, gain_db=-18.0)
-    if plan.music_enabled and plan.music_id:
-        music_piece = await db.get(Music, UUID(plan.music_id))
-        if music_piece and music_piece.file_path:
-            music = ClipMusic(
-                music_id=str(music_piece.id),
-                url=stream_url(music_piece.file_path),  # resolves to public object URL
-                enabled=True,
-                gain_db=plan.music_gain_db,
-            )
-    ...
-```
-
-No MiniMax API call occurs during generation.
+1. **Brand default**：`BrandTemplate.config.musicId` → `GenerationContext.brand_music_id`。
+2. **Clip Agent 选曲**：prompt 收到库清单（mood + 一句话描述）与品牌默认曲，为每条 clip 输出 `music_id` / `music_enabled` / `music_gain_db`。选择逻辑：① 品牌默认契合即用；② 按 clip 内容调性推断。
+   - 注：曾有"导演 mood hint 经 DerivativePlan 传递"的设计，已随 DerivativePlan 退役（N-17）不再存在；选曲判断全在 clip agent。
+3. **烘焙**：`build_clip_spec` 解析 `Music` 行 → `render_spec.music`（`url` = 公开对象 URL）。**生成时零 MiniMax 调用**。
 
 ---
 
-## 9. Chat / Editor Regeneration Flow
+## 9. Refinement: Edit Ops + Custom Generation
 
-### 9.1 User Intent Examples
+- **换曲 / 开关 / 调增益** = `set_music` edit op（CHAT_ARCH §9，operations 表，editor 与 chat 两前端共用）→ `outputs.render_status=PENDING` → worker 重渲染。
+- **自定义新曲** = `POST /api/v1/music` 触发 MiniMax 生成（重活走 worker，ADR-017）→ 新 `Music` 行入库（默认 `is_public=True`，进共享库）→ `set_music` 应用到 clip → 重渲染。
+- **chat 词汇**：`add_music` skill（registry 已登记，配乐殿后的 `after` 约束）。
 
-- "Make this more energetic"
-- "Change the music to something calmer"
-- "Remove background music"
-- "Generate a cinematic music piece for this climax"
-
-### 9.2 Chat Model Output
-
-```json
-{
-  "action": "regenerate_music",
-  "prompt": "cinematic drums and strings, no vocals, high energy, motivational speech climax",
-  "mood": "uplifting",
-  "gain_db": -16
-}
-```
-
-Or:
-
-```json
-{
-  "action": "select_music_asset",
-  "asset_id": "uuid-of-existing-music-piece"
-}
-```
-
-Or:
-
-```json
-{
-  "action": "toggle_music",
-  "enabled": false
-}
-```
-
-### 9.3 Backend Handling
-
-For `regenerate_music`:
-
-1. Call `services/music_generation.generate_music(prompt, mood)`.
-2. Save audio object to object storage under `music/{new_music_id}.{ext}`.
-3. Create `Music(...)` row with `file_path="music/{new_music_id}.{ext}"`.
-4. Update `clip.render_spec.music` with new `music_id` and `url`.
-5. Set `clip.render_status = RenderStatus.PENDING`.
-6. Worker picks up and re-renders.
-7. New music piece enters the shared library (if `is_public=True`).
-
-For `select_music`:
-
-1. Resolve music piece from library.
-2. Update `clip.render_spec.music`.
-3. Re-render.
-
-### 9.4 Cost Control
+### 9.1 Cost Control
 
 Music generation is more expensive than selection. To avoid runaway costs:
-- Each project has a budget or generation quota (future).
+- Each project has a budget or generation quota (future，归计费线 PROGRESS 第 7–8 周).
 - Free tier defaults to the 3 pre-generated music pieces; custom generation is a paid/limited feature.
 - Generated music pieces are cached as assets so the same prompt does not re-generate.
 
@@ -407,26 +156,9 @@ Music generation is more expensive than selection. To avoid runaway costs:
 
 ## 10. Music Library UI
 
-### 10.1 In Brand Template
-
-The `/brand-template` page has a **Music** section in the left settings list. Opening it shows:
-
-- A list of available music pieces.
-- Each row: title, mood tag, duration, play/pause button, select radio.
-- A "Generate new" button that opens a prompt input + generate button.
-- A toggle for `musicEnabled`.
-
-### 10.2 In Result Editor
-
-The clip editor shows the current music piece and allows:
-- Switch to another music piece from the library.
-- Toggle on/off.
-- Adjust gain (slider).
-- "Generate new" for custom music.
-
-### 10.3 Future: Standalone Music Library
-
-A dedicated `/library/music` page for browsing, searching, and managing all music pieces. Deferred to Phase 2.
+- **In Brand Template** (`/brand-template`)：Music 区——曲目列表（title / mood tag / duration / 试听 / 单选）+ "Generate new"（prompt 输入）+ `musicEnabled` 开关。
+- **In Result Editor**：clip 编辑器可换曲、开关、增益滑杆、"Generate new"。
+- **Future: Standalone Music Library** (`/library/music`)：浏览/搜索/管理全库，Phase 2+ 后置。
 
 ---
 
@@ -503,92 +235,42 @@ When user-generated music becomes public:
 
 ---
 
-## 13. Integration with Existing Systems
+## 13. Integration
 
-### 13.1 Agent Architecture
-
-The music layer integrates with the 4-layer agent architecture:
-
-- **Layer 1 (GenerationContext)**: carries `brand_music_id`.
-- **Layer 2 (Content Director)**: may output `music_mood` in `DerivativePlan`.
-- **Layer 3 (Clip Agent)**: selects `music_id`, `music_enabled`, `music_gain_db`.
-- **Layer 4 (Consistency Reviser, future)**: may verify that music matches brand voice.
-
-### 13.2 Task Queue
-
-Custom music generation is a heavy task and must run in the worker (`app/worker`), not in FastAPI background tasks. It creates a `RenderStatus.PENDING` clip for re-rendering.
-
-### 13.3 Storage Seams
-
-Music files use the existing storage seam:
-- Save: `save_output` or new `save_music_asset` helper.
-- Stream: `stream_url(asset.file_url)` → `GET /api/v1/files/{path}`.
-
-### 13.4 Render Service
-
-No changes to `packages/clip/src/Clip.tsx` or `apps/render`. Remotion continues to play `spec.music.url`.
+- **Agent 编排**：`GenerationContext.brand_music_id`（Layer 1）；clip agent 选曲（Layer 3）；音乐质检归 verify 节点（Phase 3，未实现——AGENT_ARCH §12）。
+- **队列**：自定义生成是重活，走 worker（ADR-017），禁 FastAPI BackgroundTasks。
+- **存储缝**（ADR-024）：`music/` 前缀、DB 只存 key、渲染取公开对象 URL。
+- **渲染服务零改动**：`packages/clip` 与 `apps/render` 只播 `spec.music.url`。
 
 ---
 
-## 14. Implementation Phases
+## 14. Status & Phases
 
-### Phase 1: MVP — AI-Generated Defaults + Selection
-
-1. Add `Music` table and Alembic migration.
-2. Update storage helpers so generated music objects use the `music/` prefix in object storage.
-3. Implement `services/music_generation.py` (MiniMax integration).
-4. Generate 3 default music pieces and seed as `Music` rows.
-5. Add `/api/v1/music` endpoints (list, generate, get metadata, update metadata, delete).
-6. Add streaming endpoint for music pieces.
-7. Update `BrandTemplate.config` to use `musicId`.
-8. Update `services/brand.py:music_from_template` to resolve music pieces.
-9. Update Clip Agent prompt and `ClipPlan` to select music.
-10. Add Music panel to `/brand-template`.
-11. Add music switch/gain control to clip editor.
-
-### Phase 2: Chat-Driven Regeneration
-
-1. Chat model can output `regenerate_music` / `select_music_asset` / `toggle_music` actions.
-2. Worker processes music generation and re-render.
-3. Generated assets enter the public library.
-
-### Phase 3: User Uploads
-
-1. Upload endpoint with rights attestation.
-2. Uploaded music pieces default to private.
-3. Review flow for public sharing.
-4. Terms of Service and DMCA process.
-
-### Phase 4: Advanced Audio Editing
-
-1. Per-clip gain automation.
-2. Start/end trim in music piece.
-3. Fade in/out.
-4. Multi-music support (explicitly out of scope until L3).
+| 期 | 内容 | 状态 |
+|---|---|---|
+| Phase 1 | Music 表 + 迁移 + MiniMax 生成 + 3 首默认曲 seed + `/api/v1/music` 端点 + Brand `musicId` + clip agent 选曲 + UI | ✅（2026-07） |
+| Phase 2 | chat/editor 换曲与生成（`set_music` edit op + `add_music` skill + 重渲染） | ✅ |
+| Phase 3 | 用户上传（权利声明 + 默认私有 + 审核 + ToS/DMCA） | 📋（§11） |
+| Phase 4 | 高级音频编辑（增益自动化 / 起止裁剪 / 淡入淡出；多曲明确 L3 外） | 📋 |
 
 ---
 
 ## 15. Open Questions
 
-1. **MiniMax music API details**: endpoint, async/sync, pricing, output format, commercial terms.
-2. **Audio length**: should default music pieces be 60s loops, 2min pieces, or full-length?
-3. **Looping behavior**: Remotion `<Audio loop>` is the current path; do we need crossfade or seamless-loop metadata?
-4. **Public library moderation**: who reviews user-generated public music pieces?
-5. **Revenue sharing**: if artists contribute music pieces, how are they credited/compensated?
-6. **Quota model**: how many custom music generations per user/tier?
-7. **Migration**: how to handle existing clips that reference old `musicMood` strings?
+1. **Public library moderation**: who reviews user-generated public music pieces?
+2. **Revenue sharing**: if artists contribute music pieces, how are they credited/compensated?
+3. **Quota model**: how many custom music generations per user/tier?（随计费线一并设计）
 
 ---
 
 ## 16. Related Documents
 
 - `docs/DECISIONS.md` ADR-019: Built-in mood music library (filesystem-only, superseded by this doc).
-- `docs/DECISIONS.md` ADR-022: Music library CRUD (management layer, partial overlap).
+- `docs/DECISIONS.md` ADR-022: Music library CRUD (management layer, superseded by ADR-023).
 - `docs/DECISIONS.md` ADR-023: Music becomes an AI-generated, asset-based library.
 - `docs/VIDEO_EDITOR.md` (`render_spec.music` contract).
-- `docs/AGENT_ARCHITECTURE.md` (4-layer agent integration).
-- `docs/tasks/todo.md`: Original narrow task brief.
-- `docs/tasks/music-asset-library.md`: Implementation todo for this architecture.
+- `docs/AGENT_ARCHITECTURE.md` (agent 编排集成).
+- `docs/tasks/done/music-asset-library.md`: Implementation record.
 
 ---
 
@@ -602,4 +284,4 @@ Repurposer’s music architecture moves from a **static, file-based mood library
 - **Reusability**: All generated music becomes a `Music` in the library, shareable across projects and eventually users.
 - **Copyright**: Platform defaults to AI-generated music to avoid licensing fragility; user uploads are deferred and will require explicit rights management.
 
-This design keeps the render contract stable, integrates cleanly with the 4-layer agent architecture, and gives the product a scalable path from MVP to a community-driven music library.
+This design keeps the render contract stable, integrates cleanly with the agent architecture, and gives the product a scalable path from MVP to a community-driven music library.

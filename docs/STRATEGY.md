@@ -2,7 +2,7 @@
 
 > Status: Active（2026-07-21 建立）
 >
-> 本文是**战略论证的唯一事实源**。ROADMAP 是排期表、不写论证，只引用本文条目号（`STRATEGY §X`）；竞品原始证据在 `research/` + `DECISION_MATRIX.md`，本文只做综合与判断。
+> 本文是**战略论证的唯一事实源**。PROGRESS 是排期表、不写论证，只引用本文条目号（`STRATEGY §X`）；竞品原始证据在 `research/` + `DECISION_MATRIX.md`，本文只做综合与判断。
 >
 > 回答三个问题：2027 年的市场长什么样（§1）、我们凭什么赢（§2–§3）、什么会杀死我们（§4）。所有排期争议的仲裁回到这里；本文结论变更 = 走 ADR。
 
@@ -47,8 +47,8 @@ ChatCut 和 Underlord 已证明编辑的终局形态：对话式指令 + 可撤�
 
 每家产品都声称自己有品味，用户无法验证——品味是三资产里最弱的护城河，**除非**满足两个条件：
 
-1. **打分理由可见**：每条 clip 标注"为什么是这 30 秒"（维度明细 + 打分理由，ROADMAP §1），让判断可以被审视、被反驳；
-2. **删改痕迹回流**：用户删掉哪条、改了哪句，回流校准打分与 persona（persona 校准，ROADMAP §1；痕迹回流依赖 Operation Model，ROADMAP §2）。
+1. **打分理由可见**：每条 clip 标注"为什么是这 30 秒"（维度明细 + 打分理由，PROGRESS 需求池），让判断可以被审视、被反驳；
+2. **删改痕迹回流**：用户删掉哪条、改了哪句，回流校准打分与 persona（persona 校准，PROGRESS 需求池；痕迹回流依赖 Operation Model，✅ 已落地）。
 
 没有反馈回路的"品味"只是营销文案。Gallery（§5）是品味对外的陈列窗，打分理由 + 回流是对内的复利机制——两者缺一不可。
 
@@ -56,9 +56,9 @@ ChatCut 和 Underlord 已证明编辑的终局形态：对话式指令 + 可撤�
 
 风格学习用得越久越准——这是我们唯一带**数据网络效应**的资产，切换成本随使用时间增长。打分反馈、改稿痕迹都应回流校准 persona。
 
-Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"个人文风"可学——**用户结构决定它进不来**。LinkedIn 对"通用 AI 腔"约 94% 检测率 + 30% 触达惩罚，Voice DNA 已成 B2B 必需品（ROADMAP §6）——我们的 persona 恰好是正确答案。
+Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"个人文风"可学——**用户结构决定它进不来**。LinkedIn 对"通用 AI 腔"约 94% 检测率 + 30% 触达惩罚，Voice DNA 已成 B2B 必需品（PROGRESS 需求池·多语言质量）——我们的 persona 恰好是正确答案。
 
-工程后果：persona 显化（让用户看到/编辑自己的 Voice DNA，ROADMAP §6）与校准回路，是 P1/P2 里最不该被挤掉的项。
+工程后果：persona 显化（让用户看到/编辑自己的 Voice DNA，PROGRESS 第 4 周）与校准回路，是本周期里最不该被挤掉的项。
 
 **终态（2026-07-22 确认）**：persona 的终态兑现 = **虚拟分身**。AI 生成结果我们必做，但形态是 **identity-driven**——persona（风格 + 声纹 + 视觉身份 + 术语表）就是那个 prompt，不是 Factory 通用生成（判断 1：生成能力商品化，persona 不商品化）。与 clip 线的分界 = **主视频轨 provenance**：clip 线主轨永远是"时间轴上的记录"（实拍 / stills——选段 / trim / hidden 语义预设了一盘拍好的带子）；轨道级虚拟（dub 声音克隆、AI 音乐、片头尾卡）在 clip 内合法存在，已受 ADR-026 管辖；主轨本身生成的产物跨线，进入虚拟产物族（ADR-029：双链并列，非 clip、不进 clip-spec）。
 
@@ -66,7 +66,7 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 
 全行业 credit 计费不透明是共同的信任伤口（Opus 锁项目、Descript 改制反弹、Crayo all sales final，见 `DECISION_MATRIX.md`）；EU AI Act Art.50 于 2026-08-02 生效；LinkedIn 对 AI slop 降权。三件事指向同一个机会：**可解释、可审计、失败不扣费、数据不出 EU**。对 C 端是加分项，对机构采购是门槛；七家里只有我们能把这张牌打满（两家法国竞品数据都在美国）。
 
-呈现野心参照（2026-07-22）：ElevenCreative 已把合规做成**具名可购 SKU**——Zero Retention mode、Data Residency options（US/EU/India）、HIPAA BAA，全部挂在定价档上（`research/elevencreative.md` §2）。ROADMAP §7 各行落地时应以"有名字的开关"形态出现，而不是安全页徽章。
+呈现野心参照（2026-07-22）：ElevenCreative 已把合规做成**具名可购 SKU**——Zero Retention mode、Data Residency options（US/EU/India）、HIPAA BAA，全部挂在定价档上（`research/elevencreative.md` §2）。合规各行（PROGRESS 第 9 周）落地时应以"有名字的开关"形态出现，而不是安全页徽章。
 
 ### 2.4 时序关系：排期的理论依据
 
@@ -74,7 +74,7 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 
 > **Trust wins the deal. Identity keeps the customer. Taste is what they tell colleagues about.**
 
-- **信任赢得第一单**（采购门槛）→ 合规、计量、失败不扣费全在 ROADMAP P0/P1，排期正确；
+- **信任赢得第一单**（采购门槛）→ 合规、计量、失败不扣费全在 PROGRESS 本周期排期（第 7/9 周），排期正确；
 - **身份留住第二年**（切换成本复利）→ persona 校准与显化是 P1/P2 的底线项；
 - **品味是日常使用中被感知、并拿去跟同行说的东西** → 打分理由 + Gallery 低成本先行（§5）。
 
@@ -90,17 +90,17 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 | L3 寻址控制 | 步骤级重跑、chat 可寻址、run plan 可检视 | 🚧 仅按输出类型重生成（粗粒度） |
 | L4 交付控制 | 分发（直发 = 核心，P1）；定时 / 回流（边缘，P2，2026-07-23 定界） | ❌（设计完成，DISTRIBUTION.md） |
 
-**排期含义**：配方作为产品 = L1+L2 兑现之后——否则配方卡是营销剧场。原 P0 集群里 L2 路径上的两项已兑现（计量钩子 2026-07-22、首发推荐分 2026-07-23）；去静默下放 P2、AI 标识降 P1（2026-07-23，上线前回补）；L2 剩余缺口 = 打分门槛 / persona 保真 / 术语表 / 运镜枚举。L1 与 L3 的共同地基是 RunPlan 持久化（ADR-028，ROADMAP §1）。Gallery Phase 1 硬编码卡不受此限（获客面，手工策展即可）；但"agent 兑现配方"必须排在控制深度行之后。
+**排期含义**：配方作为产品 = L1+L2 兑现之后——否则配方卡是营销剧场。原 P0 集群里 L2 路径上的两项已兑现（计量钩子 2026-07-22、首发推荐分 2026-07-23）；去静默下放 P2、AI 标识降 P1（2026-07-23，上线前回补）；L2 剩余缺口 = 打分门槛 / persona 保真 / 术语表 / 运镜枚举。L1 与 L3 的共同地基是 RunPlan 持久化（ADR-028，✅ 2026-07-22）。Gallery Phase 1 硬编码卡不受此限（获客面，手工策展即可）；但"agent 兑现配方"必须排在控制深度行之后。
 
 ---
 
 ## 3. 五张牌（打什么、不打什么）
 
-1. **拒绝功能数量军备竞赛，all-in 工作流闭环。** 2027 年 Opus 会有 200 个功能，我们可能只有 20 个——没关系。知识工作者的真实场景是："我下周三有个演讲，之后两周的 LinkedIn 内容、newsletter、德语版都要有着落。"谁能把这条链路做成**一次上传、审核即走**，谁就赢这个市场；竞品每家只握链路的一段。（→ ROADMAP §1 链接摄入、§5 Distribution）**闭环不是 Distribution 一个模块的事，是全模块的指导方针**：每个模块都要回答"你在闭环的哪一段、你消灭了哪条断头路"。全模块流转与闭环断点见 `MODULE_ARCHITECTURE.md` §2.1 闭环流转图。**闭环的信任主张分叉**：对手 autopilot 卖"不用管"，我们卖"管得住"（ADR-027：个人秒发、机构强制人工确认）——同一个闭环，机构买后者。
-2. **persona 做成复利资产，而不是一个 feature。**（→ ROADMAP §6 全层 + §1 校准打分）
-3. **信任当产品做，不当公关做。** 计费透明、失败不扣费、AI 内容标识、数据不出 EU。（→ ROADMAP §7/§8）
-4. **在 AI slop 泛滥的 2027，"不像 AI 写的"是最高溢价。** 每个人的 feed 都塞满生成内容时，受众的 AI 嗅觉会极度灵敏。我们的定位——真实演讲素材 + speaker voice + 母语级文案——恰好是 slop 的反面。这不是情怀，是定价权。（→ ROADMAP §6 多语言质量）
-5. **2026 下半年长出 MCP 这张脸。** 我们的 4-layer 架构天然是工具面（`generate_assets` / `search_talks` / `get_speaker_profile`），包装成本远低于对手，而"知识内容"这个 MCP 生态位目前无人占据。这是 P2 清单里最该提前的一项。（→ ROADMAP §3）
+1. **拒绝功能数量军备竞赛，all-in 工作流闭环。** 2027 年 Opus 会有 200 个功能，我们可能只有 20 个——没关系。知识工作者的真实场景是："我下周三有个演讲，之后两周的 LinkedIn 内容、newsletter、德语版都要有着落。"谁能把这条链路做成**一次上传、审核即走**，谁就赢这个市场；竞品每家只握链路的一段。（→ PROGRESS 可选需求·链接摄入、第 9 周分发联调）**闭环不是 Distribution 一个模块的事，是全模块的指导方针**：每个模块都要回答"你在闭环的哪一段、你消灭了哪条断头路"。全模块流转与闭环断点见 `MODULE_ARCHITECTURE.md` §2.1 闭环流转图。**闭环的信任主张分叉**：对手 autopilot 卖"不用管"，我们卖"管得住"（ADR-027：个人秒发、机构强制人工确认）——同一个闭环，机构买后者。
+2. **persona 做成复利资产，而不是一个 feature。**（→ PROGRESS 第 4–5 周 Memory 线 + 需求池·persona 校准）
+3. **信任当产品做，不当公关做。** 计费透明、失败不扣费、AI 内容标识、数据不出 EU。（→ PROGRESS 第 7/9 周）
+4. **在 AI slop 泛滥的 2027，"不像 AI 写的"是最高溢价。** 每个人的 feed 都塞满生成内容时，受众的 AI 嗅觉会极度灵敏。我们的定位——真实演讲素材 + speaker voice + 母语级文案——恰好是 slop 的反面。这不是情怀，是定价权。（→ PROGRESS 需求池·多语言质量）
+5. **2026 下半年长出 MCP 这张脸。** 我们的 4-layer 架构天然是工具面（`generate_assets` / `search_talks` / `get_speaker_profile`），包装成本远低于对手，而"知识内容"这个 MCP 生态位目前无人占据。这是 P2 清单里最该提前的一项。（→ PROGRESS 明确不在本周期·MCP，周期结束后重排）
 
 **不打的仗**：多轨时间线 / 转场 / B-roll / 自动 reframe / 模型超市转售——前者是 CapCut / Premiere 的战场（ADR-016 范围纪律），后者是会被上游碾平的中间商生意（判断 1）。
 
@@ -108,8 +108,8 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 
 ## 4. 两个风险（什么会杀死我们）
 
-1. **Opus 向 B 端基础设施移动**（OpusSearch + API + 配音）。如果它 2027 年做"面向机构的版本"，我们必须在它之前把 EU 驻留和 persona 复利做成既成事实——**窗口约 12–18 个月**。这是 EU 驻留（ROADMAP §7 P2）和 persona 项不能再往后压的理由。2026-07 实证加速：autopilot 闭环产品化 + Viral Presets + 团队工作区/API，周级发版（`research/opusclip.md` §8）。
-2. **LinkedIn API 单押。** 平台政策一变，分发链路就抖。newsletter / 机构网站这类**自有渠道**必须与 LinkedIn 并重（→ ROADMAP §5 newsletter ESP，建议提前半档）。
+1. **Opus 向 B 端基础设施移动**（OpusSearch + API + 配音）。如果它 2027 年做"面向机构的版本"，我们必须在它之前把 EU 驻留和 persona 复利做成既成事实——**窗口约 12–18 个月**。这是 EU 驻留（PROGRESS 需求池）和 persona 项不能再往后压的理由。2026-07 实证加速：autopilot 闭环产品化 + Viral Presets + 团队工作区/API，周级发版（`research/opusclip.md` §8）。
+2. **LinkedIn API 单押。** 平台政策一变，分发链路就抖。newsletter / 机构网站这类**自有渠道**必须与 LinkedIn 并重（→ PROGRESS 明确不在本周期·newsletter ESP，建议提前半档）。
 
 ---
 
@@ -124,11 +124,11 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 - **双受众复用**：匿名访客在 `/` 看到落地页（hero 文案 + gallery 只读预览 + 信任牌 + pricing 预告）；已登录用户在 home 看到同一套配方卡作为起点。一份建设，两个受众；hero 文案随之迁移到它该在的地方。
 - **不是 TikTok 式 feed**：我们的用户不刷内容取乐，6–12 张策展卡片足够。卡片内容必须是知识演讲场景、多语言输出可见（定位纪律，见 CLAUDE.md）。
 - **封面方向（2026-07-21 确认）**：做落地页，整体以 **parallax 滚动视差**为主设计语言；首屏审美锚点 = Google Antigravity（一句话 hero + 双 CTA + 粒子场）。视差服务于叙事——沿工作流滚动展开"原始素材 → AI 选段打分 → 多语言产物 → 配方卡"，让滚动本身演示产品核心价值，而不是装饰性炫技。工程纪律：transform/opacity-only，禁 scroll-jacking，client-only 增强（SSR 首屏为静态布局），`prefers-reduced-motion` 降级，移动端有性能预算。
-- **竞品实证（2026-07-21）**：Agent Opus 已上线"灵感 gallery + 混音版"（`research/agent-opus.md`）——已登录首页 = composer + gallery、无营销 hero，与我们 Phase 1 布局一致；其 calendar 只是 projects 页**视图 toggle**（非路由），佐证"立即发布为主路径"。**IA 完整性验收清单**（小而美 = 每个核心任务有可见的家）：创作（composer）/ 灵感（配方卡）/ 管理（projects）/ 身份（Brand+Speaker）/ 计量（credits 分解）/ 教育（通知中心）——Phase 1 补齐后三格（ROADMAP §9）。
+- **竞品实证（2026-07-21）**：Agent Opus 已上线"灵感 gallery + 混音版"（`research/agent-opus.md`）——已登录首页 = composer + gallery、无营销 hero，与我们 Phase 1 布局一致；其 calendar 只是 projects 页**视图 toggle**（非路由），佐证"立即发布为主路径"。**IA 完整性验收清单**（小而美 = 每个核心任务有可见的家）：创作（composer）/ 灵感（配方卡）/ 管理（projects）/ 身份（Brand+Speaker）/ 计量（credits 分解）/ 教育（通知中心）——Phase 1 补齐后三格（PROGRESS 第 1–3 周）。
 - **配方形态升级（2026-07-22，ADR-028）**：配方不是参数包，是 **run-plan 模板**——结构化步骤清单（哪些 executor 会跑、每步 instruction；模型路由对用户不可见）+ **类型化输入槽位**（演讲视频=必填槽、slides=可选槽，借鉴 Flows @ 引用槽位）+ 成功 run **回流成模板**（Phase 2 机制：用户把满意的 run 存为"我的配方"）。兑现依赖控制深度（§2.5）。
 - **版权纪律**：只用自己录制或获授权的演讲素材，不爬会议视频。
 
-**两阶段**（排期见 ROADMAP §9）：
+**两阶段**（排期见 PROGRESS 第 1–3 周）：
 
 | 阶段 | 内容 | 成本 / 依赖 |
 |---|---|---|
@@ -143,16 +143,16 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 
 ---
 
-## 7. 战略 → ROADMAP 映射
+## 7. 战略 → PROGRESS 映射
 
-| 本文条目 | ROADMAP 落点 |
+| 本文条目 | PROGRESS 落点 |
 |---|---|
-| §2.1 品味可见可证伪 | §1 首发推荐分持久化（P0-3，值+理由）/ persona 校准（P1）；§2 Operation Model |
-| §2.2 身份复利 | §6 Memory 全层（persona 显化、术语表、多语言质量） |
-| §2.3 信任门槛 | §7 合规底座（P0）；§8 成本计量 / 预估 / 失败不扣费 |
-| §2.5 控制深度阶梯 | §1 RunPlan 持久化（P1 地基）/ 覆盖问责（P1）/ 节拍+motion 枚举（P2）；§2 Operation Model |
-| §3 牌 1 工作流闭环 | §1 链接摄入（P1）；§5 Distribution（直发 = P1 核心；定时/审核/回流 = P2 边缘） |
-| §3 牌 5 MCP | §3 MCP server（P2，最该提前） |
-| §4 风险 1 Opus 窗口 | §7 EU 驻留（P2）；§6 persona |
-| §4 风险 2 LinkedIn 单押 | §5 newsletter ESP（P2，建议提前半档） |
-| §5 Gallery | §9 配方卡（P1）/ 真实 Gallery（P2） |
+| §2.1 品味可见可证伪 | 首发推荐分持久化（✅ 07-23）/ persona 校准（需求池）；Operation Model（✅ 07-26） |
+| §2.2 身份复利 | 第 4–5 周 Memory 线（persona 显化）+ 需求池（术语表、多语言质量） |
+| §2.3 信任门槛 | 第 9 周合规标识；第 7 周成本透明（计量 ✅ 07-22 / 预估 / 失败不扣费） |
+| §2.5 控制深度阶梯 | RunPlan（✅ 07-22）/ 覆盖问责（✅ 07-27）/ Operation Model（✅ 07-26）；节拍+motion 枚举（需求池） |
+| §3 牌 1 工作流闭环 | 可选需求·链接摄入；第 9 周分发联调（直发核心；定时/审核/回流后置） |
+| §3 牌 5 MCP | 明确不在本周期·MCP（P2，周期结束后重排） |
+| §4 风险 1 Opus 窗口 | 需求池·EU 驻留；第 4–5 周 persona |
+| §4 风险 2 LinkedIn 单押 | 明确不在本周期·newsletter ESP（建议提前半档） |
+| §5 Gallery | 第 1–3 周配方卡（R1 ✅ 07-31）；需求池·真实 Gallery |

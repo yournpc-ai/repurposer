@@ -1,7 +1,7 @@
 # Module Architecture — 模块划分与边界契约
 
-> Status: Active（2026-07-20 建立，post-MVP 模块架构锚点）
-> 排期见 [ROADMAP.md](./ROADMAP.md)（本文多处被其引用为"2027 架构"）；现状系统架构见 [ARCHITECTURE.md](./ARCHITECTURE.md)；决策留痕见 [DECISIONS.md](./DECISIONS.md)。
+> Status: Active（2026-07-20 建立，post-MVP 模块架构锚点；2026-07-31 起兼为**现状系统架构的唯一事实源**——ARCHITECTURE.md 退役，其独有内容（代码地图 / 队列机制 / 横切数据约定）并入 §7）
+> 排期见 [PROGRESS.md](./PROGRESS.md)（本文多处被其引用为"2027 架构"）；决策留痕见 [DECISIONS.md](./DECISIONS.md)。
 
 本文回答三个问题：**有哪些模块、每张表归谁、模块之间怎么通信**。它是方向性契约——部分模块（Operation Model、Agent Interface、Distribution）尚未实现，但其边界现在就定死，避免演进时跨域纠缠。
 
@@ -122,9 +122,9 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（二态 dispatch：task_list→create_run / edit_ops→operations）、`chat/intent.py`（op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
-| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（ROADMAP §5） |
+| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第 9 周联调） |
 | **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
-| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露/EU 驻留 📋 ROADMAP §7/§8 |
+| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第 9 周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
 
@@ -167,7 +167,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | Threads / Conversations | `conversations` + `messages` | OpenAI Conversations API 同款 |
 | Agent Observability | metering（workflow_steps.cost）+ structlog + 📋 METRICS.md | 横切不开包（§5） |
 | Channels | `distribution/` | 直发渠道 |
-| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | ROADMAP §7/§8 |
+| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | PROGRESS 第 9 周 |
 
 反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
@@ -186,3 +186,53 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 - **新模块准入**：必须有独立的表归属或独立的队列认领源，否则只是现有模块的职责扩充。
 - **命名注意**：竞品文档中 "pipeline" 也指 Opus 范式（见 DECISION_MATRIX 范式短名）；内部模块语境下 Pipeline = 我们的生成管线，引用竞品时写 `Pipeline 范式`。
 - **本契约的变更 = ADR**：表归属调整、新横切切面、认领源增减都要写 ADR 并更新本文。
+
+## 7. 代码地图与运行约定（自 ARCHITECTURE.md 并入，2026-07-31）
+
+### 7.1 代码地图
+
+```
+apps/api/
+├── app/
+│   ├── main.py / config.py / worker.py   # FastAPI 入口 / 配置 / 独立 worker 进程
+│   ├── chat/            # Agent Interface：routes / service / intent
+│   ├── pipeline/        # Pipeline（RunPlan 内核）
+│   │   ├── routes/      # projects / assets / outputs / runs / music 端点
+│   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地）
+│   │   ├── node_runners.py        # 节点执行器注册表（NODE_RUNNERS）
+│   │   ├── registry.py            # skill 注册表（compile_graph 校验）
+│   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
+│   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
+│   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
+│   ├── skills/          # 班组（LLM 决策单元）：persona / content_director / clip_agent /
+│   │                    #   post / quotes / carousel / article / reviser / caption_translate
+│   ├── tools/           # 机械（确定性执行）：asr / voice / dubbing / extraction / filler /
+│   │                    #   music / storage / transcript / caption_translate
+│   ├── memory/          # Memory：speakers + brand templates 端点、brand → clip-spec 烘焙
+│   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
+│   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
+│   ├── platform/        # 平台层：auth / email / notifications / project_context / routes
+│   ├── models/          # tables.py + schemas.py + database.py
+│   ├── clients/         # minimax.py（M3 wrapper + usage 捕获点）
+│   ├── prompts/         # Jinja2 模板
+│   └── metering.py      # 逐节点计量（usage → workflow_steps.cost，ADR-025）
+├── migrations/          # Alembic
+apps/web/                # TanStack Start 前端
+apps/render/             # Remotion 渲染服务（Node）
+packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 Pydantic）
+```
+
+### 7.2 队列机制（ADR-017）
+
+- **Postgres 即队列**：`FOR UPDATE SKIP LOCKED` 认领；独立 worker 进程（`python -m app.worker`），与 API 进程物理隔离；不引入 Redis/Celery，横向扩容时再换 arq/Celery，调用方不变。
+- **四个认领源**：`assets.processing_status`（预处理）/ `workflow_runs.status`（生成；deferred claim——项目还有 pending/processing 素材时不认领）/ `outputs.render_status`（渲染）/ `publications`（`state='scheduled'` + `due_at` 部分索引，分发）。
+- **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
+- 纪律见 §5 规则 1（耗时任务一律写 pending 行入队，禁跨模块直调 service 执行重活，禁 FastAPI BackgroundTasks）。
+
+### 7.3 横切数据约定
+
+- **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表（旧 PRD 副本已 drift 删除）。
+- **认证与隔离**：邮箱验证码无密码登录（Resend）；speakers / projects / assets / brand_templates / conversations 全部按 user 隔离；seed 默认用户仅作共享默认内容（brand template）的属主。
+- **存储 key**：DB 只存对象 key，字节在 TOS（ADR-024）；key 前缀 `{user_id}/…` 承载归属；上传走短时 presigned PUT；读取经 API 归属校验后 307 重定向到公开对象 URL（程序拉取走 `?proxy=1` 由 API 转流）。
+- **EU 数据驻留**：project 级 `data_region` 是未来差异化（PROGRESS 明确不在本周期），未实现。
+- **UI 语言偏好**：future；首屏英文渲染避免 hydration mismatch（见 CLAUDE.md i18n 约定）。

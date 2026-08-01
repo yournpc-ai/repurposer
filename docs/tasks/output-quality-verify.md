@@ -1,13 +1,13 @@
 # output-quality-verify 实施简报——生成产物质量：保真止血 + 打分维度 + 质检节点首期
 
 > Status: 📋 待实施（2026-07-28 评审定范围：方案 A——保真 + 质检节点，视觉产物品牌渲染归下一轮）
-> 依据：ROADMAP §1"首发推荐分：维度明细"（P1 ❌）与"质检节点"（P2 ❌，本轮提前兑现——单产物质检首期）；AGENT_ARCH §12.3（质检节点形态）/§12.7（Phase 3）；STRATEGY §2.1（品味可见可证伪）/§2.5（L2 质量控制缺口）
+> 依据：PROGRESS 需求池"首发推荐分：维度明细"（P1 ❌）与"质检节点"（P2 ❌，本轮提前兑现——单产物质检首期）；AGENT_ARCH §12.3（质检节点形态）/§12.6（Phase 3）；STRATEGY §2.1（品味可见可证伪）/§2.5（L2 质量控制缺口）
 > 前置：工作区在飞的 speakers/pending-intent/stepper 改版（GenerationStepper 删除、GenerationOverlay 重写）先落地；本简报的 UI 接线点以落地后的通用 steps 渲染（`workflow_step_to_response` + stepKinds i18n）为准
 > 迁移：新增 1 个 alembic 迁移（`outputs.quality` JSONB）；down_revision 跟在飞两个迁移（asset_title / pending_intent）落地后的 head
 
 ## 0. Context
 
-ROADMAP P0 表已清空，STRATEGY §2.5 控制深度阶梯的剩余缺口全在 L2（打分门槛 / persona 保真 / 术语表 / 运镜枚举）。本轮兑现 L2 的"质量"半边：先修三个保真缺陷（产物与素材货不对板），再把打分维度落库（可证伪前提），最后在 DAG 上长出 verify 节点承接这一切（质检 = 图里一种 kind，不是外挂流程）。
+原 ROADMAP P0 表已清空（ROADMAP 已并入 PROGRESS，2026-07-31），STRATEGY §2.5 控制深度阶梯的剩余缺口全在 L2（打分门槛 / persona 保真 / 术语表 / 运镜枚举）。本轮兑现 L2 的"质量"半边：先修三个保真缺陷（产物与素材货不对板），再把打分维度落库（可证伪前提），最后在 DAG 上长出 verify 节点承接这一切（质检 = 图里一种 kind，不是外挂流程）。
 
 读码核实的三个保真缺陷：
 
@@ -109,7 +109,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 - LLM judge（persona 保真、质量打分）——首期零 LLM 质检；judge 可靠性需单独评审。
 - 视觉产物品牌渲染（quote card 弃 image-01 烘文字 / carousel PDF）——下一轮，单独技术路线。
 - storyboard/coverage 门禁化、modifier 节点的质检、reviser 的 axes。
-- 术语表（ROADMAP §6 P1，独立线）。
+- 术语表（PROGRESS 可选需求，独立线）。
 
 ### 2.5 评审附项（2026-07-28 二轮评审纳入）
 
@@ -169,7 +169,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 8. **附项·响度**：低音量源视频渲染出的 clip 实测响度 -16 LUFS ±1；过大音量同样被压回。测量用 loudnorm 自带测量通道（`print_format=json` 的 `input_i`，同 R128 算法）——Remotion compositor 的裁剪 ffmpeg 构建无 ebur128 滤镜。
 9. **附项·下载**：article/carousel/post 下载菜单三项齐（.md/.txt/复制），.txt 无 Markdown 语法残留。
 10. **附项·count**：prompt "给我 8 张金句卡" → storyboard quotes 槽 count=8 → 产物 8 条；未提及时默认 3/6 不变。
-11. **文档落地**：ROADMAP §1 两行状态翻 ✅（维度明细 / 质检节点首期，全片质检标注仍 ❌）；AGENT_ARCH §12.7 Phase 3 → 🚧 首期落地；NAMING 词汇表登记 §5 新词。
+11. **文档落地**：PROGRESS 需求池两行状态翻 ✅（维度明细 / 质检节点首期，全片质检标注仍 ❌）；AGENT_ARCH §12.6 Phase 3 → 🚧 首期落地；NAMING 词汇表登记 §5 新词。
 
 ## 7. 禁止行为（Prohibited Behaviors）
 

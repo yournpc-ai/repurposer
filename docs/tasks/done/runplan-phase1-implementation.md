@@ -1,7 +1,7 @@
 # RunPlan Phase 1 施工图：实施计划（已批准 2026-07-22）
 
-> Status: Approved — in implementation
-> 准绳：`docs/tasks/runplan-persistence.md`（简报）；决策：ADR-028/029/030；概念：`docs/AGENT_ARCHITECTURE.md` §12
+> Status: ✅ Implemented（2026-07-22）
+> 准绳：`docs/tasks/done/runplan-persistence.md`（简报）；决策：ADR-028/029/030；概念：`docs/AGENT_ARCHITECTURE.md` §12
 > 评审修正 4 条已吸收（见 §1.1）；执行纪律：阶段 A→F 小步提交、每步可编译。
 
 ## 1. Context
@@ -131,7 +131,7 @@ async def execute_run_inline(run_id: UUID) -> None    # demo_seed 用：拓扑�
 
 - `docs/MODULE_ARCHITECTURE.md` §4：outputs/plan_nodes ✅，删 clips/derivatives 过渡行；§3 Pipeline 现状代码 +orchestrator/node_runners。
 - `docs/AGENT_ARCHITECTURE.md` §11 critical files + §12.7 Phase 1 标记已落地。
-- `docs/tasks/runplan-persistence.md` status → Implemented；§4.4 口径同步为"3 物理位覆盖 4 逻辑入口，derivative_dispatch 不建 run"。
+- `docs/tasks/done/runplan-persistence.md` status → Implemented；§4.4 口径同步为"3 物理位覆盖 4 逻辑入口，derivative_dispatch 不建 run"。
 - 不需要新 ADR。
 
 ## 9. 验收方案

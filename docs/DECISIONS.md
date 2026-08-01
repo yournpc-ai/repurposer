@@ -739,7 +739,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - MODULE_ARCH §4 登记 outputs（Owner: Pipeline）；数据架构图见 §2.2。
 - payload 的"类型安全"未丢——从 DB 层移到 schema 层（Pydantic 校验强于 SQL CHECK）。
 
-**Related**: ADR-016、ADR-026、ADR-028、ADR-029（Amendment）；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md` §12；`docs/tasks/runplan-persistence.md`
+**Related**: ADR-016、ADR-026、ADR-028、ADR-029（Amendment）；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md` §12；`docs/tasks/done/runplan-persistence.md`
 
 ## ADR-031: 渠道凭证应用级加密——Fernet + env key
 
@@ -778,4 +778,4 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - editor 历史面板/版本时间线 UI 后置（反过度设计裁决）；undo 能力经端点 + chat 撤销按钮先行可用。
 - 校准回流的读路径（按 project/op/时间窗聚合 params）落成文档座位，消费端后建。
 
-**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/tasks/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
+**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/tasks/done/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
