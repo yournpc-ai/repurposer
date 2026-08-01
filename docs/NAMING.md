@@ -56,6 +56,13 @@
 | 字幕样式目录 | `CAPTION_PRESETS` | 字幕样式注册表（packages/clip）：preset id → 原语组合；TS 类型由它推导，Python 只校验成员 | 不是自由样式（preset 枚举纪律不变） |
 | 布局 / 进场 / 词级高亮 | `layout` / `entrance` / `wordHighlight` | 字幕样式三原语：single\|stack × none\|fade-in\|pop-in\|slide-up × bool | — |
 | 堆叠 | `stacking` | catalog 成员：新行淡入、旧行驻留、超 maxLines 滑动窗口 | — |
+| 工作室 | `studio` | 登录后应用区（landing 之外的 sidebar 世界）的统称：home composer、projects、editor；用户文案（`openStudio`、"欢迎来到你的工作室"）与内部文档同词。**只是空间名**，品类自称永远是 agent（N-23） | 不是 workbench/工作台（已退役，N-22）；不是品类词 |
+| 助手 | `assistant` | 对外文案的自称（N-25 双轨：对内技术 = agent）；zh 优先用代词"它" | 不是 agent（agent 只对内）；不是运营官（已退役，N-24） |
+| 风格 | `style` | 文风（写作风格），对外文案统一用词（hero/showcase/FAQ/identityEcho 已全扫）；voice 仅保留音频本义（声纹克隆/配音 dub）；Brand voice/语气 表单标签保留 | 不是"口吻"（已退役，2026-08-01）；不是 voice |
+| 提及类型 | mention type（`ChatMention.type`） | @ 引用的实体类别：asset / output / transcript_segment / workflow_step / recipe（第五类，2026-08-01） | 不是自由文本、不是标签 |
+| 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |
+| 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：任务书钉（outputs/dub_languages）+ 输入槽位 + status——**钉死唯一事实源**，钉死实质不出服务端 | 不是前端数据文件、不是表 |
+| 输入槽位 | `input_slots` | 配方的类型化素材要求（素材类型 + 是否必填）；前端提示 + 服务端门禁双消费者 | 不是上传组件 |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
@@ -79,11 +86,16 @@
 | N-14 | `ChatIntent` 退役 → `IntentProposal` 二态判别联合 | 规则版 action 枚举整体退役；`TaskListProposal`/`EditOpsProposal` 判别联合，`tasks=[]` = 反问（合法输出，不加第三态） | §1 |
 | N-15 | `plan_nodes` → `workflow_steps` | plan 一词三用（RunPlan/ContentPlan/plan_nodes）真实歧义；表对词族统一（workflow_runs+workflow_steps）；前端早已叫 step（GenerationStepper/results.stepper.*）；Mastra workflow steps 同构。**概念层 RunPlan 不动**——这不是 N-10 翻案（N-10 否的是概念层清洗），是存储层对齐行业词；`outputs.plan_node_id→workflow_step_id`、`PlanNode→WorkflowStep`、`StepKind/StepStatus/StepResponse`（迁移 c4a9e2f17b03） | §1 |
 | N-16 | `restore_range` 独立 op 否决 | removeRange 在 spec 内真删 caption cues，独立"恢复删除"op 只能 un-hide segments、复活不了字幕——恢复出来的产物是坏的；恢复语义全归快照层（undo / restore_version，ADR-032 D1/D4）；真要做点选恢复，前置 = clip-spec 契约扩展（cues 加 hidden），属 ADR-016 级改动单独评审 | §1、ADR-032 D4 |
-| N-17 | ContentPlan 拆分：素材理解 `MaterialUnderstanding` + 分镜表 `Storyboard`；DerivativePlan 退役为槽位 `StoryboardSlot` | 导演两步走落地（`docs/tasks/director-two-step.md`）：理解=素材级（asset-hash 复用），分镜=请求级（每 run 重排）。否决 `TaskBoard`（撞 TaskSpec/TaskItem 词族，N-11 同型三撞）与 ContentPlan 沿用（理解是描述不是计划，沿用旧名不诚实）。"两个 plan 各司其职"注记改写：RunPlan 成唯一 plan | §1、§6 |
-| N-18 | `IntentProposal` 升三态（**翻案 N-14**） | 结构化 ask 的 payload 与 task_list/edit_ops 正交，判别联合加第三态；N-14 的"tasks=[] 反问"迁移为 ask 的 freeform 形态（options 空 + allow_freeform）——反问仍是合法输出，只是有了类型座位（简报 `tasks/intent-ask-primitive.md` §2.3；期 3 已落代码） | §1 |
+| N-17 | ContentPlan 拆分：素材理解 `MaterialUnderstanding` + 分镜表 `Storyboard`；DerivativePlan 退役为槽位 `StoryboardSlot` | 导演两步走落地（`docs/tasks/done/director-two-step.md`）：理解=素材级（asset-hash 复用），分镜=请求级（每 run 重排）。否决 `TaskBoard`（撞 TaskSpec/TaskItem 词族，N-11 同型三撞）与 ContentPlan 沿用（理解是描述不是计划，沿用旧名不诚实）。"两个 plan 各司其职"注记改写：RunPlan 成唯一 plan | §1、§6 |
+| N-18 | `IntentProposal` 升三态（**翻案 N-14**） | 结构化 ask 的 payload 与 task_list/edit_ops 正交，判别联合加第三态；N-14 的"tasks=[] 反问"迁移为 ask 的 freeform 形态（options 空 + allow_freeform）——反问仍是合法输出，只是有了类型座位（简报 `tasks/done/intent-ask-primitive.md` §2.3；期 3 已落代码） | §1 |
 | N-19 | 机制词与用途词分离 | 机制一词一物：`Suspend` 异常 / `waiting` 状态 / `answer` / `bail`；用途住 payload kind（`question.kind` / `spec.for`）；**用途×机制组合词永禁**；配对词整体引入（ask/answer/bail）；状态词从机制动词派生（Mastra 参照） | §1、§6 |
 | N-20 | 任务槽 vs 分镜槽分层 | `IntentSlot`（请求层：用户要什么）≠ `StoryboardSlot`（派工层：导演怎么排）——两层各有槽位词，混用即违规 | §1 |
 | N-21 | `IntentProposal` 升四态（answer 直答态，延展 N-18） | 纯信息直答（能力/进度/解释/闲聊）与 task_list/edit_ops/ask 正交，判别联合加第四态 `AnswerProposal{type:"answer", text}`——落普通 assistant 消息，不起 run、不 dock；与 ask 的边界写死在 agent 规则（无工作请求且无歧义才可用）。沿用 `answer` 词（§1 同概念同名：与 `InferredIntent.action="answer"`、messages.answer 同族）；同一机制收编发布/导航引导，不开新通道（期 4 补四已落代码） | §1 |
+| N-22 | 应用区定名 `studio`，workbench/工作台全库退役 | 创作类 AI 产品惯例（ElevenLabs/Suno/Descript/PlayHT Studio）；workbench 是企业 SaaS 语域（控制台味），与 agent/IP 孵化定位不符；studio 无夸大（一间创作的屋子，不承诺结果）。动线闭环：landing 按钮"进入工作室"→ home 接待语"欢迎来到你的工作室"。i18n key `openWorkbench`→`openStudio`，CLAUDE.md 布局节与代码注释同步 | §1 |
+| N-23 | 品类词 = agent，空间词 = studio，两层分离 | 品类自称永远是 agent（PRD one-liner "An AI agent for knowledge experts"、hero "We do the rest"）；**studio 只做应用区空间名**（"你的工作室"），永不出现在品类陈述句（"Repurposer is a …"）——避免触发 CapCut/Descript 式工具功能数量对标（外部评审 Kimi 同判：叫 studio 就被拉进工具军备竞赛，叫 agent 比的是交付与省心）。空间名成立前提：房间内永不出现工具货架（多轨/特效/素材库），UI 保持 composer + 卡片、editor 薄化；中文"工作室"双关运营团队（明星工作室 = 替名人运营自媒体的班子），与 agent 定位咬合 | §1 |
+| N-24 | 品类词只用 `agent`，角色隐喻（运营官/操盘手/班子）全库退役 | 角色包装是话术 dressing：landing heroSubtitle 自称 "an AI agent"，PRD 曾写 "content-operations officer"——一份产品两个自称，朴素品类词胜出（2026-08-01 用户裁决）。PRD one-liner / CLAUDE.md 定位条 / N-22·N-23 引述同步清洗；"运营官"承载的洞察（用户不懂自媒体、产品指导并孵化其 IP）保留在 CLAUDE.md 定位条，仅标签退役 | §1 |
+| N-25 | 自称双轨：对内技术 = agent，对外文案 = assistant/助手（细化 N-24 适用范围） | "agent" 对非技术用户是行话（欧洲用户甚至会读成"经纪人/特工"）；技术实体不变——架构/PRD/CLAUDE.md/代码全用 agent，N-24 的隐喻禁令不变；hero/showcase 等对外文案一律 assistant（EN）/ 助手或代词"它"（zh，zh 优先代词）（2026-08-01 用户裁决）。对外文案中出现 "agent" 字样即违规 | §1、§6 |
+| N-25 | 任务书钉死归服务端配方注册表解析；mention 系统双端注册表化 | 钉死唯一发生地 = 服务端 `resolve_recipe_mentions`（composer/chat 两表面同一份解析器）；客户端 prior 构造路径退役（旧事故根因：隐式状态 + 客户端持钉）。提及类型与效果各自注册表化（recipe 第一成员、第五提及类型），后续 @ 类型只填注册项，禁类型分支补丁（2026-08-01 用户裁决：mention 做成可扩展架构，功能先只开 recipe）。**词汇修订**："硬编码"表述退役——正确表述是"静态注册表，随代码部署"（SKILL_REGISTRY 同款纪律） | §1、§5 |
 
 ## 4. API 命名
 

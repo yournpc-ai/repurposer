@@ -3,11 +3,11 @@
 > Status: implemented on main
 > Last updated: 2026-07-27
 > **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
-> **2026-07-27 Phase 2 落地**：导演两步走已上线——`ContentPlan`/`DerivativePlan` 整体退役，导演拆为 `director_understand`（素材理解，asset-hash 复用）+ `director_plan`（分镜表，每 run 重排）。§4–§6 中关于 ContentPlan/DerivativePlan 的描述为 Phase 1 历史形态，现行契约以 §12.8 为准（实施简报：`docs/tasks/director-two-step.md`）。
+> **2026-07-27 Phase 2 落地**：导演两步走已上线——`ContentPlan`/`DerivativePlan` 整体退役，导演拆为 `director_understand`（素材理解，asset-hash 复用）+ `director_plan`（分镜表，每 run 重排）。§4–§6 中关于 ContentPlan/DerivativePlan 的描述为 Phase 1 历史形态，现行契约以 §12.7 为准（实施简报：`docs/tasks/done/director-two-step.md`）。
 
 ## 1. Overview
 
-Repurposer turns a single source (talk video, audio, slides, or transcript) into a set of reusable knowledge assets: vertical clips, social posts, quote cards, carousels, and articles.
+Repurposer turns a single source (talk video, meeting recording, audio, slides, or transcript) into the content the user names: vertical clips, social posts, quote cards, carousels, and articles.
 
 The backend generation pipeline is organized as a **4-layer agent architecture**:
 
@@ -304,7 +304,7 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 
 ## 12. 施工图视图（RunPlan 架构，2026-07-22 定型）
 
-> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（RunPlan 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
+> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（RunPlan 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/done/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
 
 ### 12.1 概念表（八个，没有第九个）
 
@@ -346,23 +346,15 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 - **会思考（LLM 班底）**：意图识别 / 导演 / 班组 / 质检 / persona / chat 意图解析
 - **不会思考（施工机械）**：processor / orchestrator（物化图+走图）/ worker（认领节点）/ Remotion / 队列 / 存储 / 分发状态机
 
-### 12.6 现状五宗罪（2026-07-22 代码核实；Phase 1 已全部清除）
-
-1. ~~ContentPlan = project 上 JSON blob，盲目复用无失效~~ → 内部 `outputs[type=content_plan]` 行，director_plan 节点产物（每 run 重排；asset-hash 复用是 Phase 2）
-2. ~~DerivativePlan 混 what/how，定向重生成靠伪造 plan~~ → 定向重生成 = 小拓扑 `[director_plan → X_gen(target_id)]`，伪造 plan 路径整体删除
-3. ~~output_status JSON + 进程内 asyncio 锁，跨 worker 失效~~ → workflow_steps 行级状态，步骤清单改读节点
-4. ~~speaker 自动创建埋在 run_generation~~ → `persona_bootstrap` 节点
-5. ~~scope if-else 双形态~~ → 同机制小拓扑图（hook/clip→`[script]`，render→`[render]`）
-
-### 12.7 分期（防范围蠕变）
+### 12.6 分期（防范围蠕变）
 
 | 期 | 内容 | 行为变化 | 状态 |
 |---|---|---|---|
-| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 | ✅ 已落地（2026-07-22；实施计划 `docs/tasks/runplan-phase1-implementation.md`） |
-| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 🚧 主体已落地（2026-07-27：两步走 + DerivativePlan 退役 + 覆盖问责，简报 `docs/tasks/director-two-step.md`；persona_bootstrap 已随 Phase 1；**选段独立成节点顺延 Phase 2b**，另行简报） |
+| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 | ✅ 已落地（2026-07-22；实施计划 `docs/tasks/done/runplan-phase1-implementation.md`） |
+| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 🚧 主体已落地（2026-07-27：两步走 + DerivativePlan 退役 + 覆盖问责，简报 `docs/tasks/done/director-two-step.md`；persona_bootstrap 已随 Phase 1；**选段独立成节点顺延 Phase 2b**，另行简报） |
 | Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 | 📋 |
 
-### 12.8 Phase 2 落地实录（2026-07-27）
+### 12.7 Phase 2 落地实录（2026-07-27）
 
 - **两个内部产物类型**：`material_understanding`（素材级：`overall_summary` / `core_thesis` / `key_arguments(id+text+position)` / `themes` / `target_audience` / `quote_candidates`，素材语言、金句逐字）与 `storyboard`（请求级：`slots` + `coverage`，target_language）。`content_plan` 类型退役（旧行仍被 `INTERNAL_OUTPUT_TYPES` 过滤隐藏）。
 - **拓扑**：full = `preprocess → persona_bootstrap ∥ director_understand → director_plan → executors`（persona 与 understand 互不依赖，并行）；定向 derivative = `[understand → plan(target_type) → X_gen]`；模式② prelude 同为四节点。

@@ -7,15 +7,15 @@
 Read these before touching a subsystem (check each doc's own status line — some describe proposed work not yet landed on `main`):
 
 - `docs/README.md` — **docs 索引与治理原则（单一事实源表）**，找文档先查这里。
-- `docs/ROADMAP.md` — 分模块需求排期的**唯一事实源**（8 模块表 + 依赖图 + P0 汇总）；排期/优先级只准引用它。
-- `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则；新表/新模块/新认领源必须在此登记。
+- `docs/PROGRESS.md` — 进展快照 + 十周排期 + 需求池的**唯一事实源**（ROADMAP 已并入本文并退役，2026-07-31）；排期/优先级只准引用它。
+- `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则 + §7 代码地图/队列机制/数据约定（现状架构唯一事实源，ARCHITECTURE.md 已并入）；新表/新模块/新认领源必须在此登记。
 - `docs/AGENT_ARCHITECTURE.md` — 4-layer agent pipeline (GenerationContext → Content Director → Agent Executors → Consistency Reviser). Implemented on `main`（Layer 4 未实现，图已标注）；the canonical map of `app/pipeline/orchestrator.py` orchestration and the `app/skills/` registry.
 - `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table; supersedes ADR-019's filesystem-only mood library. Implemented (Layer-4 music verification still future).
 - `docs/VIDEO_EDITOR.md` + ADR-016 — clip-spec is the **sole render contract**; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec.
 - `docs/DECISIONS.md` — ADRs，只追加不修改；翻案写新 ADR（如 ADR-025 修订 ADR-004 的 provider 抽象决策）。
 - `docs/COMPETITIVE_ANALYSIS.md` + `docs/DECISION_MATRIX.md` + `docs/research/` — 竞品综合 / 采纳矩阵 / 原始证据三层，评估竞品功能时按此顺序查。
 - `docs/DATABASE_MIGRATIONS.md` — Alembic workflow; `migrations/versions/*.py` is part of the codebase and must be committed.
-- `docs/tasks/` — per-feature implementation briefs with acceptance criteria and explicit "Prohibited Behaviors"; read the relevant task before starting and respect its prohibitions.
+- `docs/tasks/` — per-feature implementation briefs with acceptance criteria and explicit "Prohibited Behaviors"; read the relevant task before starting and respect its prohibitions. 已完成简报归 `docs/tasks/done/`（历史记录，不再维护）。
 
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
@@ -90,8 +90,8 @@ Correct:
 - Bottom row is **one continuous row inside the card** (no separate action-bar strip / muted background): Brand pill on the left, AI model pill (display-only, current provider) + circular send button on the right, controls at `h-9`. The composer has **no language / outputs / clip-count controls and runs no inference of its own** (see behavioral contract).
 - Card padding is controlled by `CardContent` (`Card` adds `py-0` to remove built-in vertical padding, avoiding double padding).
 - Do not add a divider / border in the middle of the card to separate the input area from the action bar; keep it as one piece.
-- **Teaching lives in the Tour, not the placeholder**: the textarea placeholder stays a single short prompt — no usage instructions in it. First-visit teaching is the 4-step `Tour` (assets → speaker → prompt → send, anchored via `data-tour="composer-*"` attributes); it auto-opens only when `localStorage["repurposer-tour-seen"]` is unset, and complete/skip both write the flag (read/write inside `useEffect` only — never during SSR).
-- **Results page has its own tour** (score badge → video area → "···" menu, anchored via `data-tour="results-*"` on the first ready clip card): separate key `localStorage["repurposer-results-tour-seen"]`, fires once clips are rendered and the generation overlay is closed — no matter how the user arrived (fresh generation or from `/projects`). New first-visit tours follow the same pattern: own storage key, `data-tour` anchors, effect-only reads.
+- **Teaching lives in the Tour, not the placeholder**: the textarea placeholder stays a single short prompt — no usage instructions in it. First-visit teaching is the 5-step `Tour` (assets → speaker → prompt → send → recipe gallery, anchored via `data-tour="composer-*"` / `data-tour="home-recipes"` attributes). The seen flag's version is **a pure function of content** (`lib/tour.ts`: djb2 hash of the step config + the EN copy subtree — EN is the locale source of truth, so every copy edit touches it and a language switch never replays): `localStorage["repurposer-tour-seen"]` stores the hash, the tour auto-opens when the stored hash differs, and complete/skip both write the current hash. **Any content change — steps or copy — replays the tour exactly once per user; no manual version constants, no "worth re-showing" judgment** (read/write inside `useEffect` only — never during SSR). New first-visit tours follow the same pattern: own storage key, a static `TourStepDef[]` config hashed with its EN copy subtree, `data-tour` anchors, effect-only reads.
+- **Results page has its own tour** (score badge → video area → "···" menu, anchored via `data-tour="results-*"` on the first ready clip card): separate key `localStorage["repurposer-results-tour-seen"]` with the same content-hash rule, fires once clips are rendered and the generation overlay is closed — no matter how the user arrived (fresh generation or from `/projects`).
 
 #### Composer behavioral contract（2026-07-27 修订：意图识别归管线，composer 瘦身）
 - **Prompt is required**: submitting with an empty prompt is blocked locally (toast), same posture as the auth gate. Files are optional (prompt-only → a `prompt.txt` transcript asset).
@@ -99,18 +99,21 @@ Correct:
 - **clips need media**: enforced server-side — the intent agent excludes clips for text-only input; `/generate` mirrors with 422 against the resolved outputs.
 - **Zero-asset quick start retired** (its trigger was the outputs pill).
 - **Show grid ≠ tool grid**: the capability icon row below the composer is display-only — it must not switch outputs or touch composer params.
+- **Mentions = the composer's fourth payload field**（2026-08-01，brief `docs/tasks/recipe-mention.md`）: @-entity chips ride `mentions` alongside `instruction` + `speaker_id` + `brand_template_id`. The mention system is a **registry architecture** (frontend `MENTION_REGISTRY` + server-side resolution), `recipe` is the first registered type; new @ types are registry entries, never one-off branches. Input = `MentionEditor` (contentEditable; chips are inline `contenteditable=false` nodes, the DOM owns the text, `syncNow` is the single sync funnel — 完全体 landed 2026-08-02). Chip three laws: **visible** (inline chip with ×), **consumed on send**, **× purifies** (no state lingers across sends). Task-book pinning happens **only** server-side (`resolve_recipe_mentions`) — the composer never builds `prior`. Recipe cards' Remix inserts a recipe mention (no fullscreen modal; the DAG is never user-facing).
 
 ## Product Positioning
 
-Repurposer targets the **European knowledge-speaking market**. Its core positioning is **turning speeches into reusable knowledge assets**, not "viral short-video clips".
+Repurposer serves **European knowledge experts who have content but no time to manage social media** — professors, researchers, lecturers, executives (operating solo or via an assistant). Its core positioning is **an AI agent that turns existing material into the content the user names** — guiding people who don't know editing or social media in growing their own IP — not a self-serve media tool, not "viral short-video clips".
 
-- **Target users**: academic conference speakers, corporate summit speakers, research institutions.
+- **Target users**: knowledge experts with content. **Never assume the input is a "speech"** (2026-08-01 baseline): it can be a meeting, a report, a podcast, or just a transcript plus photos/slides.
 - **Core channels**: LinkedIn, institutional websites, email newsletters.
-- **Core outputs**: LinkedIn long-form posts, quote cards, multi-language summaries, newsletter content, core insights, blog articles, etc.
+- **Core outputs**: whatever the user names — LinkedIn posts, quote cards, articles, newsletters, multi-language versions, vertical clips. **Multi-output is a capability surface, not the promise** (2026-07-31): the promise is "the user names it, the agent makes it" — bundle-style "one input, a full set out" advertising is banned; enumerating capabilities is fine.
 - **Multi-language is the entry ticket**: outputs must cover mainstream European languages (FR / DE / ES / IT / EN, etc.).
-- **GDPR / EU data residency**: a core selling point when selling to European institutions; backend deployment must support EU regions.
+- **GDPR / EU data residency**: a core selling point; outward compliance copy stays in the "ready" angle until compliance actually ships (2026-08-01).
+- **Self-label dual track** (2026-08-01, NAMING N-25): internal/technical = **agent**; user-facing copy = **assistant / 助手** ("agent" never appears in outward text; zh prefers the pronoun 它). Role-metaphors (运营官 / 操盘手 / 班子) are retired 话术 (N-24).
+- **Copy doctrine** (2026-08-01): plain and factual — no asset jargon ("knowledge assets" rejected), no inflated metaphors ("bigger stage" rejected), no approval-mechanics ("You review. It publishes" rejected). Studio home = hello + spec note only; positioning lives on the landing page. Writing style = 风格/style; "voice" is audio-only (声纹/dub). The Sparkles icon is banned ("AI 用烂了"); the assistant's visual is `LogoMark`.
 
-Therefore, frontend copy, tool grids, and example placeholders should all revolve around **knowledge assets / LinkedIn / multi-language**, avoiding descriptions like "TikTok / viral / trending".
+Therefore, frontend copy, tool grids, and example placeholders should all revolve around **content / LinkedIn / multi-language**, avoiding descriptions like "TikTok / viral / trending".
 
 ## Internationalization (i18n)
 
@@ -156,9 +159,9 @@ t("home.allProjects", { count: projects.length })
 
 ## Routing
 
-### Layout Split (landing vs. workbench)
-- `/` is the **public landing page** (no sidebar); the sidebar workbench lives under the `_app` **pathless layout route** (`src/routes/_app.tsx` holds `SidebarProvider`/`AppSidebar`/`SidebarInset`/`AppHeader`). `__root.tsx` keeps only providers + `Toaster`.
-- The workbench home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.projects.tsx` → `/projects`, `_app.projects.$id.tsx` → `/projects/$id`, …).
+### Layout Split (landing vs. studio)
+- `/` is the **public landing page** (no sidebar); the sidebar studio lives under the `_app` **pathless layout route** (`src/routes/_app.tsx` holds `SidebarProvider`/`AppSidebar`/`SidebarInset`/`AppHeader`). `__root.tsx` keeps only providers + `Toaster`.
+- The studio home is `/home` (`_app.home.tsx`); other app pages keep flat URLs (`_app.projects.tsx` → `/projects`, `_app.projects.$id.tsx` → `/projects/$id`, …).
 - `AuthProvider` public paths: `/` only. Everything under `_app` sits behind the login wall automatically.
 
 ### Dynamic Links

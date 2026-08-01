@@ -4,8 +4,8 @@
 
 | Item | Content |
 |:---|:---|
-| Document Version | v0.6 (Europe Edition, aligned with current implementation) |
-| Date | 2026/07/23 |
+| Document Version | v0.7 (Europe Edition, second post-MVP slimming) |
+| Date | 2026/07/31 |
 | Product Name | TBD (internal codename: SpeechRepurposer) |
 | Target Audience | Product managers, tech leads, designers, Zuo, European market team |
 | Status | Draft |
@@ -16,11 +16,11 @@
 
 ### 2.1 One-Liner
 
-Transform raw talk materials (video, audio, transcript, slides, photos) into high-quality knowledge assets for LinkedIn, institutional websites, and email newsletters — including social posts, articles, quote cards, and vertical clips — while preserving the speaker's voice and style.
+An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the speaker's own voice and style, and guides people with no editing or social-media background in growing their own IP.
 
 ### 2.2 Vision
 
-Enable thought leaders, subject-matter experts, and executives to **zero-edit** their **talks, podcasts, webinars, or interviews** into high-quality knowledge assets for LinkedIn, institutional websites, and email newsletters — with their viewpoints, style, and voice intact throughout.
+Enable thought leaders, subject-matter experts, and executives to **zero-edit** their **talks, meetings, podcasts, webinars, or interviews** into the content they need for LinkedIn, institutional websites, and email newsletters — with their viewpoints and style intact throughout.
 
 ### 2.3 Core Value Proposition
 
@@ -49,10 +49,10 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 ### 3.2 Key Insight
 
-> **SpeechRepurposer is not "another OpusClip" in Europe — it's the only AI knowledge-assetization tool that understands academic talks, speaks 5 European languages natively, and can keep data in the EU.**
+> **Repurposer is not "another OpusClip" in Europe — it's the only AI content agent that understands expert material, writes natively in 5 European languages, and can keep data in the EU.**
 
 - **Core channels are LinkedIn + institutional websites + email newsletters**, not TikTok/Douyin
-- **Product positioning shifts from "clip short videos" to "knowledge assetization"**: social posts + articles + quote cards + vertical clips (optional)
+- **Product positioning shifts from "clip short videos" to "an agent that delivers the content you name"**: social posts + articles + quote cards + vertical clips (optional)
 - **Multi-language is elevated to P0**: Chinese/English + German/French/Spanish/Italian, M3 native translation, no third-party API
 - **EU data residency as a premium differentiator**: GDPR compliance + optional EU data residency via Cast AI Kimchi
 
@@ -66,97 +66,7 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 ### 3.4 Competitive Analysis
 
-> **⚠️ SUPERSEDED (2026-07-19)**: 本节为 v0.4 定位论证版，颗粒度粗且未反映实现现状。竞品事实与决策的唯一入口为 [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景 + 六范式分类）、单家卡片 [research/](./research/)（opusclip / descript / chatcut / submagic / repurpose / crayo / revid）、决策层 [DECISION_MATRIX.md](./DECISION_MATRIX.md)（功能点 × 采纳/改造/放弃 × 现状）。本节保留仅供追溯定位论证脉络，不再维护。
-
-#### Competitive Landscape (European Perspective)
-
-| Competitor | Positioning | Weakness in Europe | Our Advantage |
-|:---|:---|:---|:---|
-| **OpusClip** | Long video → batch viral clips | Shallow understanding of academic content; 20-40% of clips need discarding; US data processing | M3 1M context understands full talk logic; Agent closed-loop correction; EU data residency |
-| **Descript / Underlord** | Text-driven audio/video editing | Creative editing requires manual work; social copy is generic; US data processing | Learns style from speaker's past materials; native multi-language; EU deployment |
-| **InVideo** | Prompt → complete video | Generates from scratch, not based on existing talks; AI scripts are generic | Deep understanding of talk content + past materials; maintains speaker's voice |
-| **European Local Tools** | e.g. Lumen5, Pictory | Limited capabilities, no native multi-language support; no Agent loop | M3 capability advantage; multi-language; Agent self-review correction |
-
-#### OpusClip
-
-**Positioning**: Long video → batch short-form viral clips, targeting podcasters, influencers, and marketing teams.
-
-**Core UX Flow**:
-
-```
-Upload video → Configure parameters → AI generates clips → Sort by Virality Score → Review preview → Export/publish
-```
-
-**Notable Features**:
-
-| Feature | Description | Borrow Value |
-|:---|:---|:---|
-| **AI Highlight Clips** | Auto-extracts 5-10 viral-potential clips | High — we also need auto-segmentation |
-| **Virality Score™** | 0-100 score predicting viral potential | High — adapted as our first-post recommendation score (value + visible reason, never predicts reach; 矩阵 §C) |
-| **Auto Vertical** | 9:16 with face tracking | Medium — add in P1 |
-| **Dynamic Subtitles** | Keyword highlighting, emoji | Medium — can simplify in P0 |
-| **AI Hook** | Auto-generates first 3-second title | High — must-have in P0 |
-| **Natural Language Filter** | "Find segments discussing pricing strategy" | Medium — add in P1 |
-
-**Limitations**: 20-40% of AI clips need discarding; shallow understanding of complex narratives and academic content; weak creative control.
-
-#### Descript / Underlord
-
-**Positioning**: Text-driven audio/video editor + AI collaborator, targeting podcasts, interviews, and knowledge content.
-
-**Core UX Flow**:
-
-```
-Upload audio/video → Auto-transcribe to text → Natural language instructions → AI executes multi-step edits → Review draft → Text refinement
-```
-
-**Notable Features**:
-
-| Feature | Description | Borrow Value |
-|:---|:---|:---|
-| **Text Edits Video** | Edit transcript = edit video | High — P1 subtitle-level editing |
-| **Underlord AI Assistant** | Natural language multi-step editing | Medium — similar "regenerate" capability |
-| **Filler Word / Pause Cleanup** | One-click remove um/uh/long pauses | Low — non-core need |
-| **Show Notes / Chapter Markers** | Auto-generate episode descriptions | Medium — can generate social posts |
-| **Multi-language Translation & Dubbing** | 30+ languages with lip sync | Medium — P2 |
-| **Overdub** | Text-to-speech in the speaker's voice | Low — P2 consideration |
-
-**Limitations**: Complex multi-track editing still requires professional software; creative edits ("make this more energetic") need manual work; generated social copy is generic.
-
-#### InVideo
-
-**Positioning**: Prompt/text → complete video, targeting social media operators, marketers, and small teams.
-
-**Core UX Flow**:
-
-```
-Enter prompt → AI generates script/assets/voiceover/subtitles → Review editor, replace assets → Export
-```
-
-**Notable Features**:
-
-| Feature | Description | Borrow Value |
-|:---|:---|:---|
-| **Brand Kit** | Unified fonts/colors/logo | Medium — P1 subtitle style templates |
-| **One-click Multi-language** | 100+ languages | Medium — P2 reference for one-click feel |
-| **Voice Selection** | Multiple AI voice options | Medium — P1 general TTS stage usable |
-| **Asset Replacement UI** | Left thumbnail strip + right preview | High — P0 review page reference |
-| **Prompt Guidance** | Natural language controls generation style | Medium — add "more academic" etc. instructions during generation |
-
-**Limitations**: Generates video from scratch, not based on existing talk content; AI scripts are generic; weak creative control.
-
-#### Differentiation Summary
-
-| Dimension | OpusClip | Descript | InVideo | Our Project |
-|:---|:---|:---|:---|:---|
-| Target Users | Influencers/podcasters | Podcasts/interviews | Marketing/social media ops | Professors/experts/conference organizers/think tanks |
-| Starting Point | Existing long video | Existing audio/video | One-line prompt | Existing talk materials + past materials |
-| Core Differentiator | Batch viral clips | Text-edit audio/video | Generate from scratch | Understand speaker + maintain voice + multi-asset input |
-| Data Processing | US | US | US | Optional EU residency (GDPR compliant) |
-| Multi-language | Translation plugin feel | 30+ language dubbing | 100+ languages | M3 native 6 languages, preserves speaker style |
-| Academic Content Understanding | Shallow, 20-40% discard | Medium | None | Deep, based on 1M context + Persona Agent |
-
-**Conclusion**: We borrow their **review workflow, scoring mechanism, text-editing experience, and brand kit**, but core selling points are **"sounds like me", "multi-asset input", "native multi-language", and "EU data residency"**.
+> 竞品事实与决策的唯一入口：[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景）+ [DECISION_MATRIX.md](./DECISION_MATRIX.md)（采纳/改造/放弃裁决）+ [research/](./research/)（单家卡片）。（2026-07-31：旧定位对比表已删——与上述文档重复；历史版本见 git）
 
 ---
 
@@ -202,9 +112,9 @@ Enter prompt → AI generates script/assets/voiceover/subtitles → Review edito
 1. Multilingual output **is** the influence model, not a bonus
 2. Voice fidelity is the entry ticket, not a premium — AI-tone content is a *negative* asset; risk appetite is negative (rather publish less than publish wrong)
 3. Scarcest asset = time; most perishable asset = the talk just given. Expert involvement = **acceptance (~10 min), not work**
-4. **Solo operation is the floor**: the entire loop must be completable by the expert alone — zero configuration, outputs ≥90% ready, fixes faster by direct edit than by description (§7.8). Assistant delegation is a *variant* on the same interface, not the assumption; the review queue exists only in institutional mode (ADR-027: personal instant-publish, institutional mandatory confirmation)
+4. **Solo operation is the floor**: the entire loop must be completable by the expert alone — zero configuration, outputs ≥90% ready, fixes faster by direct edit than by description (§6.8). Assistant delegation is a *variant* on the same interface, not the assumption; the review queue exists only in institutional mode (ADR-027: personal instant-publish, institutional mandatory confirmation)
 5. Compliance gates "can we use it at all" (policy-sensitive material, institutional procurement, US-processed tools are non-starters)
-6. Fixed terminology translations are professional dignity → glossary is a **survival feature** for this group, not an enhancement (ROADMAP §6)
+6. Fixed terminology translations are professional dignity → glossary is a **survival feature** for this group, not an enhancement (PROGRESS 可选需求)
 
 **Core scenario — the 48 hours after a talk (solo main path):**
 
@@ -297,68 +207,33 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ---
 
-## 6. User Stories
+## 6. Functional Requirements
 
-### 6.1 Upload & Create
+> 本节为**需求目录**（ID 稳定，供外部文档按 ID 引用）。优先级 / 排期 / 实现状态的唯一事实源是 [PROGRESS.md](./PROGRESS.md)；竞品溯源见 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。
+> 注：FR-011 / FR-018 / FR-019 编号历史上重复出现（项目管理 / 素材上传 / persona 三节各有一份），保留原样以免打断外部引用。
 
-**US-001**: As a user, I want the system to automatically persist my style persona after completing a task, and let me view and edit it when needed.
+### 6.1 Speaker Memory Management
 
-**US-002**: As a user, I want to upload a talk video or audio and have the system automatically transcribe it to text.
+| ID | Requirement |
+|:---|:---|
+| FR-001 | Auto-create Speaker memory from task input when none selected (after task completion) |
+| FR-002 | Manual Speaker creation at `/speakers` |
+| FR-003 | Edit Speaker memory (basic info + AI-extracted style fields) |
+| FR-004 | View/edit AI-generated style persona |
+| FR-005 | Manage Speaker past materials (books/articles/social) as persona calibration sources |
+| FR-006 | Manage Speaker voice samples (upload/delete/preview cloning) |
 
-**US-003**: As a user, I want to upload a transcript or slides as material for AI analysis.
+### 6.2 Project (Talk) Management
 
-**US-004**: As a user, I want to upload the speaker's past articles or book chapters to help the AI understand their style.
+| ID | Requirement |
+|:---|:---|
+| FR-007 | Create project (Speaker optional; auto-created if unselected) |
+| FR-008 | Project list with Speaker/status/date filters |
+| FR-009 | Soft-delete project |
+| FR-010 | Project status tracking (uploading/processing/review/completed) |
+| FR-011 | Optional EU data residency at project creation (future differentiator, not implemented) |
 
-**US-005**: As a user, I want to upload a voice sample for generating a voice similar to my own.
-
-### 6.2 Generation
-
-**US-006**: As a user, I want the system to automatically extract quotes and highlight segments from the talk.
-
-**US-007**: As a user, I want the system to generate short-form video scripts based on the speaker's style.
-
-**US-008**: As a user, I want the system to generate social post copy.
-
-**US-009**: As a user, I want the system to generate quote images suitable for multiple platforms.
-
-**US-010**: As a user, I want the system to translate content into English or other languages.
-
-### 6.3 Review & Export
-
-**US-011**: As a user, I want to preview AI-generated videos and copy.
-
-**US-012**: As a user, I want to edit generated scripts, subtitles, and titles.
-
-**US-013**: As a user, I want to replace visuals or BGM in the video.
-
-**US-014**: As a user, I want to one-click export all generated content.
-
----
-
-## 7. Functional Requirements
-
-### 7.1 Speaker Memory Management
-
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-001 | Auto-create Speaker | P0 | When user hasn't selected a Speaker, auto-extract and create a Speaker memory from task input after task completion |
-| FR-002 | Manual Speaker creation | P0 | User can manually create and fill in basic info at `/speakers` in advance |
-| FR-003 | Edit Speaker memory | P0 | Modify name, title, avatar, language preferences, and AI-extracted style fields |
-| FR-004 | View Speaker style persona | P0 | AI-generated persona summary, editable by human |
-| FR-005 | Manage Speaker past materials | P1 | CRUD books, articles, social content as supplementary persona calibration sources |
-| FR-006 | Manage Speaker voice samples | P1 | Upload/delete/preview cloning effects |
-
-### 7.2 Project (Talk) Management
-
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-007 | Create project | P0 | Can select an existing Speaker, or leave unselected; system auto-creates if unselected |
-| FR-008 | View project list | P0 | Filter by Speaker/status/date |
-| FR-009 | Delete project | P1 | Soft delete |
-| FR-010 | Project status tracking | P0 | Uploading/processing/review/completed |
-| FR-011 | Select EU data residency | P2 | During project creation: Default (Global) / EU data residency (via Cast AI Kimchi); future procurement differentiator, not in MVP |
-
-### 7.3 Material Upload & Input Sources
+### 6.3 Material Upload & Input Sources
 
 > **Understanding: Input sources have two first-class entry points — "upload file" and "paste link".**
 > In real scenarios, user content often already lives on YouTube / Zoom / Loom / podcasts; "paste link to auto-fetch" is much smoother than "download first, then upload", a key barrier-reducing entry point (industry standard, see OpusClip).
@@ -370,60 +245,60 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > **Input processing pipeline:** `link/file → (yt-dlp-style fetch) → ASR transcription → normalized transcript (with timestamps) → persona understanding / content generation`.
 > **External dependencies (not covered by MiniMax, need third-party):** link fetching (yt-dlp-style, supports thousands of sites), ASR transcription (Whisper-style, multi-language).
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-011 | Upload video | P0 | Support common formats, size limit TBD |
-| FR-012 | Upload audio | P0 | Support common formats |
-| FR-013 | Upload transcript | P0 | Support docx/txt/md, or paste text |
-| FR-014 | Upload slides | P0 | Support pdf/ppt/pptx |
-| FR-015 | Upload event photos | P0 | Support jpg/png, multiple selection |
-| FR-016 | Upload speaker past materials | P0 | Books, articles, old talk transcripts, social content |
-| FR-017 | Material preprocessing status display | P0 | Fetching/transcribing/parsing/completed |
-| FR-018 | Paste link auto-fetch | P1 | YouTube / Vimeo / Zoom / Loom / Google Drive / podcast links, fetched via yt-dlp-style tool to get video/audio, eliminating manual download-then-upload; after fetch, enters ASR transcription |
-| FR-019 | Non-text input auto-transcription (ASR) | P0 | Video/audio → timestamped transcript; multi-language; prerequisite for segment selection/subtitles/generation; implemented with faster-whisper |
+| ID | Requirement |
+|:---|:---|
+| FR-011 | Upload video (common formats) |
+| FR-012 | Upload audio (common formats) |
+| FR-013 | Upload transcript (docx/txt/md or paste text) |
+| FR-014 | Upload slides (pdf/ppt/pptx) |
+| FR-015 | Upload event photos (jpg/png, multi-select) |
+| FR-016 | Upload Speaker past materials (books/articles/old transcripts/social) |
+| FR-017 | Material preprocessing status display (fetching/transcribing/parsing/completed) |
+| FR-018 | Paste-link auto-fetch (YouTube/Vimeo/Zoom/Loom/Drive/podcast, yt-dlp-style, then ASR) |
+| FR-019 | Auto-transcription of non-text input (ASR, word-level timestamps, multi-language, faster-whisper) |
 
-### 7.4 Persona Understanding & Style Persona
+### 6.4 Persona Understanding & Style Persona
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-018 | Auto-extract Speaker memory from task input | P0 | Extract values, common metaphors, sentence patterns, terminology preferences, emotional tendencies from current task materials + prompts, persist as Speaker |
-| FR-019 | Manual edit Speaker memory | P0 | User can modify, supplement, or disable certain expressions |
-| FR-020 | Content segmentation & scoring | P0 | Slice talk into standalone segments, each with a first-post recommendation score (1-100) + visible reason. *Semantics 2026-07-23: the score answers "which clip is most worth posting first" (completeness / opening / representativeness / delivery), never predicts reach. Impl. status: LLM produces scores but they are not yet persisted to `outputs.score` or shown in the UI — see ROADMAP P0-3* |
-| FR-021 | Keyframe/slide page recommendation | P1 | Recommend suitable visuals from uploaded materials |
-| FR-022 | Quote extraction | P0 | Auto-extract 5-10 most viral quotes |
+| ID | Requirement |
+|:---|:---|
+| FR-018 | Auto-extract Speaker memory from task input (values/metaphors/sentence patterns/terminology/emotional tendencies) |
+| FR-019 | Manual edit of Speaker memory (modify/supplement/disable expressions) |
+| FR-020 | Content segmentation & scoring: first-post recommendation score (1-100) + visible reason — answers "which clip is most worth posting first", never predicts reach |
+| FR-021 | Keyframe/slide-page recommendation from uploaded materials |
+| FR-022 | Quote extraction (5-10 most viral quotes) |
 
-### 7.5 Voice Settings
+### 6.5 Voice Settings
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-023 | Style sliders | P0 | Academic rigor ↔ casual spoken; rational restraint ↔ passionate; concise direct ↔ detailed expansion |
-| FR-024 | Target audience selection | P0 | Peer scholars / industry practitioners / general public / investors / policymakers |
-| FR-025 | Catchphrases / fixed openers & closers | P1 | User can set common expressions |
-| FR-026 | Blocked words | P2 | Avoid certain words appearing |
+| ID | Requirement |
+|:---|:---|
+| FR-023 | Style sliders (academic↔casual / restrained↔passionate / concise↔detailed) |
+| FR-024 | Target audience selection (peers/practitioners/public/investors/policymakers) |
+| FR-025 | Catchphrases / fixed openers & closers |
+| FR-026 | Blocked words |
 
-### 7.6 Voice Samples
+### 6.6 Voice Samples
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-027 | Upload voice sample | P1 | 1-3 minutes of clear recording |
-| FR-028 | Preview cloned voice | P1 | Listen with sample text |
-| FR-029 | Toggle for generation | P1 | User can enable/disable cloned voice |
-| FR-030 | Multi-language voice mapping | P2 | Chinese uses cloned voice, English can choose British/American |
+| ID | Requirement |
+|:---|:---|
+| FR-027 | Upload voice sample (1-3 min clear recording) |
+| FR-028 | Preview cloned voice with sample text |
+| FR-029 | Toggle cloned voice for generation |
+| FR-030 | Multi-language voice mapping (e.g. ZH cloned, EN British/American) |
 
-### 7.7 Content Generation
+### 6.7 Content Generation
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-031 | Generate highlight clip scripts | P0 | Default 3-5, each containing: Hook + script + subtitle timestamps + visual suggestions + music mood |
-| FR-032 | Generate alternative hooks | P0 | Each clip gets 3 alternative titles/hooks, user can select or customize |
-| FR-033 | Generate social post | P0 | 1 post, matching Speaker voice, structure: Hook → Core insight → Personal take → Call to action |
-| FR-034 | Generate quote cards | P0 | 3-5 cards, 1:1 or 4:5, with attribution and style templates |
-| FR-035 | Generate Carousel | P1 | Multi-page images + text, suitable for social platforms |
-| **FR-036** | **Generate multi-language versions** | **P0** | **Chinese/English + German/French/Spanish/Italian, M3 native translation, preserves original meaning and impact** |
-| FR-037 | Generate visual/B-roll prompts | P1 | Annotate suggested visuals for each clip, match from uploaded materials |
-| FR-038 | Generate music suggestions | P1 | Match BGM by mood tags (calm/passionate/suspenseful/hopeful) |
+| ID | Requirement |
+|:---|:---|
+| FR-031 | Highlight clip scripts (default 3-5: hook + script + subtitle timestamps + visual suggestions + music mood) |
+| FR-032 | 3 alternative hooks/titles per clip |
+| FR-033 | Social post in Speaker voice (Hook → Core insight → Personal take → CTA) |
+| FR-034 | Quote cards (3-5, 1:1 or 4:5, attribution + style templates) |
+| FR-035 | Carousel (multi-page image+text for social platforms) |
+| FR-036 | Multi-language versions (ZH/EN + DE/FR/ES/IT, M3 native translation preserving meaning and impact) |
+| FR-037 | Visual/B-roll prompts matched from uploaded materials |
+| FR-038 | Music suggestions by mood tags (calm/passionate/suspenseful/hopeful) |
 
-### 7.8 Review & Editing (Iteration: Direct Edit First, Dialogue as Fallback)
+### 6.8 Review & Editing (Iteration: Direct Edit First, Dialogue as Fallback)
 
 > **Understanding: Output "will inevitably need changes", but "change" ≠ "must be multi-turn dialogue".** Making all changes into dialogue is slower, less controllable, and more token-consuming for the most common small edits. Choose the fastest interaction by edit type:
 >
@@ -437,45 +312,44 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 >
 > **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
 > When dialogue fallback is used, agent context = talk materials + Speaker memory + current output + necessary history.
-> (Chapter 20 is **internal agent orchestration**, separate from the user-facing iteration interaction here.)
 >
-> **Current gap:** Output is currently read-only display, missing "direct edit" and "local regeneration/quick action" entry points; Reviser endpoint exists but frontend not yet connected (home page "New chat" is just a dialogue-suggesting UI hint).
+> **现状（2026-07-31）**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 编排见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-039 | Script editing | P0 | Modify subtitles, hooks, endings, displayed by timeline |
-| FR-040 | Title selection/editing | P0 | Select from AI alternative titles or rewrite |
-| FR-041 | Visual replacement | P1 | Select alternative visuals from uploaded materials |
-| FR-042 | BGM replacement | P1 | Switch background music by mood tags |
-| FR-043 | Regenerate | P0 | Local regeneration for a single clip or derivative content (triggers Reviser Agent) |
-| FR-044 | Structured feedback | P0 | User feedback types: Hook not working / overall style mismatch / too complex/too simple / factual inaccuracy / want different expression |
-| FR-045 | Multi-language review | P0 | Sentence-by-sentence review and correction of multi-language versions |
+| ID | Requirement |
+|:---|:---|
+| FR-039 | Script editing (subtitles/hooks/endings, timeline display) |
+| FR-040 | Title selection/editing (AI alternatives or custom) |
+| FR-041 | Visual replacement from uploaded materials |
+| FR-042 | BGM replacement by mood tags |
+| FR-043 | Local regeneration of a single clip/derivative (triggers Reviser) |
+| FR-044 | Structured feedback (hook/style/complexity/facts/expression) |
+| FR-045 | Multi-language sentence-by-sentence review |
 
-### 7.9 Export
+### 6.9 Export
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-046 | Export copy | P0 | Markdown/TXT, including all language versions |
-| FR-047 | Export quote card images | P0 | PNG/JPG, multiple templates available |
-| FR-048 | Export video | P0 | MP4 via Remotion renderer, preview = output pixel parity |
-| FR-049 | Export subtitle files | P0 | SRT export per clip |
-| FR-050 | Batch export | P0 | ZIP archive with all project outputs |
-| FR-051 | Export EU compliance certificate | P2 | Generate GDPR data processing statement PDF; future procurement feature, not in MVP |
+| ID | Requirement |
+|:---|:---|
+| FR-046 | Export copy (Markdown/TXT, all language versions) |
+| FR-047 | Export quote card images (PNG/JPG, multiple templates) |
+| FR-048 | Export video (MP4 via Remotion, preview = output pixel parity) |
+| FR-049 | Export subtitle files (SRT per clip) |
+| FR-050 | Batch export (ZIP of all project outputs) |
+| FR-051 | Export EU compliance certificate (future procurement feature) |
 
-### 7.10 European Localization Features
+### 6.10 European Localization Features
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| FR-052 | Multi-language UI | P1 | Frontend UI supports English/German/French/Spanish/Italian switching |
-| FR-053 | European time format | P1 | Support 24-hour clock, DD/MM/YYYY date format |
-| FR-054 | European academic conference templates | P1 | Output templates for European academic conferences (e.g. ECA, EMBO style) |
-| FR-055 | European B2B marketing templates | P1 | Copy templates for European LinkedIn B2B marketing (German rigor, French elegance, British brevity) |
+| ID | Requirement |
+|:---|:---|
+| FR-052 | Multi-language UI (EN/DE/FR/ES/IT) |
+| FR-053 | European time format (24h, DD/MM/YYYY) |
+| FR-054 | European academic conference templates (ECA/EMBO style) |
+| FR-055 | European B2B marketing copy templates (German rigor / French elegance / British brevity) |
 
 ---
 
-## 8. Non-Functional Requirements
+## 7. Non-Functional Requirements
 
-### 8.1 Performance
+### 7.1 Performance
 
 | ID | Requirement | Priority | Description |
 |:---|:---|:---|:---|
@@ -484,7 +358,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | NFR-003 | Video rendering | P1 | Single clip render within 2 minutes |
 | NFR-004 | Concurrent processing | P1 | Support multiple projects queued for async processing |
 
-### 8.2 Security & Privacy
+### 7.2 Security & Privacy
 
 | ID | Requirement | Priority | Description |
 |:---|:---|:---|:---|
@@ -496,7 +370,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | NFR-010 | GDPR compliance | P2 | Provide data processing statements, user data deletion, export features; future procurement requirement |
 | NFR-011 | Cross-border data control | P2 | EU project data must not be transferred to non-EU regions for processing; future procurement requirement |
 
-### 8.3 Usability
+### 7.3 Usability
 
 | ID | Requirement | Priority | Description |
 |:---|:---|:---|:---|
@@ -505,7 +379,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | NFR-014 | Review-friendly | P0 | Generated content displayed side-by-side for easy comparison |
 | NFR-015 | Mobile adaptation | P2 | Large file upload recommended on desktop |
 
-### 8.4 Extensibility
+### 7.4 Extensibility
 
 | ID | Requirement | Priority | Description |
 |:---|:---|:---|:---|
@@ -515,21 +389,21 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ---
 
-## 9. Technical Architecture
+## 8. Technical Architecture
 
-> **已迁移**：技术架构的唯一事实源是 [ARCHITECTURE.md](./ARCHITECTURE.md)（抽象架构 / Agent 工作流 / 数据流 / 队列 / 渲染）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；模块边界与演进方向见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)。（2026-07-20 自本文移除，原内容为 ARCHITECTURE 的重复副本）
-
----
-
-## 10. Data Models
-
-> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（旧版文档字段表已 drift，不再维护）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [ARCHITECTURE.md](./ARCHITECTURE.md) §11。（2026-07-20 自本文移除）
+> **已迁移**：技术架构的唯一事实源是 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)（六层模块图 / 表归属 / 代码地图 / 队列机制）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；clip-spec 与编辑器见 [VIDEO_EDITOR.md](./VIDEO_EDITOR.md)。（2026-07-20 自本文移除；2026-07-31 ARCHITECTURE.md 退役，指针改 MODULE_ARCHITECTURE.md）
 
 ---
 
-## 11. Core User Flows
+## 9. Data Models
 
-### 11.1 Create and Manage Speaker Memory
+> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（旧版文档字段表已 drift，不再维护）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md) §7.3。（2026-07-20 自本文移除；2026-07-31 指针更新）
+
+---
+
+## 10. Core User Flows
+
+### 10.1 Create and Manage Speaker Memory
 
 ```
 1. User logs in
@@ -548,29 +422,28 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 6. Set voice sliders (academic rigor ↔ casual spoken; rational restraint ↔ passionate; concise direct ↔ detailed expansion)
 ```
 
-### 11.2 Home Page Task Creation & Content Generation
+### 10.2 Home Page Task Creation & Content Generation
 
 ```
 1. User enters home page, sees input box
 2. Provide input (choose one or multiple combinations)
    ├── Drag/drop or select files: video/audio/transcript/slides/images
    └── Paste text or enter prompt in input box
-3. Configure outputs (all in toolbar below input box, all optional)
-   ├── Speaker: select existing Speaker or leave unselected
-   ├── Brand template: select existing template or leave unselected
-   ├── Tone: professional/thought leader/conversational/academic
-   └── Outputs: clips generated by default, optionally social post / quote cards / article / carousel, etc.
+3. Configure (all optional)
+   ├── Speaker: select existing Speaker or leave unselected (auto-create)
+   └── Brand template: select existing template or leave unselected
+   (outputs / target language 由管线意图识别推导，见 CHAT_ARCHITECTURE.md；composer 无 outputs/tone 控件)
 4. Click generate button
    ├── Frontend auto calls POST /projects to create Project
    ├── Frontend auto calls POST /projects/{id}/assets to upload materials
    └── Frontend auto calls POST /projects/{id}/generate to trigger async generation
 5. System processes asynchronously
    ├── Worker processes Asset: ASR transcription / text extraction / visual image reading
-   └── Worker runs Generation: Analyzer → Script / Post / Quotes / Article / Carousel
+   └── Worker runs Generation: director (understand → plan) → executors (clips / post / quotes / article / carousel)
 6. User auto-redirects to project detail page to view generation results
 ```
 
-### 11.3 Review & Export
+### 10.3 Review & Export
 
 ```
 1. User views generated clips list (left list + right preview)
@@ -591,9 +464,9 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ---
 
-## 12. Output Specifications
+## 11. Output Specifications
 
-### 12.1 Vertical Highlight Clips
+### 11.1 Vertical Highlight Clips
 
 | Attribute | Specification |
 |:---|:---|
@@ -604,13 +477,13 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Visuals | Speaker close-up / event photos / slide pages / dynamic text |
 | Music | Matched by mood tags |
 
-### 12.2 Hook / Title
+### 11.2 Hook / Title
 
 - Each clip provides 3 alternative titles
 - First 3 seconds of subtitles must have conflict, counter-intuition, or strong data
 - Title length suitable for display on all platforms
 
-### 12.3 Social Post
+### 11.3 Social Post
 
 | Attribute | Specification |
 |:---|:---|
@@ -620,7 +493,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Hashtags | Auto-generate 3-5 relevant topic tags |
 | Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
 
-### 12.4 Article
+### 11.4 Article
 
 | Attribute | Specification |
 |:---|:---|
@@ -630,7 +503,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Hashtags | Auto-generate 3-5 relevant topic tags |
 | Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
 
-### 12.4 Quote Cards
+### 11.5 Quote Cards
 
 | Attribute | Specification |
 |:---|:---|
@@ -640,7 +513,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Output | PNG / JPG, high resolution |
 | Multi-language | Simultaneously generate multi-language versions |
 
-### 12.5 Carousel
+### 11.6 Carousel
 
 | Attribute | Specification |
 |:---|:---|
@@ -650,7 +523,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Last page | CTA + attribution + QR code/link |
 | Platforms | LinkedIn / Instagram |
 
-### 12.6 Multi-language Versions
+### 11.7 Multi-language Versions
 
 | Attribute | Specification |
 |:---|:---|
@@ -662,28 +535,28 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ---
 
-## 13. API Overview
+## 12. API Overview
 
 > API 规格的唯一事实源：[API.md](./API.md)。（2026-07-20 移除重复的高层列表）
 
 ---
 
-## 14. UI/UX Requirements
+## 13. UI/UX Requirements
 
-### 14.1 Upload Page
+### 13.1 Upload Page
 
 - Clear material type sections (video/audio/transcript/slides/photos)
 - Drag-and-drop upload + click upload
 - Display processing status for each material (transcribing/parsing/completed)
 - **Hint copy**: "Upload at least one type, more is better. Transcript + event photos can produce a first draft."
 
-### 14.2 Speaker Style Persona Page
+### 13.2 Speaker Style Persona Page
 
 - Left: AI-generated persona
 - Right: User-editable fields
 - Provide "re-analyze" button
 
-### 14.3 Generation Results Page
+### 13.3 Generation Results Page
 
 Reference OpusClip's "left list + right preview" layout:
 
@@ -693,7 +566,7 @@ Reference OpusClip's "left list + right preview" layout:
 - **Action buttons**: Export, regenerate, delete
 - **Sort/filter**: Filter by score, duration, status
 
-### 14.4 Review Page
+### 13.4 Review Page
 
 Reference Descript's text-editing experience:
 
@@ -704,15 +577,15 @@ Reference Descript's text-editing experience:
 - **Title selection**: A/B/C three alternatives + custom
 - **Feedback buttons**: Submit dissatisfaction reasons for clip overall, hook, subtitles, style separately
 
-### 14.5 UX Borrowed from Competitors
+### 13.5 UX Borrowed from Competitors
 
 > **已迁移**：竞品 UX 借鉴与采纳/不做决策的唯一事实源是 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。（原表已过时——例如"文稿编辑视频 ❌ P1"实际已在 MVP 落地；2026-07-20 移除）
 
 ---
 
-## 15. Success Metrics
+## 14. Success Metrics
 
-### 15.1 Content Quality
+### 14.1 Content Quality
 
 | Metric | Target | Measurement |
 |:---|:---|:---|
@@ -721,7 +594,7 @@ Reference Descript's text-editing experience:
 | Multi-language adoption rate | > 60% | Proportion of users who export multi-language versions |
 | Style match score | > 7/10 | User rating "does this sound like me" |
 
-### 15.2 Efficiency Gains
+### 14.2 Efficiency Gains
 
 | Metric | Target |
 |:---|:---|
@@ -730,7 +603,7 @@ Reference Descript's text-editing experience:
 | Compared to pure manual editing | Save 80%+ time |
 | Multi-language generation time | < 2 minutes / language |
 
-### 15.3 User Retention (European Market)
+### 14.3 User Retention (European Market)
 
 | Metric | Target |
 |:---|:---|
@@ -742,24 +615,19 @@ Reference Descript's text-editing experience:
 
 ---
 
-## 16. Risks & Assumptions
+## 15. Risks & Assumptions
 
-### 16.1 Risks
+### 15.1 Risks
 
 | Risk | Impact | Mitigation |
 |:---|:---|:---|
-| MiniMax M3 instability on long-text/multimodal understanding | Poor output quality | Start with transcript-driven, multimodal as auxiliary; Agent Review iterative correction |
-| Voice cloning quality below expectations | Multi-language versions unavailable | Default to general TTS, cloning as premium |
-| Video rendering cost/speed | Poor UX | P0 start with image carousel + subtitles, no complex rendering |
 | **Link fetching depends on third-party (yt-dlp-style)** | Site changes/anti-scraping cause fetch failures; copyright risk | On fetch failure, fallback to manual upload; clarify user authorization responsibility; defer non-core sources |
-| **ASR is external dependency (Whisper-style, MiniMax doesn't provide)** | Adds service/cost layer; multi-language accuracy fluctuation | Transcript input bypasses ASR; choose mature ASR service; dirty transcripts go through manual/Agent correction |
 | Copyright issues (music/images) | Legal risk | Use royalty-free materials, clarify user responsibility |
-| Users can't write voice settings | Output doesn't meet expectations | Provide default templates and preview features |
 | GDPR compliance audit | Legal risk (future) | Plan EU deployment via Cast AI Kimchi or EU cloud region; prepare compliance docs before institutional sales |
 | Cross-border data transfer risk (Schrems II) | European institutional procurement blocked (future) | EU project data stays in EU; provide data processing proof; not required for MVP seed customers |
 | European institutional procurement cycle is long | Slow commercialization | Early focus on seed customers and academic conference organizers |
 
-### 16.2 Assumptions
+### 15.2 Assumptions
 
 - User-uploaded material audio/video quality is acceptable (or transcript provided)
 - Talk content has clear, shareable viewpoints and structure
@@ -770,9 +638,9 @@ Reference Descript's text-editing experience:
 
 ---
 
-## 17. Roadmap
+## 16. Roadmap
 
-> 工程排期的唯一事实源：[ROADMAP.md](./ROADMAP.md)（分模块排期 + 依赖图 + P0 汇总）。P0 时代计划文档已删除，见 git 历史。
+> 工程排期 / 优先级 / 需求池的唯一事实源：[PROGRESS.md](./PROGRESS.md)。ROADMAP.md 已于 2026-07-31 并入 PROGRESS 并退役；P0 时代计划文档更早删除，均见 git 历史。
 
 产品阶段方向（非排期）：
 
@@ -782,7 +650,7 @@ Reference Descript's text-editing experience:
 
 ---
 
-## 18. Glossary
+## 17. Glossary
 
 | Term | Description |
 |:---|:---|
@@ -802,30 +670,26 @@ Reference Descript's text-editing experience:
 
 ---
 
-## 19. Open Decisions
+## 18. Open Decisions
 
 | Item | Proposal | Decision Maker | Status |
 |:---|:---|:---|:---|
 | Product name | SpeechRepurposer (internal, adjustable) | Zuo | TBD |
-| Agent framework selection | **Decided: P0 hand-rolled** | Tech | **Decided** |
-| URL input support | Not this cycle, can be added later | Product/Tech | TBD |
-| First-phase supported languages | Chinese/English + German/French/Spanish/Italian (P0) | Product | **Decided** |
-| EU data residency | Via Cast AI Kimchi or EU cloud region (P2) | Tech | **Decided** |
-| Voice cloning | P0 implemented via MiniMax voice_clone + T2A; general TTS fallback available | Product | **Decided** |
-| Social media publishing API integration | Consider in P2 | Product | TBD |
-| Pricing model | Not designed this cycle | Zuo | TBD |
+| URL input support | 需求池（链接摄入，PROGRESS 可选需求） | Product/Tech | 已登记 |
+| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，PROGRESS 第 9 周联调 | Product | 已排期 |
+| Pricing model | PROGRESS 第 7 周定价设计 + 第 8 周支付接入 | Zuo | 已排期 |
 | European company registration | Q3 launch UK Limited Company | Operations | TBD |
 | Academic conference partnerships | Q3 contact ECA, EMBO, London Tech Week | Marketing | TBD |
 
 ---
 
-## 20. Agent Framework Selection Decision
+## 19. Agent Framework Selection Decision
 
 > **已迁移**：决策结论与理由以 [DECISIONS.md](./DECISIONS.md) 为准——ADR-004（手搓编排，不引入框架）+ ADR-025（薄 provider 接口，修订 ADR-004 的"无需 provider 抽象"理由）。候选框架对比表已移入 ADR-004 附录。（2026-07-20 自本文移除）
 
 ---
 
-## 21. Document History
+## 20. Document History
 
 | Version | Date | Changes | Author |
 |:---|:---|:---|:---|
@@ -835,3 +699,5 @@ Reference Descript's text-editing experience:
 | v0.4 | 2026/06/27 | Vertical clip output + editor finalized (elevated to MVP main flow): clip-spec contract + Remotion first renderer + Descript-style transcript editor; ASR elevated to hard prerequisite (video needs streamable playback, local FS + Range sufficient; object storage still deferred to scale) (see ADR-016 / VIDEO_EDITOR.md) | Tech Team |
 | v0.5 | 2026/07/20 | Post-MVP slimming (1252→779 lines): §9 Technical Architecture / §10 Data Models / §13 API / §14.5 UX borrowing / §20 framework decision removed as duplicates — replaced with pointers to ARCHITECTURE.md / code / API.md / DECISION_MATRIX.md / DECISIONS.md (single-source principle, see docs/README.md); §17 Roadmap compressed to pointer + phase direction; FR-020 annotated with implementation status | Tech Team |
 | v0.6 | 2026/07/23 | Added §4.2 Core Archetype: Cross-Border Knowledge Broker as Seed ICP (working hypothesis, pending 3–5 validation interviews): kernel = maintained thought-leadership presence (creator-economy distinction table), solo main path (product does the labour, expert keeps the judgement; review queue only in institutional mode per ADR-027), 48-hour post-talk core scenario, requirement stack, language priority follows seed customers; §4.1 table gained broker row; persona examples renumbered to §4.3 | Tech Team |
+| v0.7 | 2026/07/31 | Second post-MVP slimming (837→703 lines): §3.4 (superseded competitive landscape) and §6 User Stories removed — duplicates of COMPETITIVE_ANALYSIS / DECISION_MATRIX and the FR tables; FR tables compressed to an ID + one-liner catalog (priorities/status live only in PROGRESS.md; duplicate FR-011/018/019 numbering noted); stale rows pruned from Risks (M3 stability / voice cloning / rendering / ASR dependency — all landed) and Open Decisions (decided items removed, publishing/pricing marked as scheduled in PROGRESS); pointers updated (ROADMAP.md retired → PROGRESS.md; ARCHITECTURE.md retired → MODULE_ARCHITECTURE.md); sections renumbered (old §7–§21 → §6–§20) | Tech Team |
+| v0.8 | 2026/08/01 | Positioning refresh, following the landing copy overhaul: §2.1 one-liner = "An AI agent for knowledge experts" (role-metaphors such as "content-operations officer" retired); §2.2 Vision drops "knowledge assets" jargon and speech-only framing (inputs = talks / meetings / podcasts / webinars / interviews; writing persona = style, voice reserved for audio); §3.2 Key Insight rewritten (product name Repurposer; "AI content agent" replaces "knowledge-assetization tool"). Confirmed baselines: self-label dual track — internal = agent, outward copy = assistant/助手 (NAMING N-25); input diversity — never assume the input is a speech | Tech Team |

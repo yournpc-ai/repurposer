@@ -1,13 +1,14 @@
 # RECIPES — 配方架构（Home 能力卡 + 兑现管线）
 
-> Status: 📐 设计定稿（2026-07-30，待施工；R1–R4 分期见 §8）
-> 上游定位：`STRATEGY.md` §5（配方库 = 品味的陈列窗，不做内容流）；排期唯一事实源 `ROADMAP.md` §9
+> Status: 📐 设计定稿（2026-07-30；**2026-08-01 交互形态修订**：Remix = composer mention chip，裁决⑤，简报 `docs/tasks/recipe-mention.md`；R1–R4 分期见 §8）
+> 上游定位：`STRATEGY.md` §5（配方库 = 品味的陈列窗，不做内容流）；排期唯一事实源 `PROGRESS.md`（第 1–3 周）
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
 > 用户裁决记录（2026-07-30，四轮设计评审沉淀）：
 > ① **配方 = 能力承诺**——上了的卡必须能用用户自己的素材跑出同款，不能写死、不能仅 demo（STRATEGY"配方卡不做营销剧场"的产品化口径）；
 > ② 首页形态 = composer 下方**能力演示视频卡**（4 张：风格 / 多语言 dub / 分镜剪辑 / 图片视频），源素材用云端 demo talk；
 > ③ 声音的家 = **Speaker 块扩展**（声纹 = Speaker 画像属性，stock voices 作系统内置 Speaker 进 SpeakerPickerModal），composer 不加 Audio 块；
-> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）。
+> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）；
+> ⑤ **Remix 形态 = composer mention chip**（2026-08-01，对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决）：点卡 = 往 composer 插入 recipe 提及 chip，走唯一入口正常流；**否全屏模态框**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统做成**双端注册表架构**，recipe 第一成员，后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书钉死唯一发生地 = 服务端解析（简报 `docs/tasks/recipe-mention.md`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，第 6 周线）。
 
 ## 0. 已核实的现状事实（读码确认，2026-07-30）
 
@@ -27,7 +28,7 @@
 2. **点亮纪律（2026-07-31 修订）**：四张卡**全部渲染**（presence over gating——画廊存在感优先）；纪律的保留线是**承诺不可点**——能力未兑现的卡（reserved）hover 只给 Soon 标记，不出 Remix 按钮。点亮 = `status` 翻 `live` + Remix 解锁，不要求四张齐发。
 3. **DAG 编排全复用**：每个新动词（节点/契约扩展）落地即免费获得编排、逐节点计量、SSE 打勾流、失败重试、子图重跑。零新表——一切住 JSON 载荷层（clip-spec / node.spec / run.context）。
 4. **可扩展词汇一律注册表化**：字幕样式、skill、节点 kind 同纪律（`SKILL_REGISTRY` / `NODE_RUNNERS` 先例）——加成员是填注册项，不是加分支。
-5. **内容定位**：卡片围绕 LinkedIn / 多语言 / 知识资产（欧洲 ICP），不做 TikTok 风（CLAUDE.md 产品定位）。
+5. **内容定位**：卡片围绕 LinkedIn / 多语言 / 专家需求（欧洲 ICP），不做 TikTok 风（CLAUDE.md 产品定位）。
 
 ## 2. 三层正交架构
 
@@ -102,9 +103,9 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 ## 5. 声音层（裁决③④落档）
 
 - **家 = Speaker 块扩展**：声纹 = Speaker 画像属性（已决架构不变）；`SpeakerPickerModal` 加"系统音色"区——stock voices 以系统内置 Speaker 形态出现（如 Rachel · Confident，带试听），与"👤 Anna（cloned ✓）"同列表分区。composer 维持两块不加 Audio 块（避免与 Speaker 职责重叠；Opus 的 Style/Assets/Audio 三块形态已评审未采纳）。
-- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用 ask 原语 choice 形态，`tasks/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
+- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用 ask 原语 choice 形态，`tasks/done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
 - **stock 声来源**：MiniMax 系统音色（零克隆成本）。**待核实**：系统音色清单与多语言覆盖（EN/DE/FR/ES/IT/ZH 必须齐），核实结果回填本节与 R2 简报。
-- **后置**：语速调节、Pronunciation 纠正（归术语表线 ROADMAP §6）、无声版（阅读节奏估算）。
+- **后置**：语速调节、Pronunciation 纠正（归术语表线（PROGRESS 可选需求））、无声版（阅读节奏估算）。
 
 ## 6. 分镜能力指引（简报 B 种子）
 
@@ -119,33 +120,38 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 
 ## 7. 卡片层（数据 + 交互 + 布局）
 
-### 7.1 卡片数据 schema（Phase 1 硬编码，纯前端无新表）
+### 7.1 卡片数据：双端注册表（2026-08-01 修订，取代"前端数据文件"形态）
 
-```ts
-type RecipeCard = {
-  id: string                          // i18n 键根：recipes.<id>.*
-  inputSlots: { type: "video"|"audio"|"images"|"slides"|"transcript"; required: boolean }[]
-  promptTemplate: string              // 预填 composer 的指令（en/zh 随 i18n）
-  slotsPrior: IntentSlot[]            // explicit 钉死的任务槽（承诺确定性兑现）
-  params?: { captionPreset?: string; music?: boolean; dubLanguages?: string[] }
-  preview: { posterUrl: string; videoUrl?: string }  // 公开可读静态资源
-  status: "live" | "reserved"         // reserved = 可见但 Soon 置灰（§1 点亮纪律修订）
-}
-// R1 实施注：inputSlots 与 params.captionPreset/music 按 YAGNI 修剪（无人
-// 读取即不入码），随首张真正消费它们的 live 卡回归；promptTemplate 住 i18n。
+配方数据分两半，各归其主——**钉死实质永不出服务端，展示数据公开可读**：
+
+```python
+# 服务端 app/pipeline/recipes.py — 静态注册表，随代码部署（SKILL_REGISTRY 同款纪律）
+RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs, dub_languages}
+#   status       live | reserved（点亮纪律的闸门）
+#   input_slots  类型化输入槽位：[{type: "video"|"audio"|"images"|"slides"|"transcript", required}]
+#   outputs      钉死任务槽（explicit，pin-merge 抗重推断）
+#   dub_languages 配音语言集（§4.1）
 ```
 
-### 7.2 点击链路（与 composer 主流程零分叉）
+- **公开端点** `GET /api/v1/recipes` 只回 `{id, status, input_slots}`——钉死实质（outputs/dub_languages）不下发；landing 匿名受众也是读者，端点公开。
+- **前端三件配置**：注册表查询（结构）+ `recipes.assets.ts`（preview 内容寻址映射，生成文件）+ i18n `recipes.<id>.*`（title/promise/promptTemplate）。新增配方 = 服务端一条注册项 + i18n 键 + preview 资产，零代码路径。
+- `inputSlots` 本期回归（R1 曾按 YAGNI 修剪）：消费者 = chip/picker 提示 + Assets 引导（前端展示）与 clips-media 门拒收信息（服务端兜底）。
+
+### 7.2 点击链路：mention chip 形态（2026-08-01 修订，取代预填+prior 形态）
 
 ```
-点卡 → 预填 composer prompt（promptTemplate）
-     → 用户上传自己的素材（Assets 块，必选动作）
-     → 发送：建项目 → 上传 → POST /intent { prompt, brand_template_id, prior: { outputs: slotsPrior } }
-     → pin-merge（explicit 槽抗 re-inference）→ pending_intent
-     → ?overlay=intent 审阅面板：逐槽行确定性呈现卡片承诺 + QuestionDock Start
+点卡 Remix → 往 composer 插入 recipe 提及 chip（{type:"recipe", id, label}）
+           + promptTemplate 文本预填（可见可改，纯文本不是状态）
+           → 用户上传自己的素材（Assets 块，必选动作；chip 旁提示所需槽位）
+           → 发送：建项目 → 上传 → POST /intent { prompt, brand_template_id, mentions }
+           → 服务端 resolve_recipe_mentions() 钉死（钉死唯一发生地；composer 不再发 prior）
+           → pin-merge → pending_intent → ?overlay=intent 审阅面板逐槽行呈现承诺 → Start
 ```
 
-承诺的确定性靠 **explicit 槽 pin-merge**（代码保证），不靠 LLM 从 prompt 重新推断。匿名访客点卡 → 同一套卡组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
+**chip 三律**（2026-07-31 旧事故的结构性消除——事故根因是配方状态不可见且跨发送残留）：
+① **可见**——chip 内联 textarea（图标 + label + ×）；② **发送即消费**——随 prompt 清空，payload 只附着当次；③ **× 即纯化**——删 chip 后本次发送不带任何钉。
+
+@ 手选与点卡同终点（同一 mention）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的确定性靠**服务端注册表解析 + explicit 槽 pin-merge**（代码保证），不靠 LLM 从 prompt 重新推断，也不靠 LLM 解释 recipe 提及。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
 
 ### 7.3 布局与素材
 
@@ -157,12 +163,12 @@ type RecipeCard = {
 
 | 期 | 内容 | 上卡 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|---|
-| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/recipe-cards-r1.md`） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
+| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；**交互形态 2026-08-01 修订为 mention chip**，简报 `docs/tasks/recipe-mention.md` 期 1 随本行复亮 Remix） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
 | **R2** | `voice_gen` 节点 + stock 声兜底 + Speaker 块扩展 + stills+stacking 链 | 图片视频卡 | 文字稿+照片 → 照片轮播+堆叠字幕+音乐+TTS 声成片；无声纹用户 stock 声不阻塞，dock 可换声 |
 | **R3** | 简报 B：ADR 翻案 + filmstrip 检测 + `crop_track` + `reframe_clip` | 分镜卡 | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
 | **R4** | 风格卡（内容 TBD） | 风格卡 | — |
 
-每期配套：对应素材策展 + 该期 `docs/tasks/` 简报（引用本文档章节号）+ ROADMAP §9 状态更新。
+每期配套：对应素材策展 + 该期 `docs/tasks/` 简报（引用本文档章节号）+ PROGRESS 状态更新。
 
 ## 9. 新开会话导读（用本文档创建 tasks）
 
@@ -170,7 +176,7 @@ type RecipeCard = {
 2. **每期一份 `docs/tasks/` 简报**，模板对齐既有简报（Context / 已核实事实 / 设计论证 / 改动点 / 命名审计 / 分期验收 / Prohibited Behaviors），依据行引用本文档章节号（如 "RECIPES §3.2"）；上游文档清单见 §11。
 3. **开工前重核 §0 事实**（代码可能已漂移），事实以读码为准。
 4. **运维坑**（已踩过）：改 pipeline 代码必须重启常驻 worker；本机服务调用用 `127.0.0.1` 不用 `localhost`；验证用的手工 run 会被常驻 worker 抢跑，验后清数据。
-5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`reframe_clip`（评审后）。
+5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）/ mention type `"recipe"`（2026-08-01 随 recipe-mention 简报登记）。
 
 ## 10. Prohibited Behaviors
 
@@ -182,15 +188,18 @@ type RecipeCard = {
 6. **禁**无声纹阻塞出片（裁决④）；禁 ReAct/多步推理（CHAT_ARCH 铁律延伸）；禁绕过 `orchestrator.create_run`。
 7. **禁**卡片预览走登录态 asset 端点（匿名受众必须公开可读）。
 8. **禁**分镜跳过 ADR 翻案直接动工；`reframe_clip` 未过 NAMING §7 不进 registry。
+9. **禁**前端构造任务书钉（2026-08-01 裁决⑤）：钉死唯一发生地 = 服务端配方注册表解析；composer/chat 只发 mentions。
+10. **禁** chip 状态跨发送残留——三律：可见 / 发送即消费 / × 即删；**禁**全屏配方模态框与 DAG 画布外显。
+11. **禁** mention 类型一次性分支——新 @ 类型 = 双端注册表各一条注册项（recipe-mention 简报 §2.5）。
 
 ## 11. 与其他文档的关系（引导章节）
 
 | 文档 | 关系 / 需要的更新 |
 |---|---|
 | `STRATEGY.md` §5 | 配方库定位来源；本文档是其实施架构，论证不复述 |
-| `ROADMAP.md` §9 | 配方卡行更新：方向修订为能力演示卡 + 本文档指引（已随本文档落地） |
+| `PROGRESS.md` | 第 1–3 周排期含配方卡（三卡定格 / 四卡齐亮，已随本文档落地） |
 | `tasks/synthetic-talk-video.md` | R2 修订点：voice_gen 先行、`synth_visual` 降可选增强、stock 兜底语义、Speaker 块扩展 |
-| `tasks/intent-ask-primitive.md` | 声音换声复用 ask 原语 choice 形态（零新机制） |
+| `tasks/done/intent-ask-primitive.md` | 声音换声复用 ask 原语 choice 形态（零新机制） |
 | `CHAT_ARCHITECTURE.md` §4 | `reframe_clip` 准入评审；`set_caption_style` 枚举随 catalog 扩展 |
 | `VIDEO_EDITOR.md` | caption catalog 遵守 preset enum + CSS∩libass 纪律；分镜翻案 ADR 落 DECISIONS 后回填此节 |
 | `AGENT_ARCHITECTURE.md` §12 | `voice_gen`/`speaker_map` 节点的内部分析产物 + asset-hash 复用同款哲学 |
