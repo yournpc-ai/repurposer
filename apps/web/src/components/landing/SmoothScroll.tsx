@@ -17,7 +17,7 @@ const ANCHOR_OFFSET = -80
 
 /**
  * Lenis smooth scrolling for the landing page only. Mounted by the landing
- * route; the workbench keeps native scrolling. Disabled under reduced motion.
+ * route; the studio keeps native scrolling. Disabled under reduced motion.
  * Anchor clicks (`a[href^="#"]`) are intercepted and routed through Lenis so
  * in-page navigation stays on the smooth scroller.
  */

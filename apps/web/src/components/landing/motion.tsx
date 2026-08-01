@@ -8,7 +8,7 @@ import {
 
 /**
  * Landing-page motion kit, ported from the Cortex template. Scoped to the
- * landing route on purpose — the workbench uses motion/react's own hooks.
+ * landing route on purpose — the studio uses motion/react's own hooks.
  *
  * Every scroll scene consumes `useReducedMotion` from here and ships a static
  * fallback, so the whole page stays usable under prefers-reduced-motion.

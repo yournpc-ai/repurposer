@@ -5,10 +5,11 @@ import {
   useTransform,
   type MotionValue,
 } from "motion/react"
-import { BadgeCheck, Check, Globe, Sparkles } from "lucide-react"
+import { ArrowUp, BadgeCheck, Check, Globe } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { LogoMark } from "@/components/LogoMark"
 import {
   useIsDesktop,
   useReducedMotion,
@@ -30,14 +31,21 @@ const SEGMENT = 1 / STEP_COUNT
 const FADE = 0.06
 const SHEET_EASE = cubicBezier(0.32, 0.72, 0, 1)
 
+/**
+ * Presence/drift windows are aligned to the ScreenLayer slide window
+ * [segment boundary ± FADE], so a step's text + aside always travel WITH
+ * its screen: (text N + screen N) leave as (text N+1 + screen N+1) arrive —
+ * the combo is 01·02 → 02·03 → 03·04 in lockstep, never text-behind-screen.
+ */
 function presenceWindow(index: number): { input: number[]; output: number[] } {
   const enter = index * SEGMENT
   const exit = (index + 1) * SEGMENT
-  if (index === 0) return { input: [exit - FADE, exit - 0.02], output: [1, 0] }
+  if (index === 0)
+    return { input: [exit - FADE, exit + FADE], output: [1, 0] }
   if (index === STEP_COUNT - 1)
-    return { input: [enter - 0.02, enter + FADE], output: [0, 1] }
+    return { input: [enter - FADE, enter + FADE], output: [0, 1] }
   return {
-    input: [enter - 0.02, enter + FADE, exit - FADE, exit - 0.02],
+    input: [enter - FADE, enter + FADE, exit - FADE, exit + FADE],
     output: [0, 1, 1, 0],
   }
 }
@@ -48,10 +56,14 @@ function driftWindow(
 ): { input: number[]; output: number[] } {
   const enter = index * SEGMENT
   const exit = (index + 1) * SEGMENT
-  if (index === 0) return { input: [0, exit], output: [0, -distance] }
+  if (index === 0)
+    return { input: [0, exit - FADE, exit + FADE], output: [0, 0, -distance] }
   if (index === STEP_COUNT - 1)
-    return { input: [enter - 0.02, 1], output: [distance, 0] }
-  return { input: [enter - 0.02, exit], output: [distance, -distance] }
+    return { input: [enter - FADE, enter + FADE, 1], output: [distance, 0, 0] }
+  return {
+    input: [enter - FADE, enter + FADE, exit - FADE, exit + FADE],
+    output: [distance, 0, 0, -distance],
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,7 +129,7 @@ function ComposeScreen(): ReactNode {
       </div>
       <div className="flex-1" />
       <div className="mx-1 flex h-10 items-center justify-center gap-1.5 rounded-full bg-foreground text-xs font-medium text-background">
-        <Sparkles className="size-3.5" aria-hidden="true" />
+        <ArrowUp className="size-3.5" aria-hidden="true" />
         {t("landing.showcase.screens.compose.cta")}
       </div>
     </div>
@@ -172,9 +184,7 @@ function ChatScreen(): ReactNode {
         {t("landing.showcase.screens.chat.user")}
       </div>
       <div className="mx-1 mt-2.5 flex items-start gap-2">
-        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground/10">
-          <Sparkles className="size-3 text-foreground" aria-hidden="true" />
-        </span>
+        <LogoMark className="mt-0.5 size-5" />
         <div className="rounded-2xl rounded-tl-md border border-border bg-background px-3.5 py-2.5 text-[12px] leading-snug text-foreground">
           {t("landing.showcase.screens.chat.agent")}
         </div>

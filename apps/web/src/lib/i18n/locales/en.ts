@@ -41,6 +41,8 @@ const en = {
   },
   home: {
     newChat: "New chat",
+    welcomeTitle: "Welcome to <b>your studio</b>",
+    welcomeSubtitle: "Your assistant is ready — <b>tell it what you'd like to make today</b>.",
     pastePlaceholder: "Describe what to make from your talk…",
     selectSpeaker: "Speaker",
     promptSeedTool: "Turn this talk into a {{label}}…",
@@ -54,50 +56,98 @@ const en = {
       features: "Features",
       pricing: "Pricing",
       faq: "FAQ",
+      menus: {
+        features: {
+          items: {
+            clips: {
+              label: "Vertical clips",
+              description: "Auto-cut, captioned, on-brand",
+            },
+            posts: {
+              label: "Posts & articles",
+              description: "LinkedIn posts and long-form, in your style",
+            },
+            languages: {
+              label: "Multi-language versions",
+              description: "Native in six European languages",
+            },
+          },
+          promo: {
+            title: "How it works",
+            description: "From raw material to published, in four steps.",
+          },
+        },
+        faq: {
+          items: {
+            data: {
+              label: "Where is my data stored?",
+              description: "GDPR-ready — nothing trains third-party models",
+            },
+            upload: {
+              label: "What can I upload?",
+              description: "Video, audio, slides, photos, or a transcript",
+            },
+            languages: {
+              label: "Which languages are supported?",
+              description: "EN, FR, DE, ES, IT, NL — written natively",
+            },
+            autoPublish: {
+              label: "Does anything get published automatically?",
+              description: "No — nothing ships without your approval",
+            },
+          },
+        },
+      },
     },
     signIn: "Sign in",
-    openWorkbench: "Open workbench",
+    openStudio: "Open studio",
     heroTitle1: "You did the talking",
     heroTitle2: "We do the rest",
     heroSubtitle:
-      "Repurposer is an AI agent that studies how you actually write and speak — your habits, your terms, your rhythm. Give it a <b>video</b>, an audio file, or just the transcript and some photos from a talk, podcast or interview, and it produces clips, LinkedIn posts, articles and newsletters <b>in the languages your audience speaks</b>. <b>You review. It publishes.</b>",
+      "Repurposer is an AI assistant for experts who have content but no time to manage social media. Just give it what you already have — <b>talk videos</b>, meeting recordings, photos, slides, or even just a transcript. Tell it roughly what you want, and it will offer suggestions, plan, and deliver finished pieces in your style. <b>select the version you like and publish with one click.</b>",
     ctaTryBeta: "Try the free beta",
     ctaSeeHow: "See how it works",
-    video: {
-      ariaLabel: "Product film",
-      caption: "Watch the film — one talk in, a season of content out",
+    comparison: {
+      ariaLabel: "Before and after: a raw clip and its publish-ready version",
+      caption: "Drag the divider — see what one clip becomes",
       scrollDown: "Scroll down",
+      beforeLabel: "Raw clip",
+      afterLabel: "Publish-ready",
+      clipTitle: "Where technology goes next — London summit",
+      captionLine: "The future isn't announced — it's <y>negotiated</y>.",
+      unmute: "Play sound",
+      mute: "Mute",
     },
     manifesto: {
       statement:
-        "You spent months on the research and weeks on the slides. The talk itself is over in forty minutes. Repurposer exists for everything after — the posts, the clips, the translations, the newsletter. One performance, a season of material.",
+        "You spent months on the research and weeks on the slides. The talk itself is over in forty minutes. Then the room empties. The slides go into a folder. The recording sits on a conference page nobody opens twice — and the people who most needed to hear it weren't in the room. Repurposer exists for everything after.",
     },
     showcase: {
-      title: "From talk to published",
+      title: "How it works",
       description:
-        "One upload runs the whole pipeline. You stay in the loop at the two moments that matter — direction and approval.",
+        "Tell it what you need — it runs the whole pipeline, start to finish.",
       steps: {
         s1: {
-          title: "Drop in the talk",
-          body: "Keynote video, podcast audio, slides, or just the transcript. Tell the agent what you need right in the composer — outputs and languages included.",
+          title: "Bring whatever you have",
+          body: "Keynote video, podcast audio, slides, or just the transcript. Tell it what you need right in the input box — what to make, and in which languages.",
         },
         s2: {
-          title: "Get a full set of drafts",
-          body: "LinkedIn posts, clips, articles and newsletters — every output written in your voice, in every language you asked for.",
+          title: "You name it, you get it",
+          body: "Posts, clips, articles, newsletters — written in your style, exactly to your brief. Nothing extra, nothing missing.",
         },
         s3: {
           title: "Refine in chat",
-          body: "Talk to the results: shorten a post, retitle a clip, push a different angle. The agent rewrites until you approve.",
+          body: "Talk to the results: shorten a post, retitle a clip, push a different angle. It rewrites until you approve.",
         },
         s4: {
-          title: "Publish everywhere",
-          body: "Approved pieces go out per channel and language. LinkedIn, TikTok, newsletter — done.",
+          title: "One click and it's out",
+          body: "Finished pieces go out per channel and language. LinkedIn, newsletter, TikTok — done.",
         },
       },
       screens: {
         compose: {
           chrome: "New project",
-          prompt: "Turn my ECC keynote into 3 LinkedIn posts and a short clip, in English and German…",
+          prompt: "Do something with my ECC keynote — LinkedIn first. Our Berlin office needs German too…",
           chip1: "Video",
           chip2: "Slides",
           chip3: "Transcript",
@@ -108,8 +158,8 @@ const en = {
           score: "92 fidelity",
           cardTitle: "Why grid storage decides the energy transition",
           cardMeta: "LinkedIn · EN · 1,240 chars",
-          row2: "LinkedIn post — DE",
-          row3: "Short clip — 9:16",
+          row2: "Newsletter — EN",
+          row3: "Short clip — DE dub · 9:16",
         },
         chat: {
           chrome: "Chat",
@@ -133,8 +183,8 @@ const en = {
         },
         a2: {
           label: "Drafts",
-          title: "5 outputs · EN + DE",
-          body: "Your voice, your terms",
+          title: "3 drafts · EN + DE",
+          body: "Your style, your terms",
           chip: "Written natively",
         },
         a3: {
@@ -147,14 +197,13 @@ const en = {
           label: "Distribution",
           title: "3 channels",
           body: "Per-language scheduling",
-          chip: "GDPR-safe hosting",
+          chip: "GDPR-ready",
         },
       },
     },
     gallery: {
-      title: "Made from one talk",
-      description:
-        "A single keynote, repurposed. Every card below is the kind of output a project produces — nothing staged.",
+      title: "Made from one source",
+      description: "",
       cards: {
         c1: { type: "LinkedIn post", text: "Storage, not generation, is the bottleneck of the energy transition. Three numbers from my ECC keynote…" },
         c2: { type: "Quote card", text: "“The grid of 2040 is being decided in committee rooms this year.”" },
@@ -169,14 +218,14 @@ const en = {
       },
     },
     channels: {
-      title: "Lands where your audience reads",
+      title: "Lands where your audience is",
       description:
-        "Outputs route straight into the channels institutions actually publish on — and in the languages your audience speaks.",
+        "Everything routes straight into the channels you publish on — and in the languages your audience speaks.",
       platforms: {
         linkedin: { name: "LinkedIn", blurb: "Native posts" },
         newsletter: { name: "Newsletter", blurb: "Email-ready" },
-        website: { name: "Website", blurb: "SEO articles" },
-        youtube: { name: "YouTube", blurb: "Shorts-ready" },
+        website: { name: "Website", blurb: "Articles for your site" },
+        youtube: { name: "YouTube", blurb: "Vertical clips" },
         tiktok: { name: "TikTok", blurb: "Short clips" },
         x: { name: "X", blurb: "Threads" },
         podcast: { name: "Podcast", blurb: "Show notes" },
@@ -191,45 +240,45 @@ const en = {
       },
     },
     testimonials: {
-      title: "Speakers keep the receipts",
+      title: "In their own words",
       description:
         "Researchers, keynote speakers and comms teams use Repurposer where the work has to hold up in print.",
       items: {
         t1: {
-          quote: "My keynote used to die on the conference page. This year it became twelve posts, two articles and a newsletter — all in my own voice.",
+          quote: "My keynote used to die on the conference website. This year it became twelve LinkedIn posts, two essays and a newsletter. My dean asked who my new ghostwriter was.",
           name: "Prof. Marije Albers",
-          role: "Keynote speaker, TU Delft",
+          role: "Professor of Energy Systems, TU Delft",
         },
         t2: {
-          quote: "The German versions read like I wrote them. Our Berlin office checked twice that I hadn't.",
+          quote: "The German versions read like I wrote them myself. Our Berlin office checked twice to be sure I hadn't.",
           name: "Claire Dubois",
-          role: "Research comms lead, Paris",
+          role: "Head of research communications, Paris",
         },
         t3: {
-          quote: "We stopped choosing which talks deserve coverage. Every session at our summit gets repurposed now.",
+          quote: "We used to choose which keynotes deserved coverage. This year every session at the summit got its own posts, clips and recaps.",
           name: "Jonas Weber",
-          role: "Conference organizer, Munich",
+          role: "Summit programme director, Munich",
         },
         t4: {
-          quote: "Review-before-publish is the whole product for me. Nothing goes out with my name until I've read it.",
+          quote: "Review-before-publish is the whole product for me. Nothing with my name on it goes out until I've read every word.",
           name: "Dr. Sofia Ricci",
           role: "Policy researcher, Milan",
         },
         t5: {
-          quote: "I record once, in English, and my Spanish audience gets a version that doesn't sound like a translation.",
+          quote: "I record once in English. My Spanish students get a version that doesn't read like a translation — they can tell the difference.",
           name: "Diego Fernández",
-          role: "Lecturer, Madrid",
+          role: "Economics lecturer, Madrid",
         },
         t6: {
-          quote: "GDPR was the first question our legal team asked. EU hosting was the answer that closed it.",
+          quote: "GDPR was the first question our lawyers asked. The answers were ready — we're in pilot now.",
           name: "Anke Janssen",
-          role: "University marketing, Amsterdam",
+          role: "University marketing lead, Amsterdam",
         },
       },
     },
     pricing: {
       title: "Simple pricing",
-      description: "Start free. Upgrade when your talks start working harder than you do.",
+      description: "Start free. Upgrade when your content starts working harder than you do.",
       monthly: "Monthly",
       yearly: "Yearly",
       perMonth: "/mo",
@@ -242,10 +291,10 @@ const en = {
       tiers: {
         free: {
           name: "Free",
-          blurb: "Try the pipeline on your next talk.",
+          blurb: "Try the pipeline on your next project.",
           features: {
-            f1: "2 talks per month",
-            f2: "3 outputs per talk",
+            f1: "2 projects per month",
+            f2: "3 pieces of content per talk",
             f3: "English + 1 language",
             f4: "Community support",
           },
@@ -253,10 +302,10 @@ const en = {
         },
         pro: {
           name: "Pro",
-          blurb: "For speakers with a full calendar.",
+          blurb: "For a packed calendar.",
           features: {
-            f1: "10 talks per month",
-            f2: "Unlimited outputs",
+            f1: "10 projects per month",
+            f2: "Unlimited content",
             f3: "6 European languages",
             f4: "Voice-matched dubbing",
             f5: "Priority generation",
@@ -283,15 +332,15 @@ const en = {
       items: {
         q1: {
           q: "Where is my data stored?",
-          a: "In the EU, on GDPR-compliant infrastructure. Your uploads and outputs never train third-party models, and you can delete everything at any time.",
+          a: "Repurposer is GDPR-ready by design: your uploads and outputs never train third-party models, and you can delete everything at any time. EU data residency ships with Institution plans.",
         },
         q2: {
           q: "Which languages are supported?",
-          a: "English, French, German, Spanish, Italian and Dutch today, with more European languages on the roadmap. Outputs are written natively, not translated word-for-word.",
+          a: "English, French, German, Spanish, Italian and Dutch today, with more European languages on the roadmap. Everything is written natively, never translated word-for-word.",
         },
         q3: {
           q: "What can I upload?",
-          a: "Keynote videos, podcast audio, slide decks, photos, or just a transcript. The more context you give, the closer the output sits to your voice.",
+          a: "Keynote videos, podcast audio, slide decks, photos, or just a transcript. The more context you give, the closer the output sits to your style.",
         },
         q4: {
           q: "Does anything get published automatically?",
@@ -308,15 +357,15 @@ const en = {
       },
     },
     finalCta: {
-      headline: "Your next talk is already a season of content",
+      headline: "The room empties. The content is just getting started.",
       subtitle:
-        "Free during beta. Upload one talk and watch it turn into posts, clips and newsletters — in every language your audience reads.",
+        "Free during beta. Drop in a talk, a meeting, or just a transcript — tell it what you want, and it does the rest.",
       ctaPrimary: "Try the free beta",
       ctaSecondary: "See pricing",
     },
     footer: {
       tagline:
-        "Turning talks into lasting knowledge assets — posts, clips and newsletters in the languages your audience speaks.",
+        "Turning what you already have into lasting content — posts, clips and newsletters in the languages your audience speaks.",
       cta: "Try the free beta",
       columns: {
         features: {
@@ -347,7 +396,7 @@ const en = {
         },
       },
       copyright: "© {{year}} Repurposer. All rights reserved.",
-      note: "Made for speakers, hosted in the EU.",
+      note: "Made for experts, GDPR-ready.",
       wordmark: "Repurposer",
     },
   },
@@ -379,7 +428,7 @@ const en = {
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards keep their seats here but never render.
   recipes: {
-    sectionTitle: "Start from a recipe",
+    sectionTitle: "Get inspired. Then make it yours",
     remix: "Remix",
     soon: "Soon",
     mute: "Mute preview sound",
@@ -407,14 +456,36 @@ const en = {
       promise: "One talk, many looks — caption and brand styles applied for you.",
       promptTemplate: "Cut highlight clips from my talk with a fresh caption style.",
     },
+    "ai-visuals": {
+      title: "AI visuals",
+      promise: "No footage, no photos — every scene generated from your talk.",
+      promptTemplate:
+        "Turn my talk into a short video with AI-generated visuals — no footage needed.",
+    },
+  },
+  // @-mention system (docs/tasks/recipe-mention.md): picker copy, type
+  // names, and input-slot hints (the picker's muted subtitle).
+  mentions: {
+    pickerEmpty: "No matches",
+    remove: "Remove mention",
+    types: {
+      recipe: "Template",
+    },
+    input: {
+      video: "Needs a video",
+      audio: "Needs audio",
+      images: "Needs photos",
+      slides: "Needs slides",
+      transcript: "Needs a transcript",
+    },
   },
   projects: {
     title: "Projects",
-    subtitle: "Manage speech materials and AI-generated knowledge assets",
+    subtitle: "Manage speech materials and AI-generated content",
     searchPlaceholder: "Search projects...",
     new: "New Project",
     dialogTitle: "New Project",
-    dialogDesc: "Pick a speaker and enter project info to start turning the speech into reusable knowledge assets.",
+    dialogDesc: "Pick a speaker and enter project info to start turning what you already have into reusable content.",
     labelTitle: "Title",
     titlePlaceholder: "e.g. AI Safety Governance Framework — EU Compliance Perspective",
     labelEvent: "Event name (optional)",
@@ -425,7 +496,7 @@ const en = {
     langZh: "Chinese",
     langEn: "English",
     emptyTitle: "No projects yet",
-    emptyDesc: "Create your first project and turn speech content into social posts, quote cards, articles, and other knowledge assets.",
+    emptyDesc: "Create your first project and turn your material into social posts, quote cards, articles, and more.",
     noEvent: "No event set",
     deleteConfirm: "Delete this project?",
     status: {
@@ -991,10 +1062,13 @@ const en = {
         "Pick whose writing style and voice the AI imitates. Auto builds or matches a persona from your assets.",
       promptTitle: "Tell us what to make",
       promptDesc:
-        "One sentence is enough — e.g. clips, LinkedIn posts, a German article. Type, language and count are all inferred from your words.",
+        "One sentence is enough — type and language are inferred. Type @ to pin a template right into your words: it stays as a visible chip — arrows and Enter to pick, × or Backspace to remove.",
       sendTitle: "Generate",
       sendDesc:
-        "Press Enter or click here. The pipeline plans the work and produces every asset for your review.",
+        "Press Enter or click here. The pipeline plans the work and produces what you asked for, ready for your review.",
+      recipesTitle: "Or browse the templates",
+      recipesDesc:
+        "See if one catches your eye — hit Remix and it lands in the input box as an @ chip inside your words. You just add your material.",
     },
     results: {
       scoreTitle: "Recommendation score",

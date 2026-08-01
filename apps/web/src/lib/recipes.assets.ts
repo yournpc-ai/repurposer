@@ -4,6 +4,7 @@
  */
 export const RECIPE_ASSETS = {
   "ai-visuals-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/ai-visuals-poster-d45b3114.jpg",
+  "comparison-source.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/comparison-source-06dbe6b0.mp4",
   "dub-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/dub-poster-5535321b.jpg",
   "dub-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/dub-preview-ba2a2ea7.mp4",
   "image-video-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/image-video-poster-103ceb64.jpg",
