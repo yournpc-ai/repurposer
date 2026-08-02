@@ -27,12 +27,14 @@ Usage (from apps/api/):
     uv run python scripts/reset_db.py --yes --db-only       # DB only
     uv run python scripts/reset_db.py --yes --storage-only  # storage only
 
-After the wipe, just restart the stack — API startup (lifespan)
-automatically: runs migrations (``alembic upgrade head``, a no-op right
-after deploy), re-seeds the default brand template, and reconciles the
-default Music rows against the preserved ``music/`` objects (idempotent,
-no MiniMax quota spent). Demo-project seeding is retired — there is no
-SKIP_DEMO_SEED flag (it never existed in code); nothing else to restore.
+After the wipe the script itself restores the platform seeds it just
+removed (default brand template + default Music rows reconciled against
+the preserved ``music/`` objects — idempotent, no MiniMax quota spent),
+so no restart or manual seeding is required afterwards. Migrations are
+NOT run here: deploy/restart the API first (startup runs ``alembic
+upgrade head``) — the drift check aborts early if the schema is behind.
+Demo-project seeding is retired — there is no SKIP_DEMO_SEED flag (it
+never existed in code).
 """
 
 import argparse
@@ -67,6 +69,8 @@ from app.models.tables import (  # noqa: E402
     VerificationCode,
     WorkflowRun,
 )
+from app.memory.brand import seed_default_brand_template  # noqa: E402
+from app.pipeline.music import seed_default_music  # noqa: E402
 from app.tools.storage import _get_s3_client  # noqa: E402
 
 # Prefixes the storage purge never touches (see module docstring).
@@ -231,6 +235,13 @@ async def main() -> None:
                     print(f"  {label:24} deleted {result.rowcount}")
                 await db.commit()
                 print("Database is empty.")
+                # The wipe also removed the platform seeds (default brand
+                # template, default music) — restore them NOW so the system
+                # is usable without another API restart. Music reconcile
+                # reuses the preserved objects: no MiniMax quota spent.
+                await seed_default_brand_template()
+                await seed_default_music(db)
+                print("Platform seeds restored (brand template, music rows).")
         print()
 
     if do_storage:
@@ -260,8 +271,8 @@ async def main() -> None:
         print("\nPass --yes to execute.")
         return
 
-    print("\nDone. Restart the stack — API startup auto-migrates, re-seeds the")
-    print("default brand template, and reconciles music rows (free; objects kept).")
+    print("\nDone — platform seeds already restored; the running stack picks")
+    print("them up live, no restart needed.")
 
 
 if __name__ == "__main__":
