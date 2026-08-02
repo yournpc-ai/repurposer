@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
+  BrainCircuit,
   Paperclip,
   FileText,
   Mic2,
@@ -12,7 +13,6 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Check,
-  Cpu,
   User,
   Video,
   Image as ImageIcon,
@@ -46,6 +46,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 type Speaker = SpeakerPickerEntry
 
@@ -349,12 +354,14 @@ export function HomeComposer({
         <div className="flex items-start gap-3">
           <div className="-mt-9 flex flex-shrink-0 items-start gap-2">
             {/* Assets block — Opus anatomy: icon at the top, spacer, then
-                title with the info line at the very bottom. */}
+                title with the info line at the very bottom. Hover = a lift of
+                the SAME color family (dark: lighter shade of the block's own
+                hue), never an accent hop — a different hue reads muddy. */}
             <button
               type="button"
               data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none dark:hover:bg-[oklch(0.31_0.008_260)]"
             >
               {files.length === 0 ? (
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -380,7 +387,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-speaker"
               onClick={() => setSpeakerPickerOpen(true)}
-              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none"
+              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none dark:hover:bg-[oklch(0.31_0.008_260)]"
             >
               {selectedSpeaker ? (
                 <Avatar size="sm">
@@ -469,37 +476,41 @@ export function HomeComposer({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* AI model — display-only for now (single provider) */}
-            <DropdownMenu>
-              <DropdownMenuTrigger
+            {/* AI model — display-only (single provider): hover reveals the
+                provider breakdown. A picker lands only when a real second
+                provider exists (provider abstraction, PROGRESS 需求池). */}
+            <Popover>
+              <PopoverTrigger
+                openOnHover
+                delay={150}
                 render={
                   <Button
                     variant="ghost"
                     size="sm"
                     className="ml-auto h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
                   >
-                    <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                    <BrainCircuit className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{t("composer.aiModel")}</span>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </Button>
                 }
               />
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="px-2 py-1.5">
-                    <PillHeaderText
-                      title={t("composer.aiModel")}
-                      desc={t("composer.aiModelDesc")}
-                    />
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem>
-                    <Cpu className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1">MiniMax M3</span>
-                    <Check className="ml-2 h-4 w-4" />
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <PopoverContent side="top" align="end" className="w-64 ring-0 shadow-xl dark:bg-white/10">
+                <div className="flex flex-col gap-1.5 px-0.5 pb-0.5">
+                  {(
+                    [
+                      [t("composer.aiModelRowText"), "MiniMax M3"],
+                      [t("composer.aiModelRowVoice"), "MiniMax T2A"],
+                      [t("composer.aiModelRowVisual"), "MiniMax"],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <Button
               className="h-9 w-9 rounded-full"
