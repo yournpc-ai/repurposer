@@ -114,16 +114,20 @@ export function AppSidebar() {
           : "group-data-[side=left]:border-r-0"
       }
     >
-      <SidebarHeader className="gap-3 p-3 group-data-[state=collapsed]:items-center">
+      <SidebarHeader className="gap-3 p-3 pt-5 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
             <LogoMark />
             <span className="font-semibold tracking-tight">Repurposer</span>
           </div>
+          {/* PC collapsed rail: the toggle is retired (PC stays icon-only,
+              2026-08-02) — the LogoMark takes its slot. Mobile keeps the
+              toggle below; its off-canvas logic is untouched. */}
+          <LogoMark className="hidden group-data-[state=collapsed]:md:block" />
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-8 w-8 shrink-0 rounded-md"
+            className="relative h-8 w-8 shrink-0 rounded-md md:hidden"
             onClick={toggleSidebar}
             aria-label={t("a11y.toggleSidebar")}
           >
