@@ -2,6 +2,7 @@
 
 > Status: implemented on main
 > Last updated: 2026-07-27
+> **2026-08-02 agent-loop-upgrade**：执行层三补丁——step 级瞬时重试（`TransientNodeError` + `SkillEntry.retries` 预算，复位 pending 不级联）；morph runner 全部经 operations 记账（chat 配音/翻译/配乐/去口头禅可撤销，ADR-032 写纪律补齐）；`DubClipParams.fork`（chat「再来一版」派生新行、原版保留）。实施简报：`docs/tasks/agent-loop-upgrade.md`。
 > **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
 > **2026-07-27 Phase 2 落地**：导演两步走已上线——`ContentPlan`/`DerivativePlan` 整体退役，导演拆为 `director_understand`（素材理解，asset-hash 复用）+ `director_plan`（分镜表，每 run 重排）。§4–§6 中关于 ContentPlan/DerivativePlan 的描述为 Phase 1 历史形态，现行契约以 §12.7 为准（实施简报：`docs/tasks/done/director-two-step.md`）。
 

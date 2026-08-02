@@ -26,13 +26,13 @@
 | `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线）+ §12.7 Phase 2 落地实录（导演两步走） | 已实现（Phase 2 主体 ✅；选段独立/质检节点 📋） | 动 generation/agents 前 |
 | `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
-| `DECISIONS.md` | ADR-001 ~ ADR-032 | 持续追加 | 翻案/新决策时 |
+| `DECISIONS.md` | ADR-001 ~ ADR-033 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建；直发链路代码完成 07-24，待平台凭据联调） | 动 Distribution 前 |
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：task list 契约 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现（2026-07-26：chat UI + RunCard + edit ops 接线；plan 级节点重跑 📋） | 动 chat / registry / 进度推送前 |
 | `INTENT_COVERAGE.md` | 意图层覆盖全景：四表面五入口 × 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建，intent-ask 迭代收口后现状） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
-| `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R4 分期 | 🚧 R1 已落地（2026-07-31：caption catalog + stacking + dub 接线 + 卡片层；R2–R4 待施工）；**2026-08-01 Remix 形态修订为 mention chip**（简报 `tasks/recipe-mention.md`，待施工） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
+| `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R4 分期 | 🚧 R1 已落地（2026-07-31：caption catalog + stacking + dub 接线 + 卡片层；R2–R4 待施工）；Remix = mention chip（2026-08-02 期 1 落地，含合并代数三规则——简报 `tasks/recipe-mention.md` / `tasks/agent-loop-upgrade.md`） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |

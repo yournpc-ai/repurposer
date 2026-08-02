@@ -58,6 +58,10 @@
 | 堆叠 | `stacking` | catalog 成员：新行淡入、旧行驻留、超 maxLines 滑动窗口 | — |
 | 工作室 | `studio` | 登录后应用区（landing 之外的 sidebar 世界）的统称：home composer、projects、editor；用户文案（`openStudio`、"欢迎来到你的工作室"）与内部文档同词。**只是空间名**，品类自称永远是 agent（N-23） | 不是 workbench/工作台（已退役，N-22）；不是品类词 |
 | 助手 | `assistant` | 对外文案的自称（N-25 双轨：对内技术 = agent）；zh 优先用代词"它" | 不是 agent（agent 只对内）；不是运营官（已退役，N-24） |
+| 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `SKILL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
+| 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
+| 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按 `SkillEntry.retries` 预算复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
+| 去口头禅 | `remove_filler` | skill 与 op 同名同义（跨注册表对齐 §1，agent-loop-upgrade W4）：skill = 确定性 modifier（task_list 派发）；op = precomputed 记账参数（`filler_count`/`repeat_count`，runner 计算后记账） | 不是客户端 edit ops 可提议 op（precomputed 归 task_list） |
 | 风格 | `style` | 文风（写作风格），对外文案统一用词（hero/showcase/FAQ/identityEcho 已全扫）；voice 仅保留音频本义（声纹克隆/配音 dub）；Brand voice/语气 表单标签保留 | 不是"口吻"（已退役，2026-08-01）；不是 voice |
 | 提及类型 | mention type（`ChatMention.type`） | @ 引用的实体类别：asset / output / transcript_segment / workflow_step / recipe（第五类，2026-08-01） | 不是自由文本、不是标签 |
 | 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |

@@ -75,6 +75,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 - **承诺**：一段演讲 → 你的声音说德语/法语/西语（参照 Agent Opus"视频配音"获客形态）。
 - **能力现状**：✅ 零缺口（§0）。dub 零件、节点、skill、渲染全在跑。
 - **兑现工作 = 纯接线**：单 run 拓扑 `clips_gen → dub×N`（registry `after` 约束已有，配乐/配音修饰节点殿后）；语言集默认建议 **DE + FR + ES**（欧洲 ICP，卡片可配置）；任务书槽表达 = clips 槽 + dub 语言清单进 `spec.target_language` 扇出。
+- **合并代数三规则**（2026-08-02，agent-loop-upgrade W1；recipe-mention §2.3 同文）：① **承诺钉死**——`outputs` pin 优先；② **参数默认**——`dub_languages` 是 DEFAULT 不是承诺：用户在（可编辑的）模板文案里点名的语言赢，没点名才用配方默认（"remix 改成中文"生效）；③ **额外放行**——同句其他意图加性存活（"@配音卡 顺便写篇文章"的 article 槽位并进同一张任务书）。`RecipeEntry` 字段级策略注释即此三规则的代码座位；chat 路径的 fork/morph 选择经 `DubClipParams.fork`（"再来一版" → fork 派生新行，原版保留）。
 - **素材账单**：demo talk（恢复桶中 `demo/` 树）；预览 = 原片片段 + 各语言 dub 片段（跑真管线收获后烘成静态公开资源）。
 
 ### 4.2 图片视频卡（R2 兑现）

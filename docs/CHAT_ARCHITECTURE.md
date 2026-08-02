@@ -1,6 +1,7 @@
 # Chat Architecture — Agent Interface 层
 
 > Status: ✅ v2 已实现（2026-07-26 backend + edit ops 接线；2026-07-27 GenerationOverlay 前端；2026-07-29/30 ask 原语期 1–4 + 期 4 补四全落地）。实施史见简报 `docs/tasks/done/chat-loop-v1.md` / `chat-loop-v2.md` / `intent-ask-primitive.md`；意图覆盖现状见 `INTENT_COVERAGE.md`。@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）。
+> 补丁（2026-08-02，agent-loop-upgrade 一期，简报 `docs/tasks/agent-loop-upgrade.md`）：① 提案提示词注入参数 `Field` 描述（W2，provider-neutral）；② `DubClipParams.fork`——chat「再来一版」走派生新行、原版保留（W5）；③ morph runner 全部经 operations 记账（W4，壳/核同账，chat 配音/翻译/配乐/去口头禅可撤销）；④ step 级瞬时重试（`TransientNodeError` + `SkillEntry.retries`，W3）；⑤ recipe 合并代数三规则定格 remix 语义（W1，见 RECIPES §4.1）；⑥ 原生 tool-call 信道留待 provider 抽象（W6 不实施）——§1 原则 2 的"tool-calling"目前仍是 JSON-in-prompt 约定信道，非原生工具协议。
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；前置重构：`docs/tasks/done/backend-module-restructure.md`（chat/ 包是本文的代码家）
 >

@@ -199,8 +199,9 @@ apps/api/
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects / assets / outputs / runs / music 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地）
-│   │   ├── node_runners.py        # 节点执行器注册表（NODE_RUNNERS）
+│   │   ├── node_runners.py        # 节点执行器注册表（STEP_RUNNERS）
 │   │   ├── registry.py            # skill 注册表（compile_graph 校验）
+│   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
@@ -227,6 +228,8 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 - **Postgres 即队列**：`FOR UPDATE SKIP LOCKED` 认领；独立 worker 进程（`python -m app.worker`），与 API 进程物理隔离；不引入 Redis/Celery，横向扩容时再换 arq/Celery，调用方不变。
 - **四个认领源**：`assets.processing_status`（预处理）/ `workflow_runs.status`（生成；deferred claim——项目还有 pending/processing 素材时不认领）/ `outputs.render_status`（渲染）/ `publications`（`state='scheduled'` + `due_at` 部分索引，分发）。
 - **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
+- **step 级瞬时重试**（2026-08-02，agent-loop-upgrade W3）：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按 `SkillEntry.retries` 预算（dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
+- **morph 记账**（同日 W4）：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。
 - 纪律见 §5 规则 1（耗时任务一律写 pending 行入队，禁跨模块直调 service 执行重活，禁 FastAPI BackgroundTasks）。
 
 ### 7.3 横切数据约定
