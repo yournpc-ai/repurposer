@@ -260,7 +260,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 - `demo/` — landing + recipe-card marketing assets (content-hashed URLs baked into `apps/web/src/lib/recipes.assets.ts`; generated once via `scripts/upload_recipe_assets.py`, production never regenerates them).
 - `music/` — platform seed tracks. After the wipe, restore the Music rows with `scripts/seed_default_music.py`: it reconciles against the preserved objects **without spending MiniMax quota** (deleting the objects would force paid regeneration).
 
-The script prints the target database / bucket before doing anything — on a server, check the banner before passing `--yes`. Restart the API / worker with `SKIP_DEMO_SEED=true` or the next startup re-seeds the demo project.
+The script prints the target database / bucket before doing anything — on a server, check the banner before passing `--yes`. Afterwards just restart the stack: API startup auto-migrates (`alembic upgrade head`), re-seeds the default brand template, and reconciles the Music rows against the preserved `music/` objects (idempotent, no quota). Demo-project seeding is retired and `SKIP_DEMO_SEED` is a dead flag (never existed in code) — do not rely on it.
 
 ## Testing
 

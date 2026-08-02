@@ -27,12 +27,12 @@ Usage (from apps/api/):
     uv run python scripts/reset_db.py --yes --db-only       # DB only
     uv run python scripts/reset_db.py --yes --storage-only  # storage only
 
-After the wipe:
-- restart the API / worker with SKIP_DEMO_SEED=true or the next startup
-  re-creates the demo project
-- restore platform music rows with
-  ``uv run python scripts/seed_default_music.py`` — reconciles against the
-  preserved ``music/`` objects, no quota spent
+After the wipe, just restart the stack — API startup (lifespan)
+automatically: runs migrations (``alembic upgrade head``, a no-op right
+after deploy), re-seeds the default brand template, and reconciles the
+default Music rows against the preserved ``music/`` objects (idempotent,
+no MiniMax quota spent). Demo-project seeding is retired — there is no
+SKIP_DEMO_SEED flag (it never existed in code); nothing else to restore.
 """
 
 import argparse
@@ -260,9 +260,8 @@ async def main() -> None:
         print("\nPass --yes to execute.")
         return
 
-    print("\nDone. Next steps:")
-    print("  1. Restart API / worker with SKIP_DEMO_SEED=true (or the demo project is re-seeded).")
-    print("  2. uv run python scripts/seed_default_music.py  # reconcile music rows, free")
+    print("\nDone. Restart the stack — API startup auto-migrates, re-seeds the")
+    print("default brand template, and reconciles music rows (free; objects kept).")
 
 
 if __name__ == "__main__":
