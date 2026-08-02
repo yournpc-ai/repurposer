@@ -115,6 +115,8 @@ const zh: Resources = {
       scrollDown: "继续滚动",
       beforeLabel: "原始素材",
       afterLabel: "生成结果",
+      beforeTags: ["横屏", "双人", "声音不清晰"],
+      afterTags: ["本人竖屏镜头", "有字幕", "有标题", "声音更清晰"],
       unmute: "播放声音",
       mute: "静音",
     },

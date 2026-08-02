@@ -69,10 +69,31 @@ function PaneVideo({
   )
 }
 
+const PANE_CHIP_STYLE =
+  "rounded-md bg-black/55 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white/90 backdrop-blur-sm"
+
 function paneChipClass(position: string): string {
-  return cn(
-    "pointer-events-none absolute z-10 rounded-md bg-black/55 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white/90 backdrop-blur-sm",
-    position
+  return cn("pointer-events-none absolute z-10", PANE_CHIP_STYLE, position)
+}
+
+/** A spec attribute stacked under a pane label — same chip as the label,
+ * one comma-split attribute per row (user copy 2026-08-02: 横屏/双人/… vs
+ * 本人竖屏镜头/有字幕/…). */
+function PaneTagStack({
+  tags,
+  className,
+}: {
+  tags: string[]
+  className: string
+}): ReactNode {
+  return (
+    <div className={cn("pointer-events-none absolute z-10 flex flex-col gap-1.5", className)}>
+      {tags.map((tag) => (
+        <span key={tag} className={PANE_CHIP_STYLE}>
+          {tag}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -85,6 +106,12 @@ function paneChipClass(position: string): string {
  */
 export function VideoShowcase(): ReactNode {
   const { t } = useTranslation()
+  const beforeTags = t("landing.comparison.beforeTags", {
+    returnObjects: true,
+  }) as string[]
+  const afterTags = t("landing.comparison.afterTags", {
+    returnObjects: true,
+  }) as string[]
   const prefersReducedMotion = useReducedMotion()
   const sectionRef = useRef<HTMLElement>(null)
   const beforeVideoRef = useRef<HTMLVideoElement>(null)
@@ -93,6 +120,11 @@ export function VideoShowcase(): ReactNode {
   const [viewport, setViewport] = useState({ w: 1280, h: 800 })
   const [interactive, setInteractive] = useState(false)
   const [soundOn, setSoundOn] = useState(false)
+  /** Live mirror of soundOn for the audio gate. The slider's Draggable is
+   * created once (useGSAP deps exclude callbacks), so its onPositionChange
+   * closure freezes the FIRST render's `soundOn` — reading state there would
+   * re-mute right after every unmute. Refs stay live; state stays for UI. */
+  const soundOnRef = useRef(false)
   /** Which pane currently "owns" the soundtrack — follows the divider with a
    * hysteresis band (≥60% before / ≤40% after) so the idle float animation
    * can't flip the audio back and forth across the middle. */
@@ -206,7 +238,8 @@ export function VideoShowcase(): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollYProgress, prefersReducedMotion])
 
-  const applyAudio = (sound: boolean): void => {
+  const applyAudio = (): void => {
+    const sound = soundOnRef.current
     const dominant = dominantRef.current
     if (beforeVideoRef.current)
       beforeVideoRef.current.muted = !(sound && dominant === "before")
@@ -217,18 +250,26 @@ export function VideoShowcase(): ReactNode {
     if (railsVideoRef.current) railsVideoRef.current.muted = true
   }
 
+  // Post-commit re-assert (RecipeCard's proven pattern): React's `muted`
+  // prop is unreliable after mount, and HMR / element remounts reset it —
+  // re-drive the property from the live refs after every commit.
+  useEffect(() => {
+    applyAudio()
+  })
+
   const handlePositionChange = (position: number): void => {
     if (position >= 60) dominantRef.current = "before"
     else if (position <= 40) dominantRef.current = "after"
     playGateRef.current = { before: position > 40, after: position < 60 }
-    applyAudio(soundOn)
+    applyAudio()
     syncPlayback()
   }
 
   const toggleSound = (): void => {
     const next = !soundOn
+    soundOnRef.current = next
     setSoundOn(next)
-    applyAudio(next)
+    applyAudio()
   }
 
   const beforePane = (
@@ -247,6 +288,7 @@ export function VideoShowcase(): ReactNode {
         <span className={paneChipClass("top-4 left-4")}>
           {t("landing.comparison.beforeLabel")}
         </span>
+        <PaneTagStack tags={beforeTags} className="top-12 left-4 items-start" />
       </motion.div>
     </div>
   )
@@ -281,6 +323,7 @@ export function VideoShowcase(): ReactNode {
         <span className={paneChipClass("top-4 right-4")}>
           {t("landing.comparison.afterLabel")}
         </span>
+        <PaneTagStack tags={afterTags} className="top-12 right-4 items-end" />
       </motion.div>
     </div>
   )
