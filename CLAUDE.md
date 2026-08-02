@@ -255,7 +255,12 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 ## Database Reset
 
-`apps/api/scripts/reset_db.py` wipes **all** data (dry-run by default, `--yes` to execute) — nothing is preserved, including platform music. Re-seed music afterwards with `scripts/seed_default_music.py` (spends MiniMax quota). Object-storage objects are not deleted; orphaned prefixes (including the retired `demo/` tree) can be removed from the bucket manually.
+`apps/api/scripts/reset_db.py` resets a deployment to a clean slate (dry-run by default, `--yes` to execute; `--db-only` / `--storage-only` escape hatches): it wipes **all** DB rows and purges **all** object-storage objects **except two protected prefixes**:
+
+- `demo/` — landing + recipe-card marketing assets (content-hashed URLs baked into `apps/web/src/lib/recipes.assets.ts`; generated once via `scripts/upload_recipe_assets.py`, production never regenerates them).
+- `music/` — platform seed tracks. After the wipe, restore the Music rows with `scripts/seed_default_music.py`: it reconciles against the preserved objects **without spending MiniMax quota** (deleting the objects would force paid regeneration).
+
+The script prints the target database / bucket before doing anything — on a server, check the banner before passing `--yes`. Restart the API / worker with `SKIP_DEMO_SEED=true` or the next startup re-seeds the demo project.
 
 ## Testing
 
