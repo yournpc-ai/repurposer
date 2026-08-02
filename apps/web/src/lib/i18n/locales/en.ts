@@ -468,6 +468,13 @@ const en = {
     remove: "Remove mention",
     types: {
       recipe: "Template",
+      asset: "Asset",
+    },
+    fileType: {
+      video: "Video",
+      audio: "Audio",
+      image: "Image",
+      document: "Document",
     },
     input: {
       video: "Needs a video",
@@ -1052,21 +1059,18 @@ const en = {
     done: "Done",
     stepOf: "Step {{current}} of {{total}}",
     composer: {
-      assetsTitle: "Upload your assets",
+      assetsTitle: "Upload your material",
       assetsDesc:
-        "Upload a recording, audio, transcript or photos — bring whatever you have. You can also skip files and just write a prompt.",
-      speakerTitle: "Pick a speaker",
+        "A recording, audio, photos or a transcript — whatever you have. Or skip this and just write your idea below.",
+      speakerTitle: "Whose style and voice",
       speakerDesc:
-        "Pick whose writing style and voice the AI imitates. Auto builds or matches a persona from your assets.",
-      promptTitle: "Tell us what to make",
+        "When we don't have enough material, what style should we use for writing and speaking? Generally, there's no need to make changes; the “auto” feature will automatically generate content based on your material.",
+      promptTitle: "Say what you want",
       promptDesc:
-        "One sentence is enough — type and language are inferred. Type @ to pin a template right into your words: it stays as a visible chip — arrows and Enter to pick, × or Backspace to remove.",
-      sendTitle: "Generate",
-      sendDesc:
-        "Press Enter or click here. The pipeline plans the work and produces what you asked for, ready for your review.",
-      recipesTitle: "Or browse the templates",
+        "Just write whatever you want to generate. You can use the @ symbol to reference assets or templates to specify how they should be processed and provide us with information about the assets.",
+      recipesTitle: "Stuck? Browse the templates",
       recipesDesc:
-        "See if one catches your eye — hit Remix and it lands in the input box as an @ chip inside your words. You just add your material.",
+        "Hover over a template to remix it, and it will automatically appear in the prompt field as @.",
     },
     results: {
       scoreTitle: "Recommendation score",

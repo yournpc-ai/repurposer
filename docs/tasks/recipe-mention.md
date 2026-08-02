@@ -104,6 +104,8 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 
 以 @asset（"把 @素材2 换成…"）为例，上线只需：① 前端 `MENTION_REGISTRY` 加注册项（icon + i18nKey + `source = 项目素材列表接口`）；② 后端 `ChatMention.type` Literal 加 `"asset"`……已在内（契约预留四类型）；③ 效果 = 上下文富化族，`_build_context` 零改动。@output / @workflow_step 同型。**新类型 = 前端一条注册项 +（如需新效果族）后端一个解析分支注册**——无一处 switch 补丁。第 6 周 Remix/chat 线是全量 picker 的归属（plan 级 ops + 子图词汇同批）。
 
+**@asset 已随完全体提前落地（2026-08-02，composer 表面）**：注册表第二成员——`source` 经 `MentionContext.files` 读取 composer 已挂文件（id = 文件名，项目尚不存在时名字即身份）；效果走上下文富化族的**自然语言通道**（chip 在句中序列化为 `@文件名`，intent agent 直接读到指令指向哪个文件），服务端零改动（/intent 实验：asset 提及透传正常）。picker 的数据通道同步升级为 `source(ctx)`——注册项仍是静态配置，候选源是活的。chat 表面的 @asset（项目素材，UUID 身份 + `_build_context` 注入）归期 2。
+
 **文本内联 chip 已提前落地（2026-08-02 用户裁决）**：原定在此处等第 6 周的内容被提前——理由是"@ 后句子里找不到提及内容"在日常使用中太出戏。落地形态 = `MentionEditor`（contentEditable，chip 为 `contenteditable=false` 内联节点；**DOM 拥有文本事实源**，所有编辑路径汇于 `syncNow` 单一同步漏斗上报 `{text, mentions}`；提及在文本中序列化为 `@label`，结构化钉走 mentions 数组）。v1 的 chip 行/剥除逻辑已整体删除（不是补丁，是替换）；注册表排他/去重规则在 DOM 层原样执行。picker 改为光标锚定（空间不足时下翻）。tour 第 3/5 步文案同步教 @ 操作与 Remix 自动落 chip，闭环。
 
 ## 3. 改动点

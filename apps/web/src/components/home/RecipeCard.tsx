@@ -60,14 +60,15 @@ export function RecipeCard({
         playsInline
       />
 
-      {/* Top-left: recipe type — a faint frosted chip (same family as the
-          sound circle) so it never floats bare over busy footage */}
-      <span className="absolute left-3 top-3 rounded-md bg-black/45 px-2 py-1 text-sm font-medium text-white backdrop-blur-sm">
+      {/* Top-left: recipe type; top-right: sound toggle. One overlay family
+          (white/15 frosted) across title / volume / bottom actions, both
+          chips h-9 so they sit on the same line. The volume rides the same
+          300ms ease-out entrance as the bottom panel (stays visible while
+          this card is the one sounding). */}
+      <span className="absolute left-3 top-3 flex h-9 items-center rounded-md bg-white/15 px-2 text-sm font-medium text-white backdrop-blur-sm">
         {t(`recipes.${card.id}.title`)}
       </span>
 
-      {/* Top-right: inverse sound toggle — fades in on hover, but stays
-          visible while this card is the one sounding */}
       <button
         type="button"
         aria-label={sounding ? t("recipes.mute") : t("recipes.unmute")}
@@ -75,10 +76,10 @@ export function RecipeCard({
           e.stopPropagation()
           onToggleSound(card.id)
         }}
-        className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-all hover:bg-black/80 ${
+        className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-300 ease-out hover:bg-white/25 ${
           sounding
-            ? "opacity-100"
-            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none -translate-y-1 opacity-0 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100"
         }`}
       >
         {sounding ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}

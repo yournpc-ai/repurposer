@@ -8,6 +8,7 @@ import {
   mentionTypeDef,
   type ChatMention,
   type MentionCandidate,
+  type MentionContext,
 } from "@/lib/mentions"
 
 /**
@@ -24,6 +25,7 @@ import {
 export function MentionPicker({
   query,
   position,
+  context,
   onSelect,
   onClose,
 }: {
@@ -31,6 +33,8 @@ export function MentionPicker({
   query: string
   /** The caret's viewport rect — the popup anchors above (or below) it. */
   position: { left: number; top: number; bottom: number }
+  /** Live surface data handed to registry sources (e.g. attached files). */
+  context: MentionContext
   onSelect: (mention: ChatMention) => void
   onClose: () => void
 }) {
@@ -40,13 +44,14 @@ export function MentionPicker({
   >([])
   const [activeIndex, setActiveIndex] = useState(0)
 
-  // Load candidates from every registered type on open. Per-open fetch keeps
-  // the list fresh; sources are cheap public reads.
+  // Load candidates from every registered type on open (and when the live
+  // context changes — e.g. a file attached mid-typing). Per-open fetch keeps
+  // the list fresh; sources are cheap reads.
   useEffect(() => {
     let cancelled = false
     Promise.all(
       MENTION_REGISTRY.map(async (def) =>
-        (await def.source()).map((candidate) => ({
+        (await def.source(context)).map((candidate) => ({
           type: def.type,
           candidate,
         })),
@@ -57,7 +62,7 @@ export function MentionPicker({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [context])
 
   const q = query.trim().toLowerCase()
   const filtered = candidates.filter(

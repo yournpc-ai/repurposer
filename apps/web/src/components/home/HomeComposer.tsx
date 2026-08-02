@@ -1,7 +1,7 @@
 "use client"
 
 import { Link, useNavigate } from "@tanstack/react-router"
-import { useEffect, useState, type RefObject } from "react"
+import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
@@ -89,9 +89,9 @@ const AUTO_GENERATE = "__auto_generate__"
  * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
 
-/** Composer teaching: assets → speaker → prompt → send, then the recipe
- * gallery as the alternative entry (lands last; Tour skips the step if the
- * cards haven't loaded yet). */
+/** Composer teaching (4 steps): assets → speaker → prompt (send folded in)
+ * → the recipe gallery as the alternative entry (lands last; Tour skips the
+ * step if the cards haven't loaded yet). */
 const COMPOSER_TOUR_STEPS: TourStepDef[] = [
   {
     target: "[data-tour='composer-assets']",
@@ -110,13 +110,6 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
     titleKey: "tour.composer.promptTitle",
     descKey: "tour.composer.promptDesc",
     side: "bottom",
-  },
-  {
-    target: "[data-tour='composer-send']",
-    titleKey: "tour.composer.sendTitle",
-    descKey: "tour.composer.sendDesc",
-    side: "top",
-    align: "end",
   },
   {
     target: "[data-tour='home-recipes']",
@@ -213,6 +206,13 @@ export function HomeComposer({
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
+
+  // The asset mention's candidate feed (memoized — the picker reloads when
+  // the identity changes, so it must track `files`, not renders).
+  const mentionContext = useMemo(
+    () => ({ files: files.map((f) => ({ name: f.name, type: f.type })) }),
+    [files],
+  )
 
   // Mention chip laws (docs/tasks/recipe-mention.md §2.4): visible (inline
   // chip in the sentence, MentionEditor), consumed on send (handleGenerate
@@ -409,6 +409,7 @@ export function HomeComposer({
               ref={editorRef}
               placeholder={t("home.pastePlaceholder")}
               disabled={isGenerating}
+              mentionContext={mentionContext}
               onChange={(text, ms) => {
                 onPromptChange(text)
                 onMentionsChange(ms)

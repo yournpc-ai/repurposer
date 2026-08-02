@@ -74,7 +74,7 @@ function Home() {
   return (
     <div className="flex min-h-svh flex-1 flex-col">
       {/* Studio header + Composer */}
-      <section className="flex flex-col items-center px-6 pt-16 pb-10">
+      <section className="flex flex-col items-center px-4 pt-2 pb-10">
         {/* Two-line studio welcome: a reception hello (users arrive here
             already convinced by the landing page) + a spec note (full-length
             talks accepted) — practical orientation only, no positioning.

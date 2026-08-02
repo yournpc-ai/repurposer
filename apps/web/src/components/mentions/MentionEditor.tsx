@@ -14,6 +14,7 @@ import {
 import {
   mentionTypeDef,
   type ChatMention,
+  type MentionContext,
 } from "@/lib/mentions"
 import i18n from "@/lib/i18n"
 import { MentionPicker } from "@/components/mentions/MentionPicker"
@@ -54,12 +55,24 @@ interface MentionEditorProps {
   onChange: (text: string, mentions: ChatMention[]) => void
   /** Enter without shift (picker closed, not mid-IME). */
   onSubmit: () => void
+  /** Live surface data for registry candidate feeds (keep referentially
+   * stable — e.g. useMemo — or the picker reloads every render). */
+  mentionContext?: MentionContext
   className?: string
   "data-tour"?: string
   ref?: Ref<MentionEditorHandle>
 }
 
 const MENTION_ATTR = "data-mention-type"
+
+/** An "empty" editable usually isn't: focusing inserts a browser placeholder
+ * <br>, and anything appended lands AFTER it (the ghost first line). Treat
+ * placeholder-only content as truly empty before programmatic inserts. */
+function normalizeEmpty(el: HTMLElement) {
+  if (!el.textContent?.trim() && !el.querySelector(`[${MENTION_ATTR}]`)) {
+    el.innerHTML = ""
+  }
+}
 
 /** Serialize the editable DOM into prompt text: text nodes verbatim, chips
  * as `@label`, block boundaries as newlines. */
@@ -78,6 +91,7 @@ export function MentionEditor({
   disabled,
   onChange,
   onSubmit,
+  mentionContext,
   className,
   "data-tour": dataTour,
   ref,
@@ -203,6 +217,7 @@ export function MentionEditor({
       const el = editorRef.current
       if (!el) return
       el.focus()
+      normalizeEmpty(el)
       const sel = window.getSelection()
       // Active "@query" at the caret → replace exactly that text.
       if (
@@ -237,6 +252,7 @@ export function MentionEditor({
       const el = editorRef.current
       if (!el) return
       el.focus()
+      normalizeEmpty(el)
       const sel = window.getSelection()
       const range = document.createRange()
       range.selectNodeContents(el)
@@ -309,6 +325,7 @@ export function MentionEditor({
         <MentionPicker
           query={picker.query}
           position={picker.rect}
+          context={mentionContext ?? {}}
           onSelect={(mention) => {
             insertMention(mention)
             setPicker(null)
