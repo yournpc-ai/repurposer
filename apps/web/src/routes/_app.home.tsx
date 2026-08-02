@@ -42,7 +42,7 @@ function Home() {
     // must not take the composer's speakers/brands down with it.
     Promise.all([
       apiFetch("/api/v1/speakers")
-        .then((r) => r.json())
+        .then((r) => (r.ok ? r.json() : []))
         .catch(() => []),
       apiFetch("/api/v1/brand-templates")
         .then((r) => (r.ok ? r.json() : []))
