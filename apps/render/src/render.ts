@@ -181,6 +181,9 @@ async function normalizeLoudness(videoPath: string): Promise<void> {
       "-i", videoPath,
       "-c:v", "copy",
       "-af", filter,
+      // loudnorm internally upsamples (AAC caps at 96 kHz); >48 kHz AAC
+      // fails to decode in some browsers — pin the universal video rate.
+      "-ar", "48000",
       "-c:a", "aac", "-b:a", "192k",
       tmpPath,
     ],
