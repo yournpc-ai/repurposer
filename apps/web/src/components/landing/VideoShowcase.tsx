@@ -125,14 +125,16 @@ export function VideoShowcase(): ReactNode {
    * closure freezes the FIRST render's `soundOn` — reading state there would
    * re-mute right after every unmute. Refs stay live; state stays for UI. */
   const soundOnRef = useRef(false)
-  /** Which pane currently "owns" the soundtrack — follows the divider with a
-   * hysteresis band (≥60% before / ≤40% after) so the idle float animation
-   * can't flip the audio back and forth across the middle. */
-  const dominantRef = useRef<"before" | "after">("before")
+  /** Which pane currently "owns" being live (playback + soundtrack) —
+   * follows the divider with a hysteresis band (≥60% before / ≤40% after)
+   * so the idle float animation can't flip it back and forth across the
+   * middle. Initial: the RESULT side — it's the hero of the section (and
+   * the clear-voice first impression when unmuted). */
+  const dominantRef = useRef<"before" | "after">("after")
   /** UI mirror of dominantRef (the ref serves the Draggable's frozen
    * closures; this state drives the sounding-side indicator on the label
    * chips — the visible answer to "which side's audio is live?"). */
-  const [dominant, setDominant] = useState<"before" | "after">("before")
+  const [dominant, setDominant] = useState<"before" | "after">("after")
 
   useEffect(() => {
     const update = (): void =>
@@ -190,10 +192,13 @@ export function VideoShowcase(): ReactNode {
    * resumes it — drag start/end are gestures, scroll ticks are not (their
    * rejected promises are swallowed, leaving a frozen pane). */
   const inViewRef = useRef(false)
-  /** Which panes may play, by visible share: ≥60% one side plays alone, in
-   * the 40–60% middle band both play (so the resting 50/50 state is fully
-   * alive and the squeezed sliver never spins pointlessly). */
-  const playGateRef = useRef({ before: true, after: true })
+  /** Which panes may play: ONLY the dominant side (the one with the bigger
+   * visible share) — the squeezed side freezes instead of spinning
+   * pointlessly. Mirrors the single-soundtrack model exactly: one live
+   * pane, and it's the same pane that owns the audio. (Replaces the 40–60
+   * middle band where both played — the float swinging the divider made
+   * "Raw 占大头" and "result still playing" visibly contradict.) */
+  const playGateRef = useRef({ before: false, after: true })
   const syncPlayback = (): void => {
     const progress = scrollYProgress.get()
     const shouldPlay = inViewRef.current && progress >= PLAY_AT
@@ -269,7 +274,12 @@ export function VideoShowcase(): ReactNode {
       dominantRef.current = "after"
       setDominant("after")
     }
-    playGateRef.current = { before: position > 40, after: position < 60 }
+    // Only the dominant pane plays — the squeezed side freezes (same
+    // hysteresis as the soundtrack, so live pane == sounding pane).
+    playGateRef.current = {
+      before: dominantRef.current === "before",
+      after: dominantRef.current === "after",
+    }
     applyAudio()
     syncPlayback()
   }
