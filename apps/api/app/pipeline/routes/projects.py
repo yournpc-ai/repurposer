@@ -349,9 +349,15 @@ async def infer_project_intent(
     # definite reference — resolved server-side into explicit slots + dub
     # languages and pin-merged like a prior, AFTER the panel prior so the
     # named recipe wins. The LLM never interprets it (validated pre-inference).
+    # Merge algebra (agent-loop-upgrade §2.1): outputs are the card's PROMISE
+    # (pin wins); dub_languages is a DEFAULT — languages the user named in the
+    # (possibly edited) prompt win, the recipe fills only when inference found
+    # none (the LLM emits dub_languages only when dubbing was asked for, so
+    # non-empty = explicit); other inferred slots ride along untouched.
     if recipe is not None:
         intent.outputs = merge_explicit_slots(recipe.outputs, intent.outputs)
-        intent.dub_languages = list(recipe.dub_languages)
+        if not intent.dub_languages:
+            intent.dub_languages = list(recipe.dub_languages)
         intent.outputs_explicit = True
 
     clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)

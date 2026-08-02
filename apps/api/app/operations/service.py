@@ -168,6 +168,11 @@ async def apply_operations(
             params = validate_op(op_name, item.get("params") or {}, client=True)
         except (KeyError, ValueError) as e:
             raise OpRejected(str(e)) from e
+        # Precomputed ops (translate_captions / set_dub / remove_filler) have
+        # no pure apply — they must arrive via their journal-calling owners
+        # (editor endpoints / run runners), never the generic batch path.
+        if OP_REGISTRY[op_name].precomputed:
+            raise OpRejected(f"op '{op_name}' is precomputed — use its dedicated endpoint")
         normalized.append((op_name, params))
 
     existing = await _ops_for_output(db, output_id)

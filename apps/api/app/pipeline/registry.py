@@ -20,7 +20,7 @@ import importlib
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SkillRejected(Exception):
@@ -34,33 +34,49 @@ class SkillRejected(Exception):
 
 
 # ---- params schemas (compile-time adjudication; defaults filled by code) ---
+#
+# Field descriptions are injected into the intent agent's proposal prompt
+# (agent-loop-upgrade W2) — they ARE the LLM's parameter documentation, so
+# write them as "when to use / what null means", not as type restatements.
 
 
 class SelectClipsParams(BaseModel):
-    count: int = 5
+    count: int = Field(default=5, description="How many highlight clips to cut")
 
 
 class ReviseScriptParams(BaseModel):
-    scope: str = "clip"
-    target_output_id: str | None = None
-    instruction: str | None = None
+    scope: str = Field(default="clip", description="Scope of the revision (default 'clip')")
+    target_output_id: str | None = Field(
+        default=None, description="Revise only this one output (uuid); null = the turn's current target"
+    )
+    instruction: str | None = Field(
+        default=None, description="How to revise (shorter / longer / tone / language); null = the user's message text"
+    )
 
 
 class AddMusicParams(BaseModel):
-    mood: str | None = None
-    music_id: str | None = None
-    gain_db: float | None = None
+    mood: str | None = Field(default=None, description="Music mood keyword (e.g. calm, upbeat); null = pick from the content brief")
+    music_id: str | None = Field(default=None, description="A specific library track id; null = auto-pick by mood")
+    gain_db: float | None = Field(default=None, description="Music bed gain in dB; null = library default")
 
 
 class DubClipParams(BaseModel):
-    voice: str | None = None
-    target_output_id: str | None = None
-    target_language: str = "en"
+    voice: str | None = Field(default=None, description="Voice-clone id; null = the speaker's own cloned voice")
+    target_output_id: str | None = Field(default=None, description="Dub only this one output (uuid); null = all clips in scope")
+    target_language: str = Field(default="en", description="ISO code of the language to dub into")
+    # agent-loop-upgrade W5: mode② spec = params.model_dump() carries this
+    # into spec.fork, which run_dub_clip already reads — "再来一版/加一版"
+    # stops overwriting the source clip.
+    fork: bool = Field(
+        default=False,
+        description="True = create a NEW derived version and keep the source clip untouched (user said "
+        "'再来一版' / '加一版' / 'another version' or asked to keep the original); False = rewrite in place",
+    )
 
 
 class TranslateClipParams(BaseModel):
-    target_output_id: str | None = None
-    target_language: str  # required — no meaningful default
+    target_output_id: str | None = Field(default=None, description="Translate only this one output (uuid); null = all clips in scope")
+    target_language: str = Field(description="ISO code of the caption language (required — no meaningful default)")
 
 
 class SynthesizeTalkVideoParams(BaseModel):
@@ -183,6 +199,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             runner="app.pipeline.node_runners:run_dub_clip",
             node_kind="dub",
             requires=("media",),
+            retries=2,
         ),
         SkillEntry(
             name="translate_clip",
@@ -195,6 +212,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             runner="app.pipeline.node_runners:run_translate_clip",
             node_kind="translate_clip",
             requires=("transcript",),
+            retries=2,
         ),
         SkillEntry(
             name="remove_filler",
@@ -264,6 +282,16 @@ def dispatchable_skills() -> list[SkillEntry]:
         if entry.node_kind in STEP_RUNNERS
         and _resolve_runner(entry) is STEP_RUNNERS[entry.node_kind]
     ]
+
+
+def retries_for_node_kind(kind: str) -> int:
+    """Step-level retry budget for a node kind (``SkillEntry.retries`` seat,
+    agent-loop-upgrade W3): the entry claiming this kind wins; unregistered /
+    internal kinds get 0 (fail fast)."""
+    for entry in SKILL_REGISTRY.values():
+        if entry.node_kind == kind:
+            return entry.retries
+    return 0
 
 
 def validate_task_list(tasks: list[Any]) -> list[SkillEntry]:

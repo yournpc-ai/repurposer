@@ -35,6 +35,7 @@ from app.platform.project_context import (
     speaker_context_from_row,
 )
 from app.tools.dubbing import synthesize_dub
+from app.pipeline.errors import TransientNodeError
 
 router = APIRouter()
 
@@ -337,7 +338,13 @@ async def dub_output(
     if project is None or project.user_id != UUID(str(current_user.id)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    new_spec = await synthesize_dub(db, output, project, data.target_language)
+    # Shell translation (agent-loop-upgrade W3): the core speaks
+    # TransientNodeError for provider/storage hiccups; the endpoint's contract
+    # is HTTP — map to 502. Deterministic input errors stay HTTPException.
+    try:
+        new_spec = await synthesize_dub(db, output, project, data.target_language)
+    except TransientNodeError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
     await apply_precomputed(
         db,
         output,

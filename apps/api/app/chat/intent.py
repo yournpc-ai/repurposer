@@ -117,7 +117,9 @@ class ComposerIntentAgent:
             "DUBBING of their clips into other languages — the speaker's own "
             "cloned voice speaking another language (e.g. '配音成德语和法语', "
             "'dub my clips into German and French', '再来一版西语配音'). "
-            "Empty array otherwise. This is distinct from slot languages "
+            "Empty array otherwise. If the user asks for dubbing but names no "
+            "specific languages, return an empty array — downstream defaults "
+            "will apply; never invent languages. This is distinct from slot languages "
             "(which set an output's text language) — dubbing produces extra "
             "VOICE-OVER versions of the same clips. Same gating as clips: "
             "only when a media source file (video/audio/image) is attached; "
@@ -189,6 +191,18 @@ class ComposerIntentAgent:
 composer_intent_agent = ComposerIntentAgent()
 
 
+def _params_doc(model) -> str:
+    """"name: description" pairs for a params model (agent-loop-upgrade W2).
+
+    Falls back to the bare name when a field carries no description — the
+    prompt degrades to the pre-W2 shape for that field instead of breaking.
+    """
+    parts = []
+    for fname, field in model.model_fields.items():
+        parts.append(f"{fname}: {field.description}" if field.description else fname)
+    return ", ".join(parts)
+
+
 class ChatIntentAgent:
     """Proposes what to do with one chat message (propose-only, no execution).
 
@@ -205,9 +219,12 @@ class ChatIntentAgent:
     async def propose(self, message: str, context: dict) -> IntentResult:
         """Return the four-state proposal for one user message."""
         skills = dispatchable_skills()
+        # Params are injected as "name: description" (agent-loop-upgrade W2) —
+        # the Field descriptions in the registry's params models ARE the LLM's
+        # parameter documentation.
         skill_lines = "\n".join(
             f"- {s.name}: {s.description}"
-            + (f" (params: {list(s.params_model.model_fields)})" if s.params_model else "")
+            + (f" (params: {_params_doc(s.params_model)})" if s.params_model else "")
             for s in skills
         )
         # The edit-ops vocabulary comes from the operations registry (ADR-032)

@@ -30,8 +30,13 @@ class InputSlot(BaseModel):
 class RecipeEntry(BaseModel):
     """One registered recipe: a task-book template awaiting material.
 
-    ``outputs`` are explicit-pinned slots (they survive re-inference via the
-    pin-merge rule); ``dub_languages`` pins the run's voice-dub fan-out.
+    Field-level merge policy (agent-loop-upgrade §2.1 — merge algebra):
+    - ``outputs``: **PROMISE** — explicit-pinned slots, the card's promise
+      itself; pin-merged so they survive re-inference and user edits.
+    - ``dub_languages``: **DEFAULT (tunable)** — languages the user named in
+      the (possibly edited) prompt win; the recipe fills only when inference
+      found none. When a third tunable field appears, promote this per-field
+      policy to a declared structure (the seam is named here).
     """
 
     model_config = ConfigDict(extra="forbid")

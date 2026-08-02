@@ -64,6 +64,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.tables import (
     Asset,
     BrandTemplate,
+    Message,
     Music,
     Output,
     WorkflowStep,
@@ -85,6 +86,8 @@ from app.platform.project_context import (
 )
 from app.tools.caption_translate import translate_caption_track
 from app.tools.dubbing import synthesize_dub
+from app.operations.service import apply_precomputed
+from app.pipeline.errors import TransientNodeError
 from app.tools.filler import detect
 from app.tools.storage import (
     download_to_temp,
@@ -1535,6 +1538,18 @@ async def _target_clips(
     return [c for c in clips if c.render_spec]
 
 
+async def _run_origin(db: AsyncSession, run: WorkflowRun) -> str:
+    """Operations-journal source for run-dispatched morphs (agent-loop-upgrade
+    W4, ADR-033 shell parity): ``"chat"`` when the run was dispatched from a
+    chat message (``messages.workflow_run_id`` backlink), else ``"system"``."""
+    linked = await db.scalar(
+        select(func.count()).select_from(Message).where(
+            Message.workflow_run_id == run.id
+        )
+    )
+    return "chat" if linked else "system"
+
+
 async def _fan_out_renders(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, output_ids: list[UUID]
 ) -> None:
@@ -1595,6 +1610,7 @@ async def run_remove_filler(
         await _set_summary(node.id, "No clips to clean")
         return []
 
+    origin = await _run_origin(db, run)
     total_fillers = 0
     total_repeats = 0
     touched: list[UUID] = []
@@ -1625,10 +1641,19 @@ async def run_remove_filler(
         if new_spec is spec:
             continue
 
-        output.render_spec = new_spec.model_dump(mode="json")
+        # Journal the morph (agent-loop-upgrade W4): every render_spec write
+        # goes through the operations service — undoable, hash chain intact.
+        await apply_precomputed(
+            db,
+            output,
+            "remove_filler",
+            {"filler_count": applied_fillers, "repeat_count": applied_repeats},
+            new_spec.model_dump(mode="json"),
+            source=origin,
+            user_id=project.user_id,
+        )
         output.render_status = RenderStatus.PENDING
         output.render_error = None
-        output.updated_at = datetime.now(UTC)
         await db.flush()
         touched.append(output.id)
         total_fillers += applied_fillers
@@ -1700,13 +1725,21 @@ async def run_add_music(
         enabled=True,
         gain_db=float(gain_db) if gain_db is not None else -18.0,
     )
+    origin = await _run_origin(db, run)
     touched: list[UUID] = []
     for output in clips:
         spec = ClipSpec.model_validate(output.render_spec)
-        output.render_spec = spec.model_copy(update={"music": music}).model_dump(mode="json")
+        await apply_precomputed(
+            db,
+            output,
+            "set_music",
+            {"music_id": music.music_id, "enabled": True, "gain_db": music.gain_db},
+            spec.model_copy(update={"music": music}).model_dump(mode="json"),
+            source=origin,
+            user_id=project.user_id,
+        )
         output.render_status = RenderStatus.PENDING
         output.render_error = None
-        output.updated_at = datetime.now(UTC)
         await db.flush()
         touched.append(output.id)
 
@@ -1755,17 +1788,30 @@ async def run_translate_clip(
         await _set_summary(node.id, "No clips to translate")
         return []
 
+    origin = await _run_origin(db, run)
     touched: list[UUID] = []
     for output in clips:
         spec = output.render_spec
         track = (spec or {}).get("caption_track") or []
         if not track:
             continue
-        new_track = await translate_caption_track(track, lang)
-        output.render_spec = {**spec, "caption_track": new_track, "target_language": lang}
+        try:
+            new_track = await translate_caption_track(track, lang)
+        except MiniMaxError as e:
+            # Provider failure after the client's own retries — still
+            # transient at step level (W3 retry budget applies).
+            raise TransientNodeError(f"caption translate failed: {e}") from e
+        await apply_precomputed(
+            db,
+            output,
+            "translate_captions",
+            {"target_language": lang},
+            {**spec, "caption_track": new_track, "target_language": lang},
+            source=origin,
+            user_id=project.user_id,
+        )
         output.render_status = RenderStatus.PENDING
         output.render_error = None
-        output.updated_at = datetime.now(UTC)
         await db.flush()
         touched.append(output.id)
 
@@ -1799,10 +1845,15 @@ async def run_dub_clip(
         await _set_summary(node.id, "No clips to dub")
         return []
 
+    origin = await _run_origin(db, run)
     touched: list[UUID] = []
     for output in clips:
         try:
             new_spec = await synthesize_dub(db, output, project, lang)
+        except TransientNodeError:
+            # Transient failures are the step's, not the clip's — bubble up
+            # for step-level retry instead of skipping the clip (W3).
+            raise
         except HTTPException as e:
             # Per-clip skip (no captions / no sample usable for this one);
             # a fully unresolvable batch fails the step below.
@@ -1836,10 +1887,20 @@ async def run_dub_clip(
             await db.flush()
             touched.append(derived.id)
         else:
-            output.render_spec = new_spec
+            # Morph: rewrite in place — journaled so the overwrite is undoable
+            # (agent-loop-upgrade W4; the fork branch's new rows start their
+            # own baseline instead).
+            await apply_precomputed(
+                db,
+                output,
+                "set_dub",
+                {"enabled": True, "gain_db": 0.0, "target_language": lang},
+                new_spec,
+                source=origin,
+                user_id=project.user_id,
+            )
             output.render_status = RenderStatus.PENDING
             output.render_error = None
-            output.updated_at = datetime.now(UTC)
             await db.flush()
             touched.append(output.id)
 

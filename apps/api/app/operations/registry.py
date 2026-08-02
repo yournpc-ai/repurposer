@@ -114,6 +114,17 @@ class SetDubParams(BaseModel):
     target_language: str | None = None
 
 
+class RemoveFillerOpParams(BaseModel):
+    """Journaled by the remove_filler runner (agent-loop-upgrade W4) — counts
+    are runner-computed after the pass, kept as the semantic signal for
+    calibration reflux; not chat-proposable (precomputed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    filler_count: int | None = None
+    repeat_count: int | None = None
+
+
 class SnapshotParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -252,6 +263,7 @@ OP_REGISTRY: dict[str, OpDef] = {
     ),
     "translate_captions": OpDef(TranslateCaptionsParams, None, precomputed=True),
     "set_dub": OpDef(SetDubParams, None, precomputed=True),
+    "remove_filler": OpDef(RemoveFillerOpParams, None, precomputed=True),
     # system-internal: baseline lazy-creation / drift self-healing (ADR-032 D7)
     "snapshot": OpDef(SnapshotParams, None, client_allowed=False),
     "set_spec": OpDef(SetSpecParams, None, client_allowed=False),

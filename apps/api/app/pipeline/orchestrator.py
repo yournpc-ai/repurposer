@@ -34,10 +34,12 @@ from app.models.schemas import (
 from app.models.tables import Asset, Message, Output, WorkflowStep, Project, Speaker, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.asset_processing import has_renderable_media
+from app.pipeline.errors import TransientNodeError
 from app.pipeline.node_runners import KNOWN_OUTPUTS, STEP_RUNNERS, slot_tag
 from app.pipeline.registry import (
     SkillEntry,
     generation_node_kinds,
+    retries_for_node_kind,
     validate_task_list,
 )
 
@@ -590,6 +592,9 @@ async def execute_step(node_id: UUID) -> None:
                 else:
                     node.status = "done"
                     node.finished_at = datetime.now(UTC)
+                    # Clear any transient note from earlier attempts (W3) —
+                    # a done node carries no error.
+                    node.error = None
                 await db.commit()
                 logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Suspend as s:
@@ -611,6 +616,23 @@ async def execute_step(node_id: UUID) -> None:
             logger.error("workflow_step_failed", node_id=str(node_id), error=str(e))
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
+                # Step-level retry (agent-loop-upgrade W3): a TransientNodeError
+                # within the kind's retry budget resets the node to pending —
+                # the worker's next tick is the backoff, downstream is NOT
+                # cascade-skipped. Deterministic failures fail fast as before.
+                budget = retries_for_node_kind(node.kind)
+                if isinstance(e, TransientNodeError) and (node.attempt or 0) <= budget:
+                    node.status = "pending"
+                    node.error = f"transient attempt {node.attempt}: {str(e)[:500]}"
+                    node.finished_at = None
+                    await db.commit()
+                    logger.info(
+                        "workflow_step_retry",
+                        node_id=str(node_id),
+                        kind=node.kind,
+                        attempt=node.attempt,
+                    )
+                    return
                 node.status = "failed"
                 node.error = str(e)[:2000]
                 node.finished_at = datetime.now(UTC)
