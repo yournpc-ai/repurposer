@@ -44,8 +44,9 @@ from pathlib import Path
 # Make ``app`` importable when run as a file (apps/api on sys.path).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import delete, func, select  # noqa: E402
+from sqlalchemy import delete, func, inspect, select  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
@@ -71,6 +72,10 @@ from app.tools.storage import _get_s3_client  # noqa: E402
 # Prefixes the storage purge never touches (see module docstring).
 PROTECTED_PREFIXES = ("demo/", "music/")
 
+# Tables whose rows die via FK cascade when their parent is wiped — covered
+# indirectly, so the drift report should not flag them as "not wiped".
+CASCADE_COVERED = {"workflow_steps"}  # workflow_runs.run_id ondelete=CASCADE
+
 
 def _plan() -> list[tuple[str, object]]:
     """Deletion steps in FK-safe order: (label, table). Every row goes."""
@@ -94,6 +99,21 @@ def _plan() -> list[tuple[str, object]]:
         ("users", User),
         ("verification_codes", VerificationCode),
     ]
+
+
+async def _schema_drift(db: AsyncSession) -> tuple[list[str], list[str]]:
+    """Compare the wipe plan against the tables actually present.
+
+    Returns (missing, extra): planned tables absent from the DB (schema is
+    BEHIND the models — run migrations first) and DB tables not covered by
+    the plan (retired legacy tables the wipe will not touch). Production
+    schemas can drift from the code, so check before deleting.
+    """
+    present = set(await db.run_sync(lambda s: set(inspect(s.bind).get_table_names())))
+    planned = {getattr(table, "__tablename__") for _, table in _plan()}
+    missing = sorted(planned - present)
+    extra = sorted(present - planned - {"alembic_version"} - CASCADE_COVERED)
+    return missing, extra
 
 
 def _is_protected(key: str) -> bool:
@@ -182,6 +202,20 @@ async def main() -> None:
 
     if do_db:
         async with AsyncSessionLocal() as db:
+            missing, extra = await _schema_drift(db)
+            if missing:
+                # Deleting against a behind-schema DB would crash mid-wipe.
+                print("ERROR — the database schema is BEHIND the code; these tables")
+                print("are missing and must be migrated in before a wipe:")
+                for name in missing:
+                    print(f"  {name}")
+                print("Deploy / restart the API first (startup auto-runs `alembic upgrade head`).")
+                sys.exit(1)
+            if extra:
+                print("Note — tables present but NOT covered by the wipe (left as-is):")
+                for name in extra:
+                    print(f"  {name}")
+                print()
             if not args.yes:
                 print("DRY-RUN — database rows that would be deleted:")
                 total = 0
