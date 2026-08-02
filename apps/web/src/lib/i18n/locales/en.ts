@@ -113,7 +113,7 @@ const en = {
       scrollDown: "Scroll down",
       beforeLabel: "Raw",
       afterLabel: "Generated result",
-      beforeTags: ["Landscape", "Two people", "Muffled audio"],
+      beforeTags: ["Landscape", "Two people", "Muffled audio", "No captions"],
       afterTags: ["Vertical solo shot", "Captions", "Title", "Clearer audio"],
       unmute: "Play sound",
       mute: "Mute",

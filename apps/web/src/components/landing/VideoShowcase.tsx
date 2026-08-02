@@ -70,7 +70,7 @@ function PaneVideo({
 }
 
 const PANE_CHIP_STYLE =
-  "rounded-md bg-black/55 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white/90 backdrop-blur-sm"
+  "inline-flex items-center gap-1.5 rounded-md bg-black/55 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white/90 backdrop-blur-sm"
 
 function paneChipClass(position: string): string {
   return cn("pointer-events-none absolute z-10", PANE_CHIP_STYLE, position)
@@ -129,6 +129,10 @@ export function VideoShowcase(): ReactNode {
    * hysteresis band (≥60% before / ≤40% after) so the idle float animation
    * can't flip the audio back and forth across the middle. */
   const dominantRef = useRef<"before" | "after">("before")
+  /** UI mirror of dominantRef (the ref serves the Draggable's frozen
+   * closures; this state drives the sounding-side indicator on the label
+   * chips — the visible answer to "which side's audio is live?"). */
+  const [dominant, setDominant] = useState<"before" | "after">("before")
 
   useEffect(() => {
     const update = (): void =>
@@ -258,8 +262,13 @@ export function VideoShowcase(): ReactNode {
   })
 
   const handlePositionChange = (position: number): void => {
-    if (position >= 60) dominantRef.current = "before"
-    else if (position <= 40) dominantRef.current = "after"
+    if (position >= 60) {
+      dominantRef.current = "before"
+      setDominant("before")
+    } else if (position <= 40) {
+      dominantRef.current = "after"
+      setDominant("after")
+    }
     playGateRef.current = { before: position > 40, after: position < 60 }
     applyAudio()
     syncPlayback()
@@ -286,6 +295,9 @@ export function VideoShowcase(): ReactNode {
         style={prefersReducedMotion ? undefined : { opacity: chromeOpacity }}
       >
         <span className={paneChipClass("top-4 left-4")}>
+          {soundOn && dominant === "before" && (
+            <Volume2 className="h-3 w-3" aria-hidden="true" />
+          )}
           {t("landing.comparison.beforeLabel")}
         </span>
         <PaneTagStack tags={beforeTags} className="top-12 left-4 items-start" />
@@ -321,6 +333,9 @@ export function VideoShowcase(): ReactNode {
         style={prefersReducedMotion ? undefined : { opacity: chromeOpacity }}
       >
         <span className={paneChipClass("top-4 right-4")}>
+          {soundOn && dominant === "after" && (
+            <Volume2 className="h-3 w-3" aria-hidden="true" />
+          )}
           {t("landing.comparison.afterLabel")}
         </span>
         <PaneTagStack tags={afterTags} className="top-12 right-4 items-end" />
