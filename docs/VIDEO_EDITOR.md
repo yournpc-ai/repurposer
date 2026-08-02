@@ -1,6 +1,7 @@
 # Portrait Video Editor — Design & Implementation Plan
 
 > Status: Implemented（L2 主流程已落地；undo 已随 Operation Model 落地——端点 + chat 撤销，editor 内按钮/历史面板后置，见 ADR-032 与 `docs/tasks/done/operation-model.md`）
+> 编辑面分层（2026-08-02，ADR-033）：本文的"编辑形式"= **editor 适配器**的形态，不是产品编辑面的全部——能力层（OP_REGISTRY ∪ SKILL_REGISTRY）唯一，editor / chat /（预留）mcp 是并存的薄适配器；chat 已是正式编辑面，不再是"辅助入口"。
 > This document records the final plan for Repurposer's "portrait video output + editable" main pipeline.
 > It is the conclusion of multiple rounds of technical reviews (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
 > See also: ADR-016 (decision record), ADR-017 (queue foundation, implemented).

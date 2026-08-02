@@ -779,3 +779,23 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 校准回流的读路径（按 project/op/时间窗聚合 params）落成文档座位，消费端后建。
 
 **Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/tasks/done/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
+
+## ADR-033: 编辑面分层——能力层唯一（ops+skills 双海拔），适配层多前端并存
+
+**Status**: Decided (2026-08-02)
+
+**Context**: VIDEO_EDITOR.md 把编辑形态写成"文字稿编辑 + 单轨 trim"（editor GUI），CHAT_ARCH 曾把对话式精修写成"辅助入口，deferred"。现实是两条线都已发货且共用 Operation Model：clip editor 路由把手势翻成 ops（COALESCIBLE 合并连续 ops + `base_hash` 乐观锁），chat 把自然语言翻成 `EditOpsProposal`；run 级海拔（dub/translate/remove_filler/add_music/revise_script 等 SKILL_REGISTRY 成员）chat 经 task_list 派发、editor 经 Dub/Translate 按钮直连端点。用户裁决（2026-08-02）：编辑能力的方向是"操作作为 tools/skills，由 chat 引导 agent 执行"。这不是用 chat 取代 editor，而是需要把分层钉死，防止任一前端长出私有编辑逻辑。
+
+**Decision**:
+1. **能力层唯一，双注册表双海拔**：`OP_REGISTRY`（参数级微操作——纯函数 clip-spec→clip-spec，无 run，即时，快照/undo）∪ `SKILL_REGISTRY`（任务级宏操作——编译为图节点起 run，skill=概率性 / tool=确定性）。路由纪律维持现状并上升为契约：参数级走 ops，任务级走 task_list（`_validate_edit_ops` 拒收 precomputed ops，原话 "needs a run — propose a task_list"）。
+2. **适配层多前端，全部薄转换**：适配器只做"输入形式 → 注册表调用"的翻译，**禁止自带编辑逻辑**。已发货：editor（手势 → ops HTTP）+ chat（自然语言 → EditOpsProposal / task_list）；预留：mcp（`SOURCE_REGISTRY` 座位已注册）。新增适配器 = 新增翻译层，能力层零改动。
+3. **能力投资压能力层**：新编辑能力 = 新 op 或新 skill 注册项，全部适配器同时受益；禁止任何适配器私设能力种类（如 editor 独有的编辑类型）。
+4. **chat 升格为正式编辑面**：不再是"辅助入口"；@-mention（recipe-mention 期 2）是其定向机制（@产物 → targeted ops / skills）。editor 不退场——精细手势（拖 trim、点字幕改字、框选删段）仍是其强项。
+
+**Consequences**:
+- VIDEO_EDITOR.md 的"编辑形式"旧表述修订：文字稿编辑 + 单轨 trim 是 editor 适配器的形态，不是产品编辑面的全部。
+- L3 分工线不变：多轨/图层/B-roll 仍推给 CapCut/Premiere，不进能力层。
+- chat 适配器的语义完备性成为产品面：morph/fork 选择权暴露、recipe 参数默认值化等归 chat 能力简报（入 PROGRESS 需求池）。
+- "能力层 / 适配层"入架构词汇（NAMING §2）；新 op/skill 评审清单固定加一问："这是能力层成员，还是某适配器的呈现细节？"
+
+**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan）、ADR-032（Operation Model——本条将其"三前端共用操作日志"的愿景钉为分层纪律）；CHAT_ARCH §9；`docs/tasks/recipe-mention.md` §2.5

@@ -24,7 +24,7 @@
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
 | `AGENT_ARCHITECTURE.md` | 4-layer 生成编排 + §12 施工图视图（RunPlan 概念基线）+ §12.7 Phase 2 落地实录（导演两步走） | 已实现（Phase 2 主体 ✅；选段独立/质检节点 📋） | 动 generation/agents 前 |
-| `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置） | 动编辑器/渲染前 |
+| `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器/渲染前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
 | `DECISIONS.md` | ADR-001 ~ ADR-032 | 持续追加 | 翻案/新决策时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |

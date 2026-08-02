@@ -84,7 +84,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 
 - **调用点 ① /intent**（composer）：`ProjectIntentRequest` 加 `mentions: list[ChatMention] = []`；路由先解析 recipe → 与 `prior` 同路 pin-merge（`merge_explicit_slots` + dub 钉规则原样复用）→ `pending_intent` → 审阅面板。**composer 从此发 mentions 不发 prior；`prior` 字段保留给 API caller。**
 - **调用点 ② chat 派发**（`chat/service.py`）：用户消息带 recipe mention → 解析 → 写 `pending_intent` + dock task_book 问题（既有确认面）→ Start 起 run。**LLM 不解释 recipe 提及**——确定性引用直接钉，不占 intent 调用（"LLM 提议代码裁决"的延伸：用户经确定性引用自提议，代码裁决）；mention 仍经 `_build_context` 通用注入进后续轮次的上下文。
-- v1 边界：recipe 提及 = 卡片承诺的原样兑现，不与同句其他意图合并（"@配音卡 顺便写篇长文"的长文部分本轮不合并——审阅面板/dock 确认后，追加走下一轮普通对话）。
+- v1 边界：单 run 单配方（多配方 422 不变）；同句其他意图的合并语义随 agent-loop-upgrade（2026-08-02）定格为**合并代数三规则**——① 承诺钉死（recipe.outputs pin 优先）；② 参数默认（dub_languages：用户点名的赢，没点名用配方默认——remix 改"中文"生效）；③ 额外放行（"@配音卡 顺便写篇长文"的长文槽位加性存活）。审阅面板逐槽行呈现合并后的全部真相。
 - `create_run` 出生地约束不变：clips-media 门拒收时，composer 表面 422 toast、chat 表面反问兜底——两表面提示均含配方所需素材类型。
 
 ### 2.4 chip 三律与组件（旧事故的结构性消除）
