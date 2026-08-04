@@ -72,7 +72,10 @@ function Home() {
   }
 
   return (
-    <div className="flex min-h-svh flex-1 flex-col">
+    // flex-1 (inside SidebarInset's flex column) fills the viewport minus
+    // the sticky header exactly — never min-h-svh here: that would add the
+    // full viewport height BELOW the header and pin a permanent scrollbar.
+    <div className="flex flex-1 flex-col">
       {/* Studio header + Composer */}
       <section className="flex flex-col items-center px-4 pt-2 pb-10">
         {/* Two-line studio welcome: a reception hello (users arrive here

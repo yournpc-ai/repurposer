@@ -114,15 +114,18 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         // on the bare results page.
         search={
           project.status === "draft"
-            ? { overlay: "intent" }
+            ? { overlay: "chat" }
             : project.status === "processing"
               ? { overlay: "run" }
               : {}
         }
-        className="group flex flex-col gap-3 rounded-xl bg-card/50 p-3 transition-all hover:bg-accent"
+        className="group flex flex-col gap-2"
       >
+        {/* Full-bleed thumbnail — no card container, no inset padding: the
+            image carries its own radius and the text lives below it
+            (LTX/ElevenLabs projects-grid pattern, 2026-08-04). */}
         <div
-          className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
+          className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-xl ${
             // Neutral base for the live mist — bg-primary/10 would leak hue
             // through it; the tinted base is only for the settled thumbnail.
             live ? "bg-muted" : "bg-primary/10"
@@ -181,9 +184,7 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
             </p>
             {/* "···" menu — the wrapper preventDefault+stopPropagation keeps
                 the wrapping <a> from navigating (stopPropagation alone leaves
-                the browser's default anchor behavior intact). The button's
-                hover uses bg-background because --muted == --accent here:
-                ghost's default hover would be invisible on the hovered card. */}
+                the browser's default anchor behavior intact). */}
             <div
               className="shrink-0"
               onPointerDown={(e) => e.stopPropagation()}
@@ -199,7 +200,6 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
                       variant="ghost"
                       size="icon-sm"
                       aria-label={t("projects.menuMore")}
-                      className="hover:bg-background"
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>

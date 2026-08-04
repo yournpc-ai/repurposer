@@ -57,7 +57,7 @@ function ProjectsPage() {
   }, [projects, query])
 
   return (
-    <div className="flex min-h-svh flex-1 flex-col p-6 md:p-8">
+    <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto w-full max-w-6xl">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">

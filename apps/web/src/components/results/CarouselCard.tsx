@@ -48,7 +48,7 @@ export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
   }
 
   return (
-    <Card className="p-4 ring-1 ring-border">
+    <Card className="p-4 shadow-lg">
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
@@ -64,7 +64,7 @@ export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
           slides.map((slide, i) => (
             <div
               key={i}
-              className="rounded-md bg-muted/50 p-3 ring-1 ring-border"
+              className="rounded-md bg-muted p-3"
             >
               <p className="font-medium">{slide.title}</p>
               {slide.body && (

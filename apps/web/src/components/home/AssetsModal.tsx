@@ -72,7 +72,7 @@ export function AssetsModal({ files, onAdd, onRemove, open, onOpenChange }: Asse
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Plus className="h-5 w-5" />
           <span className="text-xs">{t("composer.assetsUpload")}</span>
@@ -85,7 +85,7 @@ export function AssetsModal({ files, onAdd, onRemove, open, onOpenChange }: Asse
               return (
                 <div
                   key={`${file.name}:${file.size}`}
-                  className="relative flex flex-col items-center gap-1.5 rounded-lg bg-muted/50 p-3 text-center"
+                  className="relative flex flex-col items-center gap-1.5 rounded-lg bg-muted p-3 text-center"
                 >
                   <button
                     type="button"

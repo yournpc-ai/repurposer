@@ -281,7 +281,7 @@ function SpeakerDetailPage() {
 
   if (loading && !speaker) {
     return (
-      <div className="flex min-h-svh flex-1 items-center justify-center">
+      <div className="flex flex-1 items-center justify-center">
         <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     )
@@ -289,14 +289,14 @@ function SpeakerDetailPage() {
 
   if (!speaker) {
     return (
-      <div className="flex min-h-svh flex-1 items-center justify-center p-8">
+      <div className="flex flex-1 items-center justify-center p-8">
         <p className="text-muted-foreground">{t("speakerDetail.notFound")}</p>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-svh flex-1 flex-col p-6 md:p-8">
+    <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-6 flex items-center gap-3">
           <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/speakers" />}>
@@ -473,7 +473,7 @@ function SpeakerDetailPage() {
               </CardHeader>
               <CardContent>
                 {materials.length === 0 ? (
-                  <div className="rounded-lg bg-muted/50 py-12 text-center">
+                  <div className="rounded-lg bg-muted py-12 text-center">
                     <FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{t("speakerDetail.noMaterials")}</p>
                   </div>
@@ -482,7 +482,7 @@ function SpeakerDetailPage() {
                     {materials.map((asset) => (
                       <div
                         key={asset.id}
-                        className="flex items-start justify-between gap-3 rounded-lg bg-muted/50 p-4"
+                        className="flex items-start justify-between gap-3 rounded-lg bg-muted p-4"
                       >
                         <div className="flex min-w-0 items-start gap-3">
                           <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />

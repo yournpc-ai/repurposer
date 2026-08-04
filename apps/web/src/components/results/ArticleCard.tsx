@@ -45,7 +45,7 @@ export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
   }
 
   return (
-    <Card className="p-4 ring-1 ring-border">
+    <Card className="p-4 shadow-lg">
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar

@@ -293,32 +293,27 @@ export function HomeComposer({
           })
         )
 
-        // Resolve the task book via the project-scoped intent endpoint. The
-        // server persists it on the project (pending_intent), so the overlay
-        // on the results page can confirm or edit it — now or later.
-        // Mentions are the composer's fourth payload field: a recipe mention
-        // is pinned server-side (resolve_recipe_mentions) — the composer
-        // never builds a prior (docs/tasks/recipe-mention.md, prohibition #1).
-        const intentRes = await apiFetch(`/api/v1/projects/${project.id}/intent`, {
-          method: "POST",
-          body: {
-            prompt: prompt.trim(),
-            brand_template_id: brandTemplateId || undefined,
-            mentions,
-          },
-        })
-        if (!intentRes.ok) {
-          const detail = await intentRes.json().catch(() => null)
-          throw new Error(detail?.detail || "Intent inference failed")
-        }
-
+        // Intent recognition lives in the chat loop, not the composer
+        // (intent-surface-unification W2): navigate straight to the project
+        // and hand the draft to the overlay chat, which sends it as the
+        // first /chat message — mentions and the brand choice ride along.
+        // A recipe mention is pinned server-side in the plan path
+        // (resolve_recipe_mentions) — the composer never builds a prior
+        // (docs/tasks/recipe-mention.md, prohibition #1).
         // Send consumes the draft (chip law ②): one clear, before navigating.
         editorRef.current?.clear()
 
         navigate({
           to: "/projects/$id",
           params: { id: project.id },
-          search: { overlay: "intent" },
+          search: { overlay: "chat" },
+          state: {
+            firstMessage: {
+              text: prompt.trim(),
+              mentions,
+              brandTemplateId: brandTemplateId || undefined,
+            },
+          } as Record<string, unknown>,
         })
       } catch {
         // apiFetch already toasted the server's reason; just reset the UI.
@@ -346,8 +341,8 @@ export function HomeComposer({
     <>
     {/* Dark mode: flat tonal steps instead of edge-glow — card 0.195,
         blocks 0.25 (D2 recipe). Light mode keeps edge-glow. */}
-    <Card className="overflow-visible py-0 ring-0 edge-glow dark:bg-[oklch(0.195_0.006_260)] dark:shadow-none">
-      <CardContent className="p-4 text-left">
+    <Card className="overflow-visible rounded-2xl py-0 ring-0 edge-glow dark:bg-[oklch(0.195_0.006_260)] dark:shadow-none">
+      <CardContent className="p-5 text-left">
         {/* Entity blocks (Assets = source materials, Speaker = whose voice)
             ride the card's top edge via negative margin; the textarea fills
             the remaining width to their right. Both blocks open modals. */}
@@ -411,7 +406,7 @@ export function HomeComposer({
             </button>
           </div>
 
-          <div className="relative flex h-20 flex-1 flex-col" data-tour="composer-prompt">
+          <div className="relative flex h-24 flex-1 flex-col" data-tour="composer-prompt">
             <MentionEditor
               ref={editorRef}
               placeholder={t("home.pastePlaceholder")}

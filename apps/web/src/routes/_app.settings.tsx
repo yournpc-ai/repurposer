@@ -73,7 +73,7 @@ function SettingsPage() {
             const configured = isConfigured(platform)
             const expired = account?.status === "expired"
             return (
-              <Card key={platform} className="p-4 ring-1 ring-border shadow-xl">
+              <Card key={platform} className="p-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <PlatformIcon platform={platform} />

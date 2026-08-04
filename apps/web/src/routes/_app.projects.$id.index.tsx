@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -143,7 +143,21 @@ function ProjectDetailPage() {
   const { id: projectId } = Route.useParams()
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const search = Route.useSearch() as { overlay?: "intent" | "run" }
+  const location = useLocation()
+  // overlay=chat is the canonical conversation surface; "intent" is the
+  // retired spelling (pre unification) — tolerated on read.
+  const search = Route.useSearch() as { overlay?: "chat" | "intent" | "run" }
+  // The composer hands its draft over via router state: the overlay chat
+  // sends it as the first /chat message (intent-surface-unification W2).
+  const firstMessage = (
+    location.state as {
+      firstMessage?: {
+        text: string
+        mentions?: { type: string; id: string; label: string }[]
+        brandTemplateId?: string
+      }
+    }
+  ).firstMessage
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [activeTab, setActiveTab] = useState<ResultsTab>("clips")
   const [loading, setLoading] = useState(true)
@@ -338,7 +352,7 @@ function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-svh items-center justify-center text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center text-muted-foreground">
         {t("common.loading")}
       </div>
     )
@@ -346,7 +360,7 @@ function ProjectDetailPage() {
 
   if (error || !results) {
     return (
-      <div className="flex min-h-svh items-center justify-center text-destructive">
+      <div className="flex flex-1 items-center justify-center text-destructive">
         {error || "Project not found"}
       </div>
     )
@@ -428,7 +442,7 @@ function ProjectDetailPage() {
         (n.status === "failed" || (runFailed && n.status !== "done"))
     )
     return (
-      <div className="rounded-lg bg-muted/50 p-8 text-center">
+      <div className="rounded-lg bg-muted p-8 text-center">
         <p className="text-sm text-destructive">
           {node?.error || latestRun?.error || t("results.retryFailed")}
         </p>
@@ -534,7 +548,7 @@ function ProjectDetailPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col p-6 md:p-8">
+    <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto w-full max-w-7xl space-y-6">
         {/* Header */}
         <div className="space-y-1">
@@ -545,7 +559,7 @@ function ProjectDetailPage() {
         {/* Tabs + content only exist once a run has started; before that the
             project is awaiting plan confirmation (or setup). */}
         {!latestRun ? (
-          <div className="rounded-lg bg-muted/50 p-8 text-center">
+          <div className="rounded-lg bg-muted p-8 text-center">
             <p className="font-medium">{t("results.pendingPlan.title")}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {pendingIntent
@@ -558,7 +572,7 @@ function ProjectDetailPage() {
                 navigate({
                   to: "/projects/$id",
                   params: { id: projectId },
-                  search: { overlay: "intent" },
+                  search: { overlay: "chat" },
                 })
               }
             >
@@ -587,10 +601,19 @@ function ProjectDetailPage() {
         )}
       </div>
 
-      {search.overlay === "intent" && (
+      {(search.overlay === "chat" || search.overlay === "intent") && (
         <GenerationOverlay
           projectId={projectId}
-          prompt={pendingIntent?.prompt ?? prompt ?? ""}
+          prompt={firstMessage?.text ?? pendingIntent?.prompt ?? prompt ?? ""}
+          firstMessage={
+            firstMessage
+              ? {
+                  text: firstMessage.text,
+                  mentions: firstMessage.mentions ?? [],
+                  brandTemplateId: firstMessage.brandTemplateId,
+                }
+              : null
+          }
           initialIntent={
             pendingIntent ? normalizeIntent(pendingIntent.intent) : undefined
           }
@@ -598,7 +621,11 @@ function ProjectDetailPage() {
             pendingIntent ? (pendingIntent.reasons?.length ?? 0) > 0 : true
           }
           initialReasons={pendingIntent?.reasons ?? []}
-          brandTemplateId={pendingIntent?.brand_template_id ?? undefined}
+          brandTemplateId={
+            firstMessage?.brandTemplateId ??
+            pendingIntent?.brand_template_id ??
+            undefined
+          }
           onClose={() => navigate({ to: "/projects" })}
           onComplete={() => {
             // The overlay created the run after this page's initial fetch —
@@ -657,7 +684,7 @@ function ProjectDetailPage() {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-lg bg-muted/50 p-8 text-center text-sm text-muted-foreground">
+    <div className="rounded-lg bg-muted p-8 text-center text-sm text-muted-foreground">
       {text}
     </div>
   )

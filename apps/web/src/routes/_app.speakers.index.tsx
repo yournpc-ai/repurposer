@@ -71,7 +71,7 @@ function SpeakersPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-1 flex-col p-6 md:p-8">
+    <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto w-full max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div className="space-y-1">
@@ -133,7 +133,7 @@ function SpeakersPage() {
         </div>
 
         {speakers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg bg-muted/50 py-20 text-center">
+          <div className="flex flex-col items-center justify-center rounded-lg bg-muted py-20 text-center">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <Mic2 className="h-6 w-6 text-primary" />
             </div>

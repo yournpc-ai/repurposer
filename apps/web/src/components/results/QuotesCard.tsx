@@ -46,7 +46,7 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden ring-1 ring-border">
+    <Card className="overflow-hidden shadow-lg">
       {imageUrl ? (
         <div className="relative aspect-square bg-muted">
           <img

@@ -118,7 +118,7 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
 
   return (
     <>
-      <Card className="group flex flex-col gap-0 overflow-hidden ring-1 ring-border">
+      <Card className="group flex flex-col gap-0 overflow-hidden shadow-lg">
         {/* Thumbnail / player */}
         <div
           data-tour={tourTargets ? "results-video" : undefined}
