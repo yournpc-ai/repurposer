@@ -799,3 +799,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - "能力层 / 适配层"入架构词汇（NAMING §2）；新 op/skill 评审清单固定加一问："这是能力层成员，还是某适配器的呈现细节？"
 
 **Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan）、ADR-032（Operation Model——本条将其"三前端共用操作日志"的愿景钉为分层纪律）；CHAT_ARCH §9；`docs/tasks/recipe-mention.md` §2.5
+
+## ADR-034: chat 回合流式——单调用流式 + 增量散文提取，Accept 协商落地
+
+**Status**: Decided (2026-08-04)
+
+**Context**: chat 回合是一次性 JSON：thinking 之后计划卡/散文瞬间弹出，感知突兀（手测 2026-08-03）。要做真流式，但 LLM 判定输出是结构化 JSON（PlanAgent / ChatIntentAgent verdict），整体必须到齐才能校验执行——"流式 JSON"本身不可渲染。两条候选：①双调用拆分（先散文后结构）——多一次 LLM 调用，延迟与成本翻倍，且散文与判定可能自相矛盾；②**单调用流式 + 增量散文提取**——判定仍是同一 JSON 同一调用，服务端在字符流累积过程中提取散文字段增量作预览通道，信封照旧收尾。
+
+**Decision**:
+1. **单调用流式 + `ProseDeltaExtractor`**：verdict JSON 不变、校验不变、metering 不变（`stream_options.include_usage`）；`stream_extract.py` 状态机从累积字符流中提取散文 key（plan path `answer`，chat loop `text`/`summary`）的解码增量。提取失败一律静默降级为整包落地（dead 锁存）——流式是纯预览通道，信封永远权威。
+2. **Accept 协商 rollout**：`POST /chat` 按 `Accept: text/event-stream` 分流 SSE / JSON，JSON 路径逐字节不变——harness、旧前端、剧本零改动，可随时回退。SSE 帧：`assistant.delta`（0..N）→ 恰好一帧终态（`turn.completed` = 完整 ChatResponse / `turn.failed`）。
+3. **prompt 配合**：两个 agent 的 system prompt 加"散文字段放第一个 key"——否则 tasks 数组生成完才出散文，流式收益大头丢失（Pydantic 校验与 key 序无关，安全）。
+4. **前端 Streamdown 渲染**：assistant 散文（流式预览 + 静态历史）统一走 Streamdown——一次性解决 markdown 渲染缺口与流式中途不完整 markdown（未闭合 **/代码栅栏）的渲染闪烁；不引 AI SDK。`lib/chat-stream.ts` 禁自动重连（重试 POST 会重复落用户消息）。
+
+**Consequences**:
+- 计划卡类回合永远零 delta（结构化 JSON 不可增量渲染）——观感靠入场动画软化，不是缺陷。
+- 基础设施坑两枚（已修并记录）：BaseHTTPMiddleware 栈下 SSE 生成器必须自开 session（runs.py 先例）；请求日志中间件**不得补丁 `_receive`**——`_CachedRequest` 的 body 缓存自动回放，补丁会在断连探测时喂出陈旧 http.request 触发 starlette "Unexpected message received"。
+- 提取器成为散文流的唯一入口：新增 verdict 散文字段 = 注册新 target key，不得旁路。
+
+**Related**: CHAT_ARCH §8.6；ADR-028（RunPlan）；`app/chat/stream_extract.py` 测试套件（逐位切分夹具）

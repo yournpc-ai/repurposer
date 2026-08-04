@@ -58,6 +58,9 @@
 | 堆叠 | `stacking` | catalog 成员：新行淡入、旧行驻留、超 maxLines 滑动窗口 | — |
 | 工作室 | `studio` | 登录后应用区（landing 之外的 sidebar 世界）的统称：home composer、projects、editor；用户文案（`openStudio`、"欢迎来到你的工作室"）与内部文档同词。**只是空间名**，品类自称永远是 agent（N-23） | 不是 workbench/工作台（已退役，N-22）；不是品类词 |
 | 助手 | `assistant` | 对外文案的自称（N-25 双轨：对内技术 = agent）；zh 优先用代词"它" | 不是 agent（agent 只对内）；不是运营官（已退役，N-24） |
+| 任务书构建 agent | `PlanAgent` | chat plan path 的推理者：free-form 文本 → 任务书推断（三动作 generate/answer/start；曾名 `ComposerIntentAgent`，2026-08-04 单面化更名内化） | 不是第二意图入口——入口只有 `/chat` |
+| plan 路径 | `plan path` | chat service 内分派分支：首次 / 待决任务书的项目级回合 → 任务书构建/修订/确认（`chat()` 状态分派，asset scope 永不进） | 不是相位（confirm 相位已降为"有 pending task_book"的普通 chat 状态） |
+| 剧本验收 | `chat_scenarios.py` | 意图层验收 harness：预设多轮剧本对活 API 跑形态级断言（S1–S8），真实 LLM 不锁文案 | 不是测试套件（无测试套件纪律不变） |
 | 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `SKILL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
 | 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按 `SkillEntry.retries` 预算复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
@@ -100,6 +103,7 @@
 | N-24 | 品类词只用 `agent`，角色隐喻（运营官/操盘手/班子）全库退役 | 角色包装是话术 dressing：landing heroSubtitle 自称 "an AI agent"，PRD 曾写 "content-operations officer"——一份产品两个自称，朴素品类词胜出（2026-08-01 用户裁决）。PRD one-liner / CLAUDE.md 定位条 / N-22·N-23 引述同步清洗；"运营官"承载的洞察（用户不懂自媒体、产品指导并孵化其 IP）保留在 CLAUDE.md 定位条，仅标签退役 | §1 |
 | N-25 | 自称双轨：对内技术 = agent，对外文案 = assistant/助手（细化 N-24 适用范围） | "agent" 对非技术用户是行话（欧洲用户甚至会读成"经纪人/特工"）；技术实体不变——架构/PRD/CLAUDE.md/代码全用 agent，N-24 的隐喻禁令不变；hero/showcase 等对外文案一律 assistant（EN）/ 助手或代词"它"（zh，zh 优先代词）（2026-08-01 用户裁决）。对外文案中出现 "agent" 字样即违规 | §1、§6 |
 | N-25 | 任务书钉死归服务端配方注册表解析；mention 系统双端注册表化 | 钉死唯一发生地 = 服务端 `resolve_recipe_mentions`（composer/chat 两表面同一份解析器）；客户端 prior 构造路径退役（旧事故根因：隐式状态 + 客户端持钉）。提及类型与效果各自注册表化（recipe 第一成员、第五提及类型），后续 @ 类型只填注册项，禁类型分支补丁（2026-08-01 用户裁决：mention 做成可扩展架构，功能先只开 recipe）。**词汇修订**："硬编码"表述退役——正确表述是"静态注册表，随代码部署"（SKILL_REGISTRY 同款纪律） | §1、§5 |
+| N-26 | chat 流式词族：delta = 散文预览增量，envelope = 终帧信封 | 流式三层各一词：LLM 原始片 = fragment（`on_delta(fragment)` 入提取器）；解码后散文增量 = **delta**（SSE 帧 `assistant.delta`，纯预览，非事实源）；终帧 = **envelope**（`turn.completed`/`turn.failed`，完整 ChatResponse，永远权威）。机制名：`ProseDeltaExtractor`（唯一散文提取入口）、`MiniMaxClient.generate_stream`、service 拆分 `prepare_chat_turn`/`execute_chat_turn`、前端 `streamChat`。禁 chunk/token 混用（chunk 是 HTTP/LLM 传输单位，token 是计费单位，delta 才是渲染单位）（ADR-034） | §1、§5 |
 
 ## 4. API 命名
 

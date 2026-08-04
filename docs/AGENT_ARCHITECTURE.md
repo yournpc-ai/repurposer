@@ -260,7 +260,7 @@ After planning, `current_step` switches to the active output key (`clips`, `post
 
 | Surface | Change |
 |---------|--------|
-| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`; `clips` is no longer forced; default `clip_count` is 5. **`outputs` / `target_language` are optional** — when omitted on a full-scope request the route derives the task book via `ComposerIntentAgent` (2026-07-27: intent recognition moved into the pipeline; the composer sends only `instruction`) |
+| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`; `clips` is no longer forced; default `clip_count` is 5. **Task slots are required for full-scope requests** — the task book is built and confirmed in the chat plan path (2026-08-04: intent recognition unified into `/chat`; the composer does no intent recognition) |
 | `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
 | `Project` response | Includes `content_plan` |
 | `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
@@ -272,7 +272,7 @@ The following agents are **not** part of the 4-layer executor pipeline and remai
 
 - `app/skills/persona.py` — extracts speaker style and content memory from source texts.
 - `app/skills/reviser.py` — revises a single clip script from human feedback.
-- `app/chat/intent.py` — two intent agents (NAMING same-name audit): `ComposerIntentAgent` infers the generation task book (`outputs`, `clip_count`, `language`, distilled instruction) from the user's prompt — **invoked server-side by the `/generate` route when `outputs` is omitted** (2026-07-27; the composer no longer debounces `/infer-intent` from the browser — the HTTP endpoint remains for external/debug use). `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article. `ChatIntentAgent` serves the chat loop (CHAT_ARCHITECTURE §3).
+- `app/chat/intent.py` — two intent agents behind the single `/chat` surface (NAMING same-name audit, 2026-08-04): `PlanAgent` builds the generation task book (slots, language, dub languages, distilled instruction) from free-form text — invoked only by the chat service's **plan path** (first-turn projects and pending-task-book refinement turns; renamed from `ComposerIntentAgent`). `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article. `ChatIntentAgent` serves the chat loop (CHAT_ARCHITECTURE §3).
 - `app/skills/caption_translate.py` — translates caption lines.
 
 ## 10. Future work

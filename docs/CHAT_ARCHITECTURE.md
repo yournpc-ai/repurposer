@@ -1,6 +1,6 @@
 # Chat Architecture — Agent Interface 层
 
-> Status: ✅ v2 已实现（2026-07-26 backend + edit ops 接线；2026-07-27 GenerationOverlay 前端；2026-07-29/30 ask 原语期 1–4 + 期 4 补四全落地）。实施史见简报 `docs/tasks/done/chat-loop-v1.md` / `chat-loop-v2.md` / `intent-ask-primitive.md`；意图覆盖现状见 `INTENT_COVERAGE.md`。@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）。
+> Status: ✅ v2 已实现（2026-07-26 backend + edit ops 接线；2026-07-27 GenerationOverlay 前端；2026-07-29/30 ask 原语期 1–4 + 期 4 补四全落地；**2026-08-04 意图层单面化**：`/intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path——简报 `tasks/intent-surface-unification.md`）。实施史见简报 `docs/tasks/done/chat-loop-v1.md` / `chat-loop-v2.md` / `intent-ask-primitive.md`；意图覆盖现状见 `INTENT_COVERAGE.md`。@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）。
 > 补丁（2026-08-02，agent-loop-upgrade 一期，简报 `docs/tasks/agent-loop-upgrade.md`）：① 提案提示词注入参数 `Field` 描述（W2，provider-neutral）；② `DubClipParams.fork`——chat「再来一版」走派生新行、原版保留（W5）；③ morph runner 全部经 operations 记账（W4，壳/核同账，chat 配音/翻译/配乐/去口头禅可撤销）；④ step 级瞬时重试（`TransientNodeError` + `SkillEntry.retries`，W3）；⑤ recipe 合并代数三规则定格 remix 语义（W1，见 RECIPES §4.1）；⑥ 原生 tool-call 信道留待 provider 抽象（W6 不实施）——§1 原则 2 的"tool-calling"目前仍是 JSON-in-prompt 约定信道，非原生工具协议。
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；前置重构：`docs/tasks/done/backend-module-restructure.md`（chat/ 包是本文的代码家）
@@ -93,6 +93,20 @@ intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代
 ```
 
 `summary` 字段必填——它是打勾流的标题文案，也是消息记录里"这轮干了什么"的人话存档。
+
+### 3.1 plan path：任务书的构建 / 修订 / 确认（2026-08-04 单面化）
+
+`/chat` 是**唯一意图表面**。`chat()` 在 autoResume 之后按状态分派：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_intent` 为空）→ **plan path**；其余 → 上述四态提案。asset scope 永不进 plan path。
+
+plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 ComposerIntentAgent 时代相同）：
+
+- `generate` → reasons 推导（language_default / outputs_default / clip_count_default / clips_without_media）+ pin-merge（`ChatRequest.prior_intent` 缺省回落 stored）+ recipe mention 服务端 pin（LLM 前 fail-fast 422）→ `sync_task_book_question` dock
+- `answer` → 普通 assistant 消息，stored 任务书不被动
+- `start` → 复用 answer kind=start 路径起 run（唯一出生地）；dock 中的任务书以 `presented_plan` 摘要注入推断上下文——短确认看得见自己在确认什么（2026-08-04 硬化，此前裸"开始吧"在模糊首轮后 2/3 误判 generate）
+
+修订回合的累积 prompt 由**服务端**拼装（stored prompt + 本轮原文）——composer/前端永不构建累积 prompt 或 prior。PlanAgent 的 LLM 故障兜底 = 默认任务书 dock（可编可 Start，永不白屏）；`outputs:null` 等松散输出由 schema 读容忍接住。
+
+### 3.2 四态边界规则
 
 **answer 态边界（写死在 agent 规则里）**：只在无工作请求且无歧义时用（能力/进度/解释/闲聊）；要干活 → task_list/edit_ops；读数有歧义 → ask——answer 永不当偷懒出口。进度问题凭 §6 的节点级进度段照实答；发布意图 → 引导到产物卡发布按钮；品牌/说话人等身份设置 → 导航到对应页面。
 
@@ -193,7 +207,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 **进度面收编（2026-07-28）**：GenerationStepper 弹窗与后端 `ui_step` 退役——进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
 
-**计划确认的持久化与恢复（2026-07-28，2026-07-30 B 组修订）**：`/projects/{id}/intent` 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 reasons / brand_template_id；answer 回合不写，免得覆盖用户在确认的计划），`/generate` 确认时清除。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=intent`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
+**计划确认的持久化与恢复（2026-07-28，2026-08-04 单面化修订）**：plan path 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 reasons / brand_template_id；answer 回合不写，免得覆盖用户在确认的计划），run 启动时清除（answer kind=start 或 `/generate`）。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=chat`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
 
 ### 8.5 QuestionDock 与 question/answer（ask 原语，期 1/3 已落）
 
@@ -203,13 +217,25 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **停靠法则**：待决问题永远停靠 input 正上方的 **QuestionDock**（✓ + 问句 + cost_hint? + 按钮组含 bail）；**同一时间最多一个待决**——新题落库前旧题 auto-bail（`answer.text="superseded"` 机器标记）。回答瞬间坍缩成 **QA 双层消息**入档（`QaPair`）。
 - **待决重建零内存态**：`latest_pending_question` = 会话最新未答 question 的行查询（Mastra `listSuspendedRuns` 同款），GET `/chat/conversation` 带 `pending_question`——刷新/跨设备 dock 复活免费。
 - **answer 端点即恢复**：`POST /chat/messages/{id}/answer` 写答案即解除阻塞（不显式命名 resume）。task_book 分派：bail → 清 pending_intent 回 draft（prompt 已 seed 进会话，可重开）；`start`（一等 answer kind）→ 从 pending_intent 起 run 并写 `workflow_run_id`。choice 分派（期 3）：记录后续聊——响应 `AnswerResponse{answered_question, follow_up}`（与 `ChatResponse.answered_question` 同角色同名，B2），option 答案回填 label 进 `answer.text`。重复回答 409。`/generate` 兜底 settle（`mark_task_book_started`）——两路径共用"一行一答"不变量。
-- **/intent 响应判别联合（B1/B4 + G-1）**：`POST /projects/{id}/intent` 返回 `{type:"plan", intent, reasons} | {type:"answer", text} | {type:"started", run_id, answered_question}`——answer 回合的问答双方落普通消息行（确认相位对话从此与"一切皆消息行"一致，刷新可重放），且 **answer 回合不覆盖 stored 任务书**；`started` 是确认相位的原话确认（G-1：`InferredIntent.action="start"` → 复用 answer kind=start 路径起 run，dock 的 autonomy 档随 `ProjectIntentRequest.autonomy` 透传不丢档；用户原话经 `record_intent_turn` 入档，无可启动对象时 re-dock 存量书或降级 plan，同样不覆盖 stored 任务书）。`needs_clarification` 布尔已摘除（`reasons.length > 0` 可推导，存量行读取容忍）。请求带 `turn`（本轮用户原文）——refinement 发累积 prompt 做推理但只把新行入档。
+- **plan path 回合形态（B1/B4 + G-1，2026-08-04 自 /intent 迁入）**：dock 任务书 = `ChatResponse.assistant_message` 携带 pending task_book question 行；answer 回合的答复落普通消息行且**不覆盖 stored 任务书**；原话确认（G-1：PlanAgent 判 `start`）复用 answer kind=start 路径起 run，`ChatResponse` 携带 `run_id` + `answered_question`（dock 的 autonomy 档随 `ChatRequest.autonomy` 透传不丢档——打字确认与 dock Start 同待遇）；无可启动对象时 re-dock 存量书或降级 plan，同样不覆盖 stored 任务书。`needs_clarification` 布尔已摘除（`reasons.length > 0` 可推导，存量行读取容忍）。修订发累积 prompt 做推理（服务端拼装），每轮用户原文各自入档。
 - **入口约束归出生地（期 4 补）**：clips-media 门、slot count 边界（`SLOT_COUNT_LIMITS`：clips 1-10 / quotes 1-20 / carousel 2-15）、targeted scope 校验、mode② requires 全部在 `create_run` 内拒绝（ValueError → 请求层 422 / chat 层反问兜底）——`/generate`、task_book start、chat 派发三条入口不再各持一份 guard。`create_run` 只 flush 不 commit：run、启动它的 answer、project 状态落在同一请求事务里，提交点唯一。
 - **task_book 形态（期 1）**：计划卡留在消息流做审阅面板（编辑属流内），Start/Cancel 决策 + **Auto/Review 自治档**移入 dock；`autonomy` 经 AnswerRequest/GenerateRequest/`TaskSpec` 落 run.context（行为期 4 生效：review 档 full run 插方向 checkpoint，auto/targeted/mode② 不插）。needs_clarification reasons（期 3）随 question 人话原文落库（数据存键，渲染时本地化）。
 - **choice 形态与 autoResume（期 3）**：dock 渲染选项按钮组（字母徽章镜像映射规则）；待决中自由文本确定性映射——命中选项字母/序号/原文 → option 回答，否则 allow_freeform → freeform，否则按新 intent 处理、问题保持待决（零 LLM；task_book 待决不参与）。`ChatResponse.answered_question` 携带本回合掉的问题行供 QA 入档。成本 quote（confirm 形态，cost_hint 解剖位已预留）归 v3。
 - **checkpoint 形态（期 4）**：方向检查点是 choice 问题 + `workflow_run_id` 分派标记。`Suspend` 异常把瘦节点停进 `waiting`（选项住 `spec.suspend_payload`）、run 停进 `WAITING_HUMAN`；答案端点/autoResume 写 `spec.answer`、节点回 pending、run 回 RUNNING——队列式重入（runner 从顶上重跑，answer 分支直达 done），不是调用栈续跑。选项代码派生自 `key_arguments`（零 LLM）；bail = 节点 done(spec.bailed) + 下游级联 skipped("user bailed") + run COMPLETED（永不 failed）；`director_plan` 经 `task_book.direction` 消费（option → 优先论点，freeform → 指引原文，默认 → 现状；slot.focus > checkpoint > director）。**过期**：park 超过 `checkpoint_expiry_seconds`（默认 30 分钟）由 worker 扫描自动以默认项回答并续跑（`answer.text="expired"` 机器标记；review 档超时降级为 auto 档，兑现"离开不中断"，永不 auto-bail）。**多 run 并停**：新题 dock 取代开口 checkpoint 题时同笔级联 bail 那个 run（`finalize_bailed_runs` 收官 COMPLETED）——单待决不变量不会搁浅 run。
 
 **量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
+
+### 8.6 chat 回合 SSE（2026-08-04）
+
+**单调用流式 + 增量散文提取**：LLM 判定仍是同一 JSON、同一调用（不加延迟不加成本）；服务端在 JSON 字符流累积过程中用状态机（`ProseDeltaExtractor`）提取散文字段（plan path 的 `answer` / chat loop 的 `text`·`summary`），把字符增量实时推给前端；流末完整 JSON 走现有 Pydantic 校验，现有 `ChatResponse` 作终帧收尾。
+
+- **Accept 协商**：`POST /chat` 内容协商——普通调用拿一次性 JSON（201，行为逐字节不变）；`Accept: text/event-stream` 拿流。harness / 旧前端零改动，随时回退。
+- **协议**：`assistant.delta` `{"text"}`（0..N，有序拼接的散文预览）；终态恰好一帧——`turn.completed`（完整 ChatResponse，**信封永远赢**，整体替换预览气泡）或 `turn.failed`（`{"detail"}`，流中失败，不落库）。15s 心跳注释帧。
+- **计划卡永远流不了**（结构化 JSON 必须完整到齐）——generate/start 回合零 delta，观感不变；收益在散文回合。两个 agent 的 system prompt 各加"散文字段放第一个 key"，否则 tasks 数组生成完才出散文。
+- **提取器纪律**：目标 key 只在 brace 深度 ≤2 接受（`ops[i].params.text` 深度 ≥3 绝不误触发）；think 前缀跳过；值非字符串 → 静默零 delta；任何意外 → dead 锁存降级为整包落地。重试只发生在首个 delta 发出前（流中失败直接抛，走现有 fallback）。
+- **service 拆两段**：`prepare_chat_turn`（dispatch 决策之前全部，所有 4xx 在此抛）+ `execute_chat_turn(db, prepared, request, on_delta)`；`chat()` = prepare + execute(on_delta=None)，JSON 路径不变。**单次末尾 commit 不变**——SSE 生成器自开 `AsyncSessionLocal`（BaseHTTPMiddleware 栈会在路由返回后关掉请求级 session，runs.py 同款）；断连取消 task → 不 commit → 回滚，"失败回合什么都不落库"契约保住。
+- **前端**：`lib/chat-stream.ts`（fetchEventSource POST，**禁自动重连**——重试会重复落用户消息；非 2xx 读 JSON detail 保持 422 toast 语义）。两个面同款节奏：发送 → thinking → 首个 delta 才建预览气泡（Streamdown `mode="streaming"` 渲染不完整 markdown）→ 信封整体替换 + 跑现有完成逻辑。静态历史消息同走 Streamdown（`mode="static"`）。
+- **answer 端点保持 JSON**（dock 点击低频；start 路径无 LLM）。
 
 ## 9. Edit Ops 边界（v2，归 Operation Model）
 

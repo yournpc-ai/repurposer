@@ -29,7 +29,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 
 ## 2. Main Flow Call Sequence
 
-The homepage input box is the main entry point. After the user clicks Generate, the frontend calls the following endpoints in sequence:
+The homepage input box is the main entry point. After the user clicks send, the frontend creates the project, uploads the material, then navigates to the project page where the overlay chat sends the draft as the first chat message — **intent recognition lives entirely in the chat loop** (intent-surface-unification, 2026-08-04; there is no separate intent endpoint):
 
 ```
 POST /api/v1/projects
@@ -40,9 +40,11 @@ POST /api/v1/projects/{project_id}/assets
   → Upload raw material (file or prompt text)
   → Returns { id, type, processing_status: "pending", ... }
 
-POST /api/v1/projects/{project_id}/generate
-  → Trigger async generation
-  → Returns { run_id, status: "pending" }
+POST /api/v1/chat
+  → The first message enters the plan path: the PlanAgent builds the task
+    book, which docks as a pending task_book question (§10)
+  → Confirming it (POST /chat/messages/{id}/answer with kind="start", or a
+    prose "looks good, start it" via /chat) starts the run
 ```
 
 After that, the frontend navigates to the project detail page and polls the following endpoints to check results:
@@ -284,8 +286,12 @@ Request:
 
 ```json
 {
-  "clip_count": 5,
-  "outputs": ["clips", "post", "quotes", "article", "carousel"],
+  "slots": [
+    { "type": "clips", "count": 5 },
+    { "type": "post", "language": "de" },
+    { "type": "quotes" },
+    { "type": "article" }
+  ],
   "target_language": "en",
   "brand_template_id": "uuid | null",
   "instruction": "聚焦实体机器人角度，hook 要狠",
@@ -301,9 +307,9 @@ Request:
 }
 ```
 
-- `outputs`: any subset of `clips | post | quotes | article | carousel`. Clips are generated only when included. **Optional**: when omitted on a `full`-scope request, the route derives the task book (`outputs` / `target_language` / `clip_count` / distilled instruction) from `instruction` via `ComposerIntentAgent` — this is the composer path (the web composer sends only `instruction` + `brand_template_id`). Explicit `outputs` (retries, targeted runs, API callers) skips intent.
-- `target_language`: optional; derived by the intent step when omitted (fallback `en`).
-- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`; the intent step overrides it when the instruction names a quantity).
+- `slots`: the task book — one `IntentSlot` per requested output (`clips | post | quotes | article | carousel`, with optional `count` / `focus` / `language` / `tone_override`; same-type multi slots express multi-language versions). **Required for `full`-scope requests** — the task book is built and confirmed in the chat plan path (§10); a full-scope call without explicit `slots` is rejected with `422`. Non-full scopes (retries, targeted runs) may omit them and fall back to the default slot set.
+- `target_language`: optional (fallback `en`).
+- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`).
 - `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
 - `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
@@ -452,7 +458,7 @@ Response: a `application/zip` file download with `Content-Disposition: attachmen
 
 ## 10. Chat
 
-Project-scoped and asset-scoped conversations persist the original prompt and all follow-up instructions. The `/generate` endpoint automatically creates a project-scoped conversation and stores the user's `instruction` as the first user message.
+Project-scoped and asset-scoped conversations persist the original prompt and all follow-up instructions. **`POST /chat` is the only intent surface** (intent-surface-unification, 2026-08-04): the task book is built, refined and confirmed here — the retired `/projects/{id}/intent` and `/infer-intent` endpoints no longer exist.
 
 ### Get or Create Conversation
 
@@ -477,13 +483,22 @@ Request:
   "asset_type": "clip | derivative | null",
   "message": "make the hook shorter",
   "attachments": [],
-  "mentions": []
+  "mentions": [],
+  "prior_intent": null,
+  "brand_template_id": "uuid | null",
+  "autonomy": "auto | review | null"
 }
 ```
 
-`mentions` pins @ entity references to definite ids (`[{type, id, label}]`, `type` ∈ `asset | output | transcript_segment | workflow_step`); the picker UI lands in a later iteration. Messages echo `mentions` back.
+`mentions` pins @ entity references to definite ids (`[{type, id, label}]`, `type` ∈ `asset | output | transcript_segment | workflow_step | recipe`); a `recipe` mention is resolved server-side into pinned task-book slots (fail-fast 422 on unknown / reserved / multiple recipes). Messages echo `mentions` back.
 
-Response: `{ conversation_id, user_message, assistant_message, run_id, answered_question }`. The assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
+**Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). 15s heartbeat comment frames. Plan-card turns emit zero deltas (structured JSON must arrive whole); the streaming benefit is prose turns. Clients must not auto-reconnect — a retried POST persists the user message again.
+
+`prior_intent` and `brand_template_id` are plan-path transports (never persisted on the message): `prior_intent` is the review panel's current task book — its `explicit` slots pin through re-inference; `brand_template_id` is written into the pending intent only when a task book docks (a later turn omitting it never clobbers the stored choice). `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
+
+**Plan path** (project scope, before the first run or while a task book is pending): the PlanAgent builds / refines the task book. Response shapes by verdict — `generate`: `assistant_message` is the docked `task_book` question (the book itself is on `GET /projects/{id}/results` → `pending_intent`); `answer`: a plain informational reply; `start` (prose confirmation): the run starts — `run_id` is set and `answered_question` carries the settled task book.
+
+**Chat loop** (projects with runs, and all asset scopes): the assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
 
 ### List Conversation Messages
 
