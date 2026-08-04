@@ -1,6 +1,9 @@
 """MiniMax M3 client."""
 
+import asyncio
+import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -114,6 +117,119 @@ class MiniMaxClient:
         raw_content = data["choices"][0]["message"]["content"]
         content = self._clean_json(raw_content)
 
+        try:
+            return response_model.model_validate_json(content)
+        except ValidationError as e:
+            logger.error(
+                "minimax_json_validation_failed",
+                error=str(e),
+                raw_content=content[:1000],
+            )
+            raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+
+    async def generate_stream(
+        self,
+        messages: list[dict],
+        response_model: type[T],
+        temperature: float = 0.3,
+        thinking: bool = False,
+        on_delta: Callable[[str], Awaitable[None] | None] | None = None,
+    ) -> T:
+        """Streaming variant of ``generate`` — same single verdict call, but the
+        raw response text is also forwarded chunk-by-chunk via ``on_delta`` as
+        it arrives (chat SSE 流式: the service layer extracts prose previews
+        from these fragments; the returned value is still the fully validated
+        ``response_model``, parsed from the accumulated text exactly like
+        ``generate``).
+
+        Spike-verified (2026-08-04): MiniMax streams fine with
+        ``response_format: json_object``; ``stream_options.include_usage``
+        delivers usage in a final choice-less chunk so ADR-025 metering is
+        preserved. A ``<think>`` preamble may precede the JSON — consumers of
+        ``on_delta`` must tolerate it (the extractor keys off JSON depth).
+
+        Retry policy differs from ``generate``: tenacity can't express "retry
+        only until a side effect", so the loop is manual — retries happen
+        only before the first ``on_delta`` call (a retry after emitted deltas
+        would double-send preview text downstream); mid-stream failures raise
+        MiniMaxError and callers take the same fallback paths as today.
+        """
+        if not self.api_key:
+            raise MiniMaxError("MINIMAX_API_KEY not configured")
+
+        payload: dict = {
+            "model": settings.minimax_model,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+            "temperature": temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if thinking:
+            payload["thinking"] = True
+
+        emitted = False
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            if attempt:
+                await asyncio.sleep(min(2**attempt, 10))
+            accumulated = ""
+            usage: dict | None = None
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    ) as response:
+                        if response.status_code != 200:
+                            await response.aread()
+                            _raise_for_status(response)
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data = line[5:].strip()
+                            if not data or data == "[DONE]":
+                                continue
+                            try:
+                                chunk = json.loads(data)
+                            except json.JSONDecodeError:
+                                logger.warning("minimax_stream_bad_frame", frame=data[:200])
+                                continue
+                            if chunk.get("usage"):
+                                usage = chunk["usage"]
+                            choices = chunk.get("choices") or []
+                            if not choices:
+                                continue
+                            fragment = (choices[0].get("delta") or {}).get("content")
+                            if not fragment:
+                                continue
+                            accumulated += fragment
+                            if on_delta is not None:
+                                emitted = True
+                                result = on_delta(fragment)
+                                if result is not None:
+                                    await result
+            except (httpx.TransportError, MiniMaxError) as exc:
+                last_exc = exc
+                if emitted or attempt == 2:
+                    raise MiniMaxError(str(exc)) from exc
+                continue
+            break
+        else:
+            raise MiniMaxError(str(last_exc))
+
+        # ADR-025 metering (same contract as ``generate``: report before
+        # validation — tokens were consumed either way).
+        from app.metering import record_usage
+
+        await record_usage(usage)
+
+        content = self._clean_json(accumulated)
         try:
             return response_model.model_validate_json(content)
         except ValidationError as e:

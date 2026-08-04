@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal, init_db
-from app.chat.routes import chat_router, intent_router
+from app.chat.routes import chat_router
 from app.distribution.routes import router as distribution_router
 from app.memory.brand import seed_default_brand_template
 from app.memory.routes import brand_templates_router, speakers_router
@@ -108,21 +108,17 @@ async def log_requests(request, call_next):
         return await call_next(request)
     start = time.monotonic()
 
-    # Only buffer JSON request bodies; endpoints re-read the body downstream,
-    # so the consumed stream is replayed via a patched receive channel.
+    # Only buffer JSON request bodies. No receive-channel patching needed:
+    # under BaseHTTPMiddleware the request is a _CachedRequest — body() caches
+    # the body and replays it to downstream handlers automatically. Patching
+    # _receive actively breaks streaming responses: after the body is consumed,
+    # StreamingResponse's disconnect probe calls receive() expecting
+    # http.disconnect, and a replayed http.request trips starlette's
+    # "Unexpected message received" guard (chat SSE, 2026-08-04).
     request_body: bytes | None = None
     request_content_type = request.headers.get("content-type", "")
     if "application/json" in request_content_type:
         request_body = await request.body()
-
-        async def receive():
-            return {
-                "type": "http.request",
-                "body": request_body,
-                "more_body": False,
-            }
-
-        request._receive = receive
 
     response = await call_next(request)
 
@@ -224,7 +220,6 @@ app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operation
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
 app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
-app.include_router(intent_router, prefix="/api/v1", tags=["intent"])
 app.include_router(
     brand_templates_router, prefix="/api/v1/brand-templates", tags=["brand-templates"]
 )

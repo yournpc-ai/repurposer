@@ -109,8 +109,8 @@ def resolve_recipe_mentions(mentions: list[ChatMention]) -> RecipeEntry | None:
     """Resolve the recipe pinned by a turn's mentions (task-book pin family).
 
     Returns ``None`` when no recipe is mentioned (path identical to today).
-    Raises ``ValueError`` on a rejected pin — the /intent surface maps it to
-    422, the chat surface to a re-ask fallback:
+    Raises ``ValueError`` on a rejected pin — the chat plan path maps it to
+    422 (fail-fast, before any LLM call):
 
     - more than one recipe per run (v1: a recipe is a complete task book;
       recipe composition is a later iteration);

@@ -7,9 +7,10 @@
  * server-side and the results page reflects it.
  */
 
-import { useEffect, useState } from "react"
-import { Send, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Send, Square, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import { LogoMark } from "@/components/LogoMark"
 import { Button } from "@/components/ui/button"
@@ -27,13 +28,16 @@ import {
 } from "@/components/ui/message"
 import {
   MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 import { apiFetch } from "@/lib/api"
+import { streamChat } from "@/lib/chat-stream"
 import type { Output } from "@/lib/types"
+import { Streamdown } from "streamdown"
 
 import { MentionPicker, type ChatMention } from "./MentionPicker"
 import { OpsCard } from "./OpsCard"
@@ -55,6 +59,8 @@ interface ChatMessage {
   role: "user" | "assistant" | "system"
   content: string | null
   workflow_run_id: string | null
+  /** Live SSE preview bubble — replaced by the turn.completed envelope. */
+  streaming?: boolean
   mentions?: ChatMention[]
   question?: {
     kind: "task_book" | "choice" | "confirm"
@@ -98,6 +104,7 @@ export function ChatModal({
   // chat loop dock above the input; answered ones archive as QA pairs.
   const [pendingQuestion, setPendingQuestion] = useState<ChatMessage | null>(null)
   const [answering, setAnswering] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!open || !asset) return
@@ -181,27 +188,51 @@ export function ChatModal({
     setMentions([])
     setIsSending(true)
 
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    // SSE transport: prose deltas land in a preview bubble as they generate;
+    // the terminal turn.completed envelope replaces it and drives the
+    // landing below (envelope always wins).
+    const streamId = crypto.randomUUID()
     try {
-      const res = await apiFetch("/api/v1/chat", {
-        method: "POST",
-        body: {
+      const data = await streamChat<{
+        user_message: ChatMessage
+        assistant_message: ChatMessage
+        answered_question?: ChatMessage | null
+      }>(
+        {
           project_id: projectId,
           asset_id: asset.id,
           asset_type: assetType,
           message: instruction,
           mentions: optimisticUser.mentions,
         },
-        toast: false,
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.detail || "Chat failed")
-      }
-      const data = (await res.json()) as {
-        user_message: ChatMessage
-        assistant_message: ChatMessage
-        answered_question?: ChatMessage | null
-      }
+        {
+          signal: ctrl.signal,
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.some((m) => m.id === streamId)
+                ? prev.map((m) =>
+                    m.id === streamId
+                      ? { ...m, content: (m.content ?? "") + delta }
+                      : m
+                  )
+                : [
+                    ...prev,
+                    {
+                      id: streamId,
+                      role: "assistant",
+                      content: delta,
+                      workflow_run_id: null,
+                      streaming: true,
+                    },
+                  ]
+            )
+          },
+        }
+      )
+      // Envelope wins — the preview placeholder lifts away.
+      setMessages((prev) => prev.filter((m) => m.id !== streamId))
       // Replace the optimistic user message with the persisted pair. An
       // autoResumed question archives its QA pair first; a NEW pending
       // question docks instead of entering the flow (prohibited #2).
@@ -220,18 +251,36 @@ export function ChatModal({
         ...next,
       ])
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: e instanceof Error ? e.message : t("chat.failed"),
-          workflow_run_id: null,
-        },
-      ])
+      // Stopped by the user: the bubble stays (the server may still finish
+      // the turn); the partial preview settles as static text.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === streamId ? { ...m, streaming: false } : m))
+        )
+        return
+      }
+      // The server commits nothing on a failed turn — roll the optimistic
+      // bubble (and any streamed preview) back out and restore the draft
+      // (+ mentions) for a retry.
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== optimisticUser.id && m.id !== streamId)
+      )
+      setInput(instruction)
+      setMentions(optimisticUser.mentions ?? [])
+      toast.error(e instanceof Error ? e.message : t("chat.failed"))
     } finally {
-      setIsSending(false)
+      if (abortRef.current === ctrl) {
+        abortRef.current = null
+        setIsSending(false)
+      }
     }
+  }
+
+  /** Stop the in-flight reply (aborts the fetch; the user's message stays). */
+  const handleStop = () => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setIsSending(false)
   }
 
   /** Docked choice question answered by a button click — the endpoint
@@ -306,7 +355,22 @@ export function ChatModal({
                                 variant={isUser ? "default" : "muted"}
                                 align={isUser ? "end" : "start"}
                               >
-                                <BubbleContent className="text-sm">{m.content}</BubbleContent>
+                                <BubbleContent className="text-sm">
+                                  {/* Assistant prose is markdown (Streamdown
+                                      parses incomplete markdown safely
+                                      mid-stream); user text stays plain. */}
+                                  {isUser ? (
+                                    m.content
+                                  ) : (
+                                    <Streamdown
+                                      mode={m.streaming ? "streaming" : "static"}
+                                      isAnimating={m.streaming}
+                                      className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
+                                    >
+                                      {m.content}
+                                    </Streamdown>
+                                  )}
+                                </BubbleContent>
                               </Bubble>
                             </BubbleGroup>
                           ) : null}
@@ -343,7 +407,10 @@ export function ChatModal({
                     </MessageScrollerItem>
                   )
                 })}
-                {(isLoadingHistory || isSending) && (
+                {/* Working bubble covers send → first delta; the streaming
+                    preview bubble then takes over as the progress signal. */}
+                {(isLoadingHistory ||
+                  (isSending && !messages.some((m) => m.streaming))) && (
                   <MessageScrollerItem key="working">
                     <Message align="start">
                       <MessageContent className="items-start">
@@ -361,6 +428,8 @@ export function ChatModal({
                 )}
               </MessageScrollerContent>
             </MessageScrollerViewport>
+            {/* Jump-to-latest pill when scrolled up off the bottom. */}
+            <MessageScrollerButton direction="end" />
           </MessageScroller>
         </MessageScrollerProvider>
 
@@ -396,7 +465,7 @@ export function ChatModal({
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 rounded-lg bg-muted p-2">
             <MentionPicker
               projectId={projectId}
               excludeIds={mentions.map((m) => m.id)}
@@ -421,17 +490,29 @@ export function ChatModal({
                   : t("chat.assetPlaceholder")
               }
               rows={1}
-              className="max-h-32 min-h-9 flex-1 resize-none"
+              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-card shadow-none focus-visible:ring-0"
             />
-            <Button
-              size="icon"
-              className="h-9 w-9 shrink-0 rounded-full"
-              disabled={!input.trim() || isSending}
-              onClick={handleSend}
-              aria-label={t("chat.send")}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+            {isSending ? (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-9 w-9 shrink-0 rounded-full"
+                onClick={handleStop}
+                aria-label={t("chat.stop")}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                className="h-9 w-9 shrink-0 rounded-full"
+                disabled={!input.trim()}
+                onClick={handleSend}
+                aria-label={t("chat.send")}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

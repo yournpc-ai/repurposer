@@ -120,7 +120,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 |---|---|---|---|
 | **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`、`app/skills/`、`pipeline/rendering.py` | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（二态 dispatch：task_list→create_run / edit_ops→operations）、`chat/intent.py`（op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（plan path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（PlanAgent + ChatIntentAgent，op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第 9 周联调） |
 | **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |

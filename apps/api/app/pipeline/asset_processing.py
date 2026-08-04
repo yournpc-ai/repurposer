@@ -49,7 +49,7 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     """Whether the project has a renderable media source (file-backed).
 
     Clips need video / audio / image / slides bytes to render. The run
-    birthplace gates on this predicate (``create_run``); the /intent route
+    birthplace gates on this predicate (``create_run``); the chat plan path
     also reads it to surface the clips-needs-media clarification reason.
     """
     result = await db.execute(

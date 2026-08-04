@@ -2,12 +2,13 @@
 
 /** GenerationOverlay — the post-composer conversation surface.
  *
- * Full-screen chat (Opus-style): the composer prompt opens the conversation,
- * the inferred task book arrives as an editable plan card pinned in the flow,
- * and confirming starts the run — whose steps light up below. The bottom
- * input is always live: before confirmation it refines the plan (intent
- * re-inference, or a plain answer to a question); after the run starts it
- * talks to the project-scoped chat loop (CHAT_ARCH §3).
+ * Full-screen chat (Opus-style): the composer draft opens the conversation
+ * (sent as the first /chat message on mount), the inferred task book arrives
+ * as an editable plan card pinned in the flow, and confirming starts the run
+ * — whose steps light up below. The bottom input is always live and every
+ * turn goes through the same /chat endpoint (intent-surface-unification W2):
+ * the server routes plan-path turns (task-book build / refine / confirm) and
+ * chat-loop turns itself.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -33,7 +34,9 @@ import {
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { streamChat } from "@/lib/chat-stream"
 import { useRunEvents } from "@/lib/use-run-events"
+import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -59,6 +62,7 @@ import {
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import {
   MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -110,7 +114,7 @@ const SLOT_COUNT_DEFAULT: Record<string, number> = {
 const BOOK_LANGUAGE = "__book__"
 
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]["key"]
-type Phase = "confirm" | "running" | "answer"
+type Phase = "confirm" | "running" | "chat"
 
 export interface InferredIntent {
   action: "generate" | "answer"
@@ -185,6 +189,9 @@ interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** Live SSE preview bubble: deltas append until the turn.completed
+   * envelope replaces it (the envelope always wins). */
+  streaming?: boolean
   /** QA archive item (answered question collapsing into the flow). */
   qa?: { question: string; answer: string; muted: boolean }
 }
@@ -206,14 +213,6 @@ interface QuestionMessage {
   answer: QaAnswer | null
   workflow_run_id: string | null
 }
-
-/** The /intent turn's discriminated union (B1 + G-1): a plan to confirm, a
- * prose answer, or the docked task book started by a prose confirmation
- * ("looks good, start it" — the QA archive row rides along). */
-type IntentTurnResponse =
-  | { type: "plan"; intent: unknown; reasons?: string[] }
-  | { type: "answer"; text: string }
-  | { type: "started"; run_id: string; answered_question: QuestionMessage }
 
 interface ProjectAsset {
   id: string
@@ -245,6 +244,14 @@ function assetFilename(fileUrl: string | null): string {
 interface GenerationOverlayProps {
   projectId: string
   prompt: string
+  /** The composer's draft, handed over via router state: sent as the first
+   * /chat message on mount (mentions + brand choice ride along). Null on
+   * restored sessions — the conversation is already on the server. */
+  firstMessage?: {
+    text: string
+    mentions: { type: string; id: string; label: string }[]
+    brandTemplateId?: string
+  } | null
   initialIntent?: InferredIntent | null
   initialNeedsClarification?: boolean
   /** needs_clarification reason keys from the last inference — the dock
@@ -252,7 +259,7 @@ interface GenerationOverlayProps {
   initialReasons?: string[]
   brandTemplateId?: string
   /** Attach to an already-running generation (returning visitor): skips the
-   * confirm phase and the intent fallback, lands straight on the step flow. */
+   * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
   onClose: () => void
   onComplete: () => void
@@ -342,14 +349,20 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
   )
 }
 
-/** Assistant prose — plain text, no bubble (Opus pattern). */
-function AssistantText({ text }: { text: string }) {
+/** Assistant prose — markdown, no bubble (Opus pattern). Streamdown parses
+ * incomplete markdown safely mid-stream, so the live preview and the settled
+ * message share one renderer. */
+function AssistantText({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
     <Message align="start">
       <MessageContent>
-        <p className="max-w-[85%] whitespace-pre-wrap text-sm leading-relaxed">
+        <Streamdown
+          mode={streaming ? "streaming" : "static"}
+          isAnimating={streaming}
+          className="max-w-[85%] text-sm leading-relaxed motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
+        >
           {text}
-        </p>
+        </Streamdown>
       </MessageContent>
     </Message>
   )
@@ -372,6 +385,7 @@ function ThinkingRow({ label }: { label: string }) {
 export function GenerationOverlay({
   projectId,
   prompt,
+  firstMessage,
   initialIntent,
   initialNeedsClarification = true,
   initialReasons,
@@ -383,11 +397,7 @@ export function GenerationOverlay({
   const { t } = useTranslation()
 
   const [phase, setPhase] = useState<Phase>(
-    initialRunId
-      ? "running"
-      : initialIntent?.action === "answer"
-        ? "answer"
-        : "confirm"
+    initialRunId ? "running" : initialIntent ? "confirm" : "chat"
   )
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
@@ -401,11 +411,17 @@ export function GenerationOverlay({
           specific_instruction: prompt,
         }
   )
-  // The plan card renders only once a real inference has landed (the
-  // composer normally hands one over; the fetch below is the fallback).
-  // Attach mode never shows the card, so it starts ready.
+  // The plan card renders only once a real inference has landed (a restored
+  // session hands one over; a fresh navigation gets it from the first /chat
+  // turn's refetch). Attach mode never shows the card, so it starts ready.
   const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
   const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
+  // Mirrored in a ref: async chat continuations capture stale closures, and
+  // they must be able to tell a run went live while their turn was in flight.
+  const runIdRef = useRef<string | null>(initialRunId ?? null)
+  useEffect(() => {
+    runIdRef.current = runId
+  }, [runId])
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -437,8 +453,8 @@ export function GenerationOverlay({
   })
 
   const autoStartedRef = useRef(false)
-  const intentFetchedRef = useRef(false)
-  const followUpsRef = useRef<string[]>([])
+  const autoStartArmedRef = useRef(false)
+  const firstMessageSentRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
@@ -456,6 +472,29 @@ export function GenerationOverlay({
       if (!res.ok) return null
       const data = (await res.json()) as { pending_question?: QuestionMessage | null }
       return data.pending_question ?? null
+    } catch {
+      return null
+    }
+  }, [projectId])
+
+  /** The panel's task book + reasons live on the project (pending_intent) —
+   * refetched after every plan-path turn (first inference, refinements). */
+  const fetchPendingIntent = useCallback(async (): Promise<{
+    intent: unknown
+    reasons?: string[]
+    brand_template_id?: string | null
+  } | null> => {
+    try {
+      const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
+        toast: false,
+      })
+      if (!res.ok) return null
+      const data = (await res.json()) as { pending_intent?: {
+        intent: unknown
+        reasons?: string[]
+        brand_template_id?: string | null
+      } | null }
+      return data.pending_intent ?? null
     } catch {
       return null
     }
@@ -630,7 +669,7 @@ export function GenerationOverlay({
   }, [terminal])
 
   /** Shared landing for every path that starts a run (the dock's Start
-   * button, a prose confirmation via /intent): the answered task book
+   * button, a prose confirmation via /chat): the answered task book
    * archives as QA, the dock clears, and the step flow takes over. */
   const landOnStartedRun = useCallback((runId: string, answered: QuestionMessage | null) => {
     setPendingQuestion(null)
@@ -640,7 +679,9 @@ export function GenerationOverlay({
   }, [])
 
   const handleStartGeneration = useCallback(async () => {
-    if (runId || isStarting) return
+    // chatBusy: a refine turn is in flight — starting now would race its
+    // response (the late task book could re-dock over the running flow).
+    if (runId || isStarting || chatBusy) return
     setStartError(null)
     setIsStarting(true)
     try {
@@ -690,7 +731,7 @@ export function GenerationOverlay({
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
       setIsStarting(false)
     }
-  }, [runId, isStarting, pendingQuestion, autonomy, intent, projectId, prompt, brandTemplateId, t, landOnStartedRun])
+  }, [runId, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, brandTemplateId, t, landOnStartedRun])
 
   /** Cancel = bail: a graceful exit back to draft (never an error toast). */
   const handleCancel = useCallback(async () => {
@@ -703,49 +744,6 @@ export function GenerationOverlay({
     }
     onClose()
   }, [pendingQuestion, onClose])
-
-  // Fallback intent fetch (direct visit without a composer-provided intent).
-  // Guarded by ref — setIntent recreates handleStartGeneration, which would
-  // otherwise retrigger this effect forever. Attach mode skips it entirely:
-  // the run is already going, there is no plan to infer.
-  useEffect(() => {
-    if (initialIntent || initialRunId || intentFetchedRef.current) return
-    intentFetchedRef.current = true
-    apiFetch(`/api/v1/projects/${projectId}/intent`, {
-      method: "POST",
-      body: { prompt },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: IntentTurnResponse | null) => {
-        if (!data) throw new Error(t("generationOverlay.failed"))
-        if (data.type === "started") {
-          // Defensive: a restored session's prose confirmation may start the
-          // run straight from the fallback fetch.
-          landOnStartedRun(data.run_id, data.answered_question)
-          setIntentReady(true)
-          return
-        }
-        if (data.type === "answer") {
-          // Capability answer — archived server-side; show it in the flow.
-          pushMessage({ role: "assistant", content: data.text })
-          setPhase("answer")
-          setIntentReady(true)
-          return
-        }
-        setIntent(normalizeIntent(data.intent))
-        setReasons(data.reasons ?? [])
-        setIntentReady(true)
-        if ((data.reasons ?? []).length === 0) {
-          handleStartGeneration()
-        }
-      })
-      .catch((e) => {
-        // Degrade to the editable defaults — Start still works without the
-        // intent endpoint.
-        setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
-        setIntentReady(true)
-      })
-  }, [initialIntent, projectId, prompt, t, handleStartGeneration, landOnStartedRun])
 
   useEffect(() => {
     if (
@@ -819,69 +817,6 @@ export function GenerationOverlay({
     setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
   }
 
-  /** Confirm-phase turn: refine the plan via intent re-inference. The panel's
-   * current (possibly hand-edited) book rides along — its explicit slots pin
-   * through the merge. A question (action="answer") is answered inline and
-   * leaves the plan untouched; a prose confirmation (action="start") starts
-   * the run like the dock's Start button. */
-  const sendPlanRefinement = async (text: string) => {
-    followUpsRef.current.push(text)
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
-    setChatBusy(true)
-    try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/intent`, {
-        method: "POST",
-        body: {
-          prompt: [prompt, ...followUpsRef.current].join("\n"),
-          prior: intent,
-          turn: text,
-          // Consumed only when this turn starts the run (action="start") —
-          // the dock's tier must survive a prose confirmation.
-          autonomy,
-        },
-        toast: false,
-        signal: ctrl.signal,
-      })
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        throw new Error(detail.detail || t("generationOverlay.failed"))
-      }
-      const data = (await res.json()) as IntentTurnResponse
-      if (data.type === "started") {
-        // G-1: the prose confirmation answered the docked task book
-        // server-side (kind=start) and the run is live.
-        landOnStartedRun(data.run_id, data.answered_question)
-        return
-      }
-      if (data.type === "answer") {
-        // Capability answer — the exchange is also archived server-side (B1).
-        pushMessage({ role: "assistant", content: data.text })
-      } else {
-        setReasons(data.reasons ?? [])
-        setIntent(normalizeIntent(data.intent))
-        setIntentReady(true)
-        // The refinement superseded the old question server-side and raised
-        // a new one — the dock must point at the new row.
-        setPendingQuestion(await fetchPendingQuestion())
-        pushMessage({ role: "assistant", content: t("generationOverlay.planUpdated") })
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return
-      pushMessage({
-        role: "assistant",
-        content: e instanceof Error ? e.message : t("generationOverlay.failed"),
-      })
-    } finally {
-      // Identity guard: after a manual stop a newer request may already own
-      // the busy state — only the owning request clears it.
-      if (abortRef.current === ctrl) {
-        abortRef.current = null
-        setChatBusy(false)
-      }
-    }
-  }
-
   /** An answered question collapses into the flow as a QA pair (ask
    * primitive: the flow archives decisions, the dock holds the open one). */
   const pushQaArchive = (message: QuestionMessage) => {
@@ -900,10 +835,36 @@ export function GenerationOverlay({
 
   /** The chat loop's reply: a pending question docks (never enters the
    * flow, prohibited-behavior #2); anything else renders as prose + an
-   * optional RunCard. */
-  const handleAssistantMessage = (message: QuestionMessage) => {
+   * optional RunCard. A docked task book also refetches the panel's plan —
+   * and arms the fresh-flow auto-start when the first inference lands with
+   * nothing to clarify. */
+  const handleAssistantMessage = async (message: QuestionMessage) => {
     if (message.question && !message.answer) {
+      if (message.question.kind === "task_book" && runIdRef.current) {
+        // A run is already live (started from another surface while this
+        // turn was in flight) — a late task book must not pull the UI back
+        // to confirm; the run flow owns the surface now.
+        return
+      }
       setPendingQuestion(message)
+      if (message.question.kind === "task_book") {
+        const hadBook = intentReady
+        const pending = await fetchPendingIntent()
+        if (pending) {
+          setIntent(normalizeIntent(pending.intent))
+          setReasons(pending.reasons ?? [])
+          setIntentReady(true)
+          setPhase("confirm")
+          if (hadBook) {
+            pushMessage({
+              role: "assistant",
+              content: t("generationOverlay.planUpdated"),
+            })
+          } else if ((pending.reasons ?? []).length === 0) {
+            autoStartArmedRef.current = true
+          }
+        }
+      }
       return
     }
     pushMessage({
@@ -913,28 +874,74 @@ export function GenerationOverlay({
     })
   }
 
-  /** Post-start turn: the project-scoped chat loop (CHAT_ARCH §3). A task
-   * list dispatch comes back with a run_id and renders as a RunCard; a
-   * pending choice question docks; an autoResumed one archives its QA. */
-  const sendProjectChat = async (text: string) => {
+  /** One endpoint for every turn (intent-surface-unification W2): the server
+   * routes plan-path turns (task-book build / refine / confirm) and
+   * chat-loop turns itself. The panel's current book rides confirm-phase
+   * turns as prior_intent (its explicit slots pin through the merge);
+   * mentions / brand ride only the composer's first message.
+   *
+   * Transport is SSE (streamChat): prose deltas land in a preview bubble as
+   * they generate; the terminal turn.completed envelope then REPLACES the
+   * preview and drives all completion logic — the envelope always wins.
+   * Plan-card turns emit no deltas (structured JSON), so their UX is
+   * unchanged: thinking row → card. */
+  const sendChat = async (
+    text: string,
+    opts?: {
+      mentions?: { type: string; id: string; label: string }[]
+      brandTemplateId?: string
+      /** Failure handling for a user-typed turn: roll the optimistic bubble
+       * back out of the flow and restore the draft (the server commits
+       * nothing on a failed turn, so the flow must not keep it either). */
+      rollbackId?: string
+      draft?: string
+    }
+  ) => {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     setChatBusy(true)
+    const streamId = crypto.randomUUID()
     try {
-      const res = await apiFetch("/api/v1/chat", {
-        method: "POST",
-        body: { project_id: projectId, message: text },
-        toast: false,
-        signal: ctrl.signal,
-      })
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        throw new Error(detail.detail || t("chat.failed"))
-      }
-      const data = (await res.json()) as {
+      const data = await streamChat<{
         assistant_message: QuestionMessage
         run_id: string | null
         answered_question?: QuestionMessage | null
+      }>(
+        {
+          project_id: projectId,
+          message: text,
+          mentions: opts?.mentions ?? [],
+          brand_template_id: opts?.brandTemplateId,
+          prior_intent: phase === "confirm" && intentReady ? intent : undefined,
+          // Consumed only when this turn confirms the book by prose — the
+          // dock's tier must survive a typed "looks good, start it".
+          autonomy: phase === "confirm" ? autonomy : undefined,
+        },
+        {
+          signal: ctrl.signal,
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.some((m) => m.id === streamId)
+                ? prev.map((m) =>
+                    m.id === streamId ? { ...m, content: m.content + delta } : m
+                  )
+                : [
+                    ...prev,
+                    { id: streamId, role: "assistant", content: delta, streaming: true },
+                  ]
+            )
+          },
+        }
+      )
+      // Envelope wins: the preview placeholder lifts away and the
+      // authoritative ChatResponse drives the landing below.
+      setMessages((prev) => prev.filter((m) => m.id !== streamId))
+      if (data.run_id) {
+        // G-1: the prose confirmation answered the docked task book
+        // server-side (kind=start) and the run is live — the same landing
+        // as the dock's Start button.
+        landOnStartedRun(data.run_id, data.answered_question ?? null)
+        return
       }
       // Deterministic autoResume settled the docked question with this very
       // text — archive its QA pair before the assistant's continuation.
@@ -942,13 +949,25 @@ export function GenerationOverlay({
         setPendingQuestion(null)
         pushQaArchive(data.answered_question)
       }
-      handleAssistantMessage(data.assistant_message)
+      await handleAssistantMessage(data.assistant_message)
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return
-      pushMessage({
-        role: "assistant",
-        content: e instanceof Error ? e.message : t("chat.failed"),
-      })
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // Stopped mid-stream: the partial preview settles as static text
+        // (the server may still finish the turn server-side).
+        setMessages((prev) =>
+          prev.map((m) => (m.id === streamId ? { ...m, streaming: false } : m))
+        )
+        return
+      }
+      // The server commits nothing on a failed turn — roll the optimistic
+      // bubble (and any streamed preview) back out and restore the draft.
+      setMessages((prev) => prev.filter((m) => m.id !== streamId))
+      if (opts?.rollbackId) {
+        const rollbackId = opts.rollbackId
+        setMessages((prev) => prev.filter((m) => m.id !== rollbackId))
+        setInput((prev) => prev || (opts?.draft ?? ""))
+      }
+      toast.error(e instanceof Error ? e.message : t("chat.failed"))
     } finally {
       if (abortRef.current === ctrl) {
         abortRef.current = null
@@ -956,6 +975,81 @@ export function GenerationOverlay({
       }
     }
   }
+
+  /** Fresh composer navigation: the handed-over draft is the conversation's
+   * first message — send it once on mount (the opening bubble already
+   * renders it from the prompt prop, so nothing is pushed to the flow).
+   * Router state survives a page refresh, so before firing we check the
+   * server: if the first send already landed, REBUILD from the server
+   * (dock / live run) instead of duplicating the message — there is no
+   * server-side dedup by design. */
+  useEffect(() => {
+    if (!firstMessage || initialRunId || firstMessageSentRef.current) return
+    firstMessageSentRef.current = true
+    void (async () => {
+      try {
+        const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
+          toast: false,
+        })
+        if (res.ok) {
+          const data = (await res.json()) as {
+            prompt?: string | null
+            latest_run?: {
+              id: string
+              status: string
+              context?: {
+                outputs?: unknown
+                target_language?: string
+                dub_languages?: string[]
+                instruction?: string | null
+              } | null
+            } | null
+          }
+          if ((data.prompt ?? "") === firstMessage.text) {
+            const run = data.latest_run
+            if (run && (run.status === "pending" || run.status === "running")) {
+              // Refresh after the run started: attach to it (intent rebuilt
+              // from the run context for the confirmed-plan summary line).
+              const runCtx = run.context ?? {}
+              setIntent(
+                normalizeIntent({
+                  outputs: runCtx.outputs,
+                  language: runCtx.target_language,
+                  dub_languages: runCtx.dub_languages,
+                  specific_instruction: runCtx.instruction,
+                })
+              )
+              landOnStartedRun(run.id, null)
+            } else {
+              // Refresh while confirming: rebuild the dock + panel plan.
+              const q = await fetchPendingQuestion()
+              if (q) await handleAssistantMessage(q)
+            }
+            return
+          }
+        }
+      } catch {
+        /* results unreadable — fall through and send */
+      }
+      await sendChat(firstMessage.text, {
+        mentions: firstMessage.mentions,
+        brandTemplateId: firstMessage.brandTemplateId,
+      })
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Fresh-flow auto-start: the first inference docked a book with nothing
+   * to clarify (an explicit instruction) — start it once the dock state has
+   * settled, without making the user press Start. */
+  useEffect(() => {
+    if (!autoStartArmedRef.current) return
+    if (phase !== "confirm" || !intentReady) return
+    if (!pendingQuestion || pendingQuestion.question?.kind !== "task_book") return
+    autoStartArmedRef.current = false
+    autoStartedRef.current = true
+    handleStartGeneration()
+  }, [phase, intentReady, pendingQuestion, handleStartGeneration])
 
   /** Docked choice question answered by a button click — the answer
    * endpoint records it and continues the conversation (answer = resume). */
@@ -974,7 +1068,7 @@ export function GenerationOverlay({
       }
       setPendingQuestion(null)
       pushQaArchive(data.answered_question)
-      if (data.follow_up) handleAssistantMessage(data.follow_up)
+      if (data.follow_up) void handleAssistantMessage(data.follow_up)
     } finally {
       setAnswering(false)
     }
@@ -1012,14 +1106,13 @@ export function GenerationOverlay({
 
   const handleSend = () => {
     const text = input.trim()
-    if (!text || chatBusy) return
-    pushMessage({ role: "user", content: text })
+    // isStarting: the dock's Start is mid-answer — a chat turn now would
+    // race it (it could supersede the question being answered).
+    if (!text || chatBusy || isStarting) return
+    const rollbackId = crypto.randomUUID()
+    setMessages((prev) => [...prev, { id: rollbackId, role: "user", content: text }])
     setInput("")
-    if (phase === "confirm") {
-      void sendPlanRefinement(text)
-    } else {
-      void sendProjectChat(text)
-    }
+    void sendChat(text, { rollbackId, draft: text })
   }
 
   const handleClose = () => {
@@ -1084,34 +1177,29 @@ export function GenerationOverlay({
                   </MessageScrollerItem>
                 ) : null}
 
-                {/* Answer intent: the reply is the whole conversation opener. */}
-                {phase === "answer" && (
-                  <MessageScrollerItem>
-                    <AssistantText text={intent.answer || t("chat.intro")} />
-                  </MessageScrollerItem>
-                )}
-
                 {/* Plan card (pinned while confirming) */}
-                {phase !== "answer" && !intentReady && (
-                  <MessageScrollerItem>
-                    <ThinkingRow label={t("chat.thinking")} />
-                  </MessageScrollerItem>
-                )}
                 {phase === "confirm" && intentReady && (
                   <MessageScrollerItem>
                     <Message align="start">
                       <MessageContent>
-                        <div className="w-full">
+                        {/* Entrance animation softens the non-streamable
+                            card's pop-in (structured JSON arrives whole). */}
+                        <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
                           {/* Prose echo of the understood plan — the card
-                              never lands naked (Opus pattern). */}
+                              never lands naked (Opus pattern). The LLM's
+                              own one-line echo (intent.answer, streamed as
+                              deltas this turn and persisted in the pending
+                              intent) wins; the localized template is the
+                              fallback for legacy/null echoes. */}
                           <p className="mb-3 max-w-[85%] text-sm leading-relaxed">
-                            {t("generationOverlay.planProse", { summary: planSummary })}
+                            {intent.answer ??
+                              t("generationOverlay.planProse", { summary: planSummary })}
                           </p>
                           {/* No shadow/glow here: the scroller's paint
                               containment clips the halo on the sides (it
                               survived only on top, looking like a cut-off
                               shadow). Depth comes from bg contrast alone. */}
-                          <Card className="ring-0 bg-muted/50">
+                          <Card className="ring-0 bg-muted">
                             <div className="flex flex-col gap-7 p-6">
                               <div className="space-y-1">
                                 <h3 className="text-base font-semibold">
@@ -1191,7 +1279,7 @@ export function GenerationOverlay({
                                     return (
                                       <div
                                         key={index}
-                                        className="flex flex-col gap-2 rounded-md bg-background/60 p-3"
+                                        className="flex flex-col gap-2 rounded-md bg-card p-3"
                                       >
                                         <div className="flex items-center gap-2">
                                           <span className="flex items-center gap-1.5 text-sm">
@@ -1367,7 +1455,7 @@ export function GenerationOverlay({
                                     {intent.dub_languages.map((lang) => (
                                       <span
                                         key={lang}
-                                        className="flex items-center gap-1.5 rounded-md bg-background/60 px-2.5 py-1.5 text-sm"
+                                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
                                       >
                                         <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
                                         {t(`languages.${lang}`, { defaultValue: lang })}
@@ -1435,7 +1523,7 @@ export function GenerationOverlay({
                       ) : (
                         <Message align="start">
                           <MessageContent>
-                            <div className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
+                            <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
                               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
                                 <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                               </span>
@@ -1535,7 +1623,9 @@ export function GenerationOverlay({
                       <UserBubble text={m.content} />
                     ) : (
                       <>
-                        {m.content ? <AssistantText text={m.content} /> : null}
+                        {m.content ? (
+                          <AssistantText text={m.content} streaming={m.streaming} />
+                        ) : null}
                         {m.runId ? (
                           <Message align="start">
                             <MessageContent>
@@ -1548,13 +1638,18 @@ export function GenerationOverlay({
                   </MessageScrollerItem>
                 ))}
 
-                {chatBusy && (
+                {/* Thinking row covers send → first delta; once the preview
+                    bubble exists it IS the progress indicator. */}
+                {chatBusy && !messages.some((m) => m.streaming) && (
                   <MessageScrollerItem>
                     <ThinkingRow label={t("chat.thinking")} />
                   </MessageScrollerItem>
                 )}
               </MessageScrollerContent>
             </MessageScrollerViewport>
+            {/* Jump-to-latest pill — appears only when the user has scrolled
+                up off the bottom (the primitive tracks visibility). */}
+            <MessageScrollerButton direction="end" />
           </MessageScroller>
         </MessageScrollerProvider>
       </div>
@@ -1574,7 +1669,7 @@ export function GenerationOverlay({
               onStart={handleStartGeneration}
               onCancel={handleCancel}
               starting={isStarting}
-              startDisabled={!canStartGeneration}
+              startDisabled={!canStartGeneration || chatBusy}
             />
           )}
           {phase !== "confirm" && pendingChoice && (
@@ -1596,7 +1691,7 @@ export function GenerationOverlay({
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
-          <div className="flex items-end gap-2 rounded-lg bg-muted/50 p-2">
+          <div className="flex items-end gap-2 rounded-lg bg-muted p-2">
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1619,7 +1714,7 @@ export function GenerationOverlay({
                     : t("generationOverlay.chatPlaceholder")
               }
               rows={1}
-              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-card text-sm shadow-none focus-visible:ring-0"
             />
             {chatBusy ? (
               <Button

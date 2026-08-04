@@ -519,6 +519,16 @@ async def create_run(
     ):
         raise ValueError(CLIPS_NEED_MEDIA)
 
+    # Vacuous dubs drop at the birthplace (2026-08-04): dub_languages only act
+    # on clips, so a book without a clips slot can't honor them. The scenario
+    # this protects: a recipe pinned dubs, the user removed the clips slot
+    # after the CLIPS_NEED_MEDIA 422 told them to — a second, cryptic 422
+    # ("dub_languages requires a clips slot") would dead-end the very escape
+    # the first message named. Dropping is safe: dubs without clips produce
+    # nothing by definition.
+    if task.dub_languages and not any(s.type == "clips" for s in task.outputs):
+        task.dub_languages = []
+
     run = WorkflowRun(
         project_id=project.id,
         status=WorkflowStatus.PENDING,

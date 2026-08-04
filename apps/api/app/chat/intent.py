@@ -1,7 +1,9 @@
-"""Intent agents (two distinct jobs, NAMING §5 same-name audit).
+"""Intent agents (two distinct jobs behind the SINGLE chat surface, NAMING §5).
 
-``ComposerIntentAgent`` — the Home composer's /infer-intent parser: free-form
-prompt → structured generation parameters (language/outputs/tone).
+``PlanAgent`` — the task-book builder (plan path, CHAT_ARCH §3): free-form
+text → a structured task book (language/outputs/tone) plus the three-action
+verdict (generate / answer / start). Invoked only from the chat service's
+plan path — first-turn projects and pending-task-book refinement turns.
 
 ``ChatIntentAgent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
 user message + assembled context → a four-state ``IntentProposal``
@@ -16,24 +18,98 @@ from app.operations.registry import OP_REGISTRY
 from app.pipeline.registry import dispatchable_skills
 
 
-class ComposerIntentAgent:
-    """Agent that infers structured intent from a composer prompt."""
+class PlanAgent:
+    """Agent that builds the structured task book from free-form text."""
 
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
 
     async def infer(
-        self, prompt: str, filename: str | None = None
+        self,
+        prompt: str,
+        filename: str | None = None,
+        presented_plan: str | None = None,
     ) -> InferredIntent:
         """Infer language, outputs, tone and instruction from prompt.
 
         Args:
             prompt: The user's free-form prompt or pasted transcript.
             filename: Optional uploaded filename for extra context.
+            presented_plan: One-line digest of the docked task book, when one
+                is on the table — the start/revise verdict needs to SEE the
+                plan being confirmed, not imagine it (a bare "开始吧" after a
+                vague first turn otherwise reads as "go generate").
 
         Returns:
             InferredIntent with defaults when inference fails.
         """
+        try:
+            return await self.client.generate(
+                messages=self._messages(prompt, filename, presented_plan),
+                response_model=InferredIntent,
+                temperature=0.2,
+            )
+        except MiniMaxError:
+            return self._fallback(prompt, filename)
+
+    async def infer_stream(
+        self,
+        prompt: str,
+        filename: str | None = None,
+        presented_plan: str | None = None,
+        on_delta=None,
+    ) -> InferredIntent:
+        """Streaming variant of ``infer`` (chat SSE): identical verdict, but
+        raw response fragments flow through ``on_delta`` so the service can
+        preview the ``answer`` prose while the rest of the JSON generates."""
+        try:
+            return await self.client.generate_stream(
+                messages=self._messages(prompt, filename, presented_plan),
+                response_model=InferredIntent,
+                temperature=0.2,
+                on_delta=on_delta,
+            )
+        except MiniMaxError:
+            return self._fallback(prompt, filename)
+
+    def _fallback(self, prompt: str, filename: str | None) -> InferredIntent:
+        # Fall back to defaults so the UI never breaks. Clips need a media
+        # source file, so text-only input falls back to text outputs.
+        has_media = filename is not None and filename.lower().endswith(
+            (".mp4", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".aac",
+             ".ogg", ".png", ".jpg", ".jpeg", ".webp")
+        )
+        return InferredIntent(
+            action="generate",
+            answer=None,
+            language="en",
+            language_explicit=False,
+            outputs=(
+                [
+                    IntentSlot(type="clips"),
+                    IntentSlot(type="post"),
+                    IntentSlot(type="quotes"),
+                    IntentSlot(type="article"),
+                ]
+                if has_media
+                else [
+                    IntentSlot(type="post"),
+                    IntentSlot(type="quotes"),
+                    IntentSlot(type="article"),
+                ]
+            ),
+            outputs_explicit=False,
+            tone="professional",
+            specific_instruction=prompt.strip() or None,
+            confidence=0.0,
+        )
+
+    def _messages(
+        self,
+        prompt: str,
+        filename: str | None,
+        presented_plan: str | None,
+    ) -> list[dict]:
         system_prompt = (
             "You are an intent parser for an AI content repurposing tool. "
             "Given a user prompt, extract the user's intent and return valid JSON only.\n\n"
@@ -63,7 +139,11 @@ class ComposerIntentAgent:
             "- answer: when action is 'answer', provide a concise, helpful response "
             "(max 200 words) in the same language as the user prompt that explains "
             "the tool's capabilities and invites the user to upload or paste talk "
-            "content. Set to null when action is 'generate' or 'start'.\n"
+            "content. When action is 'generate', write ONE short sentence in the "
+            "user's language echoing the plan you understood, e.g. \"Here's what "
+            "I understood: 5 clips, 3 quote cards and an article in English, "
+            "dubbed into German.\" — it is shown above the plan card as the "
+            "plan's own words. Set to null only when action is 'start'.\n"
             "- language: ISO code (en/fr/de/es/it/zh). Infer from the prompt "
             "language or explicit requests like 'in German'. Default to en if "
             "unclear.\n"
@@ -124,6 +204,11 @@ class ComposerIntentAgent:
             "VOICE-OVER versions of the same clips. Same gating as clips: "
             "only when a media source file (video/audio/image) is attached; "
             "text-only input gets an empty array.\n"
+            "  A voice-dub request ALWAYS lands in dub_languages, never in "
+            "'language' or a slot's language: 'dub them into Chinese' / "
+            "'配音成中文' → dub_languages ['zh']. 'language' is the "
+            "WRITTEN-text language of posts/quotes/subtitles; only set it "
+            "when the user asks for the text itself in another language.\n"
             "- outputs_explicit: true only when the user explicitly asked for "
             "specific outputs (e.g. 'just clips', 'a post and quotes', "
             "'no carousel'). false when using the default set.\n"
@@ -134,7 +219,10 @@ class ComposerIntentAgent:
             "language/output/tone/slot fields. For action='answer' or 'start', "
             "set this to null.\n"
             "- confidence: 0.0-1.0 indicating how clearly the intent was "
-            "expressed.\n\n"
+            "expressed.\n"
+            "- Key order: emit 'answer' as the FIRST key of the JSON object — "
+            "it streams to the user while the rest of the object generates "
+            "(null only for 'start').\n\n"
             "Return only a JSON object matching the schema."
         )
 
@@ -143,52 +231,19 @@ class ComposerIntentAgent:
             context += f"\nUploaded file: {filename}"
         else:
             context += "\nNo file uploaded (text-only input)."
+        if presented_plan:
+            context += (
+                f"\nA task book has already been presented to the user and "
+                f"is awaiting confirmation: {presented_plan}"
+            )
 
-        messages = [
+        return [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": context},
         ]
 
-        try:
-            return await self.client.generate(
-                messages=messages,
-                response_model=InferredIntent,
-                temperature=0.2,
-            )
-        except MiniMaxError:
-            # Fall back to defaults so the UI never breaks. Clips need a media
-            # source file, so text-only input falls back to text outputs.
-            has_media = filename is not None and filename.lower().endswith(
-                (".mp4", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".aac",
-                 ".ogg", ".png", ".jpg", ".jpeg", ".webp")
-            )
-            return InferredIntent(
-                action="generate",
-                answer=None,
-                language="en",
-                language_explicit=False,
-                outputs=(
-                    [
-                        IntentSlot(type="clips"),
-                        IntentSlot(type="post"),
-                        IntentSlot(type="quotes"),
-                        IntentSlot(type="article"),
-                    ]
-                    if has_media
-                    else [
-                        IntentSlot(type="post"),
-                        IntentSlot(type="quotes"),
-                        IntentSlot(type="article"),
-                    ]
-                ),
-                outputs_explicit=False,
-                tone="professional",
-                specific_instruction=prompt.strip() or None,
-                confidence=0.0,
-            )
 
-
-composer_intent_agent = ComposerIntentAgent()
+plan_agent = PlanAgent()
 
 
 def _params_doc(model) -> str:
@@ -218,6 +273,28 @@ class ChatIntentAgent:
 
     async def propose(self, message: str, context: dict) -> IntentResult:
         """Return the four-state proposal for one user message."""
+        return await self.client.generate(
+            messages=self._messages(message, context),
+            response_model=IntentResult,
+            temperature=0.2,
+        )
+
+    async def propose_stream(
+        self, message: str, context: dict, on_delta=None
+    ) -> IntentResult:
+        """Streaming variant of ``propose`` (chat SSE): identical verdict, raw
+        fragments flow through ``on_delta`` for the prose preview channel.
+        Repair rounds keep calling the non-streaming ``propose`` — two
+        interleaved delta streams for one bubble is a worse failure than a
+        text swap at the envelope."""
+        return await self.client.generate_stream(
+            messages=self._messages(message, context),
+            response_model=IntentResult,
+            temperature=0.2,
+            on_delta=on_delta,
+        )
+
+    def _messages(self, message: str, context: dict) -> list[dict]:
         skills = dispatchable_skills()
         # Params are injected as "name: description" (agent-loop-upgrade W2) —
         # the Field descriptions in the registry's params models ARE the LLM's
@@ -300,7 +377,10 @@ class ChatIntentAgent:
             "may be its answer — act on the question + answer together "
             "instead of asking again.\n"
             "- When the user references a mention (asset/output/segment), use its "
-            "id in params (e.g. revise_script.target_output_id) instead of guessing."
+            "id in params (e.g. revise_script.target_output_id) instead of guessing.\n"
+            "- Key order: within the proposal object, emit the user-facing "
+            "prose field FIRST ('summary' for shapes A/B, 'text' for shape D) "
+            "— it streams to the user while the rest of the JSON generates."
         )
 
         user_content = (
@@ -312,14 +392,10 @@ class ChatIntentAgent:
                 f"{context['repair_feedback']}. Fix it and return a valid proposal."
             )
 
-        return await self.client.generate(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            response_model=IntentResult,
-            temperature=0.2,
-        )
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
 
 
 chat_intent_agent = ChatIntentAgent()

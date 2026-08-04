@@ -17,7 +17,7 @@
 - **字幕现状**：`caption_style_preset` 枚举 5 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`），`Clip.tsx` 只渲染当前 active 行——**堆叠字幕（前行驻留、向下累积）不在枚举内**。
 - **crop 是 clip 级静态值** `ClipCrop{x,y,scale}`，无时序；ASR = faster-whisper（词级时间戳，**无 diarization**）。
 - **`packages/clip` 是 editor preview 与 render service 的同源组件**——渲染分支加一处，preview=render 双端自动生效。
-- **任务书 slot 化已落地**：`IntentSlot{type,count,focus,language,tone_override,explicit}`；`/intent` 接受 `prior` 且 pin-merge 保 explicit 槽；`pending_intent` + `?overlay=intent` 恢复管道在。
+- **任务书 slot 化已落地**：`IntentSlot{type,count,focus,language,tone_override,explicit}`；chat plan path 接受 `prior_intent` 且 pin-merge 保 explicit 槽；`pending_intent` + `?overlay=chat` 恢复管道在。
 - **composer = prompt-only**（instruction + speaker_id + brand_template_id），意图识别全在管线。
 - **文字稿+照片场景已有 Ready 简报**：`docs/tasks/synthetic-talk-video.md`（`voice_gen`/`synth_visual` 节点设计，声纹 TTS 回配 ASR 时间戳，下游零感知）。
 - **demo talk 素材**：reset_db 不删对象存储，retired `demo/` 树应在桶中可恢复（需人工核实）。
@@ -144,9 +144,9 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 点卡 Remix → 往 composer 插入 recipe 提及 chip（{type:"recipe", id, label}）
            + promptTemplate 文本预填（可见可改，纯文本不是状态）
            → 用户上传自己的素材（Assets 块，必选动作；chip 旁提示所需槽位）
-           → 发送：建项目 → 上传 → POST /intent { prompt, brand_template_id, mentions }
-           → 服务端 resolve_recipe_mentions() 钉死（钉死唯一发生地；composer 不再发 prior）
-           → pin-merge → pending_intent → ?overlay=intent 审阅面板逐槽行呈现承诺 → Start
+           → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, brand_template_id, mentions }
+           → 服务端 plan path resolve_recipe_mentions() 钉死（钉死唯一发生地；composer 永不构建 prior）
+           → pin-merge → pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
 ```
 
 **chip 三律**（2026-07-31 旧事故的结构性消除——事故根因是配方状态不可见且跨发送残留）：

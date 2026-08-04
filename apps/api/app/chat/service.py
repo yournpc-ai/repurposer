@@ -6,7 +6,11 @@ LinkedIn post, quote card, etc.).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
 locates or creates the right conversation, assembles deterministic context,
-and lets the intent agent propose (CHAT_ARCH §3, four-state: N-18 + N-21):
+and lets the intent agent propose (CHAT_ARCH §3). It is the ONLY intent
+surface (intent-surface-unification W1): project-scope turns before the
+first run — or while a task book is pending — go through the plan path
+(``_plan_turn``: build / refine / confirm the task book via the PlanAgent);
+everything else goes to the four-state proposer:
 
 - task_list (non-empty) → compile_graph mode② → a new WorkflowRun
 - ask                   → a typed question docked above the input; the old
@@ -32,6 +36,7 @@ is a new intent and the question stays pending.
 """
 
 from datetime import UTC, datetime
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -40,7 +45,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.minimax import MiniMaxError
-from app.chat.intent import chat_intent_agent
+from app.chat.intent import chat_intent_agent, plan_agent
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
@@ -57,6 +62,7 @@ from app.models.schemas import (
     IntentSlot,
     PendingIntent,
     ProjectStatus,
+    StartAnswerRequest,
     TaskItem,
     TaskListProposal,
 )
@@ -70,7 +76,9 @@ from app.models.tables import (
 )
 from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
+from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.outputs import list_visible_outputs
+from app.pipeline.recipes import resolve_recipe_mentions
 from app.pipeline.registry import SkillRejected, dispatchable_skills
 
 _ASK_BACK_TEXT = (
@@ -575,44 +583,6 @@ def _task_book_summary(intent: InferredIntent) -> str:
     return f"{', '.join(labels)} · {intent.language}"
 
 
-async def record_intent_turn(
-    db: AsyncSession,
-    user_id: UUID,
-    project_id: UUID,
-    turn_text: str,
-    *,
-    answer: str | None = None,
-) -> None:
-    """Archive one confirm-phase turn in the project conversation (B1).
-
-    The user's words land as a user message — deduped against the latest
-    user row so a refresh / double-fire replay never duplicates it (the
-    first turn doubles as the conversation's seed prompt, which makes
-    ``sync_task_book_question``'s own seed a no-op). An answer-action turn
-    also lands the assistant's reply as a plain message — the exchange
-    survives refresh like every other archive row. Flush-only; the caller
-    commits.
-    """
-    conversation = await _get_or_create_project_conversation(db, user_id, project_id)
-    conversation_id = UUID(str(conversation.id))
-    if turn_text:
-        last_user = (
-            await db.execute(
-                select(Message.content)
-                .where(
-                    Message.conversation_id == conversation_id,
-                    Message.role == "user",
-                )
-                .order_by(Message.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if last_user != turn_text:
-            await _create_message(db, conversation_id, "user", turn_text)
-    if answer:
-        await _create_message(db, conversation_id, "assistant", answer)
-
-
 async def sync_task_book_question(
     db: AsyncSession,
     user_id: UUID,
@@ -623,8 +593,8 @@ async def sync_task_book_question(
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
-    Called by ``POST /projects/{id}/intent`` on every inference (first call
-    and refinements alike): a fresh conversation first archives the original
+    Called by the chat plan path on every inference (first call and
+    refinements alike): a fresh conversation first archives the original
     prompt, any still-open plan question is retired as superseded, and the
     new task book becomes the pending question. The needs_clarification
     ``reasons`` ride in the question's human text (data, localized at render)
@@ -905,9 +875,9 @@ async def seed_project_prompt(
 ) -> Message | None:
     """Create the project-scoped conversation and store the original prompt.
 
-    A no-op when the conversation already has messages — the prompt is
-    seeded by ``POST /projects/{id}/intent`` (first inference) since the ask
-    primitive landed, so /generate callers must not duplicate it.
+    A no-op when the conversation already has messages — the first message
+    normally lands via the chat plan path, so /generate callers must not
+    duplicate it.
     """
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
     conversation_id = UUID(str(conversation.id))
@@ -921,6 +891,194 @@ async def seed_project_prompt(
     return await _create_message(db, conversation_id, "user", prompt)
 
 
+async def _plan_turn(
+    db: AsyncSession,
+    user_id: UUID,
+    conversation: Conversation,
+    project: Project,
+    request: ChatRequest,
+    on_delta=None,
+) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
+    """Plan path (intent-surface-unification W1): build / refine / confirm
+    the task book inside the chat loop — the ONLY intent surface.
+
+    Entered for project-scope turns while a task book is pending (refine or
+    prose confirmation) or before the project's first run (first turn / after
+    a bail). The PlanAgent's three-action verdict dispatches:
+
+    - generate → pin-merge + reasons + dock the (refined) task book
+    - answer   → a plain assistant message; the stored book stays untouched
+    - start    → the docked task book is answered kind=start (G-1 path: the
+                 run comes from the only birthplace, answer_question)
+
+    Returns the assistant message (the docked/answered question row for
+    generate/start), the started run id, the answered task-book question (for
+    ChatResponse.answered_question), and cascade-bailed run ids. The caller
+    commits — except the start branch, where answer_question commits.
+    """
+    conversation_id = UUID(str(conversation.id))
+    text = request.message
+
+    stored = (
+        PendingIntent.model_validate(project.pending_intent)
+        if isinstance(project.pending_intent, dict)
+        else None
+    )
+    # Refinement turns infer against the accumulated prompt (the stored book's
+    # prompt + this turn's own words); the archive already holds each turn as
+    # its own user message, so no dedup bookkeeping is needed here.
+    prompt = f"{stored.prompt}\n{text}" if stored and stored.prompt else text
+
+    assets = list(
+        (
+            await db.execute(
+                select(Asset).where(
+                    Asset.project_id == project.id,
+                    Asset.file_url.isnot(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    first_file = next((a for a in assets if a.file_url), None)
+    filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
+
+    # Recipe mention validation (fail-fast, BEFORE inference): a rejected pin
+    # (reserved / unknown / multiple recipes) must not burn an intent call.
+    try:
+        recipe = resolve_recipe_mentions(request.mentions)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # plan_agent.infer never raises MiniMaxError — its fallback is the default
+    # task book (dockable, editable, startable; never a white screen). The
+    # presented plan rides along so the start/revise verdict sees what is
+    # actually being confirmed. on_delta (chat SSE) streams the raw verdict
+    # fragments for the answer-prose preview; None = today's one-shot call.
+    infer = plan_agent.infer_stream if on_delta is not None else plan_agent.infer
+    intent = await infer(
+        prompt=prompt,
+        filename=filename,
+        presented_plan=(
+            _task_book_summary(stored.intent) if stored is not None else None
+        ),
+        **({"on_delta": on_delta} if on_delta is not None else {}),
+    )
+
+    has_media = await has_renderable_media(db, UUID(str(project.id)))
+
+    # Pin-merge rule: user-edited slots (explicit=True) from the panel's
+    # current task book survive this re-inference; the new inference only
+    # fills the slots the user did not pin. Falls back to the stored pending
+    # intent when the caller did not send its current book.
+    prior = request.prior_intent or (stored.intent if stored else None)
+    if prior is not None:
+        intent.outputs = merge_explicit_slots(prior.outputs, intent.outputs)
+        # dub_languages pin rule (RECIPES §4.1): pin only when the caller's
+        # book DIVERGES from the last-served book — a panel edit or a recipe
+        # prior. An untouched book follows the fresh inference, so refine can
+        # still add/drop languages (mirrors slot pin-merge: LLM-owned until
+        # edited). Removing ALL chips is therefore not pinned on refine — the
+        # accumulated prompt re-decides; the confirm path (kind=start) honors
+        # an emptied list directly.
+        stored_dub = stored.intent.dub_languages if stored else None
+        if prior.dub_languages and prior.dub_languages != stored_dub:
+            intent.dub_languages = prior.dub_languages
+
+    # Recipe mention pin (docs/tasks/recipe-mention.md §2.3): a recipe is a
+    # definite reference — resolved server-side into explicit slots + dub
+    # languages and pin-merged like a prior, AFTER the panel prior so the
+    # named recipe wins. The LLM never interprets it (validated pre-inference).
+    # Merge algebra (agent-loop-upgrade §2.1): outputs are the card's PROMISE
+    # (pin wins); dub_languages is a DEFAULT — languages the user named in the
+    # (possibly edited) prompt win, the recipe fills only when inference found
+    # none (the LLM emits dub_languages only when dubbing was asked for, so
+    # non-empty = explicit); other inferred slots ride along untouched.
+    if recipe is not None:
+        intent.outputs = merge_explicit_slots(recipe.outputs, intent.outputs)
+        if not intent.dub_languages:
+            intent.dub_languages = list(recipe.dub_languages)
+        intent.outputs_explicit = True
+
+    clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
+    reasons: list[str] = []
+    if not intent.language_explicit:
+        reasons.append("language_default")
+    if not intent.outputs_explicit:
+        reasons.append("outputs_default")
+    if clips_slot is not None and clips_slot.count is None:
+        reasons.append("clip_count_default")
+    if clips_slot is not None and not has_media:
+        reasons.append("clips_without_media")
+
+    # An answer action without answer text is an LLM misfire — degrade to a
+    # plan turn (dock the book for confirmation) rather than clobber the
+    # stored task book with an empty answer.
+    if intent.action == "answer" and not intent.answer:
+        intent.action = "generate"
+
+    if intent.action == "start":
+        # G-1: a prose confirmation ("looks good, start it") is not a
+        # revision — it answers the docked task_book question with
+        # kind=start, so the run still comes from the only birthplace
+        # (answer_question → create_run, which also clears pending_intent in
+        # the same transaction). The dock's autonomy tier rides the request —
+        # a review-tier choice must survive a prose confirmation.
+        pending_question = await latest_pending_question(db, conversation_id)
+        if is_pending_task_book(pending_question) and stored is not None:
+            answered, _follow_up = await answer_question(
+                db, user_id, UUID(str(pending_question.id)),
+                StartAnswerRequest(kind="start", autonomy=request.autonomy),
+            )
+            # answer_question commits — the run, the answer and the cleared
+            # pending intent land in one transaction.
+            return answered, UUID(str(answered.workflow_run_id)), answered, []
+        if stored is not None:
+            # Nothing startable right now. Never overwrite a stored task book
+            # with a start-action misfire's fields: re-dock the stored book
+            # unchanged.
+            bailed_run_ids = await sync_task_book_question(
+                db, user_id, project, stored.intent, stored.prompt,
+                reasons=stored.reasons,
+            )
+            question = await latest_pending_question(db, conversation_id)
+            assert question is not None  # sync_task_book_question just docked it
+            return question, None, None, bailed_run_ids
+        intent.action = "generate"
+
+    if intent.action == "answer" and intent.answer:
+        # Capability question: the reply lands as a plain assistant message
+        # and the stored task book stays untouched — an answer turn never
+        # overwrites the plan the user is confirming.
+        assistant_message = await _create_message(
+            db, conversation_id, "assistant", intent.answer
+        )
+        return assistant_message, None, None, []
+
+    # A turn that omits brand_template_id must not clobber the brand choice
+    # an earlier turn made.
+    brand_template_id = request.brand_template_id
+    if brand_template_id is None and isinstance(project.pending_intent, dict):
+        brand_template_id = project.pending_intent.get("brand_template_id")
+
+    # Persist the unconfirmed task book on the project: leaving the chat and
+    # coming back (any device) restores this exact plan. Cleared once the run
+    # starts. The dock above the input rebuilds from the task_book question.
+    project.pending_intent = PendingIntent(
+        prompt=prompt,
+        intent=intent,
+        reasons=reasons,
+        brand_template_id=brand_template_id,
+    ).model_dump(mode="json")
+    bailed_run_ids = await sync_task_book_question(
+        db, user_id, project, intent, prompt, reasons=reasons
+    )
+    question = await latest_pending_question(db, conversation_id)
+    assert question is not None  # sync_task_book_question just docked it
+    return question, None, None, bailed_run_ids
+
+
 async def _propose_turn(
     db: AsyncSession,
     user_id: UUID,
@@ -929,6 +1087,7 @@ async def _propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    on_delta=None,
 ) -> tuple[Message, UUID | None, list[UUID]]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3):
     assemble context, single intent call, adjudicate, record the reply.
@@ -951,7 +1110,14 @@ async def _propose_turn(
         None
     )
     try:
-        result = await chat_intent_agent.propose(text, context)
+        if on_delta is not None:
+            # Chat SSE: stream the verdict; raw fragments feed the prose
+            # preview extractor. Repair rounds below stay non-streaming.
+            result = await chat_intent_agent.propose_stream(
+                text, context, on_delta=on_delta
+            )
+        else:
+            result = await chat_intent_agent.propose(text, context)
         proposal = result.proposal
     except MiniMaxError:
         proposal = None
@@ -989,7 +1155,7 @@ async def _propose_turn(
     elif isinstance(proposal, AskProposal):
         # Ask 落库 (N-18): the structured ask becomes the docked question.
         # The chat surface only has the choice form — task_book questions
-        # are raised solely by the /intent code path and confirm is the
+        # are raised solely by the plan path and confirm is the
         # reserved cost-quote seat, so the agent's kind is adjudicated to
         # choice (LLM proposes, code adjudicates).
         assistant_message, bailed_run_ids = await _dock_question(
@@ -1007,7 +1173,7 @@ async def _propose_turn(
     elif isinstance(proposal, AnswerProposal):
         # Direct answer (G-4, N-21): a purely informational reply lands as a
         # plain assistant message — no task, no run, no docked question
-        # (same archival shape as the /intent answer turn, B1).
+        # (same archival shape as a plan-path answer turn, B1).
         assistant_content = proposal.text
     elif isinstance(proposal, EditOpsProposal):
         # Operation Model wiring (ADR-032): validate against the registry
@@ -1130,18 +1296,36 @@ async def _propose_turn(
     return assistant_message, run_id, bailed_run_ids
 
 
-async def chat(
+@dataclass
+class PreparedTurn:
+    """chat() phase-1 output (chat SSE, intent-surface-unification W2).
+
+    Everything decided before the LLM call: conversation, the persisted user
+    message, a deterministically answered question (autoResume), the canned
+    checkpoint-resume reply when the turn needs no LLM at all, and the
+    plan-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
+    streaming route can raise plain HTTP errors before the SSE response
+    starts; phase 2 (``execute_chat_turn``) only runs the agent turn, commits
+    once at the end, and assembles the response.
+    """
+
+    user_id: UUID
+    conversation: Conversation
+    conversation_id: UUID
+    user_message: Message
+    project: Project | None
+    history: list[Message]
+    answered_question: Message | None
+    checkpoint_reply: Message | None
+    plan_path: bool
+
+
+async def prepare_chat_turn(
     db: AsyncSession,
     user_id: UUID,
     request: ChatRequest,
-) -> ChatResponse:
-    """Send a message to a chat conversation and return the assistant reply.
-
-    Single public entry point: locate/create the conversation, settle any
-    pending choice question deterministically (autoResume), let the intent
-    agent propose (one call), adjudicate via compile_graph (SkillRejected →
-    one repair round → "I can't do that yet"), and record the turn.
-    """
+) -> PreparedTurn:
+    """chat() phase 1: settle everything up to the dispatch decision."""
     conversation = await _get_or_create_conversation(db, user_id, request)
     conversation_id = UUID(str(conversation.id))
 
@@ -1170,7 +1354,7 @@ async def chat(
     # (letter / number / verbatim label) or freeform replies are allowed —
     # otherwise it's a new intent and the question stays pending. A pending
     # task_book (unconfirmed plan) never resumes here: its answers are the
-    # dock's Start/Cancel and /intent refinements.
+    # dock's Start/Cancel and plan-path refinements below.
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
@@ -1194,6 +1378,8 @@ async def chat(
                 answered_question = pending
             await db.flush()
 
+    checkpoint_reply: Message | None = None
+    plan_path = False
     if answered_question is not None and answered_question.workflow_run_id is not None:
         # Checkpoint autoResume (期 4): a typed answer to the docked direction
         # question takes the same dispatch as the answer endpoint — wake the
@@ -1208,38 +1394,114 @@ async def chat(
         decided = (answered_question.answer or {}).get("text") or (
             answered_question.answer or {}
         ).get("option_id") or ""
-        assistant_message = await _create_message(
+        checkpoint_reply = await _create_message(
             db,
             conversation_id,
             "assistant",
             f"Direction locked: {decided}. Resuming the run.",
         )
+    else:
+        # Plan path dispatch (intent-surface-unification W1): this endpoint is
+        # the ONLY intent surface. A project-scope turn goes to the plan path
+        # (task-book build / refine / confirm via the PlanAgent) while a task
+        # book is pending or before the project's first run; everything else
+        # goes to the four-state proposer. Asset-scope turns never build task
+        # books.
+        if project is not None and conversation.asset_id is None:
+            if is_pending_task_book(pending):
+                plan_path = True
+            elif not isinstance(project.pending_intent, dict):
+                has_runs = (
+                    await db.execute(
+                        select(WorkflowRun.id)
+                        .where(WorkflowRun.project_id == project.id)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                plan_path = has_runs is None
+
+    return PreparedTurn(
+        user_id=user_id,
+        conversation=conversation,
+        conversation_id=conversation_id,
+        user_message=user_message,
+        project=project,
+        history=history,
+        answered_question=answered_question,
+        checkpoint_reply=checkpoint_reply,
+        plan_path=plan_path,
+    )
+
+
+async def execute_chat_turn(
+    db: AsyncSession,
+    prepared: PreparedTurn,
+    request: ChatRequest,
+    on_delta=None,
+) -> ChatResponse:
+    """chat() phase 2: run the agent turn, commit once, assemble the response.
+
+    ``on_delta`` (chat SSE) receives raw LLM verdict fragments for the prose
+    preview channel; None (the JSON path, repair rounds, answer_question's
+    continuation) keeps today's one-shot calls.
+    """
+    if prepared.checkpoint_reply is not None:
+        assistant_message = prepared.checkpoint_reply
         run_id = None
-        bailed_run_ids = []
+        bailed_run_ids: list[UUID] = []
+    elif prepared.plan_path:
+        assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
+            db,
+            prepared.user_id,
+            prepared.conversation,
+            prepared.project,
+            request,
+            on_delta=on_delta,
+        )
+        if plan_answered is not None:
+            prepared.answered_question = plan_answered
     else:
         assistant_message, run_id, bailed_run_ids = await _propose_turn(
             db,
-            user_id,
-            conversation,
-            project,
+            prepared.user_id,
+            prepared.conversation,
+            prepared.project,
             request.message,
             request.mentions,
-            history[-6:],
+            prepared.history[-6:],
+            on_delta=on_delta,
         )
 
     await db.commit()
     await finalize_bailed_runs(bailed_run_ids)
     return ChatResponse(
-        conversation_id=conversation_id,
-        user_message=ChatMessageResponse.model_validate(user_message),
+        conversation_id=prepared.conversation_id,
+        user_message=ChatMessageResponse.model_validate(prepared.user_message),
         assistant_message=ChatMessageResponse.model_validate(assistant_message),
         run_id=run_id,
         answered_question=(
-            ChatMessageResponse.model_validate(answered_question)
-            if answered_question is not None
+            ChatMessageResponse.model_validate(prepared.answered_question)
+            if prepared.answered_question is not None
             else None
         ),
     )
+
+
+async def chat(
+    db: AsyncSession,
+    user_id: UUID,
+    request: ChatRequest,
+) -> ChatResponse:
+    """Send a message to a chat conversation and return the assistant reply.
+
+    Single public entry point (JSON path): prepare the turn (locate/create
+    the conversation, settle any pending choice question deterministically),
+    then execute it (intent agent proposes, compile_graph adjudicates, one
+    commit). The SSE path calls the two phases itself so prose deltas can
+    stream between them.
+    """
+    prepared = await prepare_chat_turn(db, user_id, request)
+    return await execute_chat_turn(db, prepared, request)
 
 
 async def find_conversation(

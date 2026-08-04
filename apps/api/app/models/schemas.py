@@ -333,7 +333,7 @@ class AskProposal(BaseModel):
     task_list / edit_ops, so the union gains a third state. The pre-N-18
     "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
     ask. ``kind`` carries the *use* (NAMING N-19): choice is the chat loop's
-    question; task_book is raised by the /intent code path, never by the
+    question; task_book is raised by the chat plan path, never by the
     agent; confirm is the reserved seat for the cost quote (v3).
     """
 
@@ -354,7 +354,7 @@ class AnswerProposal(BaseModel):
     context carries the per-step status section, G-2), explanations of
     existing outputs, small talk. Nothing is dispatched, no run starts, no
     question docks: the text lands as a plain assistant message, the same
-    archival shape as the /intent answer turn (B1). The boundary against
+    archival shape as a plan-path answer turn (B1). The boundary against
     the other states is a prompt rule: work requests go to task_list /
     edit_ops, ambiguous readings go to ask — answer is never the lazy out.
     """
@@ -419,6 +419,20 @@ class ChatRequest(BaseModel):
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
+    # Plan-path transports (intent-surface-unification W3 — carry only, never
+    # persisted on the message):
+    # The review panel's current task book (hand-edited slots marked
+    # explicit). Its explicit slots pin through this re-inference (pin-merge
+    # rule); None = pin from the stored pending intent, if any.
+    prior_intent: "InferredIntent | None" = None
+    # The composer's brand choice rides the first message; written into the
+    # pending intent only when the plan path docks a task book (a later turn
+    # omitting it never clobbers the stored choice).
+    brand_template_id: UUID | None = None
+    # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
+    # the task book by prose (PlanAgent verdict "start"): a typed "looks
+    # good, start it" must not silently drop a review-tier choice.
+    autonomy: Literal["auto", "review"] | None = None
 
 
 class TaskItem(BaseModel):
@@ -591,6 +605,12 @@ class InferredIntent(BaseModel):
         for stored ``pending_intent`` rows only — never written."""
         if not isinstance(data, dict):
             return data
+        # An explicit ``outputs: null`` (the LLM's habit on start/answer
+        # verdicts, where slots are irrelevant) reads as "use the default" —
+        # dropping the key lets the field default apply instead of failing
+        # validation and degrading a correct verdict to the fallback intent.
+        if data.get("outputs") is None:
+            data = {k: v for k, v in data.items() if k != "outputs"}
         outputs = data.get("outputs")
         if not isinstance(outputs, list) or not any(
             isinstance(o, str) for o in outputs
@@ -677,57 +697,10 @@ class InferredIntent(BaseModel):
     )
 
 
-class InferIntentRequest(BaseModel):
-    """Request body for intent inference."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: str = Field(default="", description="User prompt or transcript paste.")
-    filename: str | None = Field(
-        default=None, description="Optional uploaded filename for extra context."
-    )
-
-
-class InferIntentResponse(BaseModel):
-    """Response from intent inference."""
-
-    intent: InferredIntent
-
-
-class ProjectIntentRequest(BaseModel):
-    """Request body for project-scoped intent inference.
-
-    The backend reads the project's assets to detect material/output conflicts
-    (e.g. clips requested without renderable media).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: str = Field(default="", description="User prompt or transcript paste.")
-    brand_template_id: UUID | None = None
-    # The composer's fourth payload field (2026-08-01, recipe-mention brief):
-    # @-entity chips. A recipe mention is resolved server-side into a pinned
-    # task book (resolve_recipe_mentions) — the client never builds a prior.
-    mentions: list[ChatMention] = Field(default_factory=list)
-    # The review panel's current task book (hand-edited slots marked
-    # explicit). Its explicit slots pin through this re-inference (pin-merge
-    # rule); None = pin from the stored pending intent, if any.
-    prior: InferredIntent | None = None
-    # The user's own words for THIS turn (B1) — refinement turns send an
-    # accumulated ``prompt`` for inference but only the new line is archived
-    # as the user message. None = archive ``prompt`` itself (first inference
-    # / single-shot callers).
-    turn: str | None = None
-    # The dock's autonomy tier (§2.7) — consumed only when this turn starts
-    # the run (action="start", G-1: a prose confirmation must not silently
-    # drop a review-tier choice); ignored on plan/answer turns.
-    autonomy: Literal["auto", "review"] | None = None
-
-
 class PendingIntent(BaseModel):
     """Unconfirmed task book persisted on ``projects.pending_intent``.
 
-    Written by ``POST /projects/{id}/intent`` on generate-action turns (an
+    Written by the chat plan path on generate-action turns (an
     answer-action turn never overwrites the stored book), cleared once the
     run starts. Lets a user who left the plan-confirmation chat resume it
     exactly, from any device.
@@ -749,65 +722,6 @@ class PendingIntent(BaseModel):
     intent: InferredIntent
     reasons: list[str] = Field(default_factory=list)
     brand_template_id: UUID | None = None
-
-
-class ProjectIntentPlanResponse(BaseModel):
-    """A generate-action turn: the (refined) task book to confirm.
-
-    Confirmation is signalled by ``reasons`` being non-empty (the retired
-    ``needs_clarification`` bool was its verbatim copy, B4).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["plan"] = "plan"
-    intent: InferredIntent
-    reasons: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Machine-readable reasons the book needs a human check: "
-            "language_default, outputs_default, clip_count_default, "
-            "clips_without_media. Empty = safe to auto-start."
-        ),
-    )
-
-
-class ProjectIntentAnswerResponse(BaseModel):
-    """An answer-action turn: a capability question answered in prose (B1).
-
-    Both sides of the exchange are persisted as plain message rows, so the
-    confirm-phase conversation survives refresh like every other archive row.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["answer"] = "answer"
-    text: str
-
-
-class ProjectIntentStartedResponse(BaseModel):
-    """A start-action turn: the prose confirmation ("looks good, start it")
-    answered the docked task book (kind=start) and its run is live (G-1).
-
-    The run still comes from the only birthplace — the start branch delegates
-    to ``answer_question`` → ``create_run``; ``answered_question`` is the QA
-    archive row (same role as ``AnswerResponse.answered_question``).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["started"] = "started"
-    run_id: UUID
-    answered_question: ChatMessageResponse
-
-
-# Result of ``POST /projects/{id}/intent`` — discriminated on ``type`` so a
-# plan turn never carries a meaningless answer field and vice versa (B1);
-# ``started`` is the confirm-phase prose confirmation (G-1).
-ProjectIntentResponse = Annotated[
-    ProjectIntentPlanResponse | ProjectIntentAnswerResponse | ProjectIntentStartedResponse,
-    Field(discriminator="type"),
-]
 
 
 class ProjectBase(BaseModel):
@@ -1620,10 +1534,10 @@ class GenerateRequest(BaseModel):
         default=None,
         description=(
             "Requested task slots — one per requested output (same-type multi "
-            "slots for multi-language / multi-angle versions). Required on "
-            "the composer path (422 otherwise — confirm via "
-            "/projects/{id}/intent first); None is only tolerated where the "
-            "route derives intent explicitly."
+            "slots for multi-language / multi-angle versions). Required for "
+            "full-scope requests (422 otherwise — the task book is built and "
+            "confirmed via the chat plan path); None is only tolerated on "
+            "non-full scopes."
         ),
     )
     tone_settings: ToneSettings | None = None
