@@ -7,8 +7,9 @@
 > ① **配方 = 能力承诺**——上了的卡必须能用用户自己的素材跑出同款，不能写死、不能仅 demo（STRATEGY"配方卡不做营销剧场"的产品化口径）；
 > ② 首页形态 = composer 下方**能力演示视频卡**（4 张：风格 / 多语言 dub / 分镜剪辑 / 图片视频），源素材用云端 demo talk；
 > ③ 声音的家 = **Speaker 块扩展**（声纹 = Speaker 画像属性，stock voices 作系统内置 Speaker 进 SpeakerPickerModal），composer 不加 Audio 块；
-> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）；
+> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）；**（2026-08-05 修订：R2 先交付无声版——照片轮播+字幕+音乐，不需要真人说话；声音路径整体后置第 4 周声纹线，§4.2）**
 > ⑤ **Remix 形态 = composer mention chip**（2026-08-01，对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决）：点卡 = 往 composer 插入 recipe 提及 chip，走唯一入口正常流；**否全屏模态框**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统做成**双端注册表架构**，recipe 第一成员，后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书钉死唯一发生地 = 服务端解析（简报 `docs/tasks/recipe-mention.md`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，第 6 周线）。
+> ⑥ **功能扩展的唯一门 = SKILL_REGISTRY 注册项**（2026-08-05）：重试/输入校验/拓扑约束/进度文案/计量提示随登记免费获得；禁为单节点开平行映射表或特判分支（CHAT_ARCH §4 扩展门纪律）。
 
 ## 0. 已核实的现状事实（读码确认，2026-07-30）
 
@@ -39,7 +40,7 @@
 ──────────────────        ─────────────────────────       ─────────────────────────
 video（实拍）               clean-bottom                    原声音轨 + ASR 词级时间戳
 stills（照片轮播）          karaoke-highlight               TTS 声纹 + ASR 回配时间戳
-slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅读节奏估算——后置）
+slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读节奏估算（✅ align_stills 落地，2026-08-05）
                             stacking（新增，§3.2）          + music 槽（独立开关，已有）
 ```
 
@@ -75,20 +76,22 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 - **承诺**：一段演讲 → 你的声音说德语/法语/西语（参照 Agent Opus"视频配音"获客形态）。
 - **能力现状**：✅ 零缺口（§0）。dub 零件、节点、skill、渲染全在跑。
 - **兑现工作 = 纯接线**：单 run 拓扑 `clips_gen → dub×N`（registry `after` 约束已有，配乐/配音修饰节点殿后）；语言集默认建议 **DE + FR + ES**（欧洲 ICP，卡片可配置）；任务书槽表达 = clips 槽 + dub 语言清单进 `spec.target_language` 扇出。
-- **合并代数三规则**（2026-08-02，agent-loop-upgrade W1；recipe-mention §2.3 同文）：① **承诺钉死**——`outputs` pin 优先；② **参数默认**——`dub_languages` 是 DEFAULT 不是承诺：用户在（可编辑的）模板文案里点名的语言赢，没点名才用配方默认（"remix 改成中文"生效）；③ **额外放行**——同句其他意图加性存活（"@配音卡 顺便写篇文章"的 article 槽位并进同一张任务书）。`RecipeEntry` 字段级策略注释即此三规则的代码座位；chat 路径的 fork/morph 选择经 `DubClipParams.fork`（"再来一版" → fork 派生新行，原版保留）。
+- **合并代数三规则**（2026-08-02，agent-loop-upgrade W1；recipe-mention §2.3 同文；**2026-08-05 修订：配方从钉降为预设**）：① **承诺播种**——`outputs` 只做存在性填充：推断没产出的槽位类型才补，已产出的一律不动；无 explicit——下一轮起每个字段（含槽位存亡）都可经 chat 修订，**chat 修订永远赢**（面板手改经 `merge_prior_slots` 三方合并存活）；② **参数默认**——`dub_languages` 是 DEFAULT 不是承诺：用户在（可编辑的）模板文案里点名的语言赢，没点名才用配方默认（"remix 改成中文"生效）；③ **额外放行**——同句其他意图加性存活（"@配音卡 顺便写篇文章"的 article 槽位并进同一张任务书）。`RecipeEntry` 字段级策略注释即此三规则的代码座位；chat 路径的 fork/morph 选择经 `DubClipParams.fork`（"再来一版" → fork 派生新行，原版保留）。
 - **素材账单**：demo talk（恢复桶中 `demo/` 树）；预览 = 原片片段 + 各语言 dub 片段（跑真管线收获后烘成静态公开资源）。
 
 ### 4.2 图片视频卡（R2 兑现）
 
-- **承诺**：只有文字稿 + 现场照片 → 照片轮播 + 字幕堆叠淡入 + 音乐 + **你的声音**在讲的视频。
-- **能力现状**：🟡 stills 链在跑；声音与堆叠字幕是缺口。
-- **兑现工作**：
-  1. `voice_gen` 节点（简报 `tasks/synthetic-talk-video.md` 已 Ready）：文字稿 → Speaker 声纹（无则 stock 默认声，§5）→ TTS 音频 asset（`provenance=generated`）→ 回配 ASR 词级时间戳。
-  2. **走 stills 短路径**：voice_gen 产出音频后，既有 stills 分支（audio+images→stills）直接出片；简报的 `synth_visual`（Ken Burns 合成视频 asset）**降为可选增强**，不进 R2 关键路径。
-  3. `stacking` caption preset（§3）。
-  4. Speaker 块扩展 + stock 兜底（§5）。
-- **DAG 拓扑**：`preprocess → voice_gen → director_* → clips(stills) → render`。
-- **素材账单**：demo talk 文字稿 + 现场照片若干；预览 = stills+stacking+TTS 成片。
+> **2026-08-05 口径修订**：R2 交付**无声版**——照片轮播 + 字幕（catalog 多效果）+ 音乐，不需要真人说话。声音路径（voice_gen / TTS / stock 兜底 / 声样入口）整体让给第 4 周声纹线；原"有声版 + stock 兜底"裁决④同步失效，届时按 §5 重启。
+
+- **承诺**：只有文字稿 + 现场照片 → 照片轮播 + 字幕 + 音乐的短片（字幕效果可在 editor/chat 换：堆叠淡入 / 词高亮等 catalog 成员）。
+- **能力现状**：✅ stills 链在跑 + `stacking` preset 已在 catalog；缺口 = 无录音时的字幕时间轴（原痛点：transcript+照片走 stills 分支但无 words，选段时间轴靠编造、无逐词字幕）。
+- **兑现工作（2026-08-05 落地）**：
+  1. `align_stills` 注册项（tool，确定性）：文字稿 → 阅读节奏估算**词级时间轴**（zh 按字 / 拉丁按词 + 句间停顿常数），写回 transcript asset 的 `meta.words`——与 ASR words 同构，下游零感知；文本哈希幂等复用。
+  2. **DAG 注入**：`create_run` 计算输入画像（无 video/audio + 有文字稿 + 有照片）→ `compile_graph` 在 director_plan 与 clips 之间插入 `align_stills`，clips 挂边 `[plan, align]`（mode①/② 共用）；clips 渲染源从 DAG 父节点读（`spec.aligned_asset_id`），不扫全项目。
+  3. `build_clip_spec` stills 分支放宽：words 在、无音频 → 字幕轮播（`url=""`）；音频轨只认 AUDIO 源（transcript 的文本文件永不进音轨）。
+  4. 简报的 `voice_gen`/`synth_visual`（TTS + Ken Burns 合成主片）**后置第 4 周**；本卡不依赖声纹。
+- **DAG 拓扑**：`preprocess → director_understand → director_plan → align_stills → clips(stills) → render`（导演先行，全流程一条 pipeline）。
+- **素材账单**：demo talk 文字稿 + 现场照片若干；预览 = stills + stacking + 音乐成片（demo 烘焙用 stacking 配置的品牌模板）。
 
 ### 4.3 分镜剪辑卡（R3 兑现，独立简报 B）
 
@@ -106,7 +109,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 - **家 = Speaker 块扩展**：声纹 = Speaker 画像属性（已决架构不变）；`SpeakerPickerModal` 加"系统音色"区——stock voices 以系统内置 Speaker 形态出现（如 Rachel · Confident，带试听），与"👤 Anna（cloned ✓）"同列表分区。composer 维持两块不加 Audio 块（避免与 Speaker 职责重叠；Opus 的 Style/Assets/Audio 三块形态已评审未采纳）。
 - **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用 ask 原语 choice 形态，`tasks/done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
 - **stock 声来源**：MiniMax 系统音色（零克隆成本）。**待核实**：系统音色清单与多语言覆盖（EN/DE/FR/ES/IT/ZH 必须齐），核实结果回填本节与 R2 简报。
-- **后置**：语速调节、Pronunciation 纠正（归术语表线（PROGRESS 可选需求））、无声版（阅读节奏估算）。
+- **后置**：语速调节、Pronunciation 纠正（归术语表线（PROGRESS 可选需求））。~~无声版（阅读节奏估算）~~ — 已提前落地为 R2 交付本体（`align_stills`，2026-08-05，§4.2）。
 
 ## 6. 分镜能力指引（简报 B 种子）
 
@@ -123,18 +126,18 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     （无声：阅�
 
 ### 7.1 卡片数据：双端注册表（2026-08-01 修订，取代"前端数据文件"形态）
 
-配方数据分两半，各归其主——**钉死实质永不出服务端，展示数据公开可读**：
+配方数据分两半，各归其主——**预设实质永不出服务端，展示数据公开可读**：
 
 ```python
 # 服务端 app/pipeline/recipes.py — 静态注册表，随代码部署（SKILL_REGISTRY 同款纪律）
 RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs, dub_languages}
 #   status       live | reserved（点亮纪律的闸门）
 #   input_slots  类型化输入槽位：[{type: "video"|"audio"|"images"|"slides"|"transcript", required}]
-#   outputs      钉死任务槽（explicit，pin-merge 抗重推断）
+#   outputs      预设任务槽（存在性填充：只补推断没有的槽位类型，无 explicit）
 #   dub_languages 配音语言集（§4.1）
 ```
 
-- **公开端点** `GET /api/v1/recipes` 只回 `{id, status, input_slots}`——钉死实质（outputs/dub_languages）不下发；landing 匿名受众也是读者，端点公开。
+- **公开端点** `GET /api/v1/recipes` 只回 `{id, status, input_slots}`——预设实质（outputs/dub_languages）不下发；landing 匿名受众也是读者，端点公开。
 - **前端三件配置**：注册表查询（结构）+ `recipes.assets.ts`（preview 内容寻址映射，生成文件）+ i18n `recipes.<id>.*`（title/promise/promptTemplate）。新增配方 = 服务端一条注册项 + i18n 键 + preview 资产，零代码路径。
 - `inputSlots` 本期回归（R1 曾按 YAGNI 修剪）：消费者 = chip/picker 提示 + Assets 引导（前端展示）与 clips-media 门拒收信息（服务端兜底）。
 
@@ -145,14 +148,14 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
            + promptTemplate 文本预填（可见可改，纯文本不是状态）
            → 用户上传自己的素材（Assets 块，必选动作；chip 旁提示所需槽位）
            → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, brand_template_id, mentions }
-           → 服务端 plan path resolve_recipe_mentions() 钉死（钉死唯一发生地；composer 永不构建 prior）
-           → pin-merge → pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
+           → 服务端 plan path resolve_recipe_mentions() 预设播种（播种唯一发生地；composer 永不构建 prior）
+           → 三方合并（merge_prior_slots）→ pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
 ```
 
 **chip 三律**（2026-07-31 旧事故的结构性消除——事故根因是配方状态不可见且跨发送残留）：
-① **可见**——chip 内联 textarea（图标 + label + ×）；② **发送即消费**——随 prompt 清空，payload 只附着当次；③ **× 即纯化**——删 chip 后本次发送不带任何钉。
+① **可见**——chip 内联 textarea（图标 + label + ×）；② **发送即消费**——随 prompt 清空，payload 只附着当次；③ **× 即纯化**——删 chip 后本次发送不带任何配方效果。
 
-@ 手选与点卡同终点（同一 mention）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的确定性靠**服务端注册表解析 + explicit 槽 pin-merge**（代码保证），不靠 LLM 从 prompt 重新推断，也不靠 LLM 解释 recipe 提及。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
+@ 手选与点卡同终点（同一 mention）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的确定性靠**服务端注册表预设播种 + 三方合并**（代码保证），不靠 LLM 从 prompt 重新推断，也不靠 LLM 解释 recipe 提及。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
 
 ### 7.3 布局与素材
 
@@ -165,7 +168,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 | 期 | 内容 | 上卡 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|---|
 | **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；**交互形态 2026-08-01 修订为 mention chip**，简报 `docs/tasks/recipe-mention.md` 期 1 随本行复亮 Remix） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
-| **R2** | `voice_gen` 节点 + stock 声兜底 + Speaker 块扩展 + stills+stacking 链 | 图片视频卡 | 文字稿+照片 → 照片轮播+堆叠字幕+音乐+TTS 声成片；无声纹用户 stock 声不阻塞，dock 可换声 |
+| **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（**2026-08-05 修订：无声版先行**，声音路径后置第 4 周，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
 | **R3** | 简报 B：ADR 翻案 + filmstrip 检测 + `crop_track` + `reframe_clip` | 分镜卡 | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
 | **R4** | 风格卡（内容 TBD） | 风格卡 | — |
 
@@ -177,7 +180,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 2. **每期一份 `docs/tasks/` 简报**，模板对齐既有简报（Context / 已核实事实 / 设计论证 / 改动点 / 命名审计 / 分期验收 / Prohibited Behaviors），依据行引用本文档章节号（如 "RECIPES §3.2"）；上游文档清单见 §11。
 3. **开工前重核 §0 事实**（代码可能已漂移），事实以读码为准。
 4. **运维坑**（已踩过）：改 pipeline 代码必须重启常驻 worker；本机服务调用用 `127.0.0.1` 不用 `localhost`；验证用的手工 run 会被常驻 worker 抢跑，验后清数据。
-5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）/ mention type `"recipe"`（2026-08-01 随 recipe-mention 简报登记）。
+5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴，2026-08-05 随 R2 无声版登记）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）/ mention type `"recipe"`（2026-08-01 随 recipe-mention 简报登记）。
 
 ## 10. Prohibited Behaviors
 

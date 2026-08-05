@@ -100,7 +100,7 @@ intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代
 
 plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 ComposerIntentAgent 时代相同）：
 
-- `generate` → reasons 推导（language_default / outputs_default / clip_count_default / clips_without_media）+ pin-merge（`ChatRequest.prior_intent` 缺省回落 stored）+ recipe mention 服务端 pin（LLM 前 fail-fast 422）→ `sync_task_book_question` dock
+- `generate` → reasons 推导（outputs_default / clip_count_default / clips_without_media）+ 三方合并（`merge_prior_slots`：base=stored 书、ours=面板 `prior_intent`（explicit=手改槽）、theirs=新推断——**逐字段**：推断为 null=无意见保留面板；面板未动的字段推断接管；推断复读旧值时面板手改赢；两边都动 **chat 赢**。手改槽被推断整体丢弃时重新挂上——删手改槽只能在面板里做）+ recipe mention 服务端**预设播种**（2026-08-05 裁定：配方=第一版预设，不是钉——只补推断没有的槽位类型 + 推断为空时填 dub 默认，无任何 explicit，下一轮起每个字段都可修订；LLM 前 fail-fast 422）→ `sync_task_book_question` dock（2026-08-05：book 级 `language`/`language_explicit` 字段退役——语言是每个槽位的属性，PlanAgent 必填；`language_default` reason 随之退役，run 出生地从槽位派生 target_language 兜底）
 - `answer` → 普通 assistant 消息，stored 任务书不被动
 - `start` → 复用 answer kind=start 路径起 run（唯一出生地）；dock 中的任务书以 `presented_plan` 摘要注入推断上下文——短确认看得见自己在确认什么（2026-08-04 硬化，此前裸"开始吧"在模糊首轮后 2/3 误判 generate）
 
@@ -130,6 +130,8 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 **准入纪律：skill 总数十几个封顶。** 新 skill 准入 = 过 NAMING §7 同款评审（用户会用自然语言说到它吗？现有 skill 组合能表达吗？），通过即登记（§8 词汇表）。
 
+**扩展门纪律（2026-08-05 立）**：加功能 = 往注册表填一项，没有第二种方式。注册项自带全家桶——`retries`（步骤级重试预算）、`requires`（出生地输入校验）、`after`（拓扑约束）、`summary_template`（进度文案）、`cost_hint`（计量提示）全部随登记免费获得；runner 落进 `STEP_RUNNERS` 即被编排/工作流/SSE 打勾流自动接管。**禁止侧门**：不为某个节点单开映射表/特判分支（如平行的 retries 表）——那是"房间本来有门又造了侧门"，发现即拆。内部节点（§4.3）不登记，但它们的扩展同样优先审视能否表达为注册项。
+
 ### 4.1 已在（反向抽象登记）
 
 | skill | 实现 | summary_template 示例 |
@@ -139,12 +141,13 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 | `revise_script` | `skills/reviser.py` | "Revised hook · {reason}" |
 | `dub_clip` | dub 端点 → `tools/voice.py` | "Dubbed with cloned voice" |
 | `add_music` | clip-spec music 槽 + mood 库 + `tools/music.py` | "Scored · {mood} bed" |
+| `align_stills` | 阅读节奏估算时间轴（`node_runners._estimate_words_timeline`） | "Aligned transcript · {n} words · {total_seconds}s" |
 
 ### 4.2 新增（按价值排序，独立排期）
 
 | skill | 状态 | 说明 |
 |---|---|---|
-| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md` | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
+| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md`；声音路径随第 4 周声纹线落地（R2 已先行交付无声版，RECIPES §4.2） | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
 | `remove_filler` | 📋 chat 线 hello world | 词级时间戳 + filler 检测 → 标 hidden（非破坏）→ 重渲染 |
 | `make_hook` | 📋 半新 | ≈ `revise_script(scope=hook)` 的独立入口 |
 

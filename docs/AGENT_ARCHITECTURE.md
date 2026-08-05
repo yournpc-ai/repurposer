@@ -295,8 +295,9 @@ Currently `Project.content_plan` is reused unconditionally. Future work should i
 - `app/skills/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
 - `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
 - `app/pipeline/derivative_dispatch.py` — thin dispatcher registry
-- `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地）
-- `app/pipeline/node_runners.py` — 节点执行器注册表（`NODE_RUNNERS`，generation 逻辑平移）
+- `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地；输入画像在此计算并传入纯函数 `compile_graph`）
+- `app/pipeline/registry.py` — SKILL_REGISTRY：功能扩展的唯一门（重试/校验/拓扑/计量随注册免费，纪律见 CHAT_ARCH §4）
+- `app/pipeline/node_runners.py` — 节点执行器注册表（`STEP_RUNNERS`，generation 逻辑平移）
 - `app/metering.py` — 逐节点计量（usage → `workflow_steps.cost`，ADR-025）
 - `app/chat/intent.py` — intent recognition
 - `app/pipeline/routes/outputs.py` — 统一产物 API（含单产物重生成）

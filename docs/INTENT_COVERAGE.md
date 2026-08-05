@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`，验收 = `apps/api/scripts/chat_scenarios.py` S1–S8）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问，验收 = `apps/api/scripts/chat_scenarios.py` S1–S13）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -52,22 +52,27 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | Q 能力（"你能做什么"） | /chat plan path → answer（普通 assistant 消息） | ✅（S4） |
 | 空指令 | 前端本地拦截（toast） | ✅ |
 | 只要 clips 但无媒体 | PlanAgent 排除 clips；绕过则出生地 422 | ✅ |
+| 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | plan path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
+| G 无素材且未贴内容 | answer 反问引导（回形针上传或直接贴文；PlanAgent 规则 + 服务端安全带，永不 dock 无米任务书；prompt.txt shim 已退役） | ✅（S13，2026-08-05） |
+| 配方播种 clips 但无媒体 | dock 保留 clips + 警告，echo 散文主动解释（上传解锁或去 clips 开工）；Start 422 后手编去 clips 可起 | ✅（S11） |
+| Remix 配方后 revise 字段（"clips only needs 2"） | 配方=预设只铺第一版（不钉任何字段）→ 修订直达 docked 书 | ✅（S15，2026-08-05） |
 | S 闲聊 | /chat plan path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |
 
 ### 3.1 待决任务书（任务书已 dock，未 Start——chat 的普通状态，不再是独立相位）
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 修订 slots（"加条德语 post"） | /chat plan path pin-merge（explicit 槽保留）→ 新任务书 dock，旧 supersede | ✅（S3） |
+| G 修订 slots（"加条德语 post"） | /chat plan path 三方合并（`merge_prior_slots`：手改槽逐字段存活；chat 点名修订的字段永远赢）→ 新任务书 dock，旧 supersede | ✅（S3/S16） |
+| 面板手改 + chat 修订冲突 | 三方合并冲突分支：chat 赢（"chat 就是在改 plan，没有什么是定死的"，2026-08-05） | ✅（S16） |
 | G 修订焦点/指令（"聚焦定价部分"） | 同上（累积 prompt = stored prompt + 本轮原文 服务端拼装） | ✅（S3） |
 | Q 能力（"能发 TikTok 吗"） | /chat plan path → answer，任务书不被动 | ✅ |
 | Q 计划（"为什么只有 3 条"） | /chat plan path → LLM 判 answer（解释）或 generate（改成你要的数量） | ✅（LLM 判断，两可都算对） |
 | **C 确认（"好的开始吧"）** | /chat plan path → PlanAgent 判 start（`presented_plan` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；2026-08-04 硬化：`outputs:null` 读容忍 + presented_plan 上下文） |
 | C 取消 | dock Cancel 按钮 → answer kind=bail → 清 pending_intent 回 draft | ✅（按钮；文本"算了"仍无 chat 路径——低频，登记待真实投诉） |
-| C 撤销自己上次修订 | 无（重说一遍反向修订 = 新修订） | 🚧（可接受：pin-merge 天然幂等） |
+| C 撤销自己上次修订 | 无 chat 命令（重说一遍反向修订 = 新修订）；面板上旧版本 chip 可展开只读快照并一键恢复（2026-08-05 版本条） | ✅（UI 恢复路径） |
 | E/T/M/S | /chat plan path → LLM 折算成任务书修订（如"配德语"→ dub_languages）或 answer | 🚧（M 类改品牌/说话人靠 answer 引导；chat 相位见 §3.3 M 行） |
 | 手编面板后 Start | dock Start → answer kind=start（edited intent 优先于 stored） | ✅ |
-| recipe mention（@配方卡） | /chat plan path → resolve_recipe_mentions 服务端 pin（LLM 前 fail-fast 422） | ✅（S5） |
+| recipe mention（@配方卡） | /chat plan path → resolve_recipe_mentions 服务端预设播种（补缺失槽位类型 + dub 默认；LLM 前 fail-fast 422） | ✅（S5） |
 
 ### 3.2 运行相位（run 在跑）
 

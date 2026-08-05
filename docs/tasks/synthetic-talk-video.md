@@ -1,9 +1,10 @@
 # Task: Synthetic Talk Video — 生成端 v1（文字稿 + 照片 → 发言视频）
 
+> **Status（2026-08-05 修订）**：**声音路径后置**——R2 图片视频卡已按无声口径先行交付（照片轮播+字幕+音乐，走 `align_stills` 阅读节奏时间轴 + stills 短路径，RECIPES §4.2）。本简报的 `voice_gen`/`synth_visual`（TTS + 合成主片）设计整体留档，随第 4 周声纹线（PROGRESS 第 4 周）重启；重启时按当时的 registry/DAG 现状重核 §2 前置假设（本简报写于意图层单面化之前，`PlanNodeKind`/`NODE_RUNNERS`/`_compute_ui_step` 等名已漂移为 `SKILL_REGISTRY`/`STEP_RUNNERS`/stage 提示）。
 > **Base branch**: `main`（backend-module-restructure 已落地，路径已按新包结构核对）
 > **Architecture reference**: `docs/AGENT_ARCHITECTURE.md` §12；ADR-029（双链并列）
 > **Naming reference**: `docs/NAMING.md`（`voice_gen` / `synth_visual` 按 §5 注册零迁移）
-> **Status**: Ready for implementation
+> **Status**: 后置（声音路径随第 4 周声纹线重启，见上条 2026-08-05 修订）
 > **Owner**: TBD
 
 ---
