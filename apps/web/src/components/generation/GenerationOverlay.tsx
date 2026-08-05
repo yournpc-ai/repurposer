@@ -11,30 +11,36 @@
  * chat-loop turns itself.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
   ArrowUp,
   Check,
   ChevronDown,
+  ChevronUp,
   CircleHelp,
   FileText,
+  History,
   Image as ImageIcon,
   Images,
   Loader2,
   Mic2,
   Minus,
   Newspaper,
+  Paperclip,
   Plus,
   Quote,
   Square,
+  Undo2,
   Video,
   X,
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { inferAssetType } from "@/lib/asset-type"
 import { streamChat } from "@/lib/chat-stream"
+import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
 import { Streamdown } from "streamdown"
 import { toast } from "sonner"
@@ -110,16 +116,12 @@ const SLOT_COUNT_DEFAULT: Record<string, number> = {
   carousel: 6,
 }
 
-/** Slot-language Select sentinel for "same as the task book" (null). */
-const BOOK_LANGUAGE = "__book__"
-
 type OutputKey = (typeof OUTPUT_OPTIONS)[number]["key"]
 type Phase = "confirm" | "running" | "chat"
 
 export interface InferredIntent {
   action: "generate" | "answer"
   answer: string | null
-  language: string
   outputs: IntentSlot[]
   /** 配音语言集 (dub_languages, RECIPES §4.1): task-book-level voice-dub
    * languages for the run's clips; empty = no dubbing. */
@@ -169,14 +171,20 @@ export function normalizeSlots(
 }
 
 /** Normalize an intent payload of either shape (legacy flat or slot) into the
- * slot-shaped InferredIntent the panel edits. */
+ * slot-shaped InferredIntent the panel edits. Language is a per-slot
+ * property (2026-08-05 restructure — the book-level field is retired): slot
+ * languages are MATERIALIZED here (null slot → the legacy book language, or
+ * "en"), so every row's dropdown shows a concrete language — no sentinel. */
 export function normalizeIntent(raw: unknown): InferredIntent {
   const data = (raw ?? {}) as Record<string, unknown>
+  const fallbackLanguage =
+    typeof data.language === "string" && data.language ? data.language : "en"
   return {
     action: data.action === "answer" ? "answer" : "generate",
     answer: (data.answer as string | null) ?? null,
-    language: typeof data.language === "string" && data.language ? data.language : "en",
-    outputs: normalizeSlots(data.outputs, data.clip_count as number | null),
+    outputs: normalizeSlots(data.outputs, data.clip_count as number | null).map(
+      (slot) => ({ ...slot, language: slot.language ?? fallbackLanguage })
+    ),
     dub_languages: Array.isArray(data.dub_languages)
       ? data.dub_languages.filter((l): l is string => typeof l === "string" && !!l)
       : [],
@@ -189,6 +197,9 @@ interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** Files uploaded mid-conversation (the chat's attach button) — rendered
+   * as attachment chips on the user bubble. */
+  assets?: ProjectAsset[]
   /** Live SSE preview bubble: deltas append until the turn.completed
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
@@ -300,19 +311,23 @@ function StepMarker({
 }
 
 /** User message — the only bubbled element in the flow (rounded, muted).
- * The opening prompt carries the project's source materials as attachments. */
+ * The opening prompt carries the project's source materials as attachments;
+ * an attachment-only message (files dropped into the chat) skips the text
+ * bubble and shows just the chips. */
 function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] }) {
   const { t } = useTranslation()
   return (
     <Message align="end">
       <MessageContent>
-        <BubbleGroup>
-          <Bubble variant="muted" align="end">
-            <BubbleContent className="rounded-2xl px-4 py-2.5 text-sm">
-              <p className="whitespace-pre-wrap">{text}</p>
-            </BubbleContent>
-          </Bubble>
-        </BubbleGroup>
+        {text ? (
+          <BubbleGroup>
+            <Bubble variant="muted" align="end">
+              <BubbleContent className="rounded-2xl px-4 py-2.5 text-sm">
+                <p className="whitespace-pre-wrap">{text}</p>
+              </BubbleContent>
+            </Bubble>
+          </BubbleGroup>
+        ) : null}
         {assets && assets.length > 0 ? (
           <AttachmentGroup className="justify-end">
             {assets.map((asset) => {
@@ -382,6 +397,98 @@ function ThinkingRow({ label }: { label: string }) {
   )
 }
 
+/** A superseded plan version in the flow: one slim chip row that expands
+ * into a read-only snapshot with a restore action. The live book is always
+ * the bottom-most card; these chips are its history (2026-08-05 ruling —
+ * chat edits the plan, nothing is locked, old versions stay visible). */
+function PlanVersionChip({
+  n,
+  book,
+  summary,
+  expanded,
+  onToggle,
+  onRestore,
+  slotLabel,
+}: {
+  n: number
+  book: InferredIntent
+  summary: string
+  expanded: boolean
+  onToggle: () => void
+  onRestore: () => void
+  slotLabel: (slot: IntentSlot) => string
+}) {
+  const { t } = useTranslation()
+  return (
+    <Message align="start">
+      <MessageContent>
+        <div className="w-full">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <History className="h-3.5 w-3.5 shrink-0" />
+            <span className="shrink-0 font-medium">
+              {t("generationOverlay.planVersion", { n })}
+            </span>
+            <span className="min-w-0 truncate">{summary}</span>
+            {expanded ? (
+              <ChevronUp className="ml-auto h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0" />
+            )}
+          </button>
+          {expanded && (
+            <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted p-4">
+              <div className="flex flex-col gap-1.5">
+                {book.outputs.map((slot, i) => {
+                  const meta = OUTPUT_OPTIONS.find((o) => o.key === slot.type)
+                  if (!meta) return null
+                  return (
+                    <div key={i} className="flex items-center gap-1.5 text-xs">
+                      <meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>{slotLabel(slot)}</span>
+                    </div>
+                  )
+                })}
+                {book.dub_languages.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>
+                      {t("generationOverlay.planSummaryDub", {
+                        langs: book.dub_languages
+                          .map((l) => t(`languages.${l}`, { defaultValue: l }))
+                          .join(", "),
+                      })}
+                    </span>
+                  </div>
+                )}
+                {book.specific_instruction ? (
+                  <p className="line-clamp-2 text-xs text-muted-foreground">
+                    {book.specific_instruction}
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={onRestore}
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  {t("generationOverlay.versionRestore")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </MessageContent>
+    </Message>
+  )
+}
+
 export function GenerationOverlay({
   projectId,
   prompt,
@@ -405,8 +512,10 @@ export function GenerationOverlay({
       : {
           action: "generate",
           answer: null,
-          language: "en",
-          outputs: [bareSlot("post"), bareSlot("quotes"), bareSlot("article")],
+          outputs: ["post", "quotes", "article"].map((type) => ({
+            ...bareSlot(type),
+            language: "en",
+          })),
           dub_languages: [],
           specific_instruction: prompt,
         }
@@ -444,6 +553,30 @@ export function GenerationOverlay({
   const [input, setInput] = useState("")
   const [chatBusy, setChatBusy] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
+  // Plan versions (2026-08-05 refinement-flow rework): the LIVE book always
+  // renders as the bottom-most card — it never moves; a refinement swaps its
+  // content in place. The superseded book collapses into a version chip
+  // anchored right after the echo bubble that produced it (expandable read-
+  // only snapshot, restorable — chat edits the plan, nothing is locked).
+  // liveBookMessageId = the echo bubble of the turn that docked the current
+  // book; null on restored sessions (no bubble exists → the card carries its
+  // own echo line).
+  const [liveBookMessageId, setLiveBookMessageId] = useState<string | null>(null)
+  const [planVersions, setPlanVersions] = useState<
+    { messageId: string; book: InferredIntent }[]
+  >([])
+  const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
+  // The demotion snapshot must capture the book as it stands AT DOCK TIME
+  // (the panel stays editable while a refinement turn is in flight).
+  const intentRef = useRef(intent)
+  useEffect(() => {
+    intentRef.current = intent
+  }, [intent])
+  // Mid-conversation uploads (the chat input's attach button) — files go
+  // straight to project assets and land in the flow as an attachment-only
+  // user bubble.
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
   // Identity echo line (speaker voice + brand skin) — resolved once.
@@ -611,19 +744,24 @@ export function GenerationOverlay({
     }
   }, [steps, pendingQuestion, runId, fetchPendingQuestion])
 
-  // Load the project's assets once for the prompt attachments.
-  useEffect(() => {
-    let cancelled = false
-    apiFetch(`/api/v1/projects/${projectId}/assets`, { toast: false })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: ProjectAsset[]) => {
-        if (!cancelled) setAssets(data)
+  // Load the project's assets for the prompt attachments — once on mount,
+  // and again after a chat turn when the project started empty: the plan
+  // path promotes user-declared pasted text ("this is my transcript: …")
+  // into a real transcript asset mid-turn, and it must show up.
+  const fetchAssets = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
+        toast: false,
       })
-      .catch(() => {})
-    return () => {
-      cancelled = true
+      if (res.ok) setAssets((await res.json()) as ProjectAsset[])
+    } catch {
+      /* attachment refresh is best-effort */
     }
   }, [projectId])
+
+  useEffect(() => {
+    void fetchAssets()
+  }, [fetchAssets])
 
   // Identity echo: resolve the speaker / brand names behind the ids once —
   // a read-only reassurance line, never a question (ask primitive §2.1).
@@ -713,7 +851,8 @@ export function GenerationOverlay({
         method: "POST",
         body: {
           slots: intent.outputs,
-          target_language: intent.language,
+          target_language:
+            intent.outputs.find((s) => s.language)?.language ?? "en",
           dub_languages: intent.dub_languages,
           instruction: intent.specific_instruction || prompt,
           brand_template_id: brandTemplateId || undefined,
@@ -760,7 +899,11 @@ export function GenerationOverlay({
     }
   }, [initialIntent, initialRunId, initialNeedsClarification, phase, questionLoaded, handleStartGeneration])
 
-  const canStartGeneration = intent.outputs.length > 0 && !!intent.language
+  const canStartGeneration = intent.outputs.length > 0
+
+  // The clips slot backing the voice-over multiplication line (null → the
+  // 422-escape state; the dock's warning carries that case instead).
+  const clipsSlotForDub = intent.outputs.find((s) => s.type === "clips") ?? null
 
   // Slot edits — every hand edit marks the slot explicit so it pins through
   // the next re-inference (pin-merge rule).
@@ -775,7 +918,16 @@ export function GenerationOverlay({
   const addSlot = (type: OutputKey) =>
     setIntent((prev) => ({
       ...prev,
-      outputs: [...prev.outputs, { ...bareSlot(type), explicit: true }],
+      outputs: [
+        ...prev.outputs,
+        {
+          ...bareSlot(type),
+          // A hand-added row starts from the plan's prevailing language —
+          // the dropdown always shows a concrete value (no sentinel).
+          language: prev.outputs.find((s) => s.language)?.language ?? "en",
+          explicit: true,
+        },
+      ],
     }))
 
   const removeSlot = (index: number) =>
@@ -796,25 +948,97 @@ export function GenerationOverlay({
     [t]
   )
 
-  const planSummary = useMemo(() => {
-    const parts = [
-      intent.outputs.map(slotLabel).join(", "),
-      t(`languages.${intent.language}`, { defaultValue: intent.language }),
-    ]
-    if (intent.dub_languages.length > 0) {
-      parts.push(
-        t("generationOverlay.planSummaryDub", {
-          langs: intent.dub_languages
-            .map((l) => t(`languages.${l}`, { defaultValue: l }))
-            .join(", "),
-        })
-      )
-    }
-    return parts.join(" · ")
-  }, [intent, slotLabel, t])
+  const summarizeBook = useCallback(
+    (book: InferredIntent) => {
+      const parts = [book.outputs.map(slotLabel).join(", ")]
+      if (book.dub_languages.length > 0) {
+        parts.push(
+          t("generationOverlay.planSummaryDub", {
+            langs: book.dub_languages
+              .map((l) => t(`languages.${l}`, { defaultValue: l }))
+              .join(", "),
+          })
+        )
+      }
+      return parts.join(" · ")
+    },
+    [slotLabel, t]
+  )
+
+  const planSummary = useMemo(() => summarizeBook(intent), [intent, summarizeBook])
+
+  /** True when the echo bubble of the turn that docked the current book is
+   * in the flow — the card's own echo line then stays hidden. */
+  const liveBubblePresent =
+    liveBookMessageId !== null &&
+    messages.some((m) => m.id === liveBookMessageId)
+
+  /** Restore a superseded version as the current plan — the chip's snapshot
+   * becomes the panel's book (it rides the next refine as prior_intent, and
+   * Start uses it directly). Nothing is locked; older versions stay in the
+   * flow as chips. */
+  const restoreVersion = (index: number) => {
+    const version = planVersions[index]
+    if (!version) return
+    setIntent(version.book)
+    setExpandedVersion(null)
+    toast.success(
+      t("generationOverlay.versionRestored", { n: index + 1 })
+    )
+  }
 
   const pushMessage = (message: Omit<OverlayMessage, "id">) => {
     setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
+  }
+
+  /** The chat input's attach button: files upload straight into the
+   * project's assets (same direct-to-storage flow as the composer) and land
+   * in the flow as an attachment-only user bubble — the answer to "the chat
+   * told me to upload but there's no upload entry here". */
+  const handleFilesPicked = async (picked: FileList | null) => {
+    const files = Array.from(picked ?? [])
+    if (files.length === 0 || uploading) return
+    setUploading(true)
+    try {
+      const uploaded: ProjectAsset[] = []
+      for (const material of files) {
+        const urlRes = await apiFetch(
+          `/api/v1/projects/${projectId}/assets/upload-url`,
+          {
+            method: "POST",
+            body: {
+              filename: material.name,
+              content_type: material.type || undefined,
+            },
+          }
+        )
+        if (!urlRes.ok) throw new Error("Failed to get upload URL")
+        const { key, upload_url } = (await urlRes.json()) as {
+          key: string
+          upload_url: string
+        }
+        const putRes = await fetch(upload_url, {
+          method: "PUT",
+          body: material,
+          headers: material.type ? { "Content-Type": material.type } : {},
+        })
+        if (!putRes.ok) throw new Error("Failed to upload file")
+        const assetRes = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
+          method: "POST",
+          body: { type: inferAssetType(material), key, title: material.name },
+        })
+        if (!assetRes.ok) throw new Error("Failed to create asset")
+        uploaded.push((await assetRes.json()) as ProjectAsset)
+      }
+      pushMessage({ role: "user", content: "", assets: uploaded })
+      void fetchAssets()
+    } catch {
+      toast.error(t("composer.uploadFailed"))
+    } finally {
+      setUploading(false)
+      // Reset so picking the same file twice still fires onChange.
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
   }
 
   /** An answered question collapses into the flow as a QA pair (ask
@@ -848,19 +1072,15 @@ export function GenerationOverlay({
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
-        const hadBook = intentReady
         const pending = await fetchPendingIntent()
         if (pending) {
           setIntent(normalizeIntent(pending.intent))
           setReasons(pending.reasons ?? [])
           setIntentReady(true)
           setPhase("confirm")
-          if (hadBook) {
-            pushMessage({
-              role: "assistant",
-              content: t("generationOverlay.planUpdated"),
-            })
-          } else if ((pending.reasons ?? []).length === 0) {
+          // No "plan updated" filler line on refinements — the turn's own
+          // streamed echo bubble already says what changed.
+          if (!intentReady && (pending.reasons ?? []).length === 0) {
             autoStartArmedRef.current = true
           }
         }
@@ -880,11 +1100,11 @@ export function GenerationOverlay({
    * turns as prior_intent (its explicit slots pin through the merge);
    * mentions / brand ride only the composer's first message.
    *
-   * Transport is SSE (streamChat): prose deltas land in a preview bubble as
-   * they generate; the terminal turn.completed envelope then REPLACES the
-   * preview and drives all completion logic — the envelope always wins.
-   * Plan-card turns emit no deltas (structured JSON), so their UX is
-   * unchanged: thinking row → card. */
+   * Transport is SSE (streamChat): prose deltas feed a typewriter-paced
+   * preview bubble (reasoning models emit a short echo in one burst — pacing
+   * keeps the "written live" feel); the terminal turn.completed envelope is
+   * authoritative and FINALIZES THE PREVIEW IN PLACE — same React key, no
+   * remount — so a docking task book never makes the text flicker. */
   const sendChat = async (
     text: string,
     opts?: {
@@ -901,6 +1121,36 @@ export function GenerationOverlay({
     abortRef.current = ctrl
     setChatBusy(true)
     const streamId = crypto.randomUUID()
+    let streamedAny = false
+    const appendDelta = (delta: string) => {
+      streamedAny = true
+      setMessages((prev) =>
+        prev.some((m) => m.id === streamId)
+          ? prev.map((m) =>
+              m.id === streamId ? { ...m, content: m.content + delta } : m
+            )
+          : [
+              ...prev,
+              { id: streamId, role: "assistant", content: delta, streaming: true },
+            ]
+      )
+    }
+    const typewriter = createTypewriter(appendDelta)
+    /** In-place finalize: the preview bubble becomes the settled message
+     * under the SAME key (the envelope's content wins); never a remount. */
+    const finalizePreview = (content?: string, runId?: string | null) =>
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === streamId
+            ? {
+                ...m,
+                content: content ?? m.content,
+                runId: runId === undefined ? m.runId : runId,
+                streaming: false,
+              }
+            : m
+        )
+      )
     try {
       const data = await streamChat<{
         assistant_message: QuestionMessage
@@ -919,27 +1169,19 @@ export function GenerationOverlay({
         },
         {
           signal: ctrl.signal,
-          onDelta: (delta) => {
-            setMessages((prev) =>
-              prev.some((m) => m.id === streamId)
-                ? prev.map((m) =>
-                    m.id === streamId ? { ...m, content: m.content + delta } : m
-                  )
-                : [
-                    ...prev,
-                    { id: streamId, role: "assistant", content: delta, streaming: true },
-                  ]
-            )
-          },
+          onDelta: (delta) => typewriter.push(delta),
         }
       )
-      // Envelope wins: the preview placeholder lifts away and the
-      // authoritative ChatResponse drives the landing below.
-      setMessages((prev) => prev.filter((m) => m.id !== streamId))
+      // Envelope wins: release any buffered prose, then land the turn.
+      typewriter.flush()
+      // A turn can create assets server-side (declared-material promotion) —
+      // refresh the prompt attachments when the project started empty.
+      if (assets.length === 0) void fetchAssets()
       if (data.run_id) {
         // G-1: the prose confirmation answered the docked task book
         // server-side (kind=start) and the run is live — the same landing
         // as the dock's Start button.
+        finalizePreview()
         landOnStartedRun(data.run_id, data.answered_question ?? null)
         return
       }
@@ -949,8 +1191,38 @@ export function GenerationOverlay({
         setPendingQuestion(null)
         pushQaArchive(data.answered_question)
       }
-      await handleAssistantMessage(data.assistant_message)
+      const message = data.assistant_message
+      if (message.question && !message.answer) {
+        // A question docks (never enters the flow). The streamed echo bubble
+        // STAYS in place; the plan card is always the bottom-most element —
+        // a refinement swaps its content in place, and the superseded book
+        // collapses into a version chip anchored after the echo bubble that
+        // produced it. No unmount, no flicker, no jumping card.
+        if (streamedAny) {
+          finalizePreview()
+          if (message.question.kind === "task_book") {
+            if (intentReady && liveBookMessageId) {
+              setPlanVersions((prev) => [
+                ...prev,
+                { messageId: liveBookMessageId, book: intentRef.current },
+              ])
+            }
+            setLiveBookMessageId(streamId)
+          }
+        } else {
+          setMessages((prev) => prev.filter((m) => m.id !== streamId))
+        }
+        await handleAssistantMessage(message)
+      } else if (streamedAny) {
+        // Prose reply: the preview bubble IS the settled message (same key;
+        // the envelope content + run id are authoritative).
+        finalizePreview(message.content ?? "", message.workflow_run_id)
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== streamId))
+        await handleAssistantMessage(message)
+      }
     } catch (e) {
+      typewriter.flush()
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stopped mid-stream: the partial preview settles as static text
         // (the server may still finish the turn server-side).
@@ -1132,7 +1404,7 @@ export function GenerationOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, terminal])
 
-  const sectionLabel = "text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+  const sectionLabel = "text-sm font-medium"
 
   // The answered task_book question's QA archive display (start via dock).
   const answeredDisplay = answeredQuestion?.answer
@@ -1177,24 +1449,31 @@ export function GenerationOverlay({
                   </MessageScrollerItem>
                 ) : null}
 
-                {/* Plan card (pinned while confirming) */}
+                {/* Plan card (confirm phase) — ALWAYS the bottom-most
+                    element (order-10): below the opening prompt, every
+                    message, the version chips and the thinking row. It never
+                    moves; a refinement swaps its content in place while the
+                    superseded book collapses into a chip in the flow above.
+                    The echo line shows only when no streamed bubble carries
+                    the plan's words (restored sessions). */}
                 {phase === "confirm" && intentReady && (
-                  <MessageScrollerItem>
+                  <MessageScrollerItem className="order-10">
                     <Message align="start">
                       <MessageContent>
-                        {/* Entrance animation softens the non-streamable
-                            card's pop-in (structured JSON arrives whole). */}
                         <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
                           {/* Prose echo of the understood plan — the card
                               never lands naked (Opus pattern). The LLM's
                               own one-line echo (intent.answer, streamed as
                               deltas this turn and persisted in the pending
                               intent) wins; the localized template is the
-                              fallback for legacy/null echoes. */}
-                          <p className="mb-3 max-w-[85%] text-sm leading-relaxed">
-                            {intent.answer ??
-                              t("generationOverlay.planProse", { summary: planSummary })}
-                          </p>
+                              fallback for legacy/null echoes. Hidden when
+                              the streamed bubble already carries it. */}
+                          {!liveBubblePresent && (
+                            <p className="mb-3 max-w-[85%] text-sm leading-relaxed">
+                              {intent.answer ??
+                                t("generationOverlay.planProse", { summary: planSummary })}
+                            </p>
+                          )}
                           {/* No shadow/glow here: the scroller's paint
                               containment clips the halo on the sides (it
                               survived only on top, looking like a cut-off
@@ -1224,48 +1503,21 @@ export function GenerationOverlay({
                                 })}
                               </p>
 
-                              {/* Task-book language (slot-level "same as book"
-                                  overrides live on each slot row) */}
-                              <div className="flex flex-col gap-4">
-                                <span className={sectionLabel}>
-                                  {t("generationOverlay.languageLabel")}
-                                </span>
-                                <Select
-                                  value={intent.language}
-                                  onValueChange={(value) =>
-                                    setIntent((prev) => ({
-                                      ...prev,
-                                      language: (value as string) || "en",
-                                    }))
-                                  }
-                                >
-                                  <SelectTrigger className="h-10 w-full text-sm">
-                                    <SelectValue>
-                                      {(value: string) =>
-                                        t(`languages.${value}`, { defaultValue: value })
-                                      }
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {LANGUAGE_OPTIONS.map((lang) => (
-                                      <SelectItem key={lang.code} value={lang.code}>
-                                        {t(lang.labelKey)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                  {t("generationOverlay.languageHint")}
-                                </p>
-                              </div>
-
                               {/* Task slots — one row per requested output.
+                                  Language is a per-row property (the book-
+                                  level field is retired): every row's
+                                  dropdown shows a concrete language.
                                   Same-type siblings (e.g. an English and a
                                   German post) are separate rows. */}
-                              <div className="flex flex-col gap-4">
-                                <span className={sectionLabel}>
-                                  {t("generationOverlay.outputsLabel")}
-                                </span>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-1">
+                                  <span className={sectionLabel}>
+                                    {t("generationOverlay.outputsLabel")}
+                                  </span>
+                                  <p className="text-xs text-muted-foreground">
+                                    {t("generationOverlay.outputsHint")}
+                                  </p>
+                                </div>
                                 <div className="flex flex-col gap-2">
                                   {intent.outputs.map((slot, index) => {
                                     const meta = OUTPUT_OPTIONS.find(
@@ -1333,35 +1585,23 @@ export function GenerationOverlay({
                                           )}
                                           <div className="ml-auto flex items-center gap-1">
                                             <Select
-                                              value={slot.language ?? BOOK_LANGUAGE}
+                                              value={slot.language ?? "en"}
                                               onValueChange={(value) =>
                                                 updateSlot(index, {
-                                                  language:
-                                                    value === BOOK_LANGUAGE
-                                                      ? null
-                                                      : (value as string),
+                                                  language: (value as string) || "en",
                                                 })
                                               }
                                             >
                                               <SelectTrigger className="h-8 w-28 text-xs">
                                                 <SelectValue>
                                                   {(value: string) =>
-                                                    value === BOOK_LANGUAGE
-                                                      ? t(
-                                                          "generationOverlay.slotLanguageDefault"
-                                                        )
-                                                      : t(`languages.${value}`, {
-                                                          defaultValue: value,
-                                                        })
+                                                    t(`languages.${value}`, {
+                                                      defaultValue: value,
+                                                    })
                                                   }
                                                 </SelectValue>
                                               </SelectTrigger>
                                               <SelectContent>
-                                                <SelectItem value={BOOK_LANGUAGE}>
-                                                  {t(
-                                                    "generationOverlay.slotLanguageDefault"
-                                                  )}
-                                                </SelectItem>
                                                 {LANGUAGE_OPTIONS.map((lang) => (
                                                   <SelectItem
                                                     key={lang.code}
@@ -1441,16 +1681,24 @@ export function GenerationOverlay({
                                 </DropdownMenu>
                               </div>
 
-                              {/* Voice dub languages (dub_languages) — one
-                                  chip per forked voice-over version. Chips
-                                  are removable (down to none = no dubbing);
-                                  adding a language goes through chat refine,
-                                  not panel editing (R1 scope). */}
+                              {/* Voice-over versions (dub_languages) — one
+                                  chip per forked voice-over language. Every
+                                  clip gets one DERIVED version per language
+                                  (fork semantics), so the version count is a
+                                  multiplication — shown explicitly below.
+                                  Chips are removable (down to none = no
+                                  dubbing); adding a language goes through
+                                  chat refine, not panel editing (R1 scope). */}
                               {intent.dub_languages.length > 0 && (
-                                <div className="flex flex-col gap-4">
-                                  <span className={sectionLabel}>
-                                    {t("generationOverlay.dubLabel")}
-                                  </span>
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex flex-col gap-1">
+                                    <span className={sectionLabel}>
+                                      {t("generationOverlay.dubLabel")}
+                                    </span>
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("generationOverlay.dubHint")}
+                                    </p>
+                                  </div>
                                   <div className="flex flex-wrap gap-2">
                                     {intent.dub_languages.map((lang) => (
                                       <span
@@ -1479,14 +1727,35 @@ export function GenerationOverlay({
                                       </span>
                                     ))}
                                   </div>
+                                  {/* The multiplication, in the open: every
+                                      clip gets one version per language. */}
+                                  {clipsSlotForDub && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("generationOverlay.dubVersionCount", {
+                                        clips:
+                                          clipsSlotForDub.count ??
+                                          SLOT_COUNT_DEFAULT.clips,
+                                        langs: intent.dub_languages.length,
+                                        total:
+                                          (clipsSlotForDub.count ??
+                                            SLOT_COUNT_DEFAULT.clips) *
+                                          intent.dub_languages.length,
+                                      })}
+                                    </p>
+                                  )}
                                 </div>
                               )}
 
                               {/* Instruction */}
-                              <div className="flex flex-col gap-4">
-                                <span className={sectionLabel}>
-                                  {t("generationOverlay.instructionLabel")}
-                                </span>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-1">
+                                  <span className={sectionLabel}>
+                                    {t("generationOverlay.instructionLabel")}
+                                  </span>
+                                  <p className="text-xs text-muted-foreground">
+                                    {t("generationOverlay.instructionHint")}
+                                  </p>
+                                </div>
                                 <Textarea
                                   value={intent.specific_instruction || ""}
                                   onChange={(e) =>
@@ -1610,32 +1879,55 @@ export function GenerationOverlay({
                   </>
                 )}
 
-                {/* Conversation below the pinned regions */}
+                {/* Conversation below the pinned regions. A superseded plan
+                    version's chip sits right after the echo bubble whose
+                    turn produced it; the live book is the bottom-most card. */}
                 {messages.map((m) => (
-                  <MessageScrollerItem key={m.id}>
-                    {m.qa ? (
-                      <QaPair
-                        question={m.qa.question}
-                        answer={m.qa.answer}
-                        muted={m.qa.muted}
-                      />
-                    ) : m.role === "user" ? (
-                      <UserBubble text={m.content} />
-                    ) : (
-                      <>
-                        {m.content ? (
-                          <AssistantText text={m.content} streaming={m.streaming} />
-                        ) : null}
-                        {m.runId ? (
-                          <Message align="start">
-                            <MessageContent>
-                              <RunCard runId={m.runId} projectId={projectId} />
-                            </MessageContent>
-                          </Message>
-                        ) : null}
-                      </>
+                  <Fragment key={m.id}>
+                    <MessageScrollerItem>
+                      {m.qa ? (
+                        <QaPair
+                          question={m.qa.question}
+                          answer={m.qa.answer}
+                          muted={m.qa.muted}
+                        />
+                      ) : m.role === "user" ? (
+                        <UserBubble text={m.content} assets={m.assets} />
+                      ) : (
+                        <>
+                          {m.content ? (
+                            <AssistantText text={m.content} streaming={m.streaming} />
+                          ) : null}
+                          {m.runId ? (
+                            <Message align="start">
+                              <MessageContent>
+                                <RunCard runId={m.runId} projectId={projectId} />
+                              </MessageContent>
+                            </Message>
+                          ) : null}
+                        </>
+                      )}
+                    </MessageScrollerItem>
+                    {planVersions.map((version, index) =>
+                      version.messageId === m.id ? (
+                        <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
+                          <PlanVersionChip
+                            n={index + 1}
+                            book={version.book}
+                            summary={summarizeBook(version.book)}
+                            expanded={expandedVersion === index}
+                            onToggle={() =>
+                              setExpandedVersion(
+                                expandedVersion === index ? null : index
+                              )
+                            }
+                            onRestore={() => restoreVersion(index)}
+                            slotLabel={slotLabel}
+                          />
+                        </MessageScrollerItem>
+                      ) : null
                     )}
-                  </MessageScrollerItem>
+                  </Fragment>
                 ))}
 
                 {/* Thinking row covers send → first delta; once the preview
@@ -1692,6 +1984,28 @@ export function GenerationOverlay({
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
           <div className="flex items-end gap-2 rounded-lg bg-muted p-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
+              onChange={(e) => void handleFilesPicked(e.target.files)}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              aria-label={t("generationOverlay.attachFiles")}
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <Loader2 className="h-4.5 w-4.5 animate-spin" />
+              ) : (
+                <Paperclip className="h-4.5 w-4.5" />
+              )}
+            </Button>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

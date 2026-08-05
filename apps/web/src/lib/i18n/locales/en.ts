@@ -443,9 +443,9 @@ const en = {
     },
     "image-video": {
       title: "Photos to video",
-      promise: "No footage — photos plus your script become a narrated video.",
+      promise: "No footage — photos plus your script become a captioned video with music.",
       promptTemplate:
-        "Turn my script and photos into a narrated video with stacking captions and music.",
+        "Turn my script and photos into short clips with captions and music.",
     },
     reframe: {
       title: "Interview reframe",
@@ -454,15 +454,15 @@ const en = {
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
     },
     style: {
-      title: "Style showcase",
+      title: "Preset styles",
       promise: "One talk, many looks — caption and brand styles applied for you.",
       promptTemplate: "Cut highlight clips from my talk with a fresh caption style.",
     },
     "ai-visuals": {
-      title: "AI visuals",
-      promise: "No footage, no photos — every scene generated from your talk.",
+      title: "Virtual scenes",
+      promise: "No footage, no photos — every scene is AI-generated for your talk.",
       promptTemplate:
-        "Turn my talk into a short video with AI-generated visuals — no footage needed.",
+        "Turn my talk into a short video with AI-generated scenes.",
     },
   },
   // @-mention system (docs/tasks/recipe-mention.md): picker copy, type
@@ -916,6 +916,7 @@ const en = {
       carousel_gen: "Building your carousel…",
       article_gen: "Writing your article…",
       synth_talk_video: "Generating your video…",
+      align_stills: "Timing your transcript…",
     },
     qa: {
       q: "Q",
@@ -969,26 +970,33 @@ const en = {
     noRecentChats: "No conversations yet",
   },
   generationOverlay: {
-    title: "Review generation plan",
-    subtitle: "Review the plan — edit anything directly, or ask me to adjust it in chat.",
+    title: "Generation plan",
+    subtitle: "Check it over — fix anything I misunderstood, here or in chat.",
     backToProjects: "Projects",
     planProse: "Here's what I understood: {{summary}}.",
     outputsLabel: "Outputs",
-    dubLabel: "Voice dub",
+    outputsHint:
+      "What you'll get — one row per output. Adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
+    dubLabel: "Voice-over versions",
+    dubHint:
+      "Each language adds a version of the clips with your cloned voice — voice and subtitles follow that language. Text outputs aren't affected.",
     removeDubLanguage: "Remove this dub language",
+    dubVersionCount: "{{clips}} clips × {{langs}} languages = {{total}} extra versions",
     planSummaryDub: "dub {{langs}}",
-    identityEcho: "Speaking as {{speaker}} · Brand: {{brand}}",
-    identitySpeakerAuto: "Auto persona",
-    identityBrandDefault: "Default brand",
+    planVersion: "Plan v{{n}}",
+    versionRestore: "Restore this version",
+    versionRestored: "Plan v{{n}} restored — it's the current plan now.",
+    identityEcho: "Style: {{speaker}} · Brand: {{brand}}",
+    identitySpeakerAuto: "auto-generated",
+    identityBrandDefault: "default template",
     addOutput: "Add output",
     removeSlot: "Remove this output",
-    slotLanguageDefault: "Task book",
-    slotFocusPlaceholder: "Angle for this {{type}} (optional)",
+    slotFocusPlaceholder: "What these {{type}} should emphasize (optional)",
     countDecrease: "Decrease",
     countIncrease: "Increase",
-    languageLabel: "Language",
-    languageHint: "Posts, quotes, articles and clip subtitles are written in this language.",
     instructionLabel: "Focus / instruction",
+    instructionHint:
+      "Free-form guidance for everything in this run — the AI follows it first when selecting and writing.",
     instructionPlaceholder: "e.g. Focus on the Q&A section; make the first clip a strong hook.",
     confirmQuestion: "Start generation with this plan?",
     confirm: "Start generation",
@@ -998,6 +1006,7 @@ const en = {
     planUpdated: "Got it — I've updated the plan above.",
     chatPlaceholder: "Chat with Repurposer…",
     chatPlaceholderConfirm: "Ask me to adjust the plan…",
+    attachFiles: "Attach files",
     assetTypes: {
       video: "Video",
       audio: "Audio",
@@ -1019,10 +1028,9 @@ const en = {
     bail: "Stop generation",
     reasons: {
       title: "Needs your check:",
-      language_default: "I guessed the language",
       outputs_default: "outputs are the default set",
       clip_count_default: "clip count is a default",
-      clips_without_media: "clips need a video, audio or image source",
+      clips_without_media: "clips need a video, audio or image source — upload one, or remove clips to start with text outputs only",
     },
   },
   clipMenu: {

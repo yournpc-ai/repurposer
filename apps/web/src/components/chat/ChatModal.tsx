@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/message-scroller"
 import { apiFetch } from "@/lib/api"
 import { streamChat } from "@/lib/chat-stream"
+import { createTypewriter } from "@/lib/typewriter"
 import type { Output } from "@/lib/types"
 import { Streamdown } from "streamdown"
 
@@ -190,10 +191,35 @@ export function ChatModal({
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
-    // SSE transport: prose deltas land in a preview bubble as they generate;
-    // the terminal turn.completed envelope replaces it and drives the
-    // landing below (envelope always wins).
+    // SSE transport: prose deltas feed a typewriter-paced preview bubble
+    // (reasoning models emit short replies in one burst — pacing keeps the
+    // "written live" feel); the terminal turn.completed envelope is
+    // authoritative and finalizes the preview IN PLACE (same key, no
+    // remount — the settled message must not flicker).
     const streamId = crypto.randomUUID()
+    let streamedAny = false
+    const appendDelta = (delta: string) => {
+      streamedAny = true
+      setMessages((prev) =>
+        prev.some((m) => m.id === streamId)
+          ? prev.map((m) =>
+              m.id === streamId
+                ? { ...m, content: (m.content ?? "") + delta }
+                : m
+            )
+          : [
+              ...prev,
+              {
+                id: streamId,
+                role: "assistant" as const,
+                content: delta,
+                workflow_run_id: null,
+                streaming: true,
+              },
+            ]
+      )
+    }
+    const typewriter = createTypewriter(appendDelta)
     try {
       const data = await streamChat<{
         user_message: ChatMessage
@@ -209,48 +235,44 @@ export function ChatModal({
         },
         {
           signal: ctrl.signal,
-          onDelta: (delta) => {
-            setMessages((prev) =>
-              prev.some((m) => m.id === streamId)
-                ? prev.map((m) =>
-                    m.id === streamId
-                      ? { ...m, content: (m.content ?? "") + delta }
-                      : m
-                  )
-                : [
-                    ...prev,
-                    {
-                      id: streamId,
-                      role: "assistant",
-                      content: delta,
-                      workflow_run_id: null,
-                      streaming: true,
-                    },
-                  ]
-            )
-          },
+          onDelta: (delta) => typewriter.push(delta),
         }
       )
-      // Envelope wins — the preview placeholder lifts away.
-      setMessages((prev) => prev.filter((m) => m.id !== streamId))
-      // Replace the optimistic user message with the persisted pair. An
-      // autoResumed question archives its QA pair first; a NEW pending
-      // question docks instead of entering the flow (prohibited #2).
-      const next: ChatMessage[] = [data.user_message]
-      if (data.answered_question) {
-        setPendingQuestion(null)
-        next.push(data.answered_question)
-      }
-      if (data.assistant_message.question && !data.assistant_message.answer) {
-        setPendingQuestion(data.assistant_message)
-      } else {
-        next.push(data.assistant_message)
-      }
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== optimisticUser.id),
-        ...next,
-      ])
+      typewriter.flush()
+      // Envelope wins — swap the optimistic/preview bubbles for the
+      // persisted messages under their EXISTING keys (no remount flicker).
+      const assistant = data.assistant_message
+      const assistantDocks = !!(assistant.question && !assistant.answer)
+      if (data.answered_question) setPendingQuestion(null)
+      if (assistantDocks) setPendingQuestion(assistant)
+      setMessages((prev) => {
+        const out: ChatMessage[] = []
+        for (const m of prev) {
+          if (m.id === optimisticUser.id) {
+            out.push({ ...data.user_message, id: m.id })
+            // An autoResumed question archives its QA pair right after the
+            // message that answered it.
+            if (data.answered_question) out.push(data.answered_question)
+            continue
+          }
+          if (m.id === streamId) {
+            // A docked question never enters the flow — drop the preview;
+            // anything else settles in place under the preview's key.
+            if (!assistantDocks) out.push({ ...assistant, id: m.id, streaming: false })
+            continue
+          }
+          out.push(m)
+        }
+        if (!streamedAny) {
+          if (data.answered_question && !prev.some((m) => m.id === optimisticUser.id)) {
+            out.push(data.answered_question)
+          }
+          if (!assistantDocks) out.push(assistant)
+        }
+        return out
+      })
     } catch (e) {
+      typewriter.flush()
       // Stopped by the user: the bubble stays (the server may still finish
       // the turn); the partial preview settles as static text.
       if (e instanceof DOMException && e.name === "AbortError") {

@@ -653,9 +653,18 @@ function ProjectDetailPage() {
           initialIntent={{
             action: "generate",
             answer: null,
-            language:
-              latestRun.context?.target_language || project.language || "en",
-            outputs: runSlots.length ? runSlots : normalizeSlots(["clips"]),
+            // Language is a per-slot property (book-level field retired):
+            // materialize each slot from the run's recorded fallback.
+            outputs: (runSlots.length ? runSlots : normalizeSlots(["clips"])).map(
+              (slot) => ({
+                ...slot,
+                language:
+                  slot.language ??
+                  latestRun.context?.target_language ??
+                  project.language ??
+                  "en",
+              })
+            ),
             dub_languages: Array.isArray(latestRun.context?.dub_languages)
               ? (latestRun.context.dub_languages as string[])
               : [],

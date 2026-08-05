@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { inferAssetType } from "@/lib/asset-type"
 import { toast } from "sonner"
 import { useAuth } from "@/components/AuthProvider"
 import type { ChatMention } from "@/lib/mentions"
@@ -185,13 +186,6 @@ export function HomeComposer({
     setBrandTemplateId((prev) => prev || (brandTemplates[0]?.id ?? ""))
   }, [brandTemplates])
 
-  const inferAssetType = (file: File): string => {
-    if (file.type.startsWith("video/")) return "video"
-    if (file.type.startsWith("audio/")) return "audio"
-    if (file.type.startsWith("image/")) return "image"
-    return "transcript"
-  }
-
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video
     if (file.type.startsWith("audio/")) return Mic2
@@ -254,11 +248,15 @@ export function HomeComposer({
         if (!projectRes.ok) throw new Error("Failed to create project")
         const project = (await projectRes.json()) as Project
 
-        const materials =
-          files.length > 0 ? files : [new File([prompt], "prompt.txt", { type: "text/plain" })]
+        // Only real user files upload. A prompt-only send creates NO fake
+        // "prompt.txt" transcript asset (retired 2026-08-05 shim): the prompt
+        // travels as the first chat message, and declaring pasted text as
+        // source material ("this is my transcript: …") is recognized
+        // server-side in the chat plan path, which promotes it to a proper
+        // transcript asset.
         await Promise.all(
-          materials.map(async (material) => {
-            const type = files.length > 0 ? inferAssetType(material) : "transcript"
+          files.map(async (material) => {
+            const type = inferAssetType(material)
 
             const urlRes = await apiFetch(`/api/v1/projects/${project.id}/assets/upload-url`, {
               method: "POST",

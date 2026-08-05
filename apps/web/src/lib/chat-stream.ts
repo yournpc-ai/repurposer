@@ -34,6 +34,10 @@ export interface StreamChatOptions {
   signal: AbortSignal
   /** Decoded prose fragment, in order — concatenate to render the preview. */
   onDelta?: (text: string) => void
+  /** Model-activity keepalive (reasoning fragments / non-prose JSON chunks):
+   * fires while the turn is alive but no prose is being produced — drive the
+   * thinking indicator, never render its payload. */
+  onThinking?: () => void
 }
 
 /** One streamed chat turn. Resolves with the ChatResponse envelope (the
@@ -42,7 +46,7 @@ export interface StreamChatOptions {
  * with the abort error on stop (callers check `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta }: StreamChatOptions,
+  { signal, onDelta, onThinking }: StreamChatOptions,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const token = getToken()
@@ -81,6 +85,8 @@ export function streamChat<T>(
         if (msg.event === "assistant.delta") {
           const data = JSON.parse(msg.data) as { text: string }
           onDelta?.(data.text)
+        } else if (msg.event === "assistant.thinking") {
+          onThinking?.()
         } else if (msg.event === "turn.completed") {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === "turn.failed") {
