@@ -18,7 +18,7 @@
 - **字幕现状**：`caption_style_preset` 枚举 5 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`），`Clip.tsx` 只渲染当前 active 行——**堆叠字幕（前行驻留、向下累积）不在枚举内**。
 - **crop 是 clip 级静态值** `ClipCrop{x,y,scale}`，无时序；ASR = faster-whisper（词级时间戳，**无 diarization**）。
 - **`packages/clip` 是 editor preview 与 render service 的同源组件**——渲染分支加一处，preview=render 双端自动生效。
-- **任务书 slot 化已落地**：`IntentSlot{type,count,focus,language,tone_override,explicit}`；chat plan path 接受 `prior_intent` 且 pin-merge 保 explicit 槽；`pending_intent` + `?overlay=chat` 恢复管道在。
+- **任务书 slot 化已落地**：`IntentSlot{type,count,focus,language,tone_override,explicit}`；chat plan path 接受 `prior_intent` 且三方合并保 explicit 槽（`merge_prior_slots`，chat 修订永远赢）；`pending_intent` + `?overlay=chat` 恢复管道在。
 - **composer = prompt-only**（instruction + speaker_id + brand_template_id），意图识别全在管线。
 - **文字稿+照片场景已有 Ready 简报**：`docs/tasks/synthetic-talk-video.md`（`voice_gen`/`synth_visual` 节点设计，声纹 TTS 回配 ASR 时间戳，下游零感知）。
 - **demo talk 素材**：reset_db 不删对象存储，retired `demo/` 树应在桶中可恢复（需人工核实）。
@@ -185,7 +185,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 ## 10. Prohibited Behaviors
 
 1. **禁**未兑现能力的卡可点（点亮纪律修订后：reserved 卡渲染但 Remix 必须置灰/替换为 Soon——承诺永远先于能力）。
-2. **禁**配方承诺靠 LLM 从 prompt 重新推断——必须 explicit 槽 pin-merge 确定性兑现。
+2. **禁**配方承诺靠 LLM 从 prompt 重新推断——必须服务端预设播种 + 三方合并确定性兑现。
 3. **禁**新表——卡片数据硬编码前端，能力扩展全住 JSON 载荷层。
 4. **禁**字幕样式绕过 catalog 加一次性分支；新原语值必须过 libass 映射检查。
 5. **禁** composer 加 Audio 块 / 绕过 Speaker 画像另建声音存储（裁决③）。

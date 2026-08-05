@@ -8,7 +8,7 @@
 > 落地偏离点（相对本文设计稿）：
 > - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
 > - `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发；归 R2，见 RECIPES §8）；`dub_clip` 已实装（2026-07-31 R1）。
-> - @picker 注册表化落地（2026-08-01 修订）：提及系统升级为**双端注册表架构**（前端 `MENTION_REGISTRY` + 服务端解析注册表），recipe 为第一注册成员、第五提及类型，任务书钉死收归服务端解析（简报 `docs/tasks/recipe-mention.md`）；此前 mentions 仅落契约与列（type 取 `workflow_step`，N-15 改名后全栈同名）。
+> - @picker 注册表化落地（2026-08-01 修订）：提及系统升级为**双端注册表架构**（前端 `MENTION_REGISTRY` + 服务端解析注册表），recipe 为第一注册成员、第五提及类型，任务书钉死收归服务端解析（简报 `docs/tasks/recipe-mention.md`；**2026-08-05 修订：钉降为预设**——存在性填充 + dub 空时填默认，无 explicit，chat 修订永远赢）；此前 mentions 仅落契约与列（type 取 `workflow_step`，N-15 改名后全栈同名）。
 > - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；results 页 GenerationStepper 弹窗已于 2026-07-28 退役，processing 项目改开 `?overlay=run` attach 模式）；step 状态枚举加 `waiting` 座位（HITL/suspend-resume 已用，§8.5）。
 
 ## 1. 定位与三条原则
@@ -181,7 +181,7 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 ## 7. Mentions（@ 实体引用）
 
-> **2026-08-01 注册表化修订**：提及系统 = 双端注册表（前端 `MENTION_REGISTRY`：icon / i18n / 候选源；服务端：效果注册表——**上下文富化**族通用注入已免费，**任务书钉死**族为 recipe 专属，解析唯一发生地 = 服务端 `resolve_recipe_mentions`）。`recipe` 为第五提及类型（前四 = asset / output / transcript_segment / workflow_step）；LLM 不解释 recipe 提及——确定性引用直接钉，不占 intent 调用。后续 @ 类型 = 双端各一条注册项，无类型分支（扩展证明见简报 `docs/tasks/recipe-mention.md` §2.5）。以下为本节的原始契约描述，机制不变。
+> **2026-08-01 注册表化修订**：提及系统 = 双端注册表（前端 `MENTION_REGISTRY`：icon / i18n / 候选源；服务端：效果注册表——**上下文富化**族通用注入已免费，**任务书预设播种**族为 recipe 专属，解析唯一发生地 = 服务端 `resolve_recipe_mentions`）。`recipe` 为第五提及类型（前四 = asset / output / transcript_segment / workflow_step）；LLM 不解释 recipe 提及——确定性引用直接播种，不占 intent 调用（**2026-08-05 修订**：原"钉死"语义降级为预设——只补推断没有的槽位类型 + dub 空时填默认，无 explicit，下一轮起每个字段可经 chat 修订）。后续 @ 类型 = 双端各一条注册项，无类型分支（扩展证明见简报 `docs/tasks/recipe-mention.md` §2.5）。以下为本节的原始契约描述，机制不变。
 
 多轮对话的模糊指代必须落为确定引用。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / workflow step**。
 

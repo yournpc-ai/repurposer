@@ -12,7 +12,7 @@
 | 表面 | 相位 | 用户输入去向 | 推理者 | 裁决 |
 |---|---|---|---|---|
 | 首页 composer | — | **无意图识别**——send = spinner 建空项目 + 上传素材 + 跳转详情（草稿经 router state 交接） | 无 | 无 |
-| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **plan path** | PlanAgent（三动作：generate / answer / start） | 代码：reasons 推导 + pin-merge + dock task_book；start 复用 answer kind=start 起 run |
+| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **plan path** | PlanAgent（三动作：generate / answer / start） | 代码：reasons 推导 + 三方合并 + dock task_book；start 复用 answer kind=start 起 run |
 | Overlay chat（项目） | 已有 run（running / results） | `POST /chat`（project scope） | ChatIntentAgent | 代码：四态裁决（task_list / edit_ops / ask / answer）+ autoResume |
 | ChatModal（单产物） | asset-scoped | `POST /chat`（asset scope，永不进 plan path） | ChatIntentAgent | 同上（asset 语境注入） |
 | 任意 dock | — | `POST /chat/messages/{id}/answer` | **无 LLM** | 代码：kind × question-kind 契约分派 |
@@ -126,7 +126,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 按序生效，上一层失败落到下一层：
 
 1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。task_book 待决不参与（它的答案是 dock 按钮与 plan path 修订/确认）。
-2. **plan path（PlanAgent 三动作）**：首次 / 待决任务书的项目级文本 → generate（pin-merge + reasons + re-dock）/ answer（普通消息）/ start（answer kind=start 起 run）。
+2. **plan path（PlanAgent 三动作）**：首次 / 待决任务书的项目级文本 → generate（三方合并 + reasons + re-dock）/ answer（普通消息）/ start（answer kind=start 起 run）。
 3. **ChatIntentAgent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + freeform 回落），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。
 4. **代码裁决**：registry 校验 skill/params（SkillRejected → 一次 repair_feedback 重试 → 再败则反问）；edit ops 校验（OpRejected → 提示）；出生地校验（requires / clips-media / count 边界 → 422 或反问）。
 5. **LLM 故障兜底**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ project scope 反问文案；asset scope revise_script 兜底；plan path → 默认任务书 dock（UI 可编可 Start，永不白屏）；`outputs:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
