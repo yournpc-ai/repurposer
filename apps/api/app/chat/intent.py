@@ -58,46 +58,42 @@ class PlanAgent:
         filename: str | None = None,
         presented_plan: str | None = None,
         on_delta=None,
+        on_reasoning=None,
     ) -> InferredIntent:
         """Streaming variant of ``infer`` (chat SSE): identical verdict, but
         raw response fragments flow through ``on_delta`` so the service can
-        preview the ``answer`` prose while the rest of the JSON generates."""
+        preview the ``answer`` prose while the rest of the JSON generates.
+        ``on_reasoning`` receives reasoning fragments (liveness signal only —
+        never shown to the user, never parsed)."""
         try:
             return await self.client.generate_stream(
                 messages=self._messages(prompt, filename, presented_plan),
                 response_model=InferredIntent,
                 temperature=0.2,
                 on_delta=on_delta,
+                on_reasoning=on_reasoning,
             )
         except MiniMaxError:
             return self._fallback(prompt, filename)
 
     def _fallback(self, prompt: str, filename: str | None) -> InferredIntent:
         # Fall back to defaults so the UI never breaks. Clips need a media
-        # source file, so text-only input falls back to text outputs.
+        # source file, so text-only input falls back to text outputs. Every
+        # slot carries a concrete language (per-slot property since the
+        # 2026-08-05 restructure — no book-level field anymore).
         has_media = filename is not None and filename.lower().endswith(
             (".mp4", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".aac",
              ".ogg", ".png", ".jpg", ".jpeg", ".webp")
         )
+        types = (
+            ["clips", "post", "quotes", "article"]
+            if has_media
+            else ["post", "quotes", "article"]
+        )
         return InferredIntent(
             action="generate",
             answer=None,
-            language="en",
-            language_explicit=False,
-            outputs=(
-                [
-                    IntentSlot(type="clips"),
-                    IntentSlot(type="post"),
-                    IntentSlot(type="quotes"),
-                    IntentSlot(type="article"),
-                ]
-                if has_media
-                else [
-                    IntentSlot(type="post"),
-                    IntentSlot(type="quotes"),
-                    IntentSlot(type="article"),
-                ]
-            ),
+            outputs=[IntentSlot(type=t, language="en") for t in types],  # type: ignore[arg-type]
             outputs_explicit=False,
             tone="professional",
             specific_instruction=prompt.strip() or None,
@@ -136,6 +132,21 @@ class PlanAgent:
             "by the LAST line. When earlier turns requested outputs but the "
             "last line is a short approval or go-ahead, the action is 'start' "
             "— those requests are already captured in the presented plan.\n"
+            "  'generate' requires source material: when NO file is attached "
+            "and the user's message is not itself source content (see "
+            "material_text), never guess a task book — use action='answer' "
+            "and ask what content to work from, in the user's language: they "
+            "can attach files with the chat input's attachment button, or "
+            "simply paste their text into the chat (pasted content is "
+            "understood as material — no special formatting needed).\n"
+            "- material_text: when the user's message IS their own source "
+            "content — a pasted transcript, speech draft, article, or notes, "
+            "with or without an explicit 'this is my …' declaration — copy "
+            "that text VERBATIM into material_text (dropping any framing "
+            "line like 'this is my transcript:'). A message that ASKS for "
+            "something is never material, no matter how long it is. When you "
+            "genuinely cannot tell whether the text is content or a request, "
+            "leave material_text null and ask. Null for action='start'.\n"
             "- answer: when action is 'answer', provide a concise, helpful response "
             "(max 200 words) in the same language as the user prompt that explains "
             "the tool's capabilities and invites the user to upload or paste talk "
@@ -143,21 +154,26 @@ class PlanAgent:
             "user's language echoing the plan you understood, e.g. \"Here's what "
             "I understood: 5 clips, 3 quote cards and an article in English, "
             "dubbed into German.\" — it is shown above the plan card as the "
-            "plan's own words. Set to null only when action is 'start'.\n"
-            "- language: ISO code (en/fr/de/es/it/zh). Infer from the prompt "
-            "language or explicit requests like 'in German'. Default to en if "
-            "unclear.\n"
-            "- language_explicit: true only when the language was clearly "
-            "inferred from the prompt (either the prompt's own language or an "
-            "explicit 'in German' / 'auf Deutsch' style request). false when "
-            "falling back to the default.\n"
+            "plan's own words. Set to null only when action is 'start'. "
+            "EXCEPTION — clips without media: when no media file is attached "
+            "but the plan keeps a clips slot (e.g. a recipe card pinned it), "
+            "the echo must ALSO tell the user, in their language: clips and "
+            "voice dub need a video, audio, or image upload — they can upload "
+            "one to unlock them, or remove the clips row in the plan panel "
+            "and start with the text outputs only.\n"
             "- outputs: array of requested task slots — one object per "
             "requested output:\n"
             '  {"type": "clips"|"post"|"quotes"|"carousel"|"article", '
-            '"count": int|null, "focus": string|null, "language": string|null, '
+            '"count": int|null, "focus": string|null, "language": string, '
             '"tone_override": string|null, "explicit": false}\n'
-            "  Default to bare slots (all fields null) for clips, post, quotes "
-            "and article when unclear.\n"
+            "  Default to bare slots (count/focus/tone null) for clips, post, "
+            "quotes and article when unclear.\n"
+            "  - language: REQUIRED on every slot — the ISO code this output "
+            "is written/shown in (posts, quotes, articles: the text; clips: "
+            "the subtitles). Infer from the prompt's own language or explicit "
+            "requests like 'in German'; default to the prompt language, or "
+            "en when unclear. Language is a PER-SLOT property — there is no "
+            "book-level language field.\n"
             "  IMPORTANT: only include a 'clips' slot when a media source file "
             "(video, audio, or image) is attached — clips are rendered videos "
             "and need visual or audio source material. When no file is "
@@ -177,13 +193,9 @@ class PlanAgent:
             "angle to an output (e.g. '切片剪定价争议' → clips slot focus "
             "'pricing debate', 'the post should summarize the whole talk' → "
             "post slot focus). null when the user gives no per-output angle.\n"
-            "  - language: ISO code ONLY when this slot's language differs "
-            "from the top-level language — the classic case is the user "
-            "asking for several LANGUAGE VERSIONS of the same output (e.g. "
+            "  - Multi-version requests are the classic multi-slot case: "
             "'一版英文帖和一版德语帖' / 'an English and a German LinkedIn "
-            "post' → TWO post slots, one language 'en', one language 'de'). "
-            "For ordinary single-language requests keep every slot's "
-            "language null (the top-level language covers all slots).\n"
+            "post' → TWO post slots, one language 'en', one language 'de'.\n"
             "  - Same-type multi slots are allowed ONLY for such multi-version "
             "requests (different language or clearly different angle). Never "
             "emit more than one 'clips' slot — clips is a single aggregate "
@@ -205,10 +217,10 @@ class PlanAgent:
             "only when a media source file (video/audio/image) is attached; "
             "text-only input gets an empty array.\n"
             "  A voice-dub request ALWAYS lands in dub_languages, never in "
-            "'language' or a slot's language: 'dub them into Chinese' / "
-            "'配音成中文' → dub_languages ['zh']. 'language' is the "
-            "WRITTEN-text language of posts/quotes/subtitles; only set it "
-            "when the user asks for the text itself in another language.\n"
+            "a slot's language: 'dub them into Chinese' / '配音成中文' → "
+            "dub_languages ['zh']. A slot's language is the WRITTEN-text "
+            "language of posts/quotes/subtitles; only change it when the "
+            "user asks for the text itself in another language.\n"
             "- outputs_explicit: true only when the user explicitly asked for "
             "specific outputs (e.g. 'just clips', 'a post and quotes', "
             "'no carousel'). false when using the default set.\n"
@@ -234,7 +246,15 @@ class PlanAgent:
         if presented_plan:
             context += (
                 f"\nA task book has already been presented to the user and "
-                f"is awaiting confirmation: {presented_plan}"
+                f"is awaiting confirmation: {presented_plan}\n"
+                f"This digest is the CURRENT book — it may include edits the "
+                f"user made directly in the plan panel, which never appear in "
+                f"the conversation. Emit the FULL revised book: keep every "
+                f"value the user's message does not revise (quantities, "
+                f"languages, angles shown in the digest), and when the "
+                f"message revises a value — 'clips only needs 2', 'make the "
+                f"post German', 'drop the quotes' — emit exactly that "
+                f"revision. The latest user message always wins."
             )
 
         return [
@@ -280,10 +300,11 @@ class ChatIntentAgent:
         )
 
     async def propose_stream(
-        self, message: str, context: dict, on_delta=None
+        self, message: str, context: dict, on_delta=None, on_reasoning=None
     ) -> IntentResult:
         """Streaming variant of ``propose`` (chat SSE): identical verdict, raw
         fragments flow through ``on_delta`` for the prose preview channel.
+        ``on_reasoning`` receives reasoning fragments as a liveness signal.
         Repair rounds keep calling the non-streaming ``propose`` — two
         interleaved delta streams for one bubble is a worse failure than a
         text swap at the envelope."""
@@ -292,6 +313,7 @@ class ChatIntentAgent:
             response_model=IntentResult,
             temperature=0.2,
             on_delta=on_delta,
+            on_reasoning=on_reasoning,
         )
 
     def _messages(self, message: str, context: dict) -> list[dict]:

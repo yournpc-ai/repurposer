@@ -2,9 +2,9 @@
 truth for recipe cards.
 
 Static registry deployed with code — SKILL_REGISTRY 同款纪律 (NAMING §5,
-N-25): NOT a plugin system, NOT a table. The pin substance (``outputs`` /
+N-25): NOT a plugin system, NOT a table. The preset substance (``outputs`` /
 ``dub_languages``) never leaves the server: the public ``GET /api/v1/recipes``
-returns only ``{id, status, input_slots}``, and pinning happens exclusively
+returns only ``{id, status, input_slots}``, and seeding happens exclusively
 here via ``resolve_recipe_mentions`` (the composer sends mentions, never a
 client-built prior — prohibition #1, docs/tasks/recipe-mention.md).
 """
@@ -30,13 +30,15 @@ class InputSlot(BaseModel):
 class RecipeEntry(BaseModel):
     """One registered recipe: a task-book template awaiting material.
 
-    Field-level merge policy (agent-loop-upgrade §2.1 — merge algebra):
-    - ``outputs``: **PROMISE** — explicit-pinned slots, the card's promise
-      itself; pin-merged so they survive re-inference and user edits.
-    - ``dub_languages``: **DEFAULT (tunable)** — languages the user named in
-      the (possibly edited) prompt win; the recipe fills only when inference
-      found none. When a third tunable field appears, promote this per-field
-      policy to a declared structure (the seam is named here).
+    Merge policy (2026-08-05 ruling — a recipe is a PRESET, never a pin):
+    - ``outputs``: **SEED** — slot types the inference didn't produce are
+      appended so the first book matches the card's shape. Nothing is
+      explicit: count / language / focus / even the slot's existence are all
+      refine-able from the very next turn ("chat 就是在修改 plan，没有什么是
+      定死的").
+    - ``dub_languages``: **DEFAULT** — languages the user named in the
+      (possibly edited) prompt win; the recipe fills only when inference
+      found none.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -58,7 +60,7 @@ class RecipePublic(BaseModel):
     input_slots: list[InputSlot]
 
 
-_CLIPS_SLOT = IntentSlot(type="clips", explicit=True)
+_CLIPS_SLOT = IntentSlot(type="clips")
 
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     # R1: one talk -> clips + your cloned voice speaking DE/FR/ES (fork
@@ -69,9 +71,11 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         outputs=[_CLIPS_SLOT],
         dub_languages=["de", "fr", "es"],
     ),
-    # R2 seat: transcript + photos -> stills + stacking captions + voice.
+    # R2: transcript + photos -> stills slideshow + captions (estimated
+    # timeline via align_stills) + music. Voice path deferred to the
+    # week-4 voiceprint line (RECIPES §4.2, 2026-08-05 ruling).
     "image-video": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="images"), InputSlot(type="transcript")],
         outputs=[_CLIPS_SLOT],
     ),
@@ -106,15 +110,15 @@ def list_public_recipes() -> list[RecipePublic]:
 
 
 def resolve_recipe_mentions(mentions: list[ChatMention]) -> RecipeEntry | None:
-    """Resolve the recipe pinned by a turn's mentions (task-book pin family).
+    """Resolve the recipe seeded by a turn's mentions (preset, not a pin).
 
     Returns ``None`` when no recipe is mentioned (path identical to today).
-    Raises ``ValueError`` on a rejected pin — the chat plan path maps it to
-    422 (fail-fast, before any LLM call):
+    Raises ``ValueError`` on a rejected mention — the chat plan path maps it
+    to 422 (fail-fast, before any LLM call):
 
     - more than one recipe per run (v1: a recipe is a complete task book;
       recipe composition is a later iteration);
-    - unknown id or a ``reserved`` card (a promise is never deliverable
+    - unknown id or a ``reserved`` card (a preset is never deliverable
       before its capability is real).
     """
     recipe_mentions = [m for m in mentions if m.type == "recipe"]

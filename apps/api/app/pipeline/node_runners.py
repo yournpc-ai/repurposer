@@ -19,6 +19,7 @@ What changed versus the retired orchestration:
 import base64
 import hashlib
 import mimetypes
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -119,6 +120,24 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
             .values(
                 spec=func.jsonb_set(
                     WorkflowStep.spec, pg_array(["stage"]), func.to_jsonb(stage), True
+                )
+            )
+        )
+        await s.commit()
+
+
+async def _set_spec_field(node_id: UUID, key: str, value: Any) -> None:
+    """Write one spec field in its own session — same jsonb_set discipline as
+    ``_set_stage``. Direct ``node.spec`` assignment from a runner is a race:
+    execute_step's post-runner commit would flush the stale in-memory dict and
+    clobber fields written meanwhile (e.g. ``_fill_summary``'s summary)."""
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(WorkflowStep)
+            .where(WorkflowStep.id == node_id)
+            .values(
+                spec=func.jsonb_set(
+                    WorkflowStep.spec, pg_array([key]), func.to_jsonb(value), True
                 )
             )
         )
@@ -1039,7 +1058,22 @@ async def run_clips_pipeline(
     generation_context.target_language = target_language
     understanding, storyboard = await _load_director_outputs(db, node)
 
-    # Render source selection (docs/VIDEO_EDITOR.md §4).
+    # Render source selection (docs/VIDEO_EDITOR.md §4). The DAG edge wins
+    # first: an upstream align_stills node hands its timeline-materialized
+    # transcript asset directly (spec.aligned_asset_id); only without that
+    # edge do we scan the project's assets.
+    aligned_source: Asset | None = None
+    for upstream_id in node.inputs or []:
+        upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
+        if upstream is None or upstream.kind != "align_stills":
+            continue
+        aligned_id = (upstream.spec or {}).get("aligned_asset_id")
+        if aligned_id:
+            candidate = await db.get(Asset, UUID(str(aligned_id)))
+            if candidate is not None and (candidate.meta or {}).get("words"):
+                aligned_source = candidate
+        break
+
     def _has_words(a: Asset) -> bool:
         return bool(a.file_url and (a.meta or {}).get("words"))
 
@@ -1072,7 +1106,9 @@ async def run_clips_pipeline(
         ),
         None,
     )
-    if source_video is not None:
+    if aligned_source is not None:
+        render_source, render_kind = aligned_source, "stills"
+    elif source_video is not None:
         render_source, render_kind = source_video, "video"
     elif source_audio is not None:
         render_source, render_kind = source_audio, "stills"
@@ -1911,6 +1947,129 @@ async def run_dub_clip(
     await _fill_summary(node.id, "dub", n=len(touched), lang=lang)
     return touched
 
+# --- align_stills: estimated speaking timeline (RECIPES §2 third time source) ---
+#
+# No recording -> no ASR words. Caption timing for a photo-slideshow clip is
+# derived from the transcript text itself at reading pace; the resulting word
+# dicts are the SAME shape as ASR output ({"word","start","end"}), so the
+# stills branch / anchored transcript / locate_span consume them untouched.
+
+# Reading-pace constants: zh counts CJK characters, latin scripts count
+# whitespace-ish tokens. Deliberately mid-tempo — captions that linger a beat
+# too long read better than captions that rush.
+_CHARS_PER_SECOND_ZH = 4.5
+_TOKENS_PER_SECOND_LATIN = 2.6
+_SENTENCE_GAP_S = 0.35
+_CLAUSE_GAP_S = 0.1
+
+_CJK_RE = re.compile(r"[一-鿿぀-ヿ가-힯]")
+_TOKEN_RE = re.compile(r"[A-Za-z0-9’'\-]+|[一-鿿぀-ヿ가-힯]")
+_SENTENCE_RE = re.compile(r"[^.!?。！？;；\n]+[.!?。！？;；]?")
+_SENTENCE_END = frozenset(".!?。！？;；")
+
+
+def _estimate_words_timeline(text: str) -> list[dict[str, Any]]:
+    """Transcript text -> estimated word-level timeline at reading pace.
+
+    Sentences advance by their own estimated duration plus a small gap; zh is
+    chunked into 2-char "words" so caption lines read like ASR zh output
+    (cue spans are joined with spaces downstream, same as whisper tokens).
+    """
+    words: list[dict[str, Any]] = []
+    t = 0.0
+    for sentence in _SENTENCE_RE.findall(text):
+        raw = _TOKEN_RE.findall(sentence)
+        if not raw:
+            continue
+        # Group consecutive single CJK chars into 2-char chunks; latin tokens
+        # stay whole. Trailing sentence punctuation rides the last token.
+        tokens: list[str] = []
+        cjk_buf = ""
+        for tok in raw:
+            if _CJK_RE.match(tok):
+                cjk_buf += tok
+                if len(cjk_buf) == 2:
+                    tokens.append(cjk_buf)
+                    cjk_buf = ""
+            else:
+                if cjk_buf:
+                    tokens.append(cjk_buf)
+                    cjk_buf = ""
+                tokens.append(tok)
+        if cjk_buf:
+            tokens.append(cjk_buf)
+        tail = sentence.rstrip()[-1:] if sentence.rstrip() else ""
+        if tail in ".!?。！？;；,，、:：" and tokens:
+            tokens[-1] += tail
+
+        for tok in tokens:
+            cjk_chars = len(_CJK_RE.findall(tok))
+            has_latin = bool(re.search(r"[A-Za-z0-9]", tok))
+            dur = cjk_chars / _CHARS_PER_SECOND_ZH + (
+                1 / _TOKENS_PER_SECOND_LATIN if has_latin else 0
+            )
+            dur = max(dur, 0.12)
+            words.append({"word": tok, "start": round(t, 3), "end": round(t + dur, 3)})
+            t += dur
+        t += _SENTENCE_GAP_S if tail in _SENTENCE_END else _CLAUSE_GAP_S
+    return words
+
+
+async def run_align_stills(
+    db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+) -> list[UUID]:
+    """Materialize the estimated timeline onto the transcript asset.
+
+    Deterministic (zero LLM/provider); idempotent by text hash — a re-run
+    with unchanged material reuses the timeline instead of rebuilding it.
+    The aligned asset id rides ``spec.aligned_asset_id`` so the downstream
+    clips node reads its render source off the DAG edge, not an asset scan.
+    """
+    assets = await _list_assets(db, project.id)
+    candidates = [
+        a for a in assets if a.type == AssetType.TRANSCRIPT and (a.extracted_text or "").strip()
+    ]
+    if not candidates:
+        raise ValueError("No transcript to align")
+    asset = max(candidates, key=lambda a: len(a.extracted_text or ""))
+    text = asset.extracted_text or ""
+    digest = hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    meta = asset.meta or {}
+    if meta.get("aligned_text_hash") == digest and meta.get("words"):
+        words = meta["words"]
+    else:
+        words = _estimate_words_timeline(text)
+        if not words:
+            raise ValueError("Transcript has no text to align")
+        cjk = len(_CJK_RE.findall(text))
+        language = "zh" if cjk / max(1, len(text)) > 0.2 else (project.language or "en")
+        asset.meta = {
+            **meta,
+            "words": words,
+            "language": language,
+            "aligned_text_hash": digest,
+            "alignment": "estimated",
+        }
+        asset.duration_seconds = int(float(words[-1]["end"]) + 0.999)
+        await db.flush()
+        logger.info(
+            "stills_aligned",
+            project_id=str(project.id),
+            asset_id=str(asset.id),
+            words=len(words),
+        )
+
+    await _set_spec_field(node.id, "aligned_asset_id", str(asset.id))
+    await _fill_summary(
+        node.id,
+        "align_stills",
+        n=len(words),
+        total_seconds=int(float(words[-1]["end"])),
+    )
+    return []
+
+
 STEP_RUNNERS = {
     "preprocess": run_preprocess,
     "persona_bootstrap": run_persona_bootstrap,
@@ -1928,5 +2087,6 @@ STEP_RUNNERS = {
     "add_music": run_add_music,
     "translate_clip": run_translate_clip,
     "dub": run_dub_clip,
+    "align_stills": run_align_stills,
 }
 

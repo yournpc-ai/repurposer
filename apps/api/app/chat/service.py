@@ -77,6 +77,7 @@ from app.models.tables import (
 from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
+from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.recipes import resolve_recipe_mentions
 from app.pipeline.registry import SkillRejected, dispatchable_skills
@@ -88,6 +89,28 @@ _ASK_BACK_TEXT = (
 )
 
 _REVISE_FALLBACK_TEXT = "Got it — revising this asset based on your instruction."
+
+
+def _ask_for_material_text(prompt: str) -> str:
+    """Server-composed ask-for-material reply (zero-material safety net).
+
+    The PlanAgent is instructed to write this itself; this is the backstop
+    when it misfiles a material-less generate verdict. Language follows the
+    prompt — the plan path's answer prose always speaks the user's language.
+    """
+    if any("一" <= ch <= "鿿" for ch in prompt):  # CJK Unified Ideographs
+        return (
+            "我还没有可以处理的素材。点输入框左侧的回形针上传视频、音频或图片，"
+            "或者直接把文稿贴在对话里发给我——贴来的内容我会当作素材，"
+            "不用特别标注。"
+        )
+    return (
+        "I don't have any source material yet. Attach a video, audio, or "
+        "image with the paperclip next to the input — or simply paste your "
+        "text into the chat; pasted content is treated as your material, no "
+        "special formatting needed."
+    )
+
 
 
 def _edit_op_items(proposal: EditOpsProposal) -> list[dict]:
@@ -545,33 +568,75 @@ async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
         await maybe_finalize_run(run_id)
 
 
-def merge_explicit_slots(
-    pinned: list[IntentSlot], inferred: list[IntentSlot]
-) -> list[IntentSlot]:
-    """Pin-merge rule (intent-ask-primitive §2.5): user-edited slots
-    (``explicit=True``) survive re-inference untouched; the new inference
-    only fills the slots the user did not pin.
+_SLOT_MERGE_FIELDS = ("count", "focus", "language", "tone_override")
 
-    Match key = (type, language) — the identity that distinguishes same-type
-    siblings (an English vs a German post). A pinned slot the new inference
-    dropped entirely is re-appended (pinning means "keep this as asked").
-    """
+
+def _match_slot(slots: list[IntentSlot], slot: IntentSlot) -> IntentSlot | None:
+    """Find the slot representing the same logical output: same type AND
+    language first (the identity that distinguishes same-type siblings — an
+    English vs a German post), then same type alone (a language revision
+    retargets the slot rather than creating a sibling)."""
+    return next(
+        (s for s in slots if s.type == slot.type and s.language == slot.language),
+        None,
+    ) or next((s for s in slots if s.type == slot.type), None)
+
+
+def merge_prior_slots(
+    base: list[IntentSlot],
+    prior: list[IntentSlot],
+    inferred: list[IntentSlot],
+) -> list[IntentSlot]:
+    """Three-way merge of the panel's book into a fresh re-inference.
+
+    base = the last-served (stored) book; prior = the panel's current book
+    (``explicit=True`` marks slots the user hand-edited); inferred = the
+    LLM's fresh read of the conversation.
+
+    Per field, for a hand-edited slot:
+
+    - inference is null → no opinion; keep the panel value;
+    - panel == base → the panel never moved this field; inference owns it;
+    - inference == base → the LLM parroted the old state; the panel's newer
+      edit wins;
+    - both moved → **chat wins** (2026-08-05 ruling: chat IS how the user
+      edits the plan — nothing is locked, the latest deliberate signal
+      prevails).
+
+    Slots the user never touched follow the inference wholesale. A hand-
+    edited slot the inference dropped entirely is re-appended (protects
+    panel edits from LLM omission; deleting a slot the user hand-edited
+    must happen in the panel itself)."""
     merged = list(inferred)
-    for pin in pinned:
+    for pin in prior:
         if not pin.explicit:
             continue
-        for i, slot in enumerate(merged):
-            if slot.type == pin.type and slot.language == pin.language:
-                merged[i] = pin
-                break
-        else:
+        slot = _match_slot(merged, pin)
+        if slot is None:
             merged.append(pin)
+            continue
+        base_slot = _match_slot(base, pin)
+        for field in _SLOT_MERGE_FIELDS:
+            inferred_value = getattr(slot, field)
+            pin_value = getattr(pin, field)
+            if inferred_value is None:
+                # null = no opinion — the panel's current value stands.
+                setattr(slot, field, pin_value)
+                continue
+            base_value = getattr(base_slot, field) if base_slot else None
+            if pin_value != base_value and inferred_value == base_value:
+                # The panel moved this field and the LLM merely parroted the
+                # old state — the panel's edit wins. (Panel untouched, or
+                # both moved: the inference stands — chat always wins.)
+                setattr(slot, field, pin_value)
+        slot.explicit = True
     return merged
 
 
 def _task_book_summary(intent: InferredIntent) -> str:
     """One-line plan digest stored as the question's human text (data, not
-    copy — localization happens at render time)."""
+    copy — localization happens at render time). Language is a per-slot
+    property (2026-08-05 restructure), so each slot carries its own."""
     labels = []
     for slot in intent.outputs:
         label = slot.type
@@ -580,7 +645,7 @@ def _task_book_summary(intent: InferredIntent) -> str:
         if slot.count:
             label += f" ×{slot.count}"
         labels.append(label)
-    return f"{', '.join(labels)} · {intent.language}"
+    return ", ".join(labels)
 
 
 async def sync_task_book_question(
@@ -786,12 +851,18 @@ async def answer_question(
             try:
                 # Entry constraints (clips-media gate included) reject at the
                 # birthplace — ValueError here is a client-facing 422.
+                # target_language is now a pure fallback (language is a
+                # per-slot property): derive it from the first slot that
+                # carries one, for legacy/null-slot reads downstream.
                 run = await create_run(
                     db,
                     project,
                     TaskSpec(
                         outputs=outputs,
-                        target_language=intent.language or "en",
+                        target_language=(
+                            next((s.language for s in outputs if s.language), None)
+                            or "en"
+                        ),
                         instruction=intent.specific_instruction
                         or pending.prompt
                         or None,
@@ -898,6 +969,7 @@ async def _plan_turn(
     project: Project,
     request: ChatRequest,
     on_delta=None,
+    on_reasoning=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the task book inside the chat loop — the ONLY intent surface.
@@ -906,7 +978,8 @@ async def _plan_turn(
     prose confirmation) or before the project's first run (first turn / after
     a bail). The PlanAgent's three-action verdict dispatches:
 
-    - generate → pin-merge + reasons + dock the (refined) task book
+    - generate → three-way merge (panel prior / recipe seed) + reasons + dock
+      the (refined) task book
     - answer   → a plain assistant message; the stored book stays untouched
     - start    → the docked task book is answered kind=start (G-1 path: the
                  run comes from the only birthplace, answer_question)
@@ -955,7 +1028,8 @@ async def _plan_turn(
     # task book (dockable, editable, startable; never a white screen). The
     # presented plan rides along so the start/revise verdict sees what is
     # actually being confirmed. on_delta (chat SSE) streams the raw verdict
-    # fragments for the answer-prose preview; None = today's one-shot call.
+    # fragments for the answer-prose preview; on_reasoning is a liveness
+    # signal for the thinking indicator. None = today's one-shot call.
     infer = plan_agent.infer_stream if on_delta is not None else plan_agent.infer
     intent = await infer(
         prompt=prompt,
@@ -963,48 +1037,83 @@ async def _plan_turn(
         presented_plan=(
             _task_book_summary(stored.intent) if stored is not None else None
         ),
-        **({"on_delta": on_delta} if on_delta is not None else {}),
+        **(
+            {"on_delta": on_delta, "on_reasoning": on_reasoning}
+            if on_delta is not None
+            else {}
+        ),
     )
+
+    # Declared-material promotion (2026-08-05 手测决策): the user explicitly
+    # said "this is my transcript/content" — the pasted text becomes a real
+    # TRANSCRIPT asset (visible, named; groundwork for the synthetic-talk
+    # line). Never inferred from text length — the LLM extracts it only on an
+    # explicit declaration.
+    material_asset: Asset | None = None
+    if intent.material_text and intent.material_text.strip():
+        material_asset = await create_transcript_asset_from_text(
+            db, UUID(str(project.id)), user_id, intent.material_text.strip()
+        )
+        assets.append(material_asset)
+
+    # Zero-material safety net (same decision): a generate verdict with no
+    # assets at all and no declared material must not dock a groundless task
+    # book — degrade to the ask-for-material answer. Only when no book is
+    # already on the table (a pending book's refine/start is untouched).
+    if (
+        intent.action == "generate"
+        and stored is None
+        and not assets
+        and material_asset is None
+    ):
+        intent.action = "answer"
+        intent.answer = _ask_for_material_text(prompt)
 
     has_media = await has_renderable_media(db, UUID(str(project.id)))
 
-    # Pin-merge rule: user-edited slots (explicit=True) from the panel's
-    # current task book survive this re-inference; the new inference only
-    # fills the slots the user did not pin. Falls back to the stored pending
-    # intent when the caller did not send its current book.
+    # Three-way merge rule (2026-08-05 ruling): base = the last-served book,
+    # prior = the panel's current book (explicit slots = hand-edited),
+    # inferred = the LLM's fresh read. Hand-edited fields survive when the
+    # LLM has no opinion or merely parrots the old state; anything the user's
+    # message revises wins — chat IS how the plan is edited, nothing is
+    # locked. Falls back to the stored pending intent when the caller did
+    # not send its current book.
     prior = request.prior_intent or (stored.intent if stored else None)
     if prior is not None:
-        intent.outputs = merge_explicit_slots(prior.outputs, intent.outputs)
-        # dub_languages pin rule (RECIPES §4.1): pin only when the caller's
-        # book DIVERGES from the last-served book — a panel edit or a recipe
-        # prior. An untouched book follows the fresh inference, so refine can
-        # still add/drop languages (mirrors slot pin-merge: LLM-owned until
-        # edited). Removing ALL chips is therefore not pinned on refine — the
-        # accumulated prompt re-decides; the confirm path (kind=start) honors
-        # an emptied list directly.
-        stored_dub = stored.intent.dub_languages if stored else None
-        if prior.dub_languages and prior.dub_languages != stored_dub:
-            intent.dub_languages = prior.dub_languages
+        base_slots = stored.intent.outputs if stored else []
+        intent.outputs = merge_prior_slots(base_slots, prior.outputs, intent.outputs)
+        # dub_languages, same three-way shape: an untouched panel list
+        # follows the fresh inference wholesale (refine can add/drop/empty
+        # languages); a panel-edited list survives an inference that is
+        # silent (empty = no opinion) or merely parrots the old list; when
+        # both diverge, chat wins. The confirm path (kind=start) always
+        # honors the panel's list directly.
+        stored_dub = stored.intent.dub_languages if stored else []
+        if prior.dub_languages == stored_dub:
+            pass  # panel untouched — inference owns it
+        elif not intent.dub_languages or intent.dub_languages == stored_dub:
+            intent.dub_languages = list(prior.dub_languages)
+        # else: both moved — chat wins, the inference stands.
 
-    # Recipe mention pin (docs/tasks/recipe-mention.md §2.3): a recipe is a
-    # definite reference — resolved server-side into explicit slots + dub
-    # languages and pin-merged like a prior, AFTER the panel prior so the
-    # named recipe wins. The LLM never interprets it (validated pre-inference).
-    # Merge algebra (agent-loop-upgrade §2.1): outputs are the card's PROMISE
-    # (pin wins); dub_languages is a DEFAULT — languages the user named in the
-    # (possibly edited) prompt win, the recipe fills only when inference found
-    # none (the LLM emits dub_languages only when dubbing was asked for, so
-    # non-empty = explicit); other inferred slots ride along untouched.
+    # Recipe mention seed (docs/tasks/recipe-mention.md §2.3, revised
+    # 2026-08-05): a recipe is a PRESET, not a pin — "仅仅是第一版的东西".
+    # Resolved server-side and applied AFTER the panel prior: slot types the
+    # inference didn't produce are appended so the first book matches the
+    # card's shape; dub_languages fills only when the prompt named none.
+    # Nothing is explicit — every field (and each slot's existence) is
+    # refine-able from the very next turn. The LLM never interprets the
+    # recipe (validated pre-inference).
     if recipe is not None:
-        intent.outputs = merge_explicit_slots(recipe.outputs, intent.outputs)
+        seeded = {s.type for s in intent.outputs}
+        for slot in recipe.outputs:
+            if slot.type not in seeded:
+                intent.outputs.append(slot.model_copy())
         if not intent.dub_languages:
             intent.dub_languages = list(recipe.dub_languages)
         intent.outputs_explicit = True
 
     clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
     reasons: list[str] = []
-    if not intent.language_explicit:
-        reasons.append("language_default")
     if not intent.outputs_explicit:
         reasons.append("outputs_default")
     if clips_slot is not None and clips_slot.count is None:
@@ -1088,6 +1197,7 @@ async def _propose_turn(
     mentions: list[ChatMention],
     recent: list[Message],
     on_delta=None,
+    on_reasoning=None,
 ) -> tuple[Message, UUID | None, list[UUID]]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3):
     assemble context, single intent call, adjudicate, record the reply.
@@ -1114,7 +1224,7 @@ async def _propose_turn(
             # Chat SSE: stream the verdict; raw fragments feed the prose
             # preview extractor. Repair rounds below stay non-streaming.
             result = await chat_intent_agent.propose_stream(
-                text, context, on_delta=on_delta
+                text, context, on_delta=on_delta, on_reasoning=on_reasoning
             )
         else:
             result = await chat_intent_agent.propose(text, context)
@@ -1438,12 +1548,14 @@ async def execute_chat_turn(
     prepared: PreparedTurn,
     request: ChatRequest,
     on_delta=None,
+    on_reasoning=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
     ``on_delta`` (chat SSE) receives raw LLM verdict fragments for the prose
-    preview channel; None (the JSON path, repair rounds, answer_question's
-    continuation) keeps today's one-shot calls.
+    preview channel; ``on_reasoning`` receives reasoning fragments as a
+    liveness signal for the thinking indicator. None (the JSON path, repair
+    rounds, answer_question's continuation) keeps today's one-shot calls.
     """
     if prepared.checkpoint_reply is not None:
         assistant_message = prepared.checkpoint_reply
@@ -1457,6 +1569,7 @@ async def execute_chat_turn(
             prepared.project,
             request,
             on_delta=on_delta,
+            on_reasoning=on_reasoning,
         )
         if plan_answered is not None:
             prepared.answered_question = plan_answered
@@ -1470,6 +1583,7 @@ async def execute_chat_turn(
             request.mentions,
             prepared.history[-6:],
             on_delta=on_delta,
+            on_reasoning=on_reasoning,
         )
 
     await db.commit()

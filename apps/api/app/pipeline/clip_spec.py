@@ -14,6 +14,7 @@ import re
 from typing import Any, cast
 
 from app.models.schemas import (
+    AssetType,
     CaptionCue,
     ClipBrand,
     ClipMusic,
@@ -30,7 +31,14 @@ from app.tools.storage import stream_url
 SECS_PER_IMAGE = 4.0
 
 # Mirrors ClipSpec.caption_style_preset's Literal values.
-_CAPTION_STYLE_PRESETS = {"clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up"}
+_CAPTION_STYLE_PRESETS = {
+    "clean-bottom",
+    "karaoke-highlight",
+    "fade-in",
+    "pop-in",
+    "slide-up",
+    "stacking",
+}
 
 
 def _norm(text: str) -> list[str]:
@@ -153,9 +161,14 @@ def build_clip_spec(
         words: list[dict[str, Any]] = cast("dict[str, Any]", source.meta or {}).get(
             "words", []
         )
-        audio_url = stream_url(source.file_url)
-        if words and audio_url:
-            # Audio-backed: captions + speech track sliced to the located span.
+        # Only an AUDIO source's file is a playable speech track — a transcript
+        # asset's file is the text document and must never become audio_url.
+        audio_url = stream_url(source.file_url) if source.type == AssetType.AUDIO else None
+        if words:
+            # Word-timed: captions (+ speech track when a recording exists)
+            # sliced to the located span. Words without audio = the estimated
+            # timeline from align_stills — a captioned slideshow, silent
+            # speech track (RECIPES §2's third time source).
             start, end = locate_span(words, segment)
             caption_track = (
                 [
@@ -171,7 +184,7 @@ def build_clip_spec(
                 if caption_enabled
                 else []
             )
-            url, duration = audio_url, (
+            url, duration = audio_url or "", (
                 float(source.duration_seconds) if source.duration_seconds else None
             )
         else:

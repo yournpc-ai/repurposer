@@ -166,7 +166,9 @@ def slot_step_label(slot: IntentSlot) -> str | None:
     return f"{_SLOT_TYPE_LABEL.get(slot.type, slot.type)} · {tag}"
 
 
-def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeSpec]:
+def compile_graph(
+    task: TaskSpec, target_type: str | None = None, *, add_stills_align: bool = False
+) -> list[_NodeSpec]:
     """Lower a task book into a fixed node topology (pure, code-determined).
 
     Mode② (task list): ``task.tasks`` is materialized via ``_compile_task_list``.
@@ -181,9 +183,14 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
     Targeted:   hook/clip -> [script];
                 derivative -> [director_understand -> director_plan -> X_gen];
                 render -> [render].
+
+    ``add_stills_align`` (input profile, computed async at the birthplace):
+    the no-recording combination — transcript + photos, no video/audio — gets
+    an ``align_stills`` node between director_plan and the clips node, so the
+    stills branch renders with an estimated caption timeline (RECIPES §4.2).
     """
     if task.tasks:
-        return _compile_task_list(task)
+        return _compile_task_list(task, add_stills_align=add_stills_align)
 
     scope = task.scope or "full"
 
@@ -210,6 +217,10 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
         else:
             nodes.append(_NodeSpec("director_plan", 4, inputs=[1, 2]))
         plan_idx = len(nodes) - 1
+        align_idx: int | None = None
+        if add_stills_align:
+            nodes.append(_NodeSpec("align_stills", 6, inputs=[plan_idx]))
+            align_idx = len(nodes) - 1
         type_ordinals: dict[str, int] = {}
         clips_idx: int | None = None
         seq = 10
@@ -226,8 +237,11 @@ def compile_graph(task: TaskSpec, target_type: str | None = None) -> list[_NodeS
             label = slot_step_label(slot)
             if label:
                 spec["summary"] = label
+            inputs = [plan_idx]
+            if slot.type == "clips" and align_idx is not None:
+                inputs.append(align_idx)
             nodes.append(
-                _NodeSpec(_OUTPUT_TO_NODE_KIND[slot.type], seq, inputs=[plan_idx], spec=spec)
+                _NodeSpec(_OUTPUT_TO_NODE_KIND[slot.type], seq, inputs=inputs, spec=spec)
             )
             if slot.type == "clips":
                 clips_idx = len(nodes) - 1
@@ -310,7 +324,7 @@ _SKILL_TO_OUTPUT: dict[str, str] = {
 }
 
 
-def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
+def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> list[_NodeSpec]:
     """Mode②: materialize an LLM-proposed task list into a standard graph.
 
     Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
@@ -322,6 +336,11 @@ def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
     Modifiers are chained in proposal order so two of them never edit the same
     render_spec concurrently. Defaults come from the params schemas, never
     from the LLM.
+
+    ``add_stills_align``: same input-profile injection as mode① — an
+    ``align_stills`` node is inserted right before the clips node and wired
+    into its inputs (an LLM-proposed align_stills is folded into the
+    injection; the runner is idempotent either way).
     """
     entries = validate_task_list(task.tasks or [])  # raises SkillRejected
     nodes: list[_NodeSpec] = []
@@ -342,6 +361,10 @@ def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
     modifiers: list[tuple[TaskItem, SkillEntry]] = []
     for item, entry in zip(task.tasks or [], entries, strict=True):
         params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
+        if entry.name == "align_stills":
+            # Handled by the input-profile injection below — the LLM naming
+            # it explicitly changes nothing (idempotent runner).
+            continue
         if not entry.needs_director and not entry.produces_outputs:
             modifiers.append((item, entry))
             continue
@@ -363,6 +386,12 @@ def _compile_task_list(task: TaskSpec) -> list[_NodeSpec]:
                 "target_type": _SKILL_TO_OUTPUT[entry.name],
             }
         inputs = [director_idx] if director_idx is not None else []
+        if entry.node_kind == "clips_pipeline" and add_stills_align:
+            align_inputs = [director_idx] if director_idx is not None else []
+            skill_node_idx["align_stills"] = len(nodes)
+            nodes.append(_NodeSpec("align_stills", seq, inputs=align_inputs))
+            seq += 1
+            inputs = [*inputs, skill_node_idx["align_stills"]]
         skill_node_idx[entry.name] = len(nodes)
         nodes.append(_NodeSpec(entry.node_kind, seq, inputs=inputs, spec=spec))
         seq += 1
@@ -470,6 +499,54 @@ CLIPS_NEED_MEDIA = (
 )
 
 
+async def _needs_stills_alignment(db: AsyncSession, project: Project, task: TaskSpec) -> bool:
+    """Input profile for the no-recording path (RECIPES §4.2).
+
+    True only for the exact combination: clips requested + NO video/audio
+    recording on the project + a transcript with text + photos/slides to back
+    the visual. Any recording present -> the existing media chain wins; no
+    images -> the clips-media gate already rejects. Computed once here and
+    passed into compile_graph, which stays pure.
+    """
+    clips_requested = any(s.type == "clips" for s in task.outputs) or any(
+        t.skill == "select_clips" for t in (task.tasks or [])
+    )
+    if not clips_requested:
+        return False
+    recording = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project.id,
+            Asset.type.in_([AssetType.VIDEO, AssetType.AUDIO]),
+            Asset.file_url.isnot(None),
+        )
+        .limit(1)
+    )
+    if recording.scalar_one_or_none() is not None:
+        return False
+    transcript = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project.id,
+            Asset.type == AssetType.TRANSCRIPT,
+            Asset.extracted_text.isnot(None),
+        )
+        .limit(1)
+    )
+    if transcript.scalar_one_or_none() is None:
+        return False
+    images = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project.id,
+            Asset.type.in_([AssetType.IMAGE, AssetType.SLIDES]),
+            Asset.file_url.isnot(None),
+        )
+        .limit(1)
+    )
+    return images.scalar_one_or_none() is not None
+
+
 async def create_run(
     db: AsyncSession,
     project: Project,
@@ -538,7 +615,9 @@ async def create_run(
     db.add(run)
     await db.flush()
 
-    node_specs = compile_graph(task, target_type)
+    node_specs = compile_graph(
+        task, target_type, add_stills_align=await _needs_stills_alignment(db, project, task)
+    )
     nodes: list[WorkflowStep] = []
     for ns in node_specs:
         node = WorkflowStep(

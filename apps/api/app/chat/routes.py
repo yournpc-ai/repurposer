@@ -98,10 +98,13 @@ async def _turn_stream(user_id: UUID, data: ChatRequest):
     body is iterated (same reason the run-events stream opens AsyncSessionLocal
     per poll). Raw LLM fragments feed the prose extractor (plan path previews
     ``answer``, the chat loop previews ``text``/``summary``) and decoded prose
-    lands in the queue as ``assistant.delta`` frames. The turn ends with
-    exactly one terminal frame: ``turn.completed`` (the full ChatResponse) or
-    ``turn.failed`` (a 4xx-class failure the JSON path would raise as an HTTP
-    error — e.g. a recipe rejection — arrives here as a frame instead).
+    lands in the queue as ``assistant.delta`` frames; fragments with no prose
+    (reasoning, the <think> preamble, the verdict JSON tail) emit
+    ``assistant.thinking`` keepalive frames so the indicator stays warm. The
+    turn ends with exactly one terminal frame: ``turn.completed`` (the full
+    ChatResponse) or ``turn.failed`` (a 4xx-class failure the JSON path would
+    raise as an HTTP error — e.g. a recipe rejection — arrives here as a
+    frame instead).
 
     A client disconnect cancels the response, hitting the ``finally`` below:
     the turn task is cancelled before its commit, the session teardown rolls
@@ -127,9 +130,18 @@ async def _turn_stream(user_id: UUID, data: ChatRequest):
                         await queue.put(
                             _sse("assistant.delta", json.dumps({"text": text}))
                         )
+                    else:
+                        # A non-prose fragment (the <think> preamble, the
+                        # verdict JSON after the echo closes) still proves the
+                        # model is alive — keep the thinking indicator warm.
+                        await queue.put(_sse("assistant.thinking", "{}"))
+
+                async def on_reasoning(_fragment: str) -> None:
+                    # Reasoning-content frames: liveness only, never shown.
+                    await queue.put(_sse("assistant.thinking", "{}"))
 
                 response = await execute_chat_turn(
-                    db, prepared, data, on_delta=on_delta
+                    db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash

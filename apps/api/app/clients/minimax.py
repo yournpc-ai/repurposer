@@ -134,6 +134,7 @@ class MiniMaxClient:
         temperature: float = 0.3,
         thinking: bool = False,
         on_delta: Callable[[str], Awaitable[None] | None] | None = None,
+        on_reasoning: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> T:
         """Streaming variant of ``generate`` — same single verdict call, but the
         raw response text is also forwarded chunk-by-chunk via ``on_delta`` as
@@ -205,7 +206,16 @@ class MiniMaxClient:
                             choices = chunk.get("choices") or []
                             if not choices:
                                 continue
-                            fragment = (choices[0].get("delta") or {}).get("content")
+                            delta = choices[0].get("delta") or {}
+                            reasoning = delta.get("reasoning_content")
+                            if reasoning and on_reasoning is not None:
+                                # Reasoning fragments are a liveness signal
+                                # only — never accumulated into the JSON
+                                # payload, never shown to the user.
+                                result = on_reasoning(reasoning)
+                                if result is not None:
+                                    await result
+                            fragment = delta.get("content")
                             if not fragment:
                                 continue
                             accumulated += fragment

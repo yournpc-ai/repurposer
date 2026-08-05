@@ -275,6 +275,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   };
   const entrance = captionEntrance(preset.entrance, frame, revealFrame);
 
+  // stack + title: the title is a ~3s intro card (it fades out below); the
+  // caption wall waits for it, so the two never share the top area. Lines
+  // revealed during the intro stay revealed — the wall appears with them.
+  const titleShown = Boolean(inVideo && spec.title.enabled && spec.title.text);
+  const stackHiddenForIntro =
+    preset.layout === "stack" && titleShown && frame <= introFrames + 105;
+
   // One line's cue spans — the active word takes the accent color (visible
   // only for wordHighlight presets; otherwise accent == captionColor).
   const renderCueSpans = (line: CaptionCue[]) =>
@@ -383,10 +390,21 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             lineHeight: 1.15,
             textShadow: "0 2px 12px rgba(0,0,0,0.7)",
             // Fade in over ~0.4s once the video portion starts (libass \fad).
-            opacity: interpolate(frame, [introFrames, introFrames + 12], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            }),
+            // stack layout: the accumulating caption wall owns the top area,
+            // so the title is a ~3s intro card and fades out (libass \fad
+            // out) — a permanent title collides with the stacked lines.
+            opacity:
+              preset.layout === "stack"
+                ? interpolate(
+                    frame,
+                    [introFrames, introFrames + 12, introFrames + 90, introFrames + 105],
+                    [0, 1, 1, 0],
+                    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+                  )
+                : interpolate(frame, [introFrames, introFrames + 12], [0, 1], {
+                    extrapolateLeft: "clamp",
+                    extrapolateRight: "clamp",
+                  }),
             ...pointStyle(spec.title.position, DEFAULT_TITLE_POS),
           }}
         >
@@ -394,7 +412,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </div>
       ) : null}
 
-      {inVideo && captionsEnabled && preset.layout === "stack" && visibleStack.length > 0 ? (
+      {inVideo && captionsEnabled && preset.layout === "stack" && visibleStack.length > 0 && !stackHiddenForIntro ? (
         <div
           style={{
             display: "flex",

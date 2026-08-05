@@ -422,8 +422,10 @@ class ChatRequest(BaseModel):
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
     # The review panel's current task book (hand-edited slots marked
-    # explicit). Its explicit slots pin through this re-inference (pin-merge
-    # rule); None = pin from the stored pending intent, if any.
+    # explicit). Its explicit slots are three-way merged against the stored
+    # book and the fresh inference — panel edits survive LLM parroting, but
+    # anything the user's message revises wins (merge_prior_slots);
+    # None = merge against the stored pending intent, if any.
     prior_intent: "InferredIntent | None" = None
     # The composer's brand choice rides the first message; written into the
     # pending intent only when the plan path docks a task book (a later turn
@@ -547,10 +549,13 @@ class IntentSlot(BaseModel):
     N-20 layering: the IntentSlot says WHAT the user wants; the director's
     ``StoryboardSlot`` (派工层) says how the work is assigned. ``None`` fields
     mean "task-book default": count → the per-type default (clips 5 / quotes 3
-    / carousel 6), language → the run's ``target_language``. Same-type multi
-    slots are how one run produces e.g. an English and a German post.
-    ``explicit`` marks user-edited slots — the pin-merge rule keeps them
-    across re-inference.
+    / carousel 6). Language is a per-slot property (2026-08-05 restructure —
+    the book-level field is retired): the PlanAgent always fills it; ``None``
+    is legacy/read-tolerant and inherits the run's derived fallback. Same-type
+    multi slots are how one run produces e.g. an English and a German post.
+    ``explicit`` marks user-edited slots — they are three-way merged across
+    re-inference (panel edits survive LLM parroting; chat revisions always
+    win, ``merge_prior_slots``).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -611,6 +616,14 @@ class InferredIntent(BaseModel):
         # validation and degrading a correct verdict to the fallback intent.
         if data.get("outputs") is None:
             data = {k: v for k, v in data.items() if k != "outputs"}
+        # 2026-08-05 restructure: the book-level ``language`` /
+        # ``language_explicit`` fields are retired — language is a per-slot
+        # property. Legacy stored books still carry them; strip on read
+        # (their value survives per-slot materialization on the client, and
+        # the run birthplace derives the fallback from the slots).
+        for retired in ("language", "language_explicit"):
+            if retired in data:
+                data = {k: v for k, v in data.items() if k != retired}
         outputs = data.get("outputs")
         if not isinstance(outputs, list) or not any(
             isinstance(o, str) for o in outputs
@@ -643,9 +656,14 @@ class InferredIntent(BaseModel):
         default=None,
         description="Direct answer text when action is 'answer'. Null for generate.",
     )
-    language: str = Field(
-        default="en",
-        description="ISO language code for generated outputs (en/fr/de/es/it/zh).",
+    material_text: str | None = Field(
+        default=None,
+        description=(
+            "Verbatim source text the user explicitly declared as their own "
+            "material ('this is my transcript: …', '这是我的文字稿：…'). Null "
+            "when the user did not declare pasted text as source material — "
+            "a bare request is never material."
+        ),
     )
     outputs: list[IntentSlot] = Field(
         default_factory=lambda: [
@@ -680,14 +698,6 @@ class InferredIntent(BaseModel):
         description="Free-form instruction distilled from the prompt.",
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    language_explicit: bool = Field(
-        default=False,
-        description=(
-            "True when the language was explicitly inferred from the prompt "
-            "(prompt language or an explicit 'in German' style request). "
-            "False when falling back to the default."
-        ),
-    )
     outputs_explicit: bool = Field(
         default=False,
         description=(

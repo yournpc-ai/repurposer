@@ -240,6 +240,19 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             requires=("media",),
         ),
         SkillEntry(
+            name="align_stills",
+            description="Build an estimated speaking timeline from the transcript so a photo "
+            "slideshow gets word-level caption timing — use when there is NO recording "
+            "(transcript + photos only; RECIPES §2's third time source: reading pace)",
+            kind="tool",
+            behavior="deterministic",
+            summary_template="Aligned transcript · {n} words · {total_seconds}s",
+            cost_hint="cheap",
+            runner="app.pipeline.node_runners:run_align_stills",
+            node_kind="align_stills",
+            requires=("transcript",),
+        ),
+        SkillEntry(
             name="synthesize_talk_video",
             description="Synthesize a talking-head video from transcript + speaker photo + voiceprint",
             kind="skill",

@@ -417,7 +417,7 @@ async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
     book = (await ctx.results(pid)).get("pending_intent")
     slots = book_slots(book)
     check(any(s["type"] == "clips" for s in slots),
-          "recipe pin keeps the clips slot (the card's promise)", slots)
+          "the recipe seed keeps the clips slot (the card's shape)", slots)
     check("clips_without_media" in (book.get("reasons") or []),
           "the no-media warning rides the dock", book.get("reasons"))
     qid = turn1["assistant_message"]["id"]
@@ -443,6 +443,139 @@ async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
           "vacuous dub languages dropped at the birthplace", run_ctx.get("dub_languages"))
 
 
+async def project_assets(pid: str) -> list[dict]:
+    """DB read: the project's asset rows (material-promotion assertions)."""
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(Asset).where(Asset.project_id == uuid.UUID(pid))
+            )
+        ).scalars().all()
+        return [
+            {"type": str(a.type), "extracted_text": a.extracted_text, "title": a.title}
+            for a in rows
+        ]
+
+
+async def s12_declared_material_promotes(ctx: Ctx) -> None:
+    """S12 素材声明升格："这是我的文字稿：…" → transcript 资产落库 + dock 任务书。"""
+    pid = await ctx.new_project("S12 declared material")
+    material = (
+        "Good morning everyone. Today I want to talk about why European "
+        "research institutes struggle to turn conference talks into an "
+        "ongoing public presence, and what we can do about it."
+    )
+
+    turn1 = await ctx.chat(pid, f"这是我的文字稿：{material}")
+    check(is_task_book_dock(turn1["assistant_message"]),
+          "declared material docks a task book", turn1["assistant_message"])
+    assets = await project_assets(pid)
+    transcripts = [a for a in assets if a["type"].endswith("transcript")]
+    check(len(transcripts) == 1, "exactly one transcript asset was promoted", assets)
+    check(material in (transcripts[0]["extracted_text"] or ""),
+          "the asset carries the declared text verbatim",
+          (transcripts[0]["extracted_text"] or "")[:80])
+    check(transcripts[0]["title"] and transcripts[0]["title"] != "prompt.txt",
+          "a human title, never the retired shim name", transcripts[0]["title"])
+
+
+async def s13_no_material_asks(ctx: Ctx) -> None:
+    """S13 零素材反问：无素材声明的 generate 请求 → answer 引导，无 dock 无 run。"""
+    pid = await ctx.new_project("S13 no material asks")
+
+    turn1 = await ctx.chat(pid, "帮我做 LinkedIn 内容")
+    check(turn1["run_id"] is None, "no run without material", turn1)
+    check(not turn1["assistant_message"].get("question"),
+          "no task book docks without material", turn1["assistant_message"])
+    check(bool((turn1["assistant_message"].get("content") or "").strip()),
+          "an ask-for-material reply lands", turn1["assistant_message"])
+    check((await ctx.results(pid)).get("pending_intent") is None,
+          "no groundless book is persisted")
+    check(await project_assets(pid) == [], "no fake asset was created")
+
+
+async def s14_bare_pasted_content_promotes(ctx: Ctx) -> None:
+    """S14 无声明贴文升格：直接贴一段自己的内容（无"这是我的…"前缀）→ 升格 + dock。"""
+    pid = await ctx.new_project("S14 bare pasted content")
+    material = (
+        "Let me walk you through the three numbers that matter for grid "
+        "storage. First, the cost curve: lithium-iron phosphate packs fell "
+        "below 60 dollars per kilowatt-hour this spring, and that changes "
+        "every procurement model we built the 2030 targets on. Second, the "
+        "interconnection queue. Third, capacity-market bidding."
+    )
+
+    turn1 = await ctx.chat(pid, material)
+    check(is_task_book_dock(turn1["assistant_message"]),
+          "bare pasted content docks a task book", turn1["assistant_message"])
+    assets = await project_assets(pid)
+    check(any(a["type"].endswith("transcript") for a in assets),
+          "the pasted content became a transcript asset", assets)
+
+
+async def s15_recipe_refine_count(ctx: Ctx) -> None:
+    """S15 配方=预设（2026-08-05 裁定）：Remix 后 refine "clips only needs 2"
+    → 数量落在 docked 书上（配方只铺第一版，不钉任何字段）。"""
+    pid = await ctx.new_project("S15 recipe refine count")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
+
+    turn1 = await ctx.chat(pid, "cut highlight clips from my talk", mentions=mentions)
+    check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
+          turn1["assistant_message"])
+
+    turn2 = await ctx.chat(pid, "clips only needs 2")
+    check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
+          turn2["assistant_message"])
+    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
+    clips = [s for s in slots if s["type"] == "clips"]
+    check(clips and clips[0].get("count") == 2,
+          "the chat revision lands on the recipe-seeded clips slot", slots)
+
+
+async def s16_panel_edit_three_way(ctx: Ctx) -> None:
+    """S16 三方合并：面板手改（explicit）在无关 refine 中存活；chat 修订覆盖手改。"""
+    pid = await ctx.new_project("S16 three-way merge")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+
+    turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
+    check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
+          turn1["assistant_message"])
+
+    def pin_count(book: dict, count: int) -> dict:
+        """Simulate a panel hand edit: clips count pinned, slot explicit."""
+        edited = dict(book["intent"])
+        edited["outputs"] = [
+            {**s, "count": count, "explicit": True} if s["type"] == "clips" else s
+            for s in book_slots(book)
+        ]
+        return edited
+
+    book1 = (await ctx.results(pid)).get("pending_intent")
+    turn2 = await ctx.chat(
+        pid, "also add a German post", prior_intent=pin_count(book1, 3)
+    )
+    check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
+          turn2["assistant_message"])
+    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
+    clips = [s for s in slots if s["type"] == "clips"]
+    check(clips and clips[0].get("count") == 3,
+          "the panel hand edit survives an unrelated refine", slots)
+    check(any(s["type"] == "post" and s.get("language") == "de" for s in slots),
+          "the German post arrived", slots)
+
+    book2 = (await ctx.results(pid)).get("pending_intent")
+    turn3 = await ctx.chat(
+        pid, "clips only needs 2", prior_intent=pin_count(book2, 3)
+    )
+    check(is_task_book_dock(turn3["assistant_message"]), "turn3 re-docks",
+          turn3["assistant_message"])
+    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
+    clips = [s for s in slots if s["type"] == "clips"]
+    check(clips and clips[0].get("count") == 2,
+          "the chat revision overrides the panel pin (chat always wins)", slots)
+
+
 SCENARIOS = {
     "S1": s1_vague_first_turn_then_prose_start,
     "S2": s2_explicit_first_turn_then_dock_start,
@@ -455,6 +588,11 @@ SCENARIOS = {
     "S9": s9_sse_turn_streaming,
     "S10": s10_dub_language_classification,
     "S11": s11_recipe_clips_without_media_escape,
+    "S12": s12_declared_material_promotes,
+    "S13": s13_no_material_asks,
+    "S14": s14_bare_pasted_content_promotes,
+    "S15": s15_recipe_refine_count,
+    "S16": s16_panel_edit_three_way,
 }
 
 
