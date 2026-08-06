@@ -30,6 +30,7 @@
 3. **DAG 编排全复用**：每个新动词（节点/契约扩展）落地即免费获得编排、逐节点计量、SSE 打勾流、失败重试、子图重跑。零新表——一切住 JSON 载荷层（clip-spec / node.spec / run.context）。
 4. **可扩展词汇一律注册表化**：字幕样式、skill、节点 kind 同纪律（`SKILL_REGISTRY` / `NODE_RUNNERS` 先例）——加成员是填注册项，不是加分支。
 5. **内容定位**：卡片围绕 LinkedIn / 多语言 / 专家需求（欧洲 ICP），不做 TikTok 风（CLAUDE.md 产品定位）。
+6. **配方 = 数据包**（2026-08-06）：base + flow + prompt + example_assets + example_outputs（+ 服务端 outputs 预设），schema 见 §7.1。扩展配方 = authoring 数据条目，不是写代码——除非该卡演示的能力本身是新的。卡面立项门槛 = 一道具体的菜（§4.4）。
 
 ## 2. 三层正交架构
 
@@ -100,9 +101,11 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 - **兑现工作**：见 §6（ADR 翻案 + M3 filmstrip 检测 + crop 时序化 + `reframe_clip` skill 评审）。
 - **素材账单**：~~demo talk 是单人演讲，喂不了此卡~~ → 已策展 `demo/uploads/xy_1.mp4`（左右对坐访谈，2026-07-30 入库）。
 
-### 4.4 风格卡（座位）
+### 4.4 风格卡（座位撤除，2026-08-06）
 
-风格内容用户未定（2026-07-30）。卡片数据结构预留；风格定了可灵活插队（视觉风格大概率 = caption catalog 成员 + brand 参数的组合，届时按 §3 注册表纪律评估）。
+**风格不作为配方卡存在**（2026-08-06 拍板）：风格是产物的修饰，不是产物——"没有人想得到一个风格"。沉为 **look 层**：caption catalog 成员 × title/intro 结构 × brand 参数的组合，三个家——配方 overlay 预览（每道菜的观感即其 look）、检视器参数直操（字幕样式等控件，简报 `tasks/results-workspace.md` D8）、chat 修订（"换成杂志风"）。
+
+**卡面立项门槛**（同日拍板）：配方必须是**一道具体的菜**——有名字、有画面感、一眼想要的成片（dub 卡"你的声音说德语"为模板）；品类形态（"带字幕的竖屏短片"这类货架标签）不配占位。第四张卡座位在闭环链（PROGRESS 第 2–5 周）完成后按此门槛立项；候选方向存档：杂志访谈风 keynote 短片（stacking + 顶部 title + intro 标题页，素材 `xy_2.mp4` 已策展）。
 
 ## 5. 声音层（裁决③④落档）
 
@@ -124,22 +127,26 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 
 ## 7. 卡片层（数据 + 交互 + 布局）
 
-### 7.1 卡片数据：双端注册表（2026-08-01 修订，取代"前端数据文件"形态）
+### 7.1 卡片数据：Recipe 数据 schema（2026-08-06 修订：配方 = 数据，取代"双端注册表 + 三件配置"的分散形态）
 
-配方数据分两半，各归其主——**预设实质永不出服务端，展示数据公开可读**：
+**配方 = 一个数据包**（2026-08-06 拍板）。一张配方卡 = 五个字段，所有消费方（卡面 / 检视 overlay / composer 回填 / plan path 播种 / 未来真实 Gallery）读同一个包：
 
-```python
-# 服务端 app/pipeline/recipes.py — 静态注册表，随代码部署（SKILL_REGISTRY 同款纪律）
-RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs, dub_languages}
-#   status       live | reserved（点亮纪律的闸门）
-#   input_slots  类型化输入槽位：[{type: "video"|"audio"|"images"|"slides"|"transcript", required}]
-#   outputs      预设任务槽（存在性填充：只补推断没有的槽位类型，无 explicit）
-#   dub_languages 配音语言集（§4.1）
+```
+Recipe = {
+  base:            名称 / 承诺 / 标签 / 画幅 / status        → 卡面 + overlay 固定信息卡
+  flow:            作者策展的只读静态流程图（友好步骤名、无模型名） → overlay"它是怎么做的"堆叠项（ADR-035）
+  prompt:          示例 prompt                                → overlay"User prompt"堆叠项 + Remix 回填 composer 的文本
+  example_assets:  示例原素材（demo/ 桶引用）+ input_slots     → overlay"原素材"堆叠项 + Assets 块必填提示
+  example_outputs: 烘焙成片（内容寻址引用）                    → overlay 大预览 + 卡面自动播放视频
+  outputs:         预设任务槽（存在性填充：只补推断没有的槽位类型，无 explicit）→ plan path 预设播种（服务端实质）
+}
 ```
 
-- **公开端点** `GET /api/v1/recipes` 只回 `{id, status, input_slots}`——预设实质（outputs/dub_languages）不下发；landing 匿名受众也是读者，端点公开。
-- **前端三件配置**：注册表查询（结构）+ `recipes.assets.ts`（preview 内容寻址映射，生成文件）+ i18n `recipes.<id>.*`（title/promise/promptTemplate）。新增配方 = 服务端一条注册项 + i18n 键 + preview 资产，零代码路径。
-- `inputSlots` 本期回归（R1 曾按 YAGNI 修剪）：消费者 = chip/picker 提示 + Assets 引导（前端展示）与 clips-media 门拒收信息（服务端兜底）。
+- **可见性分层 = schema 的字段级属性**：公开投影（base / flow / prompt / example_assets / example_outputs——落地页匿名受众可读）经 `GET /api/v1/recipes` 下发；**预设实质（outputs / dub_languages）永不出服务端**。原"双端分半"纪律收编为字段可见性，不再是两套机制。
+- **存储纪律**：结构数据与资产引用直接持有于服务端 `app/pipeline/recipes.py` 静态注册表（SKILL_REGISTRY 同款，随代码部署）；**可翻译文本**（title / promise / prompt）以 i18n 键引用（en 为源语言，现状纪律不变）；烘焙资产以内容寻址 URL 引用（`recipes.assets.ts` 由上传脚本生成，现状不变）。
+- **flow ↔ outputs 同文件登记**：flow 是策展的展示数据，但必须如实对应 outputs 预设实际编译出的图——同处登记、评审一并过，防漂移。
+- **新增配方 = 写一条数据条目**（注册项 + i18n 键 + 烘焙资产），零代码路径——除非该卡演示的能力本身是新的（如分镜的 crop_track）。"扩展配方卡"的全部工作自此统一为 authoring 数据。
+- `inputSlots` 消费者：chip/picker 提示 + Assets 块必填提示（前端展示）与 clips-media 门拒收信息（服务端兜底）。
 
 ### 7.2 点击链路：mention chip 形态（2026-08-01 修订，取代预填+prior 形态）
 
@@ -170,7 +177,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 | **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；**交互形态 2026-08-01 修订为 mention chip**，简报 `docs/tasks/recipe-mention.md` 期 1 随本行复亮 Remix） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
 | **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（**2026-08-05 修订：无声版先行**，声音路径后置第 5 周，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
 | **R3** | 简报 B：ADR 翻案 + filmstrip 检测 + `crop_track` + `reframe_clip` | 分镜卡 | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
-| **R4** | 风格卡（内容 TBD，PROGRESS 第 2 周） | 风格卡 | — |
+| **R4** | Recipe 数据 schema 定义（§7.1）+ dub 落成第一个完整数据实例（示例 prompt / 素材账单 / 静态流程图 / 预览烘焙）+ remix→chat 链路走查补缝（08-07 启动 ~ 08-11，PROGRESS 第 2 周） | —（第四卡座位撤，§4.4） | dub 数据包五字段齐，第 2 周配方检视 overlay 装配所需内容全部就绪 |
 | **R5** | AI 生成产物线（声纹 / Speaker / Memory，PROGRESS 第 5–6 周） | 虚拟画面卡 | — |
 
 每期配套：对应素材策展 + 该期 `docs/tasks/` 简报（引用本文档章节号）+ PROGRESS 状态更新。
