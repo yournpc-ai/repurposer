@@ -351,9 +351,22 @@ async def _build_context(
     if recent:
         lines.append("Recent rounds:")
         for m in recent:
-            if not m.content:
+            attached = [
+                a.get("name") for a in (m.attachments or []) if a.get("name")
+            ]
+            if not m.content and not attached:
                 continue
             line = f"- {m.role}: {m.content[:200]}"
+            if attached:
+                # An attachment-only user turn (files staged in the input
+                # group, sent with no text) must still be visible to the
+                # agent — the files themselves appear in the Assets block.
+                line += f" [attached: {', '.join(attached)}]"
+            qreasons = (m.question or {}).get("reasons") or []
+            if qreasons:
+                # Task-book needs-check keys are data for the agent (its
+                # vocabulary) — they live on the payload, never in prose.
+                line += f" (needs check: {', '.join(qreasons)})"
             if m.question and m.answer:
                 # Answered questions archive as QA pairs — the answer is the
                 # user's decision and must be visible to the agent (a bare
@@ -681,10 +694,15 @@ async def sync_task_book_question(
         await _create_message(db, conversation_id, "user", prompt)
 
     content = f"Plan ready for confirmation: {_task_book_summary(intent)}"
-    if reasons:
-        content += f" (needs your check: {', '.join(reasons)})"
+    # Reason keys ride the question PAYLOAD (data, localized at render) —
+    # never baked into content, which is user-facing prose (the QA archive
+    # renders it verbatim). The LLM context line re-appends them (keys are
+    # the agent's vocabulary).
     _message, bailed_run_ids = await _dock_question(
-        db, conversation_id, content, AskPayload(kind="task_book")
+        db,
+        conversation_id,
+        content,
+        AskPayload(kind="task_book", reasons=reasons or []),
     )
     return bailed_run_ids
 
@@ -968,6 +986,7 @@ async def _plan_turn(
     conversation: Conversation,
     project: Project,
     request: ChatRequest,
+    recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
@@ -991,6 +1010,17 @@ async def _plan_turn(
     """
     conversation_id = UUID(str(conversation.id))
     text = request.message
+    if not text.strip() and request.attachments:
+        # Attachment-only turn (files staged in the overlay's input group,
+        # sent with no text): the persisted user message stays empty (the
+        # chips carry the record), but the inference needs honest words —
+        # the files themselves are listed in the Assets context block.
+        names = ", ".join(a.name for a in request.attachments)
+        text = (
+            f"(I just attached new source files: {names}. "
+            "No note — treat them as material for what I asked, or ask what "
+            "I'd like made from them.)"
+        )
 
     stored = (
         PendingIntent.model_validate(project.pending_intent)
@@ -1027,9 +1057,22 @@ async def _plan_turn(
     # plan_agent.infer never raises MiniMaxError — its fallback is the default
     # task book (dockable, editable, startable; never a white screen). The
     # presented plan rides along so the start/revise verdict sees what is
-    # actually being confirmed. on_delta (chat SSE) streams the raw verdict
-    # fragments for the answer-prose preview; on_reasoning is a liveness
-    # signal for the thinking indicator. None = today's one-shot call.
+    # actually being confirmed; the recent rounds ride along so the
+    # material/content judgment sees what just happened (G-7 — e.g. the
+    # assistant asked for source material and the user then pastes it; same
+    # "feed the context, never make the model guess blind" precedent as
+    # presented_plan). on_delta (chat SSE) streams the raw verdict fragments
+    # for the answer-prose preview; on_reasoning is a liveness signal for the
+    # thinking indicator. None = today's one-shot call.
+    recent_lines: list[str] = []
+    for m in recent or []:
+        attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
+        if not m.content and not attached:
+            continue
+        line = f"- {m.role}: {(m.content or '')[:200]}"
+        if attached:
+            line += f" [attached: {', '.join(attached)}]"
+        recent_lines.append(line)
     infer = plan_agent.infer_stream if on_delta is not None else plan_agent.infer
     intent = await infer(
         prompt=prompt,
@@ -1037,6 +1080,7 @@ async def _plan_turn(
         presented_plan=(
             _task_book_summary(stored.intent) if stored is not None else None
         ),
+        recent=recent_lines or None,
         **(
             {"on_delta": on_delta, "on_reasoning": on_reasoning}
             if on_delta is not None
@@ -1479,7 +1523,9 @@ async def prepare_chat_turn(
                     answered_at=datetime.now(UTC),
                 ).model_dump(mode="json")
                 answered_question = pending
-            elif pending_payload.allow_freeform:
+            elif pending_payload.allow_freeform and request.message.strip():
+                # A blank attachment-only turn never answers a checkpoint —
+                # the files ride the intent paths below instead.
                 pending.answer = AnswerPayload(
                     kind="freeform",
                     text=request.message,
@@ -1562,12 +1608,19 @@ async def execute_chat_turn(
         run_id = None
         bailed_run_ids: list[UUID] = []
     elif prepared.plan_path:
+        # The plan agent's context excludes this turn's own message (already
+        # the prompt being judged); the latest few rounds before it are the
+        # disambiguating conversation (G-7).
+        recent = [
+            m for m in prepared.history if m.id != prepared.user_message.id
+        ][-5:]
         assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
             db,
             prepared.user_id,
             prepared.conversation,
             prepared.project,
             request,
+            recent=recent,
             on_delta=on_delta,
             on_reasoning=on_reasoning,
         )

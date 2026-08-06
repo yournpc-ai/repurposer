@@ -29,6 +29,7 @@ class PlanAgent:
         prompt: str,
         filename: str | None = None,
         presented_plan: str | None = None,
+        recent: list[str] | None = None,
     ) -> InferredIntent:
         """Infer language, outputs, tone and instruction from prompt.
 
@@ -39,13 +40,17 @@ class PlanAgent:
                 is on the table — the start/revise verdict needs to SEE the
                 plan being confirmed, not imagine it (a bare "开始吧" after a
                 vague first turn otherwise reads as "go generate").
+            recent: The conversation's latest rounds (pre-formatted lines,
+                current message excluded) — the material/content judgment
+                needs to SEE what just happened (e.g. the assistant asking
+                for source material), not read the text in a vacuum (G-7).
 
         Returns:
             InferredIntent with defaults when inference fails.
         """
         try:
             return await self.client.generate(
-                messages=self._messages(prompt, filename, presented_plan),
+                messages=self._messages(prompt, filename, presented_plan, recent),
                 response_model=InferredIntent,
                 temperature=0.2,
             )
@@ -57,6 +62,7 @@ class PlanAgent:
         prompt: str,
         filename: str | None = None,
         presented_plan: str | None = None,
+        recent: list[str] | None = None,
         on_delta=None,
         on_reasoning=None,
     ) -> InferredIntent:
@@ -67,7 +73,7 @@ class PlanAgent:
         never shown to the user, never parsed)."""
         try:
             return await self.client.generate_stream(
-                messages=self._messages(prompt, filename, presented_plan),
+                messages=self._messages(prompt, filename, presented_plan, recent),
                 response_model=InferredIntent,
                 temperature=0.2,
                 on_delta=on_delta,
@@ -105,6 +111,7 @@ class PlanAgent:
         prompt: str,
         filename: str | None,
         presented_plan: str | None,
+        recent: list[str] | None,
     ) -> list[dict]:
         system_prompt = (
             "You are an intent parser for an AI content repurposing tool. "
@@ -151,10 +158,13 @@ class PlanAgent:
             "(max 200 words) in the same language as the user prompt that explains "
             "the tool's capabilities and invites the user to upload or paste talk "
             "content. When action is 'generate', write ONE short sentence in the "
-            "user's language echoing the plan you understood, e.g. \"Here's what "
-            "I understood: 5 clips, 3 quote cards and an article in English, "
-            "dubbed into German.\" — it is shown above the plan card as the "
-            "plan's own words. Set to null only when action is 'start'. "
+            "user's language stating the plan you understood — a natural "
+            "paraphrase, never a stiff meta preamble (no literal 'Here's what "
+            "I understood:', it translates awkwardly): e.g. \"Got it — 5 clips, "
+            "3 quote cards and an article in English, dubbed into German.\" / "
+            "\"好的——5 条切片、3 张金句卡和 1 篇文章，中文版，再配德语配音。\" "
+            "— it is shown above the plan card as the plan's own words. Set to "
+            "null only when action is 'start'. "
             "EXCEPTION — clips without media: when no media file is attached "
             "but the plan keeps a clips slot (e.g. a recipe card pinned it), "
             "the echo must ALSO tell the user, in their language: clips and "
@@ -243,6 +253,12 @@ class PlanAgent:
             context += f"\nUploaded file: {filename}"
         else:
             context += "\nNo file uploaded (text-only input)."
+        if recent:
+            # The conversation's latest rounds (current message excluded) —
+            # what just happened is often the disambiguator (the assistant
+            # asked for material; the user then pastes it). Context only,
+            # no steering: the judgment stays the model's.
+            context = "Recent conversation:\n" + "\n".join(recent) + "\n\n" + context
         if presented_plan:
             context += (
                 f"\nA task book has already been presented to the user and "

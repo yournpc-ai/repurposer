@@ -185,6 +185,9 @@ class AskPayload(BaseModel):
     options: list[AskOption] = Field(default_factory=list)
     allow_freeform: bool = True
     cost_hint: str | None = None
+    # task_book only: the needs_clarification reason KEYS (data, localized at
+    # render — never baked into `content`, which is user-facing prose).
+    reasons: list[str] = Field(default_factory=list)
 
 
 class AnswerPayload(BaseModel):
