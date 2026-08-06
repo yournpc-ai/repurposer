@@ -2,9 +2,10 @@
 
 Endpoints (prefix ``/api/v1/recipes``):
 
-- ``GET ""`` — the public card catalogue: ``{id, status, input_slots}`` only.
-  No auth — the landing audience is anonymous and reads the same cards
-  (RECIPES §7.1). Pin substance (outputs / dub_languages) never leaves the
+- ``GET ""`` — the public card catalogue: the public projection of the
+  Recipe data package (base structure / flow / example_* / input_slots,
+  RECIPES §7.1). No auth — the landing audience is anonymous and reads the
+  same cards. Pin substance (outputs / dub_languages) never leaves the
   server (prohibition #7, docs/tasks/recipe-mention.md).
 """
 

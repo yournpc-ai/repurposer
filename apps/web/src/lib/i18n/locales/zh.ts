@@ -435,6 +435,30 @@ const zh: Resources = {
     soon: "即将推出",
     mute: "关闭预览声音",
     unmute: "播放预览声音",
+    // 静态配方流程图步骤（ADR-035）——共享命名空间；配方的流程 = 选哪些步、什么顺序、几路扇出。
+    flow: {
+      understand: "理解素材",
+      plan: "规划剪辑",
+      align_stills: "按文字稿对齐照片",
+      select: "选出高光片段",
+      write: "撰写文案",
+      dub: "用你的声音配音",
+      render: "渲染",
+    },
+    // 配方标签 chip（信息卡）——共享命名空间。
+    tags: {
+      multilingual: "多语言",
+      "voice-clone": "声音克隆",
+      "no-footage": "无需录像",
+    },
+    // 示例素材 / 成片标签（overlay 堆叠项）。
+    materials: {
+      demo_talk: "示例演讲片段",
+      demo_photos: "现场照片",
+      demo_transcript: "演讲文字稿",
+      dub_preview: "配音预览（德语）",
+      image_video_preview: "轮播预览",
+    },
     dub: {
       title: "多语言配音",
       promise: "你的演讲，你的声音——开口说德语、法语和西语。",
@@ -449,11 +473,6 @@ const zh: Resources = {
       title: "访谈分镜",
       promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
       promptTemplate: "把我的双人访谈重剪成跟着说话人切换的竖屏切片。",
-    },
-    style: {
-      title: "预设风格",
-      promise: "一场演讲，多种观感——字幕与品牌风格自动套用。",
-      promptTemplate: "用一种新的字幕风格剪出我演讲的高光切片。",
     },
     "ai-visuals": {
       title: "虚拟画面",

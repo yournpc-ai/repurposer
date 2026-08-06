@@ -823,7 +823,7 @@ async def s5_recipe_mention_pin(ctx: Ctx) -> None:
 
     res = await ctx.chat_raw(pid, "again", mentions=[{"type": "recipe", "id": "nope", "label": "nope"}])
     check(res.status_code == 422, "unknown recipe id → 422", res.status_code)
-    res = await ctx.chat_raw(pid, "again", mentions=[{"type": "recipe", "id": "style", "label": "Style"}])
+    res = await ctx.chat_raw(pid, "again", mentions=[{"type": "recipe", "id": "reframe", "label": "Reframe"}])
     check(res.status_code == 422, "reserved recipe → 422", res.status_code)
 
 

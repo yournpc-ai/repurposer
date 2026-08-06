@@ -435,6 +435,31 @@ const en = {
     soon: "Soon",
     mute: "Mute preview sound",
     unmute: "Play preview sound",
+    // Static recipe flow steps (ADR-035) — shared namespace; a recipe's flow
+    // is WHICH of these steps, in what order, with what fanout.
+    flow: {
+      understand: "Understand the material",
+      plan: "Plan the edit",
+      align_stills: "Align photos to the script",
+      select: "Select highlight segments",
+      write: "Write the copy",
+      dub: "Dub in your voice",
+      render: "Render",
+    },
+    // Recipe tag chips (info card) — shared namespace.
+    tags: {
+      multilingual: "Multilingual",
+      "voice-clone": "Voice clone",
+      "no-footage": "No footage needed",
+    },
+    // Example material / output labels (overlay stack items).
+    materials: {
+      demo_talk: "Demo talk excerpt",
+      demo_photos: "Event photos",
+      demo_transcript: "Talk transcript",
+      dub_preview: "Dubbed preview (DE)",
+      image_video_preview: "Slideshow preview",
+    },
     dub: {
       title: "Multilingual dub",
       promise: "Your talk, your voice — speaking German, French and Spanish.",
@@ -452,11 +477,6 @@ const en = {
       promise: "Landscape two-person talk, recut vertical — camera follows the speaker.",
       promptTemplate:
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
-    },
-    style: {
-      title: "Preset styles",
-      promise: "One talk, many looks — caption and brand styles applied for you.",
-      promptTemplate: "Cut highlight clips from my talk with a fresh caption style.",
     },
     "ai-visuals": {
       title: "Virtual scenes",
