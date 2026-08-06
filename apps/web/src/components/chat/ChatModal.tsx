@@ -455,10 +455,17 @@ export function ChatModal({
           </MessageScroller>
         </MessageScrollerProvider>
 
-        <div className="flex flex-col gap-2 p-4 pt-2">
+        <div
+          className={
+            pendingQuestion && mentions.length === 0
+              ? "flex flex-col p-4 pt-2"
+              : "flex flex-col gap-2 p-4 pt-2"
+          }
+        >
           {pendingQuestion ? (
             <QuestionDock
               kind="choice"
+              joined={mentions.length === 0}
               question={pendingQuestion.content ?? ""}
               options={pendingQuestion.question?.options ?? []}
               costHint={pendingQuestion.question?.cost_hint}
@@ -487,7 +494,13 @@ export function ChatModal({
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2 rounded-lg bg-muted p-2">
+          <div
+            className={
+              pendingQuestion && mentions.length === 0
+                ? "flex items-end gap-2 rounded-b-lg bg-muted p-2"
+                : "flex items-end gap-2 rounded-lg bg-muted p-2"
+            }
+          >
             <MentionPicker
               projectId={projectId}
               excludeIds={mentions.map((m) => m.id)}
@@ -512,7 +525,7 @@ export function ChatModal({
                   : t("chat.assetPlaceholder")
               }
               rows={1}
-              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-card shadow-none focus-visible:ring-0"
+              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
             {isSending ? (
               <Button

@@ -337,9 +337,10 @@ export function HomeComposer({
 
   return (
     <>
-    {/* Dark mode: flat tonal steps instead of edge-glow — card 0.195,
-        blocks 0.25 (D2 recipe). Light mode keeps edge-glow. */}
-    <Card className="overflow-visible rounded-2xl py-0 ring-0 edge-glow dark:bg-[oklch(0.195_0.006_260)] dark:shadow-none">
+    {/* Dark mode: no shadows at all — the card's edge is the ring hairline,
+        separation comes from the tonal step (card 0.21 on canvas 0.12).
+        Light mode keeps edge-glow. */}
+    <Card className="overflow-visible rounded-2xl py-0 ring-0 edge-glow dark:ring-1 dark:ring-foreground/10">
       <CardContent className="p-5 text-left">
         {/* Entity blocks (Assets = source materials, Speaker = whose voice)
             ride the card's top edge via negative margin; the textarea fills
@@ -347,14 +348,16 @@ export function HomeComposer({
         <div className="flex items-start gap-3">
           <div className="-mt-9 flex flex-shrink-0 items-start gap-2">
             {/* Assets block — Opus anatomy: icon at the top, spacer, then
-                title with the info line at the very bottom. Hover = a lift of
-                the SAME color family (dark: lighter shade of the block's own
-                hue), never an accent hop — a different hue reads muddy. */}
+                title with the info line at the very bottom. The block
+                STRADDLES the card's top edge, so its hover must stay SOLID —
+                a translucent veil would reveal the page/card seam behind it.
+                Light: bg-accent gray step; dark: a solid color-mix lift of
+                the block's own muted step (same recipe as button secondary). */}
             <button
               type="button"
               data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none dark:hover:bg-[oklch(0.31_0.008_260)]"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {files.length === 0 ? (
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -380,7 +383,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-speaker"
               onClick={() => setSpeakerPickerOpen(true)}
-              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-[oklch(0.25_0.008_260)] dark:shadow-none dark:hover:bg-[oklch(0.31_0.008_260)]"
+              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {selectedSpeaker ? (
                 <Avatar size="sm">
@@ -487,7 +490,7 @@ export function HomeComposer({
                   </Button>
                 }
               />
-              <PopoverContent side="top" align="end" className="w-64 ring-0 shadow-xl dark:bg-white/10">
+              <PopoverContent side="top" align="end" className="w-64 ring-0 shadow-xl">
                 <div className="flex flex-col gap-1.5 px-0.5 pb-0.5">
                   {(
                     [

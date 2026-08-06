@@ -72,7 +72,7 @@ function driftWindow(
 
 function BrowserFrame({ children }: { children: ReactNode }): ReactNode {
   return (
-    <div className="w-[440px] overflow-hidden rounded-2xl border border-border bg-background shadow-[0_30px_80px_-30px_rgba(0,0,0,0.35)] xl:w-[520px] [@media(max-height:760px)]:w-[400px]">
+    <div className="w-[440px] overflow-hidden rounded-2xl border border-border bg-background shadow-[0_30px_80px_-30px_rgba(0,0,0,0.35)] xl:w-[520px] dark:shadow-none [@media(max-height:760px)]:w-[400px]">
       <div className="flex items-center gap-3 border-b border-border bg-muted px-4 py-2.5">
         <div className="flex gap-1.5" aria-hidden="true">
           <span className="size-2.5 rounded-full bg-foreground/15" />

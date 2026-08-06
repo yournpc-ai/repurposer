@@ -25,6 +25,16 @@ export interface ChatTurnBody {
   asset_type?: "clip" | "derivative"
   message: string
   mentions?: { type: string; id: string; label: string }[]
+  /** Files staged in the input group and sent with this turn (the server
+   * persists them on the user message row — refresh re-renders the chips). */
+  attachments?: {
+    id: string
+    name: string
+    type: "file" | "image" | "video" | "audio"
+    url?: string
+    size?: number
+    status: "uploaded"
+  }[]
   brand_template_id?: string
   prior_intent?: unknown
   autonomy?: string

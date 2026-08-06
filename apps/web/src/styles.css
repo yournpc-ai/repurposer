@@ -15,15 +15,36 @@
  * Select / Sheet): translucent popover color + backdrop blur, ElevenLabs-style
  * frosted glass. Components still merge `className` last, so callers can
  * override per instance (e.g. a more opaque `bg-popover/95`).
+ *
+ * Per-theme recipe (2026-08-05/06, reference pass): light = 92% + blur(24px)
+ * — at 85% the dark hero type behind bled through and tinted the panel dirty
+ * gray; dark drops to 68% + blur(28px) — over the near-black canvas an 85%+
+ * fill reads as a solid box and the blur has nothing to show.
  */
 @utility overlay-surface {
-  background-color: color-mix(in oklch, var(--popover) 85%, transparent);
+  background-color: color-mix(in oklch, var(--popover) 92%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   backdrop-filter: blur(24px) saturate(1.4);
+
+  @variant dark {
+    background-color: color-mix(in oklch, var(--popover) 68%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    backdrop-filter: blur(28px) saturate(1.4);
+  }
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: var(--popover);
   }
+}
+
+/* Meta tier — the third text level below muted-foreground: small, dimmer,
+ * uppercase, tracked (the "MODEL / SEED / 2 HRS" label style from the
+ * reference pass, 2026-08-05). Compose with a size class, e.g.
+ * `text-[11px] text-meta font-medium`. */
+@utility text-meta {
+  color: var(--meta-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /*
@@ -31,19 +52,28 @@
  * element on ALL sides (incl. the top edge a downward drop shadow can't
  * reach), layered over a soft ambient drop. For contexts where bg-card ==
  * bg-background (light theme) and a card would otherwise blend into the page.
- * This is the approved edge treatment — never ring-* / border (precedent:
- * home composer card + entity blocks, 2026-07-27).
+ * LIGHT THEME ONLY — dark casts no shadows at all (see the --tw-shadow-color
+ * switch in .dark); dark hero surfaces take the ring-foreground/10 hairline.
  */
 @utility edge-glow {
   box-shadow:
     0 0 12px 1px rgb(0 0 0 / 0.06),
     0 16px 40px -12px rgb(0 0 0 / 0.12);
+}
 
-  @variant dark {
-    box-shadow:
-      0 0 12px 1px rgb(255 255 255 / 0.07),
-      0 16px 40px -12px rgb(0 0 0 / 0.5);
-  }
+/*
+ * Scroll fades — mask a scrollport's edge so content dissolves instead of
+ * clipping hard. Applied per-surface (GenerationOverlay's viewport), never
+ * in the shared primitive: pair each zone with the surface's own content
+ * padding (top fade ≈ its top padding, bottom ≈ bottom padding) so rest-state
+ * content is untouched. A soft edge only — the structural guarantee (content
+ * never reaching floating chrome) is real padding / a header band.
+ */
+@utility scroll-fade-y {
+  mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 32px), transparent);
+}
+@utility scroll-fade-x {
+  mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
 }
 
 /*
@@ -267,6 +297,7 @@ body {
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
+  --color-meta-foreground: var(--meta-foreground);
   --color-muted: var(--muted);
   --color-inset: var(--inset);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -289,10 +320,12 @@ body {
 }
 
 :root {
-  /* Gray ladder (2026-08-04): surface hierarchy comes from these four steps,
-   * never from one-off alpha fills (bg-muted/50 & co. are retired). background
-   * 0.99 lets the pure-white card float; inset is the hover/nested step. */
-  --background: oklch(0.99 0 0);
+  /* Gray ladder (2026-08-05 reference pass): the canvas is PURE WHITE — cards
+   * float via the built-in ring-foreground/10 hairline + soft shadow, not via
+   * a gray underlay. Surface hierarchy comes from these four steps, never from
+   * one-off alpha fills (bg-muted/50 & co. are retired). Three text tiers:
+   * foreground → muted-foreground (subtitles) → meta-foreground (caps meta). */
+  --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -305,6 +338,7 @@ body {
   --muted: oklch(0.95 0 0);
   --inset: oklch(0.92 0 0);
   --muted-foreground: oklch(0.556 0 0);
+  --meta-foreground: oklch(0.68 0 0);
   --accent: oklch(0.95 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -317,7 +351,7 @@ body {
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.99 0 0);
+  --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.24 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -332,21 +366,27 @@ body {
 }
 
 .dark {
-  --background: oklch(0.155 0 0);
-  --foreground: oklch(0.985 0 0);
+  /* Dark system (2026-08-05 reference pass): the canvas is NEAR-BLACK and
+   * elevation speaks glass, not ladder — floating layers are translucent
+   * (overlay-surface 68% + blur 28px), hover is a white veil (--accent, NOT a
+   * lighter solid step), and inset wells go DARKER than the panel they sit in
+   * (inverted vs light theme: kbd chips, seed values, search inputs). */
+  --background: oklch(0.12 0 0);
+  --foreground: oklch(0.95 0 0);
   --card: oklch(0.21 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card-foreground: oklch(0.95 0 0);
   --popover: oklch(0.21 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover-foreground: oklch(0.95 0 0);
   --primary: oklch(0.9 0 0);
   --primary-foreground: oklch(0.205 0 0);
   --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.24 0 0);
-  --inset: oklch(0.28 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.24 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --inset: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.63 0 0);
+  --meta-foreground: oklch(0.52 0 0);
+  --accent: oklch(1 0 0 / 8%);
+  --accent-foreground: oklch(0.95 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -356,17 +396,22 @@ body {
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.155 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.12 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.24 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
   /* Inverse panel: stays a dark slab in dark mode, just lifted off bg. */
   --inverse: oklch(0.32 0 0);
   --inverse-foreground: oklch(0.985 0 0);
+  /* Night rule: cast shadows die in dark — routing the shadow COLOR to
+   * transparent makes every shadow-* utility a no-op in one switch. Focus
+   * rings survive (they compose via --tw-ring-shadow, not the shadow color),
+   * and 1px stroke simulations via shadow-[0_0_0_1px] literals keep working. */
+  --tw-shadow-color: transparent;
 }
 
 @layer base {

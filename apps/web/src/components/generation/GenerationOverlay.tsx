@@ -59,6 +59,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   Attachment,
+  AttachmentAction,
+  AttachmentActions,
   AttachmentContent,
   AttachmentDescription,
   AttachmentGroup,
@@ -204,7 +206,7 @@ interface OverlayMessage {
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
   /** QA archive item (answered question collapsing into the flow). */
-  qa?: { question: string; answer: string; muted: boolean }
+  qa?: { question: string; answer: string; muted: boolean; detail?: string }
 }
 
 /** The typed question payload mirrored from the API (messages.question). */
@@ -213,6 +215,9 @@ interface QuestionPayload {
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
   cost_hint?: string | null
+  /** task_book: needs-clarification reason KEYS (data — localize at render,
+   * never baked into the question's prose). */
+  reasons?: string[]
 }
 
 /** A question-carrying chat message (ask primitive): the dock's pending
@@ -233,6 +238,25 @@ interface ProjectAsset {
   processing_status: "pending" | "processing" | "completed" | "failed"
 }
 
+/** A file staged in the input group, mid-lifecycle: picked → uploading
+ * (direct-to-storage, same 3-step flow as the composer) → done (a real
+ * project asset) / error (retry or remove). Nothing enters the flow until
+ * the user presses send — the chips ride the next user bubble. */
+interface StagedUpload {
+  localId: string
+  file: File
+  status: "uploading" | "done" | "error"
+  asset?: ProjectAsset
+}
+
+/** ChatAttachment wire type is narrower than asset types — slides and
+ * transcripts travel as "file". */
+function chatAttachmentType(assetType: string): "file" | "image" | "video" | "audio" {
+  return assetType === "image" || assetType === "video" || assetType === "audio"
+    ? assetType
+    : "file"
+}
+
 function assetTypeIcon(type: string) {
   switch (type) {
     case "video":
@@ -250,6 +274,21 @@ function assetTypeIcon(type: string) {
 function assetFilename(fileUrl: string | null): string {
   if (!fileUrl) return ""
   return fileUrl.split("/").pop() || fileUrl
+}
+
+/** Localize a task_book question's reason keys for the QA archive's detail
+ * line (payload data → display; the keys themselves are the agent's
+ * vocabulary, never user-facing). */
+function qaReasonsDetail(
+  question: QuestionPayload | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string | undefined {
+  const reasons = question?.reasons ?? []
+  if (reasons.length === 0) return undefined
+  const items = reasons.map((r) =>
+    t(`questionDock.reasons.${r}`, { defaultValue: r })
+  )
+  return `${t("questionDock.reasons.title")} ${items.join(" · ")}`
 }
 
 interface GenerationOverlayProps {
@@ -374,7 +413,7 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
         <Streamdown
           mode={streaming ? "streaming" : "static"}
           isAnimating={streaming}
-          className="max-w-[85%] text-sm leading-relaxed motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
+          className="text-sm leading-relaxed motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
         >
           {text}
         </Streamdown>
@@ -553,14 +592,17 @@ export function GenerationOverlay({
   const [input, setInput] = useState("")
   const [chatBusy, setChatBusy] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
-  // Plan versions (2026-08-05 refinement-flow rework): the LIVE book always
-  // renders as the bottom-most card — it never moves; a refinement swaps its
-  // content in place. The superseded book collapses into a version chip
-  // anchored right after the echo bubble that produced it (expandable read-
-  // only snapshot, restorable — chat edits the plan, nothing is locked).
+  // Plan versions (2026-08-05 refinement-flow rework; 2026-08-06 in-flight
+  // rework): the LIVE book renders as the bottom-most card while settled;
+  // during an in-flight turn it UNPINS — anchored inline right after the
+  // echo bubble that docked it (above the new user bubble + thinking row),
+  // so the stale confirm dock can hide and the flow reads chronologically.
+  // When the turn lands, the superseded book collapses into a version chip
+  // at that same anchor (expandable read-only snapshot, restorable — chat
+  // edits the plan, nothing is locked) and the fresh card pins bottom.
   // liveBookMessageId = the echo bubble of the turn that docked the current
   // book; null on restored sessions (no bubble exists → the card carries its
-  // own echo line).
+  // own echo line and stays pinned).
   const [liveBookMessageId, setLiveBookMessageId] = useState<string | null>(null)
   const [planVersions, setPlanVersions] = useState<
     { messageId: string; book: InferredIntent }[]
@@ -572,10 +614,10 @@ export function GenerationOverlay({
   useEffect(() => {
     intentRef.current = intent
   }, [intent])
-  // Mid-conversation uploads (the chat input's attach button) — files go
-  // straight to project assets and land in the flow as an attachment-only
-  // user bubble.
-  const [uploading, setUploading] = useState(false)
+  // Mid-conversation uploads (the chat input's attach button) STAGE inside
+  // the input group as lifecycle chips (uploading → done/error) and ride the
+  // next send — picking a file never sends anything by itself.
+  const [staged, setStaged] = useState<StagedUpload[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
@@ -667,13 +709,34 @@ export function GenerationOverlay({
         })
         if (!res.ok) return
         const data = (await res.json()) as {
-          items?: (QuestionMessage & { role: "user" | "assistant" })[]
+          items?: (QuestionMessage & {
+            role: "user" | "assistant"
+            attachments?: {
+              id: string
+              name: string
+              type: string
+              url?: string | null
+            }[]
+          })[]
         }
         const history: OverlayMessage[] = []
         for (const m of data.items ?? []) {
           if (m.role === "user") {
             if ((m.content ?? "") === prompt) continue
-            history.push({ id: m.id, role: "user", content: m.content ?? "" })
+            history.push({
+              id: m.id,
+              role: "user",
+              content: m.content ?? "",
+              // Sent attachments persist on the message row — re-render the
+              // chips so a refresh / another device keeps the record.
+              assets: (m.attachments ?? []).map((a) => ({
+                id: a.id,
+                type: a.type,
+                file_url: a.url ?? null,
+                title: a.name,
+                processing_status: "completed" as const,
+              })),
+            })
           } else if (m.question) {
             if (m.answer) {
               const display = qaAnswerText(m.answer, t, !!m.workflow_run_id)
@@ -685,6 +748,7 @@ export function GenerationOverlay({
                   question: m.content ?? "",
                   answer: display.text,
                   muted: display.muted,
+                  detail: qaReasonsDetail(m.question, t),
                 },
               })
             }
@@ -967,6 +1031,17 @@ export function GenerationOverlay({
 
   const planSummary = useMemo(() => summarizeBook(intent), [intent, summarizeBook])
 
+  /** Assets carried by a message bubble must not also hang under the opening
+   * prompt (a mid-conversation upload refreshed into `assets` would render
+   * twice — the 2026-08-05 duplication bug). Server-promoted assets (the
+   * declared-material transcript) have no bubble, so they still surface. */
+  const openingAssets = useMemo(() => {
+    const carried = new Set(
+      messages.flatMap((m) => (m.assets ?? []).map((a) => a.id))
+    )
+    return assets.filter((a) => !carried.has(a.id))
+  }, [assets, messages])
+
   /** True when the echo bubble of the turn that docked the current book is
    * in the flow — the card's own echo line then stays hidden. */
   const liveBubblePresent =
@@ -991,58 +1066,91 @@ export function GenerationOverlay({
     setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
   }
 
-  /** The chat input's attach button: files upload straight into the
-   * project's assets (same direct-to-storage flow as the composer) and land
-   * in the flow as an attachment-only user bubble — the answer to "the chat
-   * told me to upload but there's no upload entry here". */
-  const handleFilesPicked = async (picked: FileList | null) => {
-    const files = Array.from(picked ?? [])
-    if (files.length === 0 || uploading) return
-    setUploading(true)
+  /** The chat input's attach button: picked files stage as chips INSIDE the
+   * input group (each uploads immediately, direct-to-storage — the same
+   * 3-step flow as the composer) and are only consumed by the send button.
+   * Nothing lands in the flow on pick — the chips are the lifecycle. */
+  const uploadStaged = async (localId: string, material: File) => {
     try {
-      const uploaded: ProjectAsset[] = []
-      for (const material of files) {
-        const urlRes = await apiFetch(
-          `/api/v1/projects/${projectId}/assets/upload-url`,
-          {
-            method: "POST",
-            body: {
-              filename: material.name,
-              content_type: material.type || undefined,
-            },
-          }
-        )
-        if (!urlRes.ok) throw new Error("Failed to get upload URL")
-        const { key, upload_url } = (await urlRes.json()) as {
-          key: string
-          upload_url: string
-        }
-        const putRes = await fetch(upload_url, {
-          method: "PUT",
-          body: material,
-          headers: material.type ? { "Content-Type": material.type } : {},
-        })
-        if (!putRes.ok) throw new Error("Failed to upload file")
-        const assetRes = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
+      const urlRes = await apiFetch(
+        `/api/v1/projects/${projectId}/assets/upload-url`,
+        {
           method: "POST",
-          body: { type: inferAssetType(material), key, title: material.name },
-        })
-        if (!assetRes.ok) throw new Error("Failed to create asset")
-        uploaded.push((await assetRes.json()) as ProjectAsset)
+          body: {
+            filename: material.name,
+            content_type: material.type || undefined,
+          },
+          toast: false,
+        }
+      )
+      if (!urlRes.ok) throw new Error("Failed to get upload URL")
+      const { key, upload_url } = (await urlRes.json()) as {
+        key: string
+        upload_url: string
       }
-      pushMessage({ role: "user", content: "", assets: uploaded })
-      void fetchAssets()
+      const putRes = await fetch(upload_url, {
+        method: "PUT",
+        body: material,
+        headers: material.type ? { "Content-Type": material.type } : {},
+      })
+      if (!putRes.ok) throw new Error("Failed to upload file")
+      const assetRes = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
+        method: "POST",
+        body: { type: inferAssetType(material), key, title: material.name },
+        toast: false,
+      })
+      if (!assetRes.ok) throw new Error("Failed to create asset")
+      const asset = (await assetRes.json()) as ProjectAsset
+      setStaged((prev) =>
+        prev.map((s) =>
+          s.localId === localId ? { ...s, status: "done", asset } : s
+        )
+      )
     } catch {
-      toast.error(t("composer.uploadFailed"))
-    } finally {
-      setUploading(false)
-      // Reset so picking the same file twice still fires onChange.
-      if (fileInputRef.current) fileInputRef.current.value = ""
+      setStaged((prev) =>
+        prev.map((s) => (s.localId === localId ? { ...s, status: "error" } : s))
+      )
     }
   }
 
+  const handleFilesPicked = (picked: FileList | null) => {
+    const files = Array.from(picked ?? [])
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (files.length === 0) return
+    const additions: StagedUpload[] = files.map((file) => ({
+      localId: crypto.randomUUID(),
+      file,
+      status: "uploading",
+    }))
+    setStaged((prev) => [...prev, ...additions])
+    for (const s of additions) void uploadStaged(s.localId, s.file)
+  }
+
+  /** A staged chip's × : drop it from the input group; an already-created
+   * asset is deleted server-side too (staged ≠ sent — it must not linger as
+   * project material). */
+  const removeStaged = (item: StagedUpload) => {
+    setStaged((prev) => prev.filter((s) => s.localId !== item.localId))
+    if (item.asset) {
+      void apiFetch(`/api/v1/projects/${projectId}/assets/${item.asset.id}`, {
+        method: "DELETE",
+        toast: false,
+      }).catch(() => {})
+    }
+  }
+
+  const retryStaged = (item: StagedUpload) => {
+    setStaged((prev) =>
+      prev.map((s) =>
+        s.localId === item.localId ? { ...s, status: "uploading" } : s
+      )
+    )
+    void uploadStaged(item.localId, item.file)
+  }
+
   /** An answered question collapses into the flow as a QA pair (ask
-   * primitive: the flow archives decisions, the dock holds the open one). */
+   * primitive: the flow archives decisions, the dock holds the open one).
+   * Reason keys (payload data) render localized as the pair's detail line. */
   const pushQaArchive = (message: QuestionMessage) => {
     if (!message.answer) return
     const display = qaAnswerText(message.answer, t, !!message.workflow_run_id)
@@ -1053,6 +1161,7 @@ export function GenerationOverlay({
         question: message.content ?? "",
         answer: display.text,
         muted: display.muted,
+        detail: qaReasonsDetail(message.question, t),
       },
     })
   }
@@ -1110,11 +1219,23 @@ export function GenerationOverlay({
     opts?: {
       mentions?: { type: string; id: string; label: string }[]
       brandTemplateId?: string
+      /** Files staged in the input group, sent with this turn — persisted on
+       * the user message row so a refresh re-renders the chips. */
+      attachments?: {
+        id: string
+        name: string
+        type: "file" | "image" | "video" | "audio"
+        url?: string
+        size?: number
+        status: "uploaded"
+      }[]
       /** Failure handling for a user-typed turn: roll the optimistic bubble
        * back out of the flow and restore the draft (the server commits
        * nothing on a failed turn, so the flow must not keep it either). */
       rollbackId?: string
       draft?: string
+      /** Consumed attachment chips return to the input group on failure. */
+      rollbackStaged?: StagedUpload[]
     }
   ) => {
     const ctrl = new AbortController()
@@ -1161,6 +1282,7 @@ export function GenerationOverlay({
           project_id: projectId,
           message: text,
           mentions: opts?.mentions ?? [],
+          attachments: opts?.attachments ?? [],
           brand_template_id: opts?.brandTemplateId,
           prior_intent: phase === "confirm" && intentReady ? intent : undefined,
           // Consumed only when this turn confirms the book by prose — the
@@ -1194,10 +1316,10 @@ export function GenerationOverlay({
       const message = data.assistant_message
       if (message.question && !message.answer) {
         // A question docks (never enters the flow). The streamed echo bubble
-        // STAYS in place; the plan card is always the bottom-most element —
-        // a refinement swaps its content in place, and the superseded book
+        // STAYS in place (same key — never a remount); the superseded book
         // collapses into a version chip anchored after the echo bubble that
-        // produced it. No unmount, no flicker, no jumping card.
+        // produced it — the same anchor the inline card occupied while the
+        // turn was in flight — and the fresh card pins bottom-most.
         if (streamedAny) {
           finalizePreview()
           if (message.question.kind === "task_book") {
@@ -1232,12 +1354,20 @@ export function GenerationOverlay({
         return
       }
       // The server commits nothing on a failed turn — roll the optimistic
-      // bubble (and any streamed preview) back out and restore the draft.
+      // bubble (and any streamed preview) back out, restore the draft, and
+      // re-stage the consumed attachment chips.
       setMessages((prev) => prev.filter((m) => m.id !== streamId))
       if (opts?.rollbackId) {
         const rollbackId = opts.rollbackId
         setMessages((prev) => prev.filter((m) => m.id !== rollbackId))
         setInput((prev) => prev || (opts?.draft ?? ""))
+      }
+      if (opts?.rollbackStaged?.length) {
+        const chips = opts.rollbackStaged
+        setStaged((prev) => {
+          const kept = new Set(prev.map((s) => s.localId))
+          return [...prev, ...chips.filter((c) => !kept.has(c.localId))]
+        })
       }
       toast.error(e instanceof Error ? e.message : t("chat.failed"))
     } finally {
@@ -1378,13 +1508,38 @@ export function GenerationOverlay({
 
   const handleSend = () => {
     const text = input.trim()
+    const ready = staged.filter(
+      (s): s is StagedUpload & { asset: ProjectAsset } =>
+        s.status === "done" && !!s.asset
+    )
     // isStarting: the dock's Start is mid-answer — a chat turn now would
-    // race it (it could supersede the question being answered).
-    if (!text || chatBusy || isStarting) return
+    // race it (it could supersede the question being answered). An in-flight
+    // upload blocks send — the chips must settle first (× removes one).
+    if ((!text && ready.length === 0) || chatBusy || isStarting) return
+    if (staged.some((s) => s.status === "uploading")) return
+    const sentAssets = ready.map((s) => s.asset)
     const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [...prev, { id: rollbackId, role: "user", content: text }])
+    setMessages((prev) => [
+      ...prev,
+      { id: rollbackId, role: "user", content: text, assets: sentAssets },
+    ])
     setInput("")
-    void sendChat(text, { rollbackId, draft: text })
+    // Consumed on send (chip law ②); an error chip stays staged for
+    // retry/removal — it never rides a message.
+    setStaged((prev) => prev.filter((s) => s.status !== "done"))
+    void sendChat(text, {
+      rollbackId,
+      draft: text,
+      attachments: ready.map((s) => ({
+        id: s.asset.id,
+        name: s.asset.title || s.file.name,
+        type: chatAttachmentType(s.asset.type),
+        url: s.asset.file_url ?? undefined,
+        size: s.file.size,
+        status: "uploaded" as const,
+      })),
+      rollbackStaged: ready,
+    })
   }
 
   const handleClose = () => {
@@ -1404,7 +1559,7 @@ export function GenerationOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, terminal])
 
-  const sectionLabel = "text-sm font-medium"
+  const sectionLabel = "text-[11px] font-medium text-meta"
 
   // The answered task_book question's QA archive display (start via dock).
   const answeredDisplay = answeredQuestion?.answer
@@ -1420,11 +1575,337 @@ export function GenerationOverlay({
       ? pendingQuestion
       : null
 
+  // Plan-card placement (2026-08-06 in-flight rework): settled → pinned
+  // bottom-most (order-10); while a chat turn is in flight → inline at its
+  // echo anchor in the message loop (above the new user bubble + thinking
+  // row), so the flow reads chronologically and the stale confirm dock can
+  // hide. Restored sessions have no echo bubble — the card stays pinned.
+  const planCardVisible = phase === "confirm" && intentReady
+  const planCardInline = planCardVisible && chatBusy && liveBubblePresent
+  const planCard = (
+    <Message align="start">
+      <MessageContent>
+        <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
+          {/* Prose echo of the understood plan — the card
+              never lands naked (Opus pattern). The LLM's
+              own one-line echo (intent.answer, streamed as
+              deltas this turn and persisted in the pending
+              intent) wins; the localized template is the
+              fallback for legacy/null echoes. Hidden when
+              the streamed bubble already carries it. */}
+          {!liveBubblePresent && (
+            <p className="mb-3 text-sm leading-relaxed">
+              {intent.answer ??
+                t("generationOverlay.planProse", { summary: planSummary })}
+            </p>
+          )}
+          {/* No shadow/glow here: the scroller's paint
+              containment clips the halo on the sides (it
+              survived only on top, looking like a cut-off
+              shadow). Depth comes from bg contrast alone. */}
+          <Card className="ring-0 bg-muted">
+            <div className="flex flex-col gap-7 p-6">
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold">
+                  {t("generationOverlay.title")}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {t("generationOverlay.subtitle")}
+                </p>
+              </div>
+
+              {/* Identity echo — one read-only line, never a
+                  question: whose voice, which brand skin. */}
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Mic2 className="h-3.5 w-3.5" />
+                {t("generationOverlay.identityEcho", {
+                  speaker:
+                    identity.speaker ??
+                    t("generationOverlay.identitySpeakerAuto"),
+                  brand:
+                    identity.brand ??
+                    t("generationOverlay.identityBrandDefault"),
+                })}
+              </p>
+
+              {/* Task slots — one row per requested output.
+                  Language is a per-row property (the book-
+                  level field is retired): every row's
+                  dropdown shows a concrete language.
+                  Same-type siblings (e.g. an English and a
+                  German post) are separate rows. */}
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className={sectionLabel}>
+                    {t("generationOverlay.outputsLabel")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {t("generationOverlay.outputsHint")}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {intent.outputs.map((slot, index) => {
+                    const meta = OUTPUT_OPTIONS.find(
+                      (o) => o.key === slot.type
+                    )
+                    if (!meta) return null
+                    const { labelKey, Icon } = meta
+                    const limits = SLOT_COUNT_LIMITS[slot.type]
+                    const count =
+                      slot.count ?? SLOT_COUNT_DEFAULT[slot.type]
+                    return (
+                      <div
+                        key={index}
+                        className="flex flex-col gap-2 rounded-md bg-card p-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1.5 text-sm">
+                            <Icon className="h-3.5 w-3.5" />
+                            {t(labelKey)}
+                          </span>
+                          {limits && count != null && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                disabled={count <= limits[0]}
+                                aria-label={t(
+                                  "generationOverlay.countDecrease"
+                                )}
+                                onClick={() =>
+                                  updateSlot(index, {
+                                    count: Math.max(
+                                      limits[0],
+                                      count - 1
+                                    ),
+                                  })
+                                }
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <span className="w-7 text-center text-sm tabular-nums">
+                                {count}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                disabled={count >= limits[1]}
+                                aria-label={t(
+                                  "generationOverlay.countIncrease"
+                                )}
+                                onClick={() =>
+                                  updateSlot(index, {
+                                    count: Math.min(
+                                      limits[1],
+                                      count + 1
+                                    ),
+                                  })
+                                }
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                          <div className="ml-auto flex items-center gap-1">
+                            <Select
+                              value={slot.language ?? "en"}
+                              onValueChange={(value) =>
+                                updateSlot(index, {
+                                  language: (value as string) || "en",
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-28 text-xs">
+                                <SelectValue>
+                                  {(value: string) =>
+                                    t(`languages.${value}`, {
+                                      defaultValue: value,
+                                    })
+                                  }
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {LANGUAGE_OPTIONS.map((lang) => (
+                                  <SelectItem
+                                    key={lang.code}
+                                    value={lang.code}
+                                  >
+                                    {t(lang.labelKey)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {intent.outputs.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label={t(
+                                  "generationOverlay.removeSlot"
+                                )}
+                                onClick={() => removeSlot(index)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <Input
+                          value={slot.focus ?? ""}
+                          onChange={(e) =>
+                            updateSlot(index, {
+                              focus: e.target.value || null,
+                            })
+                          }
+                          placeholder={t(
+                            "generationOverlay.slotFocusPlaceholder",
+                            { type: t(labelKey) }
+                          )}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        // self-start: the section is a flex
+                        // column — without this the trigger
+                        // would stretch to full width.
+                        className="h-9 gap-1.5 self-start"
+                      />
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{t("generationOverlay.addOutput")}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {OUTPUT_OPTIONS.map(({ key, labelKey, Icon }) => (
+                      <DropdownMenuItem
+                        key={key}
+                        disabled={
+                          key === "clips" &&
+                          intent.outputs.some(
+                            (s) => s.type === "clips"
+                          )
+                        }
+                        onClick={() => addSlot(key)}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {t(labelKey)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Voice-over versions (dub_languages) — one
+                  chip per forked voice-over language. Every
+                  clip gets one DERIVED version per language
+                  (fork semantics), so the version count is a
+                  multiplication — shown explicitly below.
+                  Chips are removable (down to none = no
+                  dubbing); adding a language goes through
+                  chat refine, not panel editing (R1 scope). */}
+              {intent.dub_languages.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className={sectionLabel}>
+                      {t("generationOverlay.dubLabel")}
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      {t("generationOverlay.dubHint")}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {intent.dub_languages.map((lang) => (
+                      <span
+                        key={lang}
+                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
+                      >
+                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t(`languages.${lang}`, { defaultValue: lang })}
+                        <button
+                          type="button"
+                          aria-label={t(
+                            "generationOverlay.removeDubLanguage"
+                          )}
+                          className="text-muted-foreground transition-colors hover:text-foreground"
+                          onClick={() =>
+                            setIntent((prev) => ({
+                              ...prev,
+                              dub_languages: prev.dub_languages.filter(
+                                (l) => l !== lang
+                              ),
+                            }))
+                          }
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {/* The multiplication, in the open: every
+                      clip gets one version per language. */}
+                  {clipsSlotForDub && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("generationOverlay.dubVersionCount", {
+                        clips:
+                          clipsSlotForDub.count ??
+                          SLOT_COUNT_DEFAULT.clips,
+                        langs: intent.dub_languages.length,
+                        total:
+                          (clipsSlotForDub.count ??
+                            SLOT_COUNT_DEFAULT.clips) *
+                          intent.dub_languages.length,
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Instruction */}
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className={sectionLabel}>
+                    {t("generationOverlay.instructionLabel")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {t("generationOverlay.instructionHint")}
+                  </p>
+                </div>
+                <Textarea
+                  value={intent.specific_instruction || ""}
+                  onChange={(e) =>
+                    setIntent((prev) => ({
+                      ...prev,
+                      specific_instruction: e.target.value,
+                    }))
+                  }
+                  placeholder={t("generationOverlay.instructionPlaceholder")}
+                  className="min-h-[100px] resize-none text-sm"
+                />
+              </div>
+            </div>
+          </Card>
+        </div>
+      </MessageContent>
+    </Message>
+  )
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      {/* Back pill — floats over the scroll column, Opus-style: a plain
-          rounded bg block, no shadow. */}
-      <div className="absolute left-4 top-4 z-10">
+      {/* Header band — the back pill owns a real strip, so scrolled content
+          structurally never enters its zone (a fade alone still lets text
+          slide under the pill). */}
+      <div className="shrink-0 px-4 pt-4">
         <Button
           variant="secondary"
           size="sm"
@@ -1440,339 +1921,24 @@ export function GenerationOverlay({
       <div className="min-h-0 flex-1">
         <MessageScrollerProvider>
           <MessageScroller className="h-full">
-            <MessageScrollerViewport>
-              <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-16">
+            <MessageScrollerViewport className="scroll-fade-y">
+              <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4">
                 {/* Opening prompt */}
                 {prompt ? (
                   <MessageScrollerItem>
-                    <UserBubble text={prompt} assets={assets} />
+                    <UserBubble text={prompt} assets={openingAssets} />
                   </MessageScrollerItem>
                 ) : null}
 
-                {/* Plan card (confirm phase) — ALWAYS the bottom-most
-                    element (order-10): below the opening prompt, every
-                    message, the version chips and the thinking row. It never
-                    moves; a refinement swaps its content in place while the
-                    superseded book collapses into a chip in the flow above.
-                    The echo line shows only when no streamed bubble carries
-                    the plan's words (restored sessions). */}
-                {phase === "confirm" && intentReady && (
+                {/* Plan card (confirm phase) — pinned bottom-most
+                    (order-10) while settled. During an in-flight turn it
+                    unpins and renders inline at its echo anchor in the loop
+                    below (the stale confirm dock hides with it); restored
+                    sessions have no echo bubble to anchor to — the card
+                    stays pinned. */}
+                {planCardVisible && !planCardInline && (
                   <MessageScrollerItem className="order-10">
-                    <Message align="start">
-                      <MessageContent>
-                        <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
-                          {/* Prose echo of the understood plan — the card
-                              never lands naked (Opus pattern). The LLM's
-                              own one-line echo (intent.answer, streamed as
-                              deltas this turn and persisted in the pending
-                              intent) wins; the localized template is the
-                              fallback for legacy/null echoes. Hidden when
-                              the streamed bubble already carries it. */}
-                          {!liveBubblePresent && (
-                            <p className="mb-3 max-w-[85%] text-sm leading-relaxed">
-                              {intent.answer ??
-                                t("generationOverlay.planProse", { summary: planSummary })}
-                            </p>
-                          )}
-                          {/* No shadow/glow here: the scroller's paint
-                              containment clips the halo on the sides (it
-                              survived only on top, looking like a cut-off
-                              shadow). Depth comes from bg contrast alone. */}
-                          <Card className="ring-0 bg-muted">
-                            <div className="flex flex-col gap-7 p-6">
-                              <div className="space-y-1">
-                                <h3 className="text-base font-semibold">
-                                  {t("generationOverlay.title")}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                  {t("generationOverlay.subtitle")}
-                                </p>
-                              </div>
-
-                              {/* Identity echo — one read-only line, never a
-                                  question: whose voice, which brand skin. */}
-                              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Mic2 className="h-3.5 w-3.5" />
-                                {t("generationOverlay.identityEcho", {
-                                  speaker:
-                                    identity.speaker ??
-                                    t("generationOverlay.identitySpeakerAuto"),
-                                  brand:
-                                    identity.brand ??
-                                    t("generationOverlay.identityBrandDefault"),
-                                })}
-                              </p>
-
-                              {/* Task slots — one row per requested output.
-                                  Language is a per-row property (the book-
-                                  level field is retired): every row's
-                                  dropdown shows a concrete language.
-                                  Same-type siblings (e.g. an English and a
-                                  German post) are separate rows. */}
-                              <div className="flex flex-col gap-2">
-                                <div className="flex flex-col gap-1">
-                                  <span className={sectionLabel}>
-                                    {t("generationOverlay.outputsLabel")}
-                                  </span>
-                                  <p className="text-xs text-muted-foreground">
-                                    {t("generationOverlay.outputsHint")}
-                                  </p>
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                  {intent.outputs.map((slot, index) => {
-                                    const meta = OUTPUT_OPTIONS.find(
-                                      (o) => o.key === slot.type
-                                    )
-                                    if (!meta) return null
-                                    const { labelKey, Icon } = meta
-                                    const limits = SLOT_COUNT_LIMITS[slot.type]
-                                    const count =
-                                      slot.count ?? SLOT_COUNT_DEFAULT[slot.type]
-                                    return (
-                                      <div
-                                        key={index}
-                                        className="flex flex-col gap-2 rounded-md bg-card p-3"
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <span className="flex items-center gap-1.5 text-sm">
-                                            <Icon className="h-3.5 w-3.5" />
-                                            {t(labelKey)}
-                                          </span>
-                                          {limits && count != null && (
-                                            <div className="flex items-center gap-1">
-                                              <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                disabled={count <= limits[0]}
-                                                aria-label={t(
-                                                  "generationOverlay.countDecrease"
-                                                )}
-                                                onClick={() =>
-                                                  updateSlot(index, {
-                                                    count: Math.max(
-                                                      limits[0],
-                                                      count - 1
-                                                    ),
-                                                  })
-                                                }
-                                              >
-                                                <Minus className="h-3.5 w-3.5" />
-                                              </Button>
-                                              <span className="w-7 text-center text-sm tabular-nums">
-                                                {count}
-                                              </span>
-                                              <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                disabled={count >= limits[1]}
-                                                aria-label={t(
-                                                  "generationOverlay.countIncrease"
-                                                )}
-                                                onClick={() =>
-                                                  updateSlot(index, {
-                                                    count: Math.min(
-                                                      limits[1],
-                                                      count + 1
-                                                    ),
-                                                  })
-                                                }
-                                              >
-                                                <Plus className="h-3.5 w-3.5" />
-                                              </Button>
-                                            </div>
-                                          )}
-                                          <div className="ml-auto flex items-center gap-1">
-                                            <Select
-                                              value={slot.language ?? "en"}
-                                              onValueChange={(value) =>
-                                                updateSlot(index, {
-                                                  language: (value as string) || "en",
-                                                })
-                                              }
-                                            >
-                                              <SelectTrigger className="h-8 w-28 text-xs">
-                                                <SelectValue>
-                                                  {(value: string) =>
-                                                    t(`languages.${value}`, {
-                                                      defaultValue: value,
-                                                    })
-                                                  }
-                                                </SelectValue>
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {LANGUAGE_OPTIONS.map((lang) => (
-                                                  <SelectItem
-                                                    key={lang.code}
-                                                    value={lang.code}
-                                                  >
-                                                    {t(lang.labelKey)}
-                                                  </SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                            {intent.outputs.length > 1 && (
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8"
-                                                aria-label={t(
-                                                  "generationOverlay.removeSlot"
-                                                )}
-                                                onClick={() => removeSlot(index)}
-                                              >
-                                                <X className="h-3.5 w-3.5" />
-                                              </Button>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <Input
-                                          value={slot.focus ?? ""}
-                                          onChange={(e) =>
-                                            updateSlot(index, {
-                                              focus: e.target.value || null,
-                                            })
-                                          }
-                                          placeholder={t(
-                                            "generationOverlay.slotFocusPlaceholder",
-                                            { type: t(labelKey) }
-                                          )}
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    render={
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        // self-start: the section is a flex
-                                        // column — without this the trigger
-                                        // would stretch to full width.
-                                        className="h-9 gap-1.5 self-start"
-                                      />
-                                    }
-                                  >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    <span>{t("generationOverlay.addOutput")}</span>
-                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent>
-                                    {OUTPUT_OPTIONS.map(({ key, labelKey, Icon }) => (
-                                      <DropdownMenuItem
-                                        key={key}
-                                        disabled={
-                                          key === "clips" &&
-                                          intent.outputs.some(
-                                            (s) => s.type === "clips"
-                                          )
-                                        }
-                                        onClick={() => addSlot(key)}
-                                      >
-                                        <Icon className="h-3.5 w-3.5" />
-                                        {t(labelKey)}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-
-                              {/* Voice-over versions (dub_languages) — one
-                                  chip per forked voice-over language. Every
-                                  clip gets one DERIVED version per language
-                                  (fork semantics), so the version count is a
-                                  multiplication — shown explicitly below.
-                                  Chips are removable (down to none = no
-                                  dubbing); adding a language goes through
-                                  chat refine, not panel editing (R1 scope). */}
-                              {intent.dub_languages.length > 0 && (
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex flex-col gap-1">
-                                    <span className={sectionLabel}>
-                                      {t("generationOverlay.dubLabel")}
-                                    </span>
-                                    <p className="text-xs text-muted-foreground">
-                                      {t("generationOverlay.dubHint")}
-                                    </p>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    {intent.dub_languages.map((lang) => (
-                                      <span
-                                        key={lang}
-                                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
-                                      >
-                                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                        {t(`languages.${lang}`, { defaultValue: lang })}
-                                        <button
-                                          type="button"
-                                          aria-label={t(
-                                            "generationOverlay.removeDubLanguage"
-                                          )}
-                                          className="text-muted-foreground transition-colors hover:text-foreground"
-                                          onClick={() =>
-                                            setIntent((prev) => ({
-                                              ...prev,
-                                              dub_languages: prev.dub_languages.filter(
-                                                (l) => l !== lang
-                                              ),
-                                            }))
-                                          }
-                                        >
-                                          <X className="h-3.5 w-3.5" />
-                                        </button>
-                                      </span>
-                                    ))}
-                                  </div>
-                                  {/* The multiplication, in the open: every
-                                      clip gets one version per language. */}
-                                  {clipsSlotForDub && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {t("generationOverlay.dubVersionCount", {
-                                        clips:
-                                          clipsSlotForDub.count ??
-                                          SLOT_COUNT_DEFAULT.clips,
-                                        langs: intent.dub_languages.length,
-                                        total:
-                                          (clipsSlotForDub.count ??
-                                            SLOT_COUNT_DEFAULT.clips) *
-                                          intent.dub_languages.length,
-                                      })}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Instruction */}
-                              <div className="flex flex-col gap-2">
-                                <div className="flex flex-col gap-1">
-                                  <span className={sectionLabel}>
-                                    {t("generationOverlay.instructionLabel")}
-                                  </span>
-                                  <p className="text-xs text-muted-foreground">
-                                    {t("generationOverlay.instructionHint")}
-                                  </p>
-                                </div>
-                                <Textarea
-                                  value={intent.specific_instruction || ""}
-                                  onChange={(e) =>
-                                    setIntent((prev) => ({
-                                      ...prev,
-                                      specific_instruction: e.target.value,
-                                    }))
-                                  }
-                                  placeholder={t("generationOverlay.instructionPlaceholder")}
-                                  className="min-h-[100px] resize-none text-sm"
-                                />
-                              </div>
-                            </div>
-                          </Card>
-                        </div>
-                      </MessageContent>
-                    </Message>
+                    {planCard}
                   </MessageScrollerItem>
                 )}
 
@@ -1814,7 +1980,7 @@ export function GenerationOverlay({
                       <Message align="start">
                         <MessageContent>
                           <div className="w-full space-y-4">
-                            <p className="max-w-[85%] text-sm leading-relaxed">
+                            <p className="text-sm leading-relaxed">
                               {t("generationOverlay.startingLine")}
                             </p>
                             <div className="flex flex-col gap-2">
@@ -1888,6 +2054,7 @@ export function GenerationOverlay({
                       {m.qa ? (
                         <QaPair
                           question={m.qa.question}
+                          questionDetail={m.qa.detail}
                           answer={m.qa.answer}
                           muted={m.qa.muted}
                         />
@@ -1927,6 +2094,16 @@ export function GenerationOverlay({
                         </MessageScrollerItem>
                       ) : null
                     )}
+                    {/* In-flight only: the live plan card unpins from the
+                        bottom and anchors right after its own echo bubble —
+                        above the new user bubble and the thinking row. When
+                        the turn lands, the version chip takes this slot and
+                        the fresh card pins bottom-most again. */}
+                    {planCardInline && m.id === liveBookMessageId ? (
+                      <MessageScrollerItem key={`${m.id}-live-plan`}>
+                        {planCard}
+                      </MessageScrollerItem>
+                    ) : null}
                   </Fragment>
                 ))}
 
@@ -1948,10 +2125,14 @@ export function GenerationOverlay({
 
       {/* Bottom input — one floating bar in the chat column's width. The
           pending question docks directly above it (ask primitive): the flow
-          archives decisions, the dock holds the one still open. */}
+          archives decisions, the dock holds the one still open. The task-
+          book dock HIDES while a turn is in flight (a stale plan must not be
+          Start-able mid-revision); a choice dock JOINS the input visually
+          (joined + the input drops its top rounding) — the input IS the
+          freeform "something else" row, its placeholder already says so. */}
       <div className="shrink-0 px-4 pb-5 pt-2">
         <div className="mx-auto w-full max-w-3xl">
-          {phase === "confirm" && intentReady && (
+          {phase === "confirm" && intentReady && !chatBusy && (
             <QuestionDock
               kind="task_book"
               question={t("generationOverlay.confirmQuestion")}
@@ -1967,6 +2148,7 @@ export function GenerationOverlay({
           {phase !== "confirm" && pendingChoice && (
             <QuestionDock
               kind="choice"
+              joined
               question={pendingChoice.content ?? ""}
               options={pendingChoice.question?.options ?? []}
               costHint={pendingChoice.question?.cost_hint}
@@ -1983,74 +2165,146 @@ export function GenerationOverlay({
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
-          <div className="flex items-end gap-2 rounded-lg bg-muted p-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
-              onChange={(e) => void handleFilesPicked(e.target.files)}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              aria-label={t("generationOverlay.attachFiles")}
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? (
-                <Loader2 className="h-4.5 w-4.5 animate-spin" />
-              ) : (
-                <Paperclip className="h-4.5 w-4.5" />
-              )}
-            </Button>
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
-              placeholder={
-                phase !== "confirm" &&
-                pendingChoice &&
-                (pendingChoice.question?.options?.length ?? 0) > 0 &&
-                pendingChoice.question?.allow_freeform !== false
-                  ? t("chat.choicePlaceholder")
-                  : phase === "confirm"
-                    ? t("generationOverlay.chatPlaceholderConfirm")
-                    : t("generationOverlay.chatPlaceholder")
-              }
-              rows={1}
-              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-card text-sm shadow-none focus-visible:ring-0"
-            />
-            {chatBusy ? (
-              <Button
-                size="icon"
-                variant="secondary"
-                className="h-9 w-9 shrink-0 rounded-full"
-                onClick={handleStop}
-                aria-label={t("chat.stop")}
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </Button>
-            ) : (
-              <Button
-                size="icon"
-                className="h-9 w-9 shrink-0 rounded-full"
-                disabled={!input.trim()}
-                onClick={handleSend}
-                aria-label={t("chat.send")}
-              >
-                <ArrowUp className="h-4 w-4" />
-              </Button>
+          <div
+            className={
+              phase !== "confirm" && pendingChoice
+                ? "rounded-b-lg bg-muted p-2"
+                : "rounded-lg bg-muted p-2"
+            }
+          >
+            {/* Staged attachments — the upload lifecycle lives here (never
+                auto-sent): uploading chips shimmer, done chips wait for the
+                send button, error chips offer retry; × removes (and deletes
+                the already-created asset). */}
+            {staged.length > 0 && (
+              <AttachmentGroup className="px-1 pb-2">
+                {staged.map((s) => {
+                  const Icon = s.asset
+                    ? assetTypeIcon(s.asset.type)
+                    : s.file.type.startsWith("video/")
+                      ? Video
+                      : s.file.type.startsWith("audio/")
+                        ? Mic2
+                        : s.file.type.startsWith("image/")
+                          ? ImageIcon
+                          : FileText
+                  const typeLabel = s.asset
+                    ? t(`generationOverlay.assetTypes.${s.asset.type}`, {
+                        defaultValue: s.asset.type,
+                      })
+                    : t("generationOverlay.assetTypes.file")
+                  return (
+                    <Attachment
+                      key={s.localId}
+                      size="sm"
+                      state={
+                        s.status === "uploading"
+                          ? "uploading"
+                          : s.status === "error"
+                            ? "error"
+                            : "done"
+                      }
+                    >
+                      <AttachmentMedia>
+                        <Icon />
+                      </AttachmentMedia>
+                      <AttachmentContent>
+                        <AttachmentTitle>{s.file.name}</AttachmentTitle>
+                        <AttachmentDescription>
+                          {s.status === "error"
+                            ? t("composer.uploadFailed")
+                            : typeLabel}
+                        </AttachmentDescription>
+                      </AttachmentContent>
+                      <AttachmentActions>
+                        {s.status === "error" && (
+                          <AttachmentAction
+                            aria-label={t("generationOverlay.retryUpload")}
+                            onClick={() => retryStaged(s)}
+                          >
+                            <Undo2 />
+                          </AttachmentAction>
+                        )}
+                        <AttachmentAction
+                          aria-label={t("generationOverlay.removeAttachment")}
+                          onClick={() => removeStaged(s)}
+                        >
+                          <X />
+                        </AttachmentAction>
+                      </AttachmentActions>
+                    </Attachment>
+                  )
+                })}
+              </AttachmentGroup>
             )}
+            <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
+                onChange={(e) => handleFilesPicked(e.target.files)}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                aria-label={t("generationOverlay.attachFiles")}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="h-4.5 w-4.5" />
+              </Button>
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !isComposing) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+                placeholder={
+                  phase !== "confirm" &&
+                  pendingChoice &&
+                  (pendingChoice.question?.options?.length ?? 0) > 0 &&
+                  pendingChoice.question?.allow_freeform !== false
+                    ? t("chat.choicePlaceholder")
+                    : phase === "confirm"
+                      ? t("generationOverlay.chatPlaceholderConfirm")
+                      : t("generationOverlay.chatPlaceholder")
+                }
+                rows={1}
+                className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+              />
+              {chatBusy ? (
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="h-9 w-9 shrink-0 rounded-full"
+                  onClick={handleStop}
+                  aria-label={t("chat.stop")}
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full"
+                  disabled={
+                    (!input.trim() &&
+                      !staged.some((s) => s.status === "done")) ||
+                    staged.some((s) => s.status === "uploading")
+                  }
+                  onClick={handleSend}
+                  aria-label={t("chat.send")}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

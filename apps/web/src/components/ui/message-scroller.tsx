@@ -45,7 +45,7 @@ function MessageScrollerViewport({
         // No scrollbar-gutter-stable: it reserves a permanent track on the
         // right even when content fits (a stray always-on scrollbar rail).
         // Overlay-style auto-hiding is the chat-surface norm (2026-08-04).
-        "size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent",
+        "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent",
         className
       )}
       {...props}

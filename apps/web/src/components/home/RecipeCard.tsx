@@ -47,7 +47,7 @@ export function RecipeCard({
       onKeyDown={(e) => {
         if (live && (e.key === "Enter" || e.key === " ")) onSelect(card)
       }}
-      className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-card shadow-lg edge-glow dark:shadow-none"
+      className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-card shadow-lg edge-glow"
     >
       <video
         ref={videoRef}

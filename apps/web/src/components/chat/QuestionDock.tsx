@@ -4,12 +4,16 @@
  * one *pending* decision (ask primitive — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
- * - task_book: the plan's Start/Cancel decision plus the autonomy tier
- *   (Auto/Review — picker currently hidden, see SHOW_AUTONOMY_PICKER), the
- *   needs-your-check reasons, and the leave note.
- * - choice: the question line plus its options as a button group (letter
+ * - task_book: two rows (2026-08-06 rework) — the confirm line on the
+ *   top-left, the reserved credit slot on the top-right (the week-8 cost
+ *   estimate rides `costHint`), the actions (Cancel / Start) on the bottom
+ *   row; the needs-your-check reasons squeeze between as one compact line.
+ * - choice: the question line plus its options as full-width ROWS (letter
  *   badges mirror the deterministic autoResume mapping — typing "a" picks
- *   option a); free text rides the input (autoResume).
+ *   option a); long labels wrap, never overflow the card. With `joined`
+ *   the dock fuses visually with the input below — the input IS the
+ *   freeform "something else" row (its placeholder already switches), so
+ *   the two read as one card.
  * Answering collapses the question into a QA pair in the flow.
  */
 
@@ -52,6 +56,9 @@ interface TaskBookDockProps {
   onCancel: () => void
   starting: boolean
   startDisabled?: boolean
+  /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
+   * when present; the slot is the layout reservation. */
+  costHint?: string | null
 }
 
 interface ChoiceDockProps {
@@ -67,6 +74,9 @@ interface ChoiceDockProps {
    * parked on the answer); plain chat asks get no bail (the next message
    * supersedes them anyway). A graceful exit, never an error path. */
   onBail?: () => void
+  /** Fuse the dock with the input below (the input IS the freeform
+   * "something else" row) — drops the bottom margin and rounding. */
+  joined?: boolean
 }
 
 export type QuestionDockProps = TaskBookDockProps | ChoiceDockProps
@@ -82,6 +92,7 @@ function TaskBookForm({
   onCancel,
   starting,
   startDisabled,
+  costHint,
 }: TaskBookDockProps) {
   const { t } = useTranslation()
   const reasonLabels = (reasons ?? [])
@@ -89,12 +100,37 @@ function TaskBookForm({
     .filter(Boolean)
   return (
     <div className="mb-2 rounded-lg bg-muted px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Top row: the confirm line (left) + the reserved credit slot
+          (right). Copy stays one line — the plan card above carries the
+          substance. */}
+      <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
           <span className="truncate">{question}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        {costHint ? (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {costHint}
+          </span>
+        ) : null}
+      </div>
+      {reasonLabels.length > 0 ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {t("questionDock.reasons.title")} {reasonLabels.join(" · ")}
+        </p>
+      ) : null}
+      {/* Bottom row: the actions — Cancel quiet on the left, Start solid on
+          the right (the one dark anchor, composer-bottom-row discipline). */}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <Button
+          variant="ghost"
+          onClick={onCancel}
+          disabled={starting}
+          className="text-muted-foreground"
+        >
+          {t("common.cancel")}
+        </Button>
+        <div className="flex items-center gap-2">
           {SHOW_AUTONOMY_PICKER ? (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -123,9 +159,6 @@ function TaskBookForm({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          <Button variant="ghost" onClick={onCancel} disabled={starting}>
-            {t("common.cancel")}
-          </Button>
           <Button disabled={startDisabled || starting} onClick={onStart}>
             {starting ? (
               <>
@@ -138,14 +171,6 @@ function TaskBookForm({
           </Button>
         </div>
       </div>
-      {reasonLabels.length > 0 ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("questionDock.reasons.title")} {reasonLabels.join(" · ")}
-        </p>
-      ) : null}
-      <p className="mt-2 text-xs text-muted-foreground">
-        {t("generationOverlay.leaveNote")}
-      </p>
     </div>
   )
 }
@@ -157,13 +182,20 @@ function ChoiceForm({
   onAnswer,
   answering,
   onBail,
+  joined,
 }: ChoiceDockProps) {
   const { t } = useTranslation()
   return (
-    <div className="mb-2 rounded-lg bg-muted px-4 py-3">
+    <div
+      className={
+        joined
+          ? "rounded-t-lg bg-muted px-4 py-3"
+          : "mb-2 rounded-lg bg-muted px-4 py-3"
+      }
+    >
       <div className="flex items-start gap-2 text-sm">
         <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-        <span>{question}</span>
+        <span className="min-w-0 break-words">{question}</span>
         {costHint ? (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
             {costHint}
@@ -171,35 +203,40 @@ function ChoiceForm({
         ) : null}
       </div>
       {options.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        // Full-width rows, not pills: long option labels must wrap inside
+        // the card (the old button row let them bleed past the right edge).
+        <div className="mt-3 flex flex-col gap-2">
           {options.map((option) => (
             <Button
               key={option.id}
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
+              variant="ghost"
               disabled={answering}
               onClick={() => onAnswer(option.id)}
+              className="h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md bg-card px-3 py-2.5 text-left hover:bg-accent"
             >
-              <span className="text-xs uppercase text-muted-foreground">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium uppercase text-muted-foreground">
                 {option.id}
               </span>
-              {option.label}
+              <span className="min-w-0 break-words">{option.label}</span>
             </Button>
           ))}
-          {answering ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : null}
-          {onBail ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 text-muted-foreground"
-              disabled={answering}
-              onClick={onBail}
-            >
-              {t("questionDock.bail")}
-            </Button>
+          {answering || onBail ? (
+            <div className="flex items-center gap-2">
+              {answering ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : null}
+              {onBail ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-muted-foreground"
+                  disabled={answering}
+                  onClick={onBail}
+                >
+                  {t("questionDock.bail")}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
