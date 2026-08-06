@@ -148,7 +148,7 @@ When the platform has artists or power users, their generated music pieces can a
 ### 9.1 Cost Control
 
 Music generation is more expensive than selection. To avoid runaway costs:
-- Each project has a budget or generation quota (future，归计费线 PROGRESS 第 7–8 周).
+- Each project has a budget or generation quota (future，归计费线 PROGRESS 第 8–9 周).
 - Free tier defaults to the 3 pre-generated music pieces; custom generation is a paid/limited feature.
 - Generated music pieces are cached as assets so the same prompt does not re-generate.
 

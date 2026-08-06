@@ -7,8 +7,8 @@
 > ① **配方 = 能力承诺**——上了的卡必须能用用户自己的素材跑出同款，不能写死、不能仅 demo（STRATEGY"配方卡不做营销剧场"的产品化口径）；
 > ② 首页形态 = composer 下方**能力演示视频卡**（4 张：风格 / 多语言 dub / 分镜剪辑 / 图片视频），源素材用云端 demo talk；
 > ③ 声音的家 = **Speaker 块扩展**（声纹 = Speaker 画像属性，stock voices 作系统内置 Speaker 进 SpeakerPickerModal），composer 不加 Audio 块；
-> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）；**（2026-08-05 修订：R2 先交付无声版——照片轮播+字幕+音乐，不需要真人说话；声音路径整体后置第 4 周声纹线，§4.2）**
-> ⑤ **Remix 形态 = composer mention chip**（2026-08-01，对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决）：点卡 = 往 composer 插入 recipe 提及 chip，走唯一入口正常流；**否全屏模态框**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统做成**双端注册表架构**，recipe 第一成员，后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书钉死唯一发生地 = 服务端解析（简报 `docs/tasks/recipe-mention.md`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，第 6 周线）。
+> ④ v1 图片视频 = **有声版 + stock 兜底**（无声纹不阻塞，dock/审阅面板可换声）；**（2026-08-05 修订：R2 先交付无声版——照片轮播+字幕+音乐，不需要真人说话；声音路径整体后置第 5 周声纹线，§4.2）**
+> ⑤ **Remix 形态 = composer mention chip**（2026-08-01，对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决）：点卡 = 往 composer 插入 recipe 提及 chip，走唯一入口正常流；**否全屏模态框**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统做成**双端注册表架构**，recipe 第一成员，后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书钉死唯一发生地 = 服务端解析（简报 `docs/tasks/recipe-mention.md`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，第 7 周线）。
 > ⑥ **功能扩展的唯一门 = SKILL_REGISTRY 注册项**（2026-08-05）：重试/输入校验/拓扑约束/进度文案/计量提示随登记免费获得；禁为单节点开平行映射表或特判分支（CHAT_ARCH §4 扩展门纪律）。
 
 ## 0. 已核实的现状事实（读码确认，2026-07-30）
@@ -81,7 +81,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 
 ### 4.2 图片视频卡（R2 兑现）
 
-> **2026-08-05 口径修订**：R2 交付**无声版**——照片轮播 + 字幕（catalog 多效果）+ 音乐，不需要真人说话。声音路径（voice_gen / TTS / stock 兜底 / 声样入口）整体让给第 4 周声纹线；原"有声版 + stock 兜底"裁决④同步失效，届时按 §5 重启。
+> **2026-08-05 口径修订**：R2 交付**无声版**——照片轮播 + 字幕（catalog 多效果）+ 音乐，不需要真人说话。声音路径（voice_gen / TTS / stock 兜底 / 声样入口）整体让给第 5 周声纹线；原"有声版 + stock 兜底"裁决④同步失效，届时按 §5 重启。
 
 - **承诺**：只有文字稿 + 现场照片 → 照片轮播 + 字幕 + 音乐的短片（字幕效果可在 editor/chat 换：堆叠淡入 / 词高亮等 catalog 成员）。
 - **能力现状**：✅ stills 链在跑 + `stacking` preset 已在 catalog；缺口 = 无录音时的字幕时间轴（原痛点：transcript+照片走 stills 分支但无 words，选段时间轴靠编造、无逐词字幕）。
@@ -89,7 +89,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
   1. `align_stills` 注册项（tool，确定性）：文字稿 → 阅读节奏估算**词级时间轴**（zh 按字 / 拉丁按词 + 句间停顿常数），写回 transcript asset 的 `meta.words`——与 ASR words 同构，下游零感知；文本哈希幂等复用。
   2. **DAG 注入**：`create_run` 计算输入画像（无 video/audio + 有文字稿 + 有照片）→ `compile_graph` 在 director_plan 与 clips 之间插入 `align_stills`，clips 挂边 `[plan, align]`（mode①/② 共用）；clips 渲染源从 DAG 父节点读（`spec.aligned_asset_id`），不扫全项目。
   3. `build_clip_spec` stills 分支放宽：words 在、无音频 → 字幕轮播（`url=""`）；音频轨只认 AUDIO 源（transcript 的文本文件永不进音轨）。
-  4. 简报的 `voice_gen`/`synth_visual`（TTS + Ken Burns 合成主片）**后置第 4 周**；本卡不依赖声纹。
+  4. 简报的 `voice_gen`/`synth_visual`（TTS + Ken Burns 合成主片）**后置第 5 周**；本卡不依赖声纹。
 - **DAG 拓扑**：`preprocess → director_understand → director_plan → align_stills → clips(stills) → render`（导演先行，全流程一条 pipeline）。
 - **素材账单**：demo talk 文字稿 + 现场照片若干；预览 = stills + stacking + 音乐成片（demo 烘焙用 stacking 配置的品牌模板）。
 
@@ -168,11 +168,14 @@ RECIPE_REGISTRY: dict[str, RecipeEntry]  # id → {status, input_slots, outputs,
 | 期 | 内容 | 上卡 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|---|
 | **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；**交互形态 2026-08-01 修订为 mention chip**，简报 `docs/tasks/recipe-mention.md` 期 1 随本行复亮 Remix） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
-| **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（**2026-08-05 修订：无声版先行**，声音路径后置第 4 周，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
+| **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（**2026-08-05 修订：无声版先行**，声音路径后置第 5 周，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
 | **R3** | 简报 B：ADR 翻案 + filmstrip 检测 + `crop_track` + `reframe_clip` | 分镜卡 | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
-| **R4** | 风格卡（内容 TBD） | 风格卡 | — |
+| **R4** | 风格卡（内容 TBD，PROGRESS 第 2 周） | 风格卡 | — |
+| **R5** | AI 生成产物线（声纹 / Speaker / Memory，PROGRESS 第 5–6 周） | 虚拟画面卡 | — |
 
 每期配套：对应素材策展 + 该期 `docs/tasks/` 简报（引用本文档章节号）+ PROGRESS 状态更新。
+
+> **点亮 ≠ 通路（2026-08-05）**：上卡验收只证明能力真实；**完全通路** = Remix → 对话定计划 → 生成 → 结果页知道下一步 → 再生产/精修，由 PROGRESS 第 4 周体验闭环周统一承接——五卡共享一条闭环，不为单卡各建。
 
 ## 9. 新开会话导读（用本文档创建 tasks）
 

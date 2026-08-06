@@ -104,13 +104,24 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 - `answer` → 普通 assistant 消息，stored 任务书不被动
 - `start` → 复用 answer kind=start 路径起 run（唯一出生地）；dock 中的任务书以 `presented_plan` 摘要注入推断上下文——短确认看得见自己在确认什么（2026-08-04 硬化，此前裸"开始吧"在模糊首轮后 2/3 误判 generate）
 
-修订回合的累积 prompt 由**服务端**拼装（stored prompt + 本轮原文）——composer/前端永不构建累积 prompt 或 prior。PlanAgent 的 LLM 故障兜底 = 默认任务书 dock（可编可 Start，永不白屏）；`outputs:null` 等松散输出由 schema 读容忍接住。
+修订回合的累积 prompt 由**服务端**拼装（stored prompt + 本轮原文）——composer/前端永不构建累积 prompt 或 prior。PlanAgent 的上下文四面体（2026-08-06 补第四面）：累积 prompt + 文件名 + `presented_plan` + **最近 5 轮对话**（"Recent conversation"——G-7：素材/请求判定需要看见"上一轮刚被要素材"，短贴文曾在真空里被系统性误判为非素材形成反问死循环；只喂上下文不加倾向规则，判定归 LLM 凭语境完成，同 presented_plan 硬化先例）。PlanAgent 的 LLM 故障兜底 = 默认任务书 dock（可编可 Start，永不白屏）；`outputs:null` 等松散输出由 schema 读容忍接住。
 
 ### 3.2 四态边界规则
 
 **answer 态边界（写死在 agent 规则里）**：只在无工作请求且无歧义时用（能力/进度/解释/闲聊）；要干活 → task_list/edit_ops；读数有歧义 → ask——answer 永不当偷懒出口。进度问题凭 §6 的节点级进度段照实答；发布意图 → 引导到产物卡发布按钮；品牌/说话人等身份设置 → 导航到对应页面。
 
 **answer 契约**（期 1 已落，期 4 补修订）：`{kind: "option"|"freeform"|"bail"|"start", option_id?, text?, answered_at}`。bail 是一等公民——入口回 draft 可重开、checkpoint 下游级联 skipped（期 4），**永不标 failed**；`start` 是 task_book 确认的一等 kind（取代期 1 的魔法 `option_id="start"`）。请求体 `AnswerRequest` 是按 `kind` 判别的联合（option/freeform/start/bail）——`autonomy`/`intent` 只存在于 `start` 上，其他 kind 带 kind 外字段直接 422，不再静默忽略；task_book 问题只接受 start/bail，其他问题不接受 start。N-14 的"tasks=[] 反问"届时迁移为 ask 的 freeform 形态（options 空 + allow_freeform）——反问仍是合法输出，只是有了类型座位。
+
+### 3.3 PlanAgent 顾问姿态（2026-08-05 立；PROGRESS 第 4 周施工）
+
+来源：一份真实顾问对话样本（用户 = 目标画像：有素材、不懂自媒体、助理也不懂）。plan path 不只是填任务书——**用户到来即彷徨，agent 是接住彷徨的人**（哲学论证 → STRATEGY §5）。四条行为规格：
+
+1. **诊断一轮封顶**：模糊首轮先问**路由问题**——答案会改变任务书形状的问题（听众是谁 / 目的是什么 / 场合），不问用户不懂的（画幅 / 参数 / 样式，由配方卡与默认值吸收）。一轮问完必须出方案；诊断是手段，出方案是目的——**不做职业 / 变现咨询**。
+2. **带理由纠偏**：用户点的东西做不出或与素材不匹配（无 media 要 clips、两小时讲座要 20 条）→ 拒绝 / 降级时必须给理由 + 替代方案，禁静默排除（现状 `clips_without_media` reason 是雏形，升级为建议形态）。
+3. **成功定义随任务书**：dock 的计划摘要携带"什么叫成了"（本批产物的验收口径），schema / overlay 同改，结果页对照呈现。
+4. **按素材画像推荐配方**：输入画像命中某张 live 卡时主动说"照这张卡做"（读 `RECIPE_REGISTRY` 公开面；reserved 卡永不推荐——点亮纪律不变，RECIPES §8）。
+
+验收：迷失用户横切变体 S17–S22（`scripts/chat_scenarios.py`，散入路由/咨询/修订/边界/配方/素材六族而非独立成块——迷失是用户状态，不是意图类别；S1–S16 不得回归）。
 
 ## 4. Skill Registry 初集
 
@@ -147,7 +158,7 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 | skill | 状态 | 说明 |
 |---|---|---|
-| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md`；声音路径随第 4 周声纹线落地（R2 已先行交付无声版，RECIPES §4.2） | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
+| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md`；声音路径随第 5 周声纹线落地（R2 已先行交付无声版，RECIPES §4.2） | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
 | `remove_filler` | 📋 chat 线 hello world | 词级时间戳 + filler 检测 → 标 hidden（非破坏）→ 重渲染 |
 | `make_hook` | 📋 半新 | ≈ `revise_script(scope=hook)` 的独立入口 |
 

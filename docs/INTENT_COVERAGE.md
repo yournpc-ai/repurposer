@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问，验收 = `apps/api/scripts/chat_scenarios.py` S1–S13）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -49,6 +49,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 |---|---|---|
 | G 明确（产出物+语言都说清） | /chat plan path → dock，reasons 空 → 前端自动 Start | ✅（S2） |
 | G 模糊（"帮我处理一下"） | /chat plan path → dock + reasons → 面板确认 | ✅（S1） |
+| G 全迷失（"不知道做什么/从哪开始"） | /chat plan path → dock（reasons 非空）或散文反问指路；永不裸跑、永不出无米书 | ✅（S17/S18/S21，2026-08-05；W4 升级为顾问姿态断言） |
 | Q 能力（"你能做什么"） | /chat plan path → answer（普通 assistant 消息） | ✅（S4） |
 | 空指令 | 前端本地拦截（toast） | ✅ |
 | 只要 clips 但无媒体 | PlanAgent 排除 clips；绕过则出生地 422 | ✅ |
@@ -106,7 +107,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | **E 纠错（"这个词译错了，应该是 X"）** | /chat → revise_script 单点修；**无法"到处都改"** | 🚧（glossary 的对话入口——未来走 dispatch 注册表，不开新通道） |
 | **M 元信息（"换品牌模板/换说话人"）** | /chat → answer 导航文案（Brand template / Speakers 页面） | ✅（期 4 补四 G-6，answer 引导收编） |
 | M 目标语言改 | chat task_list（translate/write 新槽）折算 | ✅（产物级正解） |
-| 上传新素材 | 无 chat 路径（AssetsModal/composer） | 🚧（引导缺失但死路感低） |
+| 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（plan path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
 
 ### 3.4 产物会话（ChatModal，asset scope）
 
@@ -138,6 +139,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | # | 缺口 | 影响 | 建议修法 | 量级 |
 |---|---|---|---|---|
+| ~~G-7~~ | ~~短贴文（~25 词开场白式）零素材首轮被判非素材~~ | ✅ **已修（2026-08-06）**：根因 = PlanAgent 上下文真空——`_messages` 只有累积 prompt + 文件名 + presented_plan，answer 轮后每条消息在真空里判（看不见"上一轮刚被要素材"），判不准按规则走 ask（迷失旅程反问死循环，S21 短贴文 fixture 3/3 复现）。修法 = **recent 对话注入**（`_plan_turn` 传最近 5 轮、`_messages` 加 "Recent conversation" 段）——只喂上下文不加倾向规则，素材/请求判定归 LLM 凭语境完成；同 08-04 presented_plan 硬化先例。S21 fixture 保持 25 词短贴文作回归 | — | — |
 | ~~G-1~~ | ~~确认相位文本"开始吧/可以了"被当成修订~~ | ✅ **已修（期 4 补四）**：`/intent` action 加 `"start"` 座位，复用 answer kind=start 路径；**2026-08-04 随单面化迁入 plan path**（presented_plan 注入 + `outputs:null` 读容忍硬化） | — | — |
 | ~~G-4~~ | ~~/chat 无 answer 形态~~ | ✅ **已修（期 4 补四）**：IntentProposal 第四态 `AnswerProposal`（N-21），纯信息直答落普通 assistant 消息 | — | — |
 | ~~G-2~~ | ~~进度询问无节点级数据~~ | ✅ **已修（期 4 补四）**：`_build_context` 注入 latest run steps 量化摘要（`_format_step_progress`，≤12 行） | — | — |
@@ -151,7 +153,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 ## 6. 测试矩阵（e2e 覆盖对照）
 
-**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库），真实 LLM 不锁文案。S1–S8 全绿（2026-08-04）。
+**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S40 全绿（2026-08-06）；迷失用户横切变体 S17–S22 散入六族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
 
 | 路径 | 覆盖 |
 |---|---|
@@ -163,15 +165,24 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | 已有 run 项目不进 plan path（回归） | ✅ harness S6 |
 | 闲聊 / 发布引导 answer 形态 + run 数不变 | ✅ harness S7 |
 | 空项目列表不可见 → 首发消息可见 | ✅ harness S8 |
-| checkpoint 三答法 + bail + 过期 + 多 run 级联 | ✅ 期 4 e2e |
-| autoResume 字母/序号/原文/freeform + task_book 不参与 | ✅ 期 3 e2e |
-| ask 三态落库 + 单待决 supersede + 待决重建 | ✅ 期 3 e2e |
-| answer 端点 kind 契约 + 出生地 guards + count 边界 | ✅ API 面 e2e |
-| ChatIntentAgent 三态实分派（task_list/edit_ops/ask 各一） | ⚠️ 期 3 部分；edit_ops 实分派无 e2e |
-| translate_clip / dub_clip chat 派发 | ❌ 待补 |
+| checkpoint 三答法（option 按钮 / 打字母 autoResume / 自由文本）+ 答题即唤醒 | ✅ harness S36 |
+| checkpoint bail：节点 done(bailed) + 下游级联 skipped + COMPLETED（永不 failed） | ✅ harness S37 |
+| checkpoint 多 run 级联：新题 supersede → 旧 run 收官 COMPLETED | ✅ harness S38 |
+| checkpoint 过期：TTL 扫描默认项 auto-answer（expired 标记）+ 续跑 | ✅ harness S39 |
+| autoResume 边界：空白 attachment-only 不答 checkpoint；task_book 不参与 autoResume | ✅ harness S36d / S40 |
+| ask 落库（ChatIntentAgent ask 提案 → dock choice） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
+| 单待决 supersede（task_book re-dock / checkpoint 到题）+ 待决重建（pending_question） | ✅ harness S27 / S38 / S26 |
+| answer 端点契约：一行一答 409 / kind×question-kind 422 / autonomy 透传 run.context | ✅ harness S25 / S24（422 矩阵见 S5、S11、S29） |
+| 出生地 guards：clips-media 门 + count 边界（SLOT_COUNT_LIMITS） | ✅ harness S11 / S29 |
+| ChatIntentAgent 实分派：task_list 新 run / edit_ops operations 行（chat 血统 + message_id） | ✅ harness S31 / S32 |
 | G-1 started 联合 + task_book kind=start + pending_intent 清空 | ✅ harness S1（期 4 补四 e2e 的继承者） |
 | G-4 answer 形态（能力/发布问题：无 run、无 dock、run 数不变） | ✅ harness S4/S7 |
-| G-2 进度询问答真实节点状态 | ✅ 期 4 补四 e2e |
+| G-2 进度询问 answer 形态（节点级上下文注入，无新 run） | ✅ harness S33 |
+| G-6 元信息修改（品牌/说话人）answer 导航形态 | ✅ harness S34 |
+| asset scope 永不进 plan path | ✅ harness S35 |
+| 附件：attachment-only 发送持久化 + 替身行推断不死路 | ✅ harness S30 |
+| task_book bail → 回 draft 可重开；QA 入档（superseded/start 标记） | ✅ harness S23 / S27 |
+| translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |
 
 ---
 

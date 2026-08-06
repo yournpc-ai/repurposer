@@ -676,8 +676,8 @@ Reference Descript's text-editing experience:
 |:---|:---|:---|:---|
 | Product name | SpeechRepurposer (internal, adjustable) | Zuo | TBD |
 | URL input support | 需求池（链接摄入，PROGRESS 可选需求） | Product/Tech | 已登记 |
-| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，PROGRESS 第 9 周联调 | Product | 已排期 |
-| Pricing model | PROGRESS 第 7 周定价设计 + 第 8 周支付接入 | Zuo | 已排期 |
+| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，PROGRESS 第 10 周联调 | Product | 已排期 |
+| Pricing model | PROGRESS 第 8 周定价设计 + 第 9 周支付接入 | Zuo | 已排期 |
 | European company registration | Q3 launch UK Limited Company | Operations | TBD |
 | Academic conference partnerships | Q3 contact ECA, EMBO, London Tech Week | Marketing | TBD |
 

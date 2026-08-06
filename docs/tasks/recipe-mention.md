@@ -3,7 +3,7 @@
 > Status: 🚧 施工中（2026-08-01 设计定稿；**期 1 已落地 2026-08-02**：双端注册表 + GET /recipes + chip/picker + composer 接线 + /intent 解析 + parked 机械删除 + dub 卡复亮；e2e 已验：pin→pending_intent→compile_graph 三 dub fork、422 拒收矩阵、无钉回归——真机媒体全跑留周五验收；**同日完全体提前**：文本内联 chip（MentionEditor）落地，chip 行/剥除形态整体替换，见 §2.5 注记；**2026-08-04 注记：pin 时机随意图层单面化自 `/intent` 迁入 chat plan path**——`resolve_recipe_mentions` 现由 `chat/service.py` plan path 调用（mentions 随首条 `/chat` 消息到达），行为不变，简报 `tasks/intent-surface-unification.md`；**2026-08-05 语义修订：配方=预设，不是钉**——播种改存在性填充（只补推断没有的槽位类型 + dub 空时填默认，无 explicit），面板手改槽经 `merge_prior_slots` 三方合并存活、chat 修订永远赢，剧本 S15/S16 锁定；本文"钉死/pin"表述除历史叙述外按预设语义理解，NAMING N-25 已加注）
 > 依据：`docs/RECIPES.md` §7（卡片层，2026-08-01 修订）/§10（禁令）；`CHAT_ARCHITECTURE.md` §7（mentions）/§1（单一入口）；`NAMING.md`（宪法 §1/§5 + §5 审计触发）
 > 迁移：**零表迁移**——提及住既有 `messages.mentions` JSONB 列；配方注册表是代码层静态注册表（SKILL_REGISTRY 同款纪律），随代码部署
-> 用户裁决（2026-08-01，RECIPES 头部⑤）：① 配方交互形态 = Opus 式 composer mention（否全屏模态框）；② mention 系统做成**可扩展注册表架构**，功能只开放 recipe，后续 @ 类型 = 填注册项，**禁技巧性补丁**；③ DAG 永不外显，"编辑流程"的等价物 = chat（plan 级 ops + 子图词汇，第 6 周线）
+> 用户裁决（2026-08-01，RECIPES 头部⑤）：① 配方交互形态 = Opus 式 composer mention（否全屏模态框）；② mention 系统做成**可扩展注册表架构**，功能只开放 recipe，后续 @ 类型 = 填注册项，**禁技巧性补丁**；③ DAG 永不外显，"编辑流程"的等价物 = chat（plan 级 ops + 子图词汇，第 7 周线）
 
 ## 0. Context
 
@@ -102,11 +102,11 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 
 ### 2.5 可扩展性证明（后续 @ 类型的注册路径）
 
-以 @asset（"把 @素材2 换成…"）为例，上线只需：① 前端 `MENTION_REGISTRY` 加注册项（icon + i18nKey + `source = 项目素材列表接口`）；② 后端 `ChatMention.type` Literal 加 `"asset"`……已在内（契约预留四类型）；③ 效果 = 上下文富化族，`_build_context` 零改动。@output / @workflow_step 同型。**新类型 = 前端一条注册项 +（如需新效果族）后端一个解析分支注册**——无一处 switch 补丁。第 6 周 Remix/chat 线是全量 picker 的归属（plan 级 ops + 子图词汇同批）。
+以 @asset（"把 @素材2 换成…"）为例，上线只需：① 前端 `MENTION_REGISTRY` 加注册项（icon + i18nKey + `source = 项目素材列表接口`）；② 后端 `ChatMention.type` Literal 加 `"asset"`……已在内（契约预留四类型）；③ 效果 = 上下文富化族，`_build_context` 零改动。@output / @workflow_step 同型。**新类型 = 前端一条注册项 +（如需新效果族）后端一个解析分支注册**——无一处 switch 补丁。第 7 周 Remix/chat 线是全量 picker 的归属（plan 级 ops + 子图词汇同批）。
 
 **@asset 已随完全体提前落地（2026-08-02，composer 表面）**：注册表第二成员——`source` 经 `MentionContext.files` 读取 composer 已挂文件（id = 文件名，项目尚不存在时名字即身份）；效果走上下文富化族的**自然语言通道**（chip 在句中序列化为 `@文件名`，intent agent 直接读到指令指向哪个文件），服务端零改动（/intent 实验：asset 提及透传正常）。picker 的数据通道同步升级为 `source(ctx)`——注册项仍是静态配置，候选源是活的。chat 表面的 @asset（项目素材，UUID 身份 + `_build_context` 注入）归期 2。
 
-**文本内联 chip 已提前落地（2026-08-02 用户裁决）**：原定在此处等第 6 周的内容被提前——理由是"@ 后句子里找不到提及内容"在日常使用中太出戏。落地形态 = `MentionEditor`（contentEditable，chip 为 `contenteditable=false` 内联节点；**DOM 拥有文本事实源**，所有编辑路径汇于 `syncNow` 单一同步漏斗上报 `{text, mentions}`；提及在文本中序列化为 `@label`，结构化钉走 mentions 数组）。v1 的 chip 行/剥除逻辑已整体删除（不是补丁，是替换）；注册表排他/去重规则在 DOM 层原样执行。picker 改为光标锚定（空间不足时下翻）。tour 第 3/5 步文案同步教 @ 操作与 Remix 自动落 chip，闭环。
+**文本内联 chip 已提前落地（2026-08-02 用户裁决）**：原定在此处等第 7 周的内容被提前——理由是"@ 后句子里找不到提及内容"在日常使用中太出戏。落地形态 = `MentionEditor`（contentEditable，chip 为 `contenteditable=false` 内联节点；**DOM 拥有文本事实源**，所有编辑路径汇于 `syncNow` 单一同步漏斗上报 `{text, mentions}`；提及在文本中序列化为 `@label`，结构化钉走 mentions 数组）。v1 的 chip 行/剥除逻辑已整体删除（不是补丁，是替换）；注册表排他/去重规则在 DOM 层原样执行。picker 改为光标锚定（空间不足时下翻）。tour 第 3/5 步文案同步教 @ 操作与 Remix 自动落 chip，闭环。
 
 ## 3. 改动点
 
@@ -146,7 +146,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 |---|---|---|
 | **期 1**（composer + 卡复亮，第 1 周） | 双端注册表 + `GET /recipes` + chip/picker + composer 接线 + /intent 解析 + parked 机械删除 + dub 卡复亮 | 点 dub 卡 → chip 落 composer → 上传视频 → 发送 → 审阅面板逐槽行呈现"clips + DE/FR/ES 配音"→ Start → 单 run 出原声 clips + 三语言派生行；**回归：chip 发送后再发一条普通 prompt，不带任何钉**；@ 手选与点卡同终点 |
 | **期 2**（chat 表面，第 1–2 周缓冲） | chat 输入 chip/picker + service 解析 + task_book dock + 消息泡 mention 行 | 项目 chat 输入 @配音卡 → dock 呈现任务书 → Start → run；messages.mentions 持久化，刷新后消息泡 chip 仍在 |
-| **期 3**（扩展座位，不实施） | @asset/@output 注册路径评审记录（§2.5）随第 6 周简报立项 | — |
+| **期 3**（扩展座位，不实施） | @asset/@output 注册路径评审记录（§2.5）随第 7 周简报立项 | — |
 
 配套：RECIPES §7 修订已随本简报同批落地；PROGRESS 第 1 周"三卡定格"行的交互层即期 1，周五验收时回填。
 
@@ -155,7 +155,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 1. **禁**前端构造任务书钉（prior 的客户端构造路径随本期删除；钉死唯一发生地 = 服务端 `resolve_recipe_mentions`）。
 2. **禁** mention 类型的一次性分支——新类型 = 双端注册表各一条注册项；picker/chip/解析器永不出现 `if type === "recipe"` 以外的类型判断。
 3. **禁** chip 状态跨发送残留（三律：可见 / 发送即消费 / × 即删）。
-4. **禁**全屏配方模态框、DAG 画布（形态裁决 2026-08-01；"编辑流程"等价物 = chat plan 级 ops，第 6 周线）。
+4. **禁**全屏配方模态框、DAG 画布（形态裁决 2026-08-01；"编辑流程"等价物 = chat plan 级 ops，第 7 周线）。
 5. **禁**新表——注册表随代码部署；mentions 住既有 `messages.mentions` JSONB。
 6. **禁** LLM 解释 recipe 提及（确定性引用直接钉）；**禁**单 run 多 recipe 提及（v1 拒收）。
 7. **禁**钉死实质（slots/dub_languages）泄出 `GET /recipes`——端点只回 `{id, status, input_slots}`。
