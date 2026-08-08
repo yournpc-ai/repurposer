@@ -1,6 +1,6 @@
 "use client"
 
-import { Link, useNavigate } from "@tanstack/react-router"
+import { Link } from "@tanstack/react-router"
 import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -18,10 +18,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react"
 
-import { apiFetch } from "@/lib/api"
-import { inferAssetType } from "@/lib/asset-type"
-import { toast } from "sonner"
-import { useAuth } from "@/components/AuthProvider"
+import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import type { ChatMention } from "@/lib/mentions"
 import {
   MentionEditor,
@@ -32,9 +29,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
-  SpeakerPickerModal,
-  type SpeakerPickerEntry,
-} from "@/components/home/SpeakerPickerModal"
+  PersonaPickerModal,
+  type PersonaPickerEntry,
+} from "@/components/home/PersonaPickerModal"
 import { AssetsModal } from "@/components/home/AssetsModal"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
@@ -53,28 +50,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-type Speaker = SpeakerPickerEntry
+type Persona = PersonaPickerEntry
 
 interface BrandTemplate {
   id: string
   name: string
 }
 
-interface Asset {
-  id: string
-  type: string
-  processing_status: "pending" | "processing" | "completed" | "failed"
-  processing_error: string | null
-}
-
-interface Project {
-  id: string
-  title: string
-  status: string
-}
-
 interface HomeComposerProps {
-  speakers: Speaker[]
+  personas: Persona[]
   brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
@@ -95,7 +79,7 @@ const AUTO_GENERATE = "__auto_generate__"
  * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
 
-/** Composer teaching (4 steps): assets → speaker → prompt (send folded in)
+/** Composer teaching (4 steps): assets → persona → prompt (send folded in)
  * → the recipe gallery as the alternative entry (lands last; Tour skips the
  * step if the cards haven't loaded yet). */
 const COMPOSER_TOUR_STEPS: TourStepDef[] = [
@@ -106,9 +90,9 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
     side: "bottom",
   },
   {
-    target: "[data-tour='composer-speaker']",
-    titleKey: "tour.composer.speakerTitle",
-    descKey: "tour.composer.speakerDesc",
+    target: "[data-tour='composer-persona']",
+    titleKey: "tour.composer.personaTitle",
+    descKey: "tour.composer.personaDesc",
     side: "bottom",
   },
   {
@@ -141,7 +125,7 @@ function PillHeaderText({ title, desc }: { title: string; desc: string }) {
 }
 
 export function HomeComposer({
-  speakers,
+  personas,
   brandTemplates,
   onGenerateStart,
   prompt,
@@ -150,15 +134,13 @@ export function HomeComposer({
   onMentionsChange,
   editorRef,
 }: HomeComposerProps) {
-  const navigate = useNavigate()
   const { t } = useTranslation()
-  const { requireAuth } = useAuth()
+  const { launching: isGenerating, launch } = useProjectLaunch()
 
-  const [speakerId, setSpeakerId] = useState(AUTO_GENERATE)
+  const [personaId, setPersonaId] = useState(AUTO_GENERATE)
   const [brandTemplateId, setBrandTemplateId] = useState("")
   const [files, setFiles] = useState<File[]>([])
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [speakerPickerOpen, setSpeakerPickerOpen] = useState(false)
+  const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
@@ -214,116 +196,31 @@ export function HomeComposer({
   )
 
   // Mention chip laws (docs/tasks/recipe-mention.md §2.4): visible (inline
-  // chip in the sentence, MentionEditor), consumed on send (handleGenerate
-  // clears the draft on success, before navigating), × purifies (removing
-  // the chip removes every trace — no residual pin).
-
-  const handleGenerate = async () => {
-    await requireAuth(async () => {
-      // Prompt is required — the pipeline's intent step derives the task
-      // book (outputs / language / clip count) from it server-side.
-      if (!prompt.trim()) {
-        toast.error(t("home.noPromptError"))
-        return
-      }
-      setIsGenerating(true)
-      onGenerateStart?.()
-      try {
-        // Project title = a 15-char split of the user's prompt + "…" — the
-        // chat-app convention (a conversation is named from the user's own
-        // words), NEVER the material's filename.
-        const promptLine = prompt.trim().replace(/\s+/g, " ")
-        const title =
-          (promptLine.length > 15 ? `${promptLine.slice(0, 15)}…` : promptLine) ||
-          t("common.untitled")
-        const projectRes = await apiFetch("/api/v1/projects", {
-          method: "POST",
-          body: {
-            title,
-            event_name: "",
-            speaker_id:
-              speakerId === AUTO_GENERATE ? undefined : speakerId || undefined,
-          },
-        })
-        if (!projectRes.ok) throw new Error("Failed to create project")
-        const project = (await projectRes.json()) as Project
-
-        // Only real user files upload. A prompt-only send creates NO fake
-        // "prompt.txt" transcript asset (retired 2026-08-05 shim): the prompt
-        // travels as the first chat message, and declaring pasted text as
-        // source material ("this is my transcript: …") is recognized
-        // server-side in the chat plan path, which promotes it to a proper
-        // transcript asset.
-        await Promise.all(
-          files.map(async (material) => {
-            const type = inferAssetType(material)
-
-            const urlRes = await apiFetch(`/api/v1/projects/${project.id}/assets/upload-url`, {
-              method: "POST",
-              body: {
-                filename: material.name,
-                content_type: material.type || undefined,
-              },
-            })
-            if (!urlRes.ok) throw new Error("Failed to get upload URL")
-            const { key, upload_url } = (await urlRes.json()) as {
-              key: string
-              upload_url: string
-            }
-
-            const putRes = await fetch(upload_url, {
-              method: "PUT",
-              body: material,
-              headers: material.type ? { "Content-Type": material.type } : {},
-            })
-            // Direct-to-storage PUT bypasses apiFetch, so toast here.
-            if (!putRes.ok) {
-              toast.error(t("composer.uploadFailed"))
-              throw new Error("Failed to upload file")
-            }
-
-            const assetRes = await apiFetch(`/api/v1/projects/${project.id}/assets`, {
-              method: "POST",
-              body: { type, key, title: material.name },
-            })
-            if (!assetRes.ok) throw new Error("Failed to create asset")
-            return (await assetRes.json()) as Asset
-          })
-        )
-
-        // Intent recognition lives in the chat loop, not the composer
-        // (intent-surface-unification W2): navigate straight to the project
-        // and hand the draft to the overlay chat, which sends it as the
-        // first /chat message — mentions and the brand choice ride along.
-        // A recipe mention is pinned server-side in the plan path
-        // (resolve_recipe_mentions) — the composer never builds a prior
-        // (docs/tasks/recipe-mention.md, prohibition #1).
-        // Send consumes the draft (chip law ②): one clear, before navigating.
-        editorRef.current?.clear()
-
-        navigate({
-          to: "/projects/$id",
-          params: { id: project.id },
-          search: { overlay: "chat" },
-          state: {
-            firstMessage: {
-              text: prompt.trim(),
-              mentions,
-              brandTemplateId: brandTemplateId || undefined,
-            },
-          } as Record<string, unknown>,
-        })
-      } catch {
-        // apiFetch already toasted the server's reason; just reset the UI.
-        setIsGenerating(false)
-      }
+  // chip in the sentence, MentionEditor), consumed on send (onSent clears
+  // the draft, before navigating), × purifies (removing the chip removes
+  // every trace — no residual pin).
+  //
+  // The send mechanism is the shared `useProjectLaunch` (2026-08-08, D6 二次
+  // 修订): composer and the recipe overlay's launch zone ride the identical
+  // path (create project → upload → navigate → first /chat message). A
+  // recipe mention is pinned server-side in the plan path
+  // (resolve_recipe_mentions) — the composer never builds a prior
+  // (docs/tasks/recipe-mention.md, prohibition #1).
+  const handleGenerate = () =>
+    launch({
+      prompt,
+      mentions,
+      files,
+      personaId: personaId === AUTO_GENERATE ? undefined : personaId || undefined,
+      brandTemplateId: brandTemplateId || undefined,
+      onStart: onGenerateStart,
+      onSent: () => editorRef.current?.clear(),
     })
-  }
 
-  const selectedSpeaker =
-    speakerId === AUTO_GENERATE
+  const selectedPersona =
+    personaId === AUTO_GENERATE
       ? undefined
-      : speakers.find((s) => s.id === speakerId)
+      : personas.find((p) => p.id === personaId)
 
   // Composer teaching tour: built per render from the static config so a
   // language switch re-labels the steps (Tour reads via ref).
@@ -342,7 +239,7 @@ export function HomeComposer({
         Light mode keeps edge-glow. */}
     <Card className="overflow-visible rounded-2xl py-0 ring-0 edge-glow dark:ring-1 dark:ring-foreground/10">
       <CardContent className="p-5 text-left">
-        {/* Entity blocks (Assets = source materials, Speaker = whose voice)
+        {/* Entity blocks (Assets = source materials, Persona = whose voice)
             ride the card's top edge via negative margin; the textarea fills
             the remaining width to their right. Both blocks open modals. */}
         <div className="flex items-start gap-3">
@@ -377,31 +274,31 @@ export function HomeComposer({
               </span>
             </button>
 
-            {/* Speaker block — same anatomy: avatar/user-icon top, "Speaker"
+            {/* Persona block — same anatomy: avatar/user-icon top, "Persona"
                 title, current value at the very bottom. */}
             <button
               type="button"
-              data-tour="composer-speaker"
-              onClick={() => setSpeakerPickerOpen(true)}
+              data-tour="composer-persona"
+              onClick={() => setPersonaPickerOpen(true)}
               className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
-              {selectedSpeaker ? (
+              {selectedPersona ? (
                 <Avatar size="sm">
-                  {selectedSpeaker.avatar_url ? (
+                  {selectedPersona.avatar_url ? (
                     <AvatarImage
-                      src={selectedSpeaker.avatar_url}
-                      alt={selectedSpeaker.name}
+                      src={selectedPersona.avatar_url}
+                      alt={selectedPersona.name}
                     />
                   ) : null}
-                  <AvatarFallback>{selectedSpeaker.name.slice(0, 1)}</AvatarFallback>
+                  <AvatarFallback>{selectedPersona.name.slice(0, 1)}</AvatarFallback>
                 </Avatar>
               ) : (
                 <User className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="mt-auto min-w-0">
-                <span className="block text-xs">{t("composer.speaker")}</span>
+                <span className="block text-xs">{t("composer.persona")}</span>
                 <span className="block truncate text-[10px] text-muted-foreground">
-                  {selectedSpeaker ? selectedSpeaker.name : t("composer.autoGenerate")}
+                  {selectedPersona ? selectedPersona.name : t("composer.autoGenerate")}
                 </span>
               </span>
             </button>
@@ -525,13 +422,13 @@ export function HomeComposer({
       </CardContent>
     </Card>
 
-    <SpeakerPickerModal
-      speakers={speakers}
-      value={speakerId}
+    <PersonaPickerModal
+      personas={personas}
+      value={personaId}
       autoValue={AUTO_GENERATE}
-      onSelect={setSpeakerId}
-      open={speakerPickerOpen}
-      onOpenChange={setSpeakerPickerOpen}
+      onSelect={setPersonaId}
+      open={personaPickerOpen}
+      onOpenChange={setPersonaPickerOpen}
     />
     <AssetsModal
       files={files}

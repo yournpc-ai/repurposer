@@ -130,13 +130,14 @@ _CLIPS_SLOT = IntentSlot(type="clips")
 _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
-    # R1: one talk -> clips + your cloned voice speaking DE/FR/ES (fork
-    # semantics — originals and all language versions coexist).
+    # R1: one talk -> clips + your cloned voice speaking ZH/FR/ES (fork
+    # semantics — originals and all language versions coexist; demo pack
+    # languages ruled 中英法西 2026-08-07).
     "dub": RecipeEntry(
         status="live",
         input_slots=[InputSlot(type="video")],
         outputs=[_CLIPS_SLOT],
-        dub_languages=["de", "fr", "es"],
+        dub_languages=["zh", "fr", "es"],
         tags=["multilingual", "voice-clone"],
         flow=[
             FlowStep(key="understand"),
@@ -153,11 +154,32 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
         example_outputs=[
+            # Contrast pack (2026-08-07, scripts/bake_dub_contrast.py): the same
+            # 13s segment as EN original + ZH/FR/ES aligned dubs — the inspect
+            # overlay's language-contrast player consumes these four.
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/dub-preview-ba2a2ea7.mp4",
-                poster_url=f"{_DEMO}/outputs/dub-poster-5535321b.jpg",
-                label_key="dub_preview",
+                url=f"{_DEMO}/outputs/dub-contrast-en-8d19361b.mp4",
+                poster_url=f"{_DEMO}/outputs/dub-contrast-poster-a217f889.jpg",
+                label_key="dub_en",
+            ),
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/dub-contrast-zh-70738878.mp4",
+                poster_url=f"{_DEMO}/outputs/dub-contrast-poster-a217f889.jpg",
+                label_key="dub_zh",
+            ),
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/dub-contrast-fr-7ad83de1.mp4",
+                poster_url=f"{_DEMO}/outputs/dub-contrast-poster-a217f889.jpg",
+                label_key="dub_fr",
+            ),
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/dub-contrast-es-b6484740.mp4",
+                poster_url=f"{_DEMO}/outputs/dub-contrast-poster-a217f889.jpg",
+                label_key="dub_es",
             ),
         ],
     ),

@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { apiFetch } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 
-interface Speaker {
+interface Persona {
   id: string
   name: string
   title: string | null
@@ -36,30 +36,30 @@ interface Speaker {
   created_at: string
 }
 
-export const Route = createFileRoute("/_app/speakers/")({
-  component: SpeakersPage,
+export const Route = createFileRoute("/_app/personas/")({
+  component: PersonasPage,
 })
 
-function SpeakersPage() {
+function PersonasPage() {
   const { t, i18n } = useTranslation()
-  const [speakers, setSpeakers] = useState<Speaker[]>([])
+  const [personas, setPersonas] = useState<Persona[]>([])
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
   const [language, setLanguage] = useState("en")
   const [open, setOpen] = useState(false)
 
-  const fetchSpeakers = async () => {
-    const res = await apiFetch("/api/v1/speakers")
-    setSpeakers(await res.json())
+  const fetchPersonas = async () => {
+    const res = await apiFetch("/api/v1/personas")
+    setPersonas(await res.json())
   }
 
   useEffect(() => {
-    fetchSpeakers()
+    fetchPersonas()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await apiFetch("/api/v1/speakers", {
+    await apiFetch("/api/v1/personas", {
       method: "POST",
       body: { name, title, language },
     })
@@ -67,7 +67,7 @@ function SpeakersPage() {
     setTitle("")
     setLanguage("en")
     setOpen(false)
-    fetchSpeakers()
+    fetchPersonas()
   }
 
   return (
@@ -76,10 +76,10 @@ function SpeakersPage() {
         <div className="mb-8 flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {t("speakers.title")}
+              {t("personas.title")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {t("speakers.subtitle")}
+              {t("personas.subtitle")}
             </p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -87,23 +87,23 @@ function SpeakersPage() {
               render={
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  {t("speakers.new")}
+                  {t("personas.new")}
                 </Button>
               }
             />
             <DialogContent className="sm:max-w-md">
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle>{t("speakers.dialogTitle")}</DialogTitle>
-                  <DialogDescription>{t("speakers.dialogDesc")} </DialogDescription>
+                  <DialogTitle>{t("personas.dialogTitle")}</DialogTitle>
+                  <DialogDescription>{t("personas.dialogDesc")} </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">{t("speakers.labelName")}</Label>
+                    <Label htmlFor="name">{t("personas.labelName")}</Label>
                     <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="title">{t("speakers.labelTitle")}</Label>
+                    <Label htmlFor="title">{t("personas.labelTitle")}</Label>
                     <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
                   </div>
                   <div className="grid gap-2">
@@ -132,56 +132,56 @@ function SpeakersPage() {
           </Dialog>
         </div>
 
-        {speakers.length === 0 ? (
+        {personas.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg bg-muted py-20 text-center">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <Mic2 className="h-6 w-6 text-primary" />
             </div>
-            <p className="font-medium">{t("speakers.emptyTitle")}</p>
+            <p className="font-medium">{t("personas.emptyTitle")}</p>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              {t("speakers.emptyDesc")}
+              {t("personas.emptyDesc")}
             </p>
             <Button className="mt-6" onClick={() => setOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              {t("speakers.new")}
+              {t("personas.new")}
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {speakers.map((speaker) => (
+            {personas.map((persona) => (
               <Link
-                key={speaker.id}
-                to="/speakers/$id"
-                params={{ id: speaker.id }}
+                key={persona.id}
+                to="/personas/$id"
+                params={{ id: persona.id }}
                 className="group rounded-xl bg-card p-5 shadow-sm transition-all hover:shadow-md dark:hover:bg-muted"
               >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-11 w-11">
                     <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                      {speaker.name.charAt(0).toUpperCase()}
+                      {persona.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{speaker.name}</p>
-                    {speaker.title && (
+                    <p className="truncate font-medium">{persona.name}</p>
+                    {persona.title && (
                       <p className="truncate text-sm text-muted-foreground">
-                        {speaker.title}
+                        {persona.title}
                       </p>
                     )}
                   </div>
                 </div>
                 <div className="mt-4 flex items-center gap-2">
                   <Badge variant="secondary" className="rounded-md">
-                    {t(`speakerDetail.tones.${speaker.emotional_tone}`)}
+                    {t(`personaDetail.tones.${persona.emotional_tone}`)}
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="rounded-md uppercase"
                   >
-                    {speaker.language}
+                    {persona.language}
                   </Badge>
                   <span className="ml-auto text-xs text-muted-foreground">
-                    {formatRelativeTime(speaker.created_at, i18n.language)}
+                    {formatRelativeTime(persona.created_at, i18n.language)}
                   </span>
                 </div>
               </Link>

@@ -69,14 +69,17 @@ async function recipeSource(): Promise<MentionCandidate[]> {
   const recipes = (await res.json()) as RecipePublic[]
   return recipes
     .filter((r) => r.status === "live")
-    .map((r) => ({
-      id: r.id,
-      label: i18n.t(`recipes.${r.id}.title`),
-      hint: r.input_slots
+    .map((r) => {
+      const nouns = r.input_slots
         .filter((s) => s.required)
         .map((s) => i18n.t(`mentions.input.${s.type}`))
-        .join(" + "),
-    }))
+        .join(" + ")
+      return {
+        id: r.id,
+        label: i18n.t(`recipes.${r.id}.title`),
+        hint: nouns ? i18n.t("mentions.inputLead", { slots: nouns }) : "",
+      }
+    })
 }
 
 function fileKind(mime: string): "video" | "audio" | "image" | "document" {

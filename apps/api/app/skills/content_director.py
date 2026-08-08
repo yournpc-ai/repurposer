@@ -1,7 +1,7 @@
 """Content Director: two-step planning (RunPlan Phase 2).
 
 Step 1 ``understand`` reads the source material (texts + media) and produces a
-material-scoped ``MaterialUnderstanding`` — pure of speaker/tone/instruction/
+material-scoped ``MaterialUnderstanding`` — pure of persona/tone/instruction/
 language so it stays reusable across runs (asset-hash invalidation lives in
 the ``director_understand`` node runner).
 
@@ -36,7 +36,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
     ) -> MaterialUnderstanding:
         """Produce the material-scoped understanding from source texts/media.
 
-        Deliberately takes no GenerationContext: speaker, tone, instruction,
+        Deliberately takes no GenerationContext: persona, tone, instruction,
         and target language would all poison reuse (they change per request;
         the understanding changes only with the material).
         """
@@ -102,7 +102,7 @@ class ContentDirectorAgent(MiniMaxAgentBase):
         """Produce the request-scoped storyboard from the understanding.
 
         Self-sufficiency contract: this call never sees the raw sources —
-        only the understanding, the shared context (speaker/tone/language/
+        only the understanding, the shared context (persona/tone/language/
         instruction), and the task book (the requested IntentSlots).
         """
         user_prompt = self.jinja_env.get_template("director_plan.j2").render(

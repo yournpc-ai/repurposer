@@ -12,7 +12,7 @@ Preserved object-storage prefixes (never touched, by design):
   skips any object that already exists); deleting the objects would force
   paid regeneration after every reset.
 
-Everything else in the bucket (``{user_id}/uploads|outputs|speakers|
+Everything else in the bucket (``{user_id}/uploads|outputs|personas|
 brand-media/...`` and any stray top-level prefix) is deleted, and every row
 is deleted from every table (users, projects, assets, outputs, operations,
 publications, workflow runs/steps, chat, music, channel accounts,
@@ -62,9 +62,9 @@ from app.models.tables import (  # noqa: E402
     Notification,
     Operation,
     Output,
+    Persona,
     Project,
     Publication,
-    Speaker,
     User,
     VerificationCode,
     WorkflowRun,
@@ -97,7 +97,7 @@ def _plan() -> list[tuple[str, object]]:
         ("assets", Asset),
         ("brand_templates", BrandTemplate),
         ("projects", Project),
-        ("speakers", Speaker),
+        ("personas", Persona),
         ("music", Music),
         ("channel_accounts", ChannelAccount),
         ("users", User),

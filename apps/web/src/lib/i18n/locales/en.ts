@@ -11,6 +11,8 @@ const en = {
     all: "All",
     back: "Back",
     cancel: "Cancel",
+    close: "Close",
+    remove: "Remove",
     loading: "Loading...",
     untitled: "Untitled",
     preview: "Preview",
@@ -30,7 +32,7 @@ const en = {
   },
   nav: {
     home: "Home",
-    speakers: "Speakers",
+    personas: "Personas",
     myProjects: "My projects",
     brandTemplate: "Brand template",
     account: "Account",
@@ -44,12 +46,12 @@ const en = {
     welcomeTitle: "Welcome to <b>your studio</b>",
     welcomeSubtitle: "Your assistant is ready — <b>tell it what you'd like to make today</b>.",
     pastePlaceholder: "Describe what to make from your talk…",
-    selectSpeaker: "Speaker",
+    selectPersona: "Persona",
     promptSeedTool: "Turn this talk into a {{label}}…",
     promptAppendTool: "(also generate a {{label}})",
     generating: "Analyzing the talk and generating content, this can take a moment…",
     noPromptError: "Describe what you want to generate first",
-    speakerCreateFailed: "Failed to create speaker",
+    personaCreateFailed: "Failed to create persona",
   },
   landing: {
     nav: {
@@ -242,7 +244,7 @@ const en = {
     testimonials: {
       title: "In their own words",
       description:
-        "Researchers, keynote speakers and comms teams use Repurposer where the work has to hold up in print.",
+        "Researchers, lecturers and comms teams use Repurposer where the work has to hold up in print.",
       items: {
         t1: {
           quote: "My keynote used to die on the conference website. This year it became twelve LinkedIn posts, two essays and a newsletter. My dean asked who my new ghostwriter was.",
@@ -328,7 +330,7 @@ const en = {
     },
     faq: {
       title: "Questions, answered",
-      description: "The things speakers and institutions ask before the first upload.",
+      description: "The things experts and institutions ask before the first upload.",
       items: {
         q1: {
           q: "Where is my data stored?",
@@ -401,14 +403,14 @@ const en = {
     },
   },
   composer: {
-    speaker: "Speaker",
-    speakerDesc: "Whose writing style the AI imitates — auto-generated if unselected",
+    persona: "Persona",
+    personaDesc: "Whose writing style the AI imitates — auto-generated if unselected",
     autoGenerate: "Auto",
     assets: "Assets",
     optional: "Optional",
     assetsCount: "{{count}} files",
-    speakerPickerTitle: "Choose speaker",
-    speakerAutoDesc: "Build or match a persona from this upload",
+    personaPickerTitle: "Choose persona",
+    personaAutoDesc: "Build or match a persona from this upload",
     voiceBound: "Voice cloned",
     voiceMissing: "No voice clone",
     assetsModalTitle: "Add assets",
@@ -421,7 +423,7 @@ const en = {
     aiModelRowVoice: "Voice & dubbing",
     aiModelRowVisual: "Image & music",
     uploadFailed: "Upload failed — please try again",
-    manageSpeakers: "Manage speakers…",
+    managePersonas: "Manage personas…",
     brandLabel: "Brand template",
     brandDesc: "Colors, fonts, and logo baked into every output",
     brandDefault: "Default brand",
@@ -459,28 +461,52 @@ const en = {
       demo_transcript: "Talk transcript",
       dub_preview: "Dubbed preview (DE)",
       image_video_preview: "Slideshow preview",
+      dub_en: "Original (EN)",
+      dub_zh: "Chinese dub",
+      dub_fr: "French dub",
+      dub_es: "Spanish dub",
+    },
+    // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
+    // right = inspect tabs; left = the launch zone (composer's send
+    // mechanism parked inside). The prefilled prompt IS the visible
+    // preset — no picker controls, no mirror chips.
+    inspect: {
+      tabs: {
+        examples: "Examples",
+        flow: "Flow",
+      },
+      sections: {
+        outputs: "What you get",
+        inputs: "Source material",
+      },
+      promptLabel: "Tell it what you want",
+      send: "Generate",
     },
     dub: {
       title: "Multilingual dub",
-      promise: "Your talk, your voice — speaking German, French and Spanish.",
+      promise: "Your talk, your voice — speaking Chinese, French and Spanish.",
+      uploadCta: "Upload your video",
       promptTemplate:
-        "Cut highlight clips from my talk and dub them into German, French and Spanish with my voice.",
+        "Cut highlight clips from my talk and dub them into Chinese, French and Spanish with my voice.",
     },
     "image-video": {
       title: "Photos to video",
       promise: "No footage — photos plus your script become a captioned video with music.",
+      uploadCta: "Upload your script and photos",
       promptTemplate:
         "Turn my script and photos into short clips with captions and music.",
     },
     reframe: {
       title: "Interview reframe",
       promise: "Landscape two-person talk, recut vertical — camera follows the speaker.",
+      uploadCta: "Upload your interview video",
       promptTemplate:
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
     },
     "ai-visuals": {
       title: "Virtual scenes",
       promise: "No footage, no photos — every scene is AI-generated for your talk.",
+      uploadCta: "Upload your script",
       promptTemplate:
         "Turn my talk into a short video with AI-generated scenes.",
     },
@@ -501,12 +527,15 @@ const en = {
       document: "Document",
     },
     input: {
-      video: "Needs a video",
-      audio: "Needs audio",
-      images: "Needs photos",
-      slides: "Needs slides",
-      transcript: "Needs a transcript",
+      video: "a video",
+      audio: "an audio file",
+      images: "a few photos",
+      slides: "slides",
+      transcript: "a transcript",
     },
+    // Lead-in composing the slot nouns into one service-minded line (mention
+    // picker hint + the overlay dropzone's subtitle).
+    inputLead: "All it takes is {{slots}}",
   },
   projects: {
     title: "Projects",
@@ -514,13 +543,13 @@ const en = {
     searchPlaceholder: "Search projects...",
     new: "New Project",
     dialogTitle: "New Project",
-    dialogDesc: "Pick a speaker and enter project info to start turning what you already have into reusable content.",
+    dialogDesc: "Pick a persona and enter project info to start turning what you already have into reusable content.",
     labelTitle: "Title",
     titlePlaceholder: "e.g. AI Safety Governance Framework — EU Compliance Perspective",
     labelEvent: "Event name (optional)",
     eventPlaceholder: "e.g. 2026 Europe AI Governance Summit",
-    labelSpeaker: "Speaker",
-    speakerPlaceholder: "Select a speaker",
+    labelPersona: "Persona",
+    personaPlaceholder: "Select a persona",
     labelLanguage: "Source language",
     langZh: "Chinese",
     langEn: "English",
@@ -539,24 +568,24 @@ const en = {
     renamePlaceholder: "Project name",
     deleteDesc: "\"{{title}}\" and all its clips, posts and conversations will be permanently deleted.",
   },
-  speakers: {
-    title: "Speakers",
-    subtitle: "Manage speakers and their style personas",
-    new: "Create Speaker",
-    dialogTitle: "Create Speaker",
-    dialogDesc: "Add a speaker, then upload assets to generate a style persona.",
+  personas: {
+    title: "Personas",
+    subtitle: "Manage personas and their style profiles",
+    new: "Create Persona",
+    dialogTitle: "Create Persona",
+    dialogDesc: "Add a persona, then upload assets to generate a style profile.",
     labelName: "Name",
     labelTitle: "Title",
-    emptyTitle: "No speakers yet",
-    emptyDesc: "Create your first speaker and upload past assets to build a style persona.",
+    emptyTitle: "No personas yet",
+    emptyDesc: "Create your first persona and upload past assets to build a style profile.",
     noTitle: "No title set",
     language: "Language: {{lang}}",
   },
-  speakerDetail: {
-    tabPersona: "Style Persona",
+  personaDetail: {
+    tabPersona: "Style Profile",
     tabMaterials: "Assets ({{count}})",
-    personaTitle: "Style Persona",
-    personaDesc: "Speaker style persona used to guide AI content generation",
+    personaTitle: "Style Profile",
+    personaDesc: "The persona's style profile, used to guide AI content generation",
     generate: "Generate from Assets",
     generating: "Generating...",
     saveChanges: "Save Changes",
@@ -583,8 +612,8 @@ const en = {
     charsExtracted: "{{count}} chars extracted",
     noText: "No text extracted",
     uploadedAt: "Uploaded {{date}}",
-    notFound: "Speaker not found",
-    msgUpdated: "Speaker updated",
+    notFound: "Persona not found",
+    msgUpdated: "Persona updated",
     msgGenerated: "Persona generated successfully",
     msgUploaded: "Asset uploaded",
     msgDeleted: "Asset deleted",
@@ -595,7 +624,7 @@ const en = {
     renamePlaceholder: "Asset name",
     uploading: "Uploading...",
     contentStrategyTitle: "Content Strategy",
-    contentStrategyDesc: "How this speaker sounds and who they speak to",
+    contentStrategyDesc: "How this persona sounds and who they speak to",
     voice: "Voice",
     voicePlaceholder: "e.g. professional but warm",
     audience: "Target audience",
@@ -608,7 +637,6 @@ const en = {
   projectDetail: {
     back: "Back",
     status: "Status",
-    speaker: "Speaker",
     persona: "Persona",
     notGenerated: "Not generated",
     unknown: "Unknown",
@@ -918,7 +946,7 @@ const en = {
     },
     stepKinds: {
       preprocess: "Analyzing your uploads…",
-      persona_bootstrap: "Preparing your speaker profile…",
+      persona_bootstrap: "Preparing your persona…",
       director_understand: "Understanding your material…",
       checkpoint: "Waiting for your direction…",
       director_plan: "Planning the content…",
@@ -1006,8 +1034,8 @@ const en = {
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",
-    identityEcho: "Style: {{speaker}} · Brand: {{brand}}",
-    identitySpeakerAuto: "auto-generated",
+    identityEcho: "Style: {{persona}} · Brand: {{brand}}",
+    identityPersonaAuto: "auto-generated",
     identityBrandDefault: "default template",
     addOutput: "Add output",
     removeSlot: "Remove this output",
@@ -1097,8 +1125,8 @@ const en = {
       assetsTitle: "Upload your material",
       assetsDesc:
         "A recording, audio, photos or a transcript — whatever you have. Or skip this and just write your idea below.",
-      speakerTitle: "Whose style and voice",
-      speakerDesc:
+      personaTitle: "Whose style and voice",
+      personaDesc:
         "When we don't have enough material, what style should we use for writing and speaking? Generally, there's no need to make changes; the “auto” feature will automatically generate content based on your material.",
       promptTitle: "Say what you want",
       promptDesc:

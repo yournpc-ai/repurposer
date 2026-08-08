@@ -61,7 +61,7 @@ class AddMusicParams(BaseModel):
 
 
 class DubClipParams(BaseModel):
-    voice: str | None = Field(default=None, description="Voice-clone id; null = the speaker's own cloned voice")
+    voice: str | None = Field(default=None, description="Voice-clone id; null = the persona's own cloned voice")
     target_output_id: str | None = Field(default=None, description="Dub only this one output (uuid); null = all clips in scope")
     target_language: str = Field(default="en", description="ISO code of the language to dub into")
     # agent-loop-upgrade W5: mode② spec = params.model_dump() carries this
@@ -108,7 +108,7 @@ class SkillEntry(BaseModel):
     node_kind: str
     needs_director: bool = False
     after: tuple[str, ...] = ()
-    requires: tuple[str, ...] = ()  # "media"/"transcript"/"speaker_photo"/"voiceprint"
+    requires: tuple[str, ...] = ()  # "media"/"transcript"/"persona_photo"/"voiceprint"
     produces_outputs: bool = False
     retries: int = 0  # Mastra step-level retry seat; generic retry lands with provider skills
 
@@ -191,7 +191,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
         ),
         SkillEntry(
             name="dub_clip",
-            description="Dub existing clips with the speaker's cloned voice into a target language, then re-render",
+            description="Dub existing clips with the persona's cloned voice into a target language, then re-render",
             kind="skill",
             behavior="probabilistic",
             params_model=DubClipParams,
@@ -254,7 +254,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
         ),
         SkillEntry(
             name="synthesize_talk_video",
-            description="Synthesize a talking-head video from transcript + speaker photo + voiceprint",
+            description="Synthesize a talking-head video from transcript + persona photo + voiceprint",
             kind="skill",
             behavior="probabilistic",
             params_model=SynthesizeTalkVideoParams,
@@ -262,7 +262,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             cost_hint="expensive",
             runner=None,  # seat: virtual chain lands with docs/tasks/synthetic-talk-video.md
             node_kind="synth_talk_video",
-            requires=("transcript", "speaker_photo", "voiceprint"),
+            requires=("transcript", "persona_photo", "voiceprint"),
             produces_outputs=True,
         ),
     ]

@@ -27,8 +27,8 @@ from app.models.tables import (
     Message,
     Output,
     WorkflowStep,
+    Persona,
     Project,
-    Speaker,
     User,
     WorkflowRun,
 )
@@ -58,18 +58,18 @@ async def create_project(
     current_user: User = Depends(get_current_user_required),
 ) -> Project:
     """Create a new project."""
-    if data.speaker_id:
-        speaker_result = await db.execute(
-            select(Speaker).where(
-                Speaker.id == data.speaker_id,
-                Speaker.user_id == current_user.id,
+    if data.persona_id:
+        persona_result = await db.execute(
+            select(Persona).where(
+                Persona.id == data.persona_id,
+                Persona.user_id == current_user.id,
             )
         )
-        speaker = speaker_result.scalar_one_or_none()
-        if not speaker:
+        persona = persona_result.scalar_one_or_none()
+        if not persona:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Speaker not found",
+                detail="Persona not found",
             )
 
     project = Project(**data.model_dump(), user_id=current_user.id)
@@ -83,7 +83,7 @@ async def create_project(
 async def list_projects(
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-    speaker_id: UUID | None = None,
+    persona_id: UUID | None = None,
     skip: int = 0,
     limit: int = 100,
 ) -> list[ProjectResponse]:
@@ -127,8 +127,8 @@ async def list_projects(
         .where(Project.user_id == current_user.id)
         .where(or_(has_messages, has_runs))
     )
-    if speaker_id:
-        query = query.where(Project.speaker_id == speaker_id)
+    if persona_id:
+        query = query.where(Project.persona_id == persona_id)
     query = (
         query.order_by(Project.updated_at.desc().nulls_last())
         .offset(skip)

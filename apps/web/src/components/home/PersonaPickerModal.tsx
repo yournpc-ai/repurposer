@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-/** The speaker shape this picker reads. The API already returns all of these
- * (SpeakerContext); the composer previously typed it down to {id, name}. */
-export interface SpeakerPickerEntry {
+/** The persona shape this picker reads. The API already returns all of these
+ * (PersonaContext); the composer previously typed it down to {id, name}. */
+export interface PersonaPickerEntry {
   id: string
   name: string
   title?: string | null
@@ -28,9 +28,9 @@ export interface SpeakerPickerEntry {
   voice?: string | null
 }
 
-interface SpeakerPickerModalProps {
-  speakers: SpeakerPickerEntry[]
-  /** Current selection: a speaker id, or `autoValue` for auto-generate. */
+interface PersonaPickerModalProps {
+  personas: PersonaPickerEntry[]
+  /** Current selection: a persona id, or `autoValue` for auto-generate. */
   value: string
   autoValue: string
   onSelect: (id: string) => void
@@ -39,30 +39,30 @@ interface SpeakerPickerModalProps {
 }
 
 /** Style one-liner: sentence style + tone + up to two core values. */
-function useStyleTags(speaker: SpeakerPickerEntry): string {
+function useStyleTags(persona: PersonaPickerEntry): string {
   const { t } = useTranslation()
   const parts: string[] = []
-  if (speaker.sentence_style) parts.push(speaker.sentence_style)
-  if (speaker.emotional_tone) {
-    parts.push(t(`speakerDetail.tones.${speaker.emotional_tone}`))
+  if (persona.sentence_style) parts.push(persona.sentence_style)
+  if (persona.emotional_tone) {
+    parts.push(t(`personaDetail.tones.${persona.emotional_tone}`))
   }
-  for (const value of speaker.core_values ?? []) {
+  for (const value of persona.core_values ?? []) {
     if (parts.length >= 3) break
     parts.push(value)
   }
   return parts.join(" · ")
 }
 
-/** Rich single-select picker for the Speaker dimension. This is a picker, not
- * an editor — persona editing lives on the /speakers pages. */
-export function SpeakerPickerModal({
-  speakers,
+/** Rich single-select picker for the Persona dimension. This is a picker, not
+ * an editor — persona editing lives on the /personas pages. */
+export function PersonaPickerModal({
+  personas,
   value,
   autoValue,
   onSelect,
   open,
   onOpenChange,
-}: SpeakerPickerModalProps) {
+}: PersonaPickerModalProps) {
   const { t } = useTranslation()
 
   const pick = (id: string) => {
@@ -74,13 +74,13 @@ export function SpeakerPickerModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("composer.speakerPickerTitle")}</DialogTitle>
-          <DialogDescription>{t("composer.speakerDesc")}</DialogDescription>
+          <DialogTitle>{t("composer.personaPickerTitle")}</DialogTitle>
+          <DialogDescription>{t("composer.personaDesc")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto">
           {/* Auto-generate: the default — never fall back to a concrete
-              speaker entry; the user picks one explicitly. */}
+              persona entry; the user picks one explicitly. */}
           <button
             type="button"
             onClick={() => pick(autoValue)}
@@ -95,29 +95,29 @@ export function SpeakerPickerModal({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">{t("composer.autoGenerate")}</span>
               <span className="block truncate text-xs text-muted-foreground">
-                {t("composer.speakerAutoDesc")}
+                {t("composer.personaAutoDesc")}
               </span>
             </span>
             {value === autoValue && <Check className="h-4 w-4 flex-shrink-0" />}
           </button>
 
-          {speakers.map((speaker) => (
-            <SpeakerRow
-              key={speaker.id}
-              speaker={speaker}
-              selected={speaker.id === value}
-              onPick={() => pick(speaker.id)}
+          {personas.map((persona) => (
+            <PersonaRow
+              key={persona.id}
+              persona={persona}
+              selected={persona.id === value}
+              onPick={() => pick(persona.id)}
             />
           ))}
         </div>
 
         <div className="flex justify-end pt-1">
           <Link
-            to="/speakers"
+            to="/personas"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <Users className="h-3.5 w-3.5" />
-            {t("composer.manageSpeakers")}
+            {t("composer.managePersonas")}
           </Link>
         </div>
       </DialogContent>
@@ -125,17 +125,17 @@ export function SpeakerPickerModal({
   )
 }
 
-function SpeakerRow({
-  speaker,
+function PersonaRow({
+  persona,
   selected,
   onPick,
 }: {
-  speaker: SpeakerPickerEntry
+  persona: PersonaPickerEntry
   selected: boolean
   onPick: () => void
 }) {
   const { t } = useTranslation()
-  const tags = useStyleTags(speaker)
+  const tags = useStyleTags(persona)
 
   return (
     <button
@@ -147,14 +147,14 @@ function SpeakerRow({
       )}
     >
       <Avatar className="h-9 w-9">
-        {speaker.avatar_url ? <AvatarImage src={speaker.avatar_url} alt={speaker.name} /> : null}
-        <AvatarFallback>{speaker.name.slice(0, 1)}</AvatarFallback>
+        {persona.avatar_url ? <AvatarImage src={persona.avatar_url} alt={persona.name} /> : null}
+        <AvatarFallback>{persona.name.slice(0, 1)}</AvatarFallback>
       </Avatar>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">
-          {speaker.name}
-          {speaker.title ? (
-            <span className="text-muted-foreground"> · {speaker.title}</span>
+          {persona.name}
+          {persona.title ? (
+            <span className="text-muted-foreground"> · {persona.title}</span>
           ) : null}
         </span>
         {tags ? (
@@ -162,7 +162,7 @@ function SpeakerRow({
         ) : null}
         <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
           <Mic2 className="h-3 w-3" />
-          {speaker.voice ? t("composer.voiceBound") : t("composer.voiceMissing")}
+          {persona.voice ? t("composer.voiceBound") : t("composer.voiceMissing")}
         </span>
       </span>
       {selected && <Check className="h-4 w-4 flex-shrink-0" />}

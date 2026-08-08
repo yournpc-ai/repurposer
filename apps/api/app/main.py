@@ -17,17 +17,17 @@ from app.models.database import AsyncSessionLocal, init_db
 from app.chat.routes import chat_router
 from app.distribution.routes import router as distribution_router
 from app.memory.brand import seed_default_brand_template
-from app.memory.routes import brand_templates_router, speakers_router
+from app.memory.routes import brand_templates_router, personas_router
 from app.pipeline.music import seed_default_music
 from app.pipeline.registry import assert_runners_registered
 from app.pipeline.routes import (
     assets,
     music,
     outputs,
+    persona_assets,
     projects,
     recipes,
     runs,
-    speaker_assets,
 )
 from app.platform.routes import auth_router, files_router, notifications_router
 from app.operations.routes import router as operations_router
@@ -209,12 +209,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(speakers_router, prefix="/api/v1/speakers", tags=["speakers"])
+app.include_router(personas_router, prefix="/api/v1/personas", tags=["personas"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(runs, prefix="/api/v1/runs", tags=["runs"])
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
-app.include_router(speaker_assets, prefix="/api/v1/speakers", tags=["speaker-assets"])
+app.include_router(persona_assets, prefix="/api/v1/personas", tags=["persona-assets"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])

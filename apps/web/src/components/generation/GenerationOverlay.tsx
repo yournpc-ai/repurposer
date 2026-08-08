@@ -621,9 +621,9 @@ export function GenerationOverlay({
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
-  // Identity echo line (speaker voice + brand skin) — resolved once.
-  const [identity, setIdentity] = useState<{ speaker: string | null; brand: string | null }>({
-    speaker: null,
+  // Identity echo line (persona voice + brand skin) — resolved once.
+  const [identity, setIdentity] = useState<{ persona: string | null; brand: string | null }>({
+    persona: null,
     brand: null,
   })
 
@@ -827,7 +827,7 @@ export function GenerationOverlay({
     void fetchAssets()
   }, [fetchAssets])
 
-  // Identity echo: resolve the speaker / brand names behind the ids once —
+  // Identity echo: resolve the persona / brand names behind the ids once —
   // a read-only reassurance line, never a question (ask primitive §2.1).
   useEffect(() => {
     let cancelled = false
@@ -835,22 +835,22 @@ export function GenerationOverlay({
       apiFetch(`/api/v1/projects/${projectId}`, { toast: false })
         .then((res) => (res.ok ? res.json() : null))
         .catch(() => null),
-      apiFetch("/api/v1/speakers", { toast: false })
+      apiFetch("/api/v1/personas", { toast: false })
         .then((res) => (res.ok ? res.json() : []))
         .catch(() => []),
       apiFetch("/api/v1/brand-templates", { toast: false })
         .then((res) => (res.ok ? res.json() : []))
         .catch(() => []),
-    ]).then(([project, speakers, brands]) => {
+    ]).then(([project, personas, brands]) => {
       if (cancelled) return
-      const speaker =
-        (speakers as { id: string; name: string }[]).find(
-          (s) => s.id === (project as { speaker_id?: string } | null)?.speaker_id
+      const persona =
+        (personas as { id: string; name: string }[]).find(
+          (p) => p.id === (project as { persona_id?: string } | null)?.persona_id
         )?.name ?? null
       const brand =
         (brands as { id: string; name: string }[]).find((b) => b.id === brandTemplateId)
           ?.name ?? null
-      setIdentity({ speaker, brand })
+      setIdentity({ persona, brand })
     })
     return () => {
       cancelled = true
@@ -1619,9 +1619,9 @@ export function GenerationOverlay({
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Mic2 className="h-3.5 w-3.5" />
                 {t("generationOverlay.identityEcho", {
-                  speaker:
-                    identity.speaker ??
-                    t("generationOverlay.identitySpeakerAuto"),
+                  persona:
+                    identity.persona ??
+                    t("generationOverlay.identityPersonaAuto"),
                   brand:
                     identity.brand ??
                     t("generationOverlay.identityBrandDefault"),

@@ -41,7 +41,7 @@ class ClipAgent(MiniMaxAgentBase):
 
         Args:
             asset_texts: Extracted text / transcripts from project assets.
-            context: Shared generation context (speaker, brand, tone, language).
+            context: Shared generation context (persona, brand, tone, language).
             understanding: Material understanding from director step 1.
             storyboard: Storyboard from director step 2 (aggregate clips slot).
             asset_media: Optional images/videos/short audio snippets from assets.

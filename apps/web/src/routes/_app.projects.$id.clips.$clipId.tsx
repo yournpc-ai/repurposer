@@ -330,7 +330,7 @@ function ClipEditorPage() {
   }
 
   const dubClip = async (lang: string) => {
-    // Clones the speaker's voice from the project's audio/video and dubs the
+    // Clones the persona's voice from the project's audio/video and dubs the
     // (translated) captions into `lang`. Save pending edits first.
     if (!spec || dubbing) return
     if (dirty && !(await save())) return

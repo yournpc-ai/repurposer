@@ -1,6 +1,6 @@
 """MiniMax voice cloning + T2A speech synthesis (sync, for the dub endpoint).
 
-Clone the speaker's voice from an audio sample, then synthesize translated text
+Clone the persona's voice from an audio sample, then synthesize translated text
 in that voice. Sync httpx (the dub endpoint awaits it off the request like
 translate-captions). GDPR is set aside for the MVP per the product decision; a
 future EU-local MiniMax deployment handles residency.
@@ -71,8 +71,12 @@ def clone_voice(audio_path: Path) -> str | None:
         raise MiniMaxError(f"Voice clone failed: {e}") from e
 
 
-def synthesize(text: str, voice_id: str, language: str = "en") -> bytes:
-    """Synthesize ``text`` in the cloned ``voice_id`` -> MP3 bytes."""
+def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.0) -> bytes:
+    """Synthesize ``text`` in the cloned ``voice_id`` -> MP3 bytes.
+
+    ``speed`` is the provider's voice-level rate (MiniMax voice_setting.speed,
+    0.5–2.0) — the cue-aligned dub uses it for per-unit timing fit (no pitch
+    shift, unlike a resample)."""
     if not settings.minimax_api_key:
         raise MiniMaxError("MINIMAX_API_KEY not configured")
     payload = {
@@ -81,7 +85,7 @@ def synthesize(text: str, voice_id: str, language: str = "en") -> bytes:
         "stream": False,
         "language_boost": _LANG_BOOST.get(language, "auto"),
         "output_format": "hex",
-        "voice_setting": {"voice_id": voice_id, "speed": 1, "vol": 1, "pitch": 0},
+        "voice_setting": {"voice_id": voice_id, "speed": speed, "vol": 1, "pitch": 0},
         "audio_setting": {
             "sample_rate": 32000,
             "bitrate": 128000,

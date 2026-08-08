@@ -15,7 +15,7 @@ The backend generation pipeline is organized as a **4-layer agent architecture**
 ```
 ┌─────────────────────────────────────────────┐
 │ Layer 1: GenerationContext                  │
-│ (shared speaker / brand / tone / language)  │
+│ (shared persona / brand / tone / language)  │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
@@ -45,7 +45,7 @@ This design guarantees that every output is derived from the same **content plan
 ## 2. Goals
 
 - **Consistency**: clips, posts, quote cards, etc. should reinforce the same core thesis and brand voice.
-- **Single source of truth**: speaker memory, tone, and user instruction are assembled once and shared.
+- **Single source of truth**: persona memory, tone, and user instruction are assembled once and shared.
 - **Extensibility**: adding a new derivative type requires only a new executor agent and one registry entry.
 - **Parallel execution**: independent derivative agents run concurrently via `asyncio.gather`.
 - **Resilience**: a single output failure does not fail the whole run; it is retried once and then surfaced for manual retry.
@@ -56,7 +56,7 @@ This design guarantees that every output is derived from the same **content plan
 
 ```python
 class GenerationContext(BaseModel):
-    speaker: SpeakerContext | None
+    persona: PersonaContext | None
     event_name: str | None
     tone_settings: ToneSettings | None
     target_language: str
@@ -64,7 +64,7 @@ class GenerationContext(BaseModel):
     brand_music_id: str | None
 ```
 
-It is constructed in `app/services/generation.py` from the resolved `Speaker`, selected `BrandTemplate`, project metadata, and the user's generation request.
+It is assembled per run in `app/pipeline/node_runners.py` (`_generation_context`) from the resolved `Persona`, selected `BrandTemplate`, project metadata, and the user's generation request.
 
 ## 4. Layer 2: Content Director
 
@@ -170,7 +170,7 @@ Each prompt template receives `asset_texts`, `context`, and `content_plan`:
 - `app/prompts/article.j2`
 
 Prompts render:
-- Speaker identity and style memory from `context.speaker`
+- Persona identity and style memory from `context.persona`
 - Tone settings and user instruction from `context`
 - Brand music default from `context.brand_music_id`
 - Core thesis, themes, and target audience from `content_plan`
@@ -208,7 +208,7 @@ This file was previously `derivative_generation.py` and contained per-type param
 ### 7.1 Flow
 
 1. Collect source texts (`collect_asset_texts`) and media inputs (`collect_asset_media`).
-2. Resolve speaker (auto-create default memory if none selected), brand template, and tone settings.
+2. Resolve persona (auto-create default memory if none selected), brand template, and tone settings.
 3. Build `GenerationContext`.
 4. Map requested `outputs` to `DerivativeType`s.
 5. Call `content_director_agent.plan(...)` → `ContentPlan`, then persist to `Project.content_plan`.
@@ -244,7 +244,7 @@ Each output agent call is wrapped in `try/except` with **one automatic retry**. 
 
 During the planning phase, `WorkflowRun.current_step` uses three discrete values so the Result page can render a real stepper:
 
-- `"analyze"` — collecting source texts / media, resolving speaker and brand
+- `"analyze"` — collecting source texts / media, resolving persona and brand
 - `"plan"` — running the Content Director
 - `"prepare"` — plan persisted, clearing old outputs, about to generate
 
@@ -264,13 +264,13 @@ After planning, `current_step` switches to the active output key (`clips`, `post
 | `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
 | `Project` response | Includes `content_plan` |
 | `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
-| Speaker schema | Flattened: `persona` JSON replaced with direct columns (already landed) |
+| Persona schema | `speakers` → `personas` rename landed (ADR-037 cut 1); flat columns |
 
 ## 9. Non-content agents
 
 The following agents are **not** part of the 4-layer executor pipeline and remain unchanged:
 
-- `app/skills/persona.py` — extracts speaker style and content memory from source texts.
+- `app/skills/persona.py` — extracts persona style and content memory from source texts.
 - `app/skills/reviser.py` — revises a single clip script from human feedback.
 - `app/chat/intent.py` — two intent agents behind the single `/chat` surface (NAMING same-name audit, 2026-08-04): `PlanAgent` builds the generation task book (slots, language, dub languages, distilled instruction) from free-form text — invoked only by the chat service's **plan path** (first-turn projects and pending-task-book refinement turns; renamed from `ComposerIntentAgent`). `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article. `ChatIntentAgent` serves the chat loop (CHAT_ARCHITECTURE §3).
 - `app/skills/caption_translate.py` — translates caption lines.
@@ -360,8 +360,8 @@ Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单
 
 - **两个内部产物类型**：`material_understanding`（素材级：`overall_summary` / `core_thesis` / `key_arguments(id+text+position)` / `themes` / `target_audience` / `quote_candidates`，素材语言、金句逐字）与 `storyboard`（请求级：`slots` + `coverage`，target_language）。`content_plan` 类型退役（旧行仍被 `INTERNAL_OUTPUT_TYPES` 过滤隐藏）。
 - **拓扑**：full = `preprocess → persona_bootstrap ∥ director_understand → director_plan → executors`（persona 与 understand 互不依赖，并行）；定向 derivative = `[understand → plan(target_type) → X_gen]`；模式② prelude 同为四节点。
-- **asset-hash 复用**：`source_ref.asset_hash` = 理解精确输入的内容 hash（trimmed texts + asset 身份）；命中即复用旧行（节点成本 0，summary="Reused understanding…"）；语言/任务书/speaker 变更不使失效。
-- **纯度纪律**：understand prompt 禁注 speaker/tone/instruction/target_language；plan prompt 禁读原稿（自足契约——只吃 understanding + 任务书 + speaker 上下文）。
+- **asset-hash 复用**：`source_ref.asset_hash` = 理解精确输入的内容 hash（trimmed texts + asset 身份）；命中即复用旧行（节点成本 0，summary="Reused understanding…"）；语言/任务书/persona 变更不使失效。
+- **纯度纪律**：understand prompt 禁注 persona/tone/instruction/target_language；plan prompt 禁读原稿（自足契约——只吃 understanding + 任务书 + persona 上下文）。
 - **覆盖问责**：`storyboard.coverage` = 代码推导（论点→槽位 assignments / unused_arguments / collisions），落库 + 进 plan 节点量化摘要；是报告不是门禁（门禁归 Phase 3）。
 - **clips 槽位**：聚合一个槽（focus + argument_ids + count=任务书 clip_count），clip_agent 选段/编剧融合调用不动；逐 clip 论点→槽位归 Phase 2b 选段节点。
 - **executor 接口**：`generate(asset_texts, context, understanding, storyboard)`；缺槽位回退空槽（原 `_find_derivative_plan` 纪律，现 `_find_slot`）。

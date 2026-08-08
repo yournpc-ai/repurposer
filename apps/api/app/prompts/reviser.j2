@@ -11,15 +11,15 @@ You are a short-form video clip revision expert. The user has provided feedback 
 - Title Options: {{ title_options | join(' / ') }}
 - BGM Mood: {{ music_mood }}
 
-## Speaker Style Profile
+## Persona Style Profile
 
-{% if speaker %}
-- Core Values: {{ speaker.core_values | join(', ') }}
-- Preferred Metaphors: {{ speaker.favorite_metaphors | join(', ') }}
-- Sentence Style: {{ speaker.sentence_style }}
-- Emotional Tone: {{ speaker.emotional_tone }}
-- Typical Openings: {{ speaker.typical_hooks | join(' / ') }}
-- Words to Avoid: {{ speaker.avoid_words | join(', ') }}
+{% if persona %}
+- Core Values: {{ persona.core_values | join(', ') }}
+- Preferred Metaphors: {{ persona.favorite_metaphors | join(', ') }}
+- Sentence Style: {{ persona.sentence_style }}
+- Emotional Tone: {{ persona.emotional_tone }}
+- Typical Openings: {{ persona.typical_hooks | join(' / ') }}
+- Words to Avoid: {{ persona.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
@@ -39,7 +39,7 @@ Focus on revising the hook (first 3 seconds); keep the duration, titles, and mus
 {% elif feedback.scope == 'full_script' %}
 Reorganize the clip while preserving the core arguments and key information from the segment.
 {% elif feedback.scope == 'tone' %}
-Adjust the tone so it aligns more closely with the speaker's style profile.
+Adjust the tone so it aligns more closely with the persona's style profile.
 {% elif feedback.scope == 'translation' %}
 Retain the original meaning, but adjust the expression so it feels more natural.
 {% endif %}
@@ -47,8 +47,8 @@ Retain the original meaning, but adjust the expression so it feels more natural.
 Reason mapping:
 {% if feedback.reason == 'hook_not_catchy' %}
 - The hook must be more impactful; use rhetorical questions, conflict, numbers, or counter-intuitive points
-{% elif feedback.reason == 'not_like_speaker' %}
-- Use the speaker's typical sentence structures and metaphors; avoid unfamiliar phrasing
+{% elif feedback.reason == 'not_like_persona' %}
+- Use the persona's typical sentence structures and metaphors; avoid unfamiliar phrasing
 {% elif feedback.reason == 'too_complex' %}
 - Simplify the language, reduce jargon, and add analogies
 {% elif feedback.reason == 'too_simple' %}

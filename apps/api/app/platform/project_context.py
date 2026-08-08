@@ -5,7 +5,7 @@ derivative regeneration, and clip revision:
 
 - fetch a project and verify ownership
 - collect asset texts from a project's assets
-- resolve a project's speaker
+- resolve a project's persona
 - validate a clip for revision
 """
 
@@ -15,15 +15,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import Segment, SpeakerContext
-from app.models.tables import Asset, Output, Project, Speaker
+from app.models.schemas import Segment, PersonaContext
+from app.models.tables import Asset, Output, Persona, Project
 
 
-def speaker_context_from_row(speaker: Speaker | None) -> SpeakerContext | None:
-    """Build a SpeakerContext from a Speaker DB row."""
-    if speaker is None:
+def persona_context_from_row(persona: Persona | None) -> PersonaContext | None:
+    """Build a PersonaContext from a Persona DB row."""
+    if persona is None:
         return None
-    return SpeakerContext.model_validate(speaker)
+    return PersonaContext.model_validate(persona)
 
 
 async def get_project_for_user(
@@ -71,23 +71,23 @@ async def collect_asset_texts(
     ]
 
 
-async def resolve_speaker(
+async def resolve_persona(
     db: AsyncSession,
     project: Project,
     require_user: bool = False,
-) -> Speaker | None:
-    """Resolve a project's speaker.
+) -> Persona | None:
+    """Resolve a project's persona.
 
-    Returns ``None`` when the project has no speaker. The optional
-    ``require_user`` flag adds a ``Speaker.user_id`` filter to match the
-    stricter lookup used during auto-speaker creation.
+    Returns ``None`` when the project has no persona. The optional
+    ``require_user`` flag adds a ``Persona.user_id`` filter to match the
+    stricter lookup used during auto-persona creation.
     """
-    if not project.speaker_id:
+    if not project.persona_id:
         return None
 
-    query = select(Speaker).where(Speaker.id == project.speaker_id)
+    query = select(Persona).where(Persona.id == project.persona_id)
     if require_user:
-        query = query.where(Speaker.user_id == project.user_id)
+        query = query.where(Persona.user_id == project.user_id)
 
     result = await db.execute(query)
     return result.scalar_one_or_none()

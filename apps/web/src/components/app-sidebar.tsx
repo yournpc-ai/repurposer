@@ -49,7 +49,7 @@ const navItems = [
   { key: "home", url: "/home", icon: Home },
   { key: "myProjects", url: "/projects", icon: FolderKanban },
   { key: "brandTemplate", url: "/brand-template", icon: Palette },
-  { key: "speakers", url: "/speakers", icon: Mic2 },
+  { key: "personas", url: "/personas", icon: Mic2 },
 ]
 
 const accountItems = [

@@ -172,7 +172,7 @@ def language_match(text: str, target: str) -> CheckResult:
 
 
 def avoid_words(text: str, avoid: list[str] | None) -> CheckResult:
-    """Zero substring hits against the speaker's avoid list (normalized)."""
+    """Zero substring hits against the persona's avoid list (normalized)."""
     if not avoid:
         return CheckResult("avoid_words", True, "no avoid list configured")
     haystack = _normalize(text)

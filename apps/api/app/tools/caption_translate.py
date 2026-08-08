@@ -50,13 +50,34 @@ def _redistribute(
     return cues
 
 
+async def translate_text(
+    text: str,
+    target_language: str,
+    style_hint: str | None = None,
+) -> str:
+    """Translate one free-standing string (e.g. the clip title card) — the
+    same line-by-line agent, reused with a single line (2026-08-09: a dubbed
+    clip with an untranslated title card reads broken; found via the dub
+    contrast pack showing the EN title on all four videos)."""
+    text = text.strip()
+    if not text:
+        return ""
+    translated = await caption_translate_agent.translate(
+        [text], target_language, style_hint=style_hint
+    )
+    return translated[0].strip() if translated else ""
+
+
 async def translate_caption_track(
-    cues: list[dict[str, Any]], target_language: str
+    cues: list[dict[str, Any]],
+    target_language: str,
+    style_hint: str | None = None,
 ) -> list[dict[str, Any]]:
     """Translate a word-level caption track into ``target_language``.
 
     Returns a new word-level track (same shape as the input cues). Raises
-    ``MiniMaxError`` if the LLM call fails.
+    ``MiniMaxError`` if the LLM call fails. ``style_hint`` = persona register
+    injection (dub 生产级, 2026-08-07).
     """
     if not cues:
         return []
@@ -64,7 +85,9 @@ async def translate_caption_track(
     units = _group_units(cues)
     unit_texts = [" ".join(str(c["text"]).strip() for c in unit) for unit in units]
 
-    translated = await caption_translate_agent.translate(unit_texts, target_language)
+    translated = await caption_translate_agent.translate(
+        unit_texts, target_language, style_hint=style_hint
+    )
 
     out: list[dict[str, Any]] = []
     for unit, text in zip(units, translated, strict=False):

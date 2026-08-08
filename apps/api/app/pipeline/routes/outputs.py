@@ -31,8 +31,8 @@ from app.operations.service import apply_precomputed
 from app.pipeline.node_runners import generate_clip_cover_image
 from app.platform.project_context import (
     resolve_clip_for_revision,
-    resolve_speaker,
-    speaker_context_from_row,
+    persona_context_from_row,
+    resolve_persona,
 )
 from app.tools.dubbing import synthesize_dub
 from app.pipeline.errors import TransientNodeError
@@ -156,7 +156,7 @@ async def revise_output(
             detail=str(e),
         ) from e
 
-    speaker = await resolve_speaker(db, project)
+    persona = await resolve_persona(db, project)
     payload = output.payload or {}
 
     try:
@@ -167,7 +167,7 @@ async def revise_output(
             clip_music_mood=payload.get("music_mood", "calm"),
             segment=source_segment,
             feedback=feedback,
-            speaker=speaker_context_from_row(speaker),
+            persona=persona_context_from_row(persona),
         )
     except MiniMaxError as e:
         await db.rollback()
@@ -326,7 +326,7 @@ async def dub_output(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
-    """Voice-clone dub the clip into ``target_language`` (speaker's own voice).
+    """Voice-clone dub the clip into ``target_language`` (the persona's own voice).
 
     Pipeline lives in ``tools/dubbing.py`` (shared with the dub_clip run
     runner); the endpoint additionally journals the operation (ADR-032).

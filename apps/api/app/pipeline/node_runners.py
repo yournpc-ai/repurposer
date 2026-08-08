@@ -69,8 +69,8 @@ from app.models.tables import (
     Music,
     Output,
     WorkflowStep,
+    Persona,
     Project,
-    Speaker,
     WorkflowRun,
 )
 from app.memory.brand import (
@@ -82,8 +82,8 @@ from app.pipeline.clip_spec import build_clip_spec, remove_range
 from app.pipeline.derivative_dispatch import generate_derivative
 from app.platform.project_context import (
     collect_asset_texts,
-    resolve_speaker,
-    speaker_context_from_row,
+    persona_context_from_row,
+    resolve_persona,
 )
 from app.tools.caption_translate import translate_caption_track
 from app.tools.dubbing import synthesize_dub
@@ -474,7 +474,7 @@ async def _list_assets(db: AsyncSession, project_id: UUID) -> list[Asset]:
 def _generation_context(
     run: WorkflowRun,
     project: Project,
-    speaker: Speaker | None,
+    persona: Persona | None,
     *,
     brand_music_id: str | None = None,
 ) -> GenerationContext:
@@ -482,7 +482,7 @@ def _generation_context(
     ctx = run.context or {}
     tone_raw = ctx.get("tone_settings")
     return GenerationContext(
-        speaker=speaker_context_from_row(speaker),
+        persona=persona_context_from_row(persona),
         event_name=project.event_name,
         tone_settings=ToneSettings.model_validate(tone_raw) if tone_raw else None,
         target_language=ctx.get("target_language", "en"),
@@ -666,13 +666,13 @@ async def run_preprocess(
 async def run_persona_bootstrap(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
-    """Return the project's speaker, or auto-create one from source texts.
+    """Return the project's persona, or auto-create one from source texts.
 
     Moved verbatim out of run_generation: the homepage no longer forces the
-    user to pick/create a speaker, so the first run derives a default persona
+    user to pick/create a persona, so the first run derives a default persona
     from the transcript. Now addressable + metered as its own node.
     """
-    if project.speaker_id:
+    if project.persona_id:
         return []
 
     asset_texts = await collect_asset_texts(db, project.id)
@@ -682,24 +682,24 @@ async def run_persona_bootstrap(
 
     try:
         memory = await persona_agent.generate(
-            speaker_name=project.title or "Speaker",
-            speaker_title=None,
+            persona_name=project.title or "Persona",
+            persona_title=None,
             language=project.language or "en",
             asset_texts=trimmed,
         )
     except Exception as e:  # noqa: BLE001 — persona bootstrap never fails the run
         logger.warning(
-            "auto_speaker_extraction_failed",
+            "auto_persona_extraction_failed",
             project_id=str(project.id),
             error=str(e),
         )
         return []
 
-    speaker = Speaker(
+    persona = Persona(
         user_id=project.user_id,
         # LLM-synthesized persona label — project.title is the first uploaded
         # file's name (see HomeComposer), which must not become the persona name.
-        name=_truncate(memory.name, 255) or project.title or "Auto Speaker",
+        name=_truncate(memory.name, 255) or project.title or "Auto Persona",
         title=None,
         language=project.language or "en",
         core_values=memory.core_values or [],
@@ -713,16 +713,16 @@ async def run_persona_bootstrap(
         guidelines=memory.guidelines,
         cta=_truncate(memory.cta, 512),
     )
-    db.add(speaker)
+    db.add(persona)
     await db.flush()
 
-    project.speaker_id = speaker.id
+    project.persona_id = persona.id
     await db.flush()
 
     logger.info(
-        "auto_created_speaker",
+        "auto_created_persona",
         project_id=str(project.id),
-        speaker_id=str(speaker.id),
+        persona_id=str(persona.id),
     )
     return []
 
@@ -971,7 +971,7 @@ async def run_director_plan(
     """Director step 2: request-scoped storyboard, re-planned every run.
 
     Reads ONLY the upstream understanding (self-sufficiency contract) plus the
-    task book and speaker/tone context; coverage accountability is computed by
+    task book and persona/tone context; coverage accountability is computed by
     code and persisted with the storyboard. The task book is passed slot by
     slot (per-slot count/focus/language); explicit slot fields are enforced
     by code after the LLM returns.
@@ -1000,8 +1000,8 @@ async def run_director_plan(
     if direction:
         task_book["direction"] = direction
 
-    speaker = await resolve_speaker(db, project)
-    generation_context = _generation_context(run, project, speaker)
+    persona = await resolve_persona(db, project)
+    generation_context = _generation_context(run, project, persona)
 
     storyboard = await content_director_agent.plan(
         understanding=understanding,
@@ -1050,10 +1050,10 @@ async def run_clips_pipeline(
 
     asset_texts = await collect_asset_texts(db, project.id)
     assets = await _list_assets(db, project.id)
-    speaker = await resolve_speaker(db, project)
+    persona = await resolve_persona(db, project)
     bt, brand_music_id = await _resolve_brand(db, run, project)
     generation_context = _generation_context(
-        run, project, speaker, brand_music_id=brand_music_id
+        run, project, persona, brand_music_id=brand_music_id
     )
     generation_context.target_language = target_language
     understanding, storyboard = await _load_director_outputs(db, node)
@@ -1363,8 +1363,8 @@ async def run_derivative_gen(
     await _set_stage(node.id, "writing_copy")
 
     asset_texts = await collect_asset_texts(db, project.id)
-    speaker = await resolve_speaker(db, project)
-    generation_context = _generation_context(run, project, speaker)
+    persona = await resolve_persona(db, project)
+    generation_context = _generation_context(run, project, persona)
     generation_context.target_language = target_language
     understanding, storyboard = await _load_director_outputs(db, node)
 
@@ -1468,7 +1468,7 @@ async def run_script_revision(
         raise ValueError("Clip has no source segment to revise from")
 
     segment = Segment.model_validate(output.source_ref["segment"])
-    speaker = await resolve_speaker(db, project)
+    persona = await resolve_persona(db, project)
     payload = ClipPayload.model_validate(output.payload)
 
     revised = await reviser_agent.revise_by_instruction(
@@ -1478,7 +1478,7 @@ async def run_script_revision(
         clip_music_mood=payload.music_mood,
         segment=segment,
         instruction=node.spec.get("instruction") or "Improve this clip",
-        speaker=speaker_context_from_row(speaker),
+        persona=persona_context_from_row(persona),
         scope=node.spec.get("scope", "clip"),
     )
     output.payload = ClipPayload(
@@ -1733,7 +1733,7 @@ async def run_add_music(
     # default → "calm"; each unresolvable ref falls through to the next. Only
     # a fully unresolvable chain fails the step (CHAT_ARCH §10: clear error).
     brand_default: Any = None
-    if not music_id and not mood and project.speaker_id is not None:
+    if not music_id and not mood and project.persona_id is not None:
         bt = (
             await db.execute(
                 select(BrandTemplate).where(BrandTemplate.user_id == project.user_id)
@@ -1863,7 +1863,7 @@ async def run_translate_clip(
 async def run_dub_clip(
     db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
 ) -> list[UUID]:
-    """Dub existing clips with the speaker's cloned voice (tools/dubbing.py),
+    """Dub existing clips with the persona's cloned voice (tools/dubbing.py),
     then re-render (modifier step).
 
     Two uses ride the same mechanism (N-19 — the use lives in the spec):

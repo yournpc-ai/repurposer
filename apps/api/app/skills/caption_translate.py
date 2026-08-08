@@ -27,18 +27,29 @@ class CaptionTranslateAgent:
     def __init__(self, client: MiniMaxClient | None = None) -> None:
         self.client = client or MiniMaxClient()
 
-    async def translate(self, lines: list[str], target_language: str) -> list[str]:
+    async def translate(
+        self,
+        lines: list[str],
+        target_language: str,
+        style_hint: str | None = None,
+    ) -> list[str]:
         """Translate ``lines`` into ``target_language``, preserving count & order.
 
         Returns a list the same length as ``lines``. If the model returns a
         mismatched count, it is padded/truncated so the caller's 1:1 timing
         mapping stays valid (never raises on length drift).
+
+        ``style_hint`` (optional) carries the persona's register
+        (sentence style / tone / avoid-words) so translated captions read
+        like the persona, not like a machine (2026-08-07, dub 生产级).
         """
         if not lines:
             return []
 
         template = _jinja_env.get_template("caption_translate.j2")
-        user_prompt = template.render(lines=lines, target_language=target_language)
+        user_prompt = template.render(
+            lines=lines, target_language=target_language, style_hint=style_hint
+        )
 
         messages = [
             {

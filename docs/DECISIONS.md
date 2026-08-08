@@ -838,3 +838,80 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 翻译失败 = ask 反问成为硬契约：意图识别覆盖率不足时永远多问一句，永不亮图兜底。
 
 **Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/tasks/results-workspace.md`（六屏形态 / 精修闭环 D8-D9）；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
+
+## ADR-036: Flow 基座——只读图渲染扶正为共享能力，run 进度图升正排产（拆分修订 ADR-035 第 3 条）
+
+**Status**: Decided (2026-08-07)
+
+**Context**: ADR-035 三切次日，dub 载体链的两个事实浮出：① 配方检视 overlay 首版实现把扇出数据包（1 源 → EN/ZH/FR/ES 四片对照包）渲成 tabs + 手风琴——图结构的信息被线性容器物理消灭（四条语言版本同一时刻只能见一条）；② 单 run 的 DAG 拓扑在 `compile_graph` 后固定、run 期间只有状态迁移——ADR-035 第 3 条所指"运行期活图"里真正有布局风险的不是 run 图（死图 + 状态动画），而是跨周增长的项目全史血缘；两者并为一件 spike 颗粒度过粗。用户拍板原话（2026-08-07）：**"这一期先只暴露只读图，但该连线的连线、该有的节点是节点；只能通过 chat 修改，不变。"**
+
+**Decision**:
+1. **FlowView = 共享只读图渲染基座**（`apps/web/src/components/flow/`），`packages/clip` 同款单一画笔纪律：配方扇出 / run 进度图 / 舞台家族视图 /（spike）血缘板四个消费面各自只做"领域数据 → nodes/edges"适配器，禁自绘边、禁自写布局。契约三要素：节点皮（asset / output / step）、双边语义（**lineage 血缘边** ⊥ **dependency 依赖边**，视觉可辨）、确定性分层布局（depth 分层，有界规模不虚拟化、不缩放）。
+2. **只读是结构性的，内容不降级**：FlowView 不提供 drag / connect / pan / zoom props——"图不可编辑"（ADR-035 第 2 条）从约定升级为组件 API 物理缺席；同时每条边是真边（step `inputs` / `derived_from_output_id`）、每个节点是真节点，禁装饰性插画。
+3. **run 进度图升正为排产项**（修订 ADR-035 第 3 条的前半）：单 run 拓扑编译期定死，属有界死图 + SSE 状态动画，无布局风险——闭环链第 3 周落地，取代 results-workspace 原"进度网格"（中央区状态机修订为：**进度图 → 结果网格 ⇄ 舞台**）。chat 打勾流不退役：线性旁白与空间图同源（workflow_steps）双视图并存。
+4. **spike 收窄为项目全史血缘板**（保留 ADR-035 第 3 条的后半）：唯一无界图面，09-03 小白复述测试照跑，裁决问题改写为"血缘板是否升正为默认中心"。
+5. **修改通道不变**：chat 是唯一修改通道；图面交互白名单 = 点选聚焦 / hover 血缘路径高亮 /（第 5 周）点节点插 `@workflow_step` mention 接三档重跑。
+
+**Consequences**:
+- 后端增量三处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地，同"任务书预设归服务端"纪律）；`run.context.recipe_id` 穿线（results-workspace D5）。
+- CLAUDE.md 的 ADR-035 行随本条修订：DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板），可操作画布永不用户化不变。
+- ADR-035 第 1/2/4 条不变；第 3 条被本条拆分取代（run 图 ≠ 全史血缘的判据：拓扑是否编译期固定）。
+
+**Related**: ADR-035（本条拆分修订其第 3 条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）；简报 `docs/tasks/results-workspace.md`（D2/D6/D7、屏 3、分期与禁令随本条修订）
+
+### 补记（2026-08-07，同日两轮用户拍板）
+
+1. **缩放 = 导航，不是编辑**：ADR-035 第 2 条永久拒绝的是编辑手势（拖节点/接线/删加节点——拓扑唯一来源仍是 `compile_graph`）；缩放/平移/fit/minimap 是导航能力，**基座持有、按面门禁开放**：有界图面（配方扇出 / run 进度图 / 家族视图，≤~30 节点）fit-first 锁缩放（用户裁定"节点多之后缩放必然"仅对无界面成立）；血缘板全开。
+2. **引擎定 `@xyflow/react`**：缩放进基座后，pan/zoom/pinch/minimap/命中坐标换算正是手写最坑、最值得买的代码类——手绘分层方案在动工前作废（零沉没成本）。布局仍自算（确定性分层 + append-only 保序，库只做摆位与视口，不引 dagre——"chat 加节点，图只长不晃"论据不变）。交互白名单：`nodesDraggable=false` / `nodesConnectable=false` **常锁**（拓扑编辑手势物理缺席不变）。动工前置核查：React 19 兼容版本 / SSR client-only 挂载 / Tailwind v4 样式共存。
+3. **过渡动画愿景（用户拍板："连线、node 的诞生、布局都有 transition，用户会感觉到优雅"）**：三层，每层都投影真实事件——**诞生编排**（run 启动时按 `seq` 编译序逐节点入场 + 边描画，是把真实编译顺序用缓动时间轴回放，不是剧场）；**状态动画**（running 脉冲 / 边流动指向待执行子节点，SSE 驱动）；**生长动画**（chat 拓扑编辑产生新节点时，新节点诞生 + 边描画）。禁令 #9 不破：动画永远是真实事件（编译序/状态迁移/真实生长）的投影，禁假进度；`prefers-reduced-motion` 降级为即时呈现；断线重连/历史回放不播诞生编排（只有会话内亲见的 run 启动才播）。
+
+## ADR-037: 身份模块正名——Speaker 退役、人设（Persona）扶正，IP 留在承诺层
+
+**Status**: Decided (2026-08-08)
+
+**Context**: 产品定位升级后（知识专家任意素材，"never assume the input is a speech"），ADR-021 拍板的 Speaker 命名三重断裂：① **语义前提崩塌**——"Speaker/演讲者"预设用户是演讲者、素材是演讲，而身份容器的主人是有内容的专家（会议/报告/播客/文字稿+照片）；② **一词三义撞车**——Speaker（用户身份画像）与排期中的 `speaker_map`（素材里"谁在说话"的分析节点，RECIPES §6）、landing 普通英文词 speakers 同词不同域，前两者即将共存于同一个 DAG；③ ADR-021 §6"Persona 只当概念词、不进表名路由"的裁决前提是"Speaker 是对的实体名"——前提已不存在。同时用户给出产品的用户侧闭环：**管理 IP → 产生 outputs → 发布**（与工程侧"理解 → 生成 → 审校 → 分发"互为表里，STRATEGY §3 牌 1）——"管理 IP"是活动不是对象：今天该模块里用户唯一能操作的是身份理解（风格/受众/禁忌词/声纹），账号绑定与发布数据未落地（Distribution P1 / 数据回流 P2），以"IP"名之则第一天不诚实。
+
+**Decision**:
+1. **身份模块正名 = 人设（en `Persona`）**：多实例扁平（工作号/生活号 = 两个人设）；用户面 zh「人设」/ en「Persona」，代码层 `persona`（表 `personas`、`PersonaContext`、路由 `/personas`；节点 `persona_bootstrap` 名零改动）——三层同词族，无需双轨。本条**翻案 ADR-021 §6**（persona 升格为实体名）；ADR-021 其余各条（persisted memory / per-user 隔离 / 可选 + auto-create / 支持多实例）不变。
+2. **`speaker` 让位素材域**：指"素材里说话的人"（纯数据层，用户不可见）；`speaker_map`（RECIPES §6）是该词的合法居民，保持原名落地。landing 的 "keynote speakers" 是普通英文词，不受影响。
+3. **IP = 承诺层词，不进产品内导航**：对外叙事/landing 可讲"打造你的 IP / 自媒体"（zh）——IP 是整个 agent 的产出（账号+受众+内容+声誉），不是某个模块。**"IP" 禁入英文文案**（英语语境 IP = intellectual property，法律词）：en 叙事用 **personal brand**（LinkedIn/职业人群）/ **thought leadership**（知识专家语境）。营销文案按 locale 适配属正常；NAMING §2 中英唯一映射约束领域词汇，不管营销 slogan。
+4. **IP 容器升格路径（未来）**：Distribution 直发 + 发布数据回流落地后，"IP"可作为产品内容器名实双归登场——每个 IP = 人设（身份页，对象原样迁入）+ 绑定平台账号 + 表现数据。演进为加法式（新增容器模型，非改名）；用户"修不像我"的维修点（人设页）位置永不变。
+5. **stock voices 不伪装人设**（修订 RECIPES §5 裁决③的形态描述）：系统音色以"音色"身份进人设选择器的系统区（如 Rachel · Confident，带试听）；声纹 = 人设属性不变。
+6. **迁移窗口**：09-08 `speaker_map` 落地前改代码零撞车；09-16 人设显化页开工前改 UI 免二次返工。迁移面：`speakers` 表 + Alembic 迁移 / schemas（`SpeakerContext`→`PersonaContext`）/ `memory/routes.py` 端点 / `skills/persona.py` / 前端 `_app.speakers.*` 路由与 i18n / composer 人设块。MODULE_ARCHITECTURE / AGENT_ARCHITECTURE 等现状事实源文档**随代码迁移同步**（迁移前仍以 `speakers` 表现状为准）；「人设 / Persona」于迁移落地时登记 NAMING §2 词汇表。
+
+**Consequences**:
+- 闭环叙事三层归档：对外/愿景 = 管理 IP → outputs → 发布（STRATEGY §2.2 落档）；产品内导航 = 人设 / composer / projects（/ 未来 Distribution）；工程层 = 理解 → 生成 → 审校 → 分发（STRATEGY §3 牌 1 不变）。
+- `persona_bootstrap`"从源文本提取风格"隐含"素材 = 本人言论"假设；素材域扩展后需"本人含量"门禁（非本人素材不污染人设；`speaker_map` 落地后可升级为"只从用户本人段落学"）——随迁移在 persona skill 与 AGENT_ARCHITECTURE 补记。
+- dub 声纹目标态（voice_id 缓存人设行、克隆一次跨项目复用）随第 7 周声纹线兑现。
+
+**Related**: ADR-021（本条翻案其 §6）、ADR-030（outputs 统一）、RECIPES §5/§6、STRATEGY §2.2/§3、NAMING N-27
+
+## ADR-038: 人设吸收 Brand——身份单对象化（brand_templates 退役，皮肤/工艺/格式三分流）
+
+**Status**: Decided (2026-08-08)
+
+**Context**: ADR-037 多人设拍板后，Brand 拆分的承重墙被反转——原理由"同一 Speaker 服务多个 Brand（大学官方号 vs 个人 IP）"在多人设下恰是**两个人设各带皮肤**的自然模型。边界早已渗漏：CTA / 语气双边同驻（brand config 有 default CTA，纪律却说 CTA 归 Speaker）；composer 双身份控件（人设块 + Brand pill）逼用户做无意义配对；IA 身份格由两个低存在感页面各撑一半。且 `brand_templates.config` 实为杂物抽屉：皮肤字段（caption 字体/颜色/preset、title、片头尾卡）与工艺开关（`removeFiller`/`captionEnabled`/`fillMode`）、产物格式默认（`aspect`）、音乐默认混居一袋——整体并入人设会误导含义，必须先按真实归属分流。
+
+**Decision**:
+1. **`personas` 终态 schema**（ADR-037 改名迁移与本条合并执行）：
+   - 身份卡：`id / user_id / name / title? / avatar_url? / language`；
+   - 风格块（flat 六件，现状平移）：`core_values / favorite_metaphors / sentence_style / emotional_tone / typical_hooks / avoid_words`；
+   - 策略块（flat 三件）：`audience? / guidelines? / cta?`——**CTA 唯一家**（brand config 的 default CTA 归并于此）；旧 `voice` 文本列**删除**（含义双解：文风内容迁移时并入 `guidelines`）——`voice` 一词随即归还唯一合法含义（词汇表：voice = 音频本义）；
+   - 声音块：`voice` JSONB NULL——`{"kind":"cloned","voice_id","sample_asset_id"}` | `{"kind":"stock","stock_id"}` | NULL = Auto；
+   - 皮肤块：`brand` JSONB NULL——caption 字体/字号/颜色/位置/preset、title 开关+位置、片头尾卡、logo、keyword_highlighter；NULL = 系统默认皮肤；**块名沿用 `brand`，全栈一词**（人设块 / 烘焙 / clip-spec `brand` 段同名，§1）——模块退役，词不退役；不引入 `look` 字段名（RECIPES §4.4 的 look 层是"caption × title/intro × brand 参数"的组合概念，避免撞名）；
+   - 来源与校准：`learned_from` JSONB NULL（asset hashes + 摘要，显化页"它从哪学的"）、`calibrated_at` ts NULL（最近校准，§4 可空时间戳）、`auto_created_at` ts NULL（系统 bootstrap 标记——**替代 is_default 布尔**）；
+   - 审计：`created_at / updated_at`。
+2. **`brand_templates` 表退役，config 三分流**：皮肤字段 → `persona.look`；工艺开关（`removeFiller` / `captionEnabled` / `aspect` / `fillMode` / 音乐默认）→ 配方注册表 / 任务书默认（`removeFiller` 本已是 op/skill，`aspect` 是产物格式）——**不进人设**；`language_tone` 不单独成字段（风格六件已覆盖）。
+3. **引用平移**：`projects.brand_template_id` 退役（渲染时经 `persona_id` 解析）；composer payload `speaker_id + brand_template_id` → 单 `persona_id`；`GenerationContext.brand` ← `persona.brand`；`memory/brand.py` 烘焙改读人设（模块名不动）；**clip-spec `brand` 段不动**（渲染黑盒契约零破坏，ADR-016）。
+4. **前端**：`/personas` 人设页 = 身份卡 + 风格（"它眼中的你"，含 `bootstrapped_from` 来源说明）+ 策略 + 声音 + **皮肤分区（原 Brand 设置 + 实时预览原样迁入）**；`/speakers`、`/brand-template` 双路由并入（重定向）；sidebar 身份项收敛为单「人设」；composer Brand pill 退役，人设块成唯一身份控件（皮肤随人设）。
+5. **`STOCK_VOICES` 代码内静态注册表**（随代码部署，不建表——系统音色不伪装人设）：id / 名 / 风格标签 / 语言覆盖 / 试听 URL / provider voice_id。
+6. **默认人设解析链**（不加 is_default 布尔）：项目挂载 > composer 显式选择 > `auto_created_at` 非空（系统 bootstrap）> 最早创建。
+7. **配方 brand 参数 → run 级 look 覆盖**：默认 = 人设 look，配方可播种视觉覆盖；任务书字段照旧可 chat 修订。
+
+**Consequences**:
+- IP 容器终态（ADR-037 D4）更干净：IP = 人设（身份+风格+策略+声音+皮肤，一个完整对象）+ 绑定账号 + 表现数据，整体迁入无残肢。
+- 多人设共享皮肤（未来团队空间共用机构 VI）以"从另一人设复制"过渡，团队空间立项时再升级共享引用——不为它保留独立模块（§7 逆用：失去独立表归属即失去模块资格）。
+- 排期（PROGRESS）：**插入周 08-09~08-14 最高优先级连续落地**（2026-08-08 拍板：改名迁移 08-09 → 皮肤吸收 08-10 → 声纹缓存 + STOCK_VOICES 08-11 → 人设显化页 08-12 → 触点 + 门禁 v1 08-13）；门禁 v2 随 W8 一（09-21，`speaker_map` 过滤）；闭环链顺延 1 周（周五验收滚动重排）。
+- 实施简报：`docs/tasks/persona-identity.md`——含**消费面全审计与迁移地图**（渲染链 / DAG / chat / 配方 / 前端 / 种子脚本逐点过）与数据迁移步骤（§6–§7）。
+
+**Related**: ADR-037（改名与人设正名）、ADR-021（persisted memory 各条不变）、ADR-016（clip-spec 契约不动）、RECIPES §4.4（look 层）/ §5（声音的家）、NAMING N-27/N-28

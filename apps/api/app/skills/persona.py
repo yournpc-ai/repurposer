@@ -1,4 +1,4 @@
-"""Persona Agent: generate speaker style and content memory from source texts."""
+"""Persona Agent: generate persona style and content memory from source texts."""
 
 from pathlib import Path
 
@@ -21,11 +21,11 @@ _jinja_env = Environment(
 _MAX_CHARS_PER_TEXT = 150_000
 
 
-class _ExtractedSpeakerMemory(BaseModel):
-    """Internal extraction result; maps directly to Speaker DB columns."""
+class _ExtractedPersonaMemory(BaseModel):
+    """Internal extraction result; maps directly to Persona DB columns."""
 
     # LLM-synthesized persona label (e.g. "Pragmatic AI evangelist") — used as
-    # the Speaker.name when the pipeline auto-creates a speaker, so the row is
+    # the Persona.name when the pipeline auto-creates a persona, so the row is
     # never named after an uploaded file. Ignored on manual regenerate, where
     # the user owns the name.
     name: str = ""
@@ -49,21 +49,21 @@ class PersonaAgent:
 
     async def generate(
         self,
-        speaker_name: str,
-        speaker_title: str | None,
+        persona_name: str,
+        persona_title: str | None,
         language: str,
         asset_texts: list[str],
-    ) -> _ExtractedSpeakerMemory:
-        """Generate speaker style and content memory from extracted asset texts.
+    ) -> _ExtractedPersonaMemory:
+        """Generate persona style and content memory from extracted asset texts.
 
         Args:
-            speaker_name: Speaker name.
-            speaker_title: Speaker title/role.
+            persona_name: Persona name.
+            persona_title: Persona title/role.
             language: Primary language (zh, en, etc.).
             asset_texts: List of extracted text from project assets.
 
         Returns:
-            Extracted memory mapped to Speaker DB columns.
+            Extracted memory mapped to Persona DB columns.
         """
         if not asset_texts:
             raise MiniMaxError("No source texts provided for persona generation")
@@ -75,8 +75,8 @@ class PersonaAgent:
 
         template = _jinja_env.get_template("persona.j2")
         user_prompt = template.render(
-            speaker_name=speaker_name,
-            speaker_title=speaker_title,
+            persona_name=persona_name,
+            persona_title=persona_title,
             language=language,
             asset_texts=trimmed_texts,
         )
@@ -93,8 +93,8 @@ class PersonaAgent:
         ]
 
         logger.info(
-            "speaker_extraction_started",
-            speaker_name=speaker_name,
+            "persona_extraction_started",
+            persona_name=persona_name,
             text_count=len(trimmed_texts),
             total_chars=sum(len(t) for t in trimmed_texts),
         )
@@ -102,18 +102,18 @@ class PersonaAgent:
         try:
             memory = await self.client.generate(
                 messages=messages,
-                response_model=_ExtractedSpeakerMemory,
+                response_model=_ExtractedPersonaMemory,
                 temperature=0.3,
             )
         except MiniMaxError:
             raise
         except Exception as e:
-            logger.error("speaker_extraction_failed", error=str(e))
-            raise MiniMaxError(f"Speaker extraction failed: {e}") from e
+            logger.error("persona_extraction_failed", error=str(e))
+            raise MiniMaxError(f"Persona extraction failed: {e}") from e
 
         logger.info(
-            "speaker_extraction_completed",
-            speaker_name=speaker_name,
+            "persona_extraction_completed",
+            persona_name=persona_name,
             emotional_tone=memory.emotional_tone,
         )
         return memory

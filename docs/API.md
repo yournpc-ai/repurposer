@@ -24,7 +24,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 - Emails are normalized (lowercase, trimmed) and format-validated on both endpoints — malformed addresses get 400 before a code is created. A recipient rejected by Resend (4xx) also returns 400; genuine provider/5xx failures return 502.
 - send-code rate limits: 60s resend cooldown per email, 10 codes/hour per email, 30 codes/hour per IP (over-limit → 429).
 - `verify-code` creates the user on first login (name defaults to the email prefix) and returns a 1-day JWT (HS256).
-- Projects, speakers, brand templates and all other product data are private to their owner — anonymous requests see nothing. `/speakers` returns only the caller's own speakers: project creation rejects speaker_ids the caller does not own, so default-user (shared) speakers are never offered as selectable options.
+- Projects, personas, brand templates and all other product data are private to their owner — anonymous requests see nothing. `/personas` returns only the caller's own personas: project creation rejects persona_ids the caller does not own, so default-user (shared) personas are never offered as selectable options.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
 ## 2. Main Flow Call Sequence
@@ -90,7 +90,7 @@ GET /api/v1/music/{mood}                     # Built-in mood library, e.g. calm 
 Errors use FastAPI's default shape — the human-readable reason is always in `detail`:
 
 ```json
-{ "detail": "Speaker not found" }
+{ "detail": "Persona not found" }
 ```
 
 - **Handler-raised errors** (4xx/5xx via `HTTPException`): `detail` is a string with the reason.
@@ -99,14 +99,14 @@ Errors use FastAPI's default shape — the human-readable reason is always in `d
 
 Every request is logged as `http_request` with method, path, query, status, duration, client IP, and — for JSON payloads — the request and response bodies (credentials like `token`/`code` are redacted, bodies truncated; multipart and file streams are never buffered). Errors additionally log `http_error` / `http_validation_error` / `http_unhandled_error` with the reason at raise time.
 
-## 5. Speaker Management
+## 5. Persona Management
 
-> **Evolution Note**: The Speaker API is being refactored per ADR-021. The target direction is: Speakers are isolated per user; `speaker_id` is optional at project creation; if not selected, the system auto-creates one. The endpoints below still retain the manual-creation and past-material-to-persona shapes, and will gradually converge toward a unified auto/manual memory model.
+> **Evolution Note**: The identity module was renamed Speaker → Persona across the stack (ADR-037, cut 1 landed 2026-08-09 — table `personas`, endpoints `/api/v1/personas`). Personas are isolated per user; `persona_id` is optional at project creation; if not selected, the system auto-creates one on the first run. The endpoints below still retain the manual-creation and past-material-to-persona shapes, and will gradually converge toward a unified auto/manual memory model.
 
-### Create Speaker
+### Create Persona
 
 ```http
-POST /api/v1/speakers
+POST /api/v1/personas
 ```
 
 Request:
@@ -128,33 +128,42 @@ Response:
   "name": "熊榆",
   "title": "萨里大学协理副校长",
   "language": "zh",
-  "persona": null,
+  "core_values": [],
+  "favorite_metaphors": [],
+  "sentence_style": "",
+  "emotional_tone": "rational",
+  "typical_hooks": [],
+  "avoid_words": [],
+  "voice": null,
+  "audience": null,
+  "guidelines": null,
+  "cta": null,
   "created_at": "2026-06-22T10:00:00Z"
 }
 ```
 
-### List Speakers
+### List Personas
 
 ```http
-GET /api/v1/speakers
+GET /api/v1/personas
 ```
 
-### Get Speaker Detail
+### Get Persona Detail
 
 ```http
-GET /api/v1/speakers/{speaker_id}
+GET /api/v1/personas/{persona_id}
 ```
 
-### Update Speaker
+### Update Persona
 
 ```http
-PUT /api/v1/speakers/{speaker_id}
+PUT /api/v1/personas/{persona_id}
 ```
 
-### Upload Speaker Past Material
+### Upload Persona Past Material
 
 ```http
-POST /api/v1/speakers/{speaker_id}/assets
+POST /api/v1/personas/{persona_id}/assets
 Content-Type: multipart/form-data
 ```
 
@@ -163,10 +172,10 @@ Fields:
 - `file`: File
 - `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample` | `past_material`
 
-### Generate / Update Speaker Style Persona
+### Generate / Update Persona Style Profile
 
 ```http
-POST /api/v1/speakers/{speaker_id}/persona/generate
+POST /api/v1/personas/{persona_id}/generate
 ```
 
 Response:
@@ -184,7 +193,7 @@ Response:
 
 ## 4. Project Management
 
-> **Current state**: `speaker_id` is optional at project creation. When omitted, the system uses the project's own `tone_snapshot` and the default speaker profile for generation; a dedicated `Speaker` row can still be created and selected manually.
+> **Current state**: `persona_id` is optional at project creation. When omitted, the first run auto-creates a persona from the project's source texts; a dedicated `Persona` row can still be created and selected manually.
 
 ### Create Project
 
@@ -196,7 +205,7 @@ Request:
 
 ```json
 {
-  "speaker_id": "uuid | null",
+  "persona_id": "uuid | null",
   "title": "2026世界未来科技发展峰会演讲",
   "event_name": "2026世界未来科技发展峰会",
   "language": "zh"
@@ -206,7 +215,7 @@ Request:
 ### List Projects
 
 ```http
-GET /api/v1/projects?speaker_id=uuid
+GET /api/v1/projects?persona_id=uuid
 ```
 
 Response now includes a representative clip thumbnail for each project:
@@ -246,7 +255,7 @@ POST /api/v1/projects/{project_id}/assets
   → Asset { id, processing_status: "pending", ... }
 ```
 
-The create-from-key call validates that the key sits under the server-issued upload dir for that user+project and that the object actually exists in storage (400 otherwise). Speaker assets have the same two-step flow under `/api/v1/speakers/{speaker_id}/assets/upload-url`.
+The create-from-key call validates that the key sits under the server-issued upload dir for that user+project and that the object actually exists in storage (400 otherwise). Persona assets have the same two-step flow under `/api/v1/personas/{persona_id}/assets/upload-url`.
 
 ### Upload Asset (multipart fallback)
 
@@ -260,7 +269,7 @@ Fields:
 - `file`: File
 - `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample` | `past_material`
 
-> `voice_sample` can also be attached to a speaker (`POST /api/v1/speakers/{id}/assets`, with `type`) — see "Speaker = User Profile". `image`/`slides` will be processed: images go through M3 vision for key-point extraction; slide PDFs are rendered page-by-page into images.
+> `voice_sample` can also be attached to a persona (`POST /api/v1/personas/{id}/assets`, with `type`) — see "Persona = User Profile". `image`/`slides` will be processed: images go through M3 vision for key-point extraction; slide PDFs are rendered page-by-page into images.
 
 ### List Assets
 
@@ -424,7 +433,7 @@ Request: `{ "target_language": "fr" }`. Response: updated `Clip` (`caption_track
 POST /api/v1/clips/{clip_id}/dub
 ```
 
-Request: `{ "target_language": "fr" }`. Uses the speaker's voice (from persona VOICE_SAMPLE / this session's AUDIO / VIDEO extracted track) via MiniMax voice_clone + T2A to dub the (translated) captions into the target language. Response: updated `Clip`, `render_spec.dub` written (original audio is muted during render, dubbed audio plays).
+Request: `{ "target_language": "fr" }`. Uses the persona's voice (from the persona's VOICE_SAMPLE / this session's AUDIO / VIDEO extracted track) via MiniMax voice_clone + T2A to dub the (translated) captions into the target language. Response: updated `Clip`, `render_spec.dub` written (original audio is muted during render, dubbed audio plays).
 
 ### List Derivatives
 
@@ -584,7 +593,7 @@ Field-level truth lives in code (`apps/api/app/models/tables.py`); cross-cutting
 
 Core models:
 
-- `Speaker` (= user profile: style memory + voiceprint; see ADR-021)
+- `Persona` (= user profile: style memory + voiceprint; ADR-037)
 - `Project` (includes `content_plan: JSON` for persisted ContentPlan)
 - `Asset`
 - `Clip`

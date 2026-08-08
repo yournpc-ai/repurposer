@@ -35,7 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { apiFetch } from "@/lib/api"
 
-interface Speaker {
+interface Persona {
   id: string
   name: string
   title: string | null
@@ -65,15 +65,15 @@ interface Asset {
   created_at: string
 }
 
-export const Route = createFileRoute("/_app/speakers/$id")({
-  component: SpeakerDetailPage,
+export const Route = createFileRoute("/_app/personas/$id")({
+  component: PersonaDetailPage,
 })
 
-function SpeakerDetailPage() {
+function PersonaDetailPage() {
   const { id } = Route.useParams()
   const { t } = useTranslation()
 
-  const [speaker, setSpeaker] = useState<Speaker | null>(null)
+  const [persona, setPersona] = useState<Persona | null>(null)
   const [materials, setMaterials] = useState<Asset[]>([])
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -92,7 +92,7 @@ function SpeakerDetailPage() {
   const [coreValues, setCoreValues] = useState("")
   const [favoriteMetaphors, setFavoriteMetaphors] = useState("")
   const [sentenceStyle, setSentenceStyle] = useState("")
-  const [emotionalTone, setEmotionalTone] = useState<Speaker["emotional_tone"]>("rational")
+  const [emotionalTone, setEmotionalTone] = useState<Persona["emotional_tone"]>("rational")
   const [typicalHooks, setTypicalHooks] = useState("")
   const [avoidWords, setAvoidWords] = useState("")
   const [voice, setVoice] = useState("")
@@ -105,29 +105,29 @@ function SpeakerDetailPage() {
     try {
       // Page-level load failure renders the not-found placeholder below, so
       // these calls stay silent (toast: false) to avoid double reporting.
-      const [speakerRes, materialsRes] = await Promise.all([
-        apiFetch(`/api/v1/speakers/${id}`, { toast: false }),
-        apiFetch(`/api/v1/speakers/${id}/assets`, { toast: false }),
+      const [personaRes, materialsRes] = await Promise.all([
+        apiFetch(`/api/v1/personas/${id}`, { toast: false }),
+        apiFetch(`/api/v1/personas/${id}/assets`, { toast: false }),
       ])
-      if (!speakerRes.ok) throw new Error("Speaker not found")
-      const speakerData: Speaker = await speakerRes.json()
+      if (!personaRes.ok) throw new Error("Persona not found")
+      const personaData: Persona = await personaRes.json()
       const materialsData = await materialsRes.json()
-      setSpeaker(speakerData)
+      setPersona(personaData)
       setMaterials(materialsData)
-      setName(speakerData.name)
-      setTitle(speakerData.title || "")
-      setCoreValues(speakerData.core_values.join("\n"))
-      setFavoriteMetaphors(speakerData.favorite_metaphors.join("\n"))
-      setSentenceStyle(speakerData.sentence_style)
-      setEmotionalTone(speakerData.emotional_tone)
-      setTypicalHooks(speakerData.typical_hooks.join("\n"))
-      setAvoidWords(speakerData.avoid_words.join("\n"))
-      setVoice(speakerData.voice || "")
-      setAudience(speakerData.audience || "")
-      setGuidelines(speakerData.guidelines || "")
-      setCta(speakerData.cta || "")
+      setName(personaData.name)
+      setTitle(personaData.title || "")
+      setCoreValues(personaData.core_values.join("\n"))
+      setFavoriteMetaphors(personaData.favorite_metaphors.join("\n"))
+      setSentenceStyle(personaData.sentence_style)
+      setEmotionalTone(personaData.emotional_tone)
+      setTypicalHooks(personaData.typical_hooks.join("\n"))
+      setAvoidWords(personaData.avoid_words.join("\n"))
+      setVoice(personaData.voice || "")
+      setAudience(personaData.audience || "")
+      setGuidelines(personaData.guidelines || "")
+      setCta(personaData.cta || "")
     } catch {
-      setSpeaker(null)
+      setPersona(null)
     } finally {
       setLoading(false)
     }
@@ -140,11 +140,11 @@ function SpeakerDetailPage() {
   const assetTitle = (asset: Asset) =>
     asset.title || asset.file_url?.split("/").pop() || t("common.untitled")
 
-  const handleUpdateSpeaker = async (e: React.FormEvent) => {
+  const handleUpdatePersona = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await apiFetch(`/api/v1/speakers/${id}`, {
+      const res = await apiFetch(`/api/v1/personas/${id}`, {
         method: "PUT",
         body: {
           name,
@@ -160,7 +160,7 @@ function SpeakerDetailPage() {
           guidelines: guidelines || null,
           cta: cta || null,
         },
-        toast: t("speakerDetail.msgUpdated"),
+        toast: t("personaDetail.msgUpdated"),
       })
       if (res.ok) fetchData()
     } finally {
@@ -171,12 +171,12 @@ function SpeakerDetailPage() {
   const handleGeneratePersona = async () => {
     setGenerating(true)
     try {
-      const res = await apiFetch(`/api/v1/speakers/${id}/persona/generate`, {
+      const res = await apiFetch(`/api/v1/personas/${id}/generate`, {
         method: "POST",
-        toast: t("speakerDetail.msgGenerated"),
+        toast: t("personaDetail.msgGenerated"),
       })
       if (!res.ok) return
-      const data: Speaker = await res.json()
+      const data: Persona = await res.json()
       setCoreValues(data.core_values.join("\n"))
       setFavoriteMetaphors(data.favorite_metaphors.join("\n"))
       setSentenceStyle(data.sentence_style)
@@ -198,7 +198,7 @@ function SpeakerDetailPage() {
     if (!file) return
     setUploading(true)
     try {
-      const urlRes = await apiFetch(`/api/v1/speakers/${id}/assets/upload-url`, {
+      const urlRes = await apiFetch(`/api/v1/personas/${id}/assets/upload-url`, {
         method: "POST",
         body: {
           filename: file.name,
@@ -223,10 +223,10 @@ function SpeakerDetailPage() {
         return
       }
 
-      const res = await apiFetch(`/api/v1/speakers/${id}/assets`, {
+      const res = await apiFetch(`/api/v1/personas/${id}/assets`, {
         method: "POST",
         body: { key, title: file.name },
-        toast: t("speakerDetail.msgUploaded"),
+        toast: t("personaDetail.msgUploaded"),
       })
       if (res.ok) fetchData()
     } finally {
@@ -250,7 +250,7 @@ function SpeakerDetailPage() {
     setRenameBusy(true)
     try {
       const res = await apiFetch(
-        `/api/v1/speakers/${id}/assets/${renameTarget.id}`,
+        `/api/v1/personas/${id}/assets/${renameTarget.id}`,
         { method: "PUT", body: { title: nextTitle } }
       )
       if (res.ok) {
@@ -266,9 +266,9 @@ function SpeakerDetailPage() {
     if (!deleteTarget || deleteBusy) return
     setDeleteBusy(true)
     try {
-      const res = await apiFetch(`/api/v1/speakers/${id}/assets/${deleteTarget.id}`, {
+      const res = await apiFetch(`/api/v1/personas/${id}/assets/${deleteTarget.id}`, {
         method: "DELETE",
-        toast: t("speakerDetail.msgDeleted"),
+        toast: t("personaDetail.msgDeleted"),
       })
       if (res.ok) {
         setDeleteTarget(null)
@@ -279,7 +279,7 @@ function SpeakerDetailPage() {
     }
   }
 
-  if (loading && !speaker) {
+  if (loading && !persona) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <p className="text-muted-foreground">{t("common.loading")}</p>
@@ -287,10 +287,10 @@ function SpeakerDetailPage() {
     )
   }
 
-  if (!speaker) {
+  if (!persona) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <p className="text-muted-foreground">{t("speakerDetail.notFound")}</p>
+        <p className="text-muted-foreground">{t("personaDetail.notFound")}</p>
       </div>
     )
   }
@@ -299,22 +299,22 @@ function SpeakerDetailPage() {
     <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-6 flex items-center gap-3">
-          <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/speakers" />}>
+          <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/personas" />}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{speaker.name}</h1>
-            {speaker.title && (
-              <p className="truncate text-sm text-muted-foreground">{speaker.title}</p>
+            <h1 className="truncate text-2xl font-semibold tracking-tight">{persona.name}</h1>
+            {persona.title && (
+              <p className="truncate text-sm text-muted-foreground">{persona.title}</p>
             )}
           </div>
         </div>
 
         <Tabs defaultValue="persona" className="flex-1">
           <TabsList className="mb-6">
-            <TabsTrigger value="persona">{t("speakerDetail.tabPersona")}</TabsTrigger>
+            <TabsTrigger value="persona">{t("personaDetail.tabPersona")}</TabsTrigger>
             <TabsTrigger value="materials">
-              {t("speakerDetail.tabMaterials", { count: materials.length })}
+              {t("personaDetail.tabMaterials", { count: materials.length })}
             </TabsTrigger>
           </TabsList>
 
@@ -324,37 +324,37 @@ function SpeakerDetailPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Fingerprint className="h-4 w-4" />
-                    {t("speakerDetail.personaTitle")}
+                    {t("personaDetail.personaTitle")}
                   </CardTitle>
-                  <CardDescription>{t("speakerDetail.personaDesc")}</CardDescription>
+                  <CardDescription>{t("personaDetail.personaDesc")}</CardDescription>
                 </div>
                 <Button
                   onClick={handleGeneratePersona}
                   disabled={generating || materials.length === 0}
                 >
                   <Wand2 className="mr-2 h-4 w-4" />
-                  {generating ? t("speakerDetail.generating") : t("speakerDetail.generate")}
+                  {generating ? t("personaDetail.generating") : t("personaDetail.generate")}
                 </Button>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleUpdateSpeaker} className="space-y-6">
+                <form onSubmit={handleUpdatePersona} className="space-y-6">
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="tone">{t("speakerDetail.tone")}</Label>
+                      <Label htmlFor="tone">{t("personaDetail.tone")}</Label>
                       <Select
                         value={emotionalTone}
-                        onValueChange={(v) => setEmotionalTone(v as Speaker["emotional_tone"])}
+                        onValueChange={(v) => setEmotionalTone(v as Persona["emotional_tone"])}
                       >
                         <SelectTrigger id="tone">
                           <SelectValue>
-                            {(value: string) => t(`speakerDetail.tones.${value}`)}
+                            {(value: string) => t(`personaDetail.tones.${value}`)}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {(["rational", "passionate", "gentle", "sharp", "humorous"] as const).map(
                             (tName) => (
                               <SelectItem key={tName} value={tName}>
-                                {t(`speakerDetail.tones.${tName}`)}
+                                {t(`personaDetail.tones.${tName}`)}
                               </SelectItem>
                             )
                           )}
@@ -363,7 +363,7 @@ function SpeakerDetailPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="sentence_style">{t("speakerDetail.sentenceStyle")}</Label>
+                      <Label htmlFor="sentence_style">{t("personaDetail.sentenceStyle")}</Label>
                       <Input
                         id="sentence_style"
                         value={sentenceStyle}
@@ -378,7 +378,7 @@ function SpeakerDetailPage() {
                     { key: "typical_hooks", value: typicalHooks, setter: setTypicalHooks, rows: 4 },
                     { key: "avoid_words", value: avoidWords, setter: setAvoidWords, rows: 3 },
                   ] as const).map((item) => {
-                    const label = t(`speakerDetail.fields.${item.key}` as const)
+                    const label = t(`personaDetail.fields.${item.key}` as const)
                     return (
                       <div key={item.key} className="space-y-2">
                         <Label>{label}</Label>
@@ -386,65 +386,65 @@ function SpeakerDetailPage() {
                           value={item.value}
                           onChange={(e) => item.setter(e.target.value)}
                           rows={item.rows}
-                          placeholder={t("speakerDetail.fieldPlaceholder", { label })}
+                          placeholder={t("personaDetail.fieldPlaceholder", { label })}
                         />
                       </div>
                     )
                   })}
 
                   <div className="space-y-2">
-                    <CardTitle className="text-base">{t("speakerDetail.contentStrategyTitle")}</CardTitle>
+                    <CardTitle className="text-base">{t("personaDetail.contentStrategyTitle")}</CardTitle>
                     <CardDescription className="text-xs">
-                      {t("speakerDetail.contentStrategyDesc")}
+                      {t("personaDetail.contentStrategyDesc")}
                     </CardDescription>
                   </div>
 
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="voice">{t("speakerDetail.voice")}</Label>
+                      <Label htmlFor="voice">{t("personaDetail.voice")}</Label>
                       <Input
                         id="voice"
                         value={voice}
                         onChange={(e) => setVoice(e.target.value)}
-                        placeholder={t("speakerDetail.voicePlaceholder")}
+                        placeholder={t("personaDetail.voicePlaceholder")}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="audience">{t("speakerDetail.audience")}</Label>
+                      <Label htmlFor="audience">{t("personaDetail.audience")}</Label>
                       <Input
                         id="audience"
                         value={audience}
                         onChange={(e) => setAudience(e.target.value)}
-                        placeholder={t("speakerDetail.audiencePlaceholder")}
+                        placeholder={t("personaDetail.audiencePlaceholder")}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="cta">{t("speakerDetail.cta")}</Label>
+                    <Label htmlFor="cta">{t("personaDetail.cta")}</Label>
                     <Input
                       id="cta"
                       value={cta}
                       onChange={(e) => setCta(e.target.value)}
-                      placeholder={t("speakerDetail.ctaPlaceholder")}
+                      placeholder={t("personaDetail.ctaPlaceholder")}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="guidelines">{t("speakerDetail.guidelines")}</Label>
+                    <Label htmlFor="guidelines">{t("personaDetail.guidelines")}</Label>
                     <Textarea
                       id="guidelines"
                       value={guidelines}
                       onChange={(e) => setGuidelines(e.target.value)}
                       rows={4}
-                      placeholder={t("speakerDetail.guidelinesPlaceholder")}
+                      placeholder={t("personaDetail.guidelinesPlaceholder")}
                     />
                   </div>
 
                   <div className="flex justify-end">
                     <Button type="submit" disabled={saving}>
                       <Save className="mr-2 h-4 w-4" />
-                      {saving ? t("common.saving") : t("speakerDetail.saveChanges")}
+                      {saving ? t("common.saving") : t("personaDetail.saveChanges")}
                     </Button>
                   </div>
                 </form>
@@ -456,12 +456,12 @@ function SpeakerDetailPage() {
             <Card className="ring-0 edge-glow">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>{t("speakerDetail.pastMaterials")}</CardTitle>
-                  <CardDescription>{t("speakerDetail.pastMaterialsDesc")}</CardDescription>
+                  <CardTitle>{t("personaDetail.pastMaterials")}</CardTitle>
+                  <CardDescription>{t("personaDetail.pastMaterialsDesc")}</CardDescription>
                 </div>
                 <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
                   <Upload className="mr-2 h-4 w-4" />
-                  {uploading ? t("speakerDetail.uploading") : t("common.upload")}
+                  {uploading ? t("personaDetail.uploading") : t("common.upload")}
                 </Button>
                 <input
                   ref={fileRef}
@@ -475,7 +475,7 @@ function SpeakerDetailPage() {
                 {materials.length === 0 ? (
                   <div className="rounded-lg bg-muted py-12 text-center">
                     <FileText className="mx-auto mb-4 h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{t("speakerDetail.noMaterials")}</p>
+                    <p className="text-sm text-muted-foreground">{t("personaDetail.noMaterials")}</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -490,13 +490,13 @@ function SpeakerDetailPage() {
                             <p className="truncate font-medium">{assetTitle(asset)}</p>
                             <p className="text-sm text-muted-foreground">
                               {asset.extracted_text
-                                ? t("speakerDetail.charsExtracted", {
+                                ? t("personaDetail.charsExtracted", {
                                     count: asset.extracted_text.length,
                                   })
-                                : t("speakerDetail.noText")}
+                                : t("personaDetail.noText")}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {t("speakerDetail.uploadedAt", {
+                              {t("personaDetail.uploadedAt", {
                                 date: new Date(asset.created_at).toLocaleString(),
                               })}
                             </p>
@@ -506,7 +506,7 @@ function SpeakerDetailPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={t("speakerDetail.rename")}
+                            aria-label={t("personaDetail.rename")}
                             onClick={() => openRename(asset)}
                           >
                             <Pencil className="h-4 w-4" />
@@ -539,7 +539,7 @@ function SpeakerDetailPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t("speakerDetail.renameTitle")}</DialogTitle>
+            <DialogTitle>{t("personaDetail.renameTitle")}</DialogTitle>
           </DialogHeader>
           <Input
             value={renameValue}
@@ -547,7 +547,7 @@ function SpeakerDetailPage() {
             onKeyDown={(e) => {
               if (e.key === "Enter") handleRename()
             }}
-            placeholder={t("speakerDetail.renamePlaceholder")}
+            placeholder={t("personaDetail.renamePlaceholder")}
             autoFocus
           />
           <DialogFooter>
@@ -570,10 +570,10 @@ function SpeakerDetailPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t("speakerDetail.deleteConfirm")}</DialogTitle>
+            <DialogTitle>{t("personaDetail.deleteConfirm")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {deleteTarget && t("speakerDetail.deleteDesc", { title: assetTitle(deleteTarget) })}
+            {deleteTarget && t("personaDetail.deleteDesc", { title: assetTitle(deleteTarget) })}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>

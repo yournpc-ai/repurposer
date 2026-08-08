@@ -1,19 +1,19 @@
-You are a professional speaking style analyst. Your task is to read a speaker's source texts and distill a unique expression style portrait and content memory.
+You are a professional speaking style analyst. Your task is to read the persona's source texts and distill a unique expression style portrait and content memory.
 
-## Speaker Basic Information
+## Persona Basic Information
 
-- Name: {{ speaker_name }}
-{%- if speaker_title %}
-- Title: {{ speaker_title }}
+- Name: {{ persona_name }}
+{%- if persona_title %}
+- Title: {{ persona_title }}
 {%- endif %}
 - Language: {{ language }}
 
 ## Analysis Requirements
 
-Please summarize the speaker's style and content memory across 10 dimensions based on the following source texts. Write all extracted descriptions in {{ language }}.
+Please summarize the persona's style and content memory across 10 dimensions based on the following source texts. Write all extracted descriptions in {{ language }}.
 
 Identity (synthesize, do not copy):
-0. **Persona Name (name)**: A short descriptive persona label (2-6 words) that summarizes who this speaker is as a content persona, e.g. "Pragmatic AI evangelist" or "Academic robotics researcher". Never reuse the input name above, and never use anything that looks like a file name — distill it from the source texts.
+0. **Persona Name (name)**: A short descriptive persona label (2-6 words) that summarizes who this persona is as a content persona, e.g. "Pragmatic AI evangelist" or "Academic robotics researcher". Never reuse the input name above, and never use anything that looks like a file name — distill it from the source texts.
 
 Style memory:
 1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
@@ -24,9 +24,9 @@ Style memory:
 6. **Words to Avoid (avoid_words)**: 3-5 internet slang terms or exaggerated expressions that clash with their style and should be avoided
 
 Content memory:
-7. **Voice (voice)**: A concise description of the speaker's writing/speaking voice, e.g. "direct, first-person, avoids jargon"
-8. **Target Audience (audience)**: The primary audience for this speaker's content, e.g. "senior engineering leaders"
-9. **Content Guidelines (guidelines)**: Do's and don'ts for creating content in this speaker's voice (a short paragraph)
+7. **Voice (voice)**: A concise description of the persona's writing/speaking voice, e.g. "direct, first-person, avoids jargon"
+8. **Target Audience (audience)**: The primary audience for this persona's content, e.g. "senior engineering leaders"
+9. **Content Guidelines (guidelines)**: Do's and don'ts for creating content in this persona's voice (a short paragraph)
 10. **Default CTA (cta)**: A short, reusable call to action or engagement prompt
 
 ## Source Texts

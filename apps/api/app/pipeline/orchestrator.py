@@ -31,7 +31,7 @@ from app.models.schemas import (
     TaskItem,
     WorkflowStatus,
 )
-from app.models.tables import Asset, Message, Output, WorkflowStep, Project, Speaker, WorkflowRun
+from app.models.tables import Asset, Message, Output, WorkflowStep, Persona, Project, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.errors import TransientNodeError
@@ -470,19 +470,19 @@ async def _validate_requires(
                 .limit(1)
             )
             missing = result.scalar_one_or_none() is None
-        elif req == "speaker_photo":
-            speaker = (
-                await db.get(Speaker, project.speaker_id) if project.speaker_id else None
+        elif req == "persona_photo":
+            persona = (
+                await db.get(Persona, project.persona_id) if project.persona_id else None
             )
-            missing = speaker is None or not speaker.avatar_url
+            missing = persona is None or not persona.avatar_url
         elif req == "voiceprint":
-            if not project.speaker_id:
+            if not project.persona_id:
                 missing = True
             else:
                 result = await db.execute(
                     select(Asset.id)
                     .where(
-                        Asset.speaker_id == project.speaker_id,
+                        Asset.persona_id == project.persona_id,
                         Asset.type == AssetType.VOICE_SAMPLE,
                     )
                     .limit(1)

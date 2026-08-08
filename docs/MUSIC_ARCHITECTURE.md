@@ -62,7 +62,7 @@ Remotion <Audio url>（loop + gain_db 混音）
 | Data | Source of Truth | Rationale |
 |---|---|---|
 | **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | 与 uploads/outputs 同约定（ADR-024） |
-| **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 speaker） |
+| **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 persona） |
 | **Brand default music** | `BrandTemplate.config.musicId` | 用户侧 = "default music" |
 | **Per-clip music choice** | `outputs[type=clip].render_spec.music` | 渲染契约是运行时事实源 |
 

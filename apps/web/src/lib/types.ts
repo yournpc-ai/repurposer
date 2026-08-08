@@ -61,20 +61,19 @@ export interface Project {
   id: string
   title: string
   status: string
-  speaker_id: string | null
+  persona_id: string | null
   event_name: string | null
   language: string
   created_at: string
 }
 
-export interface Speaker {
+export interface Persona {
   id: string
   name: string
   title?: string | null
-  persona?: {
-    emotional_tone?: string
-    sentence_style?: string
-  } | null
+  avatar_url?: string | null
+  sentence_style?: string
+  emotional_tone?: "rational" | "passionate" | "gentle" | "sharp" | "humorous"
 }
 
 export interface Asset {

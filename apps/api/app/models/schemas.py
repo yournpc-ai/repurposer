@@ -468,12 +468,12 @@ class ChatResponse(BaseModel):
     answered_question: ChatMessageResponse | None = None
 
 
-class SpeakerContext(BaseModel):
-    """Speaker business object returned by the API and passed to agents.
+class PersonaContext(BaseModel):
+    """Persona business object returned by the API and passed to agents.
 
-    Contains only flat fields backed by DB columns. The ``persona`` concept
-    lives at the agent layer as a rendered prompt summary, not as a stored
-    field.
+    The identity module (ADR-037): one flat object carrying the style six,
+    content strategy, and identity card. Rendered into prompts at the agent
+    layer via the j2 templates' ``context.persona``.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -497,8 +497,8 @@ class SpeakerContext(BaseModel):
     updated_at: datetime | None = None
 
 
-class SpeakerCreate(BaseModel):
-    """Create speaker request."""
+class PersonaCreate(BaseModel):
+    """Create persona request."""
 
     name: str
     title: str | None = None
@@ -516,8 +516,8 @@ class SpeakerCreate(BaseModel):
     cta: str | None = None
 
 
-class SpeakerUpdate(BaseModel):
-    """Update speaker request."""
+class PersonaUpdate(BaseModel):
+    """Update persona request."""
 
     name: str | None = None
     title: str | None = None
@@ -748,7 +748,7 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     """Create project request."""
 
-    speaker_id: UUID | None = None
+    persona_id: UUID | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -767,7 +767,7 @@ class ProjectResponse(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    speaker_id: UUID | None
+    persona_id: UUID | None
     status: ProjectStatus
     tone_snapshot: ToneSettings | None = None
     created_at: datetime
@@ -787,7 +787,7 @@ class AssetResponse(BaseModel):
     id: UUID
     user_id: UUID
     project_id: UUID | None = None
-    speaker_id: UUID | None = None
+    persona_id: UUID | None = None
     type: AssetType
     file_url: str | None = None
     title: str | None = None
@@ -831,16 +831,16 @@ class AssetCreateRequest(BaseModel):
     title: str | None = None
 
 
-class SpeakerAssetCreateRequest(BaseModel):
-    """Create a speaker asset record after direct upload to storage."""
+class PersonaAssetCreateRequest(BaseModel):
+    """Create a persona asset record after direct upload to storage."""
 
     key: str
     # Original upload filename, used as the display title in the UI.
     title: str | None = None
 
 
-class SpeakerAssetUpdateRequest(BaseModel):
-    """Rename a speaker asset."""
+class PersonaAssetUpdateRequest(BaseModel):
+    """Rename a persona asset."""
 
     title: str
 
@@ -1173,13 +1173,13 @@ class ClipMusic(BaseModel):
 class GenerationContext(BaseModel):
     """Shared context passed to every content generation agent.
 
-    Assembled once per generation run from the resolved speaker, brand
+    Assembled once per generation run from the resolved persona, brand
     template, tone settings, project metadata, and user instruction.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    speaker: SpeakerContext | None = None
+    persona: PersonaContext | None = None
     event_name: str | None = None
     tone_settings: ToneSettings | None = None
     target_language: str = "en"
@@ -1211,7 +1211,7 @@ class KeyArgument(BaseModel):
 class MaterialUnderstanding(BaseModel):
     """素材理解: director step 1 — what the material says (material-scoped).
 
-    Pure: built from source texts/media only — never speaker, tone,
+    Pure: built from source texts/media only — never persona, tone,
     instruction, or target language — so it stays reusable across runs,
     languages, and task books (asset-hash invalidation).
     """
@@ -1525,7 +1525,7 @@ class TranslateCaptionsRequest(BaseModel):
 
 
 class DubRequest(BaseModel):
-    """Voice-clone dub a clip into ``target_language`` (speaker's own voice)."""
+    """Voice-clone dub a clip into ``target_language`` (the persona's own voice)."""
 
     target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
 
@@ -1619,7 +1619,7 @@ class FeedbackReason(StrEnum):
     """Feedback reason."""
 
     HOOK_NOT_CATCHY = "hook_not_catchy"
-    NOT_LIKE_SPEAKER = "not_like_speaker"
+    NOT_LIKE_PERSONA = "not_like_persona"
     TOO_COMPLEX = "too_complex"
     TOO_SIMPLE = "too_simple"
     FACTUALLY_INACCURATE = "factually_inaccurate"

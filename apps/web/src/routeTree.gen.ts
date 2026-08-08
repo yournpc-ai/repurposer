@@ -13,13 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppBrandTemplateRouteImport } from './routes/_app.brand-template'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppPersonasRouteImport } from './routes/_app.personas'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppSpeakersRouteImport } from './routes/_app.speakers'
+import { Route as AppPersonasIndexRouteImport } from './routes/_app.personas.index'
+import { Route as AppPersonasIdRouteImport } from './routes/_app.personas.$id'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
 import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
-import { Route as AppSpeakersIndexRouteImport } from './routes/_app.speakers.index'
-import { Route as AppSpeakersIdRouteImport } from './routes/_app.speakers.$id'
 import { Route as AppProjectsIdIndexRouteImport } from './routes/_app.projects.$id.index'
 import { Route as AppProjectsIdClipsClipIdRouteImport } from './routes/_app.projects.$id.clips.$clipId'
 
@@ -42,6 +42,11 @@ const AppHomeRoute = AppHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPersonasRoute = AppPersonasRouteImport.update({
+  id: '/personas',
+  path: '/personas',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProjectsRoute = AppProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -52,10 +57,15 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
-const AppSpeakersRoute = AppSpeakersRouteImport.update({
-  id: '/speakers',
-  path: '/speakers',
-  getParentRoute: () => AppRoute,
+const AppPersonasIndexRoute = AppPersonasIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppPersonasRoute,
+} as any)
+const AppPersonasIdRoute = AppPersonasIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppPersonasRoute,
 } as any)
 const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   id: '/',
@@ -66,16 +76,6 @@ const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AppProjectsRoute,
-} as any)
-const AppSpeakersIndexRoute = AppSpeakersIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppSpeakersRoute,
-} as any)
-const AppSpeakersIdRoute = AppSpeakersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AppSpeakersRoute,
 } as any)
 const AppProjectsIdIndexRoute = AppProjectsIdIndexRouteImport.update({
   id: '/',
@@ -93,13 +93,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
+  '/personas': typeof AppPersonasRouteWithChildren
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
-  '/speakers': typeof AppSpeakersRouteWithChildren
+  '/personas/$id': typeof AppPersonasIdRoute
   '/projects/$id': typeof AppProjectsIdRouteWithChildren
-  '/speakers/$id': typeof AppSpeakersIdRoute
+  '/personas/': typeof AppPersonasIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
-  '/speakers/': typeof AppSpeakersIndexRoute
   '/projects/$id/': typeof AppProjectsIdIndexRoute
   '/projects/$id/clips/$clipId': typeof AppProjectsIdClipsClipIdRoute
 }
@@ -108,9 +108,9 @@ export interface FileRoutesByTo {
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
   '/settings': typeof AppSettingsRoute
-  '/speakers/$id': typeof AppSpeakersIdRoute
+  '/personas/$id': typeof AppPersonasIdRoute
+  '/personas': typeof AppPersonasIndexRoute
   '/projects': typeof AppProjectsIndexRoute
-  '/speakers': typeof AppSpeakersIndexRoute
   '/projects/$id': typeof AppProjectsIdIndexRoute
   '/projects/$id/clips/$clipId': typeof AppProjectsIdClipsClipIdRoute
 }
@@ -120,13 +120,13 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_app/brand-template': typeof AppBrandTemplateRoute
   '/_app/home': typeof AppHomeRoute
+  '/_app/personas': typeof AppPersonasRouteWithChildren
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
-  '/_app/speakers': typeof AppSpeakersRouteWithChildren
+  '/_app/personas/$id': typeof AppPersonasIdRoute
   '/_app/projects/$id': typeof AppProjectsIdRouteWithChildren
-  '/_app/speakers/$id': typeof AppSpeakersIdRoute
+  '/_app/personas/': typeof AppPersonasIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
-  '/_app/speakers/': typeof AppSpeakersIndexRoute
   '/_app/projects/$id/': typeof AppProjectsIdIndexRoute
   '/_app/projects/$id/clips/$clipId': typeof AppProjectsIdClipsClipIdRoute
 }
@@ -136,13 +136,13 @@ export interface FileRouteTypes {
     | '/'
     | '/brand-template'
     | '/home'
+    | '/personas'
     | '/projects'
     | '/settings'
-    | '/speakers'
+    | '/personas/$id'
     | '/projects/$id'
-    | '/speakers/$id'
+    | '/personas/'
     | '/projects/'
-    | '/speakers/'
     | '/projects/$id/'
     | '/projects/$id/clips/$clipId'
   fileRoutesByTo: FileRoutesByTo
@@ -151,9 +151,9 @@ export interface FileRouteTypes {
     | '/brand-template'
     | '/home'
     | '/settings'
-    | '/speakers/$id'
+    | '/personas/$id'
+    | '/personas'
     | '/projects'
-    | '/speakers'
     | '/projects/$id'
     | '/projects/$id/clips/$clipId'
   id:
@@ -162,13 +162,13 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_app/brand-template'
     | '/_app/home'
+    | '/_app/personas'
     | '/_app/projects'
     | '/_app/settings'
-    | '/_app/speakers'
+    | '/_app/personas/$id'
     | '/_app/projects/$id'
-    | '/_app/speakers/$id'
+    | '/_app/personas/'
     | '/_app/projects/'
-    | '/_app/speakers/'
     | '/_app/projects/$id/'
     | '/_app/projects/$id/clips/$clipId'
   fileRoutesById: FileRoutesById
@@ -208,6 +208,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/personas': {
+      id: '/_app/personas'
+      path: '/personas'
+      fullPath: '/personas'
+      preLoaderRoute: typeof AppPersonasRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/projects': {
       id: '/_app/projects'
       path: '/projects'
@@ -222,12 +229,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/speakers': {
-      id: '/_app/speakers'
-      path: '/speakers'
-      fullPath: '/speakers'
-      preLoaderRoute: typeof AppSpeakersRouteImport
-      parentRoute: typeof AppRoute
+    '/_app/personas/': {
+      id: '/_app/personas/'
+      path: '/'
+      fullPath: '/personas/'
+      preLoaderRoute: typeof AppPersonasIndexRouteImport
+      parentRoute: typeof AppPersonasRoute
+    }
+    '/_app/personas/$id': {
+      id: '/_app/personas/$id'
+      path: '/$id'
+      fullPath: '/personas/$id'
+      preLoaderRoute: typeof AppPersonasIdRouteImport
+      parentRoute: typeof AppPersonasRoute
     }
     '/_app/projects/': {
       id: '/_app/projects/'
@@ -242,20 +256,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/projects/$id'
       preLoaderRoute: typeof AppProjectsIdRouteImport
       parentRoute: typeof AppProjectsRoute
-    }
-    '/_app/speakers/': {
-      id: '/_app/speakers/'
-      path: '/'
-      fullPath: '/speakers/'
-      preLoaderRoute: typeof AppSpeakersIndexRouteImport
-      parentRoute: typeof AppSpeakersRoute
-    }
-    '/_app/speakers/$id': {
-      id: '/_app/speakers/$id'
-      path: '/$id'
-      fullPath: '/speakers/$id'
-      preLoaderRoute: typeof AppSpeakersIdRouteImport
-      parentRoute: typeof AppSpeakersRoute
     }
     '/_app/projects/$id/': {
       id: '/_app/projects/$id/'
@@ -273,6 +273,20 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AppPersonasRouteChildren {
+  AppPersonasIdRoute: typeof AppPersonasIdRoute
+  AppPersonasIndexRoute: typeof AppPersonasIndexRoute
+}
+
+const AppPersonasRouteChildren: AppPersonasRouteChildren = {
+  AppPersonasIdRoute: AppPersonasIdRoute,
+  AppPersonasIndexRoute: AppPersonasIndexRoute,
+}
+
+const AppPersonasRouteWithChildren = AppPersonasRoute._addFileChildren(
+  AppPersonasRouteChildren,
+)
 
 interface AppProjectsIdRouteChildren {
   AppProjectsIdIndexRoute: typeof AppProjectsIdIndexRoute
@@ -302,34 +316,20 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
   AppProjectsRouteChildren,
 )
 
-interface AppSpeakersRouteChildren {
-  AppSpeakersIdRoute: typeof AppSpeakersIdRoute
-  AppSpeakersIndexRoute: typeof AppSpeakersIndexRoute
-}
-
-const AppSpeakersRouteChildren: AppSpeakersRouteChildren = {
-  AppSpeakersIdRoute: AppSpeakersIdRoute,
-  AppSpeakersIndexRoute: AppSpeakersIndexRoute,
-}
-
-const AppSpeakersRouteWithChildren = AppSpeakersRoute._addFileChildren(
-  AppSpeakersRouteChildren,
-)
-
 interface AppRouteChildren {
   AppBrandTemplateRoute: typeof AppBrandTemplateRoute
   AppHomeRoute: typeof AppHomeRoute
+  AppPersonasRoute: typeof AppPersonasRouteWithChildren
   AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
-  AppSpeakersRoute: typeof AppSpeakersRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppBrandTemplateRoute: AppBrandTemplateRoute,
   AppHomeRoute: AppHomeRoute,
+  AppPersonasRoute: AppPersonasRouteWithChildren,
   AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
-  AppSpeakersRoute: AppSpeakersRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

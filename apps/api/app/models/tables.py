@@ -44,7 +44,7 @@ class User(Base):
 
     Login is passwordless: a 6-digit email code (see ``services/auth.py``) is
     exchanged for a JWT. All product data is isolated per user; the seeded
-    default user only owns shared default content (brand template, speakers).
+    default user only owns shared default content (brand template, personas).
     """
 
     __tablename__ = "users"
@@ -71,15 +71,15 @@ class VerificationCode(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
-class Speaker(Base):
-    """Speaker table.
+class Persona(Base):
+    """Persona table (ADR-037 — the identity module; renamed from Speaker).
 
-    A speaker is a project-level memory of a talk's voice, style, and content
-    strategy. Style and content memory are stored as flat columns; the
-    ``persona`` summary is rendered at the agent layer when needed.
+    A persona is a project-level memory of the user's voice, style, and content
+    strategy. Style and content memory are stored as flat columns; the persona
+    summary is rendered into prompts at the agent layer when needed.
     """
 
-    __tablename__ = "speakers"
+    __tablename__ = "personas"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -108,7 +108,7 @@ class Project(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
+    persona_id = Column(UUID(as_uuid=True), ForeignKey("personas.id"), nullable=True)
     title = Column(String(255), nullable=False)
     event_name = Column(String(255), nullable=True)
     language = Column(String(10), default="zh")
@@ -126,19 +126,19 @@ class Asset(Base):
     """Asset table.
 
     Assets belong to a user and are optionally attached to a project or a
-    speaker. The user_id denormalisation lets the storage layer enforce
-    ownership without joining projects/speakers on every file read.
+    persona. The user_id denormalisation lets the storage layer enforce
+    ownership without joining projects/personas on every file read.
     """
 
     __tablename__ = "assets"
 
     __table_args__ = (
         CheckConstraint(
-            "project_id IS NOT NULL OR speaker_id IS NOT NULL",
+            "project_id IS NOT NULL OR persona_id IS NOT NULL",
             name="ck_asset_owner_set",
         ),
         CheckConstraint(
-            "NOT (project_id IS NOT NULL AND speaker_id IS NOT NULL)",
+            "NOT (project_id IS NOT NULL AND persona_id IS NOT NULL)",
             name="ck_asset_owner_single",
         ),
     )
@@ -146,7 +146,7 @@ class Asset(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
-    speaker_id = Column(UUID(as_uuid=True), ForeignKey("speakers.id"), nullable=True)
+    persona_id = Column(UUID(as_uuid=True), ForeignKey("personas.id"), nullable=True)
     type = Column(Enum(AssetType), nullable=False)
     file_url = Column(String(512), nullable=True)
     # User-facing display name (defaults to the original upload filename);
@@ -401,8 +401,8 @@ class Music(Base):
     """Background music piece (DB-backed; audio bytes stay in object storage).
 
     A dedicated table — not the ``Asset`` table — because music library items are
-    global/shared resources: they don't belong to a single project or speaker
-    (``Asset`` enforces ``project_id IS NOT NULL OR speaker_id IS NOT NULL``).
+    global/shared resources: they don't belong to a single project or persona
+    (``Asset`` enforces ``project_id IS NOT NULL OR persona_id IS NOT NULL``).
 
     Binding:
     - Platform/default pieces: ``generated_by_user_id = NULL``, ``is_public = True``.

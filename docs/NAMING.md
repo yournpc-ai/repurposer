@@ -70,6 +70,14 @@
 | 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |
 | 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：任务书钉（outputs/dub_languages）+ 输入槽位 + status——**钉死唯一事实源**，钉死实质不出服务端 | 不是前端数据文件、不是表 |
 | 输入槽位 | `input_slots` | 配方的类型化素材要求（素材类型 + 是否必填）；前端提示 + 服务端门禁双消费者 | 不是上传组件 |
+| 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
+| 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
+| 依赖边 | dependency edge | FlowView 边语义之二：step 间工艺顺序（step `inputs`） | 不是血缘边 |
+| run 进度图 | run flow graph | 单 run 拓扑的只读状态动画投影（编译期定死的死图，ADR-036 第 3 条排产项）；适配器组件 `RunFlowGraph` | 不是 spike（spike 只剩血缘板）；不取代打勾流 |
+| 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（2026-08-08，D6 二次修订）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
+| 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
+| 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，09-03 复述测试裁决是否升正默认中心） | 图内不堆历史（禁令 #6） |
+| 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037，N-27；2026-08-09 第一刀落地）：身份卡 + 风格 + 策略 + 声音（+ 皮肤，第二刀），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族 | 不是 speaker——`speaker` 只指素材里说话的人（`speaker_map` 合法居民）；不是 IP（承诺层词，禁入英文文案） |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
@@ -104,6 +112,8 @@
 | N-25 | 自称双轨：对内技术 = agent，对外文案 = assistant/助手（细化 N-24 适用范围） | "agent" 对非技术用户是行话（欧洲用户甚至会读成"经纪人/特工"）；技术实体不变——架构/PRD/CLAUDE.md/代码全用 agent，N-24 的隐喻禁令不变；hero/showcase 等对外文案一律 assistant（EN）/ 助手或代词"它"（zh，zh 优先代词）（2026-08-01 用户裁决）。对外文案中出现 "agent" 字样即违规 | §1、§6 |
 | N-25 | 任务书钉死归服务端配方注册表解析；mention 系统双端注册表化 | 钉死唯一发生地 = 服务端 `resolve_recipe_mentions`（composer/chat 两表面同一份解析器）；客户端 prior 构造路径退役（旧事故根因：隐式状态 + 客户端持钉）。提及类型与效果各自注册表化（recipe 第一成员、第五提及类型），后续 @ 类型只填注册项，禁类型分支补丁（2026-08-01 用户裁决：mention 做成可扩展架构，功能先只开 recipe）。**词汇修订**："硬编码"表述退役——正确表述是"静态注册表，随代码部署"（SKILL_REGISTRY 同款纪律）。**2026-08-05 语义修订**：钉（pin）降为**预设播种（preset seed）**——存在性填充（只补推断没有的槽位类型）+ dub 空时填默认，无 explicit，下一轮起每个字段可经 chat 修订（chat 永远赢，三方合并 `merge_prior_slots`）；"唯一发生地 = 服务端解析"不变 | §1、§5 |
 | N-26 | chat 流式词族：delta = 散文预览增量，envelope = 终帧信封 | 流式三层各一词：LLM 原始片 = fragment（`on_delta(fragment)` 入提取器）；解码后散文增量 = **delta**（SSE 帧 `assistant.delta`，纯预览，非事实源）；终帧 = **envelope**（`turn.completed`/`turn.failed`，完整 ChatResponse，永远权威）。机制名：`ProseDeltaExtractor`（唯一散文提取入口）、`MiniMaxClient.generate_stream`、service 拆分 `prepare_chat_turn`/`execute_chat_turn`、前端 `streamChat`。禁 chunk/token 混用（chunk 是 HTTP/LLM 传输单位，token 是计费单位，delta 才是渲染单位）（ADR-034） | §1、§5 |
+| N-27 | 身份模块正名：Speaker → 人设 / `Persona`；`speaker` 让位素材说话人 | 定位升级后"演讲者"前提崩塌（素材 = 会议/报告/播客，不只是演讲）+ 一词三义（用户身份画像 / `speaker_map` 素材里说话的人 / landing 普通词 speakers）。用户面 zh「人设」/ en「Persona」、代码 `persona`，三层同词族；`speaker` 此后只指素材里说话的人（`speaker_map` 合法居民）；**IP = 承诺层词，禁入英文文案**（en 叙事 = personal brand / thought leadership），不进产品内导航（ADR-037，翻案 ADR-021 §6）。迁移落地时词汇表登记「人设 / Persona」 | §1、§6 |
+| N-28 | 人设吸收 Brand：`brand_templates` 退役，皮肤 = `persona.brand` | 多人设拍板反转拆分理由（一人多号 = 多人设各带皮肤）；`config` 杂物抽屉三分流——皮肤→`brand` 块、工艺开关（removeFiller/captionEnabled/aspect/fillMode）→配方/任务书默认、CTA 唯一家 = `persona.cta`；**`brand` 全栈一词**（人设块 / 烘焙 / clip-spec 段同名）——模块退役词不退役，不引入 `look` 字段名（避免撞 RECIPES §4.4 look 层组合概念）；composer 单身份控件；失去独立表归属即失去模块资格（§7 逆用）（ADR-038） | §1、§7 |
 
 ## 4. API 命名
 

@@ -12,7 +12,7 @@ from app.models.schemas import (
     FeedbackRequest,
     FeedbackScope,
     Segment,
-    SpeakerContext,
+    PersonaContext,
 )
 
 logger = structlog.get_logger()
@@ -38,7 +38,7 @@ class ReviserAgent:
         clip_music_mood: str,
         segment: Segment,
         feedback: FeedbackRequest,
-        speaker: SpeakerContext | None,
+        persona: PersonaContext | None,
     ) -> ClipRevision:
         """Revise clip metadata based on feedback.
 
@@ -49,7 +49,7 @@ class ReviserAgent:
             clip_music_mood: Current music mood.
             segment: Source segment for context.
             feedback: Human feedback.
-            speaker: Speaker context for style guidance.
+            persona: Persona context for style guidance.
 
         Returns:
             Revised ClipRevision model.
@@ -62,7 +62,7 @@ class ReviserAgent:
             music_mood=clip_music_mood,
             segment=segment,
             feedback=feedback,
-            speaker=speaker,
+            persona=persona,
         )
 
         messages = [
@@ -109,7 +109,7 @@ class ReviserAgent:
         clip_music_mood: str,
         segment: Segment,
         instruction: str,
-        speaker: SpeakerContext | None,
+        persona: PersonaContext | None,
         scope: str = "full_script",
     ) -> ClipRevision:
         """Revise clip metadata from a free-text user instruction.
@@ -135,7 +135,7 @@ class ReviserAgent:
             clip_music_mood,
             segment,
             feedback,
-            speaker,
+            persona,
         )
 
 

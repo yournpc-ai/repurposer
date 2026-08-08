@@ -43,26 +43,26 @@ The user's explicit requirements for this output are as follows. **Please priori
 > {{ context.instruction }}
 
 {% endif %}
-{% if context.speaker %}
-## Speaker Context
+{% if context.persona %}
+## Persona Context
 
-You are planning content for **{{ context.speaker.name or "the speaker" }}{% if context.speaker.title %} ({{ context.speaker.title }}){% endif %}**.
+You are planning content for **{{ context.persona.name or "the persona" }}{% if context.persona.title %} ({{ context.persona.title }}){% endif %}**.
 Make sure each slot's angle serves their audience and credibility.
 
-{% if context.speaker.voice or context.speaker.audience or context.speaker.guidelines or context.speaker.cta %}
-### Speaker Memory
+{% if context.persona.voice or context.persona.audience or context.persona.guidelines or context.persona.cta %}
+### Persona Memory
 
-{% if context.speaker.voice %}
-- **Voice**: {{ context.speaker.voice }}
+{% if context.persona.voice %}
+- **Voice**: {{ context.persona.voice }}
 {% endif %}
-{% if context.speaker.audience %}
-- **Target audience**: {{ context.speaker.audience }}
+{% if context.persona.audience %}
+- **Target audience**: {{ context.persona.audience }}
 {% endif %}
-{% if context.speaker.cta %}
-- **Call to action**: {{ context.speaker.cta }} — outputs should, when natural, lead to this action.
+{% if context.persona.cta %}
+- **Call to action**: {{ context.persona.cta }} — outputs should, when natural, lead to this action.
 {% endif %}
-{% if context.speaker.guidelines %}
-- **Content guidelines**: {{ context.speaker.guidelines }}
+{% if context.persona.guidelines %}
+- **Content guidelines**: {{ context.persona.guidelines }}
 {% endif %}
 
 {% endif %}

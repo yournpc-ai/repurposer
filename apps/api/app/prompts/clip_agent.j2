@@ -99,9 +99,9 @@ Each clip should satisfy multiple of the following conditions:
 
 ## Recommendation Score
 
-For each clip, output `recommendation_score` (1-100): **how strongly you recommend the speaker post THIS clip first**, and `score_reason` (one sentence, in the target language) explaining the score.
+For each clip, output `recommendation_score` (1-100): **how strongly you recommend the persona post THIS clip first**, and `score_reason` (one sentence, in the target language) explaining the score.
 
-Score only what you can actually judge from the content — never predict views, reach, or virality (those depend on the speaker's audience, timing, and platform algorithms, none of which you can see):
+Score only what you can actually judge from the content — never predict views, reach, or virality (those depend on the persona's audience, timing, and platform algorithms, none of which you can see):
 
 - **Completeness**: the clip stands alone — a full argument arc (setup → point → payoff), not a fragment that only makes sense inside the full talk.
 - **Opening**: the first 3 seconds earn the next 27 — a striking claim, question, or tension (a knowledge hook, not clickbait).
@@ -110,38 +110,38 @@ Score only what you can actually judge from the content — never predict views,
 
 `score_reason` must name the axes that drove the score (e.g., "Complete argument arc with a strong opening question; delivers the talk's central claim"). It is shown to the user verbatim.
 
-{% if context.speaker %}
-## Speaker Context
+{% if context.persona %}
+## Persona Context
 
-You are selecting clips for **{{ context.speaker.name or "the speaker" }}{% if context.speaker.title %} ({{ context.speaker.title }}){% endif %}**.
-Make sure the hook sounds like something this speaker would actually say, and the angle serves their audience and credibility.
+You are selecting clips for **{{ context.persona.name or "the persona" }}{% if context.persona.title %} ({{ context.persona.title }}){% endif %}**.
+Make sure the hook sounds like something this persona would actually say, and the angle serves their audience and credibility.
 
-{% if context.speaker.voice or context.speaker.audience or context.speaker.guidelines or context.speaker.cta %}
-### Speaker Memory
+{% if context.persona.voice or context.persona.audience or context.persona.guidelines or context.persona.cta %}
+### Persona Memory
 
-{% if context.speaker.voice %}
-- **Voice**: {{ context.speaker.voice }}
+{% if context.persona.voice %}
+- **Voice**: {{ context.persona.voice }}
 {% endif %}
-{% if context.speaker.audience %}
-- **Target audience**: {{ context.speaker.audience }}
+{% if context.persona.audience %}
+- **Target audience**: {{ context.persona.audience }}
 {% endif %}
-{% if context.speaker.cta %}
-- **Call to action**: {{ context.speaker.cta }} — when possible, choose segments that can naturally lead to this action.
+{% if context.persona.cta %}
+- **Call to action**: {{ context.persona.cta }} — when possible, choose segments that can naturally lead to this action.
 {% endif %}
-{% if context.speaker.guidelines %}
-- **Content guidelines**: {{ context.speaker.guidelines }}
+{% if context.persona.guidelines %}
+- **Content guidelines**: {{ context.persona.guidelines }}
 {% endif %}
 
 {% endif %}
-{% if context.speaker %}
-### Speaker Style Profile
+{% if context.persona %}
+### Persona Style Profile
 
-- Core values: {{ context.speaker.core_values | join(', ') }}
-- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.speaker.sentence_style }}
-- Emotional tone: {{ context.speaker.emotional_tone }}
-- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
+- Core values: {{ context.persona.core_values | join(', ') }}
+- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.persona.sentence_style }}
+- Emotional tone: {{ context.persona.emotional_tone }}
+- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
 
 {% endif %}
 {% endif %}

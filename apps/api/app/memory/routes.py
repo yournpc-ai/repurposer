@@ -1,4 +1,4 @@
-"""Memory module routes: speakers + brand templates."""
+"""Memory module routes: personas + brand templates."""
 
 from datetime import UTC, datetime
 from uuid import UUID
@@ -19,156 +19,156 @@ from app.models.schemas import (
     BrandTemplateCreate,
     BrandTemplateResponse,
     BrandTemplateUpdate,
-    SpeakerContext,
-    SpeakerCreate,
-    SpeakerUpdate,
+    PersonaContext,
+    PersonaCreate,
+    PersonaUpdate,
 )
-from app.models.tables import Asset, BrandTemplate, Speaker, User
+from app.models.tables import Asset, BrandTemplate, Persona, User
 from app.tools.extraction import extract_text
 from app.tools.storage import (
     delete_file,
-    delete_speaker_files,
+    delete_persona_files,
     get_brand_media_path,
     presign_upload,
     save_brand_media_upload,
     stream_url,
 )
 
-speakers_router = APIRouter()
+personas_router = APIRouter()
 
 
-@speakers_router.post("", response_model=SpeakerContext, status_code=status.HTTP_201_CREATED)
-async def create_speaker(
-    data: SpeakerCreate,
+@personas_router.post("", response_model=PersonaContext, status_code=status.HTTP_201_CREATED)
+async def create_persona(
+    data: PersonaCreate,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Speaker:
-    """Create a new speaker."""
-    speaker = Speaker(**data.model_dump(), user_id=current_user.id)
-    db.add(speaker)
+) -> Persona:
+    """Create a new persona."""
+    persona = Persona(**data.model_dump(), user_id=current_user.id)
+    db.add(persona)
     try:
         await db.commit()
-        await db.refresh(speaker)
+        await db.refresh(persona)
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Speaker creation failed",
+            detail="Persona creation failed",
         )
-    return speaker
+    return persona
 
 
-@speakers_router.get("", response_model=list[SpeakerContext])
-async def list_speakers(
+@personas_router.get("", response_model=list[PersonaContext])
+async def list_personas(
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
     skip: int = 0,
     limit: int = 100,
-) -> list[Speaker]:
-    """List the current user's own speakers.
+) -> list[Persona]:
+    """List the current user's own personas.
 
-    Default-user (shared) speakers are intentionally excluded: project creation
-    rejects speaker_ids the caller does not own, so listing them would offer
+    Default-user (shared) personas are intentionally excluded: project creation
+    rejects persona_ids the caller does not own, so listing them would offer
     options that always 404 when selected. Anonymous callers get an empty
     list (generation requires login anyway).
     """
     if current_user is None:
         return []
     result = await db.execute(
-        select(Speaker)
-        .where(Speaker.user_id == current_user.id)
+        select(Persona)
+        .where(Persona.user_id == current_user.id)
         .offset(skip)
         .limit(limit)
     )
     return list(result.scalars().all())
 
 
-async def _get_user_speaker(
-    speaker_id: UUID, user_id: UUID | None, db: DBDep
-) -> Speaker:
-    """Fetch a speaker and ensure it belongs to the given user or defaults."""
-    query = select(Speaker).where(Speaker.id == speaker_id)
+async def _get_user_persona(
+    persona_id: UUID, user_id: UUID | None, db: DBDep
+) -> Persona:
+    """Fetch a persona and ensure it belongs to the given user or defaults."""
+    query = select(Persona).where(Persona.id == persona_id)
     if user_id is None:
-        query = query.where(Speaker.user_id == DEFAULT_USER_ID)
+        query = query.where(Persona.user_id == DEFAULT_USER_ID)
     else:
-        query = query.where(Speaker.user_id.in_([user_id, DEFAULT_USER_ID]))
+        query = query.where(Persona.user_id.in_([user_id, DEFAULT_USER_ID]))
     result = await db.execute(query)
-    speaker = result.scalar_one_or_none()
-    if not speaker:
+    persona = result.scalar_one_or_none()
+    if not persona:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Speaker not found",
+            detail="Persona not found",
         )
-    return speaker
+    return persona
 
 
-@speakers_router.get("/{speaker_id}", response_model=SpeakerContext)
-async def get_speaker(
-    speaker_id: UUID,
+@personas_router.get("/{persona_id}", response_model=PersonaContext)
+async def get_persona(
+    persona_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> Speaker:
-    """Get speaker by ID."""
-    return await _get_user_speaker(
-        speaker_id, current_user.id if current_user else None, db
+) -> Persona:
+    """Get persona by ID."""
+    return await _get_user_persona(
+        persona_id, current_user.id if current_user else None, db
     )
 
 
-@speakers_router.put("/{speaker_id}", response_model=SpeakerContext)
-async def update_speaker(
-    speaker_id: UUID,
-    data: SpeakerUpdate,
+@personas_router.put("/{persona_id}", response_model=PersonaContext)
+async def update_persona(
+    persona_id: UUID,
+    data: PersonaUpdate,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> Speaker:
-    """Update speaker."""
-    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
+) -> Persona:
+    """Update persona."""
+    persona = await _get_user_persona(persona_id, current_user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(speaker, field, value)
+        setattr(persona, field, value)
 
     await db.commit()
-    await db.refresh(speaker)
-    return speaker
+    await db.refresh(persona)
+    return persona
 
 
-@speakers_router.delete("/{speaker_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_speaker(
-    speaker_id: UUID,
+@personas_router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_persona(
+    persona_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> None:
-    """Delete speaker and all associated source assets."""
-    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
+    """Delete persona and all associated source assets."""
+    persona = await _get_user_persona(persona_id, current_user.id, db)
 
     # Delete associated assets (files + DB rows)
-    result = await db.execute(select(Asset).where(Asset.speaker_id == speaker_id))
+    result = await db.execute(select(Asset).where(Asset.persona_id == persona_id))
     assets = list(result.scalars().all())
     for asset in assets:
         delete_file(asset.file_url)
         await db.delete(asset)
 
-    await db.delete(speaker)
+    await db.delete(persona)
     await db.commit()
 
-    # Remove speaker upload directory after DB commit
-    delete_speaker_files(speaker_id, current_user.id)
+    # Remove persona upload directory after DB commit
+    delete_persona_files(persona_id, current_user.id)
 
 
-@speakers_router.post("/{speaker_id}/persona/generate", response_model=SpeakerContext)
+@personas_router.post("/{persona_id}/generate", response_model=PersonaContext)
 async def generate_persona(
-    speaker_id: UUID,
+    persona_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
-) -> SpeakerContext:
-    """Generate speaker persona and content memory from uploaded source assets."""
-    speaker = await _get_user_speaker(speaker_id, current_user.id, db)
+) -> PersonaContext:
+    """Generate persona style and content memory from uploaded source assets."""
+    persona = await _get_user_persona(persona_id, current_user.id, db)
 
-    # Find speaker's past material assets
+    # Find persona's past material assets
     result = await db.execute(
         select(Asset).where(
-            Asset.speaker_id == speaker_id,
+            Asset.persona_id == persona_id,
             Asset.type == AssetType.PAST_MATERIAL,
         )
     )
@@ -176,7 +176,7 @@ async def generate_persona(
     if not assets:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No past materials uploaded for this speaker",
+            detail="No past materials uploaded for this persona",
         )
 
     # Ensure all source assets have extracted text
@@ -199,9 +199,9 @@ async def generate_persona(
 
     try:
         memory = await persona_agent.generate(
-            speaker_name=speaker.name,
-            speaker_title=speaker.title,
-            language=speaker.language,
+            persona_name=persona.name,
+            persona_title=persona.title,
+            language=persona.language,
             asset_texts=asset_texts,
         )
     except MiniMaxError as e:
@@ -210,19 +210,19 @@ async def generate_persona(
             detail=str(e),
         ) from e
 
-    speaker.core_values = memory.core_values or []
-    speaker.favorite_metaphors = memory.favorite_metaphors or []
-    speaker.sentence_style = memory.sentence_style or ""
-    speaker.emotional_tone = memory.emotional_tone or "rational"
-    speaker.typical_hooks = memory.typical_hooks or []
-    speaker.avoid_words = memory.avoid_words or []
-    speaker.voice = memory.voice
-    speaker.audience = memory.audience
-    speaker.guidelines = memory.guidelines
-    speaker.cta = memory.cta
+    persona.core_values = memory.core_values or []
+    persona.favorite_metaphors = memory.favorite_metaphors or []
+    persona.sentence_style = memory.sentence_style or ""
+    persona.emotional_tone = memory.emotional_tone or "rational"
+    persona.typical_hooks = memory.typical_hooks or []
+    persona.avoid_words = memory.avoid_words or []
+    persona.voice = memory.voice
+    persona.audience = memory.audience
+    persona.guidelines = memory.guidelines
+    persona.cta = memory.cta
     await db.commit()
-    await db.refresh(speaker)
-    return speaker
+    await db.refresh(persona)
+    return persona
 
 
 # ---- Brand templates --------------------------------------------------

@@ -8,10 +8,11 @@ import type { ChatMention } from "@/lib/mentions"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecipeCard as RecipeCardView } from "@/components/home/RecipeCard"
-import type { SpeakerPickerEntry } from "@/components/home/SpeakerPickerModal"
+import { RecipeInspectOverlay } from "@/components/recipes/RecipeInspectOverlay"
+import type { PersonaPickerEntry } from "@/components/home/PersonaPickerModal"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
-type Speaker = SpeakerPickerEntry
+type Persona = PersonaPickerEntry
 
 interface BrandTemplate {
   id: string
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/_app/home")({
 
 function Home() {
   const { t } = useTranslation()
-  const [speakers, setSpeakers] = useState<Speaker[]>([])
+  const [personas, setPersonas] = useState<Persona[]>([])
   const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
   const [cards, setCards] = useState<RecipeCard[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
@@ -36,12 +37,17 @@ function Home() {
   // The one card currently sounding (autoplay is muted; the toggle circle
   // unmutes one card at a time).
   const [soundingId, setSoundingId] = useState<string | null>(null)
+  // Card body click opens the inspect overlay (D6 二次修订 2026-08-08):
+  // inspect tabs + the launch zone (the composer's send mechanism parked
+  // inside — no more backfill detour). The card's hover Remix shortcut still
+  // backfills the composer below (the general-purpose entry).
+  const [inspecting, setInspecting] = useState<RecipeCard | null>(null)
 
   useEffect(() => {
     // Each fetch degrades to empty independently — a recipes-endpoint hiccup
-    // must not take the composer's speakers/brands down with it.
+    // must not take the composer's personas/brands down with it.
     Promise.all([
-      apiFetch("/api/v1/speakers")
+      apiFetch("/api/v1/personas")
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []),
       apiFetch("/api/v1/brand-templates")
@@ -49,7 +55,7 @@ function Home() {
         .catch(() => []),
       fetchRecipeCards().catch(() => []),
     ]).then(([s, bt, rc]) => {
-      setSpeakers((s as Speaker[]) || [])
+      setPersonas((s as Persona[]) || [])
       setBrandTemplates(bt || [])
       setCards(rc)
     })
@@ -96,7 +102,7 @@ function Home() {
         </p>
         <div className="w-full max-w-3xl">
           <HomeComposer
-            speakers={speakers}
+            personas={personas}
             brandTemplates={brandTemplates}
             prompt={prompt}
             onPromptChange={setPrompt}
@@ -125,12 +131,21 @@ function Home() {
                     setSoundingId((prev) => (prev === id ? null : id))
                   }
                   onSelect={handleRecipeSelect}
+                  onInspect={setInspecting}
                 />
               </div>
             ))}
           </div>
         </div>
       </section>
+
+      {inspecting && (
+        <RecipeInspectOverlay
+          card={inspecting}
+          onClose={() => setInspecting(null)}
+          brandTemplateId={brandTemplates[0]?.id}
+        />
+      )}
     </div>
   )
 }

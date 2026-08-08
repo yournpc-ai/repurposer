@@ -10,8 +10,8 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 Extract {{ count }} quotes from the following source text. Each quote must:
 - Be at most 25 words (or 80 CJK characters) — short enough for a graphic card
 - Be able to stand alone and resonate without context
-- Match the speaker's style and brand voice
-- Have clear attribution (speaker name + event/occasion)
+- Match the persona's style and brand voice
+- Have clear attribution (persona name + event/occasion)
 - **Output language: {{ context.target_language }}**
 - **Verbatim fidelity**: when the output language is the same as the source language, each quote must be copied word-for-word from the source text — never paraphrase, "improve", or invent a sentence and attribute it to the speaker. When translating into another language, translate faithfully without adding or inventing claims.
 
@@ -31,25 +31,25 @@ Use these candidate quotes assigned by the storyboard — verbatim when the lang
 {% endfor %}
 
 {% endif %}
-## Speaker
+## Persona
 
-- Name: {{ context.speaker.name or 'Speaker' }}
-{% if context.speaker.title %}
-- Title: {{ context.speaker.title }}
+- Name: {{ context.persona.name or 'Persona' }}
+{% if context.persona.title %}
+- Title: {{ context.persona.title }}
 {% endif %}
 {% if context.event_name %}
 - Event: {{ context.event_name }}
 {% endif %}
 
-## Speaker Style Profile
+## Persona Style Profile
 
-{% if context.speaker %}
-- Core values: {{ context.speaker.core_values | join(', ') }}
-- Favorite metaphors: {{ context.speaker.favorite_metaphors | join(', ') }}
-- Sentence style: {{ context.speaker.sentence_style }}
-- Emotional tone: {{ context.speaker.emotional_tone }}
-- Typical hooks: {{ context.speaker.typical_hooks | join(' / ') }}
-- Words to avoid: {{ context.speaker.avoid_words | join(', ') }}
+{% if context.persona %}
+- Core values: {{ context.persona.core_values | join(', ') }}
+- Favorite metaphors: {{ context.persona.favorite_metaphors | join(', ') }}
+- Sentence style: {{ context.persona.sentence_style }}
+- Emotional tone: {{ context.persona.emotional_tone }}
+- Typical hooks: {{ context.persona.typical_hooks | join(' / ') }}
+- Words to avoid: {{ context.persona.avoid_words | join(', ') }}
 {% else %}
 (No style profile provided)
 {% endif %}
@@ -70,7 +70,7 @@ Please output only valid JSON:
   "quotes": [
     {
       "quote": "quote content",
-      "attribution": "Speaker Name | Event"
+      "attribution": "Persona Name | Event"
     }
   ]
 }

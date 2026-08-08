@@ -14,20 +14,23 @@ import type { RecipeCard as RecipeCardData } from "@/lib/recipes"
  * for live cards, a Soon pill for reserved (a promise is never clickable
  * before its capability is real). No promise copy on hover (2026-08-02).
  *
- * Remix (2026-08-01, docs/tasks/recipe-mention.md): inserts a recipe mention
- * chip into the composer — the pinned task book resolves server-side, never
- * from a client-built prior.
+ * Card body click (2026-08-07, D6) opens the read-only RecipeInspectOverlay;
+ * the hover Remix stays as the one-click fast path (the overlay's Remix is
+ * the same backfill). Remix inserts a recipe mention chip into the composer —
+ * the pinned task book resolves server-side, never from a client-built prior.
  */
 export function RecipeCard({
   card,
   sounding,
   onToggleSound,
   onSelect,
+  onInspect,
 }: {
   card: RecipeCardData
   sounding: boolean
   onToggleSound: (id: string) => void
   onSelect: (card: RecipeCardData) => void
+  onInspect: (card: RecipeCardData) => void
 }) {
   const { t } = useTranslation()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -43,9 +46,9 @@ export function RecipeCard({
     <div
       role={live ? "button" : undefined}
       tabIndex={live ? 0 : undefined}
-      onClick={() => live && onSelect(card)}
+      onClick={() => live && onInspect(card)}
       onKeyDown={(e) => {
-        if (live && (e.key === "Enter" || e.key === " ")) onSelect(card)
+        if (live && (e.key === "Enter" || e.key === " ")) onInspect(card)
       }}
       className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-card shadow-lg edge-glow"
     >

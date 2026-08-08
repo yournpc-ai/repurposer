@@ -22,7 +22,7 @@ import {
 
 // Videos / audio / images / transcripts & docs — the three input tiers
 // ("bring whatever you have"): recording, audio-only, or transcript + photos.
-const ACCEPT =
+export const ASSETS_ACCEPT =
   ".mp4,.mov,.webm,.mp3,.wav,.m4a,.png,.jpg,.jpeg,.webp,.txt,.md,.pdf,.doc,.docx,.srt,.vtt"
 
 interface AssetsModalProps {
@@ -65,7 +65,7 @@ export function AssetsModal({ files, onAdd, onRemove, open, onOpenChange }: Asse
           type="file"
           multiple
           className="hidden"
-          accept={ACCEPT}
+          accept={ASSETS_ACCEPT}
           onChange={handleChange}
         />
 

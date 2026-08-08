@@ -94,7 +94,7 @@
 ```
 users（平台层）
 
-Memory/Context：speakers（📋+视觉身份/授权）· brand_templates
+Memory/Context：personas（📋+视觉身份/授权）· brand_templates
 
 Pipeline：
 assets ──► workflow_runs ──► workflow_steps ✅ ──► outputs ✅（统一产物，clips/derivatives 已退役）
@@ -123,7 +123,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（plan path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（PlanAgent + ChatIntentAgent，op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第 10 周联调） |
-| **Memory / Context** | Speaker persona、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
+| **Memory / Context** | Persona（人设）、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
 | **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第 10 周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
@@ -140,7 +140,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；内部类型（`content_plan`）经 `visible_outputs()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
-| `speakers` | Memory | 各模块注入用只读；persona 只由 persona agent 写 |
+| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写 |
 | `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
@@ -162,7 +162,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | Workflows（编排图+执行） | RunPlan 内核（orchestrator + workflow_steps + worker 认领） | Workflow State=run 状态机；Suspend/Resume=step `waiting` 座位；Snapshots=spec/context；HITL=variant_pick gate（📋） |
 | workflow run（执行实例） | `workflow_runs` 表 | 行业标准全名（每 run 自带其编译出的 workflow=步骤图） |
 | Agent Runtime | `app/worker.py` | 执行进程 |
-| Memory | `memory/`（speakers/brand_templates） | persona/brand block 单向注入 |
+| Memory | `memory/`（personas/brand_templates） | persona/brand block 单向注入 |
 | Evals（Scorers/Gates/Verdicts） | 📋 Phase 3 verify 节点 + variant_pick gate | verify=节点 / eval=活动，与 Mastra 兼容 |
 | Threads / Conversations | `conversations` + `messages` | OpenAI Conversations API 同款 |
 | Agent Observability | metering（workflow_steps.cost）+ structlog + 📋 METRICS.md | 横切不开包（§5） |
@@ -209,7 +209,7 @@ apps/api/
 │   │                    #   post / quotes / carousel / article / reviser / caption_translate
 │   ├── tools/           # 机械（确定性执行）：asr / voice / dubbing / extraction / filler /
 │   │                    #   music / storage / transcript / caption_translate
-│   ├── memory/          # Memory：speakers + brand templates 端点、brand → clip-spec 烘焙
+│   ├── memory/          # Memory：personas + brand templates 端点、brand → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
 │   ├── platform/        # 平台层：auth / email / notifications / project_context / routes
@@ -235,7 +235,7 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 ### 7.3 横切数据约定
 
 - **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表（旧 PRD 副本已 drift 删除）。
-- **认证与隔离**：邮箱验证码无密码登录（Resend）；speakers / projects / assets / brand_templates / conversations 全部按 user 隔离；seed 默认用户仅作共享默认内容（brand template）的属主。
+- **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / brand_templates / conversations 全部按 user 隔离；seed 默认用户仅作共享默认内容（brand template）的属主。
 - **存储 key**：DB 只存对象 key，字节在 TOS（ADR-024）；key 前缀 `{user_id}/…` 承载归属；上传走短时 presigned PUT；读取经 API 归属校验后 307 重定向到公开对象 URL（程序拉取走 `?proxy=1` 由 API 转流）。
 - **EU 数据驻留**：project 级 `data_region` 是未来差异化（PROGRESS 明确不在本周期），未实现。
 - **UI 语言偏好**：future；首屏英文渲染避免 hydration mismatch（见 CLAUDE.md i18n 约定）。

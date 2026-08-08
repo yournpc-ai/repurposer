@@ -7,7 +7,7 @@ backend; neither the frontend nor the render service touches AK/SK.
 
 Key layout:
 - User upload: ``{user_id}/uploads/projects/{project_id}/{filename}``
-- Speaker asset: ``{user_id}/speakers/{speaker_id}/{filename}``
+- Persona asset: ``{user_id}/personas/{persona_id}/{filename}``
 - Brand media: ``{user_id}/brand-media/{filename}``
 - Output: ``{user_id}/outputs/projects/{project_id}/{filename}``
 - Music library: ``music/{music_id}.{ext}``
@@ -94,9 +94,9 @@ def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> str:
     return f"{user_id}/uploads/projects/{project_id}"
 
 
-def get_speaker_upload_dir(speaker_id: UUID, user_id: UUID | str) -> str:
-    """Get upload prefix for a speaker."""
-    return f"{user_id}/speakers/{speaker_id}"
+def get_persona_upload_dir(persona_id: UUID, user_id: UUID | str) -> str:
+    """Get upload prefix for a persona."""
+    return f"{user_id}/personas/{persona_id}"
 
 
 def get_brand_media_dir(user_id: UUID | str) -> str:
@@ -114,13 +114,13 @@ async def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) 
     return _unique_key(get_project_upload_dir(project_id, user_id), filename)
 
 
-async def get_speaker_upload_path(
-    speaker_id: UUID,
+async def get_persona_upload_path(
+    persona_id: UUID,
     user_id: UUID | str,
     filename: str,
 ) -> str:
-    """Generate a unique upload key for a speaker."""
-    return _unique_key(get_speaker_upload_dir(speaker_id, user_id), filename)
+    """Generate a unique upload key for a persona."""
+    return _unique_key(get_persona_upload_dir(persona_id, user_id), filename)
 
 
 async def get_brand_media_path(user_id: UUID | str, filename: str) -> str:
@@ -271,14 +271,14 @@ async def save_upload(
     return await save(key, file_obj)
 
 
-async def save_speaker_upload(
+async def save_persona_upload(
     file_obj: BinaryIO,
-    speaker_id: UUID,
+    persona_id: UUID,
     user_id: UUID | str,
     filename: str,
 ) -> str:
-    """Save uploaded file to speaker storage and return the object key."""
-    key = await get_speaker_upload_path(speaker_id, user_id, filename)
+    """Save uploaded file to persona storage and return the object key."""
+    key = await get_persona_upload_path(persona_id, user_id, filename)
     return await save(key, file_obj)
 
 
@@ -394,9 +394,9 @@ async def delete_project_files(project_id: UUID, user_id: UUID | str) -> None:
     await delete_prefix(get_project_output_dir(project_id, user_id))
 
 
-async def delete_speaker_files(speaker_id: UUID, user_id: UUID | str) -> None:
-    """Delete all files for a speaker."""
-    await delete_prefix(get_speaker_upload_dir(speaker_id, user_id))
+async def delete_persona_files(persona_id: UUID, user_id: UUID | str) -> None:
+    """Delete all files for a persona."""
+    await delete_prefix(get_persona_upload_dir(persona_id, user_id))
 
 
 # ---------------------------------------------------------------------------
