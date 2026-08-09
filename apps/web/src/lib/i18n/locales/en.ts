@@ -45,7 +45,7 @@ const en = {
     newChat: "New chat",
     welcomeTitle: "Welcome to <b>your studio</b>",
     welcomeSubtitle: "Your assistant is ready — <b>tell it what you'd like to make today</b>.",
-    pastePlaceholder: "Describe what to make from your talk…",
+    pastePlaceholder: "Describe what to make…",
     selectPersona: "Persona",
     promptSeedTool: "Turn this talk into a {{label}}…",
     promptAppendTool: "(also generate a {{label}})",

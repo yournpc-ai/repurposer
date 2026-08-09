@@ -47,7 +47,7 @@ const zh: Resources = {
     newChat: "新对话",
     welcomeTitle: "欢迎来到<b>你的工作室</b>！",
     welcomeSubtitle: "你的助手已就位——<b>告诉它，今天想做点什么</b>。",
-    pastePlaceholder: "描述想从这场演讲生成什么…",
+    pastePlaceholder: "描述你想生成什么…",
     selectPersona: "人设",
     promptSeedTool: "帮我把这场演讲整理成「{{label}}」……",
     promptAppendTool: "（同时生成{{label}}）",
