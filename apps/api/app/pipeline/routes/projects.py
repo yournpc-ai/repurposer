@@ -325,9 +325,6 @@ async def generate_content(
                 tone_settings=(
                     request.tone_settings.model_dump() if request.tone_settings else None
                 ),
-                brand_template_id=(
-                    str(request.brand_template_id) if request.brand_template_id else None
-                ),
                 dub_languages=request.dub_languages or [],
                 autonomy=request.autonomy or "auto",
                 scope=request.scope,

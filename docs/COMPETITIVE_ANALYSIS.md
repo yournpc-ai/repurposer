@@ -4,8 +4,7 @@
 > **日期**: 2026-07-19
 > **覆盖**: Opus.pro (OpusClip) / Descript / Submagic / Repurpose.io / Revid.ai / Crayo.ai / ChatCut
 > **数据说明**: 竞品官网 + 定价页 + 官方 changelog/帮助文档 + 第三方评测交叉验证；未能验证的条目在行内标注 ⚠️
-> **关联文档**: `research/opusclip-deep-dive.md`（OpusClip 单家深度拆解）、`PRD.md` §3.4（旧版定位对比，颗粒度粗，待 superseded）、§14.5（UX 借鉴表）、ADR-014/016（品类与交互对标结论）
-> **修订记录**: v1.1 根据评审修正 9 处事实、增补 6 个维度；v1.2 对评审意见本身做独立核查——确认 13 项、部分修正 4 项、驳回 3 项（OpusClip"积分 3 天清零"、ChatCut"XML 仅见搜索摘要"、Crayo"无按模型计费"均与官方来源冲突，已按官方来源改回），另修正 Descript 翻译/配音语言数为最新官方值
+> **关联文档**: `research/opusclip-deep-dive.md`（OpusClip 单家深度拆解）、ADR-016（clip-spec 契约与品类定位）
 
 ---
 
@@ -151,7 +150,7 @@
 - **范式**: 链接/上传 → AI 选段打分 → reframe + 字幕 → 审核 → 一键发全平台
 - **壁垒**: ClipAnything 全体裁理解、**Virality Score（七家独有）**、最宽的输入源
 - **2025–2026 扩张清单（向 B 端基础设施与全链路走的信号）**: Agent Opus（文本/链接 → 成片）、**OpusSearch**（企业级视频语义搜索，2025-03 随软银投资发布；企业 API 存在但产品本体为 waitlist 制）、MCP + 6 SDK、**25 语声音克隆配音**（2026-07）、AI 音效一键自动铺点（2026-07）、**Android app**（2026-07）、生成式 B-roll 规模化（Pro 50 条/天）——品类边界在快速模糊化
-- **对我们的意义**: 品类正面对标（ADR-014 已确认）；其弱点=学术内容理解浅、20-40% 废片、美国数据处理 — 全部已被 PRD §3.4 锁定
+- **对我们的意义**: 品类正面对标（sidebar 与交互参照 OpusClip，见 CLAUDE.md 布局节）；其弱点=学术内容理解浅、20-40% 废片、美国数据处理 — 全部已被 PRD 定位章锁定
 
 ### 类型 2：Editor（文档式编辑器）— Descript
 - **范式**: 转写即编辑界面；AI（Underlord）是副驾而非流水线

@@ -67,7 +67,7 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
   "title": { "text": "The hook", "enabled": true, "size": 56, "position": { "x": 0.5, "y": 0.12 } },
   "music": { "track_id": "calm", "url": "https://<bucket>/music/<music_id>.mp3", "enabled": true, "gain_db": -18 },
   "dub": { "url": "/api/v1/outputs/.../dub_fr.mp3", "enabled": false, "gain_db": 0 }, // voice-clone dubbing; when enabled, original audio is muted
-  // brand block is baked by the API from the selected BrandTemplate (brand_template_id, defaults to latest) at generation time; renderer does not read DB
+  // brand block is baked by the API from the persona's skin block (persona.brand) at generation time; renderer does not read DB
   "brand": {
     "caption_color": "#22c55e",
     "caption_size": 56,
@@ -76,7 +76,7 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
     "outro": { "kind": "video", "media_url": "/api/v1/files/.../outro.mp4" },
     "fill_mode": "fill"                       // fill (cover) | fit (contain)
   },
-  "brand_ref": "brand_template_uuid",       // provenance: which brand template
+  "brand_ref": "persona_uuid",                // provenance: which persona's skin
   "target_language": "en"
 }
 ```
@@ -84,16 +84,16 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
 - **Non-destructive** (copied from Descript): deleting a sentence = mark that `segment` as `hidden`, do not actually delete; recoverable.
 - `caption_track` drives both **burned-in subtitles** and direct **SRT** export (the handoff artifact for downstream CapCut fine-tuning).
 - Styles go through `caption_style_preset` enum (e.g. `clean-bottom` / `karaoke-highlight`), **no free-form layout** — this is the prerequisite for "what you see is what you get" and future libass swapability.
-- **Brand enters rendering**: the `brand` block is baked into the spec by the API parsing `BrandTemplate` at **generation time**; the render service / preview only reads the spec, not the DB, guaranteeing parity and keeping the renderer a black box.
-- **Music enters rendering**: `music.url` is the music piece's **direct public object URL** (baked from `Music.file_path` at generation time — the renderer fetches audio straight from object storage; the legacy `/api/v1/music/<id>/stream` API path is still tolerated by the worker's absolutizer, which joins it with the API base URL and follows the redirect). `<Audio>` loops and mixes, gain controlled by `gain_db`.
+- **Brand enters rendering**: the `brand` block is baked into the spec by the API from the persona's skin block (`persona.brand`，ADR-038) at **generation time**; the render service / preview only reads the spec, not the DB, guaranteeing parity and keeping the renderer a black box.
+- **Music enters rendering**: `music.url` is the music piece's **direct public object URL** (baked from `Music.file_path` at generation time — the renderer fetches audio straight from object storage). `<Audio>` loops and mixes, gain controlled by `gain_db`.
 - **Intro/outro**: when `brand.intro` / `brand.outro` are present, a card is inserted before and after the main video timeline for `duration_seconds` (null → 2s default); each card is `{kind: "text"|"image"|"video", text?, media_url?, duration_seconds?}` — text renders the existing title-card look, image/video fill the frame, cut at the window edge if the source is longer. The video body `<Sequence>` shifts backward, and subtitle remapping auto-aligns.
-- **Two source kinds (output is not limited to real-person recordings)**: `source.kind="video"` uses `<OffthreadVideo>` (current state); `source.kind="stills"` is an **image audio slideshow** — `image_urls` serve as the background visual (1 image = full screen / N images = evenly split hard-cut slideshow / 0 images = solid color fallback), `url` is the optional audio track. When audio is present, reuse ASR word-level `caption_track`; when no audio, it becomes a fixed-duration slideshow (each image `SECS_PER_IMAGE` seconds). Background visual source priority: **slideshow PDF page renders (`Asset.slide_pages`) first** + uploaded photos after; source selection priority VIDEO→AUDIO→SLIDES/IMAGE. **Deliberately not doing** transitions / Ken-Burns / multi-sentence animated text tracks / B-roll (staying at L2, see ADR-020). 注（2026-07-22）：PROGRESS 需求池的 clip-spec motion 枚举（P2，STRATEGY §2.5 L2）若做，限于 **video 源**的 crop 动态预设（如 slow push / 强调 pulse），与本行 stills 幻灯片的 Ken-Burns 拒绝不冲突；落地时需新 ADR 明确边界（ADR-028 关联）。
-- **Text drag positioning**: `caption_position` / `title.position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` / `caption_size` are the composite pixel font size. The brand page overlays a transparent layer on the preview for these text overlays (safe-zone + clamp): the marker shows while its settings row is hovered/active, or while the user hovers the live text directly in the preview; drag to move, drag a corner to scale the font size uniformly (no independent box width/height — no keyframe animation).
-- **Voice-clone dubbing (dub)**: `POST /clips/{id}/dub` uses the persona's voice (VOICE_SAMPLE / AUDIO / VIDEO track extraction) via MiniMax voice_clone + T2A to dub the (translated) subtitles into the target language, baked into the `dub` track; when rendering, if `dub.enabled`, **mute original audio** and play the dub instead (overlay, no lip-sync, see ADR-021 and memory).
-- **Image visual understanding**: IMAGE assets are processed by M3 multimodal (`services/vision.py:describe_image`) to extract key information into `Asset.extracted_text`, feeding into the analyzer's materials like any other asset.
-- **Intent channel**: homepage prompt = `GenerateRequest.instruction`, folded into `GenerationContext` and passed to the Content Director and every derivative agent, used to shape the content plan, select clips, determine hook/title, and bias output focus.
-- **Multiple brand templates**: CRUD + default seed on startup; at generation time, `brand_template_id` is selected (defaults to latest). `aspect` (9:16/1:1) and the three position points are also baked into the spec from the template.
-- **Persona = user profile** (ADR-021; renamed Speaker → Persona per ADR-037): style memory + voiceprint (voice sample / clone voice_id) attached to the profile; dub prefers the profile's voiceprint, clone once and reuse. Theme/intent for this project belongs to the Project.
+- **Two source kinds (output is not limited to real-person recordings)**: `source.kind="video"` uses `<OffthreadVideo>` (current state); `source.kind="stills"` is an **image audio slideshow** — `image_urls` serve as the background visual (1 image = full screen / N images = evenly split hard-cut slideshow / 0 images = solid color fallback), `url` is the optional audio track. When audio is present, reuse ASR word-level `caption_track`; when no audio, it becomes a fixed-duration slideshow (each image `SECS_PER_IMAGE` seconds). Background visual source priority: **slideshow PDF page renders (`Asset.slide_pages`) first** + uploaded photos after; source selection priority VIDEO→AUDIO→SLIDES/IMAGE. **Deliberately not doing** transitions / Ken-Burns / multi-sentence animated text tracks / B-roll (staying at L2, see ADR-020). 若做 PROGRESS 需求池的 clip-spec motion 枚举（P2，STRATEGY §2.5 L2），限于 **video 源**的 crop 动态预设（如 slow push / 强调 pulse），与本行 stills 幻灯片的 Ken-Burns 拒绝不冲突；落地时需新 ADR 明确边界（ADR-028 关联）。
+- **Text drag positioning**: `caption_position` / `title.position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` / `caption_size` are the composite pixel font size. 人设页皮肤分区 overlays a transparent layer on the preview for these text overlays (safe-zone + clamp): the marker shows while its settings row is hovered/active, or while the user hovers the live text directly in the preview; drag to move, drag a corner to scale the font size uniformly (no independent box width/height — no keyframe animation).
+- **Voice-clone dubbing (dub)**: `POST /outputs/{id}/dub` uses the persona's voice (VOICE_SAMPLE / AUDIO / VIDEO track extraction) via MiniMax voice_clone + T2A to dub the (translated) subtitles into the target language, baked into the `dub` track; when rendering, if `dub.enabled`, **mute original audio** and play the dub instead (overlay, no lip-sync, see ADR-037 and memory).
+- **Image visual understanding**: IMAGE assets are consumed directly by the generation agents as raw media — M3 multimodal reads the original image (`pipeline/asset_processing.py` registers a no-op processor for IMAGE).
+- **Intent channel**: the composer prompt rides the first chat message; the plan path folds it into the task book (`TaskSpec.instruction`) and `GenerationContext`, used by the director and every executing skill package to shape understanding, select clips, determine hook/title, and bias output focus.
+- **Skin & format defaults**: caption/title/intro-outro 皮肤字段烘焙自 `persona.brand`；`aspect`（9:16/1:1）等产物格式默认归配方注册表 / 任务书（ADR-038 三分流），不进人设。
+- **Persona = user profile** (ADR-037/038): style memory + voiceprint (voice sample / clone voice_id) attached to the profile; dub prefers the profile's voiceprint, clone once and reuse. Theme/intent for this project belongs to the Project.
 
 ## 5. Hard Prerequisites (Upgraded from Optional P1 to Hard Blockers)
 
@@ -101,15 +101,15 @@ Without these two, the editor cannot be built:
 
 | Prerequisite | Choice | Why it is a hard blocker |
 |:---|:---|:---|
-| **Streamable / seekable video URL** | **Local file system + FastAPI Range (206) streaming endpoint is sufficient**. Object storage (MinIO/S3 EU) is a **scale / multi-instance** concern, deferred to P1/production per ADR-011, **not an MVP prerequisite** | Trimming / preview requires the browser to **play + seek** the source video |
+| **Streamable / seekable video URL** | 对象存储（Volcengine TOS）+ API 307 重定向 / `?proxy=1` 流式（ADR-024），Range 由对象存储与 API 双侧支撑 | Trimming / preview requires the browser to **play + seek** the source video |
 | **Multilingual ASR (word-level timestamps)** | Self-hosted WhisperX / faster-whisper (EU/GDPR, not cloud API) | Foundation for real-time subtitle overlay + subtitle editing (= Descript "forced alignment" equivalent) |
 
-Standard MP4/H.264 uploads are **directly playable in the browser** (via the local Range endpoint), no transcoding needed. Proxy transcoding (H.264/AAC) is only needed when the upload is a **non-browser-playable format** (.mov/.mkv/strange codec) — this step is **deferrable**, not an MVP prerequisite. Note: **Remotion rendering bundles its own ffmpeg, faster-whisper uses PyAV (wheel bundles ffmpeg)**, neither requires system ffmpeg; system ffmpeg is only potentially needed for the proxy transcoding step.
+Standard MP4/H.264 uploads are **directly playable in the browser** (via the storage-served URL), no transcoding needed. Proxy transcoding (H.264/AAC) is only needed when the upload is a **non-browser-playable format** (.mov/.mkv/strange codec) — this step is **deferrable**, not an MVP prerequisite. Note: **Remotion rendering bundles its own ffmpeg, faster-whisper uses PyAV (wheel bundles ffmpeg)**, neither requires system ffmpeg; system ffmpeg is only potentially needed for the proxy transcoding step.
 
-**Cloud migration hook (reserve now)**: keep `storage.py` as the sole storage boundary (ADR-011 already abstracted a layer), with discipline:
-- Video URLs (`Clip.video_url` / source video) are always **indirect addressing** — frontend / Remotion receives "a playable URL" resolved by the storage layer, **never hardcoded local paths**.
-- Currently this URL points to the **local Range endpoint**; when migrating to object storage in the future, the storage layer returns **MinIO/S3 presigned URLs** (also support Range), and `clip-spec`, frontend, Remotion components, and worker **all remain unchanged**.
-- Range / read logic is encapsulated behind the storage layer; migration = only swap `storage.py` implementation + config, zero changes for callers.
+**Storage boundary**: `storage.py` is the sole storage seam (ADR-024), with discipline:
+- Video URLs (`outputs.files` / source video) are always **indirect addressing** — frontend / Remotion receives "a playable URL" resolved by the storage layer, **never hardcoded bucket paths**.
+- The API 307-redirects reads to the bucket's public object URL (unguessable UUID keys); `?proxy=1` streams bytes for programmatic `fetch()` (the bucket does not send `Vary: Origin`).
+- `clip-spec`, frontend, Remotion components, and worker are all storage-agnostic; render service uploads outputs via presigned PUT.
 
 ## 6. Render Layer
 
@@ -123,7 +123,7 @@ Standard MP4/H.264 uploads are **directly playable in the browser** (via the loc
 
 - Remotion component `<Clip>` consumes `clip-spec` as `inputProps`; **the same component** is used for `<Player>` (preview) and the render service (output).
 - Node render service is started with **pnpm** (per ADR-001, each uses its own package manager), self-hosted in EU.
-- Trigger: the existing Postgres queue (see ADR-017) adds a "render" claim source (`Clip.render_status`), worker calls the render service.
+- Trigger: the existing Postgres queue (see ADR-017) adds a "render" claim source (`outputs.render_status`), worker calls the render service.
 - Copy Remotion's FFmpeg encoding parameters (codec/bitrate/pixfmt) as-is; this part is pure FFmpeg anyway.
 
 **Project structure (ADR-018)**: the `<Clip>` component must be shared between the web `<Player>` (preview) and the render `renderMedia` (output) — this is the root of parity, so it is extracted into a shared package:
@@ -157,21 +157,18 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 - Change language: switch `caption_track` `lang` (triggers re-translation).
 - Default output is publishable; editing is optional.
 
-## 8. Data Model Extensions
+## 8. Data Model
 
-`Clip` table additions (via Alembic migration, reusing the existing queue):
+产物统一为 `outputs` 表（ADR-030），clip = `type='clip'` 的那一类。渲染相关列：
 
 | Field | Type | Purpose |
 |:---|:---|:---|
-| `render_spec` | JSON | clip-spec contract |
-| `render_status` | Enum(pending/rendering/completed/failed) | render task status (worker claim source) |
-| `render_error` | Text nullable | failure reason |
-| `video_url` | String (existing) | output MP4 |
-| `srt_url` | String nullable | exported subtitles |
+| `render_spec` | JSONB | clip-spec contract |
+| `render_status` | String nullable | render task status（worker 认领谓词；NULL = 未请求渲染） |
+| `files` | JSONB | 产物文件键（MP4 / SRT / 图片），对象存储 key |
+| `source_ref` | JSONB nullable | 时间轴语义（选段 / trim / hidden）——clip 类型的血统 |
 
-**In the same migration, clean up dead columns from the old ADR-008 image-slideshow model** (verified never written/read in practice): `Asset.keyframes`, `Clip.subtitles` (subtitles now carried by `render_spec.caption_track`). `Asset.slide_pages` is now active: SLIDES uploads are rendered page-by-page by PyMuPDF into images and stored, fed into stills `image_urls` (see ADR-020).
-
-**Model coordination**: the `Clip` table stores the render contract in `render_spec` and the analyzer's creative output directly on `Clip` fields (`hook`, `title_options`, `music_mood`, `duration`, `source_segment`). The old ADR-008 shot-script model (`time_range`/`visual`/`mood`) has been removed; `render_spec` is the single source of truth for the renderer.
+**Model coordination**: `render_spec` is the single source of truth for the renderer; the director's creative output lives in `payload`（payload schema 注册表守门，ADR-030 规则 1）。字幕由 `render_spec.caption_track` 承载；SLIDES 上传经 PyMuPDF 逐页渲成图片存 `Asset.slide_pages`，喂给 stills `image_urls`（see ADR-020）。
 
 ## 9. Future Replaceable Paths (spec unchanged)
 
@@ -196,7 +193,7 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 
 ## 12. Current Implementation Notes
 
-- The backend generates `carousel` and `blog` derivative types alongside clips, LinkedIn posts, quote cards, and summaries. As of the current build, the project results page (`/projects/$id`) only renders tabs for **clips, LinkedIn, quote cards, and summaries**; carousel and blog outputs exist in the API but are not yet surfaced in the UI or the library endpoint.
+- The backend generates `carousel` and `blog` output types alongside clips, LinkedIn posts, quote cards, and summaries. As of the current build, the project results page (`/projects/$id`) only renders tabs for **clips, LinkedIn, quote cards, and summaries**; carousel and blog outputs exist in the API but are not yet surfaced in the UI or the library endpoint.
 - The clip editor route (`/projects/$id/clips/$clipId`) uses the shared `@repurposer/clip` component inside a Remotion `<Player>` and supports caption editing, language switching, render triggering, and export. The full Descript-style single-track trim strip described in §7 is partially wired through `trimBounds`/`removeRange` helpers but not yet fully exposed in the UI.
 - **Clip card rendering state**: on the project results page, a clip with `render_status` of `pending` or `rendering` shows a spinner overlay, hides the action bar, and disables hover playback / detail open until rendering completes or fails.
 - **Clip download**: the frontend requests rendered outputs with `?download=1` so the API returns `Content-Disposition: attachment`, prompting the browser to save the MP4/SRT instead of playing it inline.

@@ -90,7 +90,10 @@ class TaskSpec(BaseModel):
     target_language: str = "en"
     instruction: str | None = None
     tone_settings: dict | None = None
-    brand_template_id: str | None = None
+    # The confirmed persona choice, pinned into run.context at task-book
+    # confirmation (the composer persona block → chat first message → pending
+    # intent chain). None = resolve per the default-persona chain.
+    persona_id: str | None = None
     # 配音语言集 (RECIPES §4.1): task-book-level dub languages — full runs
     # fan out one fork-semantic dub node per language after the clips node.
     # Empty = no dubbing. Requires a clips slot (compile_graph raises).

@@ -68,25 +68,12 @@ repurposer/
 **Decision**: Do not introduce Pydantic AI / LangGraph / CrewAI for P0. Build a custom agent orchestrator.
 
 **Rationale**:
-- Single model (MiniMax M3), no need for provider abstraction
-- Workflow is clearly fixed: persona → analyze → script → review → revise → HITL
+- Single model (MiniMax M3), no need for provider abstraction（模型访问 seam 后由 ADR-025 补上）
+- 编排逻辑持续演进（今为 chat 编译 DAG，见 ADR-028 / ADR-039），自有编排器跟随成本最低
 - Prompts need fine-grained control; framework templates may not be flexible enough
 - White-box debugging is easier
 
-**Future**: If the P2 workflow becomes very complex, re-evaluate LangGraph or Pydantic AI.
-
-**Context appendix**（2026-07-20 自 PRD §20 迁入，决策当时的候选对比，仅作历史存档）:
-
-| Framework | Core Positioning | Suitability |
-|:---|:---|:---|
-| Pydantic AI | Type-safe LLM Agent | High, but needs MiniMax Custom Model |
-| LangGraph | Complex state machine workflow | High, strongest HITL, steep learning curve |
-| ControlFlow | Structured Agent task flow | High, clearest code, small ecosystem |
-| CrewAI | Role-playing multi-Agent | Medium, simple API but weak control |
-| dspy | LLM program optimization | Medium, for continuous prompt optimization |
-| Hand-rolled | Self-developed orchestrator | High, fully controllable |
-
-Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无需适配层）、MiniMax 兼容性（直连 vs Custom Model 适配）、调试白盒 vs 框架黑盒、未来扩展性（框架更整洁）。
+**Future**: If the workflow becomes very complex, re-evaluate LangGraph or Pydantic AI.
 
 ---
 
@@ -141,32 +128,6 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 
 ---
 
-## ADR-008: Video rendering starts with image carousel + subtitles
-
-**Status**: Decided
-
-**Decision**: For P0, video rendering does not aim for complex editing. Start with an image carousel + subtitles + BGM format.
-
-**Rationale**:
-- Quickly validate content generation quality
-- Reduces rendering complexity
-- Can be replaced with a more sophisticated video engine later
-
----
-
-## ADR-009: Voice cloning deferred to P1
-
-**Status**: Decided
-
-**Decision**: Use generic TTS for P0; integrate voice cloning in P1.
-
-**Rationale**:
-- P0 first validates script and content quality
-- Voice cloning involves additional issues like authorization and quality evaluation
-- Generic TTS is sufficient for demo needs
-
----
-
 ## ADR-010: PostgreSQL as the database
 
 **Status**: Decided
@@ -181,21 +142,6 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 
 **Alternatives**:
 - SQLite: simpler deployment, but poor scalability
-
----
-
-## ADR-011: Local file system for file storage
-
-**Status**: Superseded by ADR-024 (object storage, Volcengine TOS)
-
-**Decision**: Store uploaded files on the local file system for P0.
-
-**Rationale**:
-- P0 is internal validation; local storage is zero-cost
-- After abstracting file paths, P1 can seamlessly migrate to object storage
-- Simple deployment, no cloud storage configuration needed
-
-**Future**: Evaluate MinIO / Alibaba Cloud OSS / AWS S3 in P1.
 
 ---
 
@@ -215,20 +161,6 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 
 ---
 
-## Open items
-
-| Item | Recommendation | Decision maker |
-|:---|:---|:---|
-| Product name | TBD | CEO Zuo |
-| Task queue | Postgres `FOR UPDATE SKIP LOCKED` + standalone worker process | Engineering |
-| Speech recognition | faster-whisper self-hosted for P0 | Engineering |
-| Video rendering engine | Remotion (server-side headless Chrome + FFmpeg) as first renderer; clip-spec(JSON) contract preserves future swap to hand-rolled FFmpeg | Engineering |
-| Speech synthesis service | MiniMax voice_clone + T2A for dubbing in P0 | Engineering |
-| Music assets | Built-in mood music library (`/api/v1/music/<mood>`) + optional custom upload | Product / Engineering |
-| URL input support | Not in this phase | Product |
-| Languages supported in first phase | Chinese/English + German/French/Spanish/Italian | Product |
-| Pricing model | Not designed in this phase | CEO Zuo |
-
 ## ADR-013: Internationalization, theme switching, and European market positioning
 
 **Status**: Decided
@@ -241,7 +173,7 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 3. **Default theme is dark**; manual user switch is written to `localStorage`. The `system` preference is also treated as dark.
 4. Theme switching uses the View Transition API with a circular reveal animation from the click position.
 5. All icons use `lucide-react` uniformly.
-6. **Product positioning shifts from "viral short videos" to "knowledge assetization"**: core outputs are LinkedIn long posts, quote cards, multi-language summaries, newsletters, etc. Target users are academic/corporate summit speakers and research institutions.
+6. **Product positioning: European knowledge experts who have content**（教授 / 研究者 / 讲师 / 高管——never assume the input is a speech）：core outputs 由用户点名（LinkedIn posts、quote cards、多语言版本、newsletters、vertical clips），核心渠道 LinkedIn / 机构网站 / 邮件通讯。
 7. **Multi-language output is the entry ticket to the European market**: in addition to UI language, content generation must cover FR/DE/ES/IT and other major European languages.
 8. **GDPR / EU data residency as a sales differentiator**: through Cast AI Kimchi's M3 EU deployment capability, provide optional EU data processing to meet the procurement threshold of European institutions.
 
@@ -251,8 +183,7 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 - `localStorage` + anti-FOUC inline script prevents theme flashing.
 - View Transition API provides native smooth animations on Chromium/Safari, with automatic degradation on Firefox.
 - A unified icon library avoids style inconsistency and manual SVG maintenance.
-- The European knowledge-speaking market is a whitespace not well covered by OpusClip/Descript; LinkedIn is the core B2B knowledge dissemination channel; multi-language and GDPR compliance are hard requirements.
-- The agent-driven Analyzer → Script → Review → Reviser → HITL loop meets European users' high demands for content quality and controllability.
+- The European knowledge-expert market is a whitespace not well covered by OpusClip/Descript; LinkedIn is the core B2B knowledge dissemination channel; multi-language and GDPR compliance are hard requirements.
 
 **Constraints and notes**:
 - shadcn components are based on base-ui; triggers use the `render` prop, not `asChild`.
@@ -269,38 +200,6 @@ Hand-rolled vs Pydantic AI 关键差异：开发速度（P0 手搓更快，无�
 - `apps/web/src/routes/index.tsx`
 - `CLAUDE.md`
 - `.claude/projects/-Users-sylas-repurposer/memory/europe-strategy-positioning.md`
-
-## ADR-014: Sidebar references OpusClip layout and Brand Template page
-
-**Status**: Decided
-
-**Context**: As navigation items grow (Home, Projects, Speakers, Library, Brand template), the top bar on the home page carries too many global actions; meanwhile, users want to reuse OpusClip's sidebar interaction and Brand template configuration page.
-
-**Decision**:
-1. Adopt a left collapsible icon sidebar (`shadcn/ui Sidebar collapsible="icon"`), referencing OpusClip's hide/expand interaction.
-2. Place the workspace logo, collapse button, and user avatar dropdown at the top of the sidebar; the dropdown is simplified to Profile / Settings / Logout, removing excessive business items from OpusClip.
-3. Group navigation in the middle by `Create` (Home, Projects, Speakers) and `Post` (Library, Brand template).
-4. Add a `/brand-template` page: left settings panel (font, primary color, accent color, logo, default CTA, language tone), right real-time preview of quote card and LinkedIn post sample.
-5. Add i18n keys: `nav.create`, `nav.post`, `nav.brandTemplate`, `brandTemplate.*`, `common.profile/settings/logout/helpCenter/inviteMembers/freePlan/new`.
-
-**Rationale**:
-- Extract global navigation from the home page content area, so the home page can focus on prompt input and the knowledge asset tool grid.
-- Brand template is a core configuration entry for a knowledge assetization SaaS, allowing users to control output style uniformly.
-- OpusClip's sidebar mode has been validated in video/content creation tools, with low user learning cost.
-
-**Constraints and notes**:
-- Continue using base-ui's `render` prop, not `asChild`.
-- New sidebar entries must be synchronized with `zh.ts`/`en.ts` `nav.*` keys.
-- Brand template is currently a frontend mock preview; needs to connect to the backend `BrandTemplate` config table later.
-
-**Related files**:
-- `apps/web/src/components/app-sidebar.tsx`
-- `apps/web/src/routes/brand-template.tsx`
-- `apps/web/src/routes/index.tsx`
-- `apps/web/src/lib/i18n/locales/zh.ts`
-- `apps/web/src/lib/i18n/locales/en.ts`
-- `CLAUDE.md`
-- `.claude/projects/-Users-sylas-repurposer/memory/repurposer-sidebar-opusclip-reference.md`
 
 ## ADR-015: ORM uses SQLAlchemy, migration tool uses Alembic
 
@@ -358,7 +257,7 @@ uv run alembic downgrade -1
 3. **Category positioning = OpusClip class** (server-side pipeline + browser thin editing surface + hand off to CapCut for fine editing), **not CapCut Web client engine**.
 4. **Editing form = Descript-style document editing**: transcript editing (delete sentence = cut segment, non-destructively recoverable) + word↔timecode + **single-track trim**; **no multi-track NLE / layer compositing / transition effects / B-roll library / auto face tracking** (L3, hand off to downstream).
 5. **Styles limited to preset enums** (expressible by both CSS and libass), guaranteeing "preview = final cut" and preserving low-cost future migration to hand-built FFmpeg.
-6. **ASR (word-level timestamps) upgraded from optional P1 to hard prerequisite**; video needs to be **streamable/seekable** (local file system + FastAPI Range endpoint is sufficient, **object storage not required**, deferred to scale per ADR-011). Without ASR + playable video, the editor cannot be built.
+6. **ASR (word-level timestamps) upgraded from optional P1 to hard prerequisite**; video needs to be **streamable/seekable**（本地 FS + FastAPI Range 起步；持久文件现全量归对象存储，见 ADR-024）。Without ASR + playable video, the editor cannot be built.
 
 **Rationale**:
 - Our task is "processing existing material"; editing needs top out at "cut segments + subtitles + styles", far from multi-track NLE; self-building a WASM engine is paying years of engineering for a non-existent need.
@@ -435,29 +334,6 @@ uv run alembic downgrade -1
 - Container service interconnection: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (overrides localhost defaults in `config.py`). The render service uploads outputs to the presigned URLs provided by the API worker; no shared volumes are required.
 - **`web` uses `vite preview` for SSR**: sufficient for MVP/staging; switch to a lightweight node http adapter around the exported fetch handler (`dist/server/server.js`) for high traffic. This SSR path has been smoke-tested through image build and single-frame rendering.
 
-## ADR-019: Music uses built-in mood library (user-provided music pieces)
-
-**Status**: Superseded by ADR-023 / `docs/MUSIC_ARCHITECTURE.md`
-
-**Context** (historical): clip-spec has a `music` block, brand template has `musicMood`, but missing "where do music pieces come from". Involves copyright; cannot have AI automatically grab unauthorized music.
-
-**Decision** (historical):
-1. **Built-in mood library**: local `data/music/<mood>.<ext>` (supports `.mp3/.m4a/.aac/.ogg/.wav`), music pieces provided by users/operations with authorization.
-2. **Route by mood**: `GET /api/v1/music/<mood>` extension-agnostic, resolver finds files by stem; with Range support.
-3. **Bake at generation time**: `services/brand.py:music_from_template` maps `BrandTemplate.musicMood` → `ClipMusic{music_id, url}`; `ClipMusic.enabled` is controlled by `musicEnabled`.
-4. **Render mix**: Remotion `<Audio src={url} volume={dbToLinear(gain_db)} loop>`.
-
-**Rationale** (historical):
-- No third-party music API/subscription, zero new dependencies or costs.
-- Copyright responsibility is clear: users/operations only place authorized music pieces; repo does not bundle music.
-- Library can expand with operations: add files, no code changes needed.
-
-**Related files**:
-- `apps/api/app/services/storage.py`
-- `apps/api/app/routers/music.py`
-- `apps/api/app/services/brand.py` (`music_from_template`)
-- `packages/clip/src/Clip.tsx` (`<Audio>`)
-
 ## ADR-020: Final cut supports a second source kind — "stills" image+audio audiogram
 
 **Status**: Implemented
@@ -491,29 +367,19 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - `apps/api/app/services/generation.py` (source selection priority VIDEO→AUDIO→IMAGE), `services/rendering.py` (`_absolutize` handles `image_urls`)
 - `apps/web/src/routes/projects.$id.tsx` (upload infers type by MIME, never infers voice_sample)
 
-## ADR-022: Music library CRUD (management layer over the mood library)
-
-**Status**: Superseded by ADR-023
-
-> 2026-07-20 补录：此 ADR 被 ADR-023 与 `docs/MUSIC_ARCHITECTURE.md` 引用但从未落笔成文，按代码与文档记录重建。
-
-**Decision**: 在 ADR-019 的文件系统情绪音乐库（`data/music/{mood}.<ext>`）之上加管理 CRUD 层（上传 / 列表 / 指派 mood），供后台维护音乐素材。
-
-**Consequences**: 管理面建立在"人工采集音频"之上，素材版权状态不可控；ADR-023 随后将音乐库整体改为 AI 生成 + `Music` 表，本决策的文件系统部分随之废弃，管理 API 演化为 `app/routers/music.py`。
-
 ---
 
 ## ADR-023: Music becomes an AI-generated, asset-based library
 
-**Status**: Implemented (2026-07; supersedes ADR-019/ADR-022 的人工采集路线)
+**Status**: Implemented
 
-**Context**: ADR-019 established a filesystem-only mood music library (`data/music/{mood}.<ext>`), and ADR-022 later added a management CRUD layer on top of it. Both approaches share a fundamental limitation: they rely on manually sourced audio files with uncertain copyright status. Opus Pro and similar tools frequently show "license expiry" warnings, and user-uploaded music pieces introduce legal liability. Meanwhile, MiniMax (and other providers) now offer music generation APIs, making it possible to produce original, platform-safe background music on demand.
+**Context**: 默认配乐若依赖人工采集或用户上传的音频文件，版权状态不可控——Opus Pro 类工具频繁出现 "license expiry" 告警，用户上传曲目引入法律责任。同时 MiniMax（及其他 provider）已提供音乐生成 API，可以按需产出原创、平台安全的背景音乐。
 
 **Decision**:
 1. **Default music is AI-generated and stored in a dedicated `music` table**: three pre-generated music pieces (`calm`, `uplifting`, `corporate`) are seeded as `Music` rows at application startup. Audio objects live in S3-compatible object storage under `music/`; structured metadata lives in the `music` table.
-2. **Brand template selects by music id**: `BrandTemplate.config.musicId` replaces `musicMood`. The template only picks a default music piece; it does not store a generation prompt or a mood string.
-3. **Clip Agent selects music per clip**: based on the brand default, the Content Director's mood suggestion, and the clip's content tone, the Clip Agent picks an existing music piece. No music generation API is called during clip generation.
-4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `Music` and updating `Clip.render_spec.music`. The clip is then re-rendered.
+2. **Music defaults by music id, not mood strings**: 配方注册表 / 任务书默认携带默认曲目 id（ADR-038 后 `brand_templates` 退役，音乐默认属工艺配置，不进人设）。
+3. **Clip skill selects music per clip**: based on the configured default, the director's mood suggestion, and the clip's content tone, an existing music piece is picked. No music generation API is called during clip generation.
+4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `Music` and updating `outputs.render_spec.music`. The clip is then re-rendered.
 5. **Render contract unchanged**: Remotion still consumes `spec.music.url` and `spec.music.enabled`.
 6. **User uploads deferred**: AI-generated music covers MVP needs. Uploaded music may be added later with explicit rights attestation, private-by-default visibility, and a takedown process.
 
@@ -521,71 +387,28 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - Eliminates platform copyright risk for default and chat-generated music.
 - Keeps generation fast and cheap by selecting from pre-generated music pieces instead of generating per clip.
 - Makes music a clip-level creative decision rather than a static brand setting.
-- Uses a dedicated `music` table because the existing `Asset` table requires every row to belong to a `project_id` or `speaker_id`, which does not fit global/shared music library items.
+- Uses a dedicated `music` table because the `Asset` table requires every row to belong to a `project_id` or `persona_id`, which does not fit global/shared music library items.
 
 **Consequences**:
-- `musicMood` and the filesystem-only resolver become legacy; existing templates and clips need migration or graceful fallback.
-- Local `assets/` and `data/music/` storage is removed; all music objects live in object storage.
-- A new `music` table and Alembic migration are required.
+- All music objects live in object storage; PostgreSQL stores only keys and metadata.
 - Custom music generation is more expensive than selection, so quotas or paid tiers may be needed.
 - MiniMax (or chosen provider) usage terms must explicitly allow commercial use and redistribution.
 
 **Related documents**:
 - `docs/MUSIC_ARCHITECTURE.md` (detailed design, flows, data model, phases, copyright strategy)
 - `docs/VIDEO_EDITOR.md` (`render_spec.music` contract)
-- `docs/AGENT_ARCHITECTURE.md` (4-layer agent integration)
 
 **Related files**:
-- `apps/api/app/models/schemas.py` (`MusicResponse`, `MusicGenerateRequest`, `MusicMetadataUpdate`, `ClipMusic`, `BrandTemplateConfig`)
+- `apps/api/app/models/schemas.py` (`MusicResponse`, `MusicGenerateRequest`, `MusicMetadataUpdate`, `ClipMusic`)
 - `apps/api/app/models/tables.py` (`Music`)
-- `apps/api/app/services/music_generation.py` (future)
-- `apps/api/app/services/music.py` (future)
-- `apps/api/app/agents/clip_agent.py` (music selection)
-- `apps/web/src/components/brand-template/music-panel.tsx` (future)
+- `apps/api/app/tools/music.py`（曲目解析/选择）
 - `packages/clip/src/types.ts` (`ClipMusic`)
-
-
-## ADR-021: Speaker = persisted memory (optional selection / auto-create if not selected / per-user isolation)
-
-**Status**: Implemented
-
-**Context**: `Speaker` and `Persona` were used interchangeably in code, documentation, and UI, causing conceptual ambiguity such as "Is Speaker a CRM contact? Or a user profile? Is Persona a standalone entity or a sub-field of Speaker?" After clarification: **Speaker is essentially memory persisted after a task completes** — recording the user's tone, style, preferences, voiceprint, and other stable characteristics. Externally still called Speaker, internally it is memory.
-
-**Decision**:
-1. **Speaker = persisted memory**: a user profile extracted from task inputs (prompt + attachments) via M3 analysis, persisted to the `speakers` table after the task completes.
-2. **Per-user isolation**: `user_id` is on the `speakers` table; users can only see and operate their own Speakers.
-3. **Optional selection on home page / project creation**: existing Speakers can be selected in the input box / project creation form, but **not mandatory**. Users may actively choose a historical profile, or choose not to select one.
-4. **Auto-create if not selected**: if the user does not select a Speaker, the system automatically creates one after task analysis completes, and associates it with the current project.
-5. **Support multiple Speakers**: users can retain multiple Speaker records (e.g., different occasions / different identities), not forced to a singleton. But the default auto-created one is the current task's profile.
-6. **Naming unification**: code and documentation no longer treat `Speaker` and `Persona` as two separate entities. `Persona` is only used as a conceptual word describing the internal style attributes of a Speaker, not reflected in table names, routes, or component names. The legacy `SpeakerPersona` schema has been removed; `SpeakerContext` is the single agent-facing object, and style/memory fields are stored as flat columns on the `speakers` table.
-7. **Keep `/speakers` management page**: users can view, edit, and delete their own Speaker records on the list page; the detail page is for editing memory fields.
-8. **Two-layer division unchanged**: Speaker = stable user style memory; Project = current theme/intent + materials.
-9. **Dub voiceprint attached to Speaker**: priority is profile.VOICE_SAMPLE → current AUDIO/VIDEO; `voice_id` is cached on the Speaker, cloned once and reused across projects.
-
-**Boundaries (explicitly not doing)**:
-- auth / multi-tenancy / team collaboration are still post-auth items.
-- Not forcing users to have only one Speaker; multi-Speaker selection is reserved for subsequent product iterations.
-
-**Rationale**:
-- Eliminates understanding cost from `Speaker`/`Persona` naming confusion.
-- New users do not need to maintain a profile first, lowering the barrier to entry.
-- Existing users can still actively select or manage historical profiles, preserving flexibility.
-- Dub voiceprint has a stable owner, cloned once and reused.
-
-**Related files (at implementation time)**:
-- `apps/api/app/models/tables.py` (add `user_id`)
-- `apps/api/app/routers/speakers.py` (filter by user, optional selection support)
-- `apps/api/app/routers/projects.py` (`speaker_id` optional)
-- `apps/api/app/services/generation.py` (auto-create Speaker when not selected)
-- `apps/api/app/routers/clips.py` (dub reads profile voiceprint + voice_id cached on profile)
-- `apps/web/src/routes/index.tsx`, `projects.tsx` (optional Speaker selection)
-- `apps/web/src/routes/speakers.tsx`, `speakers.$id.tsx` (per-user isolated multi-Speaker management page)
 
 ## ADR-024: Object storage (Volcengine TOS) for all persistent files
 
-**Status**: Implemented (supersedes ADR-011's local-FS decision; ADR-016's "local FS + Range suffices" note is updated accordingly)
+**Status**: Implemented
 
-**Context**: The local-filesystem approach (ADR-011) tied file serving to the API host's disk, blocked multi-instance deployment, and mixed uploaded assets with the repo checkout. The music library (ADR-023) already assumed object storage. Meanwhile `assets/` and `data/` local dirs have been removed from the repo.
+**Context**: 早期本地文件方案把文件服务绑死在 API 宿主机磁盘上、阻塞多实例部署，还把上传素材与仓库 checkout 混在一起。音乐库（ADR-023）已假定对象存储。本地 `assets/` 与 `data/` 目录已从仓库移除。
 
 **Decision**:
 1. **All persistent files live in one S3-compatible bucket (Volcengine TOS)**: uploads, rendered outputs, brand media, music, demo assets. PostgreSQL stores only object keys.
@@ -615,8 +438,8 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: ADR-004 rejected agent frameworks partly on the grounds of "single model (MiniMax M3), no need for provider abstraction", and agents today depend directly on `clients/minimax.py` via `MiniMaxAgentBase`. Three things changed since:
 
 1. **EU institutional sales** (ADR-013's positioning, EU AI Act era) may require EU-hosted models (e.g. Mistral) for data-residency reasons. Without an interface, every agent's prompts and structured-output handling are welded to M3's behavior and a swap becomes a rewrite.
-2. **Agent Interface roadmap** (`docs/ROADMAP.md` §3): chat is being upgraded from rule-based intent dispatch to a tool-calling agent layer. M3's native function-calling reliability is unverified (spike scheduled); an interface lets us swap between "native tool calling" and "structured-output simulated tool calling" without touching agents.
-3. **Transparent metering** (ROADMAP P0-2): cost accounting requires capturing token usage at a single choke point — today `clients/minimax.py` discards the API `usage` fields entirely.
+2. **Agent Interface roadmap**: chat is being upgraded from rule-based intent dispatch to a tool-calling agent layer. M3's native function-calling reliability is unverified (spike scheduled); an interface lets us swap between "native tool calling" and "structured-output simulated tool calling" without touching agents.
+3. **Transparent metering**: cost accounting requires capturing token usage at a single choke point — today `clients/minimax.py` discards the API `usage` fields entirely.
 
 **Decision**:
 1. Introduce a thin provider interface with two methods: `generate_structured(prompt, schema)` and `chat_with_tools(messages, tools)`. Agents depend on the interface, not on the MiniMax client; `clients/minimax.py` becomes the first adapter.
@@ -624,11 +447,11 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. Usage capture is part of the interface contract: every call records tokens / latency / cost onto the owning `WorkflowRun` row.
 
 **Consequences**:
-- `MiniMaxAgentBase` (`app/agents/base.py`) is refactored to depend on the interface; M3-specific quirks (prompt idioms, structured-output retry behavior) live in the MiniMax adapter.
+- `MiniMaxAgentBase`（现 `app/skills/base.py`；ADR-039 P3 归一为 `app/agents/base.py` 的 Agent 漏斗）is refactored to depend on the interface; M3-specific quirks (prompt idioms, structured-output retry behavior) live in the MiniMax adapter.
 - ADR-004's framework rejection is **not** re-opened — orchestration stays hand-rolled; only the model-access seam is abstracted.
 - If the M3 tool-calling spike fails, `chat_with_tools` is implemented via structured-output simulation behind the same interface.
 
-**Related**: ADR-003, ADR-004, `docs/ROADMAP.md` §3
+**Related**: ADR-003, ADR-004, ADR-039
 
 ## ADR-026: AI 内容标识分级策略——合成轨道强制 C2PA，纯剪辑豁免，分类器自动判定
 
@@ -638,22 +461,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 1. **分级，但分类器自动判定、不靠用户勾选**：渲染服务从 clip-spec 判定——spec 含合成轨道（dub 音轨 / AI 生成视觉）→ 产物嵌 C2PA Content Credentials + 发布界面披露提示 + `Publication.ai_disclosure=true`；纯剪辑+字幕 → 不嵌、不提示。用户永远不回答"这是不是 AI 生成"，也就不会答错。
-2. **纯剪辑豁免**：真实素材的剪切、字幕、字幕翻译属标准编辑，不落入合成内容标记义务；LinkedIn 文案类（AI 撰写）依 Art.50(4) 的人工审核豁免——审核队列默认全员强制人工确认（2026-07-21 决策）恰好构成该豁免所需的 editorial control。
+2. **纯剪辑豁免**：真实素材的剪切、字幕、字幕翻译属标准编辑，不落入合成内容标记义务；LinkedIn 文案类（AI 撰写）依 Art.50(4) 的人工审核豁免——发布对话框内的人工确认（payload 预填可编辑 + 披露徽标可见，ADR-027）构成该豁免所需的 editorial control。
 3. **不做全量标识**：尊重"标识是披露不是装饰"的平台语义——给明显非合成的内容贴 AI 标会稀释标识可信度，也误伤纯剪辑内容的分发。
 
 **Consequences**:
-- dub 是唯一"已上线且强制标记"的功能：C2PA 嵌入链路须在 2026-08-02 之后的首个部署前落地；ROADMAP P0-1 范围收窄为"合成轨道检测 + C2PA 写入"，纯剪辑产物零负担。
+- dub 是唯一"已上线且强制标记"的功能：C2PA 嵌入链路须在 2026-08-02 之后的首个部署前落地；范围收窄为"合成轨道检测 + C2PA 写入"，纯剪辑产物零负担。
 - 分类规则集中在 clip-spec 扩展字段（合成轨道标记），render 服务一处写入，Distribution 只读结果——符合"合规横切切面不分散"（MODULE_ARCH §5 规则 5）。
-- TikTok 直发上线时由审核队列人工确认标识状态；若 TikTok Content Posting API 后续暴露 AI 标识字段，适配器接入。
+- TikTok 直发上线时由发布对话框人工确认标识状态；若 TikTok Content Posting API 后续暴露 AI 标识字段，适配器接入。
 - 差异化叙事保留：标识自动化 + 分级精确本身成为机构采购的合规卖点。
 
-**Related**: `docs/ROADMAP.md` §7、§5；`docs/MODULE_ARCHITECTURE.md` §5 规则 5；`docs/STRATEGY.md` §2.3
+**Related**: ADR-027；`docs/MODULE_ARCHITECTURE.md` §5 规则 5；`docs/STRATEGY.md` §2.3
 
 ## ADR-027: 发布审核分级——个人免审秒发，机构强制人工确认（P2）
 
-**Status**: Decided (2026-07-22；翻案 2026-07-21 "默认全员强制人工确认")
+**Status**: Decided (2026-07-22)
 
-**Context**: 2026-07-21 曾定"发布前默认全员强制人工确认"（ROADMAP §5、DISTRIBUTION §5）。用户实测指出：payload 本就预填进发布对话框供修改，个人作者再去第二个页面点"通过"是纯摩擦（"作为用户我还自己审核一次吗"）。审核的真实位置是**发布对话框本身**——编辑即确认。
+**Context**: 发布对话框本身已预填 payload 供编辑——编辑即确认。个人作者再去第二个页面点"通过"是纯摩擦（"作为用户我还自己审核一次吗"）；只有机构场景（审核人 ≠ 作者）才需要独立的审核队列。审核的真实位置是**发布对话框本身**。
 
 **Decision**:
 1. **个人账号（P1）**：无审核态，发布流 `draft → scheduled → publishing → published`，秒发；确认点 = 发布对话框（payload 预填可编辑 + `ai_disclosure` 徽标可见）。
@@ -661,11 +484,10 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. `pending_review` / `approved` 保留在 schema 与状态机中，标注"机构模式专属"；P1 实现与 UI 均不出现。
 
 **Consequences**:
-- ADR-026 中"审核队列构成 Art.50(4) editorial control"的论据改指**发布对话框内的人工确认**（payload 可编辑 + 披露徽标可见），效力相同。
 - `publication_events` 个人流事件序列简化（无 submitted/approved）；机构模式恢复完整。
-- ROADMAP §5 审核队列行移至 P2（与团队工作区同行）；DISTRIBUTION §5/§11 按本文改写。
+- Art.50(4) editorial control 由发布对话框内的人工确认构成（见 ADR-026）。
 
-**Related**: ADR-026；`docs/DISTRIBUTION.md` §3.3/§5/§11；`docs/ROADMAP.md` §5
+**Related**: ADR-026；`docs/DISTRIBUTION.md` §3.3/§5/§11
 
 ## ADR-028: RunPlan 持久化——计划图作为一等对象（内化 flow，不做 Flow 产品）
 
@@ -674,22 +496,20 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: 生成计划今天是**易失的**：`ContentPlan` 是单趟 LLM pass 产出的内存对象（`agents/content_director.py`），跑完即焚；`workflow_runs.current_step` 是裸字符串、`context` 是无结构 JSON blob（`tables.py:234-235`）。`clips`/`derivatives` 有 `workflow_run_id`（run 级血统，带 `ondelete="SET NULL"`）但没有节点级血统——"只重跑选段、保留文案"在结构上不可能，重跑单位是整个 run。ElevenCreative Flows（`research/elevencreative.md`）证明 DAG 是生成编排的成熟形态（显式节点图、@ 引用类型化槽位、节点级重跑、一键成模板），但那是卖给操作员的画布产品，不是我们的物种形态。同时三个已排期事项暴露同一个缺口：**P0 成本计量**（ADR-025 约定 usage 落 WorkflowRun，但 run 内没有步骤身份可归属）、**Operation Model**（生成侧操作"带指令重跑这步"需要节点地址）、**配方 = run-plan 模板**（STRATEGY §5，需要可序列化的计划结构，否则配方永远只是参数包）。
 
 **Decision**:
-1. **内化 flow，不做 Flow 产品**：DAG 是内部表征——agent 当编排者，用户看步骤清单（每步状态/成本/重跑入口）；不做节点画布 UI、不向用户暴露模型名、不做自由 DAG 编辑。
-2. **`plan_nodes` 独立表**（否决 `workflow_runs.plan` JSONB 方案）：(a) 节点状态是高频并发写——并行节点完成时各自回写，JSONB 整文档读-改-写会丢更新；(b) 血统需要真外键，JSONB 里的"节点 id"只是约定字符串；(c) 成本聚合（`avg(cost) by kind`，成本预估的查询形状）是行级查询。节点的不透明载荷（模型参数、instruction）放 `spec` JSONB 列。新表按契约登记 MODULE_ARCH §4（Owner: Pipeline）。
-3. **节点级血统**：`clips`/`derivatives` 加 `plan_node_id`（`ondelete="SET NULL"`，沿用 `workflow_run_id` 先例）。解锁：步骤级重跑、逐节点成本归属、编辑痕迹回流的 join 键。
-4. **多趟规划自然化**：plan 是图之后，"分析 → 覆盖 → 各格式规划"成为图的多层；覆盖问责（哪个论点未被任何资产使用、两条 clip 是否撞同一论点）成为 plan 的一等字段（ROADMAP §1）。
-5. **与 P0 计量钩子同源**：usage 先按 step-name 记（零迁移成本），`plan_nodes` 落地后切换到 node id；ADR-025 第 3 条"usage 落 WorkflowRun 行"修订为"落 `plan_nodes` 行，run 级成本为聚合视图"。
+1. **内化 flow，不做 Flow 产品**：DAG 是内部表征——agent 当编排者，用户看步骤清单（每步状态/成本/重跑入口）；不做可操作节点画布、不向用户暴露模型名、不做自由 DAG 编辑（用户面图形态的后继裁决见 ADR-035 / ADR-036）。
+2. **`workflow_steps` 独立表**（否决 `workflow_runs.plan` JSONB 方案）：(a) 节点状态是高频并发写——并行节点完成时各自回写，JSONB 整文档读-改-写会丢更新；(b) 血统需要真外键，JSONB 里的"节点 id"只是约定字符串；(c) 成本聚合（`avg(cost) by kind`，成本预估的查询形状）是行级查询。节点的不透明载荷（模型参数、instruction）放 `spec` JSONB 列。表按契约登记 MODULE_ARCH §4（Owner: Pipeline）。
+3. **节点级血统**：产物行带 `workflow_step_id`（`ondelete="SET NULL"`，沿用 `workflow_run_id` 先例；产物表后统一为 `outputs`，ADR-030）。解锁：步骤级重跑、逐节点成本归属、编辑痕迹回流的 join 键。
+4. **多趟规划自然化**：plan 是图之后，"分析 → 覆盖 → 各格式规划"成为图的多层；覆盖问责（哪个论点未被任何资产使用、两条 clip 是否撞同一论点）成为 plan 的一等字段。
+5. **与计量钩子同源**：usage 落 `workflow_steps` 行，run 级成本为聚合视图（ADR-025 第 3 条的落点）。
 
 **Consequences**:
-- 步骤级重跑（只重跑选段保留文案、只重跑 dub 不动画面）结构上成为可能；`derivative_dispatch` 的按类型粗粒度寻址逐步被节点寻址取代。
-- 成本预估（ROADMAP §8 P1）获得查询形状：历史 `plan_nodes` 按 kind 聚合出每步均值，估价 = 逐节点求和。
-- 配方模板（STRATEGY §5）获得序列化对象：run-plan 模板 = DAG 定义 + 类型化输入槽位。
-- `workflow_runs.current_step` 退役为查询（`plan_nodes WHERE run_id=X AND status='running'`），run 行只管 run 级状态机。
-- 用户侧永不见 DAG 画布；步骤清单是唯一呈现形态（DECISION_MATRIX §F"节点编排画布"行：对内采纳、对外放弃）。
+- 步骤级重跑（只重跑选段保留文案、只重跑 dub 不动画面）结构上成为可能；按类型的粗粒度派发逐步被节点寻址取代。
+- 成本预估获得查询形状：历史 `workflow_steps` 按 kind 聚合出每步均值，估价 = 逐节点求和（ADR-039 的 estimate 系统落于此）。
+- 配方模板获得序列化对象：run-plan 模板 = DAG 定义 + 类型化输入槽位。
+- `workflow_runs.current_step` 退役为查询（`workflow_steps WHERE run_id=X AND status='running'`），run 行只管 run 级状态机。
+- 用户侧永不见**可操作** DAG 画布（ADR-035 第 2 条永久拒绝）；用户面图形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板，ADR-035/036）。
 
-**Amendment（2026-07-22）**：Consequences 中"用户侧永不见 DAG 画布"修正为——**画布不作前门**；P2+ 增加以读为主的**运行图检视面**（触发条件：机构模式"管得住"信任需求 + 虚拟产物时代混合图/变体使线性清单失效），无接线、无模型名、非图编辑。依据：ElevenCreative 自身为双界面结构（composer 前门 + Flows 收侧边栏，`research/elevencreative.md` §1/§3）——画布对我们是信任工具，不是创作工具。排期见 ROADMAP §3"运行图检视面"行。
-
-**Related**: ADR-016（clip-spec 契约不动）、ADR-025（provider 抽象与计量）、`docs/MODULE_ARCHITECTURE.md` §2.1/§4、`docs/STRATEGY.md` §2.5/§5、`docs/research/elevencreative.md`、`docs/ROADMAP.md` §1/§2
+**Related**: ADR-016（clip-spec 契约不动）、ADR-025（provider 抽象与计量）、ADR-035 / ADR-036（用户面图形态）、`docs/MODULE_ARCHITECTURE.md` §2.1/§4、`docs/STRATEGY.md` §2.5/§5、`docs/research/elevencreative.md`
 
 ## ADR-029: 双链并列——AI 生成结果以 RunPlan 新节点类型进入，虚拟产物独立成族
 
@@ -698,22 +518,20 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: 2026-07-22 确认战略终态：AI 生成结果必做，形态 = **persona 驱动虚拟产物**（identity-driven），非 Factory 通用生成（STRATEGY §2.2）。分界澄清：clip 线主轨永远是"时间轴上的记录"（选段/trim/hidden 语义预设了已拍素材）；虚拟内容以**轨道级**在 clip 内合法存在（dub 声音克隆、AI 音乐、片头尾卡，ADR-026 管辖）；主轨本身生成的产物**不是 clip**——没有"从素材选段"的语义，其"编辑"是重掷/选变体而非修剪。问题：results 链需要独立的 agent 链路吗？
 
 **Decision**:
-1. **双链并列，禁第二条编排链**：虚拟产物生成 = RunPlan 新 node kind（`avatar_gen` / `synth_visual` / `voice_gen`，provider=媒体、异步 begin/await），与 clip 节点共享 `plan_nodes` / worker / 成本汇总 / 步骤清单。**混合图合法**：一次 fortnight 规划可同时产出 clip 与虚拟产物（覆盖节点按内容性质分配产线）。
-2. **虚拟产物独立成族**：新输出表（与 `clips` 平级，落地时按契约登记 MODULE_ARCH §4），不进 `clips`、不进 clip-spec；包装层（字幕/品牌框）可复用 Remotion 渲染器，但产物身份不是 Clip。**parity 承诺只覆盖确定性包装层**，生成部分无 parity（有方差），UI 文案不得混淆两者。
+1. **双链并列，禁第二条编排链**：虚拟产物生成 = RunPlan 新 node kind（`avatar_gen` / `synth_visual` / `voice_gen`，provider=媒体、异步 begin/await），与 clip 节点共享 `workflow_steps` / worker / 成本汇总 / 步骤清单。**混合图合法**：一次 fortnight 规划可同时产出 clip 与虚拟产物（覆盖节点按内容性质分配产线）。
+2. **虚拟产物独立成族**：虚拟产物 = **`outputs` 统一表的类型 + `provenance=generated`**（ADR-030）——不进 clip-spec、parity 承诺只覆盖确定性包装层（字幕/品牌框可复用 Remotion 渲染器），生成部分无 parity（有方差），UI 文案不得混淆两者。
 3. **三个扩展**：(a) 媒体 provider `begin_generation / await_generation` 接口（ADR-025 的兄弟接口，任务型：提交→轮询→取件）；(b) provenance 记录（虚拟产物行 + 生成谱系，供 ADR-026 分类器判定）；(c) persona 视觉身份 + 授权记录（GDPR / AI Act 肖像授权，机构采购必问）。
-4. **节点语义差**：generate 节点带 `gate: variant_pick`（生成 N 变体、选定后下游才跑——"默认不阻塞"原则的唯一例外，因下游花真钱）；**每次尝试计价**，失败不扣费（ROADMAP §8）在生成节点从加分项变为生死项。
+4. **节点语义差**：generate 节点带 `gate: variant_pick`（生成 N 变体、选定后下游才跑——"默认不阻塞"原则的唯一例外，因下游花真钱）；**每次尝试计价**，失败不扣费（PROGRESS 成本线）在生成节点从加分项变为生死项。
 5. **图组装 presence-gating**：persona 视觉身份未录入，虚拟分支不进图（同 Distribution 的 presence-gating 原则）。
 6. **类型化边 + provenance 边流**：selection 类节点输入类型 = "timeline-of-record"；虚拟产物边携带 generated 标记，合规节点读边判定 C2PA——ADR-026 从"读 clip-spec"升级为"读图的边"。
 
 **Consequences**:
-- DECISION_MATRIX §F"AI 视频生成"💡 后排不变，终态声明为 identity-driven 虚拟产物族；接入时 persona / Brand 原样复用（身份层在范式之上）。
-- RunPlan（ADR-028）是双链公共地基；本 ADR 除新产物表外不新增架构层。
-- chat 随 DAG 内核连带升级：dispatch 目标 = editor 操作 / 整体重生成 / plan 级（节点重跑·追加·参数），ChatCut 原则推广到计划层（CHAT_ARCHITECTURE 待写；ROADMAP §3）。
-- 运行图检视面（ADR-028 Amendment）在虚拟时代从"可选深度面"变为必需——变体集与混合图是线性清单表达不了的。
+- DECISION_MATRIX §F"AI 视频生成"💡 后排不变，终态声明为 identity-driven 虚拟产物族；接入时 persona / 皮肤原样复用（身份层在范式之上）。
+- RunPlan（ADR-028）是双链公共地基；本 ADR 不新增架构层（产物 = `outputs` 类型，零新表）。
+- chat 随 DAG 内核连带升级：dispatch 目标 = editor 操作 / 整体重生成 / plan 级（节点重跑·追加·参数），ChatCut 原则推广到计划层（CHAT_ARCHITECTURE）。
+- 图检视面随 FlowView 落地（ADR-035/036）；虚拟时代的变体集与混合图更非线性清单所能表达。
 
-**Amendment（2026-07-22）**：Decision 2"虚拟产物独立成族：新输出表（与 `clips` 平级）"修订为——虚拟产物 = **`outputs` 统一表的类型 + `provenance=generated`**（ADR-030）。原决策的实质约束全部保留：不进 clips（`clips` 表本身退役）、不进 clip-spec、parity 只覆盖包装层；变化的只是载体——产物二分（clips/derivatives）被 outputs 统一后，"独立成族"自然落为"类型+来源"，无需第二张表。
-
-**Related**: ADR-016、ADR-021、ADR-025、ADR-026、ADR-028（含 Amendment）；`docs/STRATEGY.md` §2.2/§2.5；`docs/research/elevencreative.md`；`docs/research/chatcut.md`；`docs/ROADMAP.md` §3
+**Related**: ADR-016、ADR-025、ADR-026、ADR-028；`docs/STRATEGY.md` §2.2/§2.5；`docs/research/elevencreative.md`；`docs/research/chatcut.md`
 
 ## ADR-030: 产物统一为 outputs——clip 降级为类型，payload schema 注册表守门
 
@@ -734,12 +552,12 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 4. **verifier 的家**：`score JSONB`（分数+理由+维度）——P0-3 分数落库落定于此。
 
 **Consequences**:
-- ADR-029 修订：虚拟产物 = outputs 的类型 + provenance（见 ADR-029 Amendment）。
+- ADR-029 的虚拟产物随本条落为 outputs 的类型 + provenance（见 ADR-029 第 2 条）。
 - 新输出类型（newsletter / avatar 视频）= 新节点类型 + payload schema 注册，零表迁移。
 - MODULE_ARCH §4 登记 outputs（Owner: Pipeline）；数据架构图见 §2.2。
 - payload 的"类型安全"未丢——从 DB 层移到 schema 层（Pydantic 校验强于 SQL CHECK）。
 
-**Related**: ADR-016、ADR-026、ADR-028、ADR-029（Amendment）；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md` §12；`docs/tasks/done/runplan-persistence.md`
+**Related**: ADR-016、ADR-026、ADR-028、ADR-029；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md`；`docs/tasks/done/runplan-persistence.md`
 
 ## ADR-031: 渠道凭证应用级加密——Fernet + env key
 
@@ -766,7 +584,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Context**: 编辑侧需要与 RunPlan（生成侧"步骤皆可寻址"）同构的地基：Editor GUI / chat /（未来）MCP 三个前端共用一本操作日志，支撑 undo（VIDEO_EDITOR.md 已承诺）、chat 细粒度修改（"删掉第二句"）与精修痕迹回流校准（MODULE_ARCH 回流边①）。CHAT_ARCH §9 只钉了 edit ops 边界，op 集合与存储形态待定。关键设计问题：undo 用逆运算还是快照；op 集合的边界划在哪。
 
 **Decision**:
-1. **`operations` 表**（Owner: Operation Model）：`output_id / project_id / seq / op / params JSONB / spec_after JSONB / spec_hash / source / user_id? / message_id? / undone_at? / created_at`，`UniqueConstraint(output_id, seq)`。append-only，`undone_at` 可空时间戳是唯一可写字段（N-04）。
+1. **`operations` 表**（Owner: Operation Model）：`output_id / project_id / seq / op / params JSONB / spec_after JSONB / spec_hash / source / user_id? / message_id? / undone_at? / created_at`，`UniqueConstraint(output_id, seq)`。append-only，`undone_at` 可空时间戳是唯一可写字段（NAMING §1 宪法第 4 条）。
 2. **快照式 undo**：每行存应用后的完整 render_spec 快照（`spec_after`）+ 语义化 `op`+`params`；baseline 行（`op="snapshot", seq=0`）懒创建，不变式"op N 的 before = op N-1 的 spec_after"。否决逆运算模型：LLM op（translate/dub）无可计算的逆；`removeRange` 在 spec 内真删 caption cues，逆运算无法复活；redo 需要 after 态。params 保留语义信号供校准回流，快照提供机械保证——两者各司其职（Git 存 tree、diff 派生的同构）。
 3. **op 集边界**：operations 表只装**产物级** op（remove_range / set_trim / set_title / set_caption_style / set_music / set_crop / set_spec(system 内部) / restore_version / translate_captions / set_dub）；**plan 级 op（set_node_params / regenerate_node / swap_slot）归 RunPlan 小拓扑，两家族分开登记**。否决 `restore_range` 独立 op（NAMING 判例 N-16）：caption cues 不可复活，恢复语义全归快照层。
 4. **写纪律**：render_spec 的一切修改必须经 `operations/service.py`（MODULE_ARCH §4"内容字段修改必须能产生 operation 记录"的代码化）；`PUT /outputs/{id}` 的 render_spec 整包替换分支删除（破坏性升级，无过桥层）；漂移自愈——hash 链校验失败时自动补 `set_spec`（source=system）行，日志永不谎称现状。
@@ -784,10 +602,10 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Status**: Decided (2026-08-02)
 
-**Context**: VIDEO_EDITOR.md 把编辑形态写成"文字稿编辑 + 单轨 trim"（editor GUI），CHAT_ARCH 曾把对话式精修写成"辅助入口，deferred"。现实是两条线都已发货且共用 Operation Model：clip editor 路由把手势翻成 ops（COALESCIBLE 合并连续 ops + `base_hash` 乐观锁），chat 把自然语言翻成 `EditOpsProposal`；run 级海拔（dub/translate/remove_filler/add_music/revise_script 等 SKILL_REGISTRY 成员）chat 经 task_list 派发、editor 经 Dub/Translate 按钮直连端点。用户裁决（2026-08-02）：编辑能力的方向是"操作作为 tools/skills，由 chat 引导 agent 执行"。这不是用 chat 取代 editor，而是需要把分层钉死，防止任一前端长出私有编辑逻辑。
+**Context**: VIDEO_EDITOR.md 把编辑形态写成"文字稿编辑 + 单轨 trim"（editor GUI），CHAT_ARCH 曾把对话式精修写成"辅助入口，deferred"。现实是两条线都已发货且共用 Operation Model：clip editor 路由把手势翻成 ops（COALESCIBLE 合并连续 ops + `base_hash` 乐观锁），chat 把自然语言翻成 `EditOpsProposal`；run 级海拔（`dub_clip` / `translate_clip` / `remove_filler` / `add_music` / `revise_script` 等技能注册项）chat 经 task_list 派发、editor 经 Dub/Translate 按钮直连端点。用户裁决（2026-08-02）：编辑能力的方向是"操作作为 tools/skills，由 chat 引导 agent 执行"。这不是用 chat 取代 editor，而是需要把分层钉死，防止任一前端长出私有编辑逻辑。
 
 **Decision**:
-1. **能力层唯一，双注册表双海拔**：`OP_REGISTRY`（参数级微操作——纯函数 clip-spec→clip-spec，无 run，即时，快照/undo）∪ `SKILL_REGISTRY`（任务级宏操作——编译为图节点起 run，skill=概率性 / tool=确定性）。路由纪律维持现状并上升为契约：参数级走 ops，任务级走 task_list（`_validate_edit_ops` 拒收 precomputed ops，原话 "needs a run — propose a task_list"）。
+1. **能力层唯一，双注册表双海拔**：`OP_REGISTRY`（参数级微操作——纯函数 clip-spec→clip-spec，无 run，即时，快照/undo）∪ `SKILL_REGISTRY`（任务级宏操作 = 技能注册项——编译为图节点起 run；技能叙事与执行者构成见 ADR-039）。路由纪律维持现状并上升为契约：参数级走 ops，任务级走 task_list（`_validate_edit_ops` 拒收 precomputed ops，原话 "needs a run — propose a task_list"）。
 2. **适配层多前端，全部薄转换**：适配器只做"输入形式 → 注册表调用"的翻译，**禁止自带编辑逻辑**。已发货：editor（手势 → ops HTTP）+ chat（自然语言 → EditOpsProposal / task_list）；预留：mcp（`SOURCE_REGISTRY` 座位已注册）。新增适配器 = 新增翻译层，能力层零改动。
 3. **能力投资压能力层**：新编辑能力 = 新 op 或新 skill 注册项，全部适配器同时受益；禁止任何适配器私设能力种类（如 editor 独有的编辑类型）。
 4. **chat 升格为正式编辑面**：不再是"辅助入口"；@-mention（recipe-mention 期 2）是其定向机制（@产物 → targeted ops / skills）。editor 不退场——精细手势（拖 trim、点字幕改字、框选删段）仍是其强项。
@@ -823,23 +641,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Status**: Decided (2026-08-06)
 
-**Context**: 2026-08-06 竞品 UI 评审（七组截图：Lovart 类单产物工作面 ×2、flow 类节点画布+流程智能体 ×2、ElevenCreative 配方 modal——含"流程"tab 静态 DAG、图片编辑 modal、gallery 检视 overlay→composer 回填）。行业收敛到"chat 前门 + 结构可见 + 单一连续面"，触发对本项目 DAG 用户化形态的复审。ADR-028 已决"内化 flow，不做 Flow 产品"（DAG 为内部内核，用户看步骤清单），但留了两扇窗：只读运行图检视面（P2+，混合图/机构信任两触发）与第 7 周"DAG 编辑 go/no-go"。评审中用户拍板了精修闭环的总原则：**"精修的对象模型是图，界面是语言——隐藏画布，意图识别把用户语言翻译成图操作"**（与 ADR-028 教义同构，并加三条精度：翻译两层——指认确定性/意图归 LLM；翻译失败 = ask 反问，图永不当错误信息；新可翻译操作 = registry 注册项，永不开新面）。在此原则下，DAG 的三种用户化形态必须分别裁决，不可一概而论。
+**Context**: 2026-08-06 竞品 UI 评审（七组截图：Lovart 类单产物工作面 ×2、flow 类节点画布+流程智能体 ×2、ElevenCreative 配方 modal——含"流程"tab 静态 DAG、图片编辑 modal、gallery 检视 overlay→composer 回填）。行业收敛到"chat 前门 + 结构可见 + 单一连续面"，触发对本项目 DAG 用户化形态的复审。ADR-028 已决"内化 flow，不做 Flow 产品"（DAG 为内部内核，用户看步骤清单），但留了两扇窗：只读运行图检视面（P2+，混合图/机构信任两触发）与"DAG 编辑 go/no-go"待定项。评审中用户拍板了精修闭环的总原则：**"精修的对象模型是图，界面是语言——隐藏画布，意图识别把用户语言翻译成图操作"**（与 ADR-028 教义同构，并加三条精度：翻译两层——指认确定性/意图归 LLM；翻译失败 = ask 反问，图永不当错误信息；新可翻译操作 = registry 注册项，永不开新面）。在此原则下，DAG 的三种用户化形态必须分别裁决，不可一概而论。
 
 **Decision**:
 1. **静态配方流程图 = 采纳**。配方注册时作者策展的只读结构图（友好步骤名、固定结构、无模型名、不可接线），作为"它是怎么做的"堆叠项住进配方检视 overlay（闭环链第 2 周；flow 字段入 Recipe 数据 schema，RECIPES §7.1）。定位 = 说明书/信任件，回答"它拿我的素材做了什么"，不承担任何操作。
 2. **可操作画布 = 永久拒绝**。接线/自由拓扑/节点运行按钮/节点模型 SKU 货架永不面向用户——那是操作员形态，与"到来即彷徨"的知识专家画像冲突；拓扑唯一来源维持 `compile_graph`（LLM 亦只准提议 task list）。本条关闭 PROGRESS 决策表中"DAG 检视/编辑 + 简单多轨是否投入"行的"编辑"半边；VIDEO_EDITOR 封存的 L3 分工线（多轨/图层/B-roll 归 CapCut/Premiere）不变。
-3. **运行期活图（故事地图）= 证据裁决**。闭环链第 4 周（工作面）做 spike：复用第 1 条的静态渲染器（同画笔，数据源换活 `workflow_steps`），只读投影、只画当前 run + 最新产物（历史归消息流记录卡）、默认开给配方 run。第 5 周 09-03 以**小白复述测试**（看完能用自己的话讲出"它拿我的素材做了什么"）+ 使用数据裁决：升正为默认中心，或留检视模式。ADR-028 的"用户侧永不见 DAG 画布"自此修订为"用户侧永不见**可操作**画布"。
+3. **运行期活图 = 拆分裁决（ADR-036）**：run 进度图（单 run 死图 + 状态动画）升正排产；spike 收窄为项目全史血缘板，以小白复述测试裁决是否升正为默认中心（排期见 PROGRESS）。ADR-028 的"用户侧永不见 DAG 画布"自此修订为"用户侧永不见**可操作**画布"。
 4. **模型货架拒绝的证据并入**：竞品画布在节点上摆模型选择器，同时提供"自动（低于 300 积分）"档位——连画布派自己都需要一个策略开关兜底。这佐证 2026-08-02 的 provider-UX 裁决（用户-facing = 策略开关如"优先 EU 托管模型"，不是 SKU 货架）：模型选择是成本/合规策略，不是用户的创作决策。
 
 **Consequences**:
-- CLAUDE.md 作曲家契约行已随本 ADR 修订为"the operable DAG canvas is never user-facing; the static recipe flow is its only user-facing form"（2026-08-06）。
-- 原排期中的"DAG 编辑 go/no-go"改为闭环链第 5 周（09-03）"活图展示 go/no-go"，范围大缩：不评估编辑，只评估展示。
+- 排期以 PROGRESS 为唯一事实源：活图 spike 收窄为血缘板升正裁决（ADR-036 第 4 条），不评估编辑，只评估展示。
 - 新产物类型 / 新配方进入时，静态流程图随注册项一并策展（注册表纪律 +1 字段）；活图若升正，同一渲染器零浪费接管。
 - 翻译失败 = ask 反问成为硬契约：意图识别覆盖率不足时永远多问一句，永不亮图兜底。
 
 **Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/tasks/results-workspace.md`（六屏形态 / 精修闭环 D8-D9）；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
 
-## ADR-036: Flow 基座——只读图渲染扶正为共享能力，run 进度图升正排产（拆分修订 ADR-035 第 3 条）
+## ADR-036: Flow 基座——只读图渲染扶正为共享能力，run 进度图升正排产
 
 **Status**: Decided (2026-08-07)
 
@@ -848,16 +665,15 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Decision**:
 1. **FlowView = 共享只读图渲染基座**（`apps/web/src/components/flow/`），`packages/clip` 同款单一画笔纪律：配方扇出 / run 进度图 / 舞台家族视图 /（spike）血缘板四个消费面各自只做"领域数据 → nodes/edges"适配器，禁自绘边、禁自写布局。契约三要素：节点皮（asset / output / step）、双边语义（**lineage 血缘边** ⊥ **dependency 依赖边**，视觉可辨）、确定性分层布局（depth 分层，有界规模不虚拟化、不缩放）。
 2. **只读是结构性的，内容不降级**：FlowView 不提供 drag / connect / pan / zoom props——"图不可编辑"（ADR-035 第 2 条）从约定升级为组件 API 物理缺席；同时每条边是真边（step `inputs` / `derived_from_output_id`）、每个节点是真节点，禁装饰性插画。
-3. **run 进度图升正为排产项**（修订 ADR-035 第 3 条的前半）：单 run 拓扑编译期定死，属有界死图 + SSE 状态动画，无布局风险——闭环链第 3 周落地，取代 results-workspace 原"进度网格"（中央区状态机修订为：**进度图 → 结果网格 ⇄ 舞台**）。chat 打勾流不退役：线性旁白与空间图同源（workflow_steps）双视图并存。
-4. **spike 收窄为项目全史血缘板**（保留 ADR-035 第 3 条的后半）：唯一无界图面，09-03 小白复述测试照跑，裁决问题改写为"血缘板是否升正为默认中心"。
-5. **修改通道不变**：chat 是唯一修改通道；图面交互白名单 = 点选聚焦 / hover 血缘路径高亮 /（第 5 周）点节点插 `@workflow_step` mention 接三档重跑。
+3. **run 进度图升正为排产项**（闭环链第 3 周，日期以 PROGRESS 为准）：单 run 拓扑编译期定死，属有界死图 + SSE 状态动画，无布局风险——落地后取代 results-workspace 原"进度网格"（中央区状态机修订为：**进度图 → 结果网格 ⇄ 舞台**）。chat 打勾流不退役：线性旁白与空间图同源（workflow_steps）双视图并存。
+4. **spike 收窄为项目全史血缘板**：唯一无界图面，小白复述测试照跑（排期见 PROGRESS），裁决问题 = "血缘板是否升正为默认中心"。
+5. **修改通道不变**：chat 是唯一修改通道；图面交互白名单 = 点选聚焦 / hover 血缘路径高亮 /（闭环链第 5 周）点节点插 `@workflow_step` mention 接三档重跑。
 
 **Consequences**:
 - 后端增量三处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地，同"任务书预设归服务端"纪律）；`run.context.recipe_id` 穿线（results-workspace D5）。
-- CLAUDE.md 的 ADR-035 行随本条修订：DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板），可操作画布永不用户化不变。
-- ADR-035 第 1/2/4 条不变；第 3 条被本条拆分取代（run 图 ≠ 全史血缘的判据：拓扑是否编译期固定）。
+- DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板）；可操作画布永不用户化（ADR-035 第 2 条）不变。
 
-**Related**: ADR-035（本条拆分修订其第 3 条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）；简报 `docs/tasks/results-workspace.md`（D2/D6/D7、屏 3、分期与禁令随本条修订）
+**Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）；简报 `docs/tasks/results-workspace.md`（D2/D6/D7、屏 3、分期与禁令随本条修订）
 
 ### 补记（2026-08-07，同日两轮用户拍板）
 
@@ -869,22 +685,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Status**: Decided (2026-08-08)
 
-**Context**: 产品定位升级后（知识专家任意素材，"never assume the input is a speech"），ADR-021 拍板的 Speaker 命名三重断裂：① **语义前提崩塌**——"Speaker/演讲者"预设用户是演讲者、素材是演讲，而身份容器的主人是有内容的专家（会议/报告/播客/文字稿+照片）；② **一词三义撞车**——Speaker（用户身份画像）与排期中的 `speaker_map`（素材里"谁在说话"的分析节点，RECIPES §6）、landing 普通英文词 speakers 同词不同域，前两者即将共存于同一个 DAG；③ ADR-021 §6"Persona 只当概念词、不进表名路由"的裁决前提是"Speaker 是对的实体名"——前提已不存在。同时用户给出产品的用户侧闭环：**管理 IP → 产生 outputs → 发布**（与工程侧"理解 → 生成 → 审校 → 分发"互为表里，STRATEGY §3 牌 1）——"管理 IP"是活动不是对象：今天该模块里用户唯一能操作的是身份理解（风格/受众/禁忌词/声纹），账号绑定与发布数据未落地（Distribution P1 / 数据回流 P2），以"IP"名之则第一天不诚实。
+**Context**: 产品定位升级后（知识专家任意素材，"never assume the input is a speech"），Speaker 命名三重断裂：① **语义前提崩塌**——"Speaker/演讲者"预设用户是演讲者、素材是演讲，而身份容器的主人是有内容的专家（会议/报告/播客/文字稿+照片）；② **一词三义撞车**——Speaker（用户身份画像）与排期中的 `speaker_map`（素材里"谁在说话"的分析节点，RECIPES §6）、landing 普通英文词 speakers 同词不同域，前两者即将共存于同一个 DAG；③ 旧裁决"Persona 只当概念词、不进表名路由"的前提是"Speaker 是对的实体名"——前提已不存在。同时用户给出产品的用户侧闭环：**管理 IP → 产生 outputs → 发布**（与工程侧"理解 → 生成 → 审校 → 分发"互为表里，STRATEGY §3 牌 1）——"管理 IP"是活动不是对象：今天该模块里用户唯一能操作的是身份理解（风格/受众/禁忌词/声纹），账号绑定与发布数据未落地（Distribution P1 / 数据回流 P2），以"IP"名之则第一天不诚实。
 
 **Decision**:
-1. **身份模块正名 = 人设（en `Persona`）**：多实例扁平（工作号/生活号 = 两个人设）；用户面 zh「人设」/ en「Persona」，代码层 `persona`（表 `personas`、`PersonaContext`、路由 `/personas`；节点 `persona_bootstrap` 名零改动）——三层同词族，无需双轨。本条**翻案 ADR-021 §6**（persona 升格为实体名）；ADR-021 其余各条（persisted memory / per-user 隔离 / 可选 + auto-create / 支持多实例）不变。
+1. **身份模块正名 = 人设（en `Persona`）**：多实例扁平（工作号/生活号 = 两个人设）；用户面 zh「人设」/ en「Persona」，代码层 `persona`（表 `personas`、`PersonaContext`、路由 `/personas`；节点 `persona_bootstrap` 名零改动）——三层同词族，无需双轨。人设 = **任务完成后沉淀的记忆**（语气/风格/禁忌词/声纹等稳定特征），行为规则：per-user 隔离（`user_id` 在表）；composer 可选选择、**未选则任务分析后 auto-create** 并挂到当前项目；多实例不强制单例；两层分工不变——人设 = 稳定风格记忆，项目 = 当次主题/意图 + 素材。
 2. **`speaker` 让位素材域**：指"素材里说话的人"（纯数据层，用户不可见）；`speaker_map`（RECIPES §6）是该词的合法居民，保持原名落地。landing 的 "keynote speakers" 是普通英文词，不受影响。
 3. **IP = 承诺层词，不进产品内导航**：对外叙事/landing 可讲"打造你的 IP / 自媒体"（zh）——IP 是整个 agent 的产出（账号+受众+内容+声誉），不是某个模块。**"IP" 禁入英文文案**（英语语境 IP = intellectual property，法律词）：en 叙事用 **personal brand**（LinkedIn/职业人群）/ **thought leadership**（知识专家语境）。营销文案按 locale 适配属正常；NAMING §2 中英唯一映射约束领域词汇，不管营销 slogan。
 4. **IP 容器升格路径（未来）**：Distribution 直发 + 发布数据回流落地后，"IP"可作为产品内容器名实双归登场——每个 IP = 人设（身份页，对象原样迁入）+ 绑定平台账号 + 表现数据。演进为加法式（新增容器模型，非改名）；用户"修不像我"的维修点（人设页）位置永不变。
 5. **stock voices 不伪装人设**（修订 RECIPES §5 裁决③的形态描述）：系统音色以"音色"身份进人设选择器的系统区（如 Rachel · Confident，带试听）；声纹 = 人设属性不变。
-6. **迁移窗口**：09-08 `speaker_map` 落地前改代码零撞车；09-16 人设显化页开工前改 UI 免二次返工。迁移面：`speakers` 表 + Alembic 迁移 / schemas（`SpeakerContext`→`PersonaContext`）/ `memory/routes.py` 端点 / `skills/persona.py` / 前端 `_app.speakers.*` 路由与 i18n / composer 人设块。MODULE_ARCHITECTURE / AGENT_ARCHITECTURE 等现状事实源文档**随代码迁移同步**（迁移前仍以 `speakers` 表现状为准）；「人设 / Persona」于迁移落地时登记 NAMING §2 词汇表。
+6. **迁移**：第一刀（全栈改名 `speakers`→`personas`：表 + Alembic 迁移 / schemas / `memory/routes.py` 端点 / persona skill / 前端路由与 i18n / composer 人设块）已于 08-09 落地；皮肤吸收（ADR-038）随插入周推进，排期以 PROGRESS 为准。现状事实源文档（MODULE_ARCHITECTURE / AGENT_ARCHITECTURE / NAMING §2）随代码迁移同步更新。
 
 **Consequences**:
 - 闭环叙事三层归档：对外/愿景 = 管理 IP → outputs → 发布（STRATEGY §2.2 落档）；产品内导航 = 人设 / composer / projects（/ 未来 Distribution）；工程层 = 理解 → 生成 → 审校 → 分发（STRATEGY §3 牌 1 不变）。
 - `persona_bootstrap`"从源文本提取风格"隐含"素材 = 本人言论"假设；素材域扩展后需"本人含量"门禁（非本人素材不污染人设；`speaker_map` 落地后可升级为"只从用户本人段落学"）——随迁移在 persona skill 与 AGENT_ARCHITECTURE 补记。
-- dub 声纹目标态（voice_id 缓存人设行、克隆一次跨项目复用）随第 7 周声纹线兑现。
+- dub 声纹目标态（voice_id 缓存人设行、克隆一次跨项目复用）随插入周落地（08-11 `voice` 缓存 + STOCK_VOICES + dub 声纹优先级链）；声纹质量打磨见 PROGRESS 第四周。
 
-**Related**: ADR-021（本条翻案其 §6）、ADR-030（outputs 统一）、RECIPES §5/§6、STRATEGY §2.2/§3、NAMING N-27
+**Related**: ADR-030（outputs 统一）、ADR-038（人设吸收 Brand）、RECIPES §5/§6、STRATEGY §2.2/§3、NAMING N-27
 
 ## ADR-038: 人设吸收 Brand——身份单对象化（brand_templates 退役，皮肤/工艺/格式三分流）
 
@@ -911,7 +727,32 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**:
 - IP 容器终态（ADR-037 D4）更干净：IP = 人设（身份+风格+策略+声音+皮肤，一个完整对象）+ 绑定账号 + 表现数据，整体迁入无残肢。
 - 多人设共享皮肤（未来团队空间共用机构 VI）以"从另一人设复制"过渡，团队空间立项时再升级共享引用——不为它保留独立模块（§7 逆用：失去独立表归属即失去模块资格）。
-- 排期（PROGRESS）：**插入周 08-09~08-14 最高优先级连续落地**（2026-08-08 拍板：改名迁移 08-09 → 皮肤吸收 08-10 → 声纹缓存 + STOCK_VOICES 08-11 → 人设显化页 08-12 → 触点 + 门禁 v1 08-13）；门禁 v2 随 W8 一（09-21，`speaker_map` 过滤）；闭环链顺延 1 周（周五验收滚动重排）。
+- 排期（PROGRESS）：**插入周 08-09~08-14 最高优先级连续落地**（改名迁移 08-09 ✅ → 皮肤吸收 08-10 → 声纹缓存 + STOCK_VOICES 08-11 → 人设显化页 08-12 → 触点 + 门禁 v1 08-13）；门禁 v2 随第五周一（08-31，`speaker_map` 过滤）；后续周次以 PROGRESS 为准。
 - 实施简报：`docs/tasks/persona-identity.md`——含**消费面全审计与迁移地图**（渲染链 / DAG / chat / 配方 / 前端 / 种子脚本逐点过）与数据迁移步骤（§6–§7）。
 
-**Related**: ADR-037（改名与人设正名）、ADR-021（persisted memory 各条不变）、ADR-016（clip-spec 契约不动）、RECIPES §4.4（look 层）/ §5（声音的家）、NAMING N-27/N-28
+**Related**: ADR-037（改名与人设正名）、ADR-016（clip-spec 契约不动）、RECIPES §4.4（look 层）/ §5（声音的家）、NAMING N-27/N-28
+
+## ADR-039: 架构规范级大迭代——技能叙事 + 模块四分 + 节点对象化 + Agent 归一 + harness 层 + outputs 派生 + 估价
+
+**Status**: Decided (2026-08-09)
+
+**Context**: 三轮架构评审（内核核对 → tools/skills 职责梳理 → 多 agent 事实确认）沉淀。代码内核（RunPlan DAG + 注册表裁决 + chat 单入口）经逐文件核对确认健康，但存在系统性规范残留：① **skill 一词三义**（`app/skills/` 目录 / `SKILL_REGISTRY` 条目 / `SkillEntry.kind` 值），且 "班组/班底" 词需解释（NAMING §6 违规）；② **产物类型散在 6 处**（`IntentSlot` Literal / `KNOWN_OUTPUTS` / `_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `_SLOT_ORDER` / `SLOT_COUNT_LIMITS`），新增产物不是纯注册项；③ **tools/ 混 LLM 调用**（`tools/caption_translate` import agent、`tools/dubbing` 两层下藏翻译调用），职责边界渗漏；④ **节点知识散在 4 个文件**（registry / orchestrator 平行表 / node_runners / schemas），内核里全是 `if kind == ...` 分支知识；⑤ **10 个 `xxx_agent` ad-hoc 类**，真实差异只有 prompt/schema/配置——多样性是数据不是代码；⑥ **harness 部件散落**（`skills/base.py` 半个基类 / chat service 巨文件 / client），repair 仅 intent 一家、兜底无声明纪律；⑦ **多 agent 事实只活在文档散文**（RunPlan §12.5 会思考/不会思考），DAG 节点只有扁平 kind，"谁在行动"被抹掉；⑧ `cost_hint` 三档报不了价，生成前费用预估（PROGRESS 第六周）无技术地基。用户拍板：这是一次**规范级大迭代——内核流程不变，概念归位与模块重划**（"磨刀不误砍柴工"），最高优先级随人设插入周后连续攻坚。
+
+**Decision**:
+1. **技能叙事为架构主叙事**：Repurposer 是一个 AI 助手，身怀技能（剪辑/配音/字幕/自媒体规划…）；**技能内部 = agent 调 LLM、用 tools 实现**。三层归属：技能包（`app/skills/`，能力唯一家：节点类 + params + 私有工序 + 估价 + 展示键，+技能私有 agent 声明）/ `app/agents/`（决策体共享层）/ `app/tools/`（机械共享层，禁 import agents/LLM client）。
+2. **Agent 归一**：`agents/base.py` 一个 Agent 类 = harness 漏斗（装配→渲染→调用→校验→**修复一轮（错误回显）**→计量→声明式兜底）；实例 = 声明（name/prompt/schema），花名册 `AGENTS` 可枚举；特殊子类仅流式（chat intent）；领域逻辑归 schema 校验/技能包工序。**盲重试退役**（修复必须带反馈）；兜底默认禁、显式声明（PlanAgent 永不白屏、多模态降级为合法先例）；**纯度签名化**（understand 签名无 persona 参数，违规在类型层不可表示）。
+3. **节点对象化（`NodeBase`）**：每个节点类自描述——`run`（唯一必实现）/ `estimate(ctx)` 估价 / `requires()` 出生地门禁 / `label()` 展示名 / `reuse()` 幂等复用 / `retries`·`after`·`needs_director`·`output_type` 类属性。**内核退化为图算法**：报价 = fold、执行 = topo 走图、校验 = ∀requires、配方对账 = flow keys ⊆ 编译图 kind 集（启动自检机械化，人肉评审退役）。`_validate_requires` 字符串匹配 / `_SLOT_TYPE_LABEL` / `retries_for_node_kind` 扫描 / asset-hash 复用特判全部归位节点。
+4. **outputs = 技能属性，注册表派生**：`IntentSlot.type` Literal 退役改 str + 注册表校验（NAMING §5 延伸）；五处散点全派生；新增产物 = 一条注册项，PlanAgent prompt 同源注入当轮即知。
+5. **多 agent 落成结构**：`app/agents/` 花名册 + 节点归属技能包；协作哲学不变——**agent 互不对话，协作经落库产物沿 DAG 边流动**（编排者 = `compile_graph`，禁 ReAct 铁律延伸）；loop（chat 治理环）编译出 graph（DAG 执行核），四层工程地图 = Model（client 单边界）/ Harness（调用面漏斗）/ Graph（NodeBase + 图算法）/ Loop（chat 状态分派）。
+6. **估价系统**：`cost_hint` 退役 → `node.estimate()`（机械精确价 / agent token 区间）；`workflow_steps.estimate` 增量列（计划侧，与 `cost` 账簿侧对称）；生成前 dock 总价 / chat 修改单价 / 配方卡估价贴随 PROGRESS 第六周（09-07 周）汇合落地；actual 校准 estimate 闭环。
+7. **表结构终审**：仅 `estimate` 增量列（nullable）+ kind 与技能名统一（alembic 数据迁移：`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`；`SkillEntry.node_kind` 字段退役）；其余零变化；不建新表（agents/skills 皆为静态注册表）。
+8. **actor 概念不采用**（评审中提出后否决）：非行业标准词；技能包构成即"谁执行"的答案。
+
+**Consequences**:
+- **行为零变化**：compile_graph 同输入同图、chat 四态/裁决/dock/checkpoint 不变、run 行为与渲染链不变；剧本 harness（S1–S40）为回归网，新增三断言（flow 对账自检 / 报价单调性 / repair 只一轮）。
+- **DX 目标**：加技能 = 加一个包；加 agent = 加一条声明；加产物 = 加一条注册项——"改 6 处"成为历史。
+- **分期（PROGRESS 第二周，与人设模块/闭环链三线并行）**：P1 模块归位（零变化）→ P2 NodeBase + outputs 派生 + kind 同名（含数据迁移）→ P3 harness 漏斗（Agent 归一 + repair 全员 + contexts 抽离）→ P4 估价遍历（地基同周落位，用户可见呈现并入第六周成本统计）。
+- **排期**：与人设模块、闭环链同周（08-09~08-14）三线并行收口，后续整体提前，go/no-go **10-02**（回退 10-09；以 PROGRESS 为准）。闭环链直接吃红利：RunFlowGraph 节点友好名 = `NodeBase.label` 派生，不另起平行表。
+- **词汇**：NAMING N-29~N-35 同批落档（班组退役/Agent 归一/actor 退役/outputs 派生/harness 限定/estimate/kind 同名）。
+
+**Related**: ADR-028（RunPlan 持久化——本条是其规范面完成）、ADR-030（outputs 统一——本条使其可扩展）、ADR-033（能力层双注册表）、ADR-025（计量——估价是其计划侧）、NAMING N-29~N-35、AGENT_ARCHITECTURE（四层工程地图重画）、CHAT_ARCH §4/§5

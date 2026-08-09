@@ -884,9 +884,9 @@ async def answer_question(
                         instruction=intent.specific_instruction
                         or pending.prompt
                         or None,
-                        brand_template_id=(
-                            str(pending.brand_template_id)
-                            if pending.brand_template_id
+                        persona_id=(
+                            str(pending.persona_id)
+                            if pending.persona_id
                             else None
                         ),
                         dub_languages=intent.dub_languages,
@@ -1209,11 +1209,11 @@ async def _plan_turn(
         )
         return assistant_message, None, None, []
 
-    # A turn that omits brand_template_id must not clobber the brand choice
-    # an earlier turn made.
-    brand_template_id = request.brand_template_id
-    if brand_template_id is None and isinstance(project.pending_intent, dict):
-        brand_template_id = project.pending_intent.get("brand_template_id")
+    # A turn that omits persona_id must not clobber the persona choice an
+    # earlier turn made.
+    persona_id = request.persona_id
+    if persona_id is None and isinstance(project.pending_intent, dict):
+        persona_id = project.pending_intent.get("persona_id")
 
     # Persist the unconfirmed task book on the project: leaving the chat and
     # coming back (any device) restores this exact plan. Cleared once the run
@@ -1222,7 +1222,7 @@ async def _plan_turn(
         prompt=prompt,
         intent=intent,
         reasons=reasons,
-        brand_template_id=brand_template_id,
+        persona_id=persona_id,
     ).model_dump(mode="json")
     bailed_run_ids = await sync_task_book_question(
         db, user_id, project, intent, prompt, reasons=reasons

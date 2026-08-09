@@ -101,7 +101,7 @@ Every request is logged as `http_request` with method, path, query, status, dura
 
 ## 5. Persona Management
 
-> **Evolution Note**: The identity module was renamed Speaker → Persona across the stack (ADR-037, cut 1 landed 2026-08-09 — table `personas`, endpoints `/api/v1/personas`). Personas are isolated per user; `persona_id` is optional at project creation; if not selected, the system auto-creates one on the first run. The endpoints below still retain the manual-creation and past-material-to-persona shapes, and will gradually converge toward a unified auto/manual memory model.
+> The identity module is `personas` (ADR-037/038). Personas are isolated per user; `persona_id` is optional at project creation; the default-persona resolution chain is: run-context pin → project mount → persona with `auto_created_at` set → earliest created. A persona's `voice` field is the **voiceprint block** (`{"kind":"cloned","voice_id","sample_asset_id"}` | `{"kind":"stock","stock_id"}` | `null` = Auto) — writing style lives in the style fields + `guidelines`. `brand` is the visual-skin block (`null` = system default skin), merged over the default at bake time.
 
 ### Create Persona
 
@@ -135,12 +135,18 @@ Response:
   "typical_hooks": [],
   "avoid_words": [],
   "voice": null,
+  "brand": null,
+  "learned_from": null,
+  "calibrated_at": null,
+  "auto_created_at": null,
   "audience": null,
   "guidelines": null,
   "cta": null,
   "created_at": "2026-06-22T10:00:00Z"
 }
 ```
+
+`voice` = voiceprint block (see the note above); `brand` = visual-skin block (`captionFont` / `captionSize` / `captionColor` / `captionPosition` / `captionStylePreset` / `title*` / `keywordHighlighter` / `logo` / `intro` / `outro` / `musicId` / `musicMood`), merged over the system default at bake time; `learned_from` records which assets the profile was calibrated from; `calibrated_at` / `auto_created_at` are nullable timestamps (`auto_created_at` doubles as the "system-created" marker in the default-persona chain).
 
 ### List Personas
 
@@ -302,7 +308,6 @@ Request:
     { "type": "article" }
   ],
   "target_language": "en",
-  "brand_template_id": "uuid | null",
   "instruction": "聚焦实体机器人角度，hook 要狠",
   "tone_settings": {
     "academic_vs_casual": 0.7,
@@ -494,7 +499,7 @@ Request:
   "attachments": [],
   "mentions": [],
   "prior_intent": null,
-  "brand_template_id": "uuid | null",
+  "persona_id": "uuid | null",
   "autonomy": "auto | review | null"
 }
 ```
@@ -503,7 +508,7 @@ Request:
 
 **Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). 15s heartbeat comment frames. Plan-card turns emit zero deltas (structured JSON must arrive whole); the streaming benefit is prose turns. Clients must not auto-reconnect — a retried POST persists the user message again.
 
-`prior_intent` and `brand_template_id` are plan-path transports (never persisted on the message): `prior_intent` is the review panel's current task book — its `explicit` slots pin through re-inference; `brand_template_id` is written into the pending intent only when a task book docks (a later turn omitting it never clobbers the stored choice). `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
+`prior_intent` and `persona_id` are plan-path transports (never persisted on the message): `prior_intent` is the review panel's current task book — its `explicit` slots pin through re-inference; `persona_id` is the composer's persona choice riding the first message — it is written into the pending intent only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`. `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
 
 **Plan path** (project scope, before the first run or while a task book is pending): the PlanAgent builds / refines the task book. Response shapes by verdict — `generate`: `assistant_message` is the docked `task_book` question (the book itself is on `GET /projects/{id}/results` → `pending_intent`); `answer`: a plain informational reply; `start` (prose confirmation): the run starts — `run_id` is set and `answered_question` carries the settled task book.
 
@@ -515,77 +520,36 @@ Request:
 GET /api/v1/chat/conversations/{id}/messages
 ```
 
-## 12. Brand Template
+## 12. Persona Skin Block (brand)
 
-Brand templates determine the brand overlay elements in the final video. **Full CRUD**; a default is seeded on startup. At generation time, `GenerateRequest.brand_template_id` selects one (defaults to latest), baking `aspect` / caption·title·CTA styles and **position points** / intro/outro / music mood into `render_spec`.
+The standalone Brand Template module is retired (ADR-038): the visual skin lives on the persona as the `brand` JSONB block, read and written through the Persona endpoints (§5 — `PUT /api/v1/personas/{persona_id}` with `{"brand": {...}}`). There are no `/brand-templates` endpoints.
 
-### Create / Update Brand Template
+At clip-generation time the Pipeline merges the resolved persona's `brand` block over the system default skin and bakes caption color/size/font + position points + intro/outro + music selection into `render_spec.brand`; `render_spec.brand_ref` records the persona id. A persona with `brand: null` renders with the system default skin. Craft/format keys that used to ride the old template config (`aspect`, `fillMode`, `captionEnabled`, filler removal) are **not** persona fields — they come from the recipe registry / task-book defaults.
 
-```http
-POST /api/v1/brand-templates
-PUT /api/v1/brand-templates/{template_id}
-```
-
-Request:
+Skin keys (`null` on the persona = fall through to the default):
 
 ```json
 {
-  "name": "Default",
-  "config": {
-    "aspect": "9:16",
-    "fillMode": "fill",
+  "brand": {
     "captionFont": "lilita",
     "captionSize": 56,
     "captionColor": "#facc15",
     "captionPosition": { "x": 0.5, "y": 0.84 },
+    "captionStylePreset": "clean-bottom",
     "titleEnabled": true,
     "titleSize": 58,
     "titlePosition": { "x": 0.5, "y": 0.12 },
-    "introEnabled": true,
-    "introKind": "image",
-    "introText": "",
-    "introMediaUrl": "/api/v1/files/.../intro.png",
-    "introDurationSeconds": 2,
-    "outroEnabled": true,
-    "outroKind": "video",
-    "outroText": "",
-    "outroMediaUrl": "/api/v1/files/.../outro.mp4",
-    "outroDurationSeconds": 3,
-    "musicEnabled": true,
+    "keywordHighlighter": null,
+    "logo": null,
+    "intro": null,
+    "outro": null,
+    "musicEnabled": false,
     "musicId": "<music row uuid>"
   }
 }
 ```
 
-> `musicId` references a `Music` row (see `docs/MUSIC_ARCHITECTURE.md`); the legacy `musicMood` key (calm/uplifting/corporate/none) is still honored as a fallback for templates saved before ADR-023.
-
-### List Brand Templates
-
-```http
-GET /api/v1/brand-templates
-```
-
-### Get Single Brand Template
-
-```http
-GET /api/v1/brand-templates/{template_id}
-```
-
-### Delete Brand Template
-
-```http
-DELETE /api/v1/brand-templates/{template_id}
-```
-
-### Upload Intro/Outro Media
-
-```http
-POST /api/v1/brand-templates/media
-```
-
-Multipart `file` (image or video). Not scoped by `template_id` — a draft may
-not have one yet. Returns `{"url": "/api/v1/files/..."}`, a storage-seam URL
-to store in `config.introMediaUrl` / `config.outroMediaUrl`.
+> `musicId` references a `Music` row (see `docs/MUSIC_ARCHITECTURE.md`); the `musicMood` key (calm/uplifting/corporate/none) is honored as a fallback. `musicEnabled` is the master switch (default `false` = no soundtrack).
 
 ## 13. Data Models
 
@@ -593,7 +557,7 @@ Field-level truth lives in code (`apps/api/app/models/tables.py`); cross-cutting
 
 Core models:
 
-- `Persona` (= user profile: style memory + voiceprint; ADR-037)
+- `Persona` (= user profile: style memory + voiceprint block + skin block; ADR-037/038)
 - `Project` (includes `content_plan: JSON` for persisted ContentPlan)
 - `Asset`
 - `Clip`
@@ -601,12 +565,12 @@ Core models:
 - `WorkflowRun` (includes `context` with `outputs`, `clip_count`, `output_status`)
 - `Conversation` (project-scoped or asset-scoped chat container)
 - `Message` (chat messages, referenced by `conversation_id`)
-- `BrandTemplate`
 
 Removed / not yet implemented:
 
+- `BrandTemplate` (table dropped, ADR-038 — skin absorbed into `personas.brand`)
 - `HumanFeedback` (feedback is now handled by the `/clips/{id}/revise` endpoint and stored on the revised `Clip`)
 - `WorkflowStep` (dropped; `WorkflowRun.current_step` tracks progress as a string)
 
 Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(intro/outro) / `IntroOutroCard`(kind/text/media_url) / `Point`.
-Requests/derivatives: `GenerateRequest`(carousel/brand_template_id/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.
+Requests/derivatives: `GenerateRequest`(carousel/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.

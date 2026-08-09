@@ -54,7 +54,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | 空指令 | 前端本地拦截（toast） | ✅ |
 | 只要 clips 但无媒体 | PlanAgent 排除 clips；绕过则出生地 422 | ✅ |
 | 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | plan path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
-| G 无素材且未贴内容 | answer 反问引导（回形针上传或直接贴文；PlanAgent 规则 + 服务端安全带，永不 dock 无米任务书；prompt.txt shim 已退役） | ✅（S13，2026-08-05） |
+| G 无素材且未贴内容 | answer 反问引导（回形针上传或直接贴文；PlanAgent 规则 + 服务端安全带，永不 dock 无米任务书） | ✅（S13，2026-08-05） |
 | 配方播种 clips 但无媒体 | dock 保留 clips + 警告，echo 散文主动解释（上传解锁或去 clips 开工）；Start 422 后手编去 clips 可起 | ✅（S11） |
 | Remix 配方后 revise 字段（"clips only needs 2"） | 配方=预设只铺第一版（不钉任何字段）→ 修订直达 docked 书 | ✅（S15，2026-08-05） |
 | S 闲聊 | /chat plan path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |

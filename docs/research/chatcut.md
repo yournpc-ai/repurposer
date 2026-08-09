@@ -56,7 +56,7 @@
 
 - 无公开 REST API，而是**原生 MCP server（OAuth 登录）+ ChatGPT/Codex 桌面插件**（开源仓库 `ChatCut-Inc/agent-plugin`）：让外部 agent 直接驱动编辑器，编辑结果以真实可编辑时间线返回
 - 2026-07-09 Codex 插件上线——"在 Codex 里拥有一个完整 AI 视频编辑器"
-- **趋势信号**：它把"被 agent 调用"当作主分发面而非补充。我们的 4-layer agent 架构（GenerationContext → Content Director → Executors → Reviser）天然适合暴露 MCP 工具面，P2 方向
+- **趋势信号**：它把"被 agent 调用"当作主分发面而非补充。我们的多 agent DAG 架构（AGENT_ARCHITECTURE 四层工程地图：Model/Harness/Graph/Loop）天然适合暴露 MCP 工具面，P2 方向
 
 ## 6. 信任与合规观察
 

@@ -79,7 +79,9 @@ interface WorkflowRun {
     target_language?: string
     /** 配音语言集 (RECIPES §4.1): absent on pre-recipe runs. */
     dub_languages?: string[]
-    brand_template_id?: string | null
+    /** The run-pinned persona (ADR-038); legacy runs' brand_template_id key
+     * is ignored on read — re-runs resolve via the persona chain. */
+    persona_id?: string | null
     instruction?: string | null
     tone_settings?: Record<string, unknown> | null
   } | null
@@ -97,7 +99,7 @@ interface PendingIntent {
   /** Why the book needs a human check — confirmation is `reasons.length > 0`
    * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
-  brand_template_id?: string | null
+  persona_id?: string | null
 }
 
 interface ProjectResults {
@@ -154,7 +156,7 @@ function ProjectDetailPage() {
       firstMessage?: {
         text: string
         mentions?: { type: string; id: string; label: string }[]
-        brandTemplateId?: string
+        personaId?: string
       }
     }
   ).firstMessage
@@ -338,7 +340,6 @@ function ProjectDetailPage() {
           },
         ],
         target_language: ctx?.target_language || results.project.language || "en",
-        brand_template_id: ctx?.brand_template_id || undefined,
         instruction: ctx?.instruction || undefined,
         tone_settings: ctx?.tone_settings || undefined,
       })
@@ -610,7 +611,7 @@ function ProjectDetailPage() {
               ? {
                   text: firstMessage.text,
                   mentions: firstMessage.mentions ?? [],
-                  brandTemplateId: firstMessage.brandTemplateId,
+                  personaId: firstMessage.personaId,
                 }
               : null
           }
@@ -621,11 +622,6 @@ function ProjectDetailPage() {
             pendingIntent ? (pendingIntent.reasons?.length ?? 0) > 0 : true
           }
           initialReasons={pendingIntent?.reasons ?? []}
-          brandTemplateId={
-            firstMessage?.brandTemplateId ??
-            pendingIntent?.brand_template_id ??
-            undefined
-          }
           onClose={() => navigate({ to: "/projects" })}
           onComplete={() => {
             // The overlay created the run after this page's initial fetch —
@@ -670,7 +666,6 @@ function ProjectDetailPage() {
               : [],
             specific_instruction: latestRun.context?.instruction ?? null,
           }}
-          brandTemplateId={latestRun.context?.brand_template_id ?? undefined}
           initialRunId={attachRunId}
           onClose={closeAttachOverlay}
           onComplete={() => {

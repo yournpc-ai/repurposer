@@ -49,12 +49,9 @@ The user's explicit requirements for this output are as follows. **Please priori
 You are planning content for **{{ context.persona.name or "the persona" }}{% if context.persona.title %} ({{ context.persona.title }}){% endif %}**.
 Make sure each slot's angle serves their audience and credibility.
 
-{% if context.persona.voice or context.persona.audience or context.persona.guidelines or context.persona.cta %}
+{% if context.persona.audience or context.persona.guidelines or context.persona.cta %}
 ### Persona Memory
 
-{% if context.persona.voice %}
-- **Voice**: {{ context.persona.voice }}
-{% endif %}
 {% if context.persona.audience %}
 - **Target audience**: {{ context.persona.audience }}
 {% endif %}

@@ -1,13 +1,13 @@
 # output-quality-verify 实施简报——生成产物质量：保真止血 + 打分维度 + 质检节点首期
 
 > Status: 📋 待实施（2026-07-28 评审定范围：方案 A——保真 + 质检节点，视觉产物品牌渲染归下一轮）
-> 依据：PROGRESS 需求池"首发推荐分：维度明细"（P1 ❌）与"质检节点"（P2 ❌，本轮提前兑现——单产物质检首期）；AGENT_ARCH §12.3（质检节点形态）/§12.6（Phase 3）；STRATEGY §2.1（品味可见可证伪）/§2.5（L2 质量控制缺口）
-> 前置：工作区在飞的 speakers/pending-intent/stepper 改版（GenerationStepper 删除、GenerationOverlay 重写）先落地；本简报的 UI 接线点以落地后的通用 steps 渲染（`workflow_step_to_response` + stepKinds i18n）为准
+> 依据：PROGRESS 需求池"首发推荐分：维度明细"（P1 ❌）与"质检节点"（P2 ❌，本轮提前兑现——单产物质检首期）；AGENT_ARCH §9（Phase 3 质检）；STRATEGY §2.1（品味可见可证伪）/§2.5（L2 质量控制缺口）
+> 前置：UI 接线点以通用 steps 渲染（`workflow_step_to_response` + stepKinds i18n）为准
 > 迁移：新增 1 个 alembic 迁移（`outputs.quality` JSONB）；down_revision 跟在飞两个迁移（asset_title / pending_intent）落地后的 head
 
 ## 0. Context
 
-原 ROADMAP P0 表已清空（ROADMAP 已并入 PROGRESS，2026-07-31），STRATEGY §2.5 控制深度阶梯的剩余缺口全在 L2（打分门槛 / persona 保真 / 术语表 / 运镜枚举）。本轮兑现 L2 的"质量"半边：先修三个保真缺陷（产物与素材货不对板），再把打分维度落库（可证伪前提），最后在 DAG 上长出 verify 节点承接这一切（质检 = 图里一种 kind，不是外挂流程）。
+STRATEGY §2.5 控制深度阶梯的剩余缺口全在 L2（打分门槛 / persona 保真 / 术语表 / 运镜枚举）。本轮兑现 L2 的"质量"半边：先修三个保真缺陷（产物与素材货不对板），再把打分维度落库（可证伪前提），最后在 DAG 上长出 verify 节点承接这一切（质检 = 图里一种 kind，不是外挂流程）。
 
 读码核实的三个保真缺陷：
 
@@ -51,7 +51,7 @@
 | `span_fidelity(source_text, span_words)` | token F1（源文本 vs 时间窗内词流） | ≥ 0.5 pass |
 | `quote_verbatim(quote, source_texts)` | 归一化后 difflib 最佳句窗比对 | ratio ≥ 0.85 pass；语言不符 → skipped |
 | `language_match(text, target)` | CJK 字符比 + 六语言停用词频率 | 最高分 == target pass；非产品语言 → skipped |
-| `avoid_words(text, speaker)` | 子串命中（CJK/英文统一归一化） | 0 命中 pass |
+| `avoid_words(text, persona)` | 子串命中（CJK/英文统一归一化） | 0 命中 pass |
 | `length_in_bounds(text, kind)` | post 100–500 词 / article 400–1600 词 | 界内 pass |
 | `slide_count` / `count_match` | carousel slides 数 == slot count（±0）；quotes 数 == slot count | 相等 pass |
 
@@ -76,13 +76,13 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
           translate/dub/script）与 scope hook/clip/render 不挂
 ```
 
-- kind 统一 `verify`（AGENT_ARCH §12.3 预定词汇："verify = plan_nodes 一种 kind"），`spec.for` 区分产物类型。**不进 SKILL_REGISTRY**（非 LLM 可提议 skill，内部节点同 preprocess/director）；summary 用 `_set_summary` 直写。
+- kind 统一 `verify`（NAMING §2：verify = 节点 kind，不是 eval），`spec.for` 区分产物类型。**不进 SKILL_REGISTRY**（非 LLM 可提议 skill，内部节点同 preprocess/director）；summary 用 `_set_summary` 直写。
 - STEP_RUNNERS 注册 `run_verify`。
 
 **run_verify 逻辑**（纯确定性，零 LLM 调用）：
 
 1. 上游 executor 节点 = `node.inputs[0]` → 其 `output_refs` → Output 行。
-2. 装检查上下文：source texts（`collect_asset_texts`）、render_source 词表、speaker（avoid_words）、任务书（target_language / slot count）。
+2. 装检查上下文：source texts（`collect_asset_texts`）、render_source 词表、persona（avoid_words）、任务书（target_language / slot count）。
 3. 按 `spec.for` 跑 §2.1 检查表：clips 逐 clip 查 span_fidelity/duration_bounds/score_axes_present；quotes 逐条查 verbatim/attribution_present/count_match；post/article 查 language_match/avoid_words/length_in_bounds；carousel 查 language_match/slide_count/avoid_words。
 4. 裁决写 `Output.quality = {status, checks: [{id, ok|null, detail}], attempt, checked_at}`：
    - 全过（skipped 不算败）→ `status="passed"`，节点 done，summary="Passed {n}/{n} checks"。
@@ -92,7 +92,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 **打回（QualityBounce）**：`orchestrator.execute_step` 在通用 except 之前捕获——
 
 - 上游 executor：`status="pending"`，`spec = {**spec, "feedback": feedback}`（新 dict 赋值，SQLAlchemy 可检）；error 清空。
-- verify 自身：`status="pending"`（attempt 随认领续增，打回预算 = attempt ≤ 2，即 executor 最多跑 3 次：初跑 + 2 打回，`§12.3 "打回 ≤2 次"`）。
+- verify 自身：`status="pending"`（attempt 随认领续增，打回预算 = attempt ≤ 2，即 executor 最多跑 3 次：初跑 + 2 打回）。
 - 不标 failed、不 cascade、run 保持打开（`maybe_finalize_run` 见 pending 不收尾）。
 - feedback 结构：`{failed: [{check, detail, excerpt}], round: n}`——executor runner 启动时读出并**从 spec 弹出**（防后续定向重生成吃到陈 feedback），传入 agent；五个 executor j2 增 `{% if feedback %}## Revision Required` 节（列失败项 + 证据摘录 + "只修这些，其余保持一致"）。
 - executor 重跑真失败 → 走原 failed + cascade（verify skipped），run 语义不变。
@@ -105,7 +105,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 
 ### 2.4 明确不做（本期）
 
-- 全片质检（跨产物撞车）——coverage 维持"报告不是门禁"（§12.2 纪律）。
+- 全片质检（跨产物撞车）——coverage 维持"报告不是门禁"（NAMING §2 覆盖报告：门禁归 Phase 3 质检节点）。
 - LLM judge（persona 保真、质量打分）——首期零 LLM 质检；judge 可靠性需单独评审。
 - 视觉产物品牌渲染（quote card 弃 image-01 烘文字 / carousel PDF）——下一轮，单独技术路线。
 - storyboard/coverage 门禁化、modifier 节点的质检、reviser 的 axes。
@@ -169,7 +169,7 @@ mode②:   generation skill 节点后各挂 verify；modifier（remove_filler/ad
 8. **附项·响度**：低音量源视频渲染出的 clip 实测响度 -16 LUFS ±1；过大音量同样被压回。测量用 loudnorm 自带测量通道（`print_format=json` 的 `input_i`，同 R128 算法）——Remotion compositor 的裁剪 ffmpeg 构建无 ebur128 滤镜。
 9. **附项·下载**：article/carousel/post 下载菜单三项齐（.md/.txt/复制），.txt 无 Markdown 语法残留。
 10. **附项·count**：prompt "给我 8 张金句卡" → storyboard quotes 槽 count=8 → 产物 8 条；未提及时默认 3/6 不变。
-11. **文档落地**：PROGRESS 需求池两行状态翻 ✅（维度明细 / 质检节点首期，全片质检标注仍 ❌）；AGENT_ARCH §12.6 Phase 3 → 🚧 首期落地；NAMING 词汇表登记 §5 新词。
+11. **文档落地**：PROGRESS 需求池两行状态翻 ✅（维度明细 / 质检节点首期，全片质检标注仍 ❌）；AGENT_ARCH §9 Phase 3 → 🚧 首期落地；NAMING 词汇表登记 §5 新词。
 
 ## 7. 禁止行为（Prohibited Behaviors）
 

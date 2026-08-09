@@ -1,15 +1,14 @@
 # Chat Architecture — Agent Interface 层
 
-> Status: ✅ v2 已实现（2026-07-26 backend + edit ops 接线；2026-07-27 GenerationOverlay 前端；2026-07-29/30 ask 原语期 1–4 + 期 4 补四全落地；**2026-08-04 意图层单面化**：`/intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path——简报 `tasks/intent-surface-unification.md`）。实施史见简报 `docs/tasks/done/chat-loop-v1.md` / `chat-loop-v2.md` / `intent-ask-primitive.md`；意图覆盖现状见 `INTENT_COVERAGE.md`。@picker / composer pills 不做（pills 已于 2026-07-27 随 composer 行为契约退役）。
-> 补丁（2026-08-02，agent-loop-upgrade 一期，简报 `docs/tasks/agent-loop-upgrade.md`）：① 提案提示词注入参数 `Field` 描述（W2，provider-neutral）；② `DubClipParams.fork`——chat「再来一版」走派生新行、原版保留（W5）；③ morph runner 全部经 operations 记账（W4，壳/核同账，chat 配音/翻译/配乐/去口头禅可撤销）；④ step 级瞬时重试（`TransientNodeError` + `SkillEntry.retries`，W3）；⑤ recipe 合并代数三规则定格 remix 语义（W1，见 RECIPES §4.1）；⑥ 原生 tool-call 信道留待 provider 抽象（W6 不实施）——§1 原则 2 的"tool-calling"目前仍是 JSON-in-prompt 约定信道，非原生工具协议。
-> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）
-> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；前置重构：`docs/tasks/done/backend-module-restructure.md`（chat/ 包是本文的代码家）
+> Status: ✅ v2 已实现（意图层单面化：`POST /chat` 是唯一意图表面，任务书构建/修订/确认并入 plan path）。意图覆盖现状见 `INTENT_COVERAGE.md`；实施史简报归 `docs/tasks/done/`。
+> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）/ ADR-039（架构规范级大迭代：本文 = 四层工程地图的 Loop 层行为规格；技能包收编注册表、`kind`/`cost_hint` 字段退役、agent 正名，见 §4）
+> 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；chat/ 包是本文的代码家。
 >
-> 落地偏离点（相对本文设计稿）：
-> - §5 的 `ports` 未吸收，拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达。
-> - `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发；归 R2，见 RECIPES §8）；`dub_clip` 已实装（2026-07-31 R1）。
-> - @picker 注册表化落地（2026-08-01 修订）：提及系统升级为**双端注册表架构**（前端 `MENTION_REGISTRY` + 服务端解析注册表），recipe 为第一注册成员、第五提及类型，任务书钉死收归服务端解析（简报 `docs/tasks/recipe-mention.md`；**2026-08-05 修订：钉降为预设**——存在性填充 + dub 空时填默认，无 explicit，chat 修订永远赢）；此前 mentions 仅落契约与列（type 取 `workflow_step`，N-15 改名后全栈同名）。
-> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；results 页 GenerationStepper 弹窗已于 2026-07-28 退役，processing 项目改开 `?overlay=run` attach 模式）；step 状态枚举加 `waiting` 座位（HITL/suspend-resume 已用，§8.5）。
+> 关键形态事实：
+> - 拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达（AGENT_ARCH §4  NodeBase）。
+> - `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发；归 R2，见 RECIPES §8）。
+> - 提及系统 = 双端注册表架构（前端 `MENTION_REGISTRY` + 服务端解析注册表），任务书预设播种唯一发生地 = 服务端 `resolve_recipe_mentions`（存在性填充，chat 修订永远赢）。
+> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；processing 项目开 `?overlay=run` attach 模式）；step 状态枚举含 `waiting`（HITL/suspend-resume，§8.5）。
 
 ## 1. 定位与三条原则
 
@@ -20,8 +19,8 @@ task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁�
 ```
 
 1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_graph`。LLM 永不直接写 node spec。
-2. **轮内一次调用，轮间才是循环**。每条用户消息 = intent agent 单次 tool-calling 调用 → task list → 编译 → 跑。不做 ReAct 式多步推理；"循环"只发生在对话轮次之间。
-3. **composer = chat 的第一条消息**。数据模型早已如此（`/generate` 建 project-scoped ChatSession 并存 prompt）：pills 是 task list 的结构化快捷方式，自由 prompt 是 task list 的自然语言入口，无指令 = 输入组合推导默认 task list（compile_graph 模式①，现有 presence-gating）。
+2. **轮内一次调用，轮间才是循环**。每条用户消息 = intent agent 单次调用（信道 = JSON-in-prompt 约定，非原生工具协议）→ task list → 编译 → 跑。不做 ReAct 式多步推理；"循环"只发生在对话轮次之间。
+3. **composer = chat 的第一条消息**。composer 发送 = 建项目 + 上传素材 → 跳转 `?overlay=chat`，草稿作为第一条 `POST /chat` 消息发出（mentions + `persona_id` 随行）；无指令 = 输入组合推导默认 task list（compile_graph 模式①，presence-gating）。
 
 ## 2. 一次对话指令的完整生命
 
@@ -33,7 +32,7 @@ chat/service.py ──► intent agent（LLM 单次 tool calling，带 §6 上�
  │                   输出 task list（提议，无执行权）:
  │                   [{skill:"remove_filler"}, {skill:"select_clips",params:{count:3}}, {skill:"add_music"}]
  ▼
-pipeline/registry.py   校验：skill 已注册？参数过 schema？
+SKILL_REGISTRY（技能包收编）  校验：skill 已注册？参数过 schema？
 pipeline/orchestrator  compile_graph 模式②：拓扑排序（配乐殿后）+ 补默认值
  ▼
 workflow_steps（动态 DAG，3 步骤 + render fan-out）── worker 认领（SKIP LOCKED）
@@ -75,7 +74,7 @@ intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代
   "summary": "把第二段结尾剪掉 2 秒"
 }
 
-// C. 结构化提问（→ QuestionDock；N-18 翻案 N-14，期 3 已落代码）
+// C. 结构化提问（→ QuestionDock；N-18）
 {
   "type": "ask",
   "question": "这五个切片你想做成哪种方向？",
@@ -112,7 +111,7 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 **answer 契约**（期 1 已落，期 4 补修订）：`{kind: "option"|"freeform"|"bail"|"start", option_id?, text?, answered_at}`。bail 是一等公民——入口回 draft 可重开、checkpoint 下游级联 skipped（期 4），**永不标 failed**；`start` 是 task_book 确认的一等 kind（取代期 1 的魔法 `option_id="start"`）。请求体 `AnswerRequest` 是按 `kind` 判别的联合（option/freeform/start/bail）——`autonomy`/`intent` 只存在于 `start` 上，其他 kind 带 kind 外字段直接 422，不再静默忽略；task_book 问题只接受 start/bail，其他问题不接受 start。N-14 的"tasks=[] 反问"届时迁移为 ask 的 freeform 形态（options 空 + allow_freeform）——反问仍是合法输出，只是有了类型座位。
 
-### 3.3 PlanAgent 顾问姿态（2026-08-05 立；PROGRESS 第 4 周施工）
+### 3.3 PlanAgent 顾问姿态（2026-08-05 立；PROGRESS 第二周施工）
 
 来源：一份真实顾问对话样本（用户 = 目标画像：有素材、不懂自媒体、助理也不懂）。plan path 不只是填任务书——**用户到来即彷徨，agent 是接住彷徨的人**（哲学论证 → STRATEGY §5）。四条行为规格：
 
@@ -125,40 +124,41 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 ## 4. Skill Registry 初集
 
-`pipeline/registry.py`：Python dict + Pydantic schema，不上框架。每条登记：
+> 注册表收编进技能包（ADR-039）：`skills/__init__.py` 汇总各包声明建成 `SKILL_REGISTRY`（静态注册表随代码部署）；执行者是 agent 还是机械 = 技能包的构成（N-31），无 `kind` 分类字段；估价 = 节点 `estimate()` 函数（N-34，`cost_hint` 三档退役）；节点 kind = 技能名（N-35）。
+
+每条登记：
 
 ```jsonc
 {
-  "name": "remove_filler",
-  "kind": "skill",                    // skill=LLM 决策单元 / tool=确定性执行单元
+  "name": "remove_filler",            // = 节点 kind（N-35 同名）
   "behavior": "deterministic",        // deterministic 可缓存 / probabilistic 每次计价
-  "params_schema": { ... },           // Pydantic
+  "params_schema": { ... },           // Pydantic；Field 描述 = LLM 的参数文档
   "summary_template": "Removed {filler_count} fillers · {repeat_count} repeated takes",
-  "cost_hint": "cheap",               // 成本量级，供未来 quote
-  "runner": "pipeline.node_runners:run_remove_filler"
+  "runner": "skills.filler.node:RemoveFillerNode"   // 技能包内节点类（NodeBase）
 }
 ```
 
 **准入纪律：skill 总数十几个封顶。** 新 skill 准入 = 过 NAMING §7 同款评审（用户会用自然语言说到它吗？现有 skill 组合能表达吗？），通过即登记（§8 词汇表）。
 
-**扩展门纪律（2026-08-05 立）**：加功能 = 往注册表填一项，没有第二种方式。注册项自带全家桶——`retries`（步骤级重试预算）、`requires`（出生地输入校验）、`after`（拓扑约束）、`summary_template`（进度文案）、`cost_hint`（计量提示）全部随登记免费获得；runner 落进 `STEP_RUNNERS` 即被编排/工作流/SSE 打勾流自动接管。**禁止侧门**：不为某个节点单开映射表/特判分支（如平行的 retries 表）——那是"房间本来有门又造了侧门"，发现即拆。内部节点（§4.3）不登记，但它们的扩展同样优先审视能否表达为注册项。
+**扩展门纪律（2026-08-05 立）**：加功能 = 往注册表填一项，没有第二种方式。注册项自带全家桶——`retries`（步骤级重试预算）、`requires`（出生地输入校验）、`after`（拓扑约束）、`summary_template`（进度文案）、`estimate`（估价）全部随登记免费获得；节点类落进 `NODE_KINDS` 即被编排/工作流/SSE 打勾流自动接管。**禁止侧门**：不为某个节点单开映射表/特判分支（如平行的 retries 表）——那是"房间本来有门又造了侧门"，发现即拆。内部节点（§4.3）不登记，但它们的扩展同样优先审视能否表达为注册项。
 
 ### 4.1 已在（反向抽象登记）
 
-| skill | 实现 | summary_template 示例 |
+| skill | 技能包 | summary_template 示例 |
 |---|---|---|
-| `select_clips` | `skills/clip_agent.py` | "Selected {n} clips · {total_seconds}s total" |
-| `write_post` / `write_quotes` / `write_carousel` / `write_article` | `skills/post·quotes·carousel·article.py` | "Wrote a LinkedIn post · {word_count} words" |
-| `revise_script` | `skills/reviser.py` | "Revised hook · {reason}" |
-| `dub_clip` | dub 端点 → `tools/voice.py` | "Dubbed with cloned voice" |
-| `add_music` | clip-spec music 槽 + mood 库 + `tools/music.py` | "Scored · {mood} bed" |
-| `align_stills` | 阅读节奏估算时间轴（`node_runners._estimate_words_timeline`） | "Aligned transcript · {n} words · {total_seconds}s" |
+| `select_clips` | `skills/clips/`（含选段编剧 agent 声明） | "Selected {n} clips · {total_seconds}s total" |
+| `write_post` / `write_quotes` / `write_carousel` / `write_article` | `skills/posts·quotes·carousel·article/` | "Wrote a LinkedIn post · {word_count} words" |
+| `revise_script` | `skills/revise/` | "Revised hook · {reason}" |
+| `dub_clip` | `skills/dub/`（私有工序 + 共享 translator agent） | "Dubbed {n} clips · {lang}" |
+| `translate_clip` | `skills/captions/`（词级时间摊铺工序） | "Translated {n} clips · {lang}" |
+| `add_music` | `skills/music/` + clip-spec music 槽 + `tools/music.py` | "Scored · {mood} bed" |
+| `align_stills` | `skills/stills/`（阅读节奏估算时间轴） | "Aligned transcript · {n} words · {total_seconds}s" |
 
 ### 4.2 新增（按价值排序，独立排期）
 
 | skill | 状态 | 说明 |
 |---|---|---|
-| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md`；声音路径随第 5 周声纹线落地（R2 已先行交付无声版，RECIPES §4.2） | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
+| `synthesize_talk_video` | 📋 任务简报 `docs/tasks/synthetic-talk-video.md`；声音路径随第四~五周声纹/R5 线落地（R2 已先行交付无声版，RECIPES §4.2） | 文字稿+照片+声纹 → 合成发言视频（生成端 v1） |
 | `remove_filler` | 📋 chat 线 hello world | 词级时间戳 + filler 检测 → 标 hidden（非破坏）→ 重渲染 |
 | `make_hook` | 📋 半新 | ≈ `revise_script(scope=hook)` 的独立入口 |
 
@@ -181,7 +181,7 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 ## 6. 对话上下文（context 组装）
 
-确定性代码组装，不是塞聊天历史。每轮 intent 调用带四部分：
+确定性代码组装，不是塞聊天历史（代码家 = `agents/contexts.py`——harness 输入侧，ADR-039；chat service 不持装配逻辑）。每轮 intent 调用带四部分：
 
 | 部分 | 内容 | 来源 | 预算 |
 |---|---|---|---|
@@ -217,11 +217,11 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 
-**前端实现（2026-07-27）**：`useRunEvents` hook 统一消费这条流，接两处——results 页 `GenerationStepper`（顶部进度条）与 `GenerationOverlay` 打勾流（composer 发送后的全屏对话：计划卡 HITL 确认 → 步骤逐行亮起（shimmer 标记进行中）→ 终态 toast + 结果页 refetch）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
+**前端实现**：`useRunEvents` hook 统一消费这条流，接 GenerationOverlay 打勾流（全屏对话：计划卡 HITL 确认 → 步骤逐行亮起（shimmer 标记进行中）→ 终态 toast + 结果页 refetch）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
 
-**进度面收编（2026-07-28）**：GenerationStepper 弹窗与后端 `ui_step` 退役——进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
+**进度面**：进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
 
-**计划确认的持久化与恢复（2026-07-28，2026-08-04 单面化修订）**：plan path 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 reasons / brand_template_id；answer 回合不写，免得覆盖用户在确认的计划），run 启动时清除（answer kind=start 或 `/generate`）。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=chat`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。sessionStorage 交接管道已于同日退役。
+**计划确认的持久化与恢复**：plan path 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（含 reasons / brand_template_id；answer 回合不写，免得覆盖用户在确认的计划），run 启动时清除（answer kind=start）。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=chat`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。
 
 ### 8.5 QuestionDock 与 question/answer（ask 原语，期 1/3 已落）
 

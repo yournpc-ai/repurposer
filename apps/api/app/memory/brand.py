@@ -1,26 +1,27 @@
-"""Resolve a BrandTemplate's free-form config into a typed ClipBrand block.
+"""Resolve a persona's brand skin block into a typed ClipBrand block.
 
-The brand-template UI stores its settings as a camelCase ``config`` dict on
-``BrandTemplate`` (see apps/web/src/routes/brand-template.tsx ``Template``). At
-generation time we map the subset the renderer supports into ``ClipBrand`` and
-bake it into the clip-spec, so the render service / preview never touch the DB.
+The persona's skin lives in the free-form camelCase ``brand`` block on
+``Persona`` (ADR-038 — brand_templates retired; the word stays, the module
+does not). At generation time we map the subset the renderer supports into
+``ClipBrand`` and bake it into the clip-spec, so the render service / preview
+never touch the DB.
 """
 
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies.auth import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
-from app.models.database import AsyncSessionLocal
 from app.models.schemas import ClipBrand, ClipMusic, IntroOutroCard
-from app.models.tables import BrandTemplate, Music, User
+from app.models.tables import Music, Persona
 from app.pipeline.music import get_music, get_music_by_mood
 from app.tools.storage import public_url
 
-# Seeded when the DB has no brand templates so generation/preview always have a
-# usable default. Mirrors the brand-template UI's PRESET_1.
+# The system default skin — a persona whose brand block is NULL bakes with
+# these values (partial blocks merge over them). Craft/format defaults
+# (aspect / fillMode / captionEnabled / music toggle) live here too: they are
+# the task-book defaults the clips pipeline reads when no recipe overrides
+# them — they are never written into a persona row.
 DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "aspect": "9:16",
     "fillMode": "fill",
@@ -51,43 +52,25 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
 }
 
 
-async def seed_default_brand_template() -> None:
-    """Insert a default brand template for the default user if none exist."""
-    async with AsyncSessionLocal() as db:
-        # Ensure the seeded default user exists.
-        result = await db.execute(select(User).where(User.email == DEFAULT_USER_EMAIL))
-        user = result.scalar_one_or_none()
-        if user is None:
-            user = User(
-                id=DEFAULT_USER_ID,
-                email=DEFAULT_USER_EMAIL,
-                name="Default User",
-            )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
+async def resolve_brand_block(
+    db: AsyncSession,
+    persona: Persona | None,
+) -> tuple[dict[str, Any], str | None]:
+    """Merge the persona's skin over the system default skin + its music id.
 
-        count = (
-            await db.execute(
-                select(func.count())
-                .select_from(BrandTemplate)
-                .where(BrandTemplate.user_id == user.id)
-            )
-        ).scalar_one()
-        if count and count > 0:
-            return
-        db.add(
-            BrandTemplate(
-                name="Default",
-                user_id=user.id,
-                config=DEFAULT_BRAND_CONFIG,
-            )
-        )
-        await db.commit()
+    Returns the merged camelCase block (the clips pipeline reads aspect /
+    caption / title / intro-outro keys off it) and the resolved default music
+    piece id for the GenerationContext.
+    """
+    cfg = dict(DEFAULT_BRAND_CONFIG)
+    if persona is not None and isinstance(persona.brand, dict):
+        cfg.update(persona.brand)
+    piece = await resolve_music_ref(db, cfg.get("musicId") or cfg.get("musicMood"))
+    return cfg, (str(piece.id) if piece is not None else None)
 
 
-def brand_from_template(config: dict[str, Any] | None) -> ClipBrand:
-    """Map a BrandTemplate.config dict to a ClipBrand (empties -> None)."""
+def brand_from_block(config: dict[str, Any] | None) -> ClipBrand:
+    """Map a brand skin block dict to a ClipBrand (empties -> None)."""
     cfg = config or {}
 
     def _clean(key: str) -> str | None:
@@ -138,16 +121,16 @@ def _intro_outro_card(cfg: dict[str, Any], prefix: str) -> IntroOutroCard | None
     )
 
 
-async def music_from_template(
+async def music_from_block(
     db: AsyncSession,
     config: dict[str, Any] | None,
 ) -> ClipMusic:
-    """Resolve a BrandTemplate's default music into a ClipMusic block (DB-backed).
+    """Resolve a brand skin block's default music into a ClipMusic block (DB-backed).
 
     Reads ``musicId`` (a Music row UUID string) first, falling back to the
-    legacy ``musicMood`` key (calm/uplifting/corporate/none) for templates saved
-    before the rename. ``musicEnabled`` toggles playback; ``musicGainDb`` sets
-    the gain. A missing/unknown piece yields a disabled, track-less block.
+    legacy ``musicMood`` key (calm/uplifting/corporate/none). ``musicEnabled``
+    toggles playback; ``musicGainDb`` sets the gain. A missing/unknown piece
+    yields a disabled, track-less block.
     """
     cfg = config or {}
     gain = _gain_db(cfg.get("musicGainDb"))
@@ -233,7 +216,7 @@ async def resolve_music_ref(db: AsyncSession, ref: Any) -> Music | None:
 
 
 async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
-    """ClipMusic from a clip's own mood suggestion (fallback when no template).
+    """ClipMusic from a clip's own mood suggestion (fallback when no skin block).
 
     Resolves the mood to a Music row and enables playback; unknown moods (or no
     matching row) yield a disabled, track-less block.
@@ -252,22 +235,22 @@ async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
 async def music_from_plan(
     db: AsyncSession,
     plan: Any,
-    brand_config: dict[str, Any] | None,
+    brand_block: dict[str, Any] | None,
 ) -> ClipMusic:
     """Per-clip music: the Clip Agent's pick wins, else the brand default.
 
     Selection (see docs/MUSIC_ARCHITECTURE.md §8.3):
-    0. If a brand template is set and its ``musicEnabled`` toggle is off, music
-       is disabled outright — the brand-level toggle is a master switch the
+    0. If a brand block is set and its ``musicEnabled`` toggle is off, music
+       is disabled outright — the skin-level toggle is a master switch the
        per-clip agent's pick cannot override.
     1. ``plan.music_id`` (UUID or mood key) when ``plan.music_enabled`` — the
        agent's per-clip choice, with ``plan.music_gain_db`` applied.
-    2. Otherwise the brand template default (``music_from_template``), which
+    2. Otherwise the brand block default (``music_from_block``), which
        honors ``musicEnabled``/``musicId``/``musicGainDb`` (and legacy musicMood).
     3. If neither resolves, a disabled, track-less block is returned.
     """
-    if brand_config is not None and not brand_config.get("musicEnabled"):
-        return ClipMusic(gain_db=_gain_db(brand_config.get("musicGainDb")))
+    if brand_block is not None and not brand_block.get("musicEnabled"):
+        return ClipMusic(gain_db=_gain_db(brand_block.get("musicGainDb")))
 
     if getattr(plan, "music_enabled", True) and getattr(plan, "music_id", None):
         piece = await resolve_music_ref(db, plan.music_id)
@@ -278,4 +261,4 @@ async def music_from_plan(
                 enabled=True,
                 gain_db=float(getattr(plan, "music_gain_db", -18.0) or -18.0),
             )
-    return await music_from_template(db, brand_config)
+    return await music_from_block(db, brand_block)

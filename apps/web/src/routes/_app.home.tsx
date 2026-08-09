@@ -14,11 +14,6 @@ import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
 type Persona = PersonaPickerEntry
 
-interface BrandTemplate {
-  id: string
-  name: string
-}
-
 export const Route = createFileRoute("/_app/home")({
   component: Home,
 })
@@ -26,7 +21,6 @@ export const Route = createFileRoute("/_app/home")({
 function Home() {
   const { t } = useTranslation()
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([])
   const [cards, setCards] = useState<RecipeCard[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
@@ -45,18 +39,14 @@ function Home() {
 
   useEffect(() => {
     // Each fetch degrades to empty independently — a recipes-endpoint hiccup
-    // must not take the composer's personas/brands down with it.
+    // must not take the composer's personas down with it.
     Promise.all([
       apiFetch("/api/v1/personas")
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []),
-      apiFetch("/api/v1/brand-templates")
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
       fetchRecipeCards().catch(() => []),
-    ]).then(([s, bt, rc]) => {
+    ]).then(([s, rc]) => {
       setPersonas((s as Persona[]) || [])
-      setBrandTemplates(bt || [])
       setCards(rc)
     })
   }, [])
@@ -103,7 +93,6 @@ function Home() {
         <div className="w-full max-w-3xl">
           <HomeComposer
             personas={personas}
-            brandTemplates={brandTemplates}
             prompt={prompt}
             onPromptChange={setPrompt}
             mentions={mentions}
@@ -143,7 +132,6 @@ function Home() {
         <RecipeInspectOverlay
           card={inspecting}
           onClose={() => setInspecting(null)}
-          brandTemplateId={brandTemplates[0]?.id}
         />
       )}
     </div>

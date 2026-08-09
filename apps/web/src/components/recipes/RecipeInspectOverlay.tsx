@@ -67,13 +67,9 @@ import { recipeProcessFlow } from "./recipeFlow"
 export function RecipeInspectOverlay({
   card,
   onClose,
-  brandTemplateId,
 }: {
   card: RecipeCard
   onClose: () => void
-  /** Rides the first chat message exactly as the composer's brand choice
-   * does; the overlay carries the default brand, no picker. */
-  brandTemplateId?: string
 }) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -139,8 +135,10 @@ export function RecipeInspectOverlay({
 
   // Send = the composer's send, parked here. Nothing to consume onSent — the
   // overlay's draft dies with navigation (chip law ② holds structurally).
+  // Identity rides the default-persona chain server-side (ADR-038) — the
+  // overlay carries no persona picker.
   const handleLaunch = () =>
-    launch({ prompt, mentions, files, brandTemplateId })
+    launch({ prompt, mentions, files })
 
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video

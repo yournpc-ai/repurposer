@@ -1,367 +1,201 @@
 # Repurposer Agent Architecture
 
-> Status: implemented on main
-> Last updated: 2026-07-27
-> **2026-08-02 agent-loop-upgrade**：执行层三补丁——step 级瞬时重试（`TransientNodeError` + `SkillEntry.retries` 预算，复位 pending 不级联）；morph runner 全部经 operations 记账（chat 配音/翻译/配乐/去口头禅可撤销，ADR-032 写纪律补齐）；`DubClipParams.fork`（chat「再来一版」派生新行、原版保留）。实施简报：`docs/tasks/agent-loop-upgrade.md`。
-> **2026-07-22 架构升级**：本文的 4-layer 结构将演进到 RunPlan（施工图）架构——概念基线、目标链路、导演两步走、质检节点与分期见 §12。
-> **2026-07-27 Phase 2 落地**：导演两步走已上线——`ContentPlan`/`DerivativePlan` 整体退役，导演拆为 `director_understand`（素材理解，asset-hash 复用）+ `director_plan`（分镜表，每 run 重排）。§4–§6 中关于 ContentPlan/DerivativePlan 的描述为 Phase 1 历史形态，现行契约以 §12.7 为准（实施简报：`docs/tasks/done/director-two-step.md`）。
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代）
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 技能包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-35）；loop 层行为规格见 CHAT_ARCHITECTURE.md。
 
-## 1. Overview
+## 1. 叙事
 
-Repurposer turns a single source (talk video, meeting recording, audio, slides, or transcript) into the content the user names: vertical clips, social posts, quote cards, carousels, and articles.
+Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自媒体规划 / 配乐……）。**技能内部，是 agent 调 LLM、用 tools 实现的。**
 
-The backend generation pipeline is organized as a **4-layer agent architecture**:
+架构一句话：**外层 loop（chat 治理环）编译出内层 graph（DAG 执行核）；图上每个节点自描述；每个 LLM 决策单元是同一个 Agent 类的声明实例，每次调用过同一个 harness 漏斗；模型经 client 单边界。**
+
+我们是多 agent 系统——但 **agent 互不对话**：协作经落库产物沿 DAG 边流动（素材理解 → 分镜表 → clips → 配音行，每个中间产物可寻址、可复用、可单独重跑），编排者是 `compile_graph`（代码），不是任何 agent。禁 ReAct / 多步推理铁律延伸于此。
+
+## 2. 四层工程地图
 
 ```
-┌─────────────────────────────────────────────┐
-│ Layer 1: GenerationContext                  │
-│ (shared persona / brand / tone / language)  │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────────┐
-│ Layer 2: Content Director                   │
-│ (produces ContentPlan from source texts)    │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────────┐
-│ Layer 3: Agent Executors                    │
-│ (clip / post / quotes / carousel /          │
-│  article)                                   │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────────┐
-│ Layer 4: Consistency Reviser                │
-│ (reserved for future cross-output review)   │
-└─────────────────────────────────────────────┘
+┌─ Loop（chat 治理环）──────────────────────────────────────┐
+│  提议（LLM）→ 裁决（注册表）→ 预览/确认（dock）→ 执行 → 审阅 → 修订 │
+│  chat/service.py 状态分派 · CHAT_ARCHITECTURE 行为规格        │
+└──────────────────────┬────────────────────────────────────┘
+                       │ 每一圈编译出一张图（TaskSpec → compile_graph）
+                       ▼
+┌─ Graph（DAG 执行核）──────────────────────────────────────┐
+│  NodeBase 协议 + 图算法：报价=fold · 执行=topo · 校验=∀ · 对账=⊆ │
+│  orchestrator（create_run 唯一出生地）· worker 认领走图          │
+│  表：workflow_runs / workflow_steps（计划+账簿一体）             │
+└──────────────────────┬────────────────────────────────────┘
+                       │ agent 节点调 LLM
+                       ▼
+┌─ Harness（模型调用面）─────────────────────────────────────┐
+│  Agent 漏斗：装配 → 渲染 → 调用 → 校验 → 修复一轮 → 计量 → 兜底 │
+│  agents/base.py 唯一类 · agents/roster.py 花名册 · prompts/    │
+└──────────────────────┬────────────────────────────────────┘
+                       ▼
+┌─ Model ──────────────────────────────────────────────────┐
+│  MiniMaxClient 单边界（generate/generate_stream，schema 强制）  │
+│  usage 捕获点 → metering；provider 政策开关的未来座位           │
+└──────────────────────────────────────────────────────────┘
 ```
 
-> **Naming caution**: `app/skills/reviser.py` is **not** Layer 4 — it is the single-clip metadata revision agent invoked by targeted revision (see §9). Layer 4 (cross-output consistency review) is unimplemented as of 2026-07; there is no `consistency` code in `app/`.
+| 层 | 回答的问题 | 内核形态 | 家 |
+|---|---|---|---|
+| Loop | 用户多轮怎么治理 | 状态分派 + 四态提议 + dock/checkpoint | `app/chat/` |
+| Graph | 多次调用怎么编排 | `NodeBase` + `compile_graph` + 图算法 | `app/pipeline/` |
+| Harness | 每一次 LLM 调用怎么调得好 | Agent 漏斗 + 花名册 + prompts | `app/agents/` |
+| Model | 用谁的模型 | client 单边界 + 计量捕获 | `app/clients/` |
 
-This design guarantees that every output is derived from the same **content plan** and **generation context**, instead of each agent independently re-analyzing the source material.
+## 3. RunPlan 概念表（九个，没有第十个）
 
-## 2. Goals
+| 概念 | 一句话 |
+|---|---|
+| **任务书** `TaskSpec` | 意图归一：outputs × 语言 × 数量 × instruction；loop → graph 的交接物 |
+| **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
+| **导演** `director` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
+| **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
+| **机械** `tools` | 确定性执行单元：无 LLM 决策，禁 import agents/LLM client（N-29 铁律） |
+| **技能包** `skills/` | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
+| **质检** `verify`（节点 kind） | 单产物/全片质量校验（Phase 3，未实现）；可寻址、可计价、可单独重跑 |
+| **施工图** `workflow_steps` | 计划+账簿一体的 DAG 内核：`inputs` 边表 / `spec` 参数 / `output_refs` 产物 / `estimate` 计划侧成本 / `cost` 账簿侧成本 |
+| **产物** `outputs` | 统一产物表；产物类型 = 技能的属性（N-32），注册表派生可扩展 |
 
-- **Consistency**: clips, posts, quote cards, etc. should reinforce the same core thesis and brand voice.
-- **Single source of truth**: persona memory, tone, and user instruction are assembled once and shared.
-- **Extensibility**: adding a new derivative type requires only a new executor agent and one registry entry.
-- **Parallel execution**: independent derivative agents run concurrently via `asyncio.gather`.
-- **Resilience**: a single output failure does not fail the whole run; it is retried once and then surfaced for manual retry.
+分发（Distribution）与 Pipeline 平级，缝 = 产物表，见 MODULE_ARCHITECTURE。
 
-## 3. Layer 1: GenerationContext
+## 4. Graph 层：节点对象化与图算法
 
-`GenerationContext` is an immutable value object built at the start of every full generation run. It contains everything an agent needs to know about *who* is speaking, *to whom*, *in what voice*, and *with what constraints*.
+### 4.1 NodeBase——内核唯一认识的协议
 
 ```python
-class GenerationContext(BaseModel):
-    persona: PersonaContext | None
-    event_name: str | None
-    tone_settings: ToneSettings | None
-    target_language: str
-    instruction: str | None
-    brand_music_id: str | None
+class NodeBase:
+    kind: str                           # 唯一键；技能节点 kind = 技能名（N-35）
+    # —— 类属性声明 ——
+    output_type: str | None = None      # 产出型节点的产物（outputs 可扩展的家）
+    after: tuple[str, ...] = ()         # 拓扑约束
+    needs_director: bool = False        # 需要导演前奏（preprocess→persona∥understand→plan）
+    retries: int = 0                    # step 级瞬时重试预算
+    # —— 方法（run 唯一必实现，其余有默认）——
+    async def run(db, run, node, project) -> list[UUID]   # 执行，返回产物行 id
+    def estimate(ctx) -> CostEstimate   # 自己报价：机械精确价 / agent token 区间
+    def requires() -> list[Requirement] # 出生地门禁（media/transcript/persona_photo/voiceprint）
+    def label(slot) -> str | None       # 展示名（run 进度图 / 步骤流同源）
+    def reuse(...) -> UUID | None       # 幂等复用（asset-hash 类，命中则成本为零）
 ```
 
-It is assembled per run in `app/pipeline/node_runners.py` (`_generation_context`) from the resolved `Persona`, selected `BrandTemplate`, project metadata, and the user's generation request.
+### 4.2 内核 = 图算法（大模块无非做一次图遍历）
 
-## 4. Layer 2: Content Director
+| 算法 | 形态 |
+|---|---|
+| **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
+| **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
+| **校验** | ∀：出生地（`create_run`）对每个节点 `requires()` 一次跑完，缺输入 422 |
+| **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），人肉评审退役 |
+| **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
-The `ContentDirectorAgent` (`app/skills/content_director.py`) performs one analysis pass over the source texts and media inputs and produces a `ContentPlan`.
+### 4.3 拓扑铁律（不变）
 
-### 4.1 ContentPlan
+- **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（任务槽 / task list），`compile_graph` 纯函数裁决与物化。
+- `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
+- 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
+- "全败或无事"：run 只在全部生成节点 failed/skipped 时标 FAILED；render 节点镜像渲染链，永不 hold run。
+
+### 4.4 导演两步走（两次 LLM 调用，契约不变）
+
+- **看懂素材**（`director_understand`）：产出素材理解（论点带位置/金句/主题/受众），素材级，`source_ref.asset_hash` 命中即复用（节点 `reuse()` 钩子的本例）；**自足契约**——产物必须足以支撑分任务。
+- **分任务**（`director_plan`）：吃素材理解 + 任务书 → 分镜表（论点→槽位 + 覆盖报告），请求级，每 run 必重排。
+- **纯度纪律（签名化，见 §5.3）**：understand 不接收 persona/tone/instruction；plan 不读原稿。
+
+### 4.5 节点分两类
+
+- **技能节点**：技能包持有，LLM 可提议（dispatchable），kind = 技能名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`…）。
+- **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`director_understand`/`director_plan`/`checkpoint`/`render`），住 `pipeline/`。
+
+## 5. Harness 层：模型调用面
+
+### 5.1 Agent 漏斗——每个 agent 调用必过
 
 ```python
-class ContentPlan(BaseModel):
-    core_thesis: str
-    themes: list[str]
-    target_audience: str
-    key_arguments: list[str]
-    derivatives: list[DerivativePlan]
-    quote_candidates: list[str]
-    overall_summary: str
+class Agent[OutT]:
+    name: str            # 花名册键
+    prompt: str          # jinja 模板名（版本随代码）
+    schema: type[OutT]   # 输出契约
 
-class DerivativePlan(BaseModel):
-    derivative_type: DerivativeType
-    focus: str
-    cta: str | None
-    quote_candidates: list[str]
-    tone_override: str | None
-    count: int | None
+    async def call(**ctx) -> OutT:
+        # 装配（纯度由签名保证）→ 渲染 prompt → client.generate(schema)
+        # → 校验失败：错误结构化回显，一轮自修复（盲重试退役）
+        # → 计量（模板级归因 → workflow_steps.cost）
+        # → 兜底：默认禁，显式声明才允许
 ```
 
-### 4.2 Why a separate director?
+### 5.2 三条纪律
 
-Previously, the clip planner (`planner.py`) performed a rich analysis (`overall_summary`, `themes`, `target_audience`) but threw it away after clips were generated. Derivative agents then re-analyzed the same transcript independently, often arriving at different theses.
+1. **修复带反馈**：schema/裁决失败 → 错误结构化回显 → **一轮**自修复 → 再败才算节点失败（走图的重试语义）。不带反馈的重试只是掷两次骰子。
+2. **兜底声明化**：静默降级是例外不是常态——合法先例 = PlanAgent 永不白屏（fallback 任务书可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
+3. **纯度签名化**：禁注规则在类型层不可表示——`understand.call(asset_texts, media)` 的签名里没有 persona 参数；比任何 prompt 警告都硬，签名即文档、评审即测试。
 
-The director centralizes analysis so that every downstream agent works from the same interpretation.
+### 5.3 花名册与声明归属
 
-### 4.3 Persistent ContentPlan
+- `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**技能私有声明住技能包**（选段编剧、各 writer、reviser）。
+- `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
+- 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
+- context 装配层（`contexts.py`）：GenerationContext / mentions 注入 / recent 轮次 / per-step 状态段——harness 的输入侧，chat service 不持装配逻辑。
 
-The generated `ContentPlan` is persisted to `Project.content_plan` (JSON column) on first generation. Subsequent full regenerations reuse it instead of calling the director again, enabling faster iteration. Future work may invalidate the cache based on a materials hash.
+### 5.4 明确不建的 harness 部件
 
-### 4.4 Prompt
+- **Context compaction**：那是长程单 context agent 的解法；我们的调用是短调用 + 每节点精确装配，没有可压缩的。
+- **Tool-call loop 脚手架**（iteration caps / loop detection）：禁 ReAct，永远不需要。
+- **Memory 写入冲突管理**：agent 无共享可变状态（中间产物落库、单写者），结构性规避。
 
-`app/prompts/content_director.j2` receives:
-- `asset_texts` and optional `asset_media`
-- `context` (`GenerationContext`)
-- `requested_derivatives` (the output types the user asked for)
+## 6. Model 层
 
-It outputs JSON matching `ContentPlan`.
+- `MiniMaxClient` 单边界：`generate(response_model=T)` / `generate_stream`——结构化输出在边界单点强制（`model_validate_json`）；usage 捕获点 → `app/metering.py` → `workflow_steps.cost`（ADR-025 不变）。
+- 多模态 / 图像 / 音乐生成同边界（`generate_image` / `generate_music`）。
+- **provider 政策开关**（未来）：第二 provider 的真实需求（EU 客户要求 EU-hosted）出现时，在 harness 漏斗按 policy 路由，用户-facing 形态 = 策略开关（"优先 EU 托管模型"），不是模型 SKU 货架；现在不预留接口（单边界已够）。
 
-### 4.5 Director output constraints
+## 7. 技能包（`app/skills/`）
 
-`ContentPlan.derivatives` must only contain **text derivative** plans. Valid `derivative_type` values are:
+技能 = 用户语言的能力单位（"多语言字幕是我们的技能"）；技能包 = 能力的唯一家：
 
-- `post`
-- `quotes`
-- `carousel`
-- `article`
-
-The director must **never** emit `clips`, `short_clips`, `video`, or any other non-text type. Clips are planned separately by the `ClipAgent` because they require word-level timestamp alignment and segment-level constraints (e.g., minimum duration) that do not apply to text outputs. If the user did not request any text derivatives, the director returns an empty `derivatives` array.
-
-## 5. Layer 3: Agent Executors
-
-All content executors share the same interface:
-
-```python
-async def generate(
-    self,
-    asset_texts: list[str],
-    context: GenerationContext,
-    content_plan: ContentPlan,
-) -> BaseModel:
-    ...
+```
+skills/dub/          配音技能
+├── node.py          节点类（NodeBase 实现：run/estimate/requires/label/retries=2）
+├── params.py        DubClipParams（编译期裁决文档）
+├── procedure.py     私有工序（逐翻译单元合成 → 测时长 → 窗口调速 → cue 起点拼接）
+└── （agent 声明）    技能私有决策单元（可选；dub 复用共享 translator）
 ```
 
-Each executor extracts its own guidance from `content_plan.derivatives` by matching `derivative_type`.
+- **SKILL_REGISTRY 收编**：`skills/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
+- **新增技能 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
+- **产出型技能**声明 `output_type`：产物类型注册表派生，`IntentSlot.type` 经注册表校验；**新增产物 = 一条注册项，PlanAgent 当轮即知**（产出类型清单同源注入 prompt）。
+- 注册项准入过 NAMING §7/§8 评审。
 
-### 5.1 Agents
+## 8. 估价与计量
 
-| Domain | File | Class | Output schema | Notes |
-|--------|------|-------|---------------|-------|
-| Clip | `app/skills/clip_agent.py` | `ClipAgent` | `ClipPlans` | Renamed from `ContentPlannerAgent` / `planner.py` |
-| Post | `app/skills/post.py` | `PostAgent` | `Post` | |
-| Quotes | `app/skills/quotes.py` | `QuotesAgent` | `Quotes` | |
-| Carousel | `app/skills/carousel.py` | `CarouselAgent` | `CarouselResponse` | |
-| Article | `app/skills/article.py` | `ArticleAgent` | `Article` | |
+- **估价（计划侧）**：`node.estimate(ctx)`——机械节点精确价（TTS 按字符 / render 按秒 / 克隆按次），agent 节点 token 区间（按 prompt 规模 + 输出 schema 给上下界），checkpoint = 0。
+- **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）。
+- **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
+- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。
+- 用户呈现（PROGRESS 第六周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
 
-### 5.2 Clip agent constraints
+## 9. 质检方向（Phase 3，未实现）
 
-`ClipAgent` plans video segments from the source transcript's word-level timestamps. Every planned clip must satisfy:
+verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈打回上游 ≤2 次，再败标"待人工"不阻塞）+ 全片质检（跨产物矛盾/撞车）。Layer-4 的旧概念不是"层"，是图里的一种节点——可寻址、可计价、可单独重跑，失败只打回不合格分支。
 
-- `start_seconds < end_seconds`.
-- **Minimum duration of 5 seconds**; if the selected words produce a shorter segment, the agent extends the selection by including surrounding words until the duration is at least 5 seconds.
-- No overlap between consecutive clips; each subsequent clip starts after the previous one ends.
-- `duration_seconds` is clamped to `5–120` seconds.
-- `caption_enabled` is tri-state (`bool | None`): the agent sets `false` when the source video already has hard-coded subtitles; when the agent omits a decision (`None`), the brand template's `captionEnabled` default applies.
+## 10. 验收器
 
-These constraints are enforced in `app/prompts/clip_agent.j2` and validated by `ClipPlans` before `Clip` rows are created.
-
-### 5.3 Prompt templates
-
-Each prompt template receives `asset_texts`, `context`, and `content_plan`:
-
-- `app/prompts/clip_agent.j2`
-- `app/prompts/post.j2`
-- `app/prompts/quotes.j2`
-- `app/prompts/carousel.j2`
-- `app/prompts/article.j2`
-
-Prompts render:
-- Persona identity and style memory from `context.persona`
-- Tone settings and user instruction from `context`
-- Brand music default from `context.brand_music_id`
-- Core thesis, themes, and target audience from `content_plan`
-- Per-output focus and CTA from the matching `DerivativePlan`
-
-## 6. Dispatch
-
-`app/pipeline/derivative_dispatch.py` holds the registry of derivative executors:
-
-```python
-_AGENTS: dict[DerivativeType, BaseDerivativeAgent] = {
-    DerivativeType.POST: post_agent,
-    DerivativeType.QUOTES: quotes_agent,
-    DerivativeType.CAROUSEL: carousel_agent,
-    DerivativeType.ARTICLE: article_agent,
-}
-
-async def generate_derivative(
-    derivative_type: DerivativeType,
-    asset_texts: list[str],
-    context: GenerationContext,
-    content_plan: ContentPlan,
-) -> dict:
-    agent = _AGENTS[derivative_type]
-    result = await agent.generate(asset_texts, context, content_plan)
-    return validate_derivative_content(derivative_type, result.model_dump())
-```
-
-This file was previously `derivative_generation.py` and contained per-type parameter normalization. With the unified interface, its only remaining responsibility is **dispatch** plus content validation.
-
-## 7. Orchestration
-
-`app/services/generation.py` implements the top-level orchestration for a full generation run.
-
-### 7.1 Flow
-
-1. Collect source texts (`collect_asset_texts`) and media inputs (`collect_asset_media`).
-2. Resolve persona (auto-create default memory if none selected), brand template, and tone settings.
-3. Build `GenerationContext`.
-4. Map requested `outputs` to `DerivativeType`s.
-5. Call `content_director_agent.plan(...)` → `ContentPlan`, then persist to `Project.content_plan`.
-6. Delete prior outputs for the requested types.
-7. If clips requested:
-   - Call `clip_agent.generate(...)` → `ClipPlans`
-   - Build `ClipSpec` for each plan and persist `Clip` rows.
-8. Run all requested derivatives concurrently with `asyncio.gather`:
-   - Call `generate_derivative(...)`
-   - Persist `Derivative` rows.
-9. Mark `WorkflowRun` completed (or failed if every output failed) and project status `REVIEW`.
-
-### 7.2 Per-output status and retry
-
-`run.context["output_status"]` tracks each output independently:
-
-```json
-{
-  "clips": {"status": "completed", "progress": 100, "error": null, "stage": null},
-  "post": {"status": "failed", "progress": 0, "error": "...", "stage": null}
-}
-```
-
-Each entry carries a machine-readable `stage` for the loading UI — coarse but real sub-stage markers: `selecting_segments` / `building_specs` (clips), `writing_copy` (all text derivatives), `generating_image` (quotes). `progress` moves at those same code points (e.g. clips: 60 → 90 → 100, calibrated so the slow LLM phases sit in the upper half of the bar), and `run.progress` is the mean of per-output progress values.
-
-The chat overlay's step flow consumes these stages directly: each `workflow_step` row carries `spec.stage` (set via `_set_stage`), streamed over SSE as `step.updated`; the frontend label chain is live `spec.summary` → friendly `results.stepper.{stage}` copy → `chat.stepKinds.{kind}` fallback. (The older backend-computed `ui_step` (`{key, index, total}`) and the results-page loading dialog it drove were retired on 2026-07-28 — the overlay's step list is the single progress surface, and bare results-page visits show inline progress: running tab indicators, skeleton grids, per-clip render spinners.)
-
-Context updates are persisted with `flag_modified` — plain SQLAlchemy JSON columns do not detect in-place mutation, and without it per-output statuses never reach the database.
-
-Each output agent call is wrapped in `try/except` with **one automatic retry**. If it still fails, the error is recorded and the run continues. A run that fails mid-flight marks every non-terminal output as `failed` so consumers can settle. The frontend shows a manual retry button per failed output; retrying triggers a new `WorkflowRun` with only that output.
-
-### 7.3 Stepper stages
-
-During the planning phase, `WorkflowRun.current_step` uses three discrete values so the Result page can render a real stepper:
-
-- `"analyze"` — collecting source texts / media, resolving persona and brand
-- `"plan"` — running the Content Director
-- `"prepare"` — plan persisted, clearing old outputs, about to generate
-
-After planning, `current_step` switches to the active output key (`clips`, `post`, `quotes`, `carousel`, `article`) and finally `"done"`.
-
-### 7.4 Preserved behavior
-
-- Idempotency: prior outputs for requested types are still deleted before regeneration.
-- Targeted revision (`_run_targeted_revision`) bypasses the director and uses a minimal plan.
-- The orchestrator never raises; failures land on the `WorkflowRun`.
-
-## 8. API and Data Stability
-
-| Surface | Change |
-|---------|--------|
-| `POST /api/v1/projects/{id}/generate` | `outputs` now includes `carousel`; `clips` is no longer forced; default `clip_count` is 5. **Task slots are required for full-scope requests** — the task book is built and confirmed in the chat plan path (2026-08-04: intent recognition unified into `/chat`; the composer does no intent recognition) |
-| `GET /api/v1/projects/{id}/results` | Returns `latest_job.context.output_status` for per-output progress |
-| `Project` response | Includes `content_plan` |
-| `WorkflowRun.context` | Includes `output_status`, `outputs`, `clip_count` |
-| Persona schema | `speakers` → `personas` rename landed (ADR-037 cut 1); flat columns |
-
-## 9. Non-content agents
-
-The following agents are **not** part of the 4-layer executor pipeline and remain unchanged:
-
-- `app/skills/persona.py` — extracts persona style and content memory from source texts.
-- `app/skills/reviser.py` — revises a single clip script from human feedback.
-- `app/chat/intent.py` — two intent agents behind the single `/chat` surface (NAMING same-name audit, 2026-08-04): `PlanAgent` builds the generation task book (slots, language, dub languages, distilled instruction) from free-form text — invoked only by the chat service's **plan path** (first-turn projects and pending-task-book refinement turns; renamed from `ComposerIntentAgent`). `clips` is only suggested when a media source file (video/audio/image) is attached; text-only input falls back to post/quotes/article. `ChatIntentAgent` serves the chat loop (CHAT_ARCHITECTURE §3).
-- `app/skills/caption_translate.py` — translates caption lines.
-
-## 10. Future work
-
-### 10.1 Consistency Reviser (Layer 4)
-
-A future agent can review all generated outputs against the `ContentPlan` and `GenerationContext`, flag inconsistencies (e.g., a quote card contradicts the post's thesis), and trigger targeted revisions.
-
-### 10.2 ContentPlan invalidation
-
-Currently `Project.content_plan` is reused unconditionally. Future work should invalidate/rebuild when source materials change significantly, e.g. via a hash of asset texts/media.
+- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S40，真实 LLM 跑形态级断言；本架构的回归网。三断言随迭代新增：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+- **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
+- e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
 
 ## 11. Critical files
 
-- `app/models/schemas.py` — `GenerationContext`, `ContentPlan`, `DerivativePlan`, `InferredIntent`, RunPlan 词汇（`PlanNodeKind`/`OutputType`/`OUTPUT_PAYLOAD_SCHEMAS`）
-- `app/skills/content_director.py` — director agent
-- `app/prompts/content_director.j2` — director prompt
-- `app/skills/clip_agent.py` — clip agent
-- `app/prompts/clip_agent.j2` — clip agent prompt
-- `app/skills/post.py`, `quotes.py`, `carousel.py`, `article.py` — derivative executors
-- `app/prompts/post.j2`, `quotes.j2`, `carousel.j2`, `article.j2` — derivative prompts
-- `app/pipeline/derivative_dispatch.py` — thin dispatcher registry
-- `app/pipeline/orchestrator.py` — RunPlan 物化/走图/执行/收尾（`create_run` 是 WorkflowRun 唯一出生地；输入画像在此计算并传入纯函数 `compile_graph`）
-- `app/pipeline/registry.py` — SKILL_REGISTRY：功能扩展的唯一门（重试/校验/拓扑/计量随注册免费，纪律见 CHAT_ARCH §4）
-- `app/pipeline/node_runners.py` — 节点执行器注册表（`STEP_RUNNERS`，generation 逻辑平移）
-- `app/metering.py` — 逐节点计量（usage → `workflow_steps.cost`，ADR-025）
-- `app/chat/intent.py` — intent recognition
-- `app/pipeline/routes/outputs.py` — 统一产物 API（含单产物重生成）
-
-> 已退役（Phase 1 破坏性删除）：`services/generation.py`、`routers/clips.py`、`routers/derivatives.py`。
-
-## 12. 施工图视图（RunPlan 架构，2026-07-22 定型）
-
-> 本节是 generation 编排演进的**概念基线**。决策：ADR-028（RunPlan 持久化）/ ADR-029（双链并列）/ ADR-030（产物统一）；实施简报：`docs/tasks/done/runplan-persistence.md`。老四层概念全部保留，换了更准的形态。
-
-### 12.1 概念表（八个，没有第九个）
-
-| 概念 | 一句话 | 老概念对应 |
-|---|---|---|
-| **任务书** | 意图归一：outputs×语言×数量×预算+instruction | run.context 参数 / infer-intent / chat 指令 |
-| **预处理** | ASR 词级时间戳 + 文本提取（机器，无 LLM） | asset_processing |
-| **导演** | 两步走：看懂素材（可复用）→ 分任务（分镜表，每 run 重排） | Content Director（单趟 → 两次调用） |
-| **班组** | executors：选段 / 编剧 / 文案 / 配音 / 渲染——每工种一个节点 | Agent Executors |
-| **质检** | 单产物（分数落库 / 保真 / 合规，打回 ≤2 次）+ 全片（跨产物撞车） | Layer 4（未实现）的新形态 |
-| **施工图** | workflow_steps：DAG 内核，计划+账簿一体 | `workflow_runs.context` 的替代 |
-| **产物** | outputs 统一表；clip = 带时间轴+渲染的那一类 | clips / derivatives（ADR-030） |
-| **分发** | 缝 = 产物表，零变化 | Distribution |
-
-### 12.2 导演两步走（两次 LLM 调用）
-
-- **看懂素材**：产出素材理解（论点带 transcript 位置 / 金句 / 主题 / 受众）。**自足契约**：产物必须足以支撑分任务，分任务不再读原稿。**asset hash 失效**：素材变才重算（§10.2 的正式实现，替代 §4.3 的盲目复用）。
-- **分任务**：吃素材理解 + 任务书 → 分镜表（论点→槽位 + 任务卡 + 未用/撞车报告），每次 run 必重排。
-- **为什么两次**：寿命不同（理解=素材级，任务=请求级）；理解要冻结，fortnight 整包才一致；可寻址（"重排任务"只重跑第二步）。首次成本差可忽略（理解 ≪ 原稿）。
-- **DerivativePlan 退役**：任务卡只含 what（论点/角度/语言/格式），how 归 executor——伪造 plan 的代码路径（`generation.py:569-585`）整体删除。
-
-### 12.3 质检节点（Layer 4 的答案）
-
-Layer 4 不再是一个"层"，是图里的一种节点（kind=verify）：**单产物质检**（分数+理由落库 = P0-3 的家、persona 保真、术语合规；不合格带反馈打回上游 ≤2 次，再败标"待人工"不阻塞）+ **全片质检**（跨产物矛盾/撞车）。可寻址、可计价、可单独重跑——失败只打回不合格分支，不搞全局复审。
-
-### 12.4 流程图（一次 fortnight run）
-
-```
-预处理 → 任务书 → 导演·看懂素材 → 导演·分任务
-  → 班组（选段→编剧→渲染 / 文案×N / 配音·音乐）
-  → 质检（单产物 → 全片）
-  → 产物（outputs）→ 分发（零变化）
-```
-
-每一步 = 施工图上的一个节点：pending 可估价（成本预览）、running 可看状态、done 有账可查、不满意可单独重跑（子图词汇：只跑此节点 / 从这里跑 / 跑到这里）。
-
-### 12.5 班底与机械
-
-- **会思考（LLM 班底）**：意图识别 / 导演 / 班组 / 质检 / persona / chat 意图解析
-- **不会思考（施工机械）**：processor / orchestrator（物化图+走图）/ worker（认领节点）/ Remotion / 队列 / 存储 / 分发状态机
-
-### 12.6 分期（防范围蠕变）
-
-| 期 | 内容 | 行为变化 | 状态 |
-|---|---|---|---|
-| Phase 1 | 隐式图原样持久化 + outputs 统一 + 节点级血统 + 逐节点计量 | 零 | ✅ 已落地（2026-07-22；实施计划 `docs/tasks/done/runplan-phase1-implementation.md`） |
-| Phase 2 | 导演两步走 + DerivativePlan 退役 + persona_bootstrap/选段独立成节点 | 生成质量提升 | 🚧 主体已落地（2026-07-27：两步走 + DerivativePlan 退役 + 覆盖问责，简报 `docs/tasks/done/director-two-step.md`；persona_bootstrap 已随 Phase 1；**选段独立成节点顺延 Phase 2b**，另行简报） |
-| Phase 3 | 质检节点（单产物 + 全片） | P0-3 兑现 | 📋 |
-
-### 12.7 Phase 2 落地实录（2026-07-27）
-
-- **两个内部产物类型**：`material_understanding`（素材级：`overall_summary` / `core_thesis` / `key_arguments(id+text+position)` / `themes` / `target_audience` / `quote_candidates`，素材语言、金句逐字）与 `storyboard`（请求级：`slots` + `coverage`，target_language）。`content_plan` 类型退役（旧行仍被 `INTERNAL_OUTPUT_TYPES` 过滤隐藏）。
-- **拓扑**：full = `preprocess → persona_bootstrap ∥ director_understand → director_plan → executors`（persona 与 understand 互不依赖，并行）；定向 derivative = `[understand → plan(target_type) → X_gen]`；模式② prelude 同为四节点。
-- **asset-hash 复用**：`source_ref.asset_hash` = 理解精确输入的内容 hash（trimmed texts + asset 身份）；命中即复用旧行（节点成本 0，summary="Reused understanding…"）；语言/任务书/persona 变更不使失效。
-- **纯度纪律**：understand prompt 禁注 persona/tone/instruction/target_language；plan prompt 禁读原稿（自足契约——只吃 understanding + 任务书 + persona 上下文）。
-- **覆盖问责**：`storyboard.coverage` = 代码推导（论点→槽位 assignments / unused_arguments / collisions），落库 + 进 plan 节点量化摘要；是报告不是门禁（门禁归 Phase 3）。
-- **clips 槽位**：聚合一个槽（focus + argument_ids + count=任务书 clip_count），clip_agent 选段/编剧融合调用不动；逐 clip 论点→槽位归 Phase 2b 选段节点。
-- **executor 接口**：`generate(asset_texts, context, understanding, storyboard)`；缺槽位回退空槽（原 `_find_derivative_plan` 纪律，现 `_find_slot`）。
+- `app/agents/base.py` — Agent 类（harness 漏斗）；`app/agents/roster.py` — 共享 crew 花名册
+- `app/agents/contexts.py` — 调用面装配层（GenerationContext / mentions / recent 轮次）
+- `app/skills/` — 技能包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`skills/__init__.py` — SKILL_REGISTRY 收编
+- `app/tools/` — 机械库（asr / voice / storage / filler / transcript / music…）
+- `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
+- `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）
+- `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
+- `app/chat/service.py` — loop 状态分派；`app/chat/intent.py` — PlanAgent / ChatIntentAgent（流式特殊形态）
+- `app/clients/minimax.py` — Model 单边界；`app/metering.py` — 计量
+- `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot / 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
+- `app/prompts/*.j2` — prompt 模板（版本随代码）

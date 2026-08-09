@@ -1,8 +1,7 @@
 # Repurposer Music Architecture
 
 > Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现）
-> Last updated: 2026-07-31（瘦身：提案时代章节压缩，ContentPlan / services 时代引用修正）
-> Related: ADR-019 / ADR-022（被本文取代）、ADR-023（AI 生成音乐库决策）、实施简报 `docs/tasks/done/music-asset-library.md`
+> Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/tasks/done/music-asset-library.md`
 
 ---
 
@@ -39,7 +38,7 @@
 Music Library（Music 表 + 对象存储 music/ 前缀，预生成 + 用户触发生成）
         │
         ▼
-Brand Template（musicEnabled / musicId / musicGainDb = 品牌默认曲）
+默认曲（musicEnabled / musicId / musicGainDb；归配方注册表 / 任务书默认，ADR-038 三分流——音乐属工艺配置，不进人设）
         │
         ▼
 Clip Agent 生成时选曲（看到库清单 + 品牌默认，输出 music_id / enabled / gain_db）
@@ -63,7 +62,7 @@ Remotion <Audio url>（loop + gain_db 混音）
 |---|---|---|
 | **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | 与 uploads/outputs 同约定（ADR-024） |
 | **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 persona） |
-| **Brand default music** | `BrandTemplate.config.musicId` | 用户侧 = "default music" |
+| **默认曲目** | 配方注册表 / 任务书默认 `musicId`（ADR-038） | 用户侧 = "default music" |
 | **Per-clip music choice** | `outputs[type=clip].render_spec.music` | 渲染契约是运行时事实源 |
 
 ---
@@ -78,7 +77,7 @@ Remotion <Audio url>（loop + gain_db 混音）
 - **User-generated pieces (MiniMax)**: `generated_by_user_id = <user_id>`, `is_public = TRUE` 默认。用户触发生成，但进入共享库。
 - **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` 默认。私有，显式分享 + 审核后才公开。
 
-**Brand Template config**：`musicEnabled: bool`、`musicId: str | null`（替代旧 `musicMood`）、`musicGainDb: float = -18.0`。
+**默认曲配置**：`musicEnabled: bool`、`musicId: str | null`、`musicGainDb: float = -18.0`——归配方注册表 / 任务书默认（ADR-038 三分流）。
 
 **Render spec contract（不变）**：
 
@@ -132,9 +131,8 @@ When the platform has artists or power users, their generated music pieces can a
 
 ## 8. Generation Flow
 
-1. **Brand default**：`BrandTemplate.config.musicId` → `GenerationContext.brand_music_id`。
+1. **默认曲**：配方 / 任务书默认 `musicId` → `GenerationContext.brand_music_id`。
 2. **Clip Agent 选曲**：prompt 收到库清单（mood + 一句话描述）与品牌默认曲，为每条 clip 输出 `music_id` / `music_enabled` / `music_gain_db`。选择逻辑：① 品牌默认契合即用；② 按 clip 内容调性推断。
-   - 注：曾有"导演 mood hint 经 DerivativePlan 传递"的设计，已随 DerivativePlan 退役（N-17）不再存在；选曲判断全在 clip agent。
 3. **烘焙**：`build_clip_spec` 解析 `Music` 行 → `render_spec.music`（`url` = 公开对象 URL）。**生成时零 MiniMax 调用**。
 
 ---
@@ -148,7 +146,7 @@ When the platform has artists or power users, their generated music pieces can a
 ### 9.1 Cost Control
 
 Music generation is more expensive than selection. To avoid runaway costs:
-- Each project has a budget or generation quota (future，归计费线 PROGRESS 第 8–9 周).
+- Each project has a budget or generation quota (future，归计费线，排期见 PROGRESS).
 - Free tier defaults to the 3 pre-generated music pieces; custom generation is a paid/limited feature.
 - Generated music pieces are cached as assets so the same prompt does not re-generate.
 
@@ -156,7 +154,7 @@ Music generation is more expensive than selection. To avoid runaway costs:
 
 ## 10. Music Library UI
 
-- **In Brand Template** (`/brand-template`)：Music 区——曲目列表（title / mood tag / duration / 试听 / 单选）+ "Generate new"（prompt 输入）+ `musicEnabled` 开关。
+- **默认曲不设独立设置页**：音乐默认属工艺配置（ADR-038），由配方 / 任务书携带，不进人设皮肤分区。
 - **In Result Editor**：clip 编辑器可换曲、开关、增益滑杆、"Generate new"。
 - **Future: Standalone Music Library** (`/library/music`)：浏览/搜索/管理全库，Phase 2+ 后置。
 
@@ -237,7 +235,7 @@ When user-generated music becomes public:
 
 ## 13. Integration
 
-- **Agent 编排**：`GenerationContext.brand_music_id`（Layer 1）；clip agent 选曲（Layer 3）；音乐质检归 verify 节点（Phase 3，未实现——AGENT_ARCH §12）。
+- **Agent 编排**：`GenerationContext.brand_music_id`；clip 技能选曲；音乐质检归 verify 节点（Phase 3，未实现——AGENT_ARCH §9）。
 - **队列**：自定义生成是重活，走 worker（ADR-017），禁 FastAPI BackgroundTasks。
 - **存储缝**（ADR-024）：`music/` 前缀、DB 只存 key、渲染取公开对象 URL。
 - **渲染服务零改动**：`packages/clip` 与 `apps/render` 只播 `spec.music.url`。
@@ -265,8 +263,6 @@ When user-generated music becomes public:
 
 ## 16. Related Documents
 
-- `docs/DECISIONS.md` ADR-019: Built-in mood music library (filesystem-only, superseded by this doc).
-- `docs/DECISIONS.md` ADR-022: Music library CRUD (management layer, superseded by ADR-023).
 - `docs/DECISIONS.md` ADR-023: Music becomes an AI-generated, asset-based library.
 - `docs/VIDEO_EDITOR.md` (`render_spec.music` contract).
 - `docs/AGENT_ARCHITECTURE.md` (agent 编排集成).

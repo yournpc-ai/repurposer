@@ -295,19 +295,18 @@ interface GenerationOverlayProps {
   projectId: string
   prompt: string
   /** The composer's draft, handed over via router state: sent as the first
-   * /chat message on mount (mentions + brand choice ride along). Null on
+   * /chat message on mount (mentions + persona choice ride along). Null on
    * restored sessions — the conversation is already on the server. */
   firstMessage?: {
     text: string
     mentions: { type: string; id: string; label: string }[]
-    brandTemplateId?: string
+    personaId?: string
   } | null
   initialIntent?: InferredIntent | null
   initialNeedsClarification?: boolean
   /** needs_clarification reason keys from the last inference — the dock
    * shows them as the "needs your check" line (回显). */
   initialReasons?: string[]
-  brandTemplateId?: string
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
@@ -535,7 +534,6 @@ export function GenerationOverlay({
   initialIntent,
   initialNeedsClarification = true,
   initialReasons,
-  brandTemplateId,
   initialRunId,
   onClose,
   onComplete,
@@ -621,11 +619,9 @@ export function GenerationOverlay({
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
-  // Identity echo line (persona voice + brand skin) — resolved once.
-  const [identity, setIdentity] = useState<{ persona: string | null; brand: string | null }>({
-    persona: null,
-    brand: null,
-  })
+  // Identity echo line (the persona's name — style + skin ride it, ADR-038)
+  // — resolved once.
+  const [identityPersona, setIdentityPersona] = useState<string | null>(null)
 
   const autoStartedRef = useRef(false)
   const autoStartArmedRef = useRef(false)
@@ -657,7 +653,7 @@ export function GenerationOverlay({
   const fetchPendingIntent = useCallback(async (): Promise<{
     intent: unknown
     reasons?: string[]
-    brand_template_id?: string | null
+    persona_id?: string | null
   } | null> => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
@@ -667,7 +663,7 @@ export function GenerationOverlay({
       const data = (await res.json()) as { pending_intent?: {
         intent: unknown
         reasons?: string[]
-        brand_template_id?: string | null
+        persona_id?: string | null
       } | null }
       return data.pending_intent ?? null
     } catch {
@@ -827,7 +823,7 @@ export function GenerationOverlay({
     void fetchAssets()
   }, [fetchAssets])
 
-  // Identity echo: resolve the persona / brand names behind the ids once —
+  // Identity echo: resolve the persona name behind the project mount once —
   // a read-only reassurance line, never a question (ask primitive §2.1).
   useEffect(() => {
     let cancelled = false
@@ -838,24 +834,18 @@ export function GenerationOverlay({
       apiFetch("/api/v1/personas", { toast: false })
         .then((res) => (res.ok ? res.json() : []))
         .catch(() => []),
-      apiFetch("/api/v1/brand-templates", { toast: false })
-        .then((res) => (res.ok ? res.json() : []))
-        .catch(() => []),
-    ]).then(([project, personas, brands]) => {
+    ]).then(([project, personas]) => {
       if (cancelled) return
-      const persona =
+      setIdentityPersona(
         (personas as { id: string; name: string }[]).find(
           (p) => p.id === (project as { persona_id?: string } | null)?.persona_id
         )?.name ?? null
-      const brand =
-        (brands as { id: string; name: string }[]).find((b) => b.id === brandTemplateId)
-          ?.name ?? null
-      setIdentity({ persona, brand })
+      )
     })
     return () => {
       cancelled = true
     }
-  }, [projectId, brandTemplateId])
+  }, [projectId])
 
   // Terminal: success hands off to the results page; failure stays put so
   // the step list shows what broke (the results page carries the retry).
@@ -919,7 +909,6 @@ export function GenerationOverlay({
             intent.outputs.find((s) => s.language)?.language ?? "en",
           dub_languages: intent.dub_languages,
           instruction: intent.specific_instruction || prompt,
-          brand_template_id: brandTemplateId || undefined,
           autonomy,
         },
       })
@@ -934,7 +923,7 @@ export function GenerationOverlay({
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
       setIsStarting(false)
     }
-  }, [runId, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, brandTemplateId, t, landOnStartedRun])
+  }, [runId, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
 
   /** Cancel = bail: a graceful exit back to draft (never an error toast). */
   const handleCancel = useCallback(async () => {
@@ -1207,7 +1196,7 @@ export function GenerationOverlay({
    * routes plan-path turns (task-book build / refine / confirm) and
    * chat-loop turns itself. The panel's current book rides confirm-phase
    * turns as prior_intent (its explicit slots pin through the merge);
-   * mentions / brand ride only the composer's first message.
+   * mentions / the persona choice ride only the composer's first message.
    *
    * Transport is SSE (streamChat): prose deltas feed a typewriter-paced
    * preview bubble (reasoning models emit a short echo in one burst — pacing
@@ -1218,7 +1207,7 @@ export function GenerationOverlay({
     text: string,
     opts?: {
       mentions?: { type: string; id: string; label: string }[]
-      brandTemplateId?: string
+      personaId?: string
       /** Files staged in the input group, sent with this turn — persisted on
        * the user message row so a refresh re-renders the chips. */
       attachments?: {
@@ -1283,7 +1272,7 @@ export function GenerationOverlay({
           message: text,
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
-          brand_template_id: opts?.brandTemplateId,
+          persona_id: opts?.personaId,
           prior_intent: phase === "confirm" && intentReady ? intent : undefined,
           // Consumed only when this turn confirms the book by prose — the
           // dock's tier must survive a typed "looks good, start it".
@@ -1435,7 +1424,7 @@ export function GenerationOverlay({
       }
       await sendChat(firstMessage.text, {
         mentions: firstMessage.mentions,
-        brandTemplateId: firstMessage.brandTemplateId,
+        personaId: firstMessage.personaId,
       })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1615,16 +1604,14 @@ export function GenerationOverlay({
               </div>
 
               {/* Identity echo — one read-only line, never a
-                  question: whose voice, which brand skin. */}
+                  question: whose style the run generates in (the
+                  skin follows the persona, ADR-038). */}
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Mic2 className="h-3.5 w-3.5" />
                 {t("generationOverlay.identityEcho", {
                   persona:
-                    identity.persona ??
+                    identityPersona ??
                     t("generationOverlay.identityPersonaAuto"),
-                  brand:
-                    identity.brand ??
-                    t("generationOverlay.identityBrandDefault"),
                 })}
               </p>
 

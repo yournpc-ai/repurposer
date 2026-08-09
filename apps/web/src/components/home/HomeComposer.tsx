@@ -1,6 +1,5 @@
 "use client"
 
-import { Link } from "@tanstack/react-router"
 import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -9,10 +8,6 @@ import {
   Paperclip,
   FileText,
   Mic2,
-  Palette,
-  SlidersHorizontal,
-  ChevronDown,
-  Check,
   User,
   Video,
   Image as ImageIcon,
@@ -36,15 +31,6 @@ import { AssetsModal } from "@/components/home/AssetsModal"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -52,14 +38,8 @@ import {
 
 type Persona = PersonaPickerEntry
 
-interface BrandTemplate {
-  id: string
-  name: string
-}
-
 interface HomeComposerProps {
   personas: Persona[]
-  brandTemplates: BrandTemplate[]
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
    * owns the text (MentionEditor); Home keeps it only as the send payload
@@ -111,22 +91,8 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
 
 const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 
-/** Dropdown header: a short title plus a one-line explanation of what this
- * dimension controls, so first-time users understand the pill's purpose. */
-function PillHeaderText({ title, desc }: { title: string; desc: string }) {
-  return (
-    <>
-      <span className="block text-xs font-medium">{title}</span>
-      <span className="mt-0.5 block text-[11px] font-normal leading-snug text-muted-foreground">
-        {desc}
-      </span>
-    </>
-  )
-}
-
 export function HomeComposer({
   personas,
-  brandTemplates,
   onGenerateStart,
   prompt,
   onPromptChange,
@@ -138,7 +104,6 @@ export function HomeComposer({
   const { launching: isGenerating, launch } = useProjectLaunch()
 
   const [personaId, setPersonaId] = useState(AUTO_GENERATE)
-  const [brandTemplateId, setBrandTemplateId] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
@@ -162,11 +127,6 @@ export function HomeComposer({
       // ignore — worst case the tour shows again next visit
     }
   }
-
-  // Sync brand default once templates load.
-  useEffect(() => {
-    setBrandTemplateId((prev) => prev || (brandTemplates[0]?.id ?? ""))
-  }, [brandTemplates])
 
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video
@@ -212,7 +172,6 @@ export function HomeComposer({
       mentions,
       files,
       personaId: personaId === AUTO_GENERATE ? undefined : personaId || undefined,
-      brandTemplateId: brandTemplateId || undefined,
       onStart: onGenerateStart,
       onSent: () => editorRef.current?.clear(),
     })
@@ -319,56 +278,10 @@ export function HomeComposer({
           </div>
         </div>
 
-        {/* One continuous bottom row: brand on the left, provider + send on
-            the right — no separate action-bar strip. */}
+        {/* One continuous bottom row: the persona block above is the single
+            identity control (ADR-038 — the skin follows the persona); this
+            row carries provider + send only — no separate action-bar strip. */}
         <div className="mt-2 flex items-center gap-2">
-            {/* Brand template */}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
-                  >
-                    <Palette className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="max-w-[120px] truncate">
-                      {brandTemplates.find((b) => b.id === brandTemplateId)?.name ??
-                        t("composer.brandDefault")}
-                    </span>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="px-2 py-1.5">
-                    <PillHeaderText
-                      title={t("composer.brandLabel")}
-                      desc={t("composer.brandDesc")}
-                    />
-                  </DropdownMenuLabel>
-                  {brandTemplates.map((b) => (
-                    <DropdownMenuItem
-                      key={b.id}
-                      onClick={() => setBrandTemplateId(b.id)}
-                    >
-                      <Palette className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate">{b.name}</span>
-                      {b.id === brandTemplateId && <Check className="ml-2 h-4 w-4" />}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                <DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem render={<Link to="/brand-template" />}>
-                    <SlidersHorizontal className="mr-2 h-4 w-4" />
-                    {t("composer.manageBrand")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* AI model — display-only (single provider): hover reveals the
                 provider breakdown. A picker lands only when a real second
                 provider exists (provider abstraction, PROGRESS 需求池). */}

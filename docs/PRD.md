@@ -4,11 +4,8 @@
 
 | Item | Content |
 |:---|:---|
-| Document Version | v0.7 (Europe Edition, second post-MVP slimming) |
-| Date | 2026/07/31 |
-| Product Name | TBD (internal codename: SpeechRepurposer) |
+| Product Name | Repurposer |
 | Target Audience | Product managers, tech leads, designers, Zuo, European market team |
-| Status | Draft |
 
 ---
 
@@ -16,7 +13,7 @@
 
 ### 2.1 One-Liner
 
-An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the speaker's own voice and style, and guides people with no editing or social-media background in growing their own IP.
+An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the expert's own voice and style, and guides people with no editing or social-media background in growing their own IP.
 
 ### 2.2 Vision
 
@@ -29,7 +26,7 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 | Talk content is valuable but 90% goes dormant after the event | AI automatically analyzes the full talk, extracting the moments most worth posting first |
 | Manual short-form video editing is costly and slow | Agent workflow auto-scripts, self-reviews, and corrects, with a human review loop |
 | Multi-language adaptation is expensive | M3 native multi-language, one-click generation for 5 European languages |
-| Ghostwriters can't capture the speaker's voice | Learns speaker voice from past materials (books, articles, old talks) |
+| Ghostwriters can't capture the expert's voice | Learns the expert's voice from past materials (books, articles, old talks) |
 | Unclear which segments are shareable | AI scores which clips are most worth posting first (with visible reasons), auto-generating 3 alternative hooks |
 | European institutions worry about data security | Optional EU data residency (Cast AI Kimchi), GDPR compliant |
 
@@ -60,13 +57,13 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 1. **High editing barrier**: Professors/experts can't use editing software, assistants spend too much time editing
 2. **Hard to extract content**: Unclear which 30 seconds of a 1-hour talk are worth clipping
-3. **Inconsistent style**: Ghostwritten copy doesn't sound like the speaker
+3. **Inconsistent style**: Ghostwritten copy doesn't sound like the expert
 4. **High multi-language cost**: Want to take content overseas, but dubbing/translation is expensive
 5. **Tedious platform adaptation**: Same content needs manual resizing, subtitle restyling, and copy length adjustments
 
 ### 3.4 Competitive Analysis
 
-> 竞品事实与决策的唯一入口：[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景）+ [DECISION_MATRIX.md](./DECISION_MATRIX.md)（采纳/改造/放弃裁决）+ [research/](./research/)（单家卡片）。（2026-07-31：旧定位对比表已删——与上述文档重复；历史版本见 git）
+> 竞品事实与决策的唯一入口：[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景）+ [DECISION_MATRIX.md](./DECISION_MATRIX.md)（采纳/改造/放弃裁决）+ [research/](./research/)（单家卡片）。
 
 ---
 
@@ -135,7 +132,7 @@ No queue, no approval stage, no assistant assumed.
 
 **Explicit non-requirements:** virality optimization, TikTok-style expression, trend-chasing, fully-autopilot publishing. For this group "not AI-sounding" is the baseline (STRATEGY 牌 4), and control beats convenience (ADR-027).
 
-**Positioning implication.** Seed-phase ICP = this archetype; "European knowledge speakers" remains the expansion narrative. When scheduling conflicts (e.g. polishing one language pair's quality vs. adding another EU language), the seed ICP wins — **language priority follows seed customers**, while the European-institution story is unchanged.
+**Positioning implication.** Seed-phase ICP = this archetype; "European knowledge experts" remains the expansion narrative. When scheduling conflicts (e.g. polishing one language pair's quality vs. adding another EU language), the seed ICP wins — **language priority follows seed customers**, while the European-institution story is unchanged.
 
 ### 4.3 User Persona Examples
 
@@ -160,13 +157,13 @@ No queue, no approval stage, no assistant assumed.
 
 **Core Features (P0):**
 
-- **Speaker memory auto-persistence and optional management**: After task completion, extract user persona (voice, style, preferences) from input; persist as Speaker; user can view and edit multiple historical personas at `/speakers`; can manually select during project creation, or leave unselected for auto-creation
+- **Persona memory auto-persistence and optional management**: After task completion, extract user persona (style, preferences, voiceprint) from input; persist as Persona; user can view and edit multiple personas at `/personas`; can manually select during project creation, or leave unselected for auto-creation
 - Project-level talk material upload (video, audio, transcript, slides, images); input scenarios include talks / podcasts / webinars / interviews
-- Speaker past materials upload (books, articles, old talks, social content) — **optional method** to supplement or calibrate persona (not the sole P0 source)
-- AI auto-analysis: content segmentation, recommendation scoring, and Speaker memory extraction from task input
+- Persona past materials upload (books, articles, old talks, social content) — **optional method** to supplement or calibrate persona (not the sole P0 source)
+- AI auto-analysis: content segmentation, recommendation scoring, and Persona memory extraction from task input
 - **AI Generation (P0 Core Outputs):**
   - 3-5 highlight clip scripts (with Hook + subtitles + visual suggestions)
-  - Social post (matching Speaker voice)
+  - Social post (matching the persona's voice)
   - Quote cards / Carousel
   - Article / newsletter content
   - **Multi-language versions:** Chinese/English + German/French/Spanish/Italian, M3 native translation
@@ -212,22 +209,22 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > 本节为**需求目录**（ID 稳定，供外部文档按 ID 引用）。优先级 / 排期 / 实现状态的唯一事实源是 [PROGRESS.md](./PROGRESS.md)；竞品溯源见 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。
 > 注：FR-011 / FR-018 / FR-019 编号历史上重复出现（项目管理 / 素材上传 / persona 三节各有一份），保留原样以免打断外部引用。
 
-### 6.1 Speaker Memory Management
+### 6.1 Persona Memory Management
 
 | ID | Requirement |
 |:---|:---|
-| FR-001 | Auto-create Speaker memory from task input when none selected (after task completion) |
-| FR-002 | Manual Speaker creation at `/speakers` |
-| FR-003 | Edit Speaker memory (basic info + AI-extracted style fields) |
+| FR-001 | Auto-create Persona memory from task input when none selected (after task completion) |
+| FR-002 | Manual Persona creation at `/personas` |
+| FR-003 | Edit Persona memory (basic info + AI-extracted style fields) |
 | FR-004 | View/edit AI-generated style persona |
-| FR-005 | Manage Speaker past materials (books/articles/social) as persona calibration sources |
-| FR-006 | Manage Speaker voice samples (upload/delete/preview cloning) |
+| FR-005 | Manage Persona past materials (books/articles/social) as calibration sources |
+| FR-006 | Manage Persona voice samples (upload/delete/preview cloning) |
 
 ### 6.2 Project (Talk) Management
 
 | ID | Requirement |
 |:---|:---|
-| FR-007 | Create project (Speaker optional; auto-created if unselected) |
+| FR-007 | Create project (Persona optional; auto-created if unselected) |
 | FR-008 | Project list with Speaker/status/date filters |
 | FR-009 | Soft-delete project |
 | FR-010 | Project status tracking (uploading/processing/review/completed) |
@@ -252,7 +249,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | FR-013 | Upload transcript (docx/txt/md or paste text) |
 | FR-014 | Upload slides (pdf/ppt/pptx) |
 | FR-015 | Upload event photos (jpg/png, multi-select) |
-| FR-016 | Upload Speaker past materials (books/articles/old transcripts/social) |
+| FR-016 | Upload Persona past materials (books/articles/old transcripts/social) |
 | FR-017 | Material preprocessing status display (fetching/transcribing/parsing/completed) |
 | FR-018 | Paste-link auto-fetch (YouTube/Vimeo/Zoom/Loom/Drive/podcast, yt-dlp-style, then ASR) |
 | FR-019 | Auto-transcription of non-text input (ASR, word-level timestamps, multi-language, faster-whisper) |
@@ -261,8 +258,8 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 | ID | Requirement |
 |:---|:---|
-| FR-018 | Auto-extract Speaker memory from task input (values/metaphors/sentence patterns/terminology/emotional tendencies) |
-| FR-019 | Manual edit of Speaker memory (modify/supplement/disable expressions) |
+| FR-018 | Auto-extract Persona memory from task input (values/metaphors/sentence patterns/terminology/emotional tendencies) |
+| FR-019 | Manual edit of Persona memory (modify/supplement/disable expressions) |
 | FR-020 | Content segmentation & scoring: first-post recommendation score (1-100) + visible reason — answers "which clip is most worth posting first", never predicts reach |
 | FR-021 | Keyframe/slide-page recommendation from uploaded materials |
 | FR-022 | Quote extraction (5-10 most viral quotes) |
@@ -291,7 +288,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|
 | FR-031 | Highlight clip scripts (default 3-5: hook + script + subtitle timestamps + visual suggestions + music mood) |
 | FR-032 | 3 alternative hooks/titles per clip |
-| FR-033 | Social post in Speaker voice (Hook → Core insight → Personal take → CTA) |
+| FR-033 | Social post in the persona's voice (Hook → Core insight → Personal take → CTA) |
 | FR-034 | Quote cards (3-5, 1:1 or 4:5, attribution + style templates) |
 | FR-035 | Carousel (multi-page image+text for social platforms) |
 | FR-036 | Multi-language versions (ZH/EN + DE/FR/ES/IT, M3 native translation preserving meaning and impact) |
@@ -311,9 +308,9 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > | Change quote card template / subtitle style | Change Brand template settings | No |
 >
 > **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
-> When dialogue fallback is used, agent context = talk materials + Speaker memory + current output + necessary history.
+> When dialogue fallback is used, agent context = talk materials + Persona memory + current output + necessary history.
 >
-> **现状（2026-07-31）**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 编排见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
+> **现状（2026-07-31）**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 架构 = 四层工程地图（Model / Harness / Graph / Loop，ADR-039），见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
 
 | ID | Requirement |
 |:---|:---|
@@ -403,19 +400,19 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ## 10. Core User Flows
 
-### 10.1 Create and Manage Speaker Memory
+### 10.1 Create and Manage Persona Memory
 
 ```
 1. User logs in
-2. Method A: Manually create Speaker (optional)
+2. Method A: Manually create Persona (optional)
    ├── Enter name, title, language, primary activity field
    ├── Optional avatar upload
    └── Select target audience (peer scholars/industry practitioners/general public/investors/policymakers)
 3. Method B: Auto-create after task completion (default path)
-   ├── User doesn't select Speaker on home page / during project creation
+   ├── User doesn't select Persona on home page / during project creation
    ├── System extracts style characteristics from materials + prompts during task processing
-   └── After task completion, persists as a Speaker memory record
-4. User can view, edit, delete their Speaker memory at /speakers
+   └── After task completion, persists as a Persona memory record
+4. User can view, edit, delete their Persona memory at /personas
    ├── Modify basic info
    └── Modify AI-extracted style fields (values, metaphors, sentence patterns, etc.)
 5. Optional upload of past materials or voice samples for persona calibration (P1 supports voice cloning)
@@ -430,7 +427,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
    ├── Drag/drop or select files: video/audio/transcript/slides/images
    └── Paste text or enter prompt in input box
 3. Configure (all optional)
-   ├── Speaker: select existing Speaker or leave unselected (auto-create)
+   ├── Persona: select existing Persona or leave unselected (auto-create)
    └── Brand template: select existing template or leave unselected
    (outputs / target language 由管线意图识别推导，见 CHAT_ARCHITECTURE.md；composer 无 outputs/tone 控件)
 4. Click generate button
@@ -489,7 +486,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|
 | Length | 150-300 English words / 300-600 Chinese characters |
 | Structure | Hook → Core insight → Personal take → Call to action |
-| Voice | Maintain Speaker style, professional but readable |
+| Voice | Maintain the persona's style, professional but readable |
 | Hashtags | Auto-generate 3-5 relevant topic tags |
 | Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
 
@@ -499,7 +496,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 |:---|:---|
 | Length | 600-1,500 English words / 1,000-3,000 Chinese characters |
 | Structure | Title → Lead → Core arguments → Evidence/quotes → Conclusion/CTA |
-| Voice | Maintain Speaker style; suitable for institutional websites and newsletters |
+| Voice | Maintain the persona's style; suitable for institutional websites and newsletters |
 | Hashtags | Auto-generate 3-5 relevant topic tags |
 | Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
 
@@ -528,7 +525,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | Attribute | Specification |
 |:---|:---|
 | P0 languages | Chinese, English, German, French, Spanish, Italian |
-| Translation quality | M3 native translation, preserves original meaning, impact, and Speaker style |
+| Translation quality | M3 native translation, preserves original meaning, impact, and persona style |
 | Review support | Source + translation side-by-side, sentence-by-sentence editing |
 | Translation confidence | Low-confidence content highlighted for attention |
 | Dubbing | Voice-clone dubbing via MiniMax voice_clone + T2A (P0 implemented); general TTS fallback available |
@@ -550,7 +547,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 - Display processing status for each material (transcribing/parsing/completed)
 - **Hint copy**: "Upload at least one type, more is better. Transcript + event photos can produce a first draft."
 
-### 13.2 Speaker Style Persona Page
+### 13.2 Persona Page
 
 - Left: AI-generated persona
 - Right: User-editable fields
@@ -640,7 +637,7 @@ Reference Descript's text-editing experience:
 
 ## 16. Roadmap
 
-> 工程排期 / 优先级 / 需求池的唯一事实源：[PROGRESS.md](./PROGRESS.md)。ROADMAP.md 已于 2026-07-31 并入 PROGRESS 并退役；P0 时代计划文档更早删除，均见 git 历史。
+> 工程排期 / 优先级 / 需求池的唯一事实源：[PROGRESS.md](./PROGRESS.md)。
 
 产品阶段方向（非排期）：
 
@@ -655,12 +652,11 @@ Reference Descript's text-editing experience:
 | Term | Description |
 |:---|:---|
 | Repurposing | Reprocessing existing content to adapt to different platforms and formats |
-| Speaker Profile | Speaker profile, including style persona, voice settings, voice samples |
+| Persona | 人设：用户的风格记忆 + 声纹（voice sample / clone voice_id），多实例扁平（ADR-037/038） |
 | Clip | Generated highlight segment |
 | Hook | Attention-grabbing opening sentence for video/post |
 | Carousel | Multi-page images + text, common on LinkedIn/Instagram and other social platforms |
 | SRT | Subtitle file format |
-| Persona | Persona style profile |
 | B-roll | Supplementary visual material |
 | HITL | Human-in-the-Loop, human feedback closed loop |
 | EU data residency | Deployment in EU region (e.g. Cast AI Kimchi or EU cloud region), data stays in EU; future differentiator, not in MVP |
@@ -674,30 +670,8 @@ Reference Descript's text-editing experience:
 
 | Item | Proposal | Decision Maker | Status |
 |:---|:---|:---|:---|
-| Product name | SpeechRepurposer (internal, adjustable) | Zuo | TBD |
 | URL input support | 需求池（链接摄入，PROGRESS 可选需求） | Product/Tech | 已登记 |
-| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，PROGRESS 第 10 周联调 | Product | 已排期 |
-| Pricing model | PROGRESS 第 8 周定价设计 + 第 9 周支付接入 | Zuo | 已排期 |
+| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，联调排期见 PROGRESS | Product | 已排期 |
+| Pricing model | 定价设计与支付接入，排期见 PROGRESS | Zuo | 已排期 |
 | European company registration | Q3 launch UK Limited Company | Operations | TBD |
 | Academic conference partnerships | Q3 contact ECA, EMBO, London Tech Week | Marketing | TBD |
-
----
-
-## 19. Agent Framework Selection Decision
-
-> **已迁移**：决策结论与理由以 [DECISIONS.md](./DECISIONS.md) 为准——ADR-004（手搓编排，不引入框架）+ ADR-025（薄 provider 接口，修订 ADR-004 的"无需 provider 抽象"理由）。候选框架对比表已移入 ADR-004 附录。（2026-07-20 自本文移除）
-
----
-
-## 20. Document History
-
-| Version | Date | Changes | Author |
-|:---|:---|:---|:---|
-| v0.1 | 2026/06/22 | Initial PRD (General Edition) | Product Team |
-| v0.2 | 2026/06/22 | Added Agent framework selection decision, refined technical architecture | Tech Team |
-| v0.3 | 2026/06/24 | Europe Edition: incorporated market research, multi-language P0, EU data residency, Agent workflow, European user personas, roadmap adjustment | Product Team + Market Research Team |
-| v0.4 | 2026/06/27 | Vertical clip output + editor finalized (elevated to MVP main flow): clip-spec contract + Remotion first renderer + Descript-style transcript editor; ASR elevated to hard prerequisite (video needs streamable playback, local FS + Range sufficient; object storage still deferred to scale) (see ADR-016 / VIDEO_EDITOR.md) | Tech Team |
-| v0.5 | 2026/07/20 | Post-MVP slimming (1252→779 lines): §9 Technical Architecture / §10 Data Models / §13 API / §14.5 UX borrowing / §20 framework decision removed as duplicates — replaced with pointers to ARCHITECTURE.md / code / API.md / DECISION_MATRIX.md / DECISIONS.md (single-source principle, see docs/README.md); §17 Roadmap compressed to pointer + phase direction; FR-020 annotated with implementation status | Tech Team |
-| v0.6 | 2026/07/23 | Added §4.2 Core Archetype: Cross-Border Knowledge Broker as Seed ICP (working hypothesis, pending 3–5 validation interviews): kernel = maintained thought-leadership presence (creator-economy distinction table), solo main path (product does the labour, expert keeps the judgement; review queue only in institutional mode per ADR-027), 48-hour post-talk core scenario, requirement stack, language priority follows seed customers; §4.1 table gained broker row; persona examples renumbered to §4.3 | Tech Team |
-| v0.7 | 2026/07/31 | Second post-MVP slimming (837→703 lines): §3.4 (superseded competitive landscape) and §6 User Stories removed — duplicates of COMPETITIVE_ANALYSIS / DECISION_MATRIX and the FR tables; FR tables compressed to an ID + one-liner catalog (priorities/status live only in PROGRESS.md; duplicate FR-011/018/019 numbering noted); stale rows pruned from Risks (M3 stability / voice cloning / rendering / ASR dependency — all landed) and Open Decisions (decided items removed, publishing/pricing marked as scheduled in PROGRESS); pointers updated (ROADMAP.md retired → PROGRESS.md; ARCHITECTURE.md retired → MODULE_ARCHITECTURE.md); sections renumbered (old §7–§21 → §6–§20) | Tech Team |
-| v0.8 | 2026/08/01 | Positioning refresh, following the landing copy overhaul: §2.1 one-liner = "An AI agent for knowledge experts" (role-metaphors such as "content-operations officer" retired); §2.2 Vision drops "knowledge assets" jargon and speech-only framing (inputs = talks / meetings / podcasts / webinars / interviews; writing persona = style, voice reserved for audio); §3.2 Key Insight rewritten (product name Repurposer; "AI content agent" replaces "knowledge-assetization tool"). Confirmed baselines: self-label dual track — internal = agent, outward copy = assistant/助手 (NAMING N-25); input diversity — never assume the input is a speech | Tech Team |

@@ -1243,11 +1243,11 @@ async def s33_progress_question_answer(ctx: Ctx) -> None:
 
 
 async def s34_meta_info_navigation_answer(ctx: Ctx) -> None:
-    """S34 M 元信息：'换个品牌模板' → answer 导航形态，不起 run 不 dock。"""
+    """S34 M 元信息：'换个人设' → answer 导航形态，不起 run 不 dock。"""
     pid = await ctx.new_project("S34 meta navigation")
     await seed_completed_run(pid)
 
-    turn1 = await ctx.chat(pid, "Can you switch to a different brand template for me?")
+    turn1 = await ctx.chat(pid, "Can you switch to a different persona for me?")
     check(turn1["run_id"] is None, "meta changes dispatch no run", turn1)
     check(not turn1["assistant_message"].get("question"),
           "no question docks", turn1["assistant_message"])

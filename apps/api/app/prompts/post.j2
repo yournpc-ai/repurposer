@@ -37,12 +37,9 @@ Based on the following source texts and material understanding, write a social l
 (No style profile provided)
 {% endif %}
 
-{% if context.persona and (context.persona.voice or context.persona.audience or context.persona.guidelines or context.persona.cta) %}
+{% if context.persona and (context.persona.audience or context.persona.guidelines or context.persona.cta) %}
 ## Persona Memory
 
-{% if context.persona.voice %}
-- **Voice**: {{ context.persona.voice }}
-{% endif %}
 {% if context.persona.audience %}
 - **Target audience**: {{ context.persona.audience }}
 {% endif %}

@@ -44,7 +44,7 @@ class User(Base):
 
     Login is passwordless: a 6-digit email code (see ``services/auth.py``) is
     exchanged for a JWT. All product data is isolated per user; the seeded
-    default user only owns shared default content (brand template, personas).
+    default user only owns shared default content (personas).
     """
 
     __tablename__ = "users"
@@ -72,11 +72,15 @@ class VerificationCode(Base):
 
 
 class Persona(Base):
-    """Persona table (ADR-037 — the identity module; renamed from Speaker).
+    """Persona table (ADR-037/038 — the identity module, the single identity
+    object).
 
     A persona is a project-level memory of the user's voice, style, and content
-    strategy. Style and content memory are stored as flat columns; the persona
-    summary is rendered into prompts at the agent layer when needed.
+    strategy. Style and content memory are stored as flat columns; the voice
+    (audio) and brand (skin) blocks are JSONB — NULL means Auto / the system
+    default skin. ``auto_created_at`` marks a system-bootstrap persona (in
+    place of any is_default boolean); ``calibrated_at`` records the last
+    calibration.
     """
 
     __tablename__ = "personas"
@@ -93,7 +97,17 @@ class Persona(Base):
     emotional_tone = Column(String(20), nullable=True)
     typical_hooks = Column(JSON, nullable=True, default=list)
     avoid_words = Column(JSON, nullable=True, default=list)
-    voice = Column(String(255), nullable=True)
+    # Voice block (audio meaning only): {"kind":"cloned", voice_id,
+    # sample_asset_id} | {"kind":"stock", stock_id} | NULL = Auto.
+    voice = Column(JSONB, nullable=True)
+    # Skin block: caption font/size/color/position/preset, title toggle +
+    # position, intro/outro cards, logo, keyword highlighter. NULL = the
+    # system default skin (app.memory.brand.DEFAULT_BRAND_CONFIG).
+    brand = Column(JSONB, nullable=True)
+    # Provenance ("what it learned from") — written by the persona flows.
+    learned_from = Column(JSONB, nullable=True)
+    calibrated_at = Column(DateTime(timezone=True), nullable=True)
+    auto_created_at = Column(DateTime(timezone=True), nullable=True)
     audience = Column(String(255), nullable=True)
     guidelines = Column(Text, nullable=True)
     cta = Column(String(512), nullable=True)
@@ -164,19 +178,6 @@ class Asset(Base):
     meta = Column(JSON, nullable=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
-
-
-class BrandTemplate(Base):
-    """Brand / video template configuration."""
-
-    __tablename__ = "brand_templates"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    name = Column(String(255), nullable=False)
-    config = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
 class WorkflowRun(Base):

@@ -1,7 +1,7 @@
 # Module Architecture — 模块划分与边界契约
 
-> Status: Active（2026-07-20 建立，post-MVP 模块架构锚点；2026-07-31 起兼为**现状系统架构的唯一事实源**——ARCHITECTURE.md 退役，其独有内容（代码地图 / 队列机制 / 横切数据约定）并入 §7）
-> 排期见 [PROGRESS.md](./PROGRESS.md)（本文多处被其引用为"2027 架构"）；决策留痕见 [DECISIONS.md](./DECISIONS.md)。
+> Status: Active（**现状系统架构的唯一事实源**）
+> 排期见 [PROGRESS.md](./PROGRESS.md)；决策见 [DECISIONS.md](./DECISIONS.md)（现行决策集）。
 
 本文回答三个问题：**有哪些模块、每张表归谁、模块之间怎么通信**。它是方向性契约——部分模块（Operation Model、Agent Interface、Distribution）尚未实现，但其边界现在就定死，避免演进时跨域纠缠。
 
@@ -9,16 +9,16 @@
 
 1. **主交互面是 agent，GUI 是 client 之一**——chat、MCP、编辑器都只是 Operation Model / Pipeline 的前端。
 2. **Editor 薄化**——真正要建的是 Operation Model（可检查、可撤销的操作日志），不是编辑器本身。手动编辑占比即使萎缩，投资也沉淀在操作层。
-3. **Pipeline 是成本中心不是壁垒**——保持现有 4-layer 编排，不追加差异化投入；差异化在 Memory、Distribution、合规。
-4. **Distribution 与 Pipeline 平级**——核心是发布动作本身（直发）：正向链路最后一座手动桥。审核队列 / 定时 / 数据回流为边缘功能（P2，2026-07-23 定界）；发布数据回流若做，是首发推荐分的外部校准源（内部校准源 = 用户选用行为）。
+3. **Pipeline 是成本中心不是壁垒**——保持现有编排（NodeBase 图内核，AGENT_ARCHITECTURE），不追加差异化投入；差异化在 Memory、Distribution、合规。
+4. **Distribution 与 Pipeline 平级**——核心是发布动作本身（直发）：正向链路最后一座手动桥。审核队列 / 定时 / 数据回流为边缘功能（P2）；发布数据回流若做，是首发推荐分的外部校准源（内部校准源 = 用户选用行为）。
 5. **合规是底座不是功能**——EU AI Act Art.50（2026-08-02 生效）的内容标识写进 clip-spec 与分发层，横切所有模块。
 
 ## 2. 六层模块图
 
 ```
 ┌────────────────────────── 前端面 ──────────────────────────┐
-│ composer ✅ │ Editor GUI ✅ │ chat 🚧 │ 步骤清单 📋P1       │
-│ 运行图检视面 📋P2（信任工具） │ MCP 📋P2                     │
+│ composer ✅ │ Editor GUI ✅ │ chat ✅ │ 步骤清单 ✅          │
+│ FlowView 图面（配方流程图 ✅ / run 进度图 🚧 / 血缘板 📋spike，ADR-036）│ MCP 📋P2 │
 └──────────────────────────────┬─────────────────────────────┘
                                ▼ 意图
 ┌──────────────── Agent Interface（chat 升级版 + MCP）────────┐
@@ -27,9 +27,9 @@
 └───────┬──────────────────────────────┬─────────────────────┘
         ▼                              ▼
 ┌───────────────────┐   ┌─────────── Pipeline ✅（RunPlan 内核）────────┐
-│ Operation Model 📋 │   │ 摄入/预处理（ASR）✅ │ 导演/班组 ✅        │
+│ Operation Model ✅ │   │ 摄入/预处理（ASR）✅ │ 导演/agent 花名册 ✅    │
 │ （操作日志层，      │   │ ┌── RunPlan 内核（施工图，ADR-028 ✅）───┐│
-│  三前端共用）      │   │ │ workflow_steps：导演两步/班组/质检节点        ││
+│  三前端共用）      │   │ │ workflow_steps：导演两步/技能节点/质检节点   ││
 └─────────┬─────────┘   │ │ orchestrator 走图 · worker 认领节点       ││
           │             │ │ 链：clip 链 ✅/文案链 ✅/虚拟链 📋A-029   ││
           │             │ └───────────────────────────────────────────┘│
@@ -41,7 +41,7 @@
 ┌──────────────── Distribution 📋（与 Pipeline 平级，零变化）──────┐
 │ channel_accounts / publications 状态机 / 缝 = 产物表单 FK         │
 ├──────────────────────────────────────────────────────────────────┤
-│ Memory / Context ✅（persona + Brand + 术语表 📋；📋视觉身份+授权） │
+│ Memory / Context ✅（persona（含皮肤块 brand，ADR-038）+ 术语表 📋；📋视觉身份+授权） │
 ├──────────────────────────────────────────────────────────────────┤
 │ 合规与计费底座 📋（分类器读产物 provenance→C2PA / usage→           │
 │ workflow_steps.cost / EU 驻留）                                       │
@@ -55,11 +55,11 @@
 ```
  上传/链接        预处理          生成              精修              渲染           分发
 ┌─────────┐   ┌──────────┐   ┌───────────┐   ┌────────────┐   ┌──────────┐   ┌───────────┐
-│ 本地文件  │   │ Asset     │   │ 4-layer   │   │ Edit/Chat/  │   │ Remotion  │   │ 审核队列   │
-│ 上传 ✅   │──►│ 状态机     │──►│ 生成编排    │──►│ Regenerate │──►│ render_   │──►│ →LinkedIn │
+│ 本地文件  │   │ Asset     │   │ DAG 生成   │   │ Edit/Chat/  │   │ Remotion  │   │ 审核队列   │
+│ 上传 ✅   │──►│ 状态机     │──►│ 编排        │──►│ Regenerate │──►│ render_   │──►│ →LinkedIn │
 │ Zoom/RSS │   │ ✅        │   │ WorkflowRun│   │ 精修三角     │   │ spec ✅   │   │ /newsletter│
 │ 📋 P1   │   └──────────┘   │ ✅        │   │ (Operation  │   └──────────┘   │ 📋 P1     │
-└─────────┘                  └───────────┘   │  Model 📋)  │                 └─────┬─────┘
+└─────────┘                  └───────────┘   │  Model ✅)  │                 └─────┬─────┘
                                               └──────┬─────┘                       │
       ┌──────────────────────────────────────────────┴─────────────────────────────┘
       │ 回流两条边（闭环的关键，均 📋）：
@@ -67,7 +67,7 @@
       │  ② 发布数据（哪条被打开/互动）  → Publication 回流字段 → 校准首发推荐分（P2）
       ▼
 ┌────────────────────────────────────────────────────────┐
-│ Memory / Context：persona · Brand · 术语表               │
+│ Memory / Context：persona（风格/策略/声音/皮肤）· 术语表    │
 │ 正向边：注入 director / chat / 分发调性（✅ 单向，规则 4）   │
 └────────────────────────────────────────────────────────┘
 ```
@@ -78,26 +78,26 @@
 |---|---|---|
 | 上传 → 预处理 | `assets` 行 + worker `SKIP LOCKED` 认领 | ✅ |
 | 预处理 → 生成 | `workflow_runs` 行（deferred claim：素材未就绪不认领） | ✅ |
-| 生成计划图 | `workflow_steps`——计划作为一等对象，节点级血统/成本/重跑（ADR-028） | ✅ Phase 1 |
+| 生成计划图 | `workflow_steps`——计划作为一等对象，节点级血统/成本/重跑（ADR-028） | ✅ |
 | 生成 → 精修 | `outputs.render_spec` / `outputs.payload`（clip-spec 契约） | ✅ |
 | 精修 → 渲染 | `outputs.render_status=PENDING`（worker 认领源） | ✅ |
-| 精修操作记录 | `operations` 表——Edit/Chat 已写入（MCP 座位） | ✅（2026-07-26，ADR-032） |
+| 精修操作记录 | `operations` 表——Edit/Chat 已写入（MCP 座位） | ✅（ADR-032） |
 | 分发 | （📋）`publications` 状态机 + `channel_accounts` | 📋 P1 |
 | 发布数据回流 | （📋）Publication 回流字段 → 首发推荐分校准 | 📋 P2 |
 | Memory 注入 | persona block / brand block（消费者各自拉取） | ✅ |
 | 校准回流 | （📋）精修痕迹 + 发布数据 → persona agent | 📋 P1/P2 |
 
-**闭环现状：断在发布动作与两条回流边上。** 正向链路（上传 → 预处理 → 生成 → 精修 → 渲染 → 导出）已全通，但"导出 → 平台"仍是手动下载再上传——这是 Distribution 直发标 P1 的理由；回流（精修痕迹、发布数据）一条都不存在——这是 Operation Model 标为"地基"的理由（编辑痕迹属内部校准源，不依赖 Distribution）。发布数据回流属边缘功能（P2，2026-07-23 定界）：不通则首发推荐分和 persona 缺外部校准源，但内部校准（选用行为 + 编辑痕迹）先行。
+**闭环现状：断在发布动作与两条回流边上。** 正向链路（上传 → 预处理 → 生成 → 精修 → 渲染 → 导出）已全通，但"导出 → 平台"仍是手动下载再上传——这是 Distribution 直发标 P1 的理由；回流（精修痕迹、发布数据）一条都不存在——这是 Operation Model 标为"地基"的理由（编辑痕迹属内部校准源，不依赖 Distribution）。发布数据回流属边缘功能（P2）：不通则首发推荐分和 persona 缺外部校准源，但内部校准（选用行为 + 编辑痕迹）先行。
 
 ### 2.2 数据架构图（ADR-028/030 后）
 
 ```
 users（平台层）
 
-Memory/Context：personas（📋+视觉身份/授权）· brand_templates
+Memory/Context：personas（含皮肤块 brand / 声纹块 voice，ADR-038；📋视觉身份/授权）
 
 Pipeline：
-assets ──► workflow_runs ──► workflow_steps ✅ ──► outputs ✅（统一产物，clips/derivatives 已退役）
+assets ──► workflow_runs ──► workflow_steps ✅ ──► outputs ✅（统一产物，ADR-030）
 （上传/ASR）  （run 容器）     （施工图：计划+账簿）     type=clip 带 source_ref+render_spec
 music（AI 音乐库）                             payload/files/score/publishing/provenance
 
@@ -118,13 +118,13 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
-| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、4-layer 生成编排、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`、`app/skills/`、`pipeline/rendering.py` | ✅ 已落地 |
+| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（导演两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（plan path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（PlanAgent + ChatIntentAgent，op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`pipeline/registry.py` | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
-| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第 10 周联调） |
-| **Memory / Context** | Persona（人设）、Brand template、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`、`memory/routes.py` | ✅ 主体落地 |
-| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第 10 周；EU 驻留 📋 需求池 |
+| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第八周联调） |
+| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `skills/persona.py`、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地 |
+| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第八周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
 
@@ -140,8 +140,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；内部类型（`content_plan`）经 `visible_outputs()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
-| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写 |
-| `brand_templates` | Memory | 渲染时经 Pipeline 烘焙进 clip-spec，渲染服务不直读 |
+| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建） |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
 | operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
@@ -156,18 +155,19 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 
 | 行业通用词 | 本系统对应 | 说明 |
 |---|---|---|
-| Agents（LLM 决策单元） | `skills/`（班组） | Mastra Agents 含 Tools/Skills 子集；我们的 agent 按 NAMING 叫 skill |
-| Tools（确定性执行） | `tools/`（机械） | 同名同物 |
-| Skills（组合能力） | `pipeline/registry.py` skill 条目 | = Mastra Skills 的登记处 |
+| Agents（LLM 决策单元） | `app/agents/`（一个 Agent 类 + 声明实例，N-29/N-30） | 与 Mastra/Agno 同词 |
+| Tools（确定性执行） | `app/tools/`（机械） | 同名同物；禁 import agents/LLM client |
+| Skills（组合能力） | `app/skills/` 技能包 + SKILL_REGISTRY | = Mastra Skills 的登记处；技能一词一义（N-29），用户语言同词 |
+| Agent Harness（调用面脚手架） | `agents/base.py` 漏斗 + contexts 装配 + prompts | 装配/校验/修复一轮/计量/声明兜底；剧本 harness 是 test harness（N-33 限定） |
 | Workflows（编排图+执行） | RunPlan 内核（orchestrator + workflow_steps + worker 认领） | Workflow State=run 状态机；Suspend/Resume=step `waiting` 座位；Snapshots=spec/context；HITL=variant_pick gate（📋） |
 | workflow run（执行实例） | `workflow_runs` 表 | 行业标准全名（每 run 自带其编译出的 workflow=步骤图） |
 | Agent Runtime | `app/worker.py` | 执行进程 |
-| Memory | `memory/`（personas/brand_templates） | persona/brand block 单向注入 |
+| Memory | `memory/`（personas） | persona/brand block 单向注入 |
 | Evals（Scorers/Gates/Verdicts） | 📋 Phase 3 verify 节点 + variant_pick gate | verify=节点 / eval=活动，与 Mastra 兼容 |
 | Threads / Conversations | `conversations` + `messages` | OpenAI Conversations API 同款 |
 | Agent Observability | metering（workflow_steps.cost）+ structlog + 📋 METRICS.md | 横切不开包（§5） |
 | Channels | `distribution/` | 直发渠道 |
-| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | PROGRESS 第 10 周 |
+| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | PROGRESS 第八周 |
 
 反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
@@ -199,17 +199,19 @@ apps/api/
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects / assets / outputs / runs / music 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地）
-│   │   ├── node_runners.py        # 节点执行器注册表（STEP_RUNNERS）
-│   │   ├── registry.py            # skill 注册表（compile_graph 校验）
+│   │   ├── graph.py               # NodeBase 协议 + 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
+│   │   ├── node_runners.py        # 内部节点 crew（preprocess / director 节点 / checkpoint / render）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
-│   ├── skills/          # 班组（LLM 决策单元）：persona / content_director / clip_agent /
-│   │                    #   post / quotes / carousel / article / reviser / caption_translate
-│   ├── tools/           # 机械（确定性执行）：asr / voice / dubbing / extraction / filler /
-│   │                    #   music / storage / transcript / caption_translate
-│   ├── memory/          # Memory：personas + brand templates 端点、brand → clip-spec 烘焙
+│   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类）/
+│   │                    #   roster.py（共享 crew：director/persona/translator）/ contexts.py
+│   ├── skills/          # 技能包（能力唯一家）：clips / dub / captions / posts / quotes /
+│   │                    #   carousel / article / music / filler / stills…（节点类+params+私有工序+估价）
+│   ├── tools/           # 机械（确定性执行，禁 import agents/LLM client）：asr / voice /
+│   │                    #   extraction / filler / music / storage / transcript
+│   ├── memory/          # Memory：personas 端点、人设皮肤块 → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
 │   ├── platform/        # 平台层：auth / email / notifications / project_context / routes
@@ -235,7 +237,7 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 ### 7.3 横切数据约定
 
 - **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表（旧 PRD 副本已 drift 删除）。
-- **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / brand_templates / conversations 全部按 user 隔离；seed 默认用户仅作共享默认内容（brand template）的属主。
+- **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / conversations 全部按 user 隔离；seed 默认用户仅作共享默认内容（demo 项目资产）的属主。
 - **存储 key**：DB 只存对象 key，字节在 TOS（ADR-024）；key 前缀 `{user_id}/…` 承载归属；上传走短时 presigned PUT；读取经 API 归属校验后 307 重定向到公开对象 URL（程序拉取走 `?proxy=1` 由 API 转流）。
 - **EU 数据驻留**：project 级 `data_region` 是未来差异化（PROGRESS 明确不在本周期），未实现。
 - **UI 语言偏好**：future；首屏英文渲染避免 hydration mismatch（见 CLAUDE.md i18n 约定）。

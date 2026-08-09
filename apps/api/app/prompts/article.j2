@@ -45,12 +45,9 @@ Based on the following source texts and material understanding, write an article
 (No style profile provided)
 {% endif %}
 
-{% if context.persona and (context.persona.voice or context.persona.guidelines) %}
+{% if context.persona and context.persona.guidelines %}
 ## Persona Memory
 
-{% if context.persona.voice %}
-- **Voice**: {{ context.persona.voice }}
-{% endif %}
 {% if context.persona.guidelines %}
 - **Content guidelines**: {{ context.persona.guidelines }}
 {% endif %}

@@ -430,10 +430,10 @@ class ChatRequest(BaseModel):
     # anything the user's message revises wins (merge_prior_slots);
     # None = merge against the stored pending intent, if any.
     prior_intent: "InferredIntent | None" = None
-    # The composer's brand choice rides the first message; written into the
+    # The composer's persona choice rides the first message; written into the
     # pending intent only when the plan path docks a task book (a later turn
     # omitting it never clobbers the stored choice).
-    brand_template_id: UUID | None = None
+    persona_id: UUID | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
     # the task book by prose (PlanAgent verdict "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.
@@ -471,9 +471,10 @@ class ChatResponse(BaseModel):
 class PersonaContext(BaseModel):
     """Persona business object returned by the API and passed to agents.
 
-    The identity module (ADR-037): one flat object carrying the style six,
-    content strategy, and identity card. Rendered into prompts at the agent
-    layer via the j2 templates' ``context.persona``.
+    The identity module (ADR-037/038): one flat object carrying the style six,
+    content strategy, identity card, voice (audio) block and brand (skin)
+    block. Rendered into prompts at the agent layer via the j2 templates'
+    ``context.persona``; the brand block bakes into the clip-spec.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -489,7 +490,15 @@ class PersonaContext(BaseModel):
     emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] = "rational"
     typical_hooks: list[str] = Field(default_factory=list)
     avoid_words: list[str] = Field(default_factory=list)
-    voice: str | None = None
+    # Voice = audio only: {"kind":"cloned", voice_id, sample_asset_id} |
+    # {"kind":"stock", stock_id} | None = Auto.
+    voice: dict | None = None
+    # Skin block (caption/title/intro-outro/logo/keyword highlighter);
+    # None = the system default skin.
+    brand: dict | None = None
+    learned_from: dict | None = None
+    calibrated_at: datetime | None = None
+    auto_created_at: datetime | None = None
     audience: str | None = None
     guidelines: str | None = None
     cta: str | None = None
@@ -498,7 +507,7 @@ class PersonaContext(BaseModel):
 
 
 class PersonaCreate(BaseModel):
-    """Create persona request."""
+    """Create persona request (bare identity card; blocks fill in later)."""
 
     name: str
     title: str | None = None
@@ -510,7 +519,6 @@ class PersonaCreate(BaseModel):
     emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] | None = None
     typical_hooks: list[str] | None = None
     avoid_words: list[str] | None = None
-    voice: str | None = None
     audience: str | None = None
     guidelines: str | None = None
     cta: str | None = None
@@ -529,7 +537,8 @@ class PersonaUpdate(BaseModel):
     emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] | None = None
     typical_hooks: list[str] | None = None
     avoid_words: list[str] | None = None
-    voice: str | None = None
+    voice: dict | None = None
+    brand: dict | None = None
     audience: str | None = None
     guidelines: str | None = None
     cta: str | None = None
@@ -734,7 +743,7 @@ class PendingIntent(BaseModel):
     prompt: str = ""
     intent: InferredIntent
     reasons: list[str] = Field(default_factory=list)
-    brand_template_id: UUID | None = None
+    persona_id: UUID | None = None
 
 
 class ProjectBase(BaseModel):
@@ -845,12 +854,6 @@ class PersonaAssetUpdateRequest(BaseModel):
     title: str
 
 
-class BrandMediaCreateRequest(BaseModel):
-    """Confirm a directly-uploaded brand media file."""
-
-    key: str
-
-
 class ClipRevision(BaseModel):
     """Revised clip metadata returned by the reviser agent.
 
@@ -930,7 +933,7 @@ class ClipPlan(BaseModel):
     # one piece per clip. ``music_id`` is the Music row's UUID (string) — or, as a
     # robust fallback, a mood key (calm/uplifting/corporate) the orchestrator
     # resolves server-side. ``music_enabled``/``music_gain_db`` are per-clip
-    # overrides; when ``music_id`` is unset the brand template default is used.
+    # overrides; when ``music_id`` is unset the persona skin default is used.
     music_id: str | None = None
     music_enabled: bool = True
     music_gain_db: float = -18.0
@@ -942,7 +945,7 @@ class ClipPlan(BaseModel):
     # When false, the renderer skips burned-in captions (e.g., source video
     # already has hard-coded subtitles). ASR is still performed so the transcript
     # and SRT export remain available. ``None`` means the agent did not decide,
-    # so the brand template default applies.
+    # so the persona skin default applies.
     caption_enabled: bool | None = None
 
     def to_segment(self) -> Segment:
@@ -1173,8 +1176,8 @@ class ClipMusic(BaseModel):
 class GenerationContext(BaseModel):
     """Shared context passed to every content generation agent.
 
-    Assembled once per generation run from the resolved persona, brand
-    template, tone settings, project metadata, and user instruction.
+    Assembled once per generation run from the resolved persona (style +
+    brand skin), tone settings, project metadata, and user instruction.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1184,8 +1187,9 @@ class GenerationContext(BaseModel):
     tone_settings: ToneSettings | None = None
     target_language: str = "en"
     instruction: str | None = None
-    # Brand template's default music piece (Music.id as string); the Clip Agent
-    # uses this as the default unless a clip's content suggests otherwise.
+    # The persona skin block's default music piece (Music.id as string); the
+    # Clip Agent uses this as the default unless a clip's content suggests
+    # otherwise.
     brand_music_id: str | None = None
 
 
@@ -1381,8 +1385,8 @@ class IntroOutroCard(BaseModel):
 class ClipBrand(BaseModel):
     """Resolved brand values baked into the spec at generation time.
 
-    Renderer-agnostic data (no DB ref): the API resolves the latest
-    ``BrandTemplate`` config into these fields so the render service / preview
+    Renderer-agnostic data (no DB ref): the API resolves the persona's
+    ``brand`` skin block into these fields so the render service / preview
     never need DB access. ``None`` = renderer falls back to its default look.
     """
 
@@ -1394,7 +1398,7 @@ class ClipBrand(BaseModel):
     intro: IntroOutroCard | None = None  # opening card (None = no intro)
     outro: IntroOutroCard | None = None  # closing card (None = no outro)
     fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
-    # Default from brand template; Clip plan can override per clip.
+    # Default from the persona skin block; Clip plan can override per clip.
     caption_enabled: bool = True
 
 
@@ -1561,10 +1565,6 @@ class GenerateRequest(BaseModel):
             "by the intent step (fallback en)."
         ),
     )
-    brand_template_id: UUID | None = Field(
-        default=None,
-        description="Brand template to bake into clips; None = most recent.",
-    )
     # Task-book dub languages (RECIPES §4.1) — mirrored into TaskSpec and
     # run.context; None/[] = no dubbing. Requires a clips slot (422 mirror).
     dub_languages: list[str] | None = None
@@ -1680,34 +1680,6 @@ class ProjectResultsResponse(BaseModel):
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_intent: PendingIntent | None = None
-
-
-class BrandTemplateBase(BaseModel):
-    """Shared brand template fields."""
-
-    name: str
-    config: dict = Field(default_factory=dict)
-
-
-class BrandTemplateCreate(BrandTemplateBase):
-    """Create a brand template."""
-
-
-class BrandTemplateUpdate(BaseModel):
-    """Partial update of a brand template."""
-
-    name: str | None = None
-    config: dict | None = None
-
-
-class BrandTemplateResponse(BrandTemplateBase):
-    """Brand template response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    created_at: datetime
-    updated_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------

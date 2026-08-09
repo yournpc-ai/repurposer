@@ -2,7 +2,7 @@
 
 > Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/done/publish-dialog-notifications.md`；待办 = 平台应用凭据联调）
 >
-> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第 10 周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
+> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第八周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 
 ## 1. 模块职责与定位
 
@@ -184,7 +184,7 @@ created_at
 ## 8. AI 内容披露（ADR-026 落地）
 
 - `ai_disclosure` **由 clip-spec 分类器推导**（spec 含 dub 音轨 / AI 生成视觉 → `true`），不是用户勾选——用户永远不回答"这是不是 AI 生成"。
-- 文件层：合成轨道产物的 MP4 已嵌 C2PA（PROGRESS 第 10 周合规标识），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
+- 文件层：合成轨道产物的 MP4 已嵌 C2PA（PROGRESS 第八周合规标识），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
 - TikTok 端：voice-clone 内容属平台强制标记类，漏标的处罚落在用户账号上——`ai_disclosure` 徽标在**发布对话框**显式展示（个人模式）/ 机构审核页复核（机构模式）；API 披露字段是否暴露见 §14 开放问题。
 - 纯剪辑+字幕内容（真实素材标准编辑）：`ai_disclosure=false`，不嵌标、不提示（ADR-026 纯剪辑豁免）。
 

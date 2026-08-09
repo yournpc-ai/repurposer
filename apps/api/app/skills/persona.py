@@ -35,7 +35,6 @@ class _ExtractedPersonaMemory(BaseModel):
     emotional_tone: str = "rational"
     typical_hooks: list[str] = Field(default_factory=list)
     avoid_words: list[str] = Field(default_factory=list)
-    voice: str | None = None
     audience: str | None = None
     guidelines: str | None = None
     cta: str | None = None

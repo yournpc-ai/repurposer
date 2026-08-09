@@ -35,7 +35,10 @@ export interface ChatTurnBody {
     size?: number
     status: "uploaded"
   }[]
-  brand_template_id?: string
+  /** The composer's persona choice, riding the first message of a fresh
+   * project (ADR-038 — the single identity payload; the skin follows the
+   * persona). */
+  persona_id?: string
   prior_intent?: unknown
   autonomy?: string
 }

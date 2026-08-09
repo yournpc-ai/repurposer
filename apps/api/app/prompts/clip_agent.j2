@@ -116,12 +116,9 @@ Score only what you can actually judge from the content — never predict views,
 You are selecting clips for **{{ context.persona.name or "the persona" }}{% if context.persona.title %} ({{ context.persona.title }}){% endif %}**.
 Make sure the hook sounds like something this persona would actually say, and the angle serves their audience and credibility.
 
-{% if context.persona.voice or context.persona.audience or context.persona.guidelines or context.persona.cta %}
+{% if context.persona.audience or context.persona.guidelines or context.persona.cta %}
 ### Persona Memory
 
-{% if context.persona.voice %}
-- **Voice**: {{ context.persona.voice }}
-{% endif %}
 {% if context.persona.audience %}
 - **Target audience**: {{ context.persona.audience }}
 {% endif %}

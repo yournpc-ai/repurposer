@@ -17,7 +17,7 @@ import type { ChatMention } from "@/lib/mentions"
  * upload staged files (direct-to-storage) → navigate to
  * `/projects/$id?overlay=chat` with the draft handed over via router state —
  * the overlay chat sends it as the first `/chat` message (mentions and the
- * brand choice ride along).
+ * persona choice ride along — the single identity payload, ADR-038).
  *
  * Boundaries (unchanged doctrine): the launcher never infers intent, never
  * builds a prior, never runs generation — intent recognition lives in the
@@ -32,7 +32,6 @@ export interface LaunchInput {
   files: File[]
   /** undefined = auto persona. */
   personaId?: string
-  brandTemplateId?: string
   /** Fires when the send begins (spinner on). */
   onStart?: () => void
   /** Fires right before navigating — the sender consumes its own draft
@@ -138,7 +137,7 @@ export function useProjectLaunch() {
               firstMessage: {
                 text,
                 mentions: input.mentions,
-                brandTemplateId: input.brandTemplateId || undefined,
+                personaId: input.personaId || undefined,
               },
             } as Record<string, unknown>,
           })

@@ -45,10 +45,10 @@ Distill the following source text into a {{ count }}-slide carousel:
 (No style profile provided)
 {% endif %}
 
-{% if context.persona and context.persona.voice %}
-## Persona Voice
+{% if context.persona and context.persona.guidelines %}
+## Persona Guidelines
 
-- **Voice**: {{ context.persona.voice }}
+- **Content guidelines**: {{ context.persona.guidelines }}
 
 {% endif %}
 ## Source Texts

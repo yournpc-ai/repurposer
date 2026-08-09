@@ -64,7 +64,6 @@ from app.models.schemas import (
 from app.models.database import AsyncSessionLocal
 from app.models.tables import (
     Asset,
-    BrandTemplate,
     Message,
     Music,
     Output,
@@ -74,8 +73,9 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.memory.brand import (
-    brand_from_template,
+    brand_from_block,
     music_from_plan,
+    resolve_brand_block,
     resolve_music_ref,
 )
 from app.pipeline.clip_spec import build_clip_spec, remove_range
@@ -84,6 +84,7 @@ from app.platform.project_context import (
     collect_asset_texts,
     persona_context_from_row,
     resolve_persona,
+    resolve_run_persona,
 )
 from app.tools.caption_translate import translate_caption_track
 from app.tools.dubbing import synthesize_dub
@@ -600,46 +601,6 @@ def _compute_coverage(
     )
 
 
-async def _resolve_brand(
-    db: AsyncSession,
-    run: WorkflowRun,
-    project: Project,
-) -> tuple[BrandTemplate | None, str | None]:
-    """Resolve the brand template for this run + its default music piece id."""
-    ctx = run.context or {}
-    bt = None
-    bt_id = ctx.get("brand_template_id")
-    if bt_id:
-        try:
-            result = await db.execute(
-                select(BrandTemplate).where(
-                    BrandTemplate.id == UUID(str(bt_id)),
-                    BrandTemplate.user_id == project.user_id,
-                )
-            )
-            bt = result.scalar_one_or_none()
-        except (ValueError, TypeError):
-            bt = None
-    if bt is None:
-        bt = (
-            await db.execute(
-                select(BrandTemplate)
-                .where(BrandTemplate.user_id == project.user_id)
-                .order_by(BrandTemplate.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-    brand_music_id: str | None = None
-    if bt is not None:
-        bt_cfg: dict[str, Any] = bt.config or {}
-        brand_piece = await resolve_music_ref(
-            db, bt_cfg.get("musicId") or bt_cfg.get("musicMood")
-        )
-        brand_music_id = str(brand_piece.id) if brand_piece is not None else None
-    return bt, brand_music_id
-
-
 # ---------------------------------------------------------------------------
 # Node runners
 # ---------------------------------------------------------------------------
@@ -708,10 +669,11 @@ async def run_persona_bootstrap(
         emotional_tone=memory.emotional_tone or "rational",
         typical_hooks=memory.typical_hooks or [],
         avoid_words=memory.avoid_words or [],
-        voice=_truncate(memory.voice, 255),
         audience=_truncate(memory.audience, 255),
         guidelines=memory.guidelines,
         cta=_truncate(memory.cta, 512),
+        # System-bootstrap marker (the is_default replacement, ADR-038 §6).
+        auto_created_at=datetime.now(UTC),
     )
     db.add(persona)
     await db.flush()
@@ -1050,8 +1012,8 @@ async def run_clips_pipeline(
 
     asset_texts = await collect_asset_texts(db, project.id)
     assets = await _list_assets(db, project.id)
-    persona = await resolve_persona(db, project)
-    bt, brand_music_id = await _resolve_brand(db, run, project)
+    persona = await resolve_run_persona(db, run, project)
+    brand_cfg, brand_music_id = await resolve_brand_block(db, persona)
     generation_context = _generation_context(
         run, project, persona, brand_music_id=brand_music_id
     )
@@ -1197,9 +1159,9 @@ async def run_clips_pipeline(
             delete(Output).where(Output.id.in_(prior_clip_ids))
         )
 
-    brand = brand_from_template(bt.config) if bt is not None else None
-    brand_ref = bt.id if bt is not None else None
-    cfg = (bt.config or {}) if bt is not None else {}
+    brand = brand_from_block(brand_cfg)
+    brand_ref = persona.id if persona is not None else None
+    cfg = brand_cfg
     aspect = str(cfg.get("aspect", "9:16"))
     cap_pos = cfg.get("captionPosition")
     cap_style_raw = cfg.get("captionStylePreset")
@@ -1213,14 +1175,13 @@ async def run_clips_pipeline(
     output_ids: list[UUID] = []
     for plan in plans.clips[:clip_count]:
         segment = plan.to_segment()
-        music = await music_from_plan(db, plan, bt.config if bt else None)
+        music = await music_from_plan(db, plan, brand_cfg)
         # Clip agent decides whether burned-in captions make sense for this segment;
-        # the brand template only supplies the default.
-        brand_caption_enabled = brand.caption_enabled if brand is not None else True
+        # the skin block only supplies the default.
         caption_enabled = (
             plan.caption_enabled
             if getattr(plan, "caption_enabled", None) is not None
-            else brand_caption_enabled
+            else brand.caption_enabled
         )
         spec = (
             build_clip_spec(
@@ -1729,21 +1690,15 @@ async def run_add_music(
     music_id = node.spec.get("music_id")
     gain_db = node.spec.get("gain_db")
 
-    # Resolution order (all by code, never the LLM): music_id → mood → brand
-    # default → "calm"; each unresolvable ref falls through to the next. Only
-    # a fully unresolvable chain fails the step (CHAT_ARCH §10: clear error).
+    # Resolution order (all by code, never the LLM): music_id → mood →
+    # persona skin default → "calm"; each unresolvable ref falls through to
+    # the next. Only a fully unresolvable chain fails the step (CHAT_ARCH
+    # §10: clear error).
     brand_default: Any = None
     if not music_id and not mood and project.persona_id is not None:
-        bt = (
-            await db.execute(
-                select(BrandTemplate).where(BrandTemplate.user_id == project.user_id)
-            )
-        ).scalars().first()
-        brand_default = (
-            (bt.config or {}).get("musicId") or (bt.config or {}).get("musicMood")
-            if bt
-            else None
-        )
+        persona = await resolve_persona(db, project)
+        block = (persona.brand or {}) if persona is not None else {}
+        brand_default = block.get("musicId") or block.get("musicMood")
 
     track = None
     for ref in (music_id, mood, brand_default, "calm"):

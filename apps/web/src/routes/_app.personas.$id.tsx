@@ -47,7 +47,6 @@ interface Persona {
   emotional_tone: "rational" | "passionate" | "gentle" | "sharp" | "humorous"
   typical_hooks: string[]
   avoid_words: string[]
-  voice: string | null
   audience: string | null
   guidelines: string | null
   cta: string | null
@@ -95,7 +94,6 @@ function PersonaDetailPage() {
   const [emotionalTone, setEmotionalTone] = useState<Persona["emotional_tone"]>("rational")
   const [typicalHooks, setTypicalHooks] = useState("")
   const [avoidWords, setAvoidWords] = useState("")
-  const [voice, setVoice] = useState("")
   const [audience, setAudience] = useState("")
   const [guidelines, setGuidelines] = useState("")
   const [cta, setCta] = useState("")
@@ -122,7 +120,6 @@ function PersonaDetailPage() {
       setEmotionalTone(personaData.emotional_tone)
       setTypicalHooks(personaData.typical_hooks.join("\n"))
       setAvoidWords(personaData.avoid_words.join("\n"))
-      setVoice(personaData.voice || "")
       setAudience(personaData.audience || "")
       setGuidelines(personaData.guidelines || "")
       setCta(personaData.cta || "")
@@ -155,7 +152,6 @@ function PersonaDetailPage() {
           emotional_tone: emotionalTone,
           typical_hooks: typicalHooks.split("\n").filter((s) => s.trim()),
           avoid_words: avoidWords.split("\n").filter((s) => s.trim()),
-          voice: voice || null,
           audience: audience || null,
           guidelines: guidelines || null,
           cta: cta || null,
@@ -183,7 +179,6 @@ function PersonaDetailPage() {
       setEmotionalTone(data.emotional_tone)
       setTypicalHooks(data.typical_hooks.join("\n"))
       setAvoidWords(data.avoid_words.join("\n"))
-      setVoice(data.voice || "")
       setAudience(data.audience || "")
       setGuidelines(data.guidelines || "")
       setCta(data.cta || "")
@@ -399,25 +394,14 @@ function PersonaDetailPage() {
                     </CardDescription>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="voice">{t("personaDetail.voice")}</Label>
-                      <Input
-                        id="voice"
-                        value={voice}
-                        onChange={(e) => setVoice(e.target.value)}
-                        placeholder={t("personaDetail.voicePlaceholder")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="audience">{t("personaDetail.audience")}</Label>
-                      <Input
-                        id="audience"
-                        value={audience}
-                        onChange={(e) => setAudience(e.target.value)}
-                        placeholder={t("personaDetail.audiencePlaceholder")}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="audience">{t("personaDetail.audience")}</Label>
+                    <Input
+                      id="audience"
+                      value={audience}
+                      onChange={(e) => setAudience(e.target.value)}
+                      placeholder={t("personaDetail.audiencePlaceholder")}
+                    />
                   </div>
 
                   <div className="space-y-2">

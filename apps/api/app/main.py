@@ -16,8 +16,7 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal, init_db
 from app.chat.routes import chat_router
 from app.distribution.routes import router as distribution_router
-from app.memory.brand import seed_default_brand_template
-from app.memory.routes import brand_templates_router, personas_router
+from app.memory.routes import personas_router
 from app.pipeline.music import seed_default_music
 from app.pipeline.registry import assert_runners_registered
 from app.pipeline.routes import (
@@ -42,7 +41,6 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     assert_runners_registered()
     await init_db()
-    await seed_default_brand_template()
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
     yield
@@ -220,9 +218,6 @@ app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operation
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
 app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
-app.include_router(
-    brand_templates_router, prefix="/api/v1/brand-templates", tags=["brand-templates"]
-)
 # Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
 # resource, not the module — DISTRIBUTION.md §1.1)
 app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])

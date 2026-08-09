@@ -25,7 +25,8 @@ export interface PersonaPickerEntry {
   sentence_style?: string | null
   emotional_tone?: "rational" | "passionate" | "gentle" | "sharp" | "humorous" | null
   core_values?: string[]
-  voice?: string | null
+  /** Voice block (audio): {"kind":"cloned"|"stock", ...} — null = Auto. */
+  voice?: { kind?: string } | null
 }
 
 interface PersonaPickerModalProps {
