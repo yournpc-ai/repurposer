@@ -81,7 +81,7 @@
 | 08-05 | "文字稿+照片生成视频"卡**提前点亮**（三卡定格提前启动）：`align_stills` 注册项上线——无录音时文字稿按阅读节奏生成词级字幕时间轴，与 ASR 词轴同构、下游零改动；照片轮播 + 字幕（堆叠等样式）+ 配乐成片，e2e 真实管线验收通过；卡片 Remix 开口放开（配方=预设不定死：存在性填充播种 + `merge_prior_slots` 三方合并——面板手改槽逐字段存活，chat 修订永远赢）；贴文即素材升格为真 transcript 资产、无米反问安全带；任务书版本条（旧版 chip 只读快照一键恢复）；剧本 harness 全绿（S12–S16 新增）；**迷失用户横切剧本 S17–S22 落地**（迷失是状态不是类别——散入路由/咨询/修订/边界/配方/素材六族，锁定当前契约：不死路/不裸跑/书存活，W4 顾问姿态断言钩子埋好）；stacking 字幕与标题的渲染碰撞修复（双端一致） |
 | 08-06 | 视觉语言二次校准（双主题参考集对齐，token 单点收口）：dark 改**近黑画布** + 玻璃浮层降透明（68% + blur 28px）、全 app hover 统一白纱（`--accent` 半透明，骑缝元素实心提亮为例外）、inset 井反转（比面板更深）；light 改**纯白画布** + 玻璃 92%，弹窗遮罩分主题（light 白纱洗白 / dark 黑 30%）；文字三档制（新增 meta 大写字距档）；composer 硬编码色全部收编进变量层；修复 scroll-fade 死类复活导致附件 chip 左右溶解；border/shadow 互斥裁定修订为"发丝线可与软阴影共存，可见描边不行" ｜ 剧本 harness 扩编 S23–S40：dock 生命周期（bail 回 draft 可重开 / autonomy 透传 run.context / 一行一答 409 / pending_question 待决重建 / QA 入档 superseded+start 标记 / 无配方 clips 无媒体 / count 边界 422 / attachment-only 持久化）+ 四态实分派首覆盖（task_list 起新 run / edit_ops 落 operations 行 / 进度询问 answer / 元信息导航 / asset scope 永不进 plan path）+ checkpoint 全家首覆盖（三答法+空白不答 / bail 级联 / supersede 级联 / 过期扫描 / task_book 不参与 autoResume）；G-7 当日登记即修：短贴文（~25 词开场白式）零素材首轮曾被判非素材→反问死循环（S21 fixture 3/3 复现，根因=PlanAgent 上下文真空——answer 轮后每条消息在真空里判，看不见"上一轮刚被要素材"）；修法=recent 对话注入（`_plan_turn` 传最近 5 轮原文，`infer` 加 "Recent conversation" 段，只喂上下文不加倾向规则——素材/请求判定归 LLM 凭语境完成，同 presented_plan 硬化先例），S21 fixture 保持 25 词短贴文作回归 |
 | 08-06 | **结果工作面立项 + 配方=数据定案 + 闭环链重排**（用户拍板，产品决策行）：六屏形态定案——终态不跳转（run 收官就地落结果网格，无 toast 关窗）、中央区状态机（进度网格 → 结果网格 ⇄ 舞台+检视器）、流=档案/网格=当前/舞台=焦点、双 modal（ClipDetailModal/ChatModal）退役、配方检视 overlay（只读详情+静态流程图节，Remix 回填 composer，否决自带生成按钮的表单 modal）；**DAG 用户化三切**（ADR-035）：静态配方流程图=采纳、可操作画布=永久拒绝、运行期活图=spike+小白复述测试 09-03 裁决；**配方 = base+flow+prompt+example_assets+example_outputs 一个数据包**（RECIPES §7.1 统一 schema；风格卡撤座沉 look 层，卡面立项门槛 = 一道具体的菜）；排期 = **闭环链 08-07~09-04 连续攻坚**（dub 全程载体：schema → dub 实例 → overlay → composer 回填 → 结果网格 → 终态不跳转 → 工作面 → 三档重跑），原分镜/生成产物线后移为"扩展配方类型"行（分镜压缩 1 周 ⚠️），纵览收口 8 行，go/no-go 保 **10-23**（回退 10-30）（简报 `tasks/results-workspace.md`） |
-| 08-09 | **人设模块第一刀：全栈改名迁移落地**（speakers→personas，存量数据平移，用户行为零变化——详见插入周表本日行）；**配方检视 overlay v3 定稿**（D6 二次修订收口）：左发射区去灰底全玻璃化 + 预填 prompt 常显可改 + 预设镜像 chips 撤除（预填文案即预设的可见面）+ 每卡一句大白话上传文案（"上传你的原视频"）+ 发送按钮直给"生成"；右区满幅画布（light 白纸 / dark inset 井 + 点阵提亮，tabs 浮于画布之上）；外壳收编 Dialog 组件族——修掉两条手写 chrome 的坑：遮罩当父级触发 Backdrop Root 吞掉面板 blur（退化成纯染色）、`DialogContent` 的 translate 居中会瞬移 MentionPicker（改 `inset-0 m-auto` 零变换组合），规则已入 CLAUDE.md 浮层节 |
+| 08-09 | **人设模块第一刀：全栈改名迁移落地**（speakers→personas 全栈：数据表/端点/前端路由/文案/存储前缀，存量数据自动平移、用户行为零变化；从首页一句话到生成完成全链路实测通过）；**配方检视 overlay v3 定稿**（D6 二次修订收口）：左发射区去灰底全玻璃化 + 预填 prompt 常显可改 + 预设镜像 chips 撤除（预填文案即预设的可见面）+ 每卡一句大白话上传文案（"上传你的原视频"）+ 发送按钮直给"生成"；右区满幅画布（light 白纸 / dark inset 井 + 点阵提亮，tabs 浮于画布之上）；外壳收编 Dialog 组件族——修掉两条手写 chrome 的坑：遮罩当父级触发 Backdrop Root 吞掉面板 blur（退化成纯染色）、`DialogContent` 的 translate 居中会瞬移 MentionPicker（改 `inset-0 m-auto` 零变换组合），规则已入 CLAUDE.md 浮层节 |
 | 08-10 | **人设模块第二刀落地：新 schema 五列 + 皮肤吸收**（brand_templates 退役，详见插入周表本日行）；**排查出渲染链环境回归（非本刀引入，已复绿）**：存量渲染回归首跑 500——根因 = 本机直连 TOS 桶被限速至 ~110 KB/s（经系统代理 8.8 MB/s 对照），Remotion 内部 asset proxy 的服务端 fetch 不走系统代理 → 取帧超 180s delayRender 超时；同视频本地托管同参数渲染 120 帧全绿、最小 spec 复现锁定；修法 = 渲染服务进程带 `HTTPS_PROXY=127.0.0.1:6152` 重启，demo clip 与 dev clip 双双重渲染 COMPLETED。教训：渲染回归失败先量源站链路速度（直连 vs 代理），再怀疑 spec 契约 |
 | 08-08 | **配方入口分工定案 + D6 二次修订（用户拍板，ElevenCreative 配方 modal 证据）**：**composer = 通用 / 多种 / 复杂 / 自定义提示词的组合式需求入口；配方卡 = 预设快捷需求入口**——两入口共用同一发射机构与同一 chat 主线。overlay = **检视 tabs + 发射区**（左区：上传暂存为主角 + 产出预设 chips 可见 + 收起态可编辑预填 prompt + 发送；右区 tabs：示例 = 输出/输入平铺卡（自动播放单张发声） / 流程 = 唯一图画布（素材→步骤→成片一张图，图只画一次——ElevenCreative 证据），单屏不滚动，手风琴退役）；**发射区 = composer 发送机构挂载**（useProjectLaunch 共享 hook，同一发射台第二停放位）——overlay 零推断 / 零 prior / 零生成，A 形态否决精确化为"禁 modal 直接跑 run"，发射机构位置解禁；**两跳删除**（Remix 回填 composer 折返退役）；**修改通道定案**：预设参数永不做选择器控件（禁令 #15），预设可见 = chips，修改唯一入口 = 预填文本 / chat（chat 恒胜）；需求池登记"使用示例跑一遍"（demo 素材试跑，增长向） |
 | 08-07 | dub 生产级（上）音画对齐落地 + **dub 对照数据包烘完**（同一片段 EN 原声 + ZH/FR/ES 对齐配音四片 + 共享 poster，`scripts/bake_dub_contrast.py` 一条命令重烘，内容寻址入 demo/ 桶；配方 dub_languages 预设随展示包对齐 zh/fr/es）；**Flow 基座定案（用户拍板，ADR-036）**：只读图渲染扶正为共享能力 **FlowView**——原话"先只暴露只读图，但该连线的连线、该有的节点是节点；只能通过 chat 修改，不变"——配方扇出 / run 进度图 / 家族视图 / 血缘板四面共用一支画笔，组件无 drag/connect/pan/zoom API（只读结构性执行）；**run 进度图升正排产**（单 run 拓扑编译期定死 = 死图+状态动画，修订 ADR-035 第 3 条，取代"进度网格"）、**spike 收窄为项目全史血缘板**（09-03 复述测试照跑）；overlay 规格修订 = 扇出主视觉（对照包四片同屏，tabs 退役）+ FlowStrip（flow 字段图渲染，fanout 展开） |
@@ -99,7 +99,7 @@
 | 周 | 内容 | 里程碑（周五） |
 |---|---|---|
 | 第一周 | 意图层单面化（chat 唯一入口）✅ + Recipe 数据 schema ✅（08-07） | 意图层单面化落地 |
-| **第二周（08-09~08-14）** | **三线并行收口**：人设模块（ADR-037/038）+ 架构迭代（ADR-039）+ 闭环链（配方卡完全通路；轨 A 顾问姿态同周合流） | 人设落地 + 架构内核规范化 + dub 完全通路 |
+| **第二周（08-09~08-14）** | **人设模块 + 架构规范化 + 配方卡闭环链**（同周收口） | 人设落地 + dub 配方完全通路 + 开发地基规范化 |
 | 第三周 | 扩展配方类型：分镜剪辑（⚠️ 含说话人识别调研 spike；回退吃第四周缓冲） | 三卡齐亮 |
 | 第四周 | 扩展配方类型：AI 虚拟画面（上）——声纹打磨（听调反复）+ R5 生成管线 | — |
 | 第五周 | 扩展配方类型：AI 虚拟画面（下）——Memory 一致性 + 门禁 v2 + R5 卡 | 生成产物线就绪（四卡齐亮） |
@@ -108,7 +108,7 @@
 | 第八周 | 双平台联调 + AI 内容标识（含 C2PA 选型调研）+ 披露 | 分发 + 合规就绪 |
 | 第九周 | 法务落地 + SEO + 监控 / 邮件 + 全周期验收 | 上线 go/no-go 评估材料（10-02） |
 
-> **闭环优先于卡片数量（2026-08-05 拍板）**：配方卡全部点亮但不闭环时，期中汇报只能说"还没跑通"；先立闭环——闭环链于第二周收口，dub 为全程载体卡；此后每张新卡 = 一行"扩展配方类型"，上线即落入既有通路——叙事从"补窟窿"变成"扩展通路"。哲学论证 → STRATEGY §5；行为规格 → CHAT_ARCH §3.3；形态裁决 → ADR-035，简报 `tasks/results-workspace.md`；配方数据 schema → RECIPES §7.1。分镜压缩 1 周 ⚠️，回退则 go/no-go 移至 10-09。闭环链全部图面由 **FlowView 只读图基座**渲染（ADR-036）——overlay 扇出主视觉 / run 进度图 / 家族视图 / 血缘板（spike），chat 唯一修改通道不变；并直接消费架构迭代红利（ADR-039）：RunFlowGraph 节点友好名 = `NodeBase.label` 派生，配方 overlay 吃 flow 对账机械化。
+> **闭环优先于卡片数量（2026-08-05 拍板）**：配方卡全部点亮但不闭环时，期中汇报只能说"还没跑通"；先立闭环——闭环链于第二周收口，dub 为全程载体卡；此后每张新卡 = 一行"扩展配方类型"，上线即落入既有通路——叙事从"补窟窿"变成"扩展通路"。哲学论证 → STRATEGY §5；行为规格 → CHAT_ARCH §3.3；形态裁决 → ADR-035，简报 `tasks/results-workspace.md`；配方数据 schema → RECIPES §7.1。分镜压缩 1 周 ⚠️，回退则 go/no-go 移至 10-09。闭环链全部图面由 **FlowView 只读图基座**渲染（ADR-036）——overlay 扇出主视觉 / run 进度图 / 家族视图 / 血缘板（spike），chat 唯一修改通道不变；并直接消费架构迭代红利（ADR-039）：进度图节点自动获得友好名，配方卡的流程图与真实执行自动核对、图不骗人。
 
 **外部因素（需按期启动）**：LinkedIn / TikTok 开发者权限（暂缓，时间未定——2026-08-05 拍板；第八周联调排期届时按实际申请时间重排）；支付商入驻申请（08-14 前提交，审批周期数周——第七周支付接入前提 ⚠️）；律师法务联系（08-24 前启动，周期 2–4 周——第九周法务落地前提）。术语表、管理后台、帮助中心等最后项按需再考虑。
 
@@ -124,38 +124,18 @@
 | 四 08-06 | 缓冲 + **结果工作面立项 / 配方=数据定案 / 闭环链重排**（见 §1.3 本日行，docs 已落） | 排期重心收拢到闭环链：磨刀优先 |
 | 五 08-07 | W1 验收 🎯 **意图层单面化落地** + Recipe 数据 schema 落码 ✅（08-06 提前完成，公开投影已在发）+ ✅ **dub 生产级（上）：音画对齐落地**——逐翻译单元合成（~10 词）+ 解码测时长 + 窗口内 provider 语速二遍微调（≤1.35×，无变调）+ 按 cue 起点 PCM 拼接（**clip 时间轴**放置：源时刻经 segments 映射，源 37.7s 起点的片段 dub 从 t≈0 出声）；字幕翻译注入人设（sentence_style/emotional_tone/avoid_words → style_hint）；真片实测：13s 片段 × 德语，5 单元全调速，dub 14.4s 包络对齐无漂移（free-running 整段合成退役） | 首页成为可上手体验的能力陈列窗；配音跟得上字幕，不再越到后面漂得越远 |
 
-### 第二周（08-09 ~ 08-14）：三线并行收口——人设模块 + 架构迭代 + 闭环链
+### 第二周（08-09 ~ 08-14）：人设模块 + 架构规范化 + 配方卡闭环链
 
-> **2026-08-10 拍板**：架构迭代（ADR-039）与配方卡闭环链按实测节奏并入本周，与人设模块三线并行；意图层收尾（轨 A 顾问姿态）随闭环链同周合流；周五 08-14 联合验收。施工依据：ADR-037/038 + 简报 `tasks/persona-identity.md`；ADR-039 + NAMING N-29~N-35；ADR-035/036 + 简报 `tasks/results-workspace.md`。铁律不变：行为零变化，剧本 harness（S1–S40）为回归网；改 pipeline 代码必重启常驻 worker。
-
-**轨一 · 人设模块（ADR-037/038）**
+> **2026-08-10 拍板**：架构迭代（ADR-039）与配方卡闭环链按实测节奏并入本周，与人设模块同周收口；意图层收尾（顾问姿态）随闭环链合流；周五 08-14 联合验收。施工依据：ADR-037/038 + 简报 `tasks/persona-identity.md`；ADR-039 + NAMING N-29~N-35 + 简报 `tasks/arch-overhaul.md`（立项时落）；ADR-035/036 + 简报 `tasks/results-workspace.md`。铁律不变：行为零变化，剧本 harness（S1–S40）为回归网；改 pipeline 代码必重启常驻 worker。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 日 08-09 | ✅ **第一刀：全栈改名迁移**（`speakers`→`personas`：Alembic 表/两 FK 列改名（存量 10 行平移）/ 端点 `/personas`（旧 `/speakers` 已 404）/ schemas / 前端路由 `/personas` / i18n / 9 个 j2 变量与身份散文 / composer 人设块 / `PersonaPickerModal` / 存储前缀 `personas/`；`persona_bootstrap` 节点 type 不动）+ MODULE/AGENT_ARCHITECTURE、API.md、CLAUDE.md 同步 + NAMING §2 词汇表登记「人设 / Persona」。**E2E 实链验收**：composer 发送 → chat 定计划（贴文升格 transcript 资产、文本输入正确排除 clips）→ confirm → create_run → `persona_bootstrap` 自动建人设（LLM 真实抽取风格六件）→ director → post_gen 全绿，run completed；`/personas` CRUD + `?persona_id=` 筛选 200；dub 改名面（Persona 解析 / style_hint / 字幕翻译 / clone）实跑通过，末段 TTS 被 MiniMax 余额耗尽（402）阻断——非改名回归；验收数据已清零 | 全库无"speaker 指代用户身份"残留（`speaker` 仅余素材说话人语义：speaker_map/filler/镜头跟随）；用户行为零变化 |
-| 一 08-10 | 新五列（`voice`/`brand`/`learned_from`/`calibrated_at`/`auto_created_at`）+ **皮肤吸收**：`brand_templates` 退役（config 三分流）+ 烘焙改读 `persona.brand` + composer Brand pill 退役 + 启动种子模板退役 | 皮肤跟着人设走，composer 只剩一个身份控件 |
-| 二 08-11 | **`voice` 缓存落地** + `STOCK_VOICES` 系统音色注册表 + 试听 + dub 声纹优先级链（人设缓存 → VOICE_SAMPLE → AUDIO/VIDEO → 系统默认）。**随本行必修（08-09 E2E 暴露的既有坑）**：`clone_voice` 不查 MiniMax `base_resp`（voice_clone 业务失败如 `2037 时长超限` 被静默吞掉，返回不可用 voice_id → T2A `2054`）；VIDEO 声样整段送 clone 超 provider 限长——缓存落地前先修 base_resp 校验 + clone 前音频裁剪。**auto 生成收窄（08-10 用户拍板，与本行同做）**：bootstrap 提前退出从"项目已挂载"扩到全默认解析链（用户已有旧人设 → 直接复用，不再每个新项目都 auto 一个）；意图门禁——纯 morph 需求（dub/翻译/去口头禅/配乐）不起 persona 节点、不生成人设（mode② 已按 `needs_director` 门禁，本行补 mode① 的 `needs_persona` 判定 + 全库走查 persona=None 路径不崩：director 模板 guard、dub 走声纹链 fallback、烘焙默认皮肤）。**过渡清创（随本行）**：sidebar 撤 Brand template 项 + `/brand-template` 重定向 `/personas`（五分区正式并入仍属 08-12） | 克隆过的声音换项目直接复用；没录过声音选系统音色也能出片；人设不再按项目繁殖 |
-| 三 08-12 | **人设页（显化）**：身份卡 + 风格（"它眼中的你"，含 `learned_from` 来源说明）+ 策略 + 声音 + 皮肤分区（实时预览迁入）；`/speakers`、`/brand-template` 并入，sidebar 收敛单「人设」项 | 用户能看到并调整"AI 眼中的自己"：风格、受众、声音、皮肤一页收齐 |
-| 四 08-13 | **触点入口**（composer 人设块 hover 摘要 / chat identity echo 变链接）+ **本人含量门禁 v1**（非本人素材不提取人设）+ 全链路回归 | 产物"不像我"时一眼找到维修点；多人会议素材不污染人设 |
-
-**轨二 · 架构迭代（ADR-039，行为零变化）**
-
-| 块 | 交付 | 验收口径 |
-|---|---|---|
-| P1 模块归位 | **模块四分骨架**：`app/agents/` 建立 + 违规工序归位（`tools/caption_translate` → `skills/captions/`、`tools/dubbing` 拆分——cue 对齐合成留纯机械，翻译编排进 `skills/dub/`）+ import 全量修正 + "tools/ 禁 import agents/LLM client" grep 门禁 + **技能包骨架**（节点+params+私有工序+展示键）+ 10 个 `xxx_agent` 类归位 `agents/` 花名册 | 四分落地，全库无 tools→agents 反向 import；e2e 回归（dub 配方全程 + 剧本 harness 全绿）实锤行为零变化 |
-| P2 节点对象化 | **NodeBase 协议** + 17 节点类收编（run/requires/label/reuse/retries/after/output_type 入类；`_validate_requires` 字符串匹配、`_SLOT_TYPE_LABEL`、asset-hash 特判归位节点方法）+ **kind 与技能名统一**（alembic 数据迁移；`SkillEntry.node_kind` 退役）+ orchestrator 图算法化（`_OUTPUT_TO_NODE_KIND`/`_SKILL_TO_OUTPUT`/`KNOWN_OUTPUTS`/`retries_for_node_kind` 全部改注册表/节点类派生）+ **outputs 注册表派生**（`IntentSlot.type` Literal 退役；`SLOT_DEFAULT_COUNT`/`SLOT_COUNT_LIMITS` 住注册项；PlanAgent prompt 能力清单注入）+ **配方 flow 对账机械化**（compile_graph 纯函数编译配方 → flow keys ⊆ 图 kind 集，启动自检） | 节点知识一个家；"加一个产物改 6 处"成为历史；配方展示图与真实编译图永不漂移 |
-| P3 harness 漏斗 | **Agent 基类漏斗**（装配→渲染→调用→校验→计量→声明兜底）+ 全员迁移声明实例 + 流式子类收编（chat intent 唯一特殊形态）+ **repair 全员化**（schema 校验失败 → 错误结构化回显 → 一轮自修复，盲重试退役）+ **兜底声明化**（默认禁，显式声明）+ **纯度签名化**（understand 签名无 persona 参数）+ `contexts.py` 归 loop 层 | `/agents` 只剩基类+花名册+流式三个文件；harness 一个漏斗；剧本 harness 加"repair 只一轮"断言 |
-| P4 估价地基 | 逐节点 `estimate()`（机械精确价 + agent token 区间）+ `workflow_steps.estimate` 增量列（计划侧，与 `cost` 账簿侧对称）；用户可见报价（dock 总价 / chat 单价 / 配方卡估价贴）随第六周成本统计汇合呈现 | 生成前报价有技术地基 |
-
-**轨三 · 闭环链（配方卡完全通路；简报 `tasks/results-workspace.md`）**
-
-| 块 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 收口 | image-video example_assets 补齐（策展照片集 + 文字稿入 demo/ 桶）+ **观感敢发验收**（成片逐条看听）+ dub 入口链全通走查（点卡 → overlay 发射区上传发送 → chat 接住首发 → 播种 → 审阅面板）+ `StepResponse.inputs` 下发 + `run.context.recipe_id` 穿线 + `RunFlowGraph` 适配器（steps → nodes/edges，节点友好名 = `NodeBase.label` 派生，直接吃轨二红利） | 点卡到进对话全程无断点；run 拓扑数据进前端 |
-| 中 | **run 进度图**挂载进度态（SSE 状态动画逐节点亮起，dub×3 扇出同屏可见；打勾流保留为线性旁白）+ 结果网格重构（类型分段 / 分数与理由卡面可见 / 动作抬出一级 / 失败空态带下一步 / 批次级 chips 确定性派生）+ **终态不跳转**（run 收官就地落结果网格，无 toast 关窗）+ 成功定义对照呈现（轨 A schema 同周合流） | 生成完不被弹走，原地看到结果与"什么叫成了" |
-| 下 | **工作面**：chat 列提为页面区域（GenerationOverlay 拆壳，消息机器原样）+ 中央区状态机（进度图 → 结果网格 ⇄ 舞台）+ 舞台五类型渲染器 + 检视器 + ClipDetailModal·ChatModal 退役 + **lineage 端点** + 舞台**家族视图**（一跳血缘邻里）+ 舞台指出升级（transcript 行点选 → 指认）+ 文字类舞台直编（落 operations）+ asset scope 退役（焦点产物上下文注入）+ Before/After 对照 | Remix → 对话定计划 → 进度图 → 结果网格 → 舞台精修，全程一面 |
-| 末 | **三档重跑**（单节点 / 子图 / 参数调整）+ 对话接线（系统选执行深度，用户只听代价）+ **图节点点击 → `@workflow_step` mention 落 chat** + 剪辑器撤销/重做按钮收尾 + **血缘板 spike**（项目全史产物血缘，FlowView 只读）+ 小白复述测试 + **血缘板 go/no-go 裁决**（ADR-035/036）+ **轨 A 合流**：成功定义 schema + PlanAgent 顾问姿态（诊断一轮封顶 / 带理由纠偏 / 配方推荐）+ S17–S22 断言升级 | 改产物又快又可控；点图上的节点等于指认它；裁决落档 |
-| 五 08-14 | 【联合验收】🎯 **人设落地 + 架构内核规范化 + dub 完全通路** | 点卡 → overlay 检视+发射 → 对话定计划 → 生成（进度图）→ 网格知下一步 → chat/舞台精修 → 部分重跑，全程无断点；加技能 = 加包，加 agent = 加声明 |
+| 日 08-09 | ✅ 人设地基切换：全库身份概念从"讲者"统一为"人设"，存量数据自动平移，从首页一句话到生成完成全链路实测通过；同日配方卡详情窗定稿（左侧上传与发送、右侧成片示例与制作流程图） | 老用户数据与功能零变化；点任意配方卡能看清"需要什么素材、做出什么样、它是怎么做的" |
+| 一 08-10 | 品牌设置并入人设：字体、颜色、logo、字幕样式从此跟随人设，"品牌模板"概念退役，首页身份选择收敛为一个控件；图片视频卡的示例素材入库，"点卡 → 上传 → 发送 → 对话接住"入口链全程走查。架构规范化动工：各项能力（剪辑/配音/字幕/配乐……）开始归拢为独立的"技能包" | 设置风格只剩一个去处，首页少一个控件；从点卡到进对话全程无断点。对交付速度：此后新增一种内容形态 = 加一个技能包，这是"每周一张新卡"的前提 |
+| 二 08-11 | 声纹进人设长期保存：克隆一次、所有项目复用；没录过音的用户可选系统音色直接出片；人设自动生成收窄——已有人设直接复用，纯配音/翻译类任务不再触发人设提取；侧栏撤下"品牌模板"入口 | 克隆过的声音换项目直接用，省去重复克隆的费用和等待；没录音也能出片；人设列表不会被自动新建塞满；纯配音/翻译任务更快更便宜 |
+| 三 08-12 | **人设页上线**：身份卡、"它眼中的你"（AI 学到的写作风格、口头禅、受众与表达禁区，附来源说明）、声音、皮肤一页收齐、逐项可改，原讲者页与品牌模板页并入。生成体验升级：进度从打勾列表变为**实时流程图**（逐步点亮，能看见"它正在怎么做"）；生成完成不再弹窗关窗，结果原地落位——每条带推荐分与理由，并给出下一步 | 用户第一次能看见并修正"AI 眼中的自己"；生成过程看得见、结果不消失；哪条最值得先发一目了然；做完知道下一步是什么 |
+| 四 08-13 | 人设触点贯通：首页人设块悬停看摘要、对话里点击直达人设页；**本人含量门禁**——多人会议素材不会把别人的说话风格学进你的人设。项目页重构为**工作面**：左侧对话、中间结果与大预览、右侧详情与操作，弹窗接力退役，修改可对照前后效果。架构收尾：所有 AI 调用统一经过"校验 + 自动修复一轮 + 记账"流水线，每个生成步骤自带估价 | 人设处处可达且始终是同一个；多人素材不污染人设；精修不再弹窗来回跳——对话、结果、详情同屏完成，改完能对照；AI 输出出错能自动修一轮，生成更稳；"生成前显示价格"有了技术地基 |
+| 五 08-14 | **部分重做上线**：不满意只重跑那一步（重新选段 / 只重渲染），不必整片重来；点进度图上的节点即可在对话里指认它；编辑器补齐撤销/重做。**顾问姿态**：AI 只问用户能答的问题（听众/目的）、不合适的需求给替代方案而非静默拒绝、随任务书说清"什么叫做好了"。"它是怎么做的"血缘图经小白复述测试后裁决去留。【联合验收】🎯 | 改产物又快又省钱：对话改、手动改、部分重做都行；全程一次走通——点卡 → 上传发送 → 对话定计划 → 看图生成 → 原地出结果 → 知道下一步 → 精修 |
 
 ### 第三周（08-17 ~ 08-21）：扩展配方类型：分镜剪辑
 
