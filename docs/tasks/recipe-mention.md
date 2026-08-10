@@ -96,7 +96,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 3. **× 即纯化**：删 chip 后本次发送不带任何钉——无残留、无隐式状态。
 
 - 组件：`MentionChip`（chip 本体）、`MentionPicker`（@ 触发的 Popover 候选列表，键盘导航；overlay-surface 纪律）——两组件只读 `MENTION_REGISTRY`，composer 与 chat 输入共用。
-- **点卡 = 插入 mention**：`RecipeCard` 的 Remix 按钮 → 往 composer 插入 `{type:"recipe", id, label}` chip + `promptTemplate` 文本预填（纯文本预填，可见可改，不是状态）；与 @ 手选同一终点。`RECIPE_REMIX_ENABLED` 闸与全部 parked 机械删除（§1 清单）。
+- **点卡 = 检视 overlay**（2026-08-10 修订）：`RecipeCard` 的本体点击与 hover Remix 按钮同开配方检视 overlay，chip + `promptTemplate` 预填由 overlay 发射区携带（纯文本预填，可见可改，不是状态）；composer 回填路径退役，composer 侧只留 @ 手选——同一 mention、同一终点。`RECIPE_REMIX_ENABLED` 闸与全部 parked 机械删除（§1 清单）。
 - chat 输入：同一 chip + picker；发送走既有 `ChatRequest.mentions`；用户消息泡渲染 mention chip 行（持久化记录，刷新可重放）。
 - 发送后：composer 路径 → `?overlay=intent` 审阅面板（逐槽行确定性呈现承诺）→ Start → 打勾流；chat 路径 → task_book dock → Start → 打勾流。**两表面共用确认面与打勾流，零新进度 UI。**
 
@@ -127,7 +127,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 | `src/lib/mentions.ts` | 新建：`ChatMention` 类型 + `MENTION_REGISTRY`（recipe 首成员） |
 | `src/components/mentions/MentionChip.tsx` / `MentionPicker.tsx` | 新建（注册表驱动，composer/chat 共用） |
 | `src/lib/recipes.ts` | 重构：注册表查询 + preview 映射 + i18n 胶；`RECIPE_REMIX_ENABLED` 删除 |
-| `src/components/home/RecipeCard.tsx` | 数据源切注册表；Remix → 插入 mention |
+| `src/components/home/RecipeCard.tsx` | 数据源切注册表；Remix → 开检视 overlay（2026-08-10） |
 | `src/components/home/HomeComposer.tsx` | parked 机械删除（recipe prop/prior/prefill effect）→ mentions state + chip + picker + /intent 发 mentions |
 | `src/components/chat/`（输入组件） | chip + picker 接入；消息泡 mention chip 行 |
 | `src/routes/_app.home.tsx` | recipe state 删除 → mentions state |

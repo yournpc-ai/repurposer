@@ -24,17 +24,16 @@ function Home() {
   const [cards, setCards] = useState<RecipeCard[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
-  // through `editorRef` (a card's Remix inserts its chip + template).
+  // through `editorRef`.
   const [prompt, setPrompt] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const editorRef = useRef<MentionEditorHandle>(null)
   // The one card currently sounding (autoplay is muted; the toggle circle
   // unmutes one card at a time).
   const [soundingId, setSoundingId] = useState<string | null>(null)
-  // Card body click opens the inspect overlay (D6 二次修订 2026-08-08):
-  // inspect tabs + the launch zone (the composer's send mechanism parked
-  // inside — no more backfill detour). The card's hover Remix shortcut still
-  // backfills the composer below (the general-purpose entry).
+  // Every live-card click (body or hover Remix, 2026-08-10) opens the inspect
+  // overlay — inspect tabs + the launch zone (the composer's send mechanism
+  // parked inside). The composer keeps only the manual @-mention path.
   const [inspecting, setInspecting] = useState<RecipeCard | null>(null)
 
   useEffect(() => {
@@ -50,22 +49,6 @@ function Home() {
       setCards(rc)
     })
   }, [])
-
-  // Remix (docs/tasks/recipe-mention.md §2.4): insert a recipe mention chip
-  // INLINE into the sentence + the card's prompt template as visible,
-  // editable text — appended when the user has already typed (their words
-  // are never clobbered). The pinned task book resolves server-side from the
-  // mention alone — never from a client-built prior.
-  const handleRecipeSelect = (card: RecipeCard) => {
-    editorRef.current?.insertMention({
-      type: "recipe",
-      id: card.id,
-      label: t(`recipes.${card.id}.title`),
-    })
-    const template = t(`recipes.${card.id}.promptTemplate`)
-    editorRef.current?.insertText(prompt.trim() ? `\n${template}` : template)
-    editorRef.current?.focus()
-  }
 
   return (
     // flex-1 (inside SidebarInset's flex column) fills the viewport minus
@@ -103,8 +86,8 @@ function Home() {
       </section>
 
       {/* Recipe gallery (RECIPES §7.3): vertical auto-playing teasers fed by
-          the server registry (fetchRecipeCards); a live card's Remix inserts
-          a mention chip into the composer above. */}
+          the server registry (fetchRecipeCards); every live-card click opens
+          the inspect overlay with the launch zone inside. */}
       <section className="flex flex-col items-center px-6 pb-16">
         <div className="w-full max-w-6xl">
           <h2 className="mb-6 text-center text-xl font-medium">
@@ -119,7 +102,6 @@ function Home() {
                   onToggleSound={(id) =>
                     setSoundingId((prev) => (prev === id ? null : id))
                   }
-                  onSelect={handleRecipeSelect}
                   onInspect={setInspecting}
                 />
               </div>

@@ -6,7 +6,7 @@
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
 > 用户裁决（现行，设计评审沉淀）：
 > ① **配方 = 能力承诺**——上了的卡必须能用用户自己的素材跑出同款，不能写死、不能仅 demo（STRATEGY"配方卡不做营销剧场"的产品化口径）；
-> ② 首页形态 = composer 下方**能力演示视频卡**（4 张：风格 / 多语言 dub / 分镜剪辑 / 图片视频），源素材用云端 demo talk；
+> ② 首页形态 = composer 下方**能力演示视频卡**（5 张座位：视频配音 dub / 访谈分镜 reframe / 口播 talking-head / 虚拟视频 ai-visuals / 图文视频 image-video，2026-08-10 定格；口播先占位、能力路线后定），源素材用云端 demo talk；
 > ③ 声音的家 = **人设块扩展**（声纹 = 人设属性；stock voices 以"系统音色"身份进人设选择器系统区，不伪装成人设——ADR-037 修订形态），composer 不加 Audio 块；
 > ④ v1 图片视频 = **无声版先行**（照片轮播+字幕+音乐，不需要真人说话，无声纹不阻塞）；声音路径（voice_gen / TTS / stock 兜底 / 换声入口）整体后置声纹线（§4.2，排期见 PROGRESS）
 > ⑤ **Remix 形态 = composer mention chip**（对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决）：点卡 = 往 composer 插入 recipe 提及 chip，走唯一入口正常流；**否全屏模态框**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统做成**双端注册表架构**，recipe 第一成员，后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书预设播种唯一发生地 = 服务端解析（简报 `docs/tasks/recipe-mention.md`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，排期见 PROGRESS）。
@@ -27,7 +27,7 @@
 ## 1. 原则
 
 1. **配方 = 待填素材的任务书模板**（Phase 1 形态）。配方与素材的关系只有两层：展示素材（卡片预览，不进管线）+ 类型化输入槽位（"需要一段演讲视频"的约束）。素材是配方留给用户的唯一空格。升级为"待填素材的施工图模板"是 Phase 2（STRATEGY §5，依赖公开性字段 + ADR，不在本文档范围）。
-2. **点亮纪律**：四张卡**全部渲染**（presence over gating——画廊存在感优先）；纪律的保留线是**承诺不可点**——能力未兑现的卡（reserved）hover 只给 Soon 标记，不出 Remix 按钮。点亮 = `status` 翻 `live` + Remix 解锁，不要求四张齐发。
+2. **点亮纪律**：五张卡**全部渲染**（presence over gating——画廊存在感优先）；纪律的保留线是**承诺不可点**——能力未兑现的卡（reserved）hover 只给 Soon 标记，不出 Remix 按钮。点亮 = `status` 翻 `live` + Remix 解锁，不要求齐发。
 3. **DAG 编排全复用**：每个新动词（节点/契约扩展）落地即免费获得编排、逐节点计量、SSE 打勾流、失败重试、子图重跑。零新表——一切住 JSON 载荷层（clip-spec / node.spec / run.context）。
 4. **可扩展词汇一律注册表化**：字幕样式、skill、节点 kind 同纪律（`SKILL_REGISTRY` / `NODE_RUNNERS` 先例）——加成员是填注册项，不是加分支。
 5. **内容定位**：卡片围绕 LinkedIn / 多语言 / 专家需求（欧洲 ICP），不做 TikTok 风（CLAUDE.md 产品定位）。
@@ -130,7 +130,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 
 ### 7.1 卡片数据：Recipe 数据 schema（配方 = 数据一个包）
 
-**配方 = 一个数据包**。一张配方卡 = 五个字段，所有消费方（卡面 / 检视 overlay / composer 回填 / plan path 播种 / 未来真实 Gallery）读同一个包：
+**配方 = 一个数据包**。一张配方卡 = 五个字段，所有消费方（卡面 / 检视 overlay / plan path 播种 / 未来真实 Gallery）读同一个包：
 
 ```
 Recipe = {
@@ -158,9 +158,9 @@ Recipe = {
 ```
 点卡 → 检视 overlay（左发射区 + 右检视 tabs，D6 二次修订）
      → 发射区 = composer 发送机构挂载（同一发射台的第二个停放位）：
-       上传暂存区（主角——素材是配方唯一的空格，副行一句点名所需素材）
-       + recipe 提及 chip + promptTemplate 预填（常显可改，纯文本不是状态；修改唯一入口）
-     → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, brand_template_id, mentions }
+       上传暂存区（主角——素材是配方唯一的空格，Input 小节署名所需素材）
+       + recipe 提及 chip 行 + promptTemplate 预填 textarea（常显可改，修改唯一入口）
+     → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, persona_id, mentions }
        （与 composer 发送完全相同的路径；overlay 零推断 / 零 prior / 零生成）
      → 服务端 plan path resolve_recipe_mentions() 预设播种（播种唯一发生地；composer/overlay 永不构建 prior）
      → 三方合并（merge_prior_slots）→ pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
@@ -175,7 +175,7 @@ Recipe = {
 
 ### 7.3 布局与素材
 
-- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排四张**（`grid-cols-2 sm:grid-cols-4`，容器 max-w-5xl），视频**自动播放**（静音循环）；**左上**配方类型名，**右上**反色圆形声音开关（同时只响一张），**hover 底部浮出**承诺句 + Remix 按钮（reserved 卡 = Soon pill）。遵循 CLAUDE.md：rounded-lg、无 ring/border、shadow-lg、edge-glow。
+- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排五张**（`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`，容器 max-w-6xl），视频**自动播放**（静音循环）；**右上**反色圆形声音开关（hover 浮现，同时只响一张）；**卡下 caption = 标题 + 承诺句**（ElevenCreative 卡片解剖：菜自己解释自己，2026-08-10 定形——hover 动作区退役，Remix 按钮删除；reserved 卡在标题旁挂 Soon pill）。点击卡面开检视 overlay（唯一动作）；composer 侧只留 @ 手选 mention。遵循 CLAUDE.md：rounded-lg、无 ring/border、shadow-lg、edge-glow。
 - 预览资源必须**公开可读**（落地页匿名受众）：`apps/web/public/` 或对象存储公开前缀——现有 asset 端点全是登录态，不可用。
 - 素材策展总账：① demo talk 恢复（桶 `demo/` 树，✅ 已核实：`demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲）；② 双人访谈横屏视频（✅ 已策展：`demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，R3 分镜卡源）；③ PPT 大型登台演讲（✅ 已策展：`demo/uploads/xy_2.mp4` 63MB，风格卡/图片视频卡源）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。3–4 张卡复用 1–2 场源演讲。
 

@@ -14,4 +14,5 @@ export const RECIPE_ASSETS = {
   "reframe-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/reframe-preview-cca9916b.mp4",
   "style-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/style-poster-cad259dc.jpg",
   "style-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/style-preview-a330fe7d.mp4",
+  "talking-head-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/talking-head-poster-494deafa.jpg",
 } as const

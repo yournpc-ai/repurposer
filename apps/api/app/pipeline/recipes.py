@@ -130,6 +130,9 @@ _CLIPS_SLOT = IntentSlot(type="clips")
 _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
+    # Card order = insertion order (2026-08-10 five-dish lineup, user ruling):
+    # dub → reframe → talking-head → ai-visuals → image-video.
+    #
     # R1: one talk -> clips + your cloned voice speaking ZH/FR/ES (fork
     # semantics — originals and all language versions coexist; demo pack
     # languages ruled 中英法西 2026-08-07).
@@ -183,11 +186,33 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
     ),
+    # R3 seat: landscape two-person interview -> vertical speaker reframe
+    # (扩展配方类型: 分镜剪辑, PROGRESS 第 3 周).
+    "reframe": RecipeEntry(
+        status="reserved",
+        input_slots=[InputSlot(type="video")],
+        outputs=[_CLIPS_SLOT],
+    ),
+    # 口播 seat (2026-08-10 ruling: 先占位，能力后定 — the capability route
+    # is reviewed before this card lights).
+    "talking-head": RecipeEntry(
+        status="reserved",
+        input_slots=[InputSlot(type="transcript")],
+        outputs=[_CLIPS_SLOT],
+    ),
+    # R5 seat: nothing but a talk — every scene AI-generated, the zero-asset
+    # end of the source-material spectrum (扩展配方类型: AI 虚拟画面,
+    # PROGRESS 第 4–5 周).
+    "ai-visuals": RecipeEntry(
+        status="reserved",
+        input_slots=[InputSlot(type="audio")],
+        outputs=[_CLIPS_SLOT],
+    ),
     # R2: transcript + photos -> stills slideshow + captions (estimated
     # timeline via align_stills) + music. Voice path deferred to the
-    # week-7/8 voiceprint line (RECIPES §4.2, 2026-08-05 ruling).
+    # voiceprint line (RECIPES §4.2, 2026-08-05 ruling).
     # example_assets (curated photo set + transcript) filled on the week-2
-    # data day (PROGRESS 第 2 周周二 数据核对).
+    # data day (PROGRESS 第 2 周 数据核对).
     "image-video": RecipeEntry(
         status="live",
         input_slots=[InputSlot(type="images"), InputSlot(type="transcript")],
@@ -208,21 +233,6 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 label_key="image_video_preview",
             ),
         ],
-    ),
-    # R3 seat: landscape two-person interview -> vertical speaker reframe
-    # (扩展配方类型: 分镜剪辑, PROGRESS 第 6 周).
-    "reframe": RecipeEntry(
-        status="reserved",
-        input_slots=[InputSlot(type="video")],
-        outputs=[_CLIPS_SLOT],
-    ),
-    # R5 seat: nothing but a talk — every scene AI-generated, the zero-asset
-    # end of the source-material spectrum (扩展配方类型: AI 虚拟画面,
-    # PROGRESS 第 7–8 周).
-    "ai-visuals": RecipeEntry(
-        status="reserved",
-        input_slots=[InputSlot(type="audio")],
-        outputs=[_CLIPS_SLOT],
     ),
 }
 

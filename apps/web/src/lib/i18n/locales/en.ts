@@ -428,7 +428,6 @@ const en = {
   // reserved cards keep their seats here but never render.
   recipes: {
     sectionTitle: "Get inspired. Then make it yours",
-    remix: "Remix",
     soon: "Soon",
     mute: "Mute preview sound",
     unmute: "Play preview sound",
@@ -464,7 +463,8 @@ const en = {
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
     // right = inspect tabs; left = the launch zone (composer's send
     // mechanism parked inside). The prefilled prompt IS the visible
-    // preset — no picker controls, no mirror chips.
+    // preset — no picker controls, no mirror chips. The dropzone copy is
+    // generic; the per-recipe material ask lives in `<id>.inputHint`.
     inspect: {
       tabs: {
         examples: "Examples",
@@ -474,34 +474,49 @@ const en = {
         outputs: "What you get",
         inputs: "Source material",
       },
-      promptLabel: "Tell it what you want",
+      dropzone: "Upload or drag & drop files",
+      promptLabel: "Custom prompt — tweak it to your needs",
       send: "Generate",
     },
     dub: {
-      title: "Multilingual dub",
-      promise: "Your talk, your voice — speaking Chinese, French and Spanish.",
-      uploadCta: "Upload your video",
+      title: "Video dubbing",
+      promise:
+        "Upload your video and dub it into Chinese, French and Spanish — in your own voice.",
+      inputTitle: "Input video",
+      inputHint:
+        "The original recording you want dubbed — a talk, lecture or podcast episode.",
       promptTemplate:
         "Cut highlight clips from my talk and dub them into Chinese, French and Spanish with my voice.",
     },
     "image-video": {
       title: "Photos to video",
       promise: "No footage — photos plus your script become a captioned video with music.",
-      uploadCta: "Upload your script and photos",
+      inputTitle: "Script and photos",
+      inputHint: "Your talk transcript, plus a set of photos — event shots, slides, portraits.",
       promptTemplate:
         "Turn my script and photos into short clips with captions and music.",
     },
     reframe: {
       title: "Interview reframe",
       promise: "Landscape two-person talk, recut vertical — camera follows the speaker.",
-      uploadCta: "Upload your interview video",
+      inputTitle: "Input video",
+      inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
+    },
+    "talking-head": {
+      title: "Talking head",
+      promise: "Just a script — get a video of you delivering it on camera.",
+      inputTitle: "Input script",
+      inputHint: "The script you want delivered on camera.",
+      promptTemplate:
+        "Turn my script into a talking-head video of me delivering it.",
     },
     "ai-visuals": {
       title: "Virtual scenes",
       promise: "No footage, no photos — every scene is AI-generated for your talk.",
-      uploadCta: "Upload your script",
+      inputTitle: "Input audio",
+      inputHint: "A recording of your talk — every visual is generated around it.",
       promptTemplate:
         "Turn my talk into a short video with AI-generated scenes.",
     },
@@ -1100,7 +1115,7 @@ const en = {
         "Just write whatever you want to generate. You can use the @ symbol to reference assets or templates to specify how they should be processed and provide us with information about the assets.",
       recipesTitle: "Stuck? Browse the templates",
       recipesDesc:
-        "Hover over a template to remix it, and it will automatically appear in the prompt field as @.",
+        "Click a template — upload your own material, tweak the prompt to fit your needs, and generate the preset video effect.",
     },
     results: {
       scoreTitle: "Recommendation score",

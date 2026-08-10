@@ -7,7 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Music,
-  Plus,
+  Upload,
   Video,
   Volume2,
   VolumeX,
@@ -19,10 +19,7 @@ import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import type { RecipeCard } from "@/lib/recipes"
 import type { ChatMention } from "@/lib/mentions"
-import {
-  MentionEditor,
-  type MentionEditorHandle,
-} from "@/components/mentions/MentionEditor"
+import { MentionChip } from "@/components/mentions/MentionChip"
 import { ASSETS_ACCEPT } from "@/components/home/AssetsModal"
 import { Button } from "@/components/ui/button"
 import {
@@ -58,12 +55,22 @@ import { recipeProcessFlow } from "./recipeFlow"
  * - 流程 = THE canvas — one FlowView graph: source material → curated
  *   process steps (fanout expanded) → the baked outputs as terminal nodes.
  *
- * Preset visibility (2026-08-09): the prefilled prompt IS the visible preset
- * (the template names the outputs/languages in plain words) — mirror chips
- * duplicated that sentence and read as pickers, so they were pulled. The only
- * edit entry stays the prompt text (before send) / chat (after send); chat
+ * Preset visibility: the prompt area IS the visible preset — a plain
+ * textarea prefilled with the template, the recipe mention as a chip row
+ * above it (2026-08-10: replaces the MentionEditor — mount-time chip seeding
+ * raced the dialog's portal mount and could silently land empty; a textarea
+ * + static chip is deterministic and reads as a simple form). The only edit
+ * entry stays the prompt text (before send) / chat (after send); chat
  * always wins.
  */
+/** Input slot type → the Input section's icon (registry-driven, one map). */
+const INPUT_TYPE_ICONS: Record<string, typeof Video> = {
+  video: Video,
+  audio: Music,
+  images: ImageIcon,
+  transcript: FileText,
+}
+
 export function RecipeInspectOverlay({
   card,
   onClose,
@@ -73,22 +80,22 @@ export function RecipeInspectOverlay({
 }) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
-  const editorRef = useRef<MentionEditorHandle>(null)
   const { launching, launch } = useProjectLaunch()
 
   const title = t(`recipes.${card.id}.title`)
   const template = t(`recipes.${card.id}.promptTemplate`)
+  // The Input section's icon follows the recipe's first input slot — the
+  // material ask is registry data, never per-card branches.
+  const InputIcon =
+    INPUT_TYPE_ICONS[card.input_slots[0]?.type ?? ""] ?? FileText
 
-  // The draft starts as the composer's Remix backfill would serialize it:
-  // the recipe chip (`@label`) + the template as visible, editable text. The
-  // state mirror is seeded up front so a send always carries the full payload
-  // (chip law ① visible ② consumed ③ × purifies).
-  const [prompt, setPrompt] = useState(`@${title} ${template}`)
+  // The draft: the template as plain editable text + the recipe mention as a
+  // chip row (chip law ① visible ② dies with navigation ③ × purifies).
+  const [prompt, setPrompt] = useState(template)
   const [mentions, setMentions] = useState<ChatMention[]>([
     { type: "recipe", id: card.id, label: title },
   ])
   const [files, setFiles] = useState<File[]>([])
-  const seededRef = useRef(false)
 
   // Inspect tabs (right zone): 示例 = flat cards; 流程 = the one canvas.
   const [tab, setTab] = useState<"examples" | "flow">("examples")
@@ -102,20 +109,6 @@ export function RecipeInspectOverlay({
   // doubles as its thumb when the asset itself has none (demo talk video).
   const sharedPoster =
     card.example_outputs.find((o) => o.poster_url)?.poster_url ?? null
-
-  // Seed the editor exactly once, on mount — chip + template, the same
-  // serialization the draft state was initialized with.
-  useEffect(() => {
-    if (seededRef.current) return
-    seededRef.current = true
-    editorRef.current?.insertMention({ type: "recipe", id: card.id, label: title })
-    editorRef.current?.insertText(template)
-  }, [card.id, title, template])
-
-  const mentionContext = useMemo(
-    () => ({ files: files.map((f) => ({ name: f.name, type: f.type })) }),
-    [files],
-  )
 
   const addFiles = (picked: File[]) => {
     if (picked.length === 0) return
@@ -161,8 +154,13 @@ export function RecipeInspectOverlay({
     >
       <DialogPortal>
         <DialogOverlay />
+        {/* Hand-composed popup (the MentionPicker needs a transform-free
+            ancestor, so DialogContent is out) — but the chrome MIRRORS
+            DialogContent exactly: overlay-surface + the ring-foreground/10
+            hairline + shadow-xl + rounded-xl. Without the hairline the
+            light-theme glass dissolves into the white backdrop wash. */}
         <DialogPrimitive.Popup
-          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-lg shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
+          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl shadow-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
         >
           <DialogClose
             aria-label={t("common.close")}
@@ -189,18 +187,17 @@ export function RecipeInspectOverlay({
                 </DialogDescription>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {card.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                  >
-                    {t(`recipes.tags.${tag}`)}
-                  </span>
-                ))}
-                <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  {card.aspect}
-                </span>
+              {/* The material ask (ElevenCreative modal pattern 2026-08-10):
+                  an Input section names what the recipe needs in plain words;
+                  the dropzone copy itself stays generic. */}
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <InputIcon className="h-4 w-4 text-muted-foreground" />
+                  {t(`recipes.${card.id}.inputTitle`)}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(`recipes.${card.id}.inputHint`)}
+                </p>
               </div>
 
               <input
@@ -222,8 +219,8 @@ export function RecipeInspectOverlay({
                 onDrop={handleDrop}
                 className="flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <Plus className="h-5 w-5" />
-                <span className="text-sm">{t(`recipes.${card.id}.uploadCta`)}</span>
+                <Upload className="h-5 w-5" />
+                <span className="text-sm">{t("recipes.inspect.dropzone")}</span>
               </button>
 
               {files.length > 0 && (
@@ -257,18 +254,19 @@ export function RecipeInspectOverlay({
                 <p className="mb-1.5 text-xs text-muted-foreground">
                   {t("recipes.inspect.promptLabel")}
                 </p>
-                <div className="h-32 rounded-lg bg-inset p-1">
-                  <MentionEditor
-                    ref={editorRef}
-                    placeholder={t("home.pastePlaceholder")}
+                <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
+                  {mentions.map((m) => (
+                    <MentionChip
+                      key={`${m.type}:${m.id}`}
+                      mention={m}
+                      onRemove={() => setMentions([])}
+                    />
+                  ))}
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
                     disabled={launching}
-                    mentionContext={mentionContext}
-                    onChange={(text, ms) => {
-                      setPrompt(text)
-                      setMentions(ms)
-                    }}
-                    onSubmit={handleLaunch}
-                    className="h-full"
+                    className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none"
                   />
                 </div>
               </div>
@@ -286,10 +284,13 @@ export function RecipeInspectOverlay({
             </div>
 
             {/* RIGHT — the canvas IS the zone: full-bleed, tabs floating on
-                top. The canvas owns its surface: light = solid white paper
-                (bg-background), dark = the inverted inset well (bg-inset).
-                The left seam is the /10 hairline. */}
-            <div className="relative min-h-0 flex-1 border-foreground/10 border-t bg-background md:border-l md:border-t-0 dark:bg-inset">
+                top. Light: NO solid paint — --popover and --background are
+                both pure white, so a solid bg-background half would read as a
+                two-tone seam against the 92% glass; the glass alone keeps the
+                modal one surface (the Login read). Dark: the inverted inset
+                well (bg-inset) — a deliberate darker canvas. The left seam is
+                the /10 hairline. */}
+            <div className="relative min-h-0 flex-1 border-foreground/10 border-t md:border-l md:border-t-0 dark:bg-inset">
               <Tabs
                 value={tab}
                 onValueChange={(v) => setTab(v as "examples" | "flow")}

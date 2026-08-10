@@ -42,8 +42,7 @@ interface HomeComposerProps {
   personas: Persona[]
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
-   * owns the text (MentionEditor); Home keeps it only as the send payload
-   * and so a card's Remix can act through `editorRef`. */
+   * owns the text (MentionEditor); Home keeps it only as the send payload. */
   prompt: string
   onPromptChange: (value: string) => void
   mentions: ChatMention[]

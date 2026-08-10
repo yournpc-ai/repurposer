@@ -60,6 +60,11 @@ const RECIPE_PREVIEWS: Record<string, RecipeCard["preview"]> = {
     posterUrl: asset("reframe-poster.jpg"),
     videoUrl: asset("reframe-preview.mp4"),
   },
+  "talking-head": {
+    // Poster only (a frame from the demo talk) — the capability route is
+    // reviewed before this card lights (2026-08-10 ruling: 先占位，能力后定).
+    posterUrl: asset("talking-head-poster.jpg"),
+  },
   "ai-visuals": {
     posterUrl: asset("ai-visuals-poster.jpg"),
     // No preview video until the capability itself exists — poster only.
