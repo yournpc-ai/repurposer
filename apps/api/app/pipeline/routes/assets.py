@@ -15,6 +15,7 @@ from app.models.schemas import (
     AssetUploadUrlResponse,
     PersonaAssetCreateRequest,
     PersonaAssetUpdateRequest,
+    PersonaMediaCreateRequest,
 )
 from app.models.tables import Asset, Persona, Project, User
 from app.tools.storage import (
@@ -22,10 +23,12 @@ from app.tools.storage import (
     exists,
     get_project_upload_dir,
     get_persona_upload_dir,
+    get_persona_upload_path,
     get_upload_path,
     presign_upload,
     save_persona_upload,
     save_upload,
+    stream_url,
 )
 
 router = APIRouter()
@@ -325,7 +328,7 @@ async def create_persona_asset_from_key(
     asset = Asset(
         user_id=current_user.id,
         persona_id=persona_id,
-        type=AssetType.PAST_MATERIAL,
+        type=AssetType(request.type),
         file_url=request.key,
         title=request.title,
         processing_status=AssetStatus.PENDING,
@@ -372,13 +375,68 @@ async def list_persona_assets(
     persona_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
+    type: AssetType = AssetType.PAST_MATERIAL,
 ) -> list[Asset]:
-    """List past material assets for a persona."""
+    """List a persona's assets of one kind (default: past materials).
+
+    Voice samples live on the same row family; the voice section reads them
+    with ``type=voice_sample`` while the materials tab keeps this default.
+    """
     await _get_user_persona(persona_id, current_user.id if current_user else None, db)
     result = await db.execute(
-        select(Asset).where(Asset.persona_id == persona_id).order_by(Asset.created_at.desc())
+        select(Asset)
+        .where(Asset.persona_id == persona_id, Asset.type == type)
+        .order_by(Asset.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@persona_assets_router.post(
+    "/{persona_id}/media/upload-url",
+    response_model=AssetUploadUrlResponse,
+)
+async def create_persona_media_upload_url(
+    persona_id: UUID,
+    request: AssetUploadUrlRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> AssetUploadUrlResponse:
+    """Return a presigned PUT URL for skin intro/outro media (image/video)."""
+    await _get_user_persona(persona_id, current_user.id, db)
+
+    key = str(await get_persona_upload_path(persona_id, current_user.id, request.filename))
+    upload_url = await presign_upload(key, content_type=request.content_type)
+    if upload_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate upload URL",
+        )
+    return AssetUploadUrlResponse(key=key, upload_url=upload_url)
+
+
+@persona_assets_router.post("/{persona_id}/media", status_code=status.HTTP_201_CREATED)
+async def create_persona_media_from_key(
+    persona_id: UUID,
+    request: PersonaMediaCreateRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict[str, str | None]:
+    """Confirm a directly-uploaded skin media file and return its stream URL."""
+    await _get_user_persona(persona_id, current_user.id, db)
+
+    # Same trust rules as persona assets: server-issued key + object present.
+    expected_prefix = get_persona_upload_dir(persona_id, current_user.id)
+    if not request.key.startswith(f"{expected_prefix}/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid upload key",
+        )
+    if not await exists(request.key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file not found in storage; upload it first",
+        )
+    return {"url": stream_url(request.key)}
 
 
 @persona_assets_router.put("/{persona_id}/assets/{asset_id}", response_model=AssetResponse)

@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { apiFetch } from "@/lib/api"
+import { SkinEditor } from "@/components/persona/skin-editor"
+import { VoiceSection, type VoiceBlock } from "@/components/persona/voice-section"
 
 interface Persona {
   id: string
@@ -47,6 +49,8 @@ interface Persona {
   emotional_tone: "rational" | "passionate" | "gentle" | "sharp" | "humorous"
   typical_hooks: string[]
   avoid_words: string[]
+  voice: VoiceBlock
+  brand: Record<string, unknown> | null
   audience: string | null
   guidelines: string | null
   cta: string | null
@@ -97,6 +101,8 @@ function PersonaDetailPage() {
   const [audience, setAudience] = useState("")
   const [guidelines, setGuidelines] = useState("")
   const [cta, setCta] = useState("")
+  // Controlled tabs: the skin editor needs a wider canvas than the form.
+  const [tab, setTab] = useState("persona")
 
   const fetchData = async () => {
     setLoading(true)
@@ -292,6 +298,9 @@ function PersonaDetailPage() {
 
   return (
     <div className="flex flex-1 flex-col p-6 md:p-8">
+      {/* Header + tab bar hold a constant 4xl column; each tab's content sets
+          its own width (skin editor breathes to 6xl) so page chrome never
+          jumps sideways on tab switch. */}
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-6 flex items-center gap-3">
           <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/personas" />}>
@@ -304,15 +313,20 @@ function PersonaDetailPage() {
             )}
           </div>
         </div>
+      </div>
 
-        <Tabs defaultValue="persona" className="flex-1">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1">
+        <div className="mx-auto w-full max-w-4xl">
           <TabsList className="mb-6">
             <TabsTrigger value="persona">{t("personaDetail.tabPersona")}</TabsTrigger>
             <TabsTrigger value="materials">
               {t("personaDetail.tabMaterials", { count: materials.length })}
             </TabsTrigger>
+            <TabsTrigger value="skin">{t("personaDetail.tabSkin")}</TabsTrigger>
           </TabsList>
+        </div>
 
+        <div className="mx-auto w-full max-w-4xl">
           <TabsContent value="persona">
             <Card className="ring-0 edge-glow">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -434,6 +448,13 @@ function PersonaDetailPage() {
                 </form>
               </CardContent>
             </Card>
+
+            <div className="mt-6">
+              <VoiceSection
+                persona={persona}
+                onSaved={(voice) => setPersona((p) => (p ? { ...p, voice } : p))}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="materials">
@@ -511,8 +532,19 @@ function PersonaDetailPage() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+
+        <div className="mx-auto w-full max-w-6xl">
+          <TabsContent value="skin">
+            <SkinEditor
+              key={persona.id}
+              personaId={persona.id}
+              brand={persona.brand}
+              onSaved={(brand) => setPersona((p) => (p ? { ...p, brand } : p))}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
 
       {/* Rename */}
       <Dialog

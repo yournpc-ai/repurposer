@@ -2,7 +2,6 @@ import {
   Home,
   Mic2,
   FolderKanban,
-  Palette,
   Crown,
   BookOpen,
   HelpCircle,
@@ -48,7 +47,6 @@ import { LogoMark } from "@/components/LogoMark"
 const navItems = [
   { key: "home", url: "/home", icon: Home },
   { key: "myProjects", url: "/projects", icon: FolderKanban },
-  { key: "brandTemplate", url: "/brand-template", icon: Palette },
   { key: "personas", url: "/personas", icon: Mic2 },
 ]
 
@@ -106,14 +104,7 @@ export function AppSidebar() {
   )
 
   return (
-    <Sidebar
-      collapsible="icon"
-      className={
-        currentPath.startsWith("/brand-template")
-          ? undefined
-          : "group-data-[side=left]:border-r-0"
-      }
-    >
+    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
       <SidebarHeader className="gap-3 p-3 pt-5 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">

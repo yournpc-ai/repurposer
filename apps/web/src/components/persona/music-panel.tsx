@@ -34,7 +34,7 @@ function absoluteUrl(url: string): string {
 }
 
 /**
- * Music library panel for the brand template's Music tab: lists available
+ * Music library panel for the persona skin's Music group: lists available
  * pieces (public + the caller's own), lets the user preview/select a default
  * and generate a new one from a prompt. Mirrors docs/MUSIC_ARCHITECTURE.md §10.1.
  */
@@ -126,7 +126,7 @@ export function MusicPanel({
   return (
     <div className="space-y-4">
       <label className="flex items-center justify-between">
-        <span className="text-sm">{t("brandTemplate.music.enable")}</span>
+        <span className="text-sm">{t("personaDetail.skin.music.enable")}</span>
         <Switch checked={enabled} onCheckedChange={onEnabledChange} />
       </label>
 
@@ -134,7 +134,7 @@ export function MusicPanel({
         <>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{t("brandTemplate.music.gain")}</span>
+              <span>{t("personaDetail.skin.music.gain")}</span>
               <span>{gainDb.toFixed(0)} dB</span>
             </div>
             <Slider
@@ -148,7 +148,7 @@ export function MusicPanel({
 
           <div className="space-y-1.5">
             <p className="px-0.5 text-xs text-muted-foreground">
-              {t("brandTemplate.music.library")}
+              {t("personaDetail.skin.music.library")}
             </p>
             {loading ? (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
@@ -156,7 +156,7 @@ export function MusicPanel({
               </div>
             ) : pieces.length === 0 ? (
               <p className="py-3 text-center text-xs text-muted-foreground">
-                {t("brandTemplate.music.empty")}
+                {t("personaDetail.skin.music.empty")}
               </p>
             ) : (
               <div className="space-y-1">
@@ -177,8 +177,8 @@ export function MusicPanel({
                       className="h-7 w-7 shrink-0"
                       aria-label={
                         playingId === piece.id
-                          ? t("brandTemplate.music.pause")
-                          : t("brandTemplate.music.play")
+                          ? t("personaDetail.skin.music.pause")
+                          : t("personaDetail.skin.music.play")
                       }
                       onClick={(e) => {
                         e.stopPropagation()
@@ -194,7 +194,7 @@ export function MusicPanel({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{piece.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {t(`brandTemplate.music.moods.${piece.mood}`, piece.mood)} ·{" "}
+                        {t(`personaDetail.skin.music.moods.${piece.mood}`, piece.mood)} ·{" "}
                         {formatDuration(piece.duration_seconds)}
                       </p>
                     </div>
@@ -209,12 +209,12 @@ export function MusicPanel({
 
           <div className="space-y-1.5">
             <p className="px-0.5 text-xs text-muted-foreground">
-              {t("brandTemplate.music.generate")}
+              {t("personaDetail.skin.music.generate")}
             </p>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("brandTemplate.music.titlePlaceholder")}
+              placeholder={t("personaDetail.skin.music.titlePlaceholder")}
               className="h-9"
               disabled={generating}
             />
@@ -222,7 +222,7 @@ export function MusicPanel({
               <Input
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder={t("brandTemplate.music.generatePrompt")}
+                placeholder={t("personaDetail.skin.music.generatePrompt")}
                 className="h-9 flex-1"
                 disabled={generating}
               />
@@ -230,7 +230,7 @@ export function MusicPanel({
                 variant="outline"
                 size="icon"
                 className="h-9 w-9 shrink-0"
-                aria-label={t("brandTemplate.music.generate")}
+                aria-label={t("personaDetail.skin.music.generate")}
                 disabled={!prompt.trim() || generating}
                 onClick={generate}
               >

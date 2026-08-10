@@ -846,6 +846,16 @@ class PersonaAssetCreateRequest(BaseModel):
     key: str
     # Original upload filename, used as the display title in the UI.
     title: str | None = None
+    # Persona assets come in two kinds: past materials (text extracted for
+    # style learning) and voice samples (audio the persona's voice block
+    # binds). Everything else is rejected.
+    type: Literal["past_material", "voice_sample"] = "past_material"
+
+
+class PersonaMediaCreateRequest(BaseModel):
+    """Confirm a directly-uploaded persona skin media file (intro/outro card)."""
+
+    key: str
 
 
 class PersonaAssetUpdateRequest(BaseModel):

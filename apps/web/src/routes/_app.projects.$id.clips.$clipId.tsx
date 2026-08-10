@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { apiFetch, downloadFile, toAbsoluteUrl } from '@/lib/api'
-import type { MusicPiece } from '@/components/brand-template/music-panel'
+import type { MusicPiece } from '@/components/persona/music-panel'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const WORDS_PER_LINE = 7

@@ -206,7 +206,7 @@ Do not use template strings:
 - **No right border**: add `group-data-[side=left]:border-r-0` on `Sidebar`, background blends with the main area (see UI design guidelines).
 - Structural layout:
   - **Header**: PC = centered `LogoMark` (rail is fixed); mobile = logo lockup + toggle. (No "Invite members" entry — do not re-add without an explicit product decision.)
-  - **Content**: Flat navigation (no group titles): Home, My projects (`/projects`), Brand template, Personas (`/personas`). The project grid lives on `/projects`, not on the home page (home is composer-only).
+  - **Content**: Flat navigation (no group titles): Home, My projects (`/projects`), Personas (`/personas`). The project grid lives on `/projects`, not on the home page (home is composer-only).
   - **Footer**: User avatar dropdown (`DropdownMenu`, `side="top"` popping upward, containing Profile / Settings / Logout) at the top, followed by account items (Subscription / Learning / Help).
 - Navigation / account icons uniformly `h-4.5 w-4.5`; in `sidebarMenuButtonVariants`, expanded `[&_svg]:size-4.5`, collapsed `group-data-[collapsible=icon]:[&_svg]:size-4.5`, keep them consistent.
 - **Collapsed state center alignment**: buttons placed in Header / Footer (e.g. the avatar) must be centered; add `group-data-[state=collapsed]:items-center` to the container, and the button itself uses `w-12` square in collapsed state; **do not** put these buttons inside `SidebarMenu` (the list padding will limit the width, causing a 4px offset in collapsed state).
@@ -225,12 +225,18 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 ## Persona Skin Block (brand)
 
-> **ADR-038 已落地（第二刀，2026-08-10）**：独立 Brand Template 模块退役——`brand_templates` 表与 `/brand-templates` 端点已删，皮肤降为人设的 `brand` JSONB 块（全栈一词：人设块 / 烘焙 / clip-spec 段同名）；`/brand-template` 路由与 sidebar 项的并入属第三刀（08-12，人设页五分区），当前该路由处于过渡 404 态。
+> **ADR-038 已落地**：独立 Brand Template 模块退役——`brand_templates` 表与端点已删，皮肤 = 人设的 `brand` JSONB 块（全栈一词：人设块 / 烘焙 / clip-spec 段同名）；`/brand-template` 307 重定向 `/personas`，sidebar 单「人设」项。
 
-- The visual skin is the persona's `brand` JSONB block: caption font/size/color/position/preset + title + keywordHighlighter + logo + intro/outro + music (`musicId` / `musicMood` fallback, `musicEnabled` master switch). `brand: null` = system default skin.
+- The visual skin is the persona's `brand` JSONB block: caption font/size/color/position/style-preset + title + intro/outro + music (`musicId` / `musicMood` fallback, `musicEnabled` master switch). `brand: null` = system default skin.
+- **编辑面 = 人设页第三 tab「皮肤」**（`components/persona/skin-editor.tsx`）：左设置右 Remotion `<Player>` 实时预览（与产物像素级一致，clip 编辑页同款先例）+ 拖拽 marker 改位置/字号；保存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体走 `POST /personas/{id}/media(/upload-url)`（存 persona 上传目录，随人设删除）。`logo` 键无渲染消费路径，不进 UI。
 - **Craft/format keys are NOT persona fields**: `aspect` / `fillMode` / `captionEnabled` / filler removal / music defaults come from the recipe registry / task-book defaults (config 三分流, N-28). Writing style ("voice" as prose style) is not a column either — it lives in the style six + `guidelines`.
 - At clip-generation time the Pipeline resolves the persona (run-context pin → project mount → `auto_created_at` → earliest created), merges `persona.brand` over `DEFAULT_BRAND_CONFIG` in `app/memory/brand.py` (module name unchanged), and bakes into `render_spec.brand` with `brand_ref` = persona id. **clip-spec's brand segment contract is untouched** (renderer black box, ADR-016).
 - The composer has a single identity control (the Persona block); `persona_id` rides the first chat message, pins into `run.context.persona_id` at `create_run`. There is no `brand_template_id` anywhere in request payloads.
+
+## Persona Voice Block (voice)
+
+- The audio binding is the persona's `voice` JSONB block: `{"kind":"cloned","voice_id","sample_asset_id"}` | `{"kind":"stock","stock_id"}` | `null` = Auto（dub 用每个项目自己的素材声音）。`voice` 词独占音频本义（NAMING N-27/N-28）；文风在风格六件 + `guidelines`。
+- 编辑面 = 人设页人设 tab 内的 Voice 卡（`components/persona/voice-section.tsx`）：壳形态 = 展示当前绑定 + 上传/换绑声音样本（样本 = persona 素材 `type=voice_sample`），保存 = PUT 只更 `voice` 块；文案只陈述绑定状态、不许诺效果。STOCK_VOICES 注册表 / 系统音色试听 / dub 链读 `persona.voice` 的优先级改造属缓做项（PROGRESS 第二周拍板二）。
 
 ## Video Editor & Rendering (Vertical Shorts)
 
