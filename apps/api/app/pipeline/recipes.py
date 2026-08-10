@@ -47,8 +47,10 @@ class InputSlot(BaseModel):
 
 class FlowStep(BaseModel):
     """静态流程图一步 (Recipe.flow, ADR-035) — author-curated, read-only:
-    friendly step names via the shared ``recipes.flow.*`` i18n namespace, no
-    model names, no wiring. ``fanout`` marks parallel branches (dub ×3)."""
+    the ``key`` IS a node kind (N-35 — the startup self-check reconciles
+    flow keys ⊆ the compiled graph's kind set, AGENT_ARCH §4.2), localized
+    via the shared ``recipes.flow.*`` i18n namespace; no model names, no
+    wiring. ``fanout`` marks parallel branches (dub_clip ×3)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -143,10 +145,10 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         dub_languages=["zh", "fr", "es"],
         tags=["multilingual", "voice-clone"],
         flow=[
-            FlowStep(key="understand"),
-            FlowStep(key="plan"),
-            FlowStep(key="select"),
-            FlowStep(key="dub", fanout=3),
+            FlowStep(key="director_understand"),
+            FlowStep(key="director_plan"),
+            FlowStep(key="select_clips"),
+            FlowStep(key="dub_clip", fanout=3),
             FlowStep(key="render"),
         ],
         example_assets=[
@@ -219,10 +221,10 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         outputs=[_CLIPS_SLOT],
         tags=["no-footage"],
         flow=[
-            FlowStep(key="understand"),
-            FlowStep(key="plan"),
+            FlowStep(key="director_understand"),
+            FlowStep(key="director_plan"),
             FlowStep(key="align_stills"),
-            FlowStep(key="select"),
+            FlowStep(key="select_clips"),
             FlowStep(key="render"),
         ],
         example_outputs=[

@@ -128,13 +128,13 @@ const OUTPUT_KEY_TO_TAB: Record<string, ResultsTab> = {
 }
 
 /** Node kinds that own a results tab (ADR-028); preprocess/persona/director/
- * script/render nodes drive the stepper, not a tab. */
+ * revise/render nodes drive the stepper, not a tab. */
 const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
-  clips_pipeline: "clips",
-  post_gen: "post",
-  quotes_gen: "quotes",
-  carousel_gen: "carousel",
-  article_gen: "article",
+  select_clips: "clips",
+  write_post: "post",
+  write_quotes: "quotes",
+  write_carousel: "carousel",
+  write_article: "article",
 }
 
 export const Route = createFileRoute("/_app/projects/$id/")({

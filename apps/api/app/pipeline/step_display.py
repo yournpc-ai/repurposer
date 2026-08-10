@@ -77,13 +77,12 @@ async def _fill_summary(
 
     Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8). ``tag``
     appends the slot's distinguishing label (language/focus) so same-kind
-    sibling steps stay distinguishable after completion."""
-    from app.pipeline.registry import SKILL_REGISTRY  # deferred: import cycle
+    sibling steps stay distinguishable after completion. ``kind`` IS the
+    skill name (N-35) — the registry key directly."""
+    from app.skills import SKILL_REGISTRY  # deferred: import cycle
 
-    template = next(
-        (e.summary_template for e in SKILL_REGISTRY.values() if e.node_kind == kind),
-        None,
-    )
+    entry = SKILL_REGISTRY.get(kind)
+    template = entry.summary_template if entry is not None else None
     if not template:
         return
     try:

@@ -80,7 +80,7 @@ from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.recipes import resolve_recipe_mentions
-from app.pipeline.registry import SkillRejected, dispatchable_skills
+from app.skills import SkillRejected, dispatchable_skills
 
 _ASK_BACK_TEXT = (
     "I want to make sure I do the right thing — could you be more specific? "

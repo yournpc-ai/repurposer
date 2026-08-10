@@ -3,10 +3,11 @@
 ``director_understand`` / ``director_plan`` (the director's two steps),
 ``persona`` (style extraction), ``translator`` (caption-line translation —
 the dub skill reuses it). Skill-private declarations live in each skill
-package's ``agents.py`` (clip writer, the four copy writers, reviser);
-``AGENTS`` enumerates the shared crew, with the full enumeration landing
-when the registry moves into ``app/skills/__init__.py`` (P2) and the
-startup self-check gains node→agent reference validation (P3).
+package's ``agents.py`` (clip writer, the four copy writers, reviser).
+Every declaration self-registers into ``agents/base.py``'s ``AGENTS`` on
+construction (ADR-039 P2 full collection); the registry door
+(``app/skills/__init__.py``) imports every package, and the startup
+self-check validates node→agent references against it.
 """
 
 from typing import Any
@@ -172,8 +173,3 @@ translator: Agent[CaptionTranslation] = Agent(
     assemble=_assemble_translator,
     postprocess=_align_line_count,
 )
-
-
-AGENTS: dict[str, Agent] = {
-    a.name: a for a in (director_understand, director_plan, persona, translator)
-}

@@ -1,7 +1,14 @@
-"""write_post node (ADR-039 P1). The four copy-writer kinds share one body —
-``pipeline/derivative_dispatch.run_derivative_gen`` dispatches by node.kind;
-this alias keeps the registry's dotted path package-local."""
+"""write_post node (ADR-039 P2 objectified). The four copy-writer nodes share
+one body — ``pipeline/derivative_dispatch.DerivativeWriterNode``; this package
+declares its own kind / output_type / writer agent."""
 
-from app.pipeline.derivative_dispatch import run_derivative_gen
+from app.pipeline.derivative_dispatch import DerivativeWriterNode
+from app.skills.posts.agents import post_writer
 
-run = run_derivative_gen
+
+class WritePost(DerivativeWriterNode):
+    kind = "write_post"
+    output_type = "post"
+    slot_label = "Post"
+    slot_ordinal = 1
+    writer = post_writer

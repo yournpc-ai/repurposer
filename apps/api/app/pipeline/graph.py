@@ -1,0 +1,244 @@
+"""Graph kernel (ADR-039 P2): the NodeBase protocol + the NODE_KINDS table.
+
+Every plan-graph node is a declared ``NodeBase`` instance — the kernel's only
+vocabulary. A node self-describes: ``kind`` (unique key; a skill node's kind
+IS the skill name, N-35), the class attributes below, and ``run`` (the sole
+required method). The kernel degrades to graph algorithms over these
+declarations (AGENT_ARCH §4.2): execution = topo walk, validation =
+∀``requires``, reconciliation = recipe flow keys ⊆ compiled kind set,
+quotation = fold (P4).
+
+``NODE_KINDS`` self-populates: a concrete subclass (one that declares
+``kind``) registers a singleton instance at class-creation time. The import
+that completes the table is the registry's door — ``app/skills/__init__.py``
+imports the internal crew (``pipeline/node_runners``) and every skill
+package; this module itself imports no concrete node (no cycles).
+
+Derived views (``known_output_types`` / ``node_for_output`` /
+``slot_type_order`` / …) are computed from the table — the retired parallel
+maps (output→kind, slot-type→label, count limits…) have no home anywhere
+else (prohibition: no parallel maps).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.schemas import AssetType, IntentSlot
+from app.models.tables import Asset, Persona, Project
+from app.pipeline.step_display import slot_tag
+
+
+# ---- birthplace requirements ------------------------------------------------
+
+
+class Requirement:
+    """One birthplace-gate input (create_run ∀-check, AGENT_ARCH §4.2).
+
+    ``key`` is the error-message token ("media" / "transcript" / …); the check
+    itself is the node's own knowledge — the retired ``_validate_requires``
+    string matching lives here now.
+    """
+
+    key: str = ""
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        raise NotImplementedError
+
+
+class _MediaRequirement(Requirement):
+    key = "media"
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        result = await db.execute(
+            select(Asset.id)
+            .where(
+                Asset.project_id == project.id,
+                Asset.type.in_(
+                    [AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES]
+                ),
+                Asset.file_url.isnot(None),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is None
+
+
+class _TranscriptRequirement(Requirement):
+    key = "transcript"
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        # Mirrors the consumption rule (platform/project_context.py):
+        # documents land in extracted_text, ASR lands in transcript /
+        # meta.words — any of the three satisfies a text input.
+        result = await db.execute(
+            select(Asset.id)
+            .where(
+                Asset.project_id == project.id,
+                or_(
+                    Asset.transcript.isnot(None),
+                    Asset.extracted_text.isnot(None),
+                    Asset.meta["words"].isnot(None),
+                ),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is None
+
+
+class _PersonaPhotoRequirement(Requirement):
+    key = "persona_photo"
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        persona = (
+            await db.get(Persona, project.persona_id) if project.persona_id else None
+        )
+        return persona is None or not persona.avatar_url
+
+
+class _VoiceprintRequirement(Requirement):
+    key = "voiceprint"
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        if not project.persona_id:
+            return True
+        result = await db.execute(
+            select(Asset.id)
+            .where(
+                Asset.persona_id == project.persona_id,
+                Asset.type == AssetType.VOICE_SAMPLE,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is None
+
+
+MEDIA = _MediaRequirement()
+TRANSCRIPT = _TranscriptRequirement()
+PERSONA_PHOTO = _PersonaPhotoRequirement()
+VOICEPRINT = _VoiceprintRequirement()
+
+
+# ---- the node protocol ------------------------------------------------------
+
+
+class NodeBase:
+    """The kernel's only node protocol (AGENT_ARCH §4.1).
+
+    Class attributes are the declaration; ``run`` is the sole required
+    method. Instances are stateless singletons living in ``NODE_KINDS``.
+    """
+
+    # —— 类属性声明 ——
+    kind: str = ""  # unique key; a skill node's kind IS the skill name (N-35)
+    output_type: str | None = None  # producer nodes only (outputs extensibility seat, N-32)
+    slot_label: str | None = None  # the output type's display word ("Clips")
+    slot_ordinal: int = 99  # canonical fan-out order among output types
+    after: tuple[str, ...] = ()  # topology constraint (modifier ordering)
+    needs_director: bool = False  # needs the director prelude (preprocess→persona∥understand→plan)
+    retries: int = 0  # step-level transient retry budget
+    produces_outputs: bool = False  # counts as a generation node at run settle
+    count_default: int | None = None  # slot count default (None = no count)
+    count_limits: tuple[int, int] | None = None  # slot count bounds (birthplace C3)
+    requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
+    agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
+    runtime_fanout: bool = False  # may materialize outside compile (render, D2)
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        kind = cls.__dict__.get("kind")
+        if kind:
+            if kind in NODE_KINDS:
+                raise RuntimeError(f"Duplicate node kind: {kind}")
+            NODE_KINDS[kind] = cls()
+
+    # —— 方法（run 唯一必实现，其余有默认）——
+    async def run(
+        self, db: AsyncSession, run: Any, node: Any, project: Project
+    ) -> list[UUID]:
+        """Execute the node; return the produced output-row ids."""
+        raise NotImplementedError
+
+    def estimate(self, ctx: dict) -> None:
+        """Self-quotation seat (P4): mechanical exact price / agent token range."""
+        return None
+
+    def label(self, slot: IntentSlot | None) -> str | None:
+        """Display name preset as the step's creation-time summary — run
+        progress graph and step list share this one source. ``None`` when the
+        slot carries nothing distinguishing (the stepper then falls back to
+        the kind copy as before)."""
+        tag = slot_tag(slot)
+        if tag is None:
+            return None
+        return f"{self.slot_label or self.kind} · {tag}"
+
+    async def reuse(self, *args: Any, **kwargs: Any) -> UUID | None:
+        """Idempotent-reuse predicate (asset-hash class): a hit returns the
+        earlier row's id — the node costs nothing; a miss falls through to
+        ``run``. First case: ``director_understand``."""
+        return None
+
+
+NODE_KINDS: dict[str, NodeBase] = {}
+
+
+# ---- derived views (no parallel maps — everything computes off the table) ---
+
+
+def node_for(kind: str) -> NodeBase | None:
+    return NODE_KINDS.get(kind)
+
+
+def known_output_types() -> frozenset[str]:
+    """The requestable output types (producer nodes' ``output_type``)."""
+    return frozenset(n.output_type for n in NODE_KINDS.values() if n.output_type)
+
+
+def node_for_output(output_type: str) -> NodeBase | None:
+    """The producer node owning an output type (outputs = skill attribute, N-32)."""
+    for n in NODE_KINDS.values():
+        if n.output_type == output_type:
+            return n
+    return None
+
+
+def slot_type_order() -> dict[str, int]:
+    """Canonical fan-out order of output types (the nodes' ``slot_ordinal``)."""
+    return {
+        n.output_type: n.slot_ordinal
+        for n in NODE_KINDS.values()
+        if n.output_type is not None
+    }
+
+
+def slot_count_limits() -> dict[str, tuple[int, int]]:
+    """Per-type count bounds (birthplace C3), from the nodes' declarations."""
+    return {
+        n.output_type: n.count_limits
+        for n in NODE_KINDS.values()
+        if n.output_type is not None and n.count_limits is not None
+    }
+
+
+def slot_default_counts() -> dict[str, int]:
+    """Per-type count defaults, from the nodes' declarations."""
+    return {
+        n.output_type: n.count_default
+        for n in NODE_KINDS.values()
+        if n.output_type is not None and n.count_default is not None
+    }
+
+
+def generation_node_kinds() -> frozenset[str]:
+    """GENERATION_NODE_KINDS, node-derived (``produces_outputs``)."""
+    return frozenset(n.kind for n in NODE_KINDS.values() if n.produces_outputs)
+
+
+def runtime_fanout_kinds() -> frozenset[str]:
+    """Kinds that may materialize outside compile_graph (render, D2)."""
+    return frozenset(n.kind for n in NODE_KINDS.values() if n.runtime_fanout)

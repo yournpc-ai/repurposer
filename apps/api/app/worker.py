@@ -37,7 +37,7 @@ from app.pipeline.orchestrator import (
     expire_stale_checkpoints,
     finalize_stuck_runs,
 )
-from app.pipeline.registry import assert_runners_registered
+from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.rendering import render_output
 
 logger = structlog.get_logger()

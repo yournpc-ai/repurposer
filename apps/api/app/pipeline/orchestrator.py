@@ -17,7 +17,7 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -27,35 +27,30 @@ from app.models.schemas import (
     AssetType,
     IntentSlot,
     ProjectStatus,
-    SLOT_COUNT_LIMITS,
     TaskItem,
     WorkflowStatus,
 )
-from app.models.tables import Asset, Message, Output, WorkflowStep, Persona, Project, WorkflowRun
+from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.errors import TransientNodeError
-from app.pipeline.registry import (
-    STEP_RUNNERS,
-    SkillEntry,
+from app.pipeline.graph import (
+    NODE_KINDS,
+    Requirement,
     generation_node_kinds,
-    retries_for_node_kind,
-    validate_task_list,
+    known_output_types,
+    node_for,
+    node_for_output,
+    runtime_fanout_kinds,
+    slot_count_limits,
+    slot_type_order,
 )
-from app.pipeline.step_context import KNOWN_OUTPUTS
-from app.pipeline.step_display import slot_tag
+from app.pipeline.recipes import RECIPE_REGISTRY
+from app.skills import SKILL_REGISTRY, SkillEntry, validate_task_list
 
 logger = structlog.get_logger()
 
 GENERATION_NODE_KINDS = generation_node_kinds()
-
-_OUTPUT_TO_NODE_KIND: dict[str, str] = {
-    "clips": "clips_pipeline",
-    "post": "post_gen",
-    "quotes": "quotes_gen",
-    "carousel": "carousel_gen",
-    "article": "article_gen",
-}
 
 _TARGETED_DERIVATIVE_SCOPES = {"derivative", "post", "quotes", "carousel", "article"}
 
@@ -122,30 +117,19 @@ class _NodeSpec:
         self.spec = spec or {}
 
 
-# Canonical slot order for the full-run fan-out: deterministic so the step
-# list is stable across runs; same-type slots keep their request order.
-_SLOT_ORDER = {"clips": 0, "post": 1, "quotes": 2, "carousel": 3, "article": 4}
-
-_SLOT_TYPE_LABEL = {
-    "clips": "Clips",
-    "post": "Post",
-    "quotes": "Quotes",
-    "carousel": "Carousel",
-    "article": "Article",
-}
-
-
 def ordered_slots(slots: list[IntentSlot]) -> list[IntentSlot]:
     """Canonical fan-out order (type order, then request order within type).
 
-    Clips is a single aggregate slot — duplicate clips slots are dropped
-    (first wins); the clips_pipeline runner's idempotent re-cut semantics
-    assume one clips node per run.
+    The type order derives from the nodes' ``slot_ordinal`` declarations
+    (no parallel map). Clips is a single aggregate slot — duplicate clips
+    slots are dropped (first wins); the select_clips runner's idempotent
+    re-cut semantics assume one clips node per run.
     """
+    order = slot_type_order()
     ordered: list[IntentSlot] = []
     seen_clips = False
     for slot in sorted(
-        enumerate(slots), key=lambda p: (_SLOT_ORDER.get(p[1].type, 99), p[0])
+        enumerate(slots), key=lambda p: (order.get(p[1].type, 99), p[0])
     ):
         s = slot[1]
         if s.type == "clips":
@@ -159,16 +143,18 @@ def ordered_slots(slots: list[IntentSlot]) -> list[IntentSlot]:
 def slot_step_label(slot: IntentSlot) -> str | None:
     """Display label distinguishing same-kind sibling steps (per-slot fan-out).
 
-    Preset as the step's spec.summary at materialization so two ``post_gen``
-    nodes (e.g. English/German) read differently in the stepper before they
-    run; the runner rewrites it with the quantified line + the same tag when
-    done. ``None`` when the slot carries nothing distinguishing (the common
-    case — the stepper then falls back to the kind copy as before).
+    The label derives from the slot type's node (``NodeBase.label`` — the
+    retired slot-type→label map's home): preset as the step's
+    spec.summary at materialization so two ``write_post`` nodes (e.g.
+    English/German) read differently in the stepper before they run; the
+    runner rewrites it with the quantified line + the same tag when done.
+    ``None`` when the slot carries nothing distinguishing (the common case —
+    the stepper then falls back to the kind copy as before).
     """
-    tag = slot_tag(slot)
-    if tag is None:
+    owner = node_for_output(slot.type)
+    if owner is None:
         return None
-    return f"{_SLOT_TYPE_LABEL.get(slot.type, slot.type)} · {tag}"
+    return owner.label(slot)
 
 
 def compile_graph(
@@ -200,7 +186,7 @@ def compile_graph(
     scope = task.scope or "full"
 
     if scope == "full":
-        slots = ordered_slots([s for s in task.outputs if s.type in KNOWN_OUTPUTS])
+        slots = ordered_slots([s for s in task.outputs if s.type in known_output_types()])
         if not slots:
             slots = [IntentSlot(type="clips")]
         nodes = [
@@ -246,7 +232,7 @@ def compile_graph(
             if slot.type == "clips" and align_idx is not None:
                 inputs.append(align_idx)
             nodes.append(
-                _NodeSpec(_OUTPUT_TO_NODE_KIND[slot.type], seq, inputs=inputs, spec=spec)
+                _NodeSpec(node_for_output(slot.type).kind, seq, inputs=inputs, spec=spec)
             )
             if slot.type == "clips":
                 clips_idx = len(nodes) - 1
@@ -263,7 +249,7 @@ def compile_graph(
             for lang in dict.fromkeys(task.dub_languages):
                 nodes.append(
                     _NodeSpec(
-                        "dub",
+                        "dub_clip",
                         seq,
                         inputs=[clips_idx],
                         spec={
@@ -279,7 +265,7 @@ def compile_graph(
     if scope in ("hook", "clip"):
         return [
             _NodeSpec(
-                "script",
+                "revise_script",
                 1,
                 spec={
                     "scope": scope,
@@ -297,7 +283,7 @@ def compile_graph(
             _NodeSpec("director_understand", 1),
             _NodeSpec("director_plan", 2, inputs=[0], spec={"target_type": target_type}),
             _NodeSpec(
-                _OUTPUT_TO_NODE_KIND[target_type],
+                node_for_output(target_type).kind,
                 3,
                 inputs=[1],
                 spec={
@@ -318,15 +304,6 @@ def compile_graph(
         ]
 
     raise ValueError(f"Targeted scope not implemented: {scope}")
-
-
-_SKILL_TO_OUTPUT: dict[str, str] = {
-    "select_clips": "clips",
-    "write_post": "post",
-    "write_quotes": "quotes",
-    "write_carousel": "carousel",
-    "write_article": "article",
-}
 
 
 def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> list[_NodeSpec]:
@@ -350,7 +327,7 @@ def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> lis
     entries = validate_task_list(task.tasks or [])  # raises SkillRejected
     nodes: list[_NodeSpec] = []
 
-    if any(entry.needs_director for entry in entries):
+    if any(NODE_KINDS[entry.name].needs_director for entry in entries):
         nodes.extend(
             [
                 _NodeSpec("preprocess", 1),
@@ -365,12 +342,13 @@ def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> lis
     skill_node_idx: dict[str, int] = {}
     modifiers: list[tuple[TaskItem, SkillEntry]] = []
     for item, entry in zip(task.tasks or [], entries, strict=True):
+        node_cls = NODE_KINDS[entry.name]
         params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
         if entry.name == "align_stills":
             # Handled by the input-profile injection below — the LLM naming
             # it explicitly changes nothing (idempotent runner).
             continue
-        if not entry.needs_director and not entry.produces_outputs:
+        if not node_cls.needs_director and not node_cls.produces_outputs:
             modifiers.append((item, entry))
             continue
         if entry.name == "revise_script":
@@ -382,23 +360,23 @@ def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> lis
                 "instruction": params.instruction or task.instruction,
                 "operation": "revise",
             }
-        elif entry.node_kind == "clips_pipeline":
+        elif entry.name == "select_clips":
             spec = {"target_language": task.target_language}
         else:
             spec = {
                 "target_id": str(task.target_id) if task.target_id else None,
                 "target_language": task.target_language,
-                "target_type": _SKILL_TO_OUTPUT[entry.name],
+                "target_type": node_cls.output_type,
             }
         inputs = [director_idx] if director_idx is not None else []
-        if entry.node_kind == "clips_pipeline" and add_stills_align:
+        if entry.name == "select_clips" and add_stills_align:
             align_inputs = [director_idx] if director_idx is not None else []
             skill_node_idx["align_stills"] = len(nodes)
             nodes.append(_NodeSpec("align_stills", seq, inputs=align_inputs))
             seq += 1
             inputs = [*inputs, skill_node_idx["align_stills"]]
         skill_node_idx[entry.name] = len(nodes)
-        nodes.append(_NodeSpec(entry.node_kind, seq, inputs=inputs, spec=spec))
+        nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
         seq += 1
 
     # Modifiers run after the nodes named in their `after` constraints (when
@@ -406,13 +384,14 @@ def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> lis
     # parallel with each other. No edges at all = act on existing clips.
     prev_modifier_idx: int | None = None
     for item, entry in modifiers:
+        node_cls = NODE_KINDS[entry.name]
         params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
-        inputs = [skill_node_idx[name] for name in entry.after if name in skill_node_idx]
+        inputs = [skill_node_idx[name] for name in node_cls.after if name in skill_node_idx]
         if prev_modifier_idx is not None:
             inputs.append(prev_modifier_idx)
         prev_modifier_idx = len(nodes)
         spec = params.model_dump(mode="json") if params else {}
-        nodes.append(_NodeSpec(entry.node_kind, seq, inputs=inputs, spec=spec))
+        nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
         seq += 1
 
     return nodes
@@ -421,15 +400,17 @@ def _compile_task_list(task: TaskSpec, *, add_stills_align: bool = False) -> lis
 def derive_context_fields(tasks: list[TaskItem]) -> dict:
     """Backfill the mode① context fields (slot list) from a task list, so
     run.context consumers always see the same shape. Slot type comes from the
-    skill, count from its params (mode② task items carry no focus/language)."""
+    skill's node (``output_type``), count from its params (mode② task items
+    carry no focus/language)."""
     slots: dict[str, IntentSlot] = {}
     for item in tasks:
-        output = _SKILL_TO_OUTPUT.get(item.skill)
+        owner = node_for(item.skill)
+        output = owner.output_type if owner is not None else None
         if output is None or output in slots:
             continue
         count = (item.params or {}).get("count")
         slots[output] = IntentSlot(
-            type=output,  # type: ignore[arg-type]
+            type=output,
             count=int(count) if count is not None else None,
         )
     return {"outputs": [s.model_dump(mode="json") for s in slots.values()]}
@@ -439,62 +420,15 @@ async def _validate_requires(
     db: AsyncSession, project: Project, entries: list[SkillEntry]
 ) -> None:
     """Birthplace rejection: every input a task list's skills declare must
-    exist on the project before the run is created (CHAT_ARCH §5)."""
-    needs: set[str] = set()
+    exist on the project before the run is created (CHAT_ARCH §5). The
+    requirements live on the node classes (AGENT_ARCH §4.2: 校验 = ∀requires)."""
+    needs: dict[str, Requirement] = {}
     for entry in entries:
-        needs.update(entry.requires)
-    for req in sorted(needs):
-        missing = False
-        if req == "media":
-            result = await db.execute(
-                select(Asset.id)
-                .where(
-                    Asset.project_id == project.id,
-                    Asset.type.in_(
-                        [AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES]
-                    ),
-                    Asset.file_url.isnot(None),
-                )
-                .limit(1)
-            )
-            missing = result.scalar_one_or_none() is None
-        elif req == "transcript":
-            # Mirrors the consumption rule (platform/project_context.py):
-            # documents land in extracted_text, ASR lands in transcript /
-            # meta.words — any of the three satisfies a text input.
-            result = await db.execute(
-                select(Asset.id)
-                .where(
-                    Asset.project_id == project.id,
-                    or_(
-                        Asset.transcript.isnot(None),
-                        Asset.extracted_text.isnot(None),
-                        Asset.meta["words"].isnot(None),
-                    ),
-                )
-                .limit(1)
-            )
-            missing = result.scalar_one_or_none() is None
-        elif req == "persona_photo":
-            persona = (
-                await db.get(Persona, project.persona_id) if project.persona_id else None
-            )
-            missing = persona is None or not persona.avatar_url
-        elif req == "voiceprint":
-            if not project.persona_id:
-                missing = True
-            else:
-                result = await db.execute(
-                    select(Asset.id)
-                    .where(
-                        Asset.persona_id == project.persona_id,
-                        Asset.type == AssetType.VOICE_SAMPLE,
-                    )
-                    .limit(1)
-                )
-                missing = result.scalar_one_or_none() is None
-        if missing:
-            raise ValueError(f"Missing required input: {req}")
+        for req in NODE_KINDS[entry.name].requires:
+            needs[req.key] = req
+    for key in sorted(needs):
+        if await needs[key].missing(db, project):
+            raise ValueError(f"Missing required input: {key}")
 
 
 # Birthplace rejection message for the clips-media gate (A1: the gate lives
@@ -574,7 +508,7 @@ async def create_run(
         target = await db.get(Output, task.target_id)
         if target is None or target.project_id != project.id:
             raise ValueError("Target output not found")
-        if target.type not in _OUTPUT_TO_NODE_KIND or target.type == "clips":
+        if node_for_output(target.type) is None or target.type == "clips":
             raise ValueError(f"Target output type {target.type} is not regenerable")
         target_type = target.type
 
@@ -585,8 +519,9 @@ async def create_run(
     # Slot sanity (C3): an out-of-bounds count is real money (count=999
     # quotes = 999 image generations). Post/article carry no count — one
     # slot = one output; same-type multi slots are how you ask for more.
+    count_limits = slot_count_limits()
     for slot in task.outputs:
-        limits = SLOT_COUNT_LIMITS.get(slot.type)
+        limits = count_limits.get(slot.type)
         if limits and slot.count is not None and not limits[0] <= slot.count <= limits[1]:
             raise ValueError(
                 f"{slot.type} count must be between {limits[0]} and {limits[1]} "
@@ -674,9 +609,9 @@ async def execute_step(node_id: UUID) -> None:
                 node = await db.get(WorkflowStep, node_id)
                 run = await db.get(WorkflowRun, node.run_id)
                 project = await db.get(Project, run.project_id)
-                runner = STEP_RUNNERS[node.kind]
+                executor = NODE_KINDS[node.kind]
                 with bind_workflow_step(node.id):
-                    output_ids = await runner(db, run, node, project)
+                    output_ids = await executor.run(db, run, node, project)
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
                 if node.kind == "render":
                     # The render chain owns this node's terminal state (D2):
@@ -714,7 +649,9 @@ async def execute_step(node_id: UUID) -> None:
                 # within the kind's retry budget resets the node to pending —
                 # the worker's next tick is the backoff, downstream is NOT
                 # cascade-skipped. Deterministic failures fail fast as before.
-                budget = retries_for_node_kind(node.kind)
+                # The budget lives on the node class (NodeBase.retries).
+                executor = node_for(node.kind)
+                budget = executor.retries if executor is not None else 0
                 if isinstance(e, TransientNodeError) and (node.attempt or 0) <= budget:
                     node.status = "pending"
                     node.error = f"transient attempt {node.attempt}: {str(e)[:500]}"
@@ -975,3 +912,78 @@ async def finalize_stuck_runs() -> None:
         ).scalars().all()
     for rid in run_ids:
         await maybe_finalize_run(rid)
+
+
+# ---- startup self-check (AGENT_ARCH §10) ------------------------------------
+
+
+def _recipe_adds_stills(input_types: set[str]) -> bool:
+    """The recipe's input profile (its declared input_slots) answers what
+    ``_needs_stills_alignment`` answers from real assets at the birthplace:
+    no recording + a transcript + images → the compiled graph carries an
+    align_stills node."""
+    return (
+        "video" not in input_types
+        and "audio" not in input_types
+        and "transcript" in input_types
+        and bool({"images", "slides"} & input_types)
+    )
+
+
+def assert_runners_registered() -> None:
+    """Startup self-check, three parts (AGENT_ARCH §10):
+
+    1. registry ↔ node consistency: every non-seat skill entry has a node in
+       ``NODE_KINDS`` under the same name (N-35), and every skill-package
+       node has an entry (internal crew — ``app.pipeline.*`` — never enters
+       the proposal space by design).
+    2. node → agent references exist: every agent a node declares (its
+       ``agents`` tuple, plus Agent-typed class attributes like the writers'
+       ``writer``) is collected in the ``AGENTS`` roster.
+    3. recipe flow reconciliation (对账 = ⊆): every curated recipe flow key
+       names a kind the recipe's own preset compiles to (``compile_graph``
+       is pure — compiled and compared directly; runtime fan-out kinds —
+       render, D2 — count as present).
+    """
+    for entry in SKILL_REGISTRY.values():
+        if not entry.seat and entry.name not in NODE_KINDS:
+            raise RuntimeError(
+                f"Skill '{entry.name}': no node registered under that name"
+            )
+    for node in NODE_KINDS.values():
+        if (
+            not type(node).__module__.startswith("app.pipeline.")
+            and node.kind not in SKILL_REGISTRY
+        ):
+            raise RuntimeError(
+                f"Node '{node.kind}' ({type(node).__module__}): no SKILL_REGISTRY entry"
+            )
+
+    from app.agents.base import AGENTS, Agent  # deferred: metering-free leaf
+
+    for node in NODE_KINDS.values():
+        refs = list(node.agents) + [
+            v for v in vars(type(node)).values() if isinstance(v, Agent)
+        ]
+        for agent in refs:
+            if AGENTS.get(agent.name) is not agent:
+                raise RuntimeError(
+                    f"Node '{node.kind}': agent '{agent.name}' not in the AGENTS roster"
+                )
+
+    for recipe_id, entry in RECIPE_REGISTRY.items():
+        if not entry.flow:
+            continue
+        add_stills = _recipe_adds_stills({s.type for s in entry.input_slots})
+        compiled = {
+            ns.kind
+            for ns in compile_graph(
+                TaskSpec(outputs=entry.outputs, dub_languages=entry.dub_languages),
+                add_stills_align=add_stills,
+            )
+        } | runtime_fanout_kinds()
+        missing = [step.key for step in entry.flow if step.key not in compiled]
+        if missing:
+            raise RuntimeError(
+                f"Recipe '{recipe_id}': flow keys missing from the compiled graph: {missing}"
+            )

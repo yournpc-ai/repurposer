@@ -73,10 +73,10 @@ class NodeBase:
     after: tuple[str, ...] = ()         # 拓扑约束
     needs_director: bool = False        # 需要导演前奏（preprocess→persona∥understand→plan）
     retries: int = 0                    # step 级瞬时重试预算
+    requires: tuple[Requirement, ...] = ()  # 出生地门禁（media/transcript/persona_photo/voiceprint）
     # —— 方法（run 唯一必实现，其余有默认）——
     async def run(db, run, node, project) -> list[UUID]   # 执行，返回产物行 id
-    def estimate(ctx) -> CostEstimate   # 自己报价：机械精确价 / agent token 区间
-    def requires() -> list[Requirement] # 出生地门禁（media/transcript/persona_photo/voiceprint）
+    def estimate(ctx) -> CostEstimate   # 自己报价：机械精确价 / agent token 区间（P4 座位，默认 None）
     def label(slot) -> str | None       # 展示名（run 进度图 / 步骤流同源）
     def reuse(...) -> UUID | None       # 幂等复用（asset-hash 类，命中则成本为零）
 ```
@@ -87,7 +87,7 @@ class NodeBase:
 |---|---|
 | **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
 | **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
-| **校验** | ∀：出生地（`create_run`）对每个节点 `requires()` 一次跑完，缺输入 422 |
+| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422 |
 | **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），人肉评审退役 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
@@ -137,7 +137,7 @@ class Agent[OutT]:
 - `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**技能私有声明住技能包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
-- context 装配层（`contexts.py`）：GenerationContext / mentions 注入 / recent 轮次 / per-step 状态段——harness 的输入侧，chat service 不持装配逻辑。
+- context 装配：节点侧 = `pipeline/step_context.py` 共享助手 + 各 agent 声明的 `assemble` 回调（签名即纯度）；chat 侧 = `service.py::_build_context` 确定性装配。harness 统一装配层（`agents/contexts.py`：GenerationContext / mentions 注入 / recent 轮次收口）是 P3 座位。
 
 ### 5.4 明确不建的 harness 部件
 
@@ -189,7 +189,7 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 ## 11. Critical files
 
 - `app/agents/base.py` — Agent 类（harness 漏斗）；`app/agents/roster.py` — 共享 crew 花名册
-- `app/agents/contexts.py` — 调用面装配层（GenerationContext / mentions / recent 轮次）
+- `app/pipeline/step_context.py` — 节点侧装配助手（GenerationContext / 多模态收集 / 素材摘要）；统一装配层 `agents/contexts.py` 属 P3 座位
 - `app/skills/` — 技能包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`skills/__init__.py` — SKILL_REGISTRY 收编
 - `app/tools/` — 机械库（asr / voice / storage / filler / transcript / music…）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾

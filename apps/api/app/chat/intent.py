@@ -15,7 +15,16 @@ tool-calling-style call per turn, never a ReAct loop; the LLM proposes and
 from app.clients.minimax import MiniMaxClient, MiniMaxError
 from app.models.schemas import InferredIntent, IntentResult, IntentSlot
 from app.operations.registry import OP_REGISTRY
-from app.pipeline.registry import dispatchable_skills
+from app.pipeline.graph import slot_type_order
+from app.skills import dispatchable_skills
+
+
+def _output_type_list() -> str:
+    """The PlanAgent prompt's output-type enumeration, registry-injected
+    (N-32): a new output type is one registry entry away, and the prompt
+    knows it the same turn. Canonical slot order (clips first)."""
+    ordered = sorted(slot_type_order().items(), key=lambda p: p[1])
+    return "|".join(f'"{name}"' for name, _ in ordered)
 
 
 class PlanAgent:
@@ -99,7 +108,7 @@ class PlanAgent:
         return InferredIntent(
             action="generate",
             answer=None,
-            outputs=[IntentSlot(type=t, language="en") for t in types],  # type: ignore[arg-type]
+            outputs=[IntentSlot(type=t, language="en") for t in types],
             outputs_explicit=False,
             tone="professional",
             specific_instruction=prompt.strip() or None,
@@ -173,7 +182,7 @@ class PlanAgent:
             "and start with the text outputs only.\n"
             "- outputs: array of requested task slots — one object per "
             "requested output:\n"
-            '  {"type": "clips"|"post"|"quotes"|"carousel"|"article", '
+            '  {"type": ' + _output_type_list() + ', '
             '"count": int|null, "focus": string|null, "language": string, '
             '"tone_override": string|null, "explicit": false}\n'
             "  Default to bare slots (count/focus/tone null) for clips, post, "

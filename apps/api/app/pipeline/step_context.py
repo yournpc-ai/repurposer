@@ -1,9 +1,9 @@
 """Runner-side assembly and misc shared by node runners (ADR-039 P1 split).
 
 Context assembly (``_generation_context``), multimodal input collection,
-asset listing/digest, and the small shared vocabulary (``KNOWN_OUTPUTS``).
-The harness-side assembly layer (``agents/contexts.py``) lands in P3 and may
-absorb part of this module.
+asset listing/digest. The output-type vocabulary lives on the node classes
+(``pipeline/graph.py``, N-32). The harness-side assembly layer
+(``agents/contexts.py``) lands in P3 and may absorb part of this module.
 """
 
 import hashlib
@@ -24,8 +24,6 @@ from app.models.schemas import (
 from app.models.tables import Asset, Persona, Project, WorkflowRun
 from app.platform.project_context import persona_context_from_row
 from app.tools.storage import download_to_temp, file_to_data_url
-
-KNOWN_OUTPUTS = ("clips", "post", "quotes", "article", "carousel")
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. These limits are

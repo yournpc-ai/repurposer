@@ -40,6 +40,14 @@ jinja_env = Environment(
 # Maximum characters to send per text to stay well within the model window.
 MAX_CHARS_PER_TEXT = 150_000
 
+# The roster dict (N-30): every declared instance self-registers on
+# construction — shared crew (``agents/roster.py``) and skill-private
+# declarations (``skills/<pkg>/agents.py``) alike, so ``AGENTS`` enumerates
+# the whole crew once the registry door (``app/skills/__init__.py``) has
+# imported every package. The startup self-check walks node→agent references
+# against it (ADR-039 P2).
+AGENTS: dict[str, "Agent"] = {}
+
 # assemble() returns (template kwargs, multimodal inputs).
 AssembleResult = tuple[dict[str, Any], list[MediaInput]]
 
@@ -97,6 +105,9 @@ class Agent(Generic[OutT]):
         # any reason, retry once with the text-only prompt.
         self.media_text_fallback = media_text_fallback
         self.client = client or minimax_client
+        if name in AGENTS:
+            raise RuntimeError(f"Duplicate agent declaration: {name}")
+        AGENTS[name] = self
 
     async def call(self, **ctx: Any) -> OutT:
         """Run the funnel: assemble → render → generate → postprocess."""

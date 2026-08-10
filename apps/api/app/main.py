@@ -18,7 +18,7 @@ from app.chat.routes import chat_router
 from app.distribution.routes import router as distribution_router
 from app.memory.routes import personas_router
 from app.pipeline.music import seed_default_music
-from app.pipeline.registry import assert_runners_registered
+from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.routes import (
     assets,
     music,

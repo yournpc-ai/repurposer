@@ -444,7 +444,7 @@ class TaskItem(BaseModel):
     """One LLM-proposed task: a registry skill plus its params (CHAT_ARCH §3).
 
     The LLM proposes; ``compile_graph`` adjudicates existence, params and
-    topology against ``pipeline/registry.py`` — the LLM never writes node specs.
+    topology against ``app/skills/__init__.py`` — the LLM never writes node specs.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -568,11 +568,15 @@ class IntentSlot(BaseModel):
     ``explicit`` marks user-edited slots — they are three-way merged across
     re-inference (panel edits survive LLM parroting; chat revisions always
     win, ``merge_prior_slots``).
+
+    N-32: ``type`` is a plain ``str`` validated against the outputs registry
+    (the producer nodes' ``output_type`` declarations — a new output type is
+    one registry entry away, never a schema edit).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["clips", "post", "quotes", "carousel", "article"]
+    type: str
     count: int | None = None
     focus: str | None = None
     language: str | None = None
@@ -589,18 +593,20 @@ class IntentSlot(BaseModel):
             return {"type": data}
         return data
 
+    @model_validator(mode="after")
+    def _known_output_type(self) -> "IntentSlot":
+        """Registry validation (N-32): the type must be a declared output
+        type. Rejects exactly what the retired Literal rejected — an unknown
+        type fails parse here, never silently downstream."""
+        # Deferred: models is the leaf layer. Importing the registry door
+        # (not bare graph) guarantees NODE_KINDS is populated regardless of
+        # process entry order.
+        import app.skills  # noqa: F401
+        from app.pipeline.graph import known_output_types
 
-# Per-type count defaults for slots with ``count=None`` (task-book default).
-SLOT_DEFAULT_COUNT: dict[str, int] = {"clips": 5, "quotes": 3, "carousel": 6}
-
-# Per-type count bounds (C3) — enforced at the run birthplace (create_run).
-# Mirrors the review panel's own limits; post/article carry no count (one
-# slot = one output; same-type multi slots are how you ask for more).
-SLOT_COUNT_LIMITS: dict[str, tuple[int, int]] = {
-    "clips": (1, 10),
-    "quotes": (1, 20),
-    "carousel": (2, 15),
-}
+        if self.type not in known_output_types():
+            raise ValueError(f"Unknown output type: {self.type}")
+        return self
 
 
 class InferredIntent(BaseModel):
