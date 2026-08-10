@@ -3,17 +3,22 @@
 
 /* ── Edges: two visual semantics ─────────────────────────────────────── */
 
+/* React Flow's example edges read as an always-visible neutral gray at any
+ * zoom; ours were 1.5px at 22–55% opacity, which a fit zoom of ~0.4 renders
+ * sub-pixel (2026-08-10). vector-effect: non-scaling-stroke pins the stroke
+ * to a constant screen width at every fit level. */
 .flow-edge {
   fill: none;
-  stroke-width: 1.5;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 .flow-edge-dependency {
-  stroke: var(--foreground);
-  stroke-opacity: 0.22;
+  stroke: var(--muted-foreground);
+  stroke-opacity: 0.55;
 }
 .flow-edge-lineage {
   stroke: var(--primary);
-  stroke-opacity: 0.55;
+  stroke-opacity: 0.9;
 }
 
 /* ── Birth choreography (ADR-036 补记 3) ─────────────────────────────── */

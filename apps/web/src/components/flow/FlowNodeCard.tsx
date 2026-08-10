@@ -79,10 +79,12 @@ function StepCard({ node }: { node: FlowNode }) {
       {node.status ? (
         <StatusBadge status={node.status} />
       ) : (
-        <span className="h-5 w-5 rounded-full bg-muted" />
+        <span className="h-5 w-5 shrink-0 rounded-full bg-muted" />
       )}
+      {/* Labels wrap to two lines (the pill is sized for it) — a truncated
+          "…" node is never acceptable. Detail stays a one-line tag. */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm leading-tight">{node.label}</p>
+        <p className="line-clamp-2 text-sm leading-snug">{node.label}</p>
         {node.detail && (
           <p className="truncate text-xs leading-tight text-muted-foreground">{node.detail}</p>
         )}

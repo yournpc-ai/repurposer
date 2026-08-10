@@ -1,11 +1,13 @@
 import type { FlowEdge, FlowNode, FlowNodeKind } from "./types"
 
 /** Fixed node dimensions per skin — layout is pure math with zero DOM
- * measurement (SSR-safe, no ResizeObserver feedback loops). */
+ * measurement (SSR-safe, no ResizeObserver feedback loops). Step pills are
+ * sized for a TWO-LINE label + one detail line (a truncated "Understand
+ * the…" node is a bug, never a style — 2026-08-10). */
 export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: number }> = {
   asset: { width: 128, height: 216 },
   output: { width: 128, height: 216 },
-  step: { width: 176, height: 64 },
+  step: { width: 192, height: 72 },
 }
 
 const GAP_MAIN = 96

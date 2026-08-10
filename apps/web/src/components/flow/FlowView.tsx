@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   BackgroundVariant,
-  getNodesBounds,
-  getViewportForBounds,
   ReactFlow,
   useReactFlow,
 } from "@xyflow/react"
@@ -23,12 +21,17 @@ import type { FlowViewProps } from "./types"
 const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
 
-/** Fit + center, computed MANUALLY (getNodesBounds + getViewportForBounds +
- * setViewport) — xyflow's own fitView prop raced node measurement and landed
- * the graph top-hugged on bounded surfaces (2026-08-09). Runs: on mount
- * (double rAF, after paint + measurement), on growth (animated), and on
- * surface resize (ResizeObserver; fit-locked surfaces only — explore
- * surfaces keep the user's own viewport). */
+/** Fit + center via the framework's own `fitView` (xyflow's recommended
+ * centered-with-padding viewport). Two hard-won parameter rules:
+ * 1. minZoom must go LOW (0.15) — a wide recipe graph needs ~0.36 on the
+ *    overlay canvas; when the floor clamps above the needed zoom,
+ *    getViewportForBounds still centers, so the graph overflows BOTH edges
+ *    (2026-08-10 bug: right column cut off).
+ * 2. maxZoom caps at 1 on fit surfaces — a small graph must not upscale
+ *    into giant cards.
+ * Runs: on mount (double rAF, after paint + measurement), on growth
+ * (animated), and on surface resize (ResizeObserver; fit-locked surfaces
+ * only — explore surfaces keep the user's own viewport). */
 function ViewportController({
   count,
   wrapperRef,
@@ -44,21 +47,9 @@ function ViewportController({
   const fit = useCallback(
     (duration: number) => {
       const el = wrapperRef.current
-      if (!el) return
-      const nodes = rf.getNodes()
-      if (nodes.length === 0) return
-      const width = el.clientWidth
-      const height = el.clientHeight
-      if (!width || !height) return
-      const viewport = getViewportForBounds(
-        getNodesBounds(nodes),
-        width,
-        height,
-        0.4,
-        1.5,
-        0.15,
-      )
-      rf.setViewport(viewport, { duration })
+      if (!el || !el.clientWidth || !el.clientHeight) return
+      if (rf.getNodes().length === 0) return
+      void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.15, duration })
     },
     [rf, wrapperRef],
   )
@@ -159,7 +150,9 @@ export function FlowView({
         edges={rfEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        minZoom={0.4}
+        // The store's zoom floor must sit BELOW any fit the controller can
+        // compute (a floor above it clamps the fit and overflows the canvas).
+        minZoom={0.15}
         maxZoom={1.5}
         // Vendor attribution off — the canvas is product chrome, not an ad slot.
         proOptions={{ hideAttribution: true }}
