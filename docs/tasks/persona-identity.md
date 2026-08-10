@@ -45,6 +45,12 @@
 - 08-13：触点入口（composer 人设块 hover 三行摘要 / identity echo 变链接）+ 本人含量门禁 v1（非本人素材不提取人设）+ 全链路回归
 - 门禁 v2（W8 一 09-21，`speaker_map` 过滤只从本人段落学）
 
+**08-11 实施锚点**（08-10 勘察定案，开工免再查）：
+- **bootstrap 收窄**：`run_persona_bootstrap`（`pipeline/node_runners.py`）提前退出从 `project.persona_id` 扩到 `resolve_run_persona` 全链（有旧人设直接复用）；mode① 图（`pipeline/orchestrator.py` full 分支）加 `needs_persona(slots)` 判定——注意五种任务书产物全写散文，mode① 几乎恒真，**真正无人设 run = mode② 纯 morph**（`_compile_task_list` 已按 `needs_director` 门禁，不动）。
+- **persona=None 走查清单**：`GenerationContext.persona` 已可空（`models/schemas.py`）；director 系模板 persona 引用 guard；烘焙默认皮肤（08-10 探针已验证）；dub 声纹链 fallback。
+- **dub 声纹链代码家**：`tools/dubbing.py`（优先级链改造）+ `tools/voice.py`（clone/T2A 封装——base_resp 校验与 VIDEO 裁剪都修在这里）。
+- **渲染服务重启必须带 `HTTPS_PROXY=http://127.0.0.1:6152`**（本机直连 TOS 被限速时的取帧超时对策，PROGRESS 08-10 行）。
+
 ## 4. 验收口径（用户视角）
 
 1. composer 只剩一个身份控件「人设」（值 = Auto / 人设名），底排无 Brand pill；
