@@ -230,6 +230,10 @@ class WorkflowStep(Base):
     output_refs = Column(JSONB, nullable=False, default=list)
     # {prompt_tokens, completion_tokens, fixed_cost} — metering ledger.
     cost = Column(JSONB, nullable=True)
+    # {prompt_tokens: [low, high], completion_tokens: [low, high], units: {…}}
+    # — the node's compile-time self-quotation (N-34); NULL = never estimated
+    # (legacy rows, runtime fan-out steps, quantities unknowable at compile).
+    estimate = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
     attempt = Column(Integer, nullable=False, default=0)
     started_at = Column(DateTime(timezone=True), nullable=True)

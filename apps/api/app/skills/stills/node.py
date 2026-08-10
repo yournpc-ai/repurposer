@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetType
 from app.models.tables import WorkflowStep, Project, WorkflowRun
-from app.pipeline.graph import TRANSCRIPT, NodeBase
+from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.step_context import _list_assets
 from app.pipeline.step_display import _fill_summary, _set_spec_field
 from app.skills.stills.procedure import cjk_ratio, estimate_words_timeline
@@ -24,6 +24,10 @@ logger = structlog.get_logger()
 class AlignStills(NodeBase):
     kind = "align_stills"
     requires = (TRANSCRIPT,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Reading-pace timeline estimation — deterministic, zero provider."""
+        return estimate_free()
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

@@ -19,6 +19,7 @@ from app.models.schemas import (
     RunResponse,
 )
 from app.models.tables import Output, WorkflowStep, WorkflowRun
+from app.pipeline.graph import fold_estimates
 
 
 def visible_outputs_stmt() -> Select:
@@ -69,6 +70,56 @@ def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:
         totals["completion_tokens"] += int(node.cost.get("completion_tokens") or 0)
         totals["fixed_cost"] += float(node.cost.get("fixed_cost") or 0.0)
     return totals if seen else None
+
+
+def aggregate_step_estimate(nodes: list[WorkflowStep]) -> dict | None:
+    """Run-level quotation = fold over node estimates (P4, N-34 — the read
+    side of 报价=图 fold; the write side is create_run's per-node estimate).
+    None when every node is unquoted (NULL estimates)."""
+    quoted = [node.estimate for node in nodes if node.estimate]
+    if not quoted:
+        return None
+    return fold_estimates(quoted)
+
+
+def step_estimate_deviation(node: WorkflowStep) -> dict | None:
+    """actual (cost ledger) vs estimate (quotation), per token field — the
+    calibration regression's read shape (AGENT_ARCH §8):
+
+        {prompt_tokens:     {actual, low, high, delta},
+         completion_tokens: {actual, low, high, delta}}
+
+    delta = actual − clamp(actual, low, high): 0 = in range, positive = the
+    quote undershot, negative = it overshot. None when either side is
+    missing (a node without an estimate or without metered usage yet). The
+    SQL twin for the fleet-wide regression:
+
+        SELECT kind,
+               count(*) FILTER (WHERE (cost->>'prompt_tokens')::int
+                  BETWEEN (estimate->'prompt_tokens'->>0)::int
+                      AND (estimate->'prompt_tokens'->>1)::int) AS prompt_in_range,
+               count(*) AS n
+        FROM workflow_steps
+        WHERE estimate IS NOT NULL AND cost IS NOT NULL
+        GROUP BY kind;
+    """
+    if not node.estimate or not node.cost:
+        return None
+
+    def field(name: str) -> dict:
+        low, high = (int(v) for v in node.estimate[name])
+        actual = int(node.cost.get(name) or 0)
+        return {
+            "actual": actual,
+            "low": low,
+            "high": high,
+            "delta": actual - min(max(actual, low), high),
+        }
+
+    return {
+        "prompt_tokens": field("prompt_tokens"),
+        "completion_tokens": field("completion_tokens"),
+    }
 
 
 def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:

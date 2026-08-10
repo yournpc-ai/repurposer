@@ -13,7 +13,7 @@ from app.models.schemas import ClipSpec, RenderStatus
 from app.models.tables import Asset, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.clip_spec import remove_range
-from app.pipeline.graph import TRANSCRIPT, NodeBase
+from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
     _record_target_output_ids,
@@ -28,6 +28,12 @@ class RemoveFiller(NodeBase):
     kind = "remove_filler"
     after = ("select_clips",)
     requires = (TRANSCRIPT,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Deterministic detect — no LLM, no priced units. The re-render
+        consequence lives on the fan-out render nodes (born mid-run,
+        unquoted this week)."""
+        return estimate_free()
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

@@ -163,8 +163,23 @@ class NodeBase:
         """Execute the node; return the produced output-row ids."""
         raise NotImplementedError
 
-    def estimate(self, ctx: dict) -> None:
-        """Self-quotation seat (P4): mechanical exact price / agent token range."""
+    def estimate(self, ctx: dict) -> dict | None:
+        """Self-quotation (P4, N-34): mechanical exact units / agent token
+        ranges / free zeros. The estimate JSON is uniform and fold-friendly::
+
+            {"prompt_tokens": [low, high],
+             "completion_tokens": [low, high],
+             "units": {"tts_chars": n, "render_seconds": s, …}}
+
+        ``ctx`` keys (assembled once per ``create_run`` —
+        ``pipeline/step_context._estimate_facts``): ``spec`` (the node's
+        compile spec), ``input_kinds`` (upstream kinds, same run),
+        ``text_chars`` / ``text_count`` / ``media_count`` /
+        ``persona_exists`` / ``voice_clone_needed`` / ``clips`` (existing
+        renderable clips: caption chars + seconds) / ``output_seconds``.
+        None = unquotable at compile time (e.g. a dub fan-out whose clips
+        do not exist yet) — the row keeps NULL (未估价).
+        """
         return None
 
     def label(self, slot: IntentSlot | None) -> str | None:
@@ -242,3 +257,56 @@ def generation_node_kinds() -> frozenset[str]:
 def runtime_fanout_kinds() -> frozenset[str]:
     """Kinds that may materialize outside compile_graph (render, D2)."""
     return frozenset(n.kind for n in NODE_KINDS.values() if n.runtime_fanout)
+
+
+# ---- self-quotation (P4, N-34): estimate shape + the fold --------------------
+
+
+def token_bounds(chars: int) -> list[int]:
+    """Char count → token range: [chars/5, chars/2] brackets latin (~4
+    chars/token) and CJK (~1.5–2) without shipping a tokenizer."""
+    return [chars // 5, max(chars // 2, 1)]
+
+
+def estimate_free() -> dict:
+    """A zero quotation (checkpoint / deterministic nodes: no LLM, no
+    provider-priced units)."""
+    return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": {}}
+
+
+def estimate_agent(prompt: list[int], completion: list[int]) -> dict:
+    """An agent node's quotation: token ranges, no mechanical units."""
+    return {
+        "prompt_tokens": [max(0, prompt[0]), max(0, prompt[1])],
+        "completion_tokens": [max(0, completion[0]), max(0, completion[1])],
+        "units": {},
+    }
+
+
+def estimate_mechanical(
+    units: dict[str, float], *, prompt: list[int] | None = None, completion: list[int] | None = None
+) -> dict:
+    """A mechanical node's quotation: exact unit quantities (TTS per char /
+    render per second / clone per use / image per piece), optionally with a
+    token range when the node also calls an agent (e.g. dub's translator)."""
+    base = estimate_agent(prompt or [0, 0], completion or [0, 0])
+    base["units"] = dict(units)
+    return base
+
+
+def fold_estimates(estimates: Any) -> dict:
+    """报价 = 图 fold (AGENT_ARCH §4.2): field-wise sum over node estimates —
+    range lows and highs sum separately; units sum per key. NULL estimates
+    (unquoted nodes: fan-out steps, compile-time-unknowable quantities) are
+    skipped — the fold is the quotation of the QUOTED subgraph."""
+    total = {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": {}}
+    for est in estimates:
+        if not est:
+            continue
+        total["prompt_tokens"][0] += int(est["prompt_tokens"][0])
+        total["prompt_tokens"][1] += int(est["prompt_tokens"][1])
+        total["completion_tokens"][0] += int(est["completion_tokens"][0])
+        total["completion_tokens"][1] += int(est["completion_tokens"][1])
+        for key, value in (est.get("units") or {}).items():
+            total["units"][key] = total["units"].get(key, 0) + value
+    return total

@@ -1173,7 +1173,6 @@ async def _propose_turn(
                 kind="choice",
                 options=proposal.options,
                 allow_freeform=proposal.allow_freeform,
-                cost_hint=proposal.cost_hint,
             ),
             intent=proposal.model_dump(mode="json"),
         )

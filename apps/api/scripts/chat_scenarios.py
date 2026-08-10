@@ -25,6 +25,7 @@ birth-ordered and never recycled; position in this file = family.
     checkpoint S36 三答法+空白不答 · S37 bail级联 · S38 supersede级联 · S39 过期扫描 · S40 task_book不参与autoResume
     流式       S9 SSE
     harness    S41 repair 只一轮（Agent 漏斗自检，进程内 stub，不打 API）
+    估价       S42 对账自检 + 报价单调性 + NULL 语义（进程内编译，不打 API）
 
 S31/S35 起的 run 是真的（worker 会执行）；checkpoint 族（S36–S39）seed parked
 run 手工行，答题/过期唤醒后由 worker 跑零 LLM 的 answer 分支收官——需要 dev
@@ -69,7 +70,13 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.clients.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
-from app.models.schemas import MediaInput  # noqa: E402
+from app.models.schemas import IntentSlot, MediaInput  # noqa: E402
+from app.pipeline.graph import NODE_KINDS, fold_estimates  # noqa: E402
+from app.pipeline.orchestrator import (  # noqa: E402
+    TaskSpec,
+    assert_runners_registered,
+    compile_graph,
+)
 from app.models.tables import (  # noqa: E402
     Asset,
     Conversation,
@@ -1678,6 +1685,113 @@ async def s41_repair_one_bounded_round(ctx: Ctx) -> None:
           r_text["content"][-120:])
 
 
+# ---- Scenarios: 估价地基 -----------------------------------------------------
+
+
+async def s42_quotation_foundation(ctx: Ctx) -> None:
+    """S42 估价地基：flow 对账自检过 / 报价单调性（子图 ≤ 全图、非负）/ NULL 语义。"""
+    del ctx  # in-process — compiles + estimates only, no API, no DB rows
+
+    # 1. flow 对账: the startup self-check passes (registry ↔ node, node →
+    #    agent, and the recipe flow keys ⊆ compiled kind set).
+    assert_runners_registered()
+
+    facts = {
+        "text_chars": 50_000,
+        "text_count": 1,
+        "media_count": 1,
+        "persona_exists": False,
+        "voice_clone_needed": True,
+        "clips": [],
+        "output_seconds": {},
+    }
+
+    def quote(node_specs: list) -> dict:
+        return fold_estimates(
+            NODE_KINDS[ns.kind].estimate(
+                {
+                    **facts,
+                    "spec": ns.spec,
+                    "input_kinds": [node_specs[i].kind for i in ns.inputs],
+                }
+            )
+            for ns in node_specs
+        )
+
+    # 2. 报价单调性: the targeted-derivative subgraph quotes ≤ the full
+    #    graph, every field non-negative.
+    full = compile_graph(
+        TaskSpec(
+            outputs=[
+                IntentSlot(type="clips", language="en"),
+                IntentSlot(type="post", language="en"),
+                IntentSlot(type="quotes", language="en"),
+            ]
+        )
+    )
+    sub = compile_graph(
+        TaskSpec(scope="post", target_id=uuid.uuid4()), target_type="post"
+    )
+    full_q, sub_q = quote(full), quote(sub)
+    for field in ("prompt_tokens", "completion_tokens"):
+        check(
+            sub_q[field][0] <= full_q[field][0]
+            and sub_q[field][1] <= full_q[field][1],
+            f"subgraph {field} ≤ full graph",
+            (sub_q[field], full_q[field]),
+        )
+        check(
+            all(v >= 0 for v in sub_q[field] + full_q[field]),
+            f"{field} non-negative",
+            (sub_q[field], full_q[field]),
+        )
+    for key, value in sub_q["units"].items():
+        check(
+            full_q["units"].get(key, 0) >= value,
+            f"subgraph units.{key} ≤ full graph",
+            (sub_q["units"], full_q["units"]),
+        )
+    check(
+        all(v >= 0 for v in full_q["units"].values()),
+        "units non-negative",
+        full_q["units"],
+    )
+
+    # 3. NULL 语义: an initial-run dub fan-out (its target clips don't exist
+    #    at compile) stays NULL (未估价); a modifier dub on existing clips
+    #    quotes its exact mechanical units.
+    with_dub = compile_graph(
+        TaskSpec(
+            outputs=[IntentSlot(type="clips", language="en")],
+            dub_languages=["de"],
+        )
+    )
+    dub_ns = next(ns for ns in with_dub if ns.kind == "dub_clip")
+    est = NODE_KINDS["dub_clip"].estimate(
+        {
+            **facts,
+            "spec": dub_ns.spec,
+            "input_kinds": [with_dub[i].kind for i in dub_ns.inputs],
+        }
+    )
+    check(est is None, "the initial-run dub fan-out stays NULL", est)
+    modifier = NODE_KINDS["dub_clip"].estimate(
+        {
+            **facts,
+            "clips": [{"seconds": 30.0, "caption_chars": 420}],
+            "spec": {"target_language": "de"},
+            "input_kinds": [],
+        }
+    )
+    check(
+        modifier is not None
+        and modifier["units"]["tts_chars"] == 420.0
+        and modifier["units"]["voice_clones"] == 1.0,
+        "the modifier dub quotes exact units",
+        modifier,
+    )
+
+
 SCENARIOS = {
     # 首轮路由
     "S1": s1_vague_first_turn_then_prose_start,
@@ -1731,6 +1845,8 @@ SCENARIOS = {
     "S9": s9_sse_turn_streaming,
     # harness 漏斗
     "S41": s41_repair_one_bounded_round,
+    # 估价地基
+    "S42": s42_quotation_foundation,
 }
 
 

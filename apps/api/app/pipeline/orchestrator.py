@@ -47,6 +47,7 @@ from app.pipeline.graph import (
     slot_type_order,
 )
 from app.pipeline.recipes import RECIPE_REGISTRY
+from app.pipeline.step_context import _estimate_facts
 from app.skills import SKILL_REGISTRY, SkillEntry, validate_task_list
 
 logger = structlog.get_logger()
@@ -562,6 +563,9 @@ async def create_run(
     node_specs = compile_graph(
         task, target_type, add_stills_align=await _needs_stills_alignment(db, project, task)
     )
+    # 报价 = 图 fold 的存储侧 (P4, N-34): each compile-time node quotes
+    # itself from the shared facts; an unquotable node keeps NULL (未估价).
+    estimate_facts = await _estimate_facts(db, project)
     nodes: list[WorkflowStep] = []
     for ns in node_specs:
         node = WorkflowStep(
@@ -570,6 +574,13 @@ async def create_run(
             status="pending",
             seq=ns.seq,
             spec=ns.spec,
+            estimate=NODE_KINDS[ns.kind].estimate(
+                {
+                    **estimate_facts,
+                    "spec": ns.spec,
+                    "input_kinds": [node_specs[i].kind for i in ns.inputs],
+                }
+            ),
         )
         db.add(node)
         nodes.append(node)

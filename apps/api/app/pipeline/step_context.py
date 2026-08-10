@@ -20,7 +20,7 @@ from app.models.schemas import (
     AssetType,
     MediaInput,
 )
-from app.models.tables import Asset, Project
+from app.models.tables import Asset, Output, Persona, Project
 from app.tools.storage import download_to_temp, file_to_data_url
 
 # Media snippets above these thresholds are not sent directly to the multimodal
@@ -180,3 +180,65 @@ async def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
             if item:
                 inputs.append(item)
     return inputs
+
+
+async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
+    """Compile-time quotation facts (P4, N-34), assembled once per create_run.
+
+    Counts and lengths only — no media downloads, no payload reads beyond the
+    clip rows' duration/caption text. Each node's ``estimate(ctx)`` picks what
+    it needs; ``spec`` and ``input_kinds`` ride per node at the call site.
+    """
+    assets = await _list_assets(db, project.id)
+    texts = [t for a in assets if (t := (a.extracted_text or a.transcript))]
+    # Mirrors collect_asset_media's feed surface (no downloads): images with a
+    # file, one item per slide page, videos within the direct-feed duration.
+    media_count = sum(
+        1
+        for a in assets
+        if (a.type == AssetType.IMAGE and a.file_url)
+        or (
+            a.type == AssetType.VIDEO
+            and a.file_url
+            and (a.duration_seconds or 0) <= _MAX_DIRECT_VIDEO_SECONDS
+        )
+    ) + sum(len(a.slide_pages or []) for a in assets if a.type == AssetType.SLIDES)
+
+    persona = await db.get(Persona, project.persona_id) if project.persona_id else None
+    # The dub chain reuses a bound voice_id; anything else pays one clone
+    # (worst case — a cached sample.meta.voice_id would make the actual 0).
+    voice_id = ((persona.voice or {}).get("voice_id")) if persona else None
+
+    clip_rows = list(
+        (
+            await db.execute(
+                select(Output).where(
+                    Output.project_id == project.id,
+                    Output.type == "clip",
+                    Output.render_spec.isnot(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    clips: list[dict] = []
+    output_seconds: dict[str, float] = {}
+    for row in clip_rows:
+        seconds = float((row.payload or {}).get("duration") or 30)
+        caption_chars = sum(
+            len(str(cue.get("text") or ""))
+            for cue in ((row.render_spec or {}).get("caption_track") or [])
+        )
+        clips.append({"seconds": seconds, "caption_chars": caption_chars})
+        output_seconds[str(row.id)] = seconds
+
+    return {
+        "text_chars": sum(len(t) for t in texts),
+        "text_count": len(texts),
+        "media_count": media_count,
+        "persona_exists": persona is not None,
+        "voice_clone_needed": not voice_id,
+        "clips": clips,
+        "output_seconds": output_seconds,
+    }

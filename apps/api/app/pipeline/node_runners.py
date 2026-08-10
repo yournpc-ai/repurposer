@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.roster import director_plan, director_understand, persona
+from app.agents.base import MAX_CHARS_PER_TEXT
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AskOption,
@@ -39,7 +40,14 @@ from app.pipeline.edges import (
     _compute_coverage,
     _load_understanding,
 )
-from app.pipeline.graph import NodeBase, known_output_types
+from app.pipeline.graph import (
+    NodeBase,
+    estimate_agent,
+    estimate_free,
+    estimate_mechanical,
+    known_output_types,
+    token_bounds,
+)
 from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
     _asset_digest,
@@ -59,6 +67,10 @@ logger = structlog.get_logger()
 
 class Preprocess(NodeBase):
     kind = "preprocess"
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Validation only — no LLM, no priced units."""
+        return estimate_free()
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
@@ -81,6 +93,14 @@ class Preprocess(NodeBase):
 class PersonaBootstrap(NodeBase):
     kind = "persona_bootstrap"
     agents = (persona,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """The one extraction call — free when a persona is already mounted
+        (the run's early-exit, knowable at compile)."""
+        if ctx["persona_exists"]:
+            return estimate_free()
+        chars = min(ctx["text_chars"], 20_000 * ctx["text_count"])
+        return estimate_agent(token_bounds(chars + 300), [200, 800])
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
@@ -150,6 +170,16 @@ class PersonaBootstrap(NodeBase):
 class DirectorUnderstand(NodeBase):
     kind = "director_understand"
     agents = (director_understand,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """One multimodal call: texts trimmed to MAX_CHARS_PER_TEXT each plus
+        a per-item media bound. An asset-hash reuse zeroes the ACTUAL — the
+        quote stays the fresh-call cost (reuse is the ledger-side saving)."""
+        chars = min(ctx["text_chars"], MAX_CHARS_PER_TEXT * ctx["text_count"])
+        prompt = token_bounds(chars)
+        prompt[0] += 800 * ctx["media_count"]
+        prompt[1] += 4000 * ctx["media_count"]
+        return estimate_agent(prompt, [400, 2500])
 
     async def reuse(
         self,
@@ -236,6 +266,11 @@ class DirectorUnderstand(NodeBase):
 
 class Checkpoint(NodeBase):
     kind = "checkpoint"
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Zero by ruling (P4): thin node, no LLM — the options are
+        code-derived from the understanding."""
+        return estimate_free()
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
@@ -337,6 +372,12 @@ class DirectorPlan(NodeBase):
     kind = "director_plan"
     agents = (director_plan,)
 
+    def estimate(self, ctx: dict) -> dict | None:
+        """One call: prompt = the upstream understanding (≤ 2500 completion
+        tokens) + task book + persona/tone context; completion = the
+        storyboard (per-slot fields, bounded by the slot schema)."""
+        return estimate_agent([800, 4500], [300, 2500])
+
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
@@ -407,6 +448,17 @@ class RenderRequest(NodeBase):
     # well as at compile time (targeted re-render) — the recipe-flow
     # reconciliation treats them as present in every producer graph.
     runtime_fanout = True
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Render 按秒 (mechanical exact): the target clip's payload duration,
+        knowable for a compile-time targeted re-render. Runtime fan-out
+        renders never reach this — they are born mid-run and stay NULL
+        (unquoted this week, P4 NULL semantics)."""
+        target_id = str((ctx["spec"] or {}).get("target_id") or "")
+        seconds = ctx["output_seconds"].get(target_id)
+        if seconds is None:
+            return None
+        return estimate_mechanical({"render_seconds": float(seconds)})
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

@@ -198,14 +198,15 @@ apps/api/
 │   ├── chat/            # Agent Interface：routes / service / intent
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects / assets / outputs / runs / music 端点
-│   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地）
+│   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
 │   │   ├── graph.py               # NodeBase 协议 + 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── node_runners.py        # 内部节点 crew（preprocess / director 节点 / checkpoint / render）
-│   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手
+│   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手（step_context 兼估价事实装配 _estimate_facts）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
+│   │   │                        # （outputs.py 兼报价读面：fold 聚合 aggregate_step_estimate + 偏差回归 step_estimate_deviation）
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：director/persona/
 │   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）

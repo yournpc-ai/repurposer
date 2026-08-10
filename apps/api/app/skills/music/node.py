@@ -13,7 +13,7 @@ from app.memory.brand import resolve_music_ref
 from app.models.schemas import ClipMusic, ClipSpec, RenderStatus
 from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
-from app.pipeline.graph import MEDIA, NodeBase
+from app.pipeline.graph import MEDIA, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
     _record_target_output_ids,
@@ -29,6 +29,11 @@ class AddMusic(NodeBase):
     kind = "add_music"
     after = ("select_clips",)
     requires = (MEDIA,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Library pick by code — no LLM, no generation (the same fan-out
+        render caveat as the other morphs)."""
+        return estimate_free()
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

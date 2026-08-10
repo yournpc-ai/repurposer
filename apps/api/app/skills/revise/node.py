@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import ClipPayload, Segment
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
-from app.pipeline.graph import NodeBase
+from app.pipeline.graph import NodeBase, estimate_agent
 from app.pipeline.step_display import _fill_summary
 from app.platform.project_context import persona_context_from_row, resolve_persona
 from app.skills.revise.agents import reviser
@@ -21,6 +21,11 @@ class ReviseScript(NodeBase):
     kind = "revise_script"
     produces_outputs = True
     agents = (reviser,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """One reviser call on one existing output (its source_text segment
+        + the instruction); no mechanical ops, no re-render."""
+        return estimate_agent([200, 4000], [200, 1200])
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

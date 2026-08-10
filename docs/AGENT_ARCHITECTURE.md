@@ -76,7 +76,7 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # 出生地门禁（media/transcript/persona_photo/voiceprint）
     # —— 方法（run 唯一必实现，其余有默认）——
     async def run(db, run, node, project) -> list[UUID]   # 执行，返回产物行 id
-    def estimate(ctx) -> CostEstimate   # 自己报价：机械精确价 / agent token 区间（P4 座位，默认 None）
+    def estimate(ctx) -> dict | None  # 自己报价：机械精确价 / agent token 区间；None = 不报价（fan-out / 编译期量未知）
     def label(slot) -> str | None       # 展示名（run 进度图 / 步骤流同源）
     def reuse(...) -> UUID | None       # 幂等复用（asset-hash 类，命中则成本为零）
 ```
@@ -173,7 +173,7 @@ skills/dub/          配音技能
 - **估价（计划侧）**：`node.estimate(ctx)`——机械节点精确价（TTS 按字符 / render 按秒 / 克隆按次），agent 节点 token 区间（按 prompt 规模 + 输出 schema 给上下界），checkpoint = 0。
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
-- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。
+- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第六周。
 - 用户呈现（PROGRESS 第六周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
 
 ## 9. 质检方向（Phase 3，未实现）
@@ -182,7 +182,7 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 10. 验收器
 
-- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S40，真实 LLM 跑形态级断言；本架构的回归网。三断言随迭代新增：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S42，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S41/S42）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
 - e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
 

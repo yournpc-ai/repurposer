@@ -12,3 +12,4 @@ class WritePost(DerivativeWriterNode):
     slot_label = "Post"
     slot_ordinal = 1
     writer = post_writer
+    completion_bounds = (400, 1500)  # a long-form post (~800 words)

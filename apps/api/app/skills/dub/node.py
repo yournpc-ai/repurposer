@@ -22,7 +22,7 @@ from app.models.schemas import RenderStatus
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError
-from app.pipeline.graph import MEDIA, NodeBase
+from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
     _fan_out_renders,
     _modifier_target_clips,
@@ -40,6 +40,32 @@ class DubClip(NodeBase):
     requires = (MEDIA,)
     retries = 2
     agents = (translator,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """TTS 按字符 / 克隆按次 + translator token range, driven by the
+        target clips' caption text — knowable only when the clips EXIST at
+        compile time. A dub fan-out chained on this run's own clips node
+        (initial generation) is unquotable here: NULL (未估价)."""
+        if "select_clips" in ctx.get("input_kinds", ()):
+            return None
+        clips = ctx["clips"]
+        if not clips:
+            return None
+        n = len(clips)
+        caption_chars = sum(c["caption_chars"] for c in clips)
+        # translator: one caption-track call per clip (+ up to one title
+        # call); TTS: one synthesis per ~10-word unit, charged per char of
+        # translated caption text — the source caption chars are the exact
+        # unit driver (translation-length variance and fit re-takes, bounded
+        # at 2×, ride the calibration loop).
+        units: dict[str, float] = {"tts_chars": float(caption_chars)}
+        if ctx["voice_clone_needed"]:
+            units["voice_clones"] = 1.0
+        return estimate_mechanical(
+            units,
+            prompt=[100 * n, 1400 * n],
+            completion=[100 * n, 1600 * n],
+        )
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

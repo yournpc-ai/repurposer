@@ -9,8 +9,7 @@ the same table:
 - the intent agent (LLM) sees the proposal space (``dispatchable_skills``
   feeds its prompt);
 - ``compile_graph`` adjudicates existence / params / topology against it;
-- progress display and metering read ``summary_template`` / ``cost_hint`` /
-  ``behavior``.
+- progress display and metering read ``summary_template`` / ``behavior``.
 
 It is NOT a plugin system (static dict, deployed with the code). Admission
 discipline: a new skill passes the NAMING §7/§8 review before it is
@@ -83,9 +82,10 @@ class SkillEntry(BaseModel):
     """One registered skill (NAMING §5 registry, third member).
 
     Proposal/display data only — execution knowledge (run / requires /
-    retries / topology) lives on the node class in ``NODE_KINDS`` under the
-    same name (N-35). A seat (``seat=True``) is a registered-but-not-
-    implemented skill: propose-able nowhere, excluded from dispatchable.
+    retries / topology) and the quotation (``estimate``, N-34) live on the
+    node class in ``NODE_KINDS`` under the same name (N-35). A seat
+    (``seat=True``) is a registered-but-not-implemented skill: propose-able
+    nowhere, excluded from dispatchable.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -95,7 +95,6 @@ class SkillEntry(BaseModel):
     behavior: Literal["deterministic", "probabilistic"]
     params_model: type[BaseModel] | None = None
     summary_template: str = ""
-    cost_hint: Literal["cheap", "moderate", "expensive"] = "moderate"
     seat: bool = False  # registered-but-not-implemented (no node yet)
 
 
@@ -108,7 +107,6 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=SelectClipsParams,
             summary_template="Selected {n} clips · {total_seconds}s total",
-            cost_hint="expensive",
         ),
         SkillEntry(
             name="write_post",
@@ -154,14 +152,12 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=TranslateClipParams,
             summary_template="Translated {n} clips · {lang}",
-            cost_hint="moderate",
         ),
         SkillEntry(
             name="remove_filler",
             description="Remove filler words and repeated takes from existing clips, then re-render",
             behavior="deterministic",
             summary_template="Removed {filler_count} fillers · {repeat_count} repeated takes",
-            cost_hint="cheap",
         ),
         SkillEntry(
             name="add_music",
@@ -169,7 +165,6 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="deterministic",
             params_model=AddMusicParams,
             summary_template="Scored · {mood} bed",
-            cost_hint="cheap",
         ),
         SkillEntry(
             name="align_stills",
@@ -178,7 +173,6 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             "(transcript + photos only; RECIPES §2's third time source: reading pace)",
             behavior="deterministic",
             summary_template="Aligned transcript · {n} words · {total_seconds}s",
-            cost_hint="cheap",
         ),
         SkillEntry(
             name="synthesize_talk_video",
@@ -186,7 +180,6 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=SynthesizeTalkVideoParams,
             summary_template="Synthesized a talk video",
-            cost_hint="expensive",
             seat=True,  # seat: virtual chain lands with docs/tasks/synthetic-talk-video.md
         ),
     ]

@@ -31,7 +31,8 @@ from app.models.tables import (
 )
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.edges import _load_director_outputs
-from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase
+from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
+from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
     _list_assets,
@@ -62,6 +63,18 @@ class SelectClips(NodeBase):
     count_default = 5
     count_limits = (1, 10)
     agents = (clip_writer,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """One clip_writer call (multimodal): anchored transcript + asset
+        texts + media snippets, completion scaling with the clip count. The
+        per-clip render fan-out is born mid-run — unquoted (P4 NULL)."""
+        chars = min(ctx["text_chars"], MAX_CHARS_PER_TEXT * ctx["text_count"])
+        prompt = token_bounds(chars)
+        prompt[0] += 800 * ctx["media_count"] + 500
+        prompt[1] += 4000 * ctx["media_count"] + 2000
+        slot = (ctx["spec"] or {}).get("slot") or {}
+        count = slot.get("count") or self.count_default
+        return estimate_agent(prompt, [80 * count, 200 * count])
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project

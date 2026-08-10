@@ -13,3 +13,4 @@ class WriteCarousel(DerivativeWriterNode):
     count_default = 6
     count_limits = (2, 15)
     writer = carousel_writer
+    completion_bounds = (300, 1500)  # count slides of slide copy

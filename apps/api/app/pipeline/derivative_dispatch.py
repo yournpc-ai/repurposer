@@ -16,7 +16,7 @@ import structlog
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import Agent
+from app.agents.base import Agent, MAX_CHARS_PER_TEXT
 from app.agents.contexts import _generation_context
 from app.models.schemas import (
     DerivativeType,
@@ -27,7 +27,7 @@ from app.models.schemas import (
     validate_output_payload,
 )
 from app.models.tables import Output, Project, WorkflowStep, WorkflowRun
-from app.pipeline.graph import NODE_KINDS, NodeBase, TRANSCRIPT
+from app.pipeline.graph import NODE_KINDS, NodeBase, TRANSCRIPT, estimate_mechanical, token_bounds
 from app.pipeline.images import _save_quote_card_image
 from app.pipeline.step_context import _count_words
 from app.pipeline.step_display import (
@@ -60,11 +60,31 @@ class DerivativeWriterNode(NodeBase):
     needs_director = True
     requires = (TRANSCRIPT,)
     produces_outputs = True
+    # Per-writer quotation declarations (P4): completion bounds grounded in
+    # the output schema's size class; ``images_per_run`` = exact image
+    # generations (the quote card's 1, skipped on targeted regeneration).
+    completion_bounds: tuple[int, int] = (400, 1500)
+    images_per_run: int = 0
 
     @property
     def derivative_type(self) -> DerivativeType:
         """The DerivativeType IS the output type (N-32 single source)."""
         return DerivativeType(self.output_type)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """One writer call: prompt = trimmed asset texts + understanding /
+        storyboard / persona context overhead; completion per the writer's
+        size class."""
+        chars = min(ctx["text_chars"], MAX_CHARS_PER_TEXT * ctx["text_count"])
+        prompt = token_bounds(chars)
+        prompt[0] += 800
+        prompt[1] += 3000
+        units: dict[str, float] = {}
+        if self.images_per_run and not (ctx["spec"] or {}).get("target_id"):
+            units["images"] = float(self.images_per_run)
+        return estimate_mechanical(
+            units, prompt=prompt, completion=list(self.completion_bounds)
+        )
 
     async def _generate(
         self,

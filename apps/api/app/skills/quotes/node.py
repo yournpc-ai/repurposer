@@ -13,3 +13,5 @@ class WriteQuotes(DerivativeWriterNode):
     count_default = 3
     count_limits = (1, 20)
     writer = quotes_writer
+    completion_bounds = (100, 800)  # count cards of one-liners
+    images_per_run = 1  # the quote-card image (first card only)

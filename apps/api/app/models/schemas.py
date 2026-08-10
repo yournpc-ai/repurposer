@@ -184,6 +184,9 @@ class AskPayload(BaseModel):
     kind: Literal["task_book", "choice", "confirm"]
     options: list[AskOption] = Field(default_factory=list)
     allow_freeform: bool = True
+    # The stored cost-quote seat. Its supply is code, never the LLM: the
+    # estimate fold (N-34) — wired in with the week-6 presentation (dock
+    # total / chat unit price); NULL until then.
     cost_hint: str | None = None
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
@@ -347,7 +350,6 @@ class AskProposal(BaseModel):
     kind: Literal["choice", "task_book", "confirm"] = "choice"
     options: list[AskOption] = Field(default_factory=list)
     allow_freeform: bool = True
-    cost_hint: str | None = None
 
 
 class AnswerProposal(BaseModel):

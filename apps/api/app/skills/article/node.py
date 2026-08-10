@@ -11,3 +11,4 @@ class WriteArticle(DerivativeWriterNode):
     slot_label = "Article"
     slot_ordinal = 4
     writer = article_writer
+    completion_bounds = (800, 3000)  # a long-form article / newsletter

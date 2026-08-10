@@ -14,7 +14,7 @@ from app.models.schemas import RenderStatus
 from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError
-from app.pipeline.graph import TRANSCRIPT, NodeBase
+from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import (
     _fan_out_renders,
     _modifier_target_clips,
@@ -30,6 +30,20 @@ class TranslateClip(NodeBase):
     requires = (TRANSCRIPT,)
     retries = 2
     agents = (translator,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """One translator call per target clip, sized by the caption text —
+        knowable only when clips exist at compile time (a modifier never
+        fans out from an initial compile, so no upstream-kind check)."""
+        clips = ctx["clips"]
+        if not clips:
+            return None
+        n = len(clips)
+        bounds = token_bounds(sum(c["caption_chars"] for c in clips))
+        return estimate_agent(
+            [bounds[0] + 100 * n, bounds[1] + 1000 * n],
+            [bounds[0], bounds[1] + 500 * n],
+        )
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
