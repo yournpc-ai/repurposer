@@ -10,7 +10,12 @@ from typing import TypeVar
 import httpx
 import structlog
 from pydantic import BaseModel, ValidationError
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.config import settings
 
@@ -48,6 +53,20 @@ class MiniMaxError(Exception):
     pass
 
 
+class MiniMaxSchemaError(MiniMaxError):
+    """Structured-output validation failed at the Model boundary (the raw
+    completion did not parse into ``response_model``).
+
+    Distinct from transport/HTTP failures so the harness can answer with its
+    one bounded repair round (structured echo, ADR-039 P3) — the only retry
+    with feedback. Tenacity here must NOT retry it (a blind re-roll); the
+    repair round replaces it. Transport failures stay tenacity-retried —
+    a transport concern, never repaired by the harness.
+    """
+
+    pass
+
+
 def _raise_for_status(response: httpx.Response) -> None:
     """``raise_for_status`` that speaks MiniMaxError.
 
@@ -74,6 +93,9 @@ class MiniMaxClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
+        # Transport/HTTP hiccups only — a schema rejection is NEVER re-rolled
+        # blind here; the harness answers it with one feedback repair round.
+        retry=retry_if_not_exception_type(MiniMaxSchemaError),
         reraise=True,
     )
     async def generate(
@@ -125,7 +147,7 @@ class MiniMaxClient:
                 error=str(e),
                 raw_content=content[:1000],
             )
-            raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+            raise MiniMaxSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
     async def generate_stream(
         self,
@@ -248,7 +270,7 @@ class MiniMaxClient:
                 error=str(e),
                 raw_content=content[:1000],
             )
-            raise MiniMaxError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+            raise MiniMaxSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
     def _clean_json(self, raw: str) -> str:
         """Strip reasoning blocks and markdown fences from JSON payload."""

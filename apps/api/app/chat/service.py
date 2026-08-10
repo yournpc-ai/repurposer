@@ -45,6 +45,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.minimax import MiniMaxError
+from app.agents.contexts import _build_context
 from app.chat.intent import chat_intent_agent, plan_agent
 from app.models.schemas import (
     AnswerPayload,
@@ -72,13 +73,11 @@ from app.models.tables import (
     Message,
     Project,
     WorkflowRun,
-    WorkflowStep,
 )
 from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
-from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.recipes import resolve_recipe_mentions
 from app.skills import SkillRejected, dispatchable_skills
 
@@ -247,161 +246,6 @@ async def _create_message(
 
 async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
     return await db.get(Project, project_id)
-
-
-def _output_one_liner(output: Any) -> str:
-    """A one-line label for a visible output (type + first creative line)."""
-    payload = output.payload or {}
-    for key in ("hook", "title", "body"):
-        text = payload.get(key)
-        if text:
-            return str(text).split("\n", 1)[0][:80]
-    return ""
-
-
-_RUN_STEP_PROGRESS_LIMIT = 12
-
-
-def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
-    """One quantified line per step of a run (G-2): ``kind: status —
-    summary``. A waiting checkpoint's line reads as "waiting for you" on its
-    own; a slot label preset at materialization ("Post · DE") rides the
-    summary the same way. Capped — when a run outgrows the budget the tail
-    (current + upcoming work) is what a progress question is about."""
-    rows = []
-    for step in steps:
-        row = f"- {step.kind}: {step.status}"
-        summary = (step.spec or {}).get("summary")
-        if summary:
-            row += f" — {summary}"
-        rows.append(row)
-    if len(rows) > _RUN_STEP_PROGRESS_LIMIT:
-        omitted = len(rows) - _RUN_STEP_PROGRESS_LIMIT
-        rows = [f"- … ({omitted} earlier steps omitted)"] + rows[
-            -_RUN_STEP_PROGRESS_LIMIT:
-        ]
-    return rows
-
-
-async def _build_context(
-    db: AsyncSession,
-    project: Project,
-    conversation: Conversation,
-    recent: list[Message],
-    mentions: list[ChatMention],
-) -> dict[str, Any]:
-    """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
-    project summary (assets / visible outputs / latest run) + the last 3
-    rounds + the mention list. Not a chat-history dump."""
-    lines = [
-        f"Project: {project.title} (id={project.id}, language={project.language})",
-    ]
-
-    assets = list(
-        (await db.execute(select(Asset).where(Asset.project_id == project.id)))
-        .scalars()
-        .all()
-    )
-    if assets:
-        lines.append("Assets:")
-        for a in assets:
-            lines.append(f"- {a.type} id={a.id} status={a.processing_status}")
-
-    outputs = await list_visible_outputs(db, project.id)
-    if outputs:
-        lines.append("Current outputs:")
-        for o in outputs:
-            one_liner = _output_one_liner(o)
-            lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
-
-    latest_run = (
-        await db.execute(
-            select(WorkflowRun)
-            .where(WorkflowRun.project_id == project.id)
-            .order_by(WorkflowRun.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if latest_run is not None:
-        lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
-        steps = list(
-            (
-                await db.execute(
-                    select(WorkflowStep)
-                    .where(WorkflowStep.run_id == latest_run.id)
-                    .order_by(WorkflowStep.seq)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        progress = _format_step_progress(steps)
-        if progress:
-            # Node-level progress (G-2): "how far along / how much longer"
-            # gets answered from real step states, not guessed.
-            lines.append("Latest run steps:")
-            lines.extend(progress)
-
-    if conversation.asset_id:
-        lines.append(
-            f"This conversation is about the single {conversation.asset_type} "
-            f"output id={conversation.asset_id}."
-        )
-
-    if recent:
-        lines.append("Recent rounds:")
-        for m in recent:
-            attached = [
-                a.get("name") for a in (m.attachments or []) if a.get("name")
-            ]
-            if not m.content and not attached:
-                continue
-            line = f"- {m.role}: {m.content[:200]}"
-            if attached:
-                # An attachment-only user turn (files staged in the input
-                # group, sent with no text) must still be visible to the
-                # agent — the files themselves appear in the Assets block.
-                line += f" [attached: {', '.join(attached)}]"
-            qreasons = (m.question or {}).get("reasons") or []
-            if qreasons:
-                # Task-book needs-check keys are data for the agent (its
-                # vocabulary) — they live on the payload, never in prose.
-                line += f" (needs check: {', '.join(qreasons)})"
-            if m.question and m.answer:
-                # Answered questions archive as QA pairs — the answer is the
-                # user's decision and must be visible to the agent (a bare
-                # "a" only makes sense next to the question it picked).
-                answer = m.answer or {}
-                reply = (
-                    answer.get("text")
-                    or answer.get("option_id")
-                    or answer.get("kind")
-                )
-                line += f" (the user answered: {reply})"
-            lines.append(line)
-
-    pending = await latest_pending_question(db, UUID(str(conversation.id)))
-    if pending is not None:
-        # A still-open question (e.g. pick-only, no freeform): the agent must
-        # not re-ask it nor ignore it — the next message may be its answer.
-        lines.append(
-            f"Pending question awaiting the user's answer: {pending.content}"
-        )
-        options = (pending.question or {}).get("options") or []
-        if options:
-            lines.append(
-                "Options: "
-                + "; ".join(
-                    f"{o.get('id')}) {o.get('label')}" for o in options
-                )
-            )
-
-    if mentions:
-        lines.append("Mentions (definite references):")
-        for m in mentions:
-            lines.append(f"- {m.type} id={m.id} label={m.label}")
-
-    return {"text": "\n".join(lines)}
 
 
 async def _create_run_from_tasks(
@@ -1054,16 +898,16 @@ async def _plan_turn(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # plan_agent.infer never raises MiniMaxError — its fallback is the default
-    # task book (dockable, editable, startable; never a white screen). The
-    # presented plan rides along so the start/revise verdict sees what is
-    # actually being confirmed; the recent rounds ride along so the
-    # material/content judgment sees what just happened (G-7 — e.g. the
-    # assistant asked for source material and the user then pastes it; same
-    # "feed the context, never make the model guess blind" precedent as
-    # presented_plan). on_delta (chat SSE) streams the raw verdict fragments
-    # for the answer-prose preview; on_reasoning is a liveness signal for the
-    # thinking indicator. None = today's one-shot call.
+    # plan_agent never raises MiniMaxError — its declared fallback (Agent
+    # funnel 的声明兜底) is the default task book (dockable, editable,
+    # startable; never a white screen). The presented plan rides along so the
+    # start/revise verdict sees what is actually being confirmed; the recent
+    # rounds ride along so the material/content judgment sees what just
+    # happened (G-7 — e.g. the assistant asked for source material and the
+    # user then pastes it; same "feed the context, never make the model guess
+    # blind" precedent as presented_plan). on_delta (chat SSE) streams the raw
+    # verdict fragments for the answer-prose preview; on_reasoning is a
+    # liveness signal for the thinking indicator. None = today's one-shot call.
     recent_lines: list[str] = []
     for m in recent or []:
         attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
@@ -1073,20 +917,20 @@ async def _plan_turn(
         if attached:
             line += f" [attached: {', '.join(attached)}]"
         recent_lines.append(line)
-    infer = plan_agent.infer_stream if on_delta is not None else plan_agent.infer
-    intent = await infer(
+    infer_kwargs: dict[str, Any] = dict(
         prompt=prompt,
         filename=filename,
         presented_plan=(
             _task_book_summary(stored.intent) if stored is not None else None
         ),
         recent=recent_lines or None,
-        **(
-            {"on_delta": on_delta, "on_reasoning": on_reasoning}
-            if on_delta is not None
-            else {}
-        ),
     )
+    if on_delta is not None:
+        intent = await plan_agent.call_stream(
+            on_delta=on_delta, on_reasoning=on_reasoning, **infer_kwargs
+        )
+    else:
+        intent = await plan_agent.call(**infer_kwargs)
 
     # Declared-material promotion (2026-08-05 手测决策): the user explicitly
     # said "this is my transcript/content" — the pasted text becomes a real
@@ -1255,7 +1099,14 @@ async def _propose_turn(
     """
     conversation_id = UUID(str(conversation.id))
     context = (
-        await _build_context(db, project, conversation, recent, mentions)
+        await _build_context(
+            db,
+            project,
+            conversation,
+            recent,
+            mentions,
+            await latest_pending_question(db, conversation_id),
+        )
         if project
         else {"text": ""}
     )
@@ -1266,12 +1117,14 @@ async def _propose_turn(
     try:
         if on_delta is not None:
             # Chat SSE: stream the verdict; raw fragments feed the prose
-            # preview extractor. Repair rounds below stay non-streaming.
-            result = await chat_intent_agent.propose_stream(
-                text, context, on_delta=on_delta, on_reasoning=on_reasoning
+            # preview extractor. Repair rounds stay non-streaming (the funnel
+            # handles that — N-26).
+            result = await chat_intent_agent.call_stream(
+                message=text, context=context,
+                on_delta=on_delta, on_reasoning=on_reasoning,
             )
         else:
-            result = await chat_intent_agent.propose(text, context)
+            result = await chat_intent_agent.call(message=text, context=context)
         proposal = result.proposal
     except MiniMaxError:
         proposal = None
@@ -1338,9 +1191,9 @@ async def _propose_turn(
         except OpRejected as first_error:
             repaired = False
             try:
-                retry = await chat_intent_agent.propose(
-                    text,
-                    {**context, "repair_feedback": str(first_error)},
+                retry = await chat_intent_agent.call(
+                    message=text, context=context,
+                    repair_feedback=str(first_error),
                 )
                 if isinstance(retry.proposal, EditOpsProposal):
                     ops_items = _edit_op_items(retry.proposal)
@@ -1409,18 +1262,16 @@ async def _propose_turn(
             # can fix that; tell the user what's missing.
             assistant_content = f"I'm missing an input for that: {e}"
         except SkillRejected as first_error:
-            # One bounded repair round with the rejection as feedback.
+            # One bounded repair round with the rejection as feedback (the
+            # funnel's reserved kwarg — the echo lives in Agent.call).
             repaired = False
             try:
-                retry = await chat_intent_agent.propose(
-                    text,
-                    {
-                        **context,
-                        "repair_feedback": (
-                            f"{first_error} "
-                            f"(available: {getattr(first_error, 'suggestions', [])})"
-                        ),
-                    },
+                retry = await chat_intent_agent.call(
+                    message=text, context=context,
+                    repair_feedback=(
+                        f"{first_error} "
+                        f"(available: {getattr(first_error, 'suggestions', [])})"
+                    ),
                 )
                 if (
                     isinstance(retry.proposal, TaskListProposal)

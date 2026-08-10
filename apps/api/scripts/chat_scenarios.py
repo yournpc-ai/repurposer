@@ -24,6 +24,7 @@ birth-ordered and never recycled; position in this file = family.
     四态分派   S31 task_list run · S32 edit_ops ops行 · S33 progress · S34 meta · S35 asset scope
     checkpoint S36 三答法+空白不答 · S37 bail级联 · S38 supersede级联 · S39 过期扫描 · S40 task_book不参与autoResume
     流式       S9 SSE
+    harness    S41 repair 只一轮（Agent 漏斗自检，进程内 stub，不打 API）
 
 S31/S35 起的 run 是真的（worker 会执行）；checkpoint 族（S36–S39）seed parked
 run 手工行，答题/过期唤醒后由 worker 跑零 LLM 的 answer 分支收官——需要 dev
@@ -62,8 +63,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 
+from app.agents.base import Agent, StreamingAgent  # noqa: E402
+from app.clients.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import (  # noqa: E402
     Asset,
@@ -1490,6 +1494,136 @@ async def s9_sse_turn_streaming(ctx: Ctx) -> None:
           f"{''.join(deltas)!r} vs {echo!r}")
 
 
+# ---- Scenarios: harness 漏斗 -------------------------------------------------
+
+
+class _ProbeResult(BaseModel):
+    text: str
+
+
+class _StubClient:
+    """Scripted MiniMaxClient stand-in: records every call, plays outcomes.
+
+    Script items: ``"schema"`` (raise MiniMaxSchemaError), an exception
+    instance (raise it), or a ``_ProbeResult`` (return it).
+    """
+
+    def __init__(self, script: list[object]) -> None:
+        self.script = list(script)
+        self.calls: list[tuple[str, list[dict]]] = []
+
+    def _play(self, kind: str, messages: list[dict]) -> _ProbeResult:
+        self.calls.append((kind, messages))
+        item = self.script.pop(0)
+        if item == "schema":
+            raise MiniMaxSchemaError("Failed to validate response: boom")
+        if isinstance(item, Exception):
+            raise item
+        return item  # type: ignore[return-value]
+
+    async def generate(self, *, messages, response_model, **_):
+        return self._play("generate", messages)
+
+    async def generate_stream(self, *, messages, response_model, on_delta=None, **_):
+        return self._play("stream", messages)
+
+
+def _probe_agent(client: _StubClient, *, name: str, fallback=None) -> Agent:
+    def _assemble():
+        return ({"context_text": "", "message": "m"}, [])
+
+    return Agent(
+        name=name,
+        prompt="chat_intent.j2",
+        schema=_ProbeResult,
+        system="sys",
+        assemble=_assemble,
+        fallback=fallback,
+        client=client,  # type: ignore[arg-type]
+    )
+
+
+def _user_text(messages: list[dict]) -> str:
+    """The user message's trailing text part (the funnel's prompt carrier)."""
+    return messages[1]["content"][-1]["text"]
+
+
+async def s41_repair_one_bounded_round(ctx: Ctx) -> None:
+    """S41 repair 只一轮：schema 拒绝 → 第二轮带结构化回显；再拒即败无第三轮；transport 不修。"""
+    del ctx  # in-process funnel self-check — no API, no DB rows
+
+    # 1. Schema rejection → exactly one repair round, carrying the echo.
+    stub = _StubClient(["schema", _ProbeResult(text="ok")])
+    result = await _probe_agent(stub, name="scenario_probe_1").call()
+    check(result.text == "ok", "the repair round's result returns", result)
+    check(len(stub.calls) == 2, "first failure + one repair round == 2 calls",
+          len(stub.calls))
+    echo = "Your previous proposal was rejected"
+    check(echo not in _user_text(stub.calls[0][1]), "first attempt carries no echo")
+    check(echo in _user_text(stub.calls[1][1])
+          and "boom" in _user_text(stub.calls[1][1]),
+          "the repair round carries the structured error echo",
+          _user_text(stub.calls[1][1])[-160:])
+
+    # 2. A second rejection is the call's failure — never a third roll.
+    stub = _StubClient(["schema", "schema", _ProbeResult(text="never")])
+    raised = None
+    try:
+        await _probe_agent(stub, name="scenario_probe_2").call()
+    except MiniMaxSchemaError as exc:
+        raised = exc
+    check(isinstance(raised, MiniMaxSchemaError), "the second rejection raises")
+    check(len(stub.calls) == 2, "no third call after the repair round",
+          len(stub.calls))
+
+    # 3. Transport-class MiniMaxError is NOT repaired (client tenacity owns it).
+    stub = _StubClient([MiniMaxError("MiniMax HTTP 500"), _ProbeResult(text="x")])
+    raised = None
+    try:
+        await _probe_agent(stub, name="scenario_probe_3").call()
+    except MiniMaxError as exc:
+        raised = exc
+    check(isinstance(raised, MiniMaxError)
+          and not isinstance(raised, MiniMaxSchemaError),
+          "transport failure propagates unrepaired")
+    check(len(stub.calls) == 1, "transport failure: no repair round", len(stub.calls))
+
+    # 4. Declared fallback: a failed call returns the declaration's result.
+    stub = _StubClient([MiniMaxError("MiniMax HTTP 500")])
+    result = await _probe_agent(
+        stub, name="scenario_probe_4",
+        fallback=lambda: _ProbeResult(text="declared"),
+    ).call()
+    check(result.text == "declared", "the declared fallback answers", result)
+
+    # 5. The reserved repair_feedback kwarg echoes on the FIRST attempt (the
+    #    chat loop's adjudication repair), never reaching assemble.
+    stub = _StubClient([_ProbeResult(text="ok")])
+    result = await _probe_agent(stub, name="scenario_probe_5").call(
+        repair_feedback="adjudication said no"
+    )
+    check(result.text == "ok", "adjudication-feedback call returns", result)
+    check(len(stub.calls) == 1, "feedback echo needs no extra round", len(stub.calls))
+    check("adjudication said no" in _user_text(stub.calls[0][1]),
+          "the adjudication echo rides the first attempt",
+          _user_text(stub.calls[0][1])[-120:])
+
+    # 6. Streaming: a schema rejection repairs via the NON-streaming path.
+    stub = _StubClient(["schema", _ProbeResult(text="ok")])
+    agent = StreamingAgent(
+        name="scenario_probe_6",
+        prompt="chat_intent.j2",
+        schema=_ProbeResult,
+        system="sys",
+        assemble=lambda: ({"context_text": "", "message": "m"}, []),
+        client=stub,  # type: ignore[arg-type]
+    )
+    result = await agent.call_stream(on_delta=lambda f: None)
+    check(result.text == "ok", "the streamed call repairs", result)
+    check([k for k, _ in stub.calls] == ["stream", "generate"],
+          "first attempt streams, the repair round never does", stub.calls)
+
+
 SCENARIOS = {
     # 首轮路由
     "S1": s1_vague_first_turn_then_prose_start,
@@ -1541,6 +1675,8 @@ SCENARIOS = {
     "S40": s40_task_book_never_auto_resumes,
     # 流式
     "S9": s9_sse_turn_streaming,
+    # harness 漏斗
+    "S41": s41_repair_one_bounded_round,
 }
 
 

@@ -10,6 +10,13 @@ Gate 2 (P2 no-parallel-maps rule): every "type → X" fact derives from the
 node classes / the skill registry. The retired parallel-map identifiers
 (``_OUTPUT_TO_NODE_KIND`` and friends) and the retired ``pipeline/registry``
 module must never reappear under ``app/``.
+
+Gate 3 (P3 no-blind-retries rule): every retry carries structured feedback
+and runs exactly one round (the Agent funnel's repair); the retired
+blind-retry identifiers (``auto_retry`` / ``_with_retry``) must never
+reappear under ``app/``. The client layer's tenacity (transport) and the
+graph's step retry budget (``NodeBase.retries``) are not retries in this
+sense.
 """
 
 import re
@@ -39,6 +46,11 @@ BANNED_PARALLEL_MAPS = re.compile(
     r"|app\.pipeline\.registry"
 )
 
+# P3 retired identifiers: the blind retries these named were replaced by the
+# Agent funnel's one bounded repair round (structured echo). A hit means
+# someone reintroduced a retry without feedback.
+BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
+
 
 def check_tools_purity() -> list[str]:
     violations: list[str] = []
@@ -60,6 +72,16 @@ def check_parallel_maps() -> list[str]:
     return violations
 
 
+def check_blind_retries() -> list[str]:
+    violations: list[str] = []
+    for path in sorted(APP_DIR.rglob("*.py")):
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if BANNED_BLIND_RETRY.search(line):
+                rel = path.relative_to(API_ROOT)
+                violations.append(f"{rel}:{lineno}: {line.strip()}")
+    return violations
+
+
 def main() -> int:
     failures = check_tools_purity()
     if failures:
@@ -71,9 +93,14 @@ def main() -> int:
         print("parallel-map gate FAILED (P2: derive from NODE_KINDS / SKILL_REGISTRY):")
         for failure in parallel:
             print(f"  {failure}")
-    if failures or parallel:
+    blind = check_blind_retries()
+    if blind:
+        print("blind-retry gate FAILED (P3: one bounded repair round, with feedback):")
+        for failure in blind:
+            print(f"  {failure}")
+    if failures or parallel or blind:
         return 1
-    print("check_gates: OK (tools/ purity, no parallel maps)")
+    print("check_gates: OK (tools/ purity, no parallel maps, no blind retries)")
     return 0
 
 

@@ -447,7 +447,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. Usage capture is part of the interface contract: every call records tokens / latency / cost onto the owning `WorkflowRun` row.
 
 **Consequences**:
-- `MiniMaxAgentBase`（现 `app/skills/base.py`；ADR-039 P3 归一为 `app/agents/base.py` 的 Agent 漏斗）is refactored to depend on the interface; M3-specific quirks (prompt idioms, structured-output retry behavior) live in the MiniMax adapter.
+- `MiniMaxAgentBase`（后归一为 `app/agents/base.py` 的 Agent 漏斗，ADR-039）is refactored to depend on the interface; M3-specific quirks (prompt idioms, structured-output retry behavior) live in the MiniMax adapter.
 - ADR-004's framework rejection is **not** re-opened — orchestration stays hand-rolled; only the model-access seam is abstracted.
 - If the M3 tool-calling spike fails, `chat_with_tools` is implemented via structured-output simulation behind the same interface.
 

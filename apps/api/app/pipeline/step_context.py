@@ -1,9 +1,10 @@
-"""Runner-side assembly and misc shared by node runners (ADR-039 P1 split).
+"""Runner-side mechanical helpers shared by node runners (ADR-039 P1 split).
 
-Context assembly (``_generation_context``), multimodal input collection,
-asset listing/digest. The output-type vocabulary lives on the node classes
-(``pipeline/graph.py``, N-32). The harness-side assembly layer
-(``agents/contexts.py``) lands in P3 and may absorb part of this module.
+Multimodal input collection, asset listing/digest, misc row helpers. Context
+ASSEMBLY lives in the harness layer (``agents/contexts.py``:
+``_generation_context`` there, the chat intent context there too); this
+module keeps the media/digest mechanics. The output-type vocabulary lives on
+the node classes (``pipeline/graph.py``, N-32).
 """
 
 import hashlib
@@ -17,12 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.models.schemas import (
     AssetType,
-    GenerationContext,
     MediaInput,
-    ToneSettings,
 )
-from app.models.tables import Asset, Persona, Project, WorkflowRun
-from app.platform.project_context import persona_context_from_row
+from app.models.tables import Asset, Project
 from app.tools.storage import download_to_temp, file_to_data_url
 
 # Media snippets above these thresholds are not sent directly to the multimodal
@@ -58,26 +56,6 @@ def _count_words(value: object) -> int:
 async def _list_assets(db: AsyncSession, project_id: UUID) -> list[Asset]:
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     return list(result.scalars().all())
-
-
-def _generation_context(
-    run: WorkflowRun,
-    project: Project,
-    persona: Persona | None,
-    *,
-    brand_music_id: str | None = None,
-) -> GenerationContext:
-    """Assemble the GenerationContext from the run's task book (context)."""
-    ctx = run.context or {}
-    tone_raw = ctx.get("tone_settings")
-    return GenerationContext(
-        persona=persona_context_from_row(persona),
-        event_name=project.event_name,
-        tone_settings=ToneSettings.model_validate(tone_raw) if tone_raw else None,
-        target_language=ctx.get("target_language", "en"),
-        instruction=ctx.get("instruction"),
-        brand_music_id=brand_music_id,
-    )
 
 
 def _source_language(project: Project, assets: list[Asset]) -> str:

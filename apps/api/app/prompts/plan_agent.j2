@@ -1,0 +1,15 @@
+{%- if recent -%}
+Recent conversation:
+{{ recent|join('\n') }}
+
+{% endif -%}
+User prompt: {{ prompt }}
+{%- if filename %}
+Uploaded file: {{ filename }}
+{%- else %}
+No file uploaded (text-only input).
+{%- endif %}
+{%- if presented_plan %}
+A task book has already been presented to the user and is awaiting confirmation: {{ presented_plan }}
+This digest is the CURRENT book — it may include edits the user made directly in the plan panel, which never appear in the conversation. Emit the FULL revised book: keep every value the user's message does not revise (quantities, languages, angles shown in the digest), and when the message revises a value — 'clips only needs 2', 'make the post German', 'drop the quotes' — emit exactly that revision. The latest user message always wins.
+{%- endif %}

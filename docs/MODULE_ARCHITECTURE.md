@@ -206,8 +206,9 @@ apps/api/
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
-│   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类）/
-│   │                    #   roster.py（共享 crew：director/persona/translator）
+│   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
+│   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：director/persona/
+│   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）
 │   ├── skills/          # 技能包（能力唯一家）：__init__.py（SKILL_REGISTRY 收编 + 注册门）+
 │   │                    #   clips / dub / captions / posts / quotes /
 │   │                    #   carousel / article / music / filler / stills…（节点类+params+私有工序+估价）

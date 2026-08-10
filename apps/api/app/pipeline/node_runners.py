@@ -40,9 +40,9 @@ from app.pipeline.edges import (
     _load_understanding,
 )
 from app.pipeline.graph import NodeBase, known_output_types
+from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
     _asset_digest,
-    _generation_context,
     _list_assets,
     _source_language,
     _truncate,

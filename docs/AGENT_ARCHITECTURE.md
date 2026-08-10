@@ -122,7 +122,7 @@ class Agent[OutT]:
     async def call(**ctx) -> OutT:
         # 装配（纯度由签名保证）→ 渲染 prompt → client.generate(schema)
         # → 校验失败：错误结构化回显，一轮自修复（盲重试退役）
-        # → 计量（模板级归因 → workflow_steps.cost）
+        # → 计量（Model 边界捕获 → workflow_steps.cost，ADR-025）
         # → 兜底：默认禁，显式声明才允许
 ```
 
@@ -137,7 +137,7 @@ class Agent[OutT]:
 - `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**技能私有声明住技能包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
-- context 装配：节点侧 = `pipeline/step_context.py` 共享助手 + 各 agent 声明的 `assemble` 回调（签名即纯度）；chat 侧 = `service.py::_build_context` 确定性装配。harness 统一装配层（`agents/contexts.py`：GenerationContext / mentions 注入 / recent 轮次收口）是 P3 座位。
+- context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 任务书 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
 
 ### 5.4 明确不建的 harness 部件
 
@@ -188,14 +188,14 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 11. Critical files
 
-- `app/agents/base.py` — Agent 类（harness 漏斗）；`app/agents/roster.py` — 共享 crew 花名册
-- `app/pipeline/step_context.py` — 节点侧装配助手（GenerationContext / 多模态收集 / 素材摘要）；统一装配层 `agents/contexts.py` 属 P3 座位
+- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/roster.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
+- `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）；context 装配在 `agents/contexts.py`
 - `app/skills/` — 技能包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`skills/__init__.py` — SKILL_REGISTRY 收编
 - `app/tools/` — 机械库（asr / voice / storage / filler / transcript / music…）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
-- `app/chat/service.py` — loop 状态分派；`app/chat/intent.py` — PlanAgent / ChatIntentAgent（流式特殊形态）
+- `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — plan / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
 - `app/clients/minimax.py` — Model 单边界；`app/metering.py` — 计量
 - `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot / 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）

@@ -32,8 +32,8 @@ from app.models.tables import (
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.edges import _load_director_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase
+from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
-    _generation_context,
     _list_assets,
     collect_asset_media,
 )
@@ -172,37 +172,19 @@ class SelectClips(NodeBase):
             else None
         )
 
-        try:
-            plans = await clip_writer.call(
-                asset_texts=asset_texts,
-                context=generation_context,
-                understanding=understanding,
-                storyboard=storyboard,
-                asset_media=await collect_asset_media(assets),
-                clip_count=clip_count,
-                anchored_transcript=anchored_transcript,
-                music_pieces=await _load_music_pieces(),
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning("clip_agent_auto_retry", error=str(e))
-            try:
-                plans = await clip_writer.call(
-                    asset_texts=asset_texts,
-                    context=generation_context,
-                    understanding=understanding,
-                    storyboard=storyboard,
-                    asset_media=await collect_asset_media(assets),
-                    clip_count=clip_count,
-                    anchored_transcript=anchored_transcript,
-                    music_pieces=await _load_music_pieces(),
-                )
-            except Exception as e2:  # noqa: BLE001
-                logger.error(
-                    "clip_agent_failed_after_retry",
-                    run_id=str(run.id),
-                    error=str(e2),
-                )
-                raise
+        # A schema rejection is answered by the harness's one bounded repair
+        # round inside Agent.call (ADR-039 P3) — no blind retries here; a
+        # second rejection is the node's failure (the graph's retry semantics).
+        plans = await clip_writer.call(
+            asset_texts=asset_texts,
+            context=generation_context,
+            understanding=understanding,
+            storyboard=storyboard,
+            asset_media=await collect_asset_media(assets),
+            clip_count=clip_count,
+            anchored_transcript=anchored_transcript,
+            music_pieces=await _load_music_pieces(),
+        )
 
         await _set_stage(node.id, "building_specs")
 

@@ -5,8 +5,8 @@ resolve the node's slot + language, load the director artifacts, call the
 package's writer declaration, persist the output row. Each package's
 ``node.py`` declares a thin subclass (kind / output_type / slot_label /
 ``writer``) — the DerivativeType → writer map died with the outputs-registry
-derivation; the blind retry is retired by the harness's one-round repair
-(P3).
+derivation. A schema rejection is answered by the harness's one bounded
+repair round inside ``Agent.call`` (ADR-039 P3) — no blind retries here.
 """
 
 from datetime import UTC, datetime
@@ -17,6 +17,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent
+from app.agents.contexts import _generation_context
 from app.models.schemas import (
     DerivativeType,
     GenerationContext,
@@ -28,10 +29,7 @@ from app.models.schemas import (
 from app.models.tables import Output, Project, WorkflowStep, WorkflowRun
 from app.pipeline.graph import NODE_KINDS, NodeBase, TRANSCRIPT
 from app.pipeline.images import _save_quote_card_image
-from app.pipeline.step_context import (
-    _count_words,
-    _generation_context,
-)
+from app.pipeline.step_context import _count_words
 from app.pipeline.step_display import (
     _fill_summary,
     _node_slot,
@@ -88,35 +86,6 @@ class DerivativeWriterNode(NodeBase):
         )
         return validate_derivative_content(self.derivative_type, result.model_dump())
 
-    async def _generate_with_retry(
-        self,
-        asset_texts: list[str],
-        context: GenerationContext,
-        understanding: MaterialUnderstanding,
-        storyboard: Storyboard,
-    ) -> dict:
-        """Generate a derivative, retrying once on failure (preserved behavior —
-        the blind retry is retired by the harness's one-round repair, P3)."""
-        try:
-            return await self._generate(
-                asset_texts=asset_texts,
-                context=context,
-                understanding=understanding,
-                storyboard=storyboard,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "derivative_auto_retry",
-                derivative_type=self.derivative_type.value,
-                error=str(e),
-            )
-            return await self._generate(
-                asset_texts=asset_texts,
-                context=context,
-                understanding=understanding,
-                storyboard=storyboard,
-            )
-
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
@@ -155,7 +124,7 @@ class DerivativeWriterNode(NodeBase):
             my_slot = same_type[min(slot_index, len(same_type) - 1)]
             storyboard = storyboard.model_copy(update={"slots": [my_slot]})
 
-        content = await self._generate_with_retry(
+        content = await self._generate(
             asset_texts=asset_texts,
             context=generation_context,
             understanding=understanding,
