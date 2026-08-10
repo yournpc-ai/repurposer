@@ -33,6 +33,7 @@ from app.models.schemas import (
 from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.asset_processing import has_renderable_media
+from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError
 from app.pipeline.graph import (
     NODE_KINDS,
@@ -52,7 +53,10 @@ logger = structlog.get_logger()
 
 GENERATION_NODE_KINDS = generation_node_kinds()
 
-_TARGETED_DERIVATIVE_SCOPES = {"derivative", "post", "quotes", "carousel", "article"}
+# Targeted-regen scopes: the generic "derivative" plus every copy-writer
+# output type (node-derived — a new writer package is targetable here with
+# zero kernel edits, N-32).
+_TARGETED_DERIVATIVE_SCOPES = {"derivative"} | derivative_output_types()
 
 
 class Suspend(Exception):
@@ -936,7 +940,8 @@ def assert_runners_registered() -> None:
     1. registry ↔ node consistency: every non-seat skill entry has a node in
        ``NODE_KINDS`` under the same name (N-35), and every skill-package
        node has an entry (internal crew — ``app.pipeline.*`` — never enters
-       the proposal space by design).
+       the proposal space by design). Output types are unique across nodes —
+       ``node_for_output`` routing depends on it (N-32: one producer per type).
     2. node → agent references exist: every agent a node declares (its
        ``agents`` tuple, plus Agent-typed class attributes like the writers'
        ``writer``) is collected in the ``AGENTS`` roster.
@@ -958,6 +963,17 @@ def assert_runners_registered() -> None:
             raise RuntimeError(
                 f"Node '{node.kind}' ({type(node).__module__}): no SKILL_REGISTRY entry"
             )
+    output_owners: dict[str, str] = {}
+    for node in NODE_KINDS.values():
+        if node.output_type is None:
+            continue
+        owner = output_owners.get(node.output_type)
+        if owner is not None:
+            raise RuntimeError(
+                f"Output type '{node.output_type}' claimed by both "
+                f"'{owner}' and '{node.kind}'"
+            )
+        output_owners[node.output_type] = node.kind
 
     from app.agents.base import AGENTS, Agent  # deferred: metering-free leaf
 

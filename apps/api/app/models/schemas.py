@@ -1288,40 +1288,13 @@ class Storyboard(BaseModel):
 
 # ---------------------------------------------------------------------------
 # RunPlan vocabulary (ADR-028/030): workflow_steps + unified outputs.
+# Node kinds and output types have their living sources in NODE_KINDS /
+# the outputs registry (N-35/N-32) — no parallel Literals here.
 # ---------------------------------------------------------------------------
-
-# Phase 1/2 node kinds (coarse-grained; docs/tasks/director-two-step.md).
-# Reserved for Phase 2b/3 — NOT registered, NOT implemented here:
-# selection / music / verify.
-StepKind = Literal[
-    "preprocess",
-    "persona_bootstrap",
-    "director_understand",
-    "director_plan",
-    "clips_pipeline",
-    "post_gen",
-    "quotes_gen",
-    "carousel_gen",
-    "article_gen",
-    "script",
-    "render",
-    "remove_filler",
-    "add_music",
-]
 
 # "waiting" is a seat for HITL/suspend-resume (variant_pick gate, chat-loop-v1
 # Task 4): a step parks in waiting with spec.suspend_payload until resumed.
 StepStatus = Literal["pending", "running", "done", "failed", "skipped", "waiting"]
-
-OutputType = Literal[
-    "clip",
-    "post",
-    "quotes",
-    "carousel",
-    "article",
-    "material_understanding",
-    "storyboard",
-]
 
 OutputProvenance = Literal["real", "generated"]
 

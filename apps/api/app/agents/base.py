@@ -11,8 +11,9 @@ function's parameter list — ``director_understand``'s assemble has no persona
 parameter, so injecting one is a type error, not a prompt warning.
 
 Structured one-round repair, declared fallbacks beyond the multimodal one, and
-template-level metering attribution land in P3 (docs/tasks/arch-overhaul.md);
-the streaming subclass (chat intent) is the only legal specialization.
+template-level metering attribution land in P3 (docs/tasks/arch-overhaul.md) —
+as does folding the chat intent agents (the streaming special form, N-26) into
+the funnel; they still run as bespoke classes outside it today.
 """
 
 from collections.abc import Callable
