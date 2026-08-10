@@ -69,6 +69,7 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.clients.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
+from app.models.schemas import MediaInput  # noqa: E402
 from app.models.tables import (  # noqa: E402
     Asset,
     Conversation,
@@ -1622,6 +1623,59 @@ async def s41_repair_one_bounded_round(ctx: Ctx) -> None:
     check(result.text == "ok", "the streamed call repairs", result)
     check([k for k, _ in stub.calls] == ["stream", "generate"],
           "first attempt streams, the repair round never does", stub.calls)
+
+    # 7. media_text_fallback × repair composition: the text-only degradation
+    #    runs INSIDE the attempt, and the repair round re-carries the media
+    #    (degrading again on its own schema rejection) — worst case 4 calls,
+    #    the pre-P3 retry-era bound.
+    def _media_agent(stub: _StubClient, *, name: str) -> Agent:
+        media = [MediaInput(type="image", mime="image/png",
+                            data_url="data:image/png;base64,x")]
+        return Agent(
+            name=name,
+            prompt="chat_intent.j2",
+            schema=_ProbeResult,
+            system="sys",
+            assemble=lambda: ({"context_text": "", "message": "m"}, media),
+            media_text_fallback=True,
+            client=stub,  # type: ignore[arg-type]
+        )
+
+    # 7a. A successful text-only degradation does NOT consume the repair
+    #     round — the echo never appears.
+    stub = _StubClient(["schema", _ProbeResult(text="ok")])
+    result = await _media_agent(stub, name="scenario_probe_7a").call()
+    check(result.text == "ok", "media degradation returns", result)
+    check(len(stub.calls) == 2,
+          "media degradation inside one attempt == 2 calls", len(stub.calls))
+    a_media, a_text = stub.calls[0][1][1], stub.calls[1][1][1]
+    check(isinstance(a_media["content"], list)
+          and any(p.get("type") == "image_url" for p in a_media["content"]),
+          "attempt 1 carries the media parts", a_media["content"])
+    check(isinstance(a_text["content"], str) and echo not in a_text["content"],
+          "the text degradation is pre-echo (no repair round consumed)",
+          a_text["content"][-120:])
+
+    # 7b. Both attempts degrade: attempt(media→text) fails twice, the repair
+    #     round re-carries media + echo and degrades to the echoed text —
+    #     4 calls total.
+    stub = _StubClient(["schema", "schema", "schema", _ProbeResult(text="ok")])
+    result = await _media_agent(stub, name="scenario_probe_7b").call()
+    check(result.text == "ok", "media composition survives to the repair round",
+          result)
+    check(len(stub.calls) == 4,
+          "worst case == 4 calls (attempt media+text, repair media+text)",
+          len(stub.calls))
+    check([k for k, _ in stub.calls] == ["generate"] * 4,
+          "the media degradation never streams", [k for k, _ in stub.calls])
+    r_media, r_text = stub.calls[2][1][1], stub.calls[3][1][1]
+    check(isinstance(r_media["content"], list)
+          and any(p.get("type") == "image_url" for p in r_media["content"])
+          and echo in r_media["content"][-1]["text"],
+          "the repair round re-carries media + echo", r_media["content"])
+    check(isinstance(r_text["content"], str) and echo in r_text["content"],
+          "the repair round's text degradation carries the echo",
+          r_text["content"][-120:])
 
 
 SCENARIOS = {

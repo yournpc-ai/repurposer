@@ -134,7 +134,10 @@ class Agent(Generic[OutT]):
         self.media_text_fallback = media_text_fallback
         # Declared last-resort result builder (same discipline): called with
         # the assemble ctx when the funnel exhausted its repair round with a
-        # MiniMaxError. None = raise (the default).
+        # MiniMaxError — the fallback fires AFTER the repair round, never
+        # instead of it, and its result returns as-is (postprocess does NOT
+        # run on it: a fallback builds a final-shaped result). None = raise
+        # (the default).
         self.fallback = fallback
         self.client = client or minimax_client
         if name in AGENTS:
