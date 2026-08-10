@@ -15,12 +15,17 @@ from pathlib import Path
 import httpx
 import structlog
 
-from app.clients.minimax import MiniMaxError
 from app.config import settings
 
 logger = structlog.get_logger()
 
 _TTS_MODEL = "speech-2.6-hd"
+
+
+class VoiceError(Exception):
+    """Voice provider failure (clone / T2A) — tools/ never imports the LLM
+    client (N-29), so the voice wrapper speaks its own error; callers up the
+    stack (dub procedure) map it onto their error contract."""
 
 # Map our ISO codes to MiniMax `language_boost` names.
 _LANG_BOOST = {
@@ -56,7 +61,7 @@ def clone_voice(audio_path: Path) -> str | None:
             up.raise_for_status()
             file_id = up.json().get("file", {}).get("file_id")
             if not file_id:
-                raise MiniMaxError(f"file upload returned no file_id: {up.text[:300]}")
+                raise VoiceError(f"file upload returned no file_id: {up.text[:300]}")
             cl = client.post(
                 f"{base}/voice_clone",
                 headers={**_headers(), "Content-Type": "application/json"},
@@ -64,11 +69,11 @@ def clone_voice(audio_path: Path) -> str | None:
             )
             cl.raise_for_status()
         return voice_id
-    except MiniMaxError:
+    except VoiceError:
         raise
     except Exception as e:  # noqa: BLE001
         logger.error("voice_clone_failed", error=str(e))
-        raise MiniMaxError(f"Voice clone failed: {e}") from e
+        raise VoiceError(f"Voice clone failed: {e}") from e
 
 
 def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.0) -> bytes:
@@ -78,7 +83,7 @@ def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.
     0.5–2.0) — the cue-aligned dub uses it for per-unit timing fit (no pitch
     shift, unlike a resample)."""
     if not settings.minimax_api_key:
-        raise MiniMaxError("MINIMAX_API_KEY not configured")
+        raise VoiceError("MINIMAX_API_KEY not configured")
     payload = {
         "model": _TTS_MODEL,
         "text": text[:9000],
@@ -104,13 +109,13 @@ def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.
             data = resp.json()
         audio_hex = (data.get("data") or {}).get("audio")
         if not audio_hex:
-            raise MiniMaxError(f"T2A returned no audio: {data.get('base_resp')}")
+            raise VoiceError(f"T2A returned no audio: {data.get('base_resp')}")
         return binascii.unhexlify(audio_hex)
-    except MiniMaxError:
+    except VoiceError:
         raise
     except Exception as e:  # noqa: BLE001
         logger.error("t2a_failed", error=str(e))
-        raise MiniMaxError(f"T2A synthesis failed: {e}") from e
+        raise VoiceError(f"T2A synthesis failed: {e}") from e
 
 
 def extract_audio(video_path: Path) -> Path | None:

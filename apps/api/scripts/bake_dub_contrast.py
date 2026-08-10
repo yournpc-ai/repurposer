@@ -31,7 +31,7 @@ from app.config import settings  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import Output, Project  # noqa: E402
 from app.pipeline.rendering import _absolutize  # noqa: E402
-from app.tools.dubbing import synthesize_dub  # noqa: E402
+from app.skills.dub.procedure import synthesize_dub  # noqa: E402
 from app.tools.storage import (  # noqa: E402
     _get_s3_client,
     delete,

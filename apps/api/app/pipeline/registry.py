@@ -7,10 +7,14 @@ Three consumers, three views of the same table:
 - progress display and metering read ``summary_template`` / ``cost_hint`` /
   ``behavior``.
 
-It is NOT the execution dispatch table (that is ``STEP_RUNNERS`` in
-node_runners, which also holds non-skill internal nodes) and NOT a plugin
-system (static dict, deployed with the code). Admission discipline: a new
-skill passes the NAMING §7/§8 review before it is registered here.
+It is NOT a plugin system (static dict, deployed with the code). Admission
+discipline: a new skill passes the NAMING §7/§8 review before it is
+registered here.
+
+``STEP_RUNNERS`` (bottom) is the execution dispatch table, assembled here:
+the internal crew from ``pipeline/node_runners`` plus one entry per skill
+package's ``node.py``. Registry sits at the top of the pipeline import
+graph — nothing it imports may import it back at module level.
 """
 
 from __future__ import annotations
@@ -20,7 +24,32 @@ import importlib
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from app.pipeline.node_runners import (
+    run_checkpoint,
+    run_director_plan,
+    run_director_understand,
+    run_persona_bootstrap,
+    run_preprocess,
+    run_render_request,
+)
+from app.skills.captions.node import run_translate_clip
+from app.skills.captions.params import TranslateClipParams
+from app.skills.clips.node import run_clips_pipeline
+from app.skills.clips.params import SelectClipsParams
+from app.skills.dub.node import run_dub_clip
+from app.skills.dub.params import DubClipParams
+from app.skills.filler.node import run_remove_filler
+from app.skills.music.node import run_add_music
+from app.skills.music.params import AddMusicParams
+from app.skills.revise.node import run_script_revision
+from app.skills.revise.params import ReviseScriptParams
+from app.skills.stills.node import run_align_stills
+from app.skills.article.node import run as run_article_gen
+from app.skills.carousel.node import run as run_carousel_gen
+from app.skills.posts.node import run as run_post_gen
+from app.skills.quotes.node import run as run_quotes_gen
 
 
 class SkillRejected(Exception):
@@ -33,50 +62,15 @@ class SkillRejected(Exception):
         self.suggestions = suggestions or []
 
 
-# ---- params schemas (compile-time adjudication; defaults filled by code) ---
+# ---- params schemas ---------------------------------------------------------
 #
-# Field descriptions are injected into the intent agent's proposal prompt
-# (agent-loop-upgrade W2) — they ARE the LLM's parameter documentation, so
-# write them as "when to use / what null means", not as type restatements.
-
-
-class SelectClipsParams(BaseModel):
-    count: int = Field(default=5, description="How many highlight clips to cut")
-
-
-class ReviseScriptParams(BaseModel):
-    scope: str = Field(default="clip", description="Scope of the revision (default 'clip')")
-    target_output_id: str | None = Field(
-        default=None, description="Revise only this one output (uuid); null = the turn's current target"
-    )
-    instruction: str | None = Field(
-        default=None, description="How to revise (shorter / longer / tone / language); null = the user's message text"
-    )
-
-
-class AddMusicParams(BaseModel):
-    mood: str | None = Field(default=None, description="Music mood keyword (e.g. calm, upbeat); null = pick from the content brief")
-    music_id: str | None = Field(default=None, description="A specific library track id; null = auto-pick by mood")
-    gain_db: float | None = Field(default=None, description="Music bed gain in dB; null = library default")
-
-
-class DubClipParams(BaseModel):
-    voice: str | None = Field(default=None, description="Voice-clone id; null = the persona's own cloned voice")
-    target_output_id: str | None = Field(default=None, description="Dub only this one output (uuid); null = all clips in scope")
-    target_language: str = Field(default="en", description="ISO code of the language to dub into")
-    # agent-loop-upgrade W5: mode② spec = params.model_dump() carries this
-    # into spec.fork, which run_dub_clip already reads — "再来一版/加一版"
-    # stops overwriting the source clip.
-    fork: bool = Field(
-        default=False,
-        description="True = create a NEW derived version and keep the source clip untouched (user said "
-        "'再来一版' / '加一版' / 'another version' or asked to keep the original); False = rewrite in place",
-    )
-
-
-class TranslateClipParams(BaseModel):
-    target_output_id: str | None = Field(default=None, description="Translate only this one output (uuid); null = all clips in scope")
-    target_language: str = Field(description="ISO code of the caption language (required — no meaningful default)")
+# Skill params models live in their packages (``skills/<pkg>/params.py``,
+# ADR-039 P1) and are imported above. Field descriptions are injected into
+# the intent agent's proposal prompt (agent-loop-upgrade W2) — they ARE the
+# LLM's parameter documentation, so write them as "when to use / what null
+# means", not as type restatements.
+#
+# Only runner-less seats keep their params model here.
 
 
 class SynthesizeTalkVideoParams(BaseModel):
@@ -90,9 +84,9 @@ class SkillEntry(BaseModel):
     """One registered skill (NAMING §5 registry, third member).
 
     ``runner`` is a dotted path (``module:function``) resolved lazily —
-    ``None`` marks a registered-but-not-implemented seat (dub is a sync
-    endpoint; synthesize_talk_video awaits the virtual chain). An entry with
-    a runner that does not resolve into ``STEP_RUNNERS`` is not dispatchable.
+    ``None`` marks a registered-but-not-implemented seat (synthesize awaits
+    the virtual chain). An entry with a runner that does not resolve into
+    ``STEP_RUNNERS`` is not dispatchable.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -124,7 +118,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             params_model=SelectClipsParams,
             summary_template="Selected {n} clips · {total_seconds}s total",
             cost_hint="expensive",
-            runner="app.pipeline.node_runners:run_clips_pipeline",
+            runner="app.skills.clips.node:run_clips_pipeline",
             node_kind="clips_pipeline",
             needs_director=True,
             requires=("media", "transcript"),
@@ -136,7 +130,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             kind="skill",
             behavior="probabilistic",
             summary_template="Wrote a LinkedIn post · {word_count} words",
-            runner="app.pipeline.node_runners:run_derivative_gen",
+            runner="app.skills.posts.node:run",
             node_kind="post_gen",
             needs_director=True,
             requires=("transcript",),
@@ -148,7 +142,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             kind="skill",
             behavior="probabilistic",
             summary_template="Wrote quote cards · {word_count} words",
-            runner="app.pipeline.node_runners:run_derivative_gen",
+            runner="app.skills.quotes.node:run",
             node_kind="quotes_gen",
             needs_director=True,
             requires=("transcript",),
@@ -160,7 +154,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             kind="skill",
             behavior="probabilistic",
             summary_template="Wrote a carousel · {word_count} words",
-            runner="app.pipeline.node_runners:run_derivative_gen",
+            runner="app.skills.carousel.node:run",
             node_kind="carousel_gen",
             needs_director=True,
             requires=("transcript",),
@@ -172,7 +166,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             kind="skill",
             behavior="probabilistic",
             summary_template="Wrote an article · {word_count} words",
-            runner="app.pipeline.node_runners:run_derivative_gen",
+            runner="app.skills.article.node:run",
             node_kind="article_gen",
             needs_director=True,
             requires=("transcript",),
@@ -185,7 +179,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=ReviseScriptParams,
             summary_template="Revised {scope}",
-            runner="app.pipeline.node_runners:run_script_revision",
+            runner="app.skills.revise.node:run_script_revision",
             node_kind="script",
             produces_outputs=True,
         ),
@@ -196,7 +190,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=DubClipParams,
             summary_template="Dubbed {n} clips · {lang}",
-            runner="app.pipeline.node_runners:run_dub_clip",
+            runner="app.skills.dub.node:run_dub_clip",
             node_kind="dub",
             requires=("media",),
             retries=2,
@@ -209,7 +203,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             params_model=TranslateClipParams,
             summary_template="Translated {n} clips · {lang}",
             cost_hint="moderate",
-            runner="app.pipeline.node_runners:run_translate_clip",
+            runner="app.skills.captions.node:run_translate_clip",
             node_kind="translate_clip",
             requires=("transcript",),
             retries=2,
@@ -221,7 +215,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="deterministic",
             summary_template="Removed {filler_count} fillers · {repeat_count} repeated takes",
             cost_hint="cheap",
-            runner="app.pipeline.node_runners:run_remove_filler",
+            runner="app.skills.filler.node:run_remove_filler",
             node_kind="remove_filler",
             after=("select_clips",),
             requires=("transcript",),
@@ -234,7 +228,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             params_model=AddMusicParams,
             summary_template="Scored · {mood} bed",
             cost_hint="cheap",
-            runner="app.pipeline.node_runners:run_add_music",
+            runner="app.skills.music.node:run_add_music",
             node_kind="add_music",
             after=("select_clips",),
             requires=("media",),
@@ -248,7 +242,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="deterministic",
             summary_template="Aligned transcript · {n} words · {total_seconds}s",
             cost_hint="cheap",
-            runner="app.pipeline.node_runners:run_align_stills",
+            runner="app.skills.stills.node:run_align_stills",
             node_kind="align_stills",
             requires=("transcript",),
         ),
@@ -269,6 +263,29 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
 }
 
 
+# ---- execution dispatch table ----------------------------------------------
+
+STEP_RUNNERS: dict[str, Callable[..., Any]] = {
+    "preprocess": run_preprocess,
+    "persona_bootstrap": run_persona_bootstrap,
+    "director_understand": run_director_understand,
+    "director_plan": run_director_plan,
+    "checkpoint": run_checkpoint,
+    "clips_pipeline": run_clips_pipeline,
+    "post_gen": run_post_gen,
+    "quotes_gen": run_quotes_gen,
+    "carousel_gen": run_carousel_gen,
+    "article_gen": run_article_gen,
+    "script": run_script_revision,
+    "render": run_render_request,
+    "remove_filler": run_remove_filler,
+    "add_music": run_add_music,
+    "translate_clip": run_translate_clip,
+    "dub": run_dub_clip,
+    "align_stills": run_align_stills,
+}
+
+
 # ---- consumers' views ------------------------------------------------------
 
 
@@ -285,10 +302,8 @@ def _resolve_runner(entry: SkillEntry) -> Callable[..., Any] | None:
 
 def dispatchable_skills() -> list[SkillEntry]:
     """Skills the intent agent may propose: runner resolves AND the node kind
-    is registered in STEP_RUNNERS. Seats (dub / synthesize) and not-yet-landed
+    is registered in STEP_RUNNERS. Seats (synthesize) and not-yet-landed
     runners are excluded automatically."""
-    from app.pipeline.node_runners import STEP_RUNNERS  # deferred: avoid import cycle
-
     return [
         entry
         for entry in SKILL_REGISTRY.values()
@@ -350,8 +365,6 @@ def generation_node_kinds() -> frozenset[str]:
 def assert_runners_registered() -> None:
     """Startup self-check: every entry with a runner path must resolve into
     STEP_RUNNERS under its declared node_kind. Seats (runner=None) are skipped."""
-    from app.pipeline.node_runners import STEP_RUNNERS  # deferred: avoid import cycle
-
     for entry in SKILL_REGISTRY.values():
         if entry.runner is None:
             continue

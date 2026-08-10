@@ -126,7 +126,7 @@
 
 ### 第二周（08-09 ~ 08-14）：人设模块 + 架构规范化 + 配方卡闭环链
 
-> **2026-08-10 拍板**：架构迭代（ADR-039）与配方卡闭环链按实测节奏并入本周，与人设模块同周收口；意图层收尾（顾问姿态）随闭环链合流；周五 08-14 联合验收。施工依据：ADR-037/038 + 简报 `tasks/persona-identity.md`；ADR-039 + NAMING N-29~N-35 + 简报 `tasks/arch-overhaul.md`（立项时落）；ADR-035/036 + 简报 `tasks/results-workspace.md`。铁律不变：行为零变化，剧本 harness（S1–S40）为回归网；改 pipeline 代码必重启常驻 worker。
+> **2026-08-10 拍板**：架构迭代（ADR-039）与配方卡闭环链按实测节奏并入本周，与人设模块同周收口；意图层收尾（顾问姿态）随闭环链合流；周五 08-14 联合验收。施工依据：ADR-037/038 + 简报 `tasks/persona-identity.md`；ADR-039 + NAMING N-29~N-35 + 简报 `tasks/arch-overhaul.md`（08-10 已立项）；ADR-035/036 + 简报 `tasks/results-workspace.md`。铁律不变：行为零变化，剧本 harness（S1–S40）为回归网；改 pipeline 代码必重启常驻 worker。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|

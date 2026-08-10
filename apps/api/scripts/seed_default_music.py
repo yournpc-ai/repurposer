@@ -30,11 +30,11 @@ import structlog  # noqa: E402
 from app.clients.minimax import MiniMaxError  # noqa: E402
 from app.pipeline.music import (  # noqa: E402
     DEFAULT_MUSIC_CATALOG,
+    DEFAULTS_MODEL,
     default_music_id,
+    generate_music,
 )
 from app.tools.music import (  # noqa: E402
-    DEFAULTS_MODEL,
-    generate_music,
     music_disk_path,
     music_file_path,
     persist_music,

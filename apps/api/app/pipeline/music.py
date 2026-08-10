@@ -1,21 +1,24 @@
-"""Music library service: CRUD + default-catalog seeding + in-use guard.
+"""Music library service: CRUD + generation + default-catalog seeding + in-use guard.
 
 Audio bytes live in object storage under ``music/{music_id}.{ext}``; this layer
-owns the DB rows and the object-vs-row lifecycle. Deletion refuses a piece still
-referenced by any clip's ``render_spec.music`` (the 3 default pieces are also
-protected this way).
+owns the DB rows, the MiniMax generation call (media generation via the Model
+boundary is legal at the Graph layer — same class as the image calls in
+``pipeline/images.py``), and the object-vs-row lifecycle. Deletion refuses a
+piece still referenced by any clip's ``render_spec.music`` (the 3 default
+pieces are also protected this way).
 """
 
 from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
+import httpx
 import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.minimax import MiniMaxError, minimax_client
 from app.models.tables import Music, Output
 from app.tools.music import (
     AUDIO_EXT,
-    DEFAULTS_MODEL,
     GeneratedMusic,
     music_disk_path,
     music_file_path,
@@ -24,6 +27,60 @@ from app.tools.music import (
 from app.tools.storage import delete, size
 
 logger = structlog.get_logger()
+
+# Quality model for committed platform defaults; free model for ad-hoc user
+# generation to control cost (see docs/MUSIC_ARCHITECTURE.md).
+DEFAULTS_MODEL = "music-2.6"
+USER_MODEL = "music-2.6-free"
+
+
+async def generate_music(
+    prompt: str,
+    *,
+    model: str = USER_MODEL,
+    is_instrumental: bool = True,
+) -> GeneratedMusic:
+    """Generate a music piece via MiniMax and download the bytes.
+
+    The native ``/v1/music_generation`` call (see ``clients/minimax.py``)
+    returns a short-lived audio URL, so the bytes are downloaded immediately.
+
+    Raises ``MiniMaxError`` on any API/download failure.
+    """
+    result = await minimax_client.generate_music(
+        prompt,
+        model=model,
+        is_instrumental=is_instrumental,
+        output_format="url",
+        audio_format=AUDIO_EXT,
+    )
+    if not result.audio_url:
+        raise MiniMaxError("MiniMax music generation returned no audio URL")
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        dl = await client.get(result.audio_url)
+        dl.raise_for_status()
+        audio_bytes = dl.content
+
+    duration_seconds = (
+        int(result.duration_ms // 1000) if result.duration_ms is not None else None
+    )
+    size = result.size_bytes if result.size_bytes else len(audio_bytes)
+    logger.info(
+        "music_generated",
+        model=model,
+        duration_seconds=duration_seconds,
+        size_bytes=size,
+        generation_id=result.generation_id,
+    )
+    return GeneratedMusic(
+        audio_bytes=audio_bytes,
+        ext=AUDIO_EXT,
+        duration_seconds=duration_seconds,
+        size_bytes=size,
+        model=model,
+        generation_id=result.generation_id,
+    )
 
 
 class MusicInUseError(Exception):
@@ -272,9 +329,11 @@ __all__ = [
     "DEFAULT_MUSIC_CATALOG",
     "DEFAULTS_MODEL",
     "MusicInUseError",
+    "USER_MODEL",
     "create_music_from_generation",
     "default_music_id",
     "delete_music",
+    "generate_music",
     "get_music",
     "get_music_by_mood",
     "is_music_in_use",

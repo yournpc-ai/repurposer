@@ -1,11 +1,14 @@
-"""Re-translate a clip's caption track while keeping it WORD-LEVEL.
+"""Captions skill's private procedures: re-translate a clip's caption track
+while keeping it WORD-LEVEL (relocated from tools/caption_translate.py — the
+module imports the translator agent, so it was never a tool, N-29).
 
 The renderer and editor both treat ``caption_track`` as word-level cues (grouped
 into 7-word display lines; karaoke highlights the active word). Machine
 translation, however, only makes sense on whole lines/sentences. So we:
 
 1. group the word cues into translation units (~``UNIT_WORDS`` words each),
-2. translate each unit's joined text via the LLM (line-by-line, order preserved),
+2. translate each unit's joined text via the shared ``translator`` agent
+   (line-by-line, order preserved),
 3. split each translated unit back into words and spread the unit's
    ``[start, end]`` source-time span across them proportionally to word length.
 
@@ -16,7 +19,7 @@ result (e.g. CJK) degrades gracefully to a single cue for the whole unit.
 
 from typing import Any
 
-from app.skills.caption_translate import caption_translate_agent
+from app.agents.roster import translator
 
 UNIT_WORDS = 10  # words per translation unit (display re-chunks by 7 anyway)
 
@@ -62,10 +65,10 @@ async def translate_text(
     text = text.strip()
     if not text:
         return ""
-    translated = await caption_translate_agent.translate(
-        [text], target_language, style_hint=style_hint
+    translated = await translator.call(
+        lines=[text], target_language=target_language, style_hint=style_hint
     )
-    return translated[0].strip() if translated else ""
+    return translated.lines[0].strip() if translated.lines else ""
 
 
 async def translate_caption_track(
@@ -85,12 +88,12 @@ async def translate_caption_track(
     units = _group_units(cues)
     unit_texts = [" ".join(str(c["text"]).strip() for c in unit) for unit in units]
 
-    translated = await caption_translate_agent.translate(
-        unit_texts, target_language, style_hint=style_hint
+    translated = await translator.call(
+        lines=unit_texts, target_language=target_language, style_hint=style_hint
     )
 
     out: list[dict[str, Any]] = []
-    for unit, text in zip(units, translated, strict=False):
+    for unit, text in zip(units, translated.lines, strict=False):
         start = float(unit[0]["start"])
         end = float(unit[-1]["end"])
         out.extend(_redistribute(text, start, end, target_language))

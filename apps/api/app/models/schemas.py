@@ -1522,6 +1522,27 @@ class CaptionTranslation(BaseModel):
     lines: list[str] = Field(default_factory=list)
 
 
+class ExtractedPersonaMemory(BaseModel):
+    """LLM persona-extraction result; maps directly to Persona DB columns.
+
+    ``name`` is the LLM-synthesized persona label (e.g. "Pragmatic AI
+    evangelist") — used as the Persona.name when the pipeline auto-creates a
+    persona, so the row is never named after an uploaded file. Ignored on
+    manual regenerate, where the user owns the name.
+    """
+
+    name: str = ""
+    core_values: list[str] = Field(default_factory=list)
+    favorite_metaphors: list[str] = Field(default_factory=list)
+    sentence_style: str = ""
+    emotional_tone: str = "rational"
+    typical_hooks: list[str] = Field(default_factory=list)
+    avoid_words: list[str] = Field(default_factory=list)
+    audience: str | None = None
+    guidelines: str | None = None
+    cta: str | None = None
+
+
 class TranslateCaptionsRequest(BaseModel):
     """Re-translate a clip's caption track into ``target_language``."""
 

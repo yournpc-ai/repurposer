@@ -20,15 +20,15 @@ from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import MusicGenerateRequest, MusicMetadataUpdate, MusicResponse
 from app.models.tables import Music, User
 from app.pipeline.music import (
+    USER_MODEL,
     MusicInUseError,
     create_music_from_generation,
     delete_music,
+    generate_music as generate_music_bytes,
     get_music,
     list_music,
     update_music_metadata,
 )
-from app.tools.music import USER_MODEL
-from app.tools.music import generate_music as generate_music_bytes
 from app.tools.storage import public_url
 
 router = APIRouter()

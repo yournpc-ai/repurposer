@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.skills.reviser import reviser_agent
+from app.skills.revise.agents import reviser
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
@@ -25,16 +25,16 @@ from app.models.schemas import (
     validate_output_payload,
 )
 from app.models.tables import Output, Project, User
-from app.tools.caption_translate import translate_caption_track
+from app.skills.captions.procedure import translate_caption_track
 from app.chat.service import chat
 from app.operations.service import apply_precomputed
-from app.pipeline.node_runners import generate_clip_cover_image
+from app.pipeline.images import generate_clip_cover_image
 from app.platform.project_context import (
     resolve_clip_for_revision,
     persona_context_from_row,
     resolve_persona,
 )
-from app.tools.dubbing import synthesize_dub
+from app.skills.dub.procedure import synthesize_dub
 from app.pipeline.errors import TransientNodeError
 
 router = APIRouter()
@@ -160,7 +160,7 @@ async def revise_output(
     payload = output.payload or {}
 
     try:
-        revised = await reviser_agent.revise(
+        revised = await reviser.call(
             clip_hook=payload.get("hook", ""),
             clip_duration=payload.get("duration", 30),
             clip_title_options=payload.get("title_options") or [],
@@ -328,8 +328,8 @@ async def dub_output(
 ) -> Output:
     """Voice-clone dub the clip into ``target_language`` (the persona's own voice).
 
-    Pipeline lives in ``tools/dubbing.py`` (shared with the dub_clip run
-    runner); the endpoint additionally journals the operation (ADR-032).
+    Pipeline lives in ``skills/dub/procedure.py`` (shared with the dub_clip
+    run runner); the endpoint additionally journals the operation (ADR-032).
     """
     output = _require_clip(
         await _get_output_for_user(db, output_id, UUID(str(current_user.id)))

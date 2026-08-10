@@ -35,13 +35,15 @@ from app.models.tables import Asset, Message, Output, WorkflowStep, Persona, Pro
 from app.metering import bind_workflow_step
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.errors import TransientNodeError
-from app.pipeline.node_runners import KNOWN_OUTPUTS, STEP_RUNNERS, slot_tag
 from app.pipeline.registry import (
+    STEP_RUNNERS,
     SkillEntry,
     generation_node_kinds,
     retries_for_node_kind,
     validate_task_list,
 )
+from app.pipeline.step_context import KNOWN_OUTPUTS
+from app.pipeline.step_display import slot_tag
 
 logger = structlog.get_logger()
 
