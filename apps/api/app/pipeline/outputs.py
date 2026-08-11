@@ -53,6 +53,7 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
+        inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         started_at=node.started_at,
         finished_at=node.finished_at,
     )

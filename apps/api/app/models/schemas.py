@@ -1446,6 +1446,8 @@ class StepResponse(BaseModel):
     # Output row ids this node produced — the RunCard collects these on run
     # completion to inline the product cards (chat-loop-v2).
     output_refs: list[UUID] = Field(default_factory=list)
+    # DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036).
+    inputs: list[UUID] = Field(default_factory=list)
     started_at: datetime | None = None
     finished_at: datetime | None = None
 

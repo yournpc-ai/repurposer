@@ -189,6 +189,8 @@ export interface WorkflowStep {
   summary?: string | null
   /** Output row ids this node produced (RunCard inlines these on completion). */
   output_refs?: string[]
+  /** DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036). */
+  inputs?: string[]
   started_at: string | null
   finished_at: string | null
 }
