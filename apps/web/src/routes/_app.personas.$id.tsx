@@ -328,7 +328,7 @@ function PersonaDetailPage() {
 
         <div className="mx-auto w-full max-w-4xl">
           <TabsContent value="persona">
-            <Card className="ring-0 edge-glow">
+            <Card className="shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
@@ -458,7 +458,7 @@ function PersonaDetailPage() {
           </TabsContent>
 
           <TabsContent value="materials">
-            <Card className="ring-0 edge-glow">
+            <Card className="shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>{t("personaDetail.pastMaterials")}</CardTitle>

@@ -52,7 +52,7 @@ export function RecipeCard({
       }}
       className={`group flex flex-col gap-2.5 outline-none ${live ? "cursor-pointer" : ""}`}
     >
-      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-card shadow-lg edge-glow">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-card">
         <video
           ref={videoRef}
           src={card.preview.videoUrl}

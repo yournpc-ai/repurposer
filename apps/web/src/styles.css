@@ -48,20 +48,6 @@
 }
 
 /*
- * Edge glow — our own "border" simulation: an outward-fading halo hugging the
- * element on ALL sides (incl. the top edge a downward drop shadow can't
- * reach), layered over a soft ambient drop. For contexts where bg-card ==
- * bg-background (light theme) and a card would otherwise blend into the page.
- * LIGHT THEME ONLY — dark casts no shadows at all (see the --tw-shadow-color
- * switch in .dark); dark hero surfaces take the ring-foreground/10 hairline.
- */
-@utility edge-glow {
-  box-shadow:
-    0 0 12px 1px rgb(0 0 0 / 0.06),
-    0 16px 40px -12px rgb(0 0 0 / 0.12);
-}
-
-/*
  * Scroll fades — mask a scrollport's edge so content dissolves instead of
  * clipping hard. Applied per-surface (GenerationOverlay's viewport), never
  * in the shared primitive: pair each zone with the surface's own content
@@ -299,6 +285,7 @@ body {
   --color-muted-foreground: var(--muted-foreground);
   --color-meta-foreground: var(--meta-foreground);
   --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-inset: var(--inset);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -322,9 +309,11 @@ body {
 :root {
   /* Gray ladder (2026-08-05 reference pass): the canvas is PURE WHITE — cards
    * float via the built-in ring-foreground/10 hairline + soft shadow, not via
-   * a gray underlay. Surface hierarchy comes from these four steps, never from
+   * a gray underlay. Surface hierarchy comes from these steps, never from
    * one-off alpha fills (bg-muted/50 & co. are retired). Three text tiers:
-   * foreground → muted-foreground (subtitles) → meta-foreground (caps meta). */
+   * foreground → muted-foreground (subtitles) → meta-foreground (caps meta).
+   * --subtle (0.975) is the faintest step — fills that only need to whisper
+   * off pure white (the composer entity blocks). */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -336,6 +325,7 @@ body {
   --secondary: oklch(0.95 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.95 0 0);
+  --subtle: oklch(0.975 0 0);
   --inset: oklch(0.92 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --meta-foreground: oklch(0.68 0 0);
@@ -382,6 +372,9 @@ body {
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.24 0 0);
+  /* Dark --subtle == --muted: the faint-lift slot collapses onto the standard
+   * lift (0.24 over the 0.21 card is already whisper-grade). */
+  --subtle: oklch(0.24 0 0);
   --inset: oklch(0.15 0 0);
   --muted-foreground: oklch(0.63 0 0);
   --meta-foreground: oklch(0.52 0 0);

@@ -589,7 +589,7 @@ export function SkinEditor({
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
       {/* Settings — single column, grouped (craft keys are task-book defaults
           and intentionally absent, NAMING N-28) */}
-      <Card className="ring-0 edge-glow">
+      <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>{t("personaDetail.skin.title")}</CardTitle>
           <CardDescription>{t("personaDetail.skin.desc")}</CardDescription>

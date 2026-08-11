@@ -191,12 +191,10 @@ export function HomeComposer({
 
   return (
     <>
-    {/* Flat chrome, the same recipe as the sign-in modal (DialogContent):
-        solid card + the base primitive's ring-foreground/10 hairline +
-        shadow-xl (light only — dark shadows compile to transparent). NO
-        backdrop-filter on this card: the home page behind is a uniform fill
-        with nothing to blur. */}
-    <Card className="overflow-visible rounded-2xl py-0 shadow-xl">
+    {/* Flat chrome: the base primitive's ring-foreground/10 hairline only,
+        NO shadow. NO backdrop-filter either: the home page behind is a
+        uniform fill with nothing to blur. */}
+    <Card className="overflow-visible rounded-2xl py-0">
       <CardContent className="p-5 text-left">
         {/* Entity blocks (Assets = source materials, Persona = whose voice)
             ride the card's top edge via negative margin; the textarea fills
