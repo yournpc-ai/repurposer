@@ -7,7 +7,6 @@ import {
   FileText,
   Image as ImageIcon,
   Music,
-  PenLine,
   Upload,
   Video,
   Volume2,
@@ -263,8 +262,7 @@ export function RecipeInspectOverlay({
               )}
 
               <div>
-                <p className="flex items-center gap-1.5 text-sm font-medium">
-                  <PenLine className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">
                   {t("recipes.inspect.promptTitle")}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
