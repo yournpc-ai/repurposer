@@ -104,7 +104,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 
 ### 4.4 风格卡（座位撤除）
 
-**风格不作为配方卡存在**（拍板）：风格是产物的修饰，不是产物——"没有人想得到一个风格"。沉为 **look 层**：caption catalog 成员 × title/intro 结构 × brand 参数的组合，三个家——配方 overlay 预览（每道菜的观感即其 look）、检视器参数直操（字幕样式等控件，简报 `tasks/results-workspace.md` D8）、chat 修订（"换成杂志风"）。
+**风格不作为配方卡存在**（拍板）：风格是产物的修饰，不是产物——"没有人想得到一个风格"。沉为 **look 层**：caption catalog 成员 × title/intro 结构 × brand 参数的组合，三个家——配方 overlay 预览（每道菜的观感即其 look）、detail modal 参数直操（字幕样式等控件，简报 `tasks/results-canvas.md` D5）、chat 修订（"换成杂志风"）。
 
 **卡面立项门槛**（同日拍板）：配方必须是**一道具体的菜**——有名字、有画面感、一眼想要的成片（dub 卡"你的声音说德语"为模板）；品类形态（"带字幕的竖屏短片"这类货架标签）不配占位。第四张卡座位在闭环链（PROGRESS 第二周）完成后按此门槛立项；候选方向存档：杂志访谈风 keynote 短片（stacking + 顶部 title + intro 标题页，素材 `xy_2.mp4` 已策展）。
 

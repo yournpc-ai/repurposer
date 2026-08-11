@@ -77,7 +77,7 @@ class NodeBase:
     # —— 方法（run 唯一必实现，其余有默认）——
     async def run(db, run, node, project) -> list[UUID]   # 执行，返回产物行 id
     def estimate(ctx) -> dict | None  # 自己报价：机械精确价 / agent token 区间；None = 不报价（fan-out / 编译期量未知）
-    def label(slot) -> str | None       # 展示名（run 进度图 / 步骤流同源）
+    def label(slot) -> str | None       # 展示名（结果画布 / 步骤流同源）
     def reuse(...) -> UUID | None       # 幂等复用（asset-hash 类，命中则成本为零）
 ```
 

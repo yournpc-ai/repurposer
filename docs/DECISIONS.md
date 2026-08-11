@@ -507,7 +507,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 成本预估获得查询形状：历史 `workflow_steps` 按 kind 聚合出每步均值，估价 = 逐节点求和（ADR-039 的 estimate 系统落于此）。
 - 配方模板获得序列化对象：run-plan 模板 = DAG 定义 + 类型化输入槽位。
 - `workflow_runs.current_step` 退役为查询（`workflow_steps WHERE run_id=X AND status='running'`），run 行只管 run 级状态机。
-- 用户侧永不见**可操作** DAG 画布（ADR-035 第 2 条永久拒绝）；用户面图形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板，ADR-035/036）。
+- 用户侧永不见**可操作** DAG 画布（ADR-035 第 2 条永久拒绝）；用户面图形态 = FlowView 渲染的只读图（配方流程图 / 结果画布 / 复核中的血缘板，ADR-035/036/041）。
 
 **Related**: ADR-016（clip-spec 契约不动）、ADR-025（provider 抽象与计量）、ADR-035 / ADR-036（用户面图形态）、`docs/MODULE_ARCHITECTURE.md` §2.1/§4、`docs/STRATEGY.md` §2.5/§5、`docs/research/elevencreative.md`
 
@@ -646,7 +646,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Decision**:
 1. **静态配方流程图 = 采纳**。配方注册时作者策展的只读结构图（友好步骤名、固定结构、无模型名、不可接线），作为"它是怎么做的"堆叠项住进配方检视 overlay（闭环链第 2 周；flow 字段入 Recipe 数据 schema，RECIPES §7.1）。定位 = 说明书/信任件，回答"它拿我的素材做了什么"，不承担任何操作。
 2. **可操作画布 = 永久拒绝**。接线/自由拓扑/节点运行按钮/节点模型 SKU 货架永不面向用户——那是操作员形态，与"到来即彷徨"的知识专家画像冲突；拓扑唯一来源维持 `compile_graph`（LLM 亦只准提议 task list）。本条关闭 PROGRESS 决策表中"DAG 检视/编辑 + 简单多轨是否投入"行的"编辑"半边；VIDEO_EDITOR 封存的 L3 分工线（多轨/图层/B-roll 归 CapCut/Premiere）不变。
-3. **运行期活图 = 拆分裁决（ADR-036）**：run 进度图（单 run 死图 + 状态动画）升正排产；spike 收窄为项目全史血缘板，以小白复述测试裁决是否升正为默认中心（排期见 PROGRESS）。ADR-028 的"用户侧永不见 DAG 画布"自此修订为"用户侧永不见**可操作**画布"。
+3. **运行期活图 = 结果画布（ADR-041 终裁）**：单 run 拓扑在收官时一帧渲染为桌面默认中心——进度不进图，打勾流为唯一进度面；小白复述测试为转正复核门（不过则网格回退默认中心）。ADR-028 的"用户侧永不见 DAG 画布"自此修订为"用户侧永不见**可操作**画布"。
 4. **模型货架拒绝的证据并入**：竞品画布在节点上摆模型选择器，同时提供"自动（低于 300 积分）"档位——连画布派自己都需要一个策略开关兜底。这佐证 2026-08-02 的 provider-UX 裁决（用户-facing = 策略开关如"优先 EU 托管模型"，不是 SKU 货架）：模型选择是成本/合规策略，不是用户的创作决策。
 
 **Consequences**:
@@ -654,32 +654,32 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 新产物类型 / 新配方进入时，静态流程图随注册项一并策展（注册表纪律 +1 字段）；活图若升正，同一渲染器零浪费接管。
 - 翻译失败 = ask 反问成为硬契约：意图识别覆盖率不足时永远多问一句，永不亮图兜底。
 
-**Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/tasks/results-workspace.md`（六屏形态 / 精修闭环 D8-D9）；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
+**Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/tasks/results-canvas.md`；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
 
-## ADR-036: Flow 基座——只读图渲染扶正为共享能力，run 进度图升正排产
+## ADR-036: Flow 基座——只读图渲染扶正为共享能力
 
 **Status**: Decided (2026-08-07)
 
 **Context**: ADR-035 三切次日，dub 载体链的两个事实浮出：① 配方检视 overlay 首版实现把扇出数据包（1 源 → EN/ZH/FR/ES 四片对照包）渲成 tabs + 手风琴——图结构的信息被线性容器物理消灭（四条语言版本同一时刻只能见一条）；② 单 run 的 DAG 拓扑在 `compile_graph` 后固定、run 期间只有状态迁移——ADR-035 第 3 条所指"运行期活图"里真正有布局风险的不是 run 图（死图 + 状态动画），而是跨周增长的项目全史血缘；两者并为一件 spike 颗粒度过粗。用户拍板原话（2026-08-07）：**"这一期先只暴露只读图，但该连线的连线、该有的节点是节点；只能通过 chat 修改，不变。"**
 
 **Decision**:
-1. **FlowView = 共享只读图渲染基座**（`apps/web/src/components/flow/`），`packages/clip` 同款单一画笔纪律：配方扇出 / run 进度图 / 舞台家族视图 /（spike）血缘板四个消费面各自只做"领域数据 → nodes/edges"适配器，禁自绘边、禁自写布局。契约三要素：节点皮（asset / output / step）、双边语义（**lineage 血缘边** ⊥ **dependency 依赖边**，视觉可辨）、确定性分层布局（depth 分层，有界规模不虚拟化、不缩放）。
+1. **FlowView = 共享只读图渲染基座**（`apps/web/src/components/flow/`），`packages/clip` 同款单一画笔纪律：配方流程图 / 结果画布 / 血缘板（复核门）三个消费面各自只做"领域数据 → nodes/edges"适配器，禁自绘边、禁自写布局。契约三要素：节点皮（asset / output / step）、双边语义（**lineage 血缘边** ⊥ **dependency 依赖边**，视觉可辨）、确定性分层布局（depth 分层，有界规模不虚拟化、不缩放）。
 2. **只读是结构性的，内容不降级**：FlowView 不提供 drag / connect / pan / zoom props——"图不可编辑"（ADR-035 第 2 条）从约定升级为组件 API 物理缺席；同时每条边是真边（step `inputs` / `derived_from_output_id`）、每个节点是真节点，禁装饰性插画。
-3. **run 进度图升正为排产项**（闭环链第 3 周，日期以 PROGRESS 为准）：单 run 拓扑编译期定死，属有界死图 + SSE 状态动画，无布局风险——落地后取代 results-workspace 原"进度网格"（中央区状态机修订为：**进度图 → 结果网格 ⇄ 舞台**）。chat 打勾流不退役：线性旁白与空间图同源（workflow_steps）双视图并存。
-4. **spike 收窄为项目全史血缘板**：唯一无界图面，小白复述测试照跑（排期见 PROGRESS），裁决问题 = "血缘板是否升正为默认中心"。
+3. **结果画布 = 用户面 run 图的唯一形态**（2026-08-11 ADR-041 修订）：单 run 拓扑编译期定死，收官时一帧渲染终态为桌面默认中心——进度不进图，打勾流是唯一进度面（线性旁白与空间图同源 workflow_steps，分时复用不并存）。
+4. **血缘板**：项目全史血缘 = 唯一无界图面；默认中心之问已由 ADR-041 终裁（结果画布升正），血缘板留作扩展视图候选。
 5. **修改通道不变**：chat 是唯一修改通道；图面交互白名单 = 点选聚焦 / hover 血缘路径高亮 /（闭环链第 5 周）点节点插 `@workflow_step` mention 接三档重跑。
 
 **Consequences**:
 - 后端增量两处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地）。
-- DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板）；可操作画布永不用户化（ADR-035 第 2 条）不变。
+- DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / 结果画布 / 复核中的血缘板）；可操作画布永不用户化（ADR-035 第 2 条）不变。
 
-**Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）；简报 `docs/tasks/results-workspace.md`（D2/D6/D7、屏 3、分期与禁令随本条修订）
+**Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）、ADR-041（结果画布升正——本条第 3/4 条与补记 1/3 的修订来源）；简报 `docs/tasks/results-canvas.md`
 
 ### 补记（2026-08-07，同日两轮用户拍板）
 
-1. **缩放 = 导航，不是编辑**：ADR-035 第 2 条永久拒绝的是编辑手势（拖节点/接线/删加节点——拓扑唯一来源仍是 `compile_graph`）；缩放/平移/fit/minimap 是导航能力，**基座持有、按面门禁开放**：有界图面（配方扇出 / run 进度图 / 家族视图，≤~30 节点）fit-first 锁缩放（用户裁定"节点多之后缩放必然"仅对无界面成立）；血缘板全开。
+1. **缩放 = 导航，不是编辑**：ADR-035 第 2 条永久拒绝的是编辑手势（拖节点/接线/删加节点——拓扑唯一来源仍是 `compile_graph`）；缩放/平移/fit/minimap 是导航能力，**基座持有、按面门禁开放**：配方卡说明书（有界策展小图）fit-first 锁缩放；结果画布与血缘板开放 pan/zoom/minimap（2026-08-11 ADR-041 重划）。
 2. **引擎定 `@xyflow/react`**：缩放进基座后，pan/zoom/pinch/minimap/命中坐标换算正是手写最坑、最值得买的代码类——手绘分层方案在动工前作废（零沉没成本）。布局仍自算（确定性分层 + append-only 保序，库只做摆位与视口，不引 dagre——"chat 加节点，图只长不晃"论据不变）。交互白名单：`nodesDraggable=false` / `nodesConnectable=false` **常锁**（拓扑编辑手势物理缺席不变）。动工前置核查：React 19 兼容版本 / SSR client-only 挂载 / Tailwind v4 样式共存。
-3. **过渡动画愿景（用户拍板："连线、node 的诞生、布局都有 transition，用户会感觉到优雅"）**：三层，每层都投影真实事件——**诞生编排**（run 启动时按 `seq` 编译序逐节点入场 + 边描画，是把真实编译顺序用缓动时间轴回放，不是剧场）；**状态动画**（running 脉冲 / 边流动指向待执行子节点，SSE 驱动）；**生长动画**（chat 拓扑编辑产生新节点时，新节点诞生 + 边描画）。禁令 #9 不破：动画永远是真实事件（编译序/状态迁移/真实生长）的投影，禁假进度；`prefers-reduced-motion` 降级为即时呈现；断线重连/历史回放不播诞生编排（只有会话内亲见的 run 启动才播）。
+3. **过渡动画愿景（用户拍板："连线、node 的诞生、布局都有 transition，用户会感觉到优雅"）**：三层，每层都投影真实事件——**诞生编排**（结果画布揭幕时按 `seq` 编译序逐节点入场 + 边描画，是把真实编译顺序用缓动时间轴回放，不是剧场）；**状态动画**（running 脉冲 / 边流动指向待执行子节点，SSE 驱动）；**生长动画**（chat 拓扑编辑产生新节点时，新节点诞生 + 边描画）。禁令 #9 不破：动画永远是真实事件（编译序/状态迁移/真实生长）的投影，禁假进度；`prefers-reduced-motion` 降级为即时呈现；断线重连/历史打开不播诞生回放（只有会话内亲见收官才播）。
 
 ## ADR-037: 身份模块正名——Speaker 退役、人设（Persona）扶正，IP 留在承诺层
 
@@ -776,3 +776,27 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - NAMING 词汇表 `recipe_id` / `resolve_recipe_launch` 两条退役；MENTIONS §3 / RECIPES 裁决⑤+§7.2 / CLAUDE.md composer 契约现在时同步。
 
 **Related**: MENTIONS §3（配方永不是 mention 的母判定）、RECIPES §7.1–7.2、ADR-036（D5 穿线条款随本条失效）、AGENT_ARCH §4.2（对账自检不变）
+
+## ADR-041: 结果画布升正——canvas 为桌面默认中心、底部 dock、进度不进图、移动端 UI in chat
+
+**Status**: Decided (2026-08-11)
+
+**Context**: 闭环链施工中（results-workspace，08-06 立项），结果面四个问题同晚浮出并拍板：① chat 打勾收官后关窗跳结果页 = 跳切，过程与结果被劈成两个房间；② 网格 / tabs / 消息流同为线性容器，多产物扇出被线性容器物理消灭（08-07 dub 对照包证据的推广）——空间面是多产物的唯一解法；③ ADR-036 预留的"血缘板是否升正为默认中心"裁决口，其答案不应只给血缘板——结果面本身是中心候选；④ 移动端渲不了 canvas 曾被视为方向反证——非也：移动端是降级面不是核心场景，方向是否成立的证据看桌面。同日 Lovart 式画布评审 + 多轮讨论后用户拍板：结果面 = 整屏只读 canvas，chat 收为底部 dock。本条关闭 ADR-036 的"默认中心"裁决口，修订其第 3 条与补记 1/3；**ADR-035 第 2 条（可操作画布永久拒绝）不变**——canvas 正当性三理由：连续性（产物从过程里长出来，无跳切）、扇出全景可见、血缘信任（每个产物出处可溯）。
+
+**Decision**:
+1. **结果画布 = 桌面/iPad 默认中心**：项目页收官态 = FlowView 渲染当前 run 拓扑 + 最新产物（真节点真边，output 节点 = 产物卡：缩略图 / 分数+top-pick / 下一步建议）。多 tab 结果页与"结果网格为默认中心"退役；网格重构件降级为移动端列表渲染件复用。
+2. **进度不进图**：打勾流是唯一进度面（run 进度图排产撤销）；收官转场 = 遮罩淡出 + 消息区上收 + 画布按 `seq` 编译序诞生回放——动画 = 真实事件投影不变；输入组全程零位移；断线重连 / 历史打开直接呈现终态不播回放。
+3. **底部 dock**：chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（同一消息机器内脏不动）；**agent 发声（ask / 任务书 / chips / 收官摘要）dock 必自动升起**；历史 = 向上展开抽屉；画布视口留 bottom safe-area。一个输入组三停靠位：首页 composer / overlay 底排 / 结果 dock。
+4. **产物节点 toolbar 合法化，边界说死**：hover 出带 gap 悬浮 pill（预览 / 下载 / 发布 = 旧卡面动作平移）；单击 = detail modal 旧逻辑原样，publish modal 保留；过程节点永无 toolbar；toolbar 装图操作（运行 / 接线）永久禁区。ChatModal / AssetChatModal 退役——产物对话归 dock + 焦点注入；工作面"舞台 / 检视器"页面区方案取消（detail modal 保留使检视器冗余）。
+5. **密度三档**：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 骨架密度（素材 + 产物主角，中间步骤折为可展开"过程脊"组节点）；run 期无图。**折叠是视图行为不是数据行为**——图数据永远全量，节点展示档由 NodeBase 自描述（与 `label()` 同哲学）。判定任一节点只问："隐藏它，用户会做错决定或失去信任吗？"
+6. **导航门禁修订**（修订 ADR-036 补记 1）：缩放 = 导航不是编辑——配方卡说明书锁 fit；结果画布开放 pan / zoom / minimap；拓扑编辑手势任何面物理缺席。
+7. **移动端 = UI in chat**：不渲染 canvas（< iPad 宽度）；对话沉底与桌面 dock 同心智；一回合一张 RunCard（卡头血缘摘要行 + 可展开过程脊 + 产物缩略条 + chips）；点缩略图进全屏查看器（家族滑动 + 底部迷你输入条）；点卡即焦点免 @。卡片种类注册表制：计划 / 操作 / 结果三型。
+8. **复核门**：小白复述测试周五（08-14）照跑——裁决问题从"血缘板是否升正"改为"结果画布是否转正"；不过则结果网格回退为默认中心（组件不删），canvas 降为检视入口，零浪费。
+
+**Consequences**:
+- ADR-036 修订：第 3 条（run 进度图升正排产）退役为"结果画布"；补记 1 缩放门禁按面重划；补记 3 诞生编排触发时机从"run 启动"改为"收官揭幕回放"。FlowView 消费面 = 配方流程图 / 结果画布 /（复核中的）血缘板。
+- results-workspace 简报退役（中央区状态机 / 六屏 / 工作面三区被本条吸收改写；chips 双级派生 / 翻译两层 / Before-After / 焦点注入沿入新简报）；其 D5「配方身份贯穿三站」条款正式退役——ADR-040 后服务端永不见配方身份：打勾流皮肤用节点友好名、chips 按焦点产物派生，均不需要配方身份（本条同时关闭 ADR-040 的未决带出）。
+- 结果页 tour 锚点随画布重锚（`data-tour="results-*"` 挂产物节点卡）。
+- 移动端本期保留现有结果列表兜底；RunCard 增强排第三周。
+
+**Related**: ADR-035（可操作画布永久拒绝不变；第 3 条裁决口关闭）、ADR-036（本条修订其第 3 条与补记 1/3）、ADR-040（D5 条款退役的母因）、ADR-028（RunPlan）；简报 `docs/tasks/results-canvas.md`

@@ -14,7 +14,7 @@
 | 首页 composer | — | **无意图识别**——send = spinner 建空项目 + 上传素材 + 跳转详情（草稿经 router state 交接） | 无 | 无 |
 | Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **plan path** | PlanAgent（三动作：generate / answer / start） | 代码：reasons 推导 + 三方合并 + dock task_book；start 复用 answer kind=start 起 run |
 | Overlay chat（项目） | 已有 run（running / results） | `POST /chat`（project scope） | ChatIntentAgent | 代码：四态裁决（task_list / edit_ops / ask / answer）+ autoResume |
-| ChatModal（单产物） | asset-scoped | `POST /chat`（asset scope，永不进 plan path） | ChatIntentAgent | 同上（asset 语境注入） |
+| 产物会话（dock + 焦点注入；ChatModal 退役中——ADR-041 / `tasks/results-canvas.md`） | 单产物 | `POST /chat`（project scope + 焦点 output 注入，永不进 plan path） | ChatIntentAgent | 同上（焦点语境注入） |
 | 任意 dock | — | `POST /chat/messages/{id}/answer` | **无 LLM** | 代码：kind × question-kind 契约分派 |
 
 plan path 进入条件（`chat()` 分派，service.py）：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_intent` 为空）。start/修订/answer 的判定归 PlanAgent LLM——dock 中的任务书以 `presented_plan` 摘要注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
@@ -109,7 +109,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | M 目标语言改 | chat task_list（translate/write 新槽）折算 | ✅（产物级正解） |
 | 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（plan path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
 
-### 3.4 产物会话（ChatModal，asset scope）
+### 3.4 产物会话（dock + 焦点注入；ChatModal / asset scope 退役中——ADR-041）
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
