@@ -259,6 +259,16 @@ function ProjectDetailPage() {
     prevRunRef.current = { id: latestRun.id, status: latestRun.status }
   }, [latestRun])
 
+  // Cross-project navigation (same route, new params — no remount): every
+  // project-scoped latch resets, or the previous project's canvas/dock
+  // would bleed into the new page while its results load.
+  useEffect(() => {
+    setStickyCompletedRun(null)
+    setWitnessedRunId(null)
+    setCanvasAssets([])
+    prevRunRef.current = null
+  }, [projectId])
+
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
@@ -668,10 +678,14 @@ function ProjectDetailPage() {
         dub_languages: latestRun?.context?.dub_languages,
         specific_instruction: latestRun?.context?.instruction,
       })
-    : resultsPhase
-      ? completedRunIntent
-      : pendingIntent
-        ? normalizeIntent(pendingIntent.intent)
+    : pendingIntent
+      ? // A parked task book always wins — it IS the live confirmation
+        // surface (a refinement book parked from any device must be the
+        // book the panel edits and Start answers with, never the stale
+        // completed run's).
+        normalizeIntent(pendingIntent.intent)
+      : resultsPhase
+        ? completedRunIntent
         : undefined
 
   return (
@@ -796,6 +810,9 @@ function ProjectDetailPage() {
 
       {overlayMounted && (
         <GenerationOverlay
+          // Remount per project — the message machine's state (run id,
+          // conversation, shell) belongs to one project only.
+          key={projectId}
           ref={overlayRef}
           projectId={projectId}
           prompt={
@@ -820,7 +837,11 @@ function ProjectDetailPage() {
           }
           initialReasons={pendingIntent?.reasons ?? []}
           initialRunId={
-            attachOpen ? attachRunId : resultsPhase ? completedRun?.id : undefined
+            attachOpen
+              ? attachRunId
+              : resultsPhase && !pendingIntent
+                ? completedRun?.id
+                : undefined
           }
           initialShell={resultsPhase ? "dock" : "fullscreen"}
           completionMode={isMobile ? "navigate" : "dock"}

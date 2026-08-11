@@ -1038,9 +1038,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   }, [])
 
   const handleStartGeneration = useCallback(async () => {
-    // chatBusy: a refine turn is in flight — starting now would race its
-    // response (the late task book could re-dock over the running flow).
-    if (runId || isStarting || chatBusy) return
+    // runId && !terminal: a run is LIVE — starting now would double-launch.
+    // (A terminal run does NOT block: the dock's refinement Start launches
+    // the next run — runId set ≠ run live.) chatBusy: a refine turn is in
+    // flight — starting now would race its response (the late task book
+    // could re-dock over the running flow).
+    if ((runId && !terminal) || isStarting || chatBusy) return
     setStartError(null)
     setIsStarting(true)
     try {
@@ -1090,7 +1093,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
       setIsStarting(false)
     }
-  }, [runId, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
+  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
 
   /** Cancel = bail: a graceful exit back to draft (never an error toast). */
   const handleCancel = useCallback(async () => {
@@ -1329,10 +1332,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
    * nothing to clarify. */
   const handleAssistantMessage = async (message: QuestionMessage) => {
     if (message.question && !message.answer) {
-      if (message.question.kind === "task_book" && runIdRef.current) {
-        // A run is already live (started from another surface while this
+      if (
+        message.question.kind === "task_book" &&
+        runIdRef.current &&
+        !terminalRef.current
+      ) {
+        // A run is already LIVE (started from another surface while this
         // turn was in flight) — a late task book must not pull the UI back
-        // to confirm; the run flow owns the surface now.
+        // to confirm; the run flow owns the surface now. (A TERMINAL run
+        // does not trigger this guard: the dock's refinement books dock
+        // normally — runId set ≠ run live.)
         return
       }
       setPendingQuestion(message)
@@ -2412,9 +2421,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   }
                   className="overlay-surface flex min-w-0 flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left"
                 >
-                  <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug">
+                  <Streamdown
+                    mode="static"
+                    className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug [&_p]:inline"
+                  >
                     {dockSummary}
-                  </span>
+                  </Streamdown>
                   {dockView === "drawer" ? (
                     <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                   ) : (
