@@ -18,9 +18,9 @@ SKILL_REGISTRY 同款纪律 (NAMING §5, N-25): NOT a plugin system, NOT a table
 Visibility is a FIELD-LEVEL property: the public ``GET /api/v1/recipes``
 serves the public projection (base / flow / example_* / input_slots) — the
 preset substance (``outputs`` / ``dub_languages``) never leaves the server,
-and seeding happens exclusively here via ``resolve_recipe_mentions`` (the
-composer sends mentions, never a client-built prior — prohibition #1,
-docs/tasks/recipe-mention.md).
+and seeding happens exclusively here via ``resolve_recipe_launch`` (the
+recipe's identity rides the first message as a ``recipe_id`` transport,
+never a client-built prior — MENTIONS §3).
 
 Drift guard: ``flow`` is curated display data but must truthfully mirror the
 graph its ``outputs`` actually compile to — both live in this file and are
@@ -31,7 +31,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.schemas import ChatMention, IntentSlot
+from app.models.schemas import IntentSlot
 
 
 class InputSlot(BaseModel):
@@ -256,26 +256,23 @@ def list_public_recipes() -> list[RecipePublic]:
     ]
 
 
-def resolve_recipe_mentions(mentions: list[ChatMention]) -> RecipeEntry | None:
-    """Resolve the recipe seeded by a turn's mentions (preset, not a pin).
+def resolve_recipe_launch(recipe_id: str | None) -> RecipeEntry | None:
+    """Resolve the recipe a launch carries (preset, not a pin).
 
-    Returns ``None`` when no recipe is mentioned (path identical to today).
-    Raises ``ValueError`` on a rejected mention — the chat plan path maps it
-    to 422 (fail-fast, before any LLM call):
+    The recipe's identity arrives as the first message's ``recipe_id``
+    transport (MENTIONS §3 — launch context, never a mention). Returns
+    ``None`` when the turn carries no recipe (path identical to a plain
+    composer send). Raises ``ValueError`` on a rejected id — the chat plan
+    path maps it to 422 (fail-fast, before any LLM call):
 
-    - more than one recipe per run (v1: a recipe is a complete task book;
-      recipe composition is a later iteration);
     - unknown id or a ``reserved`` card (a preset is never deliverable
       before its capability is real).
     """
-    recipe_mentions = [m for m in mentions if m.type == "recipe"]
-    if not recipe_mentions:
+    if recipe_id is None:
         return None
-    if len(recipe_mentions) > 1:
-        raise ValueError("One recipe per run — a recipe is a complete task book.")
-    entry = RECIPE_REGISTRY.get(recipe_mentions[0].id)
+    entry = RECIPE_REGISTRY.get(recipe_id)
     if entry is None:
-        raise ValueError(f"Unknown recipe: {recipe_mentions[0].id}")
+        raise ValueError(f"Unknown recipe: {recipe_id}")
     if entry.status != "live":
-        raise ValueError(f"Recipe not yet available: {recipe_mentions[0].id}")
+        raise ValueError(f"Recipe not yet available: {recipe_id}")
     return entry

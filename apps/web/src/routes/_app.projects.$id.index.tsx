@@ -157,6 +157,7 @@ function ProjectDetailPage() {
         text: string
         mentions?: { type: string; id: string; label: string }[]
         personaId?: string
+        recipeId?: string
       }
     }
   ).firstMessage
@@ -612,6 +613,7 @@ function ProjectDetailPage() {
                   text: firstMessage.text,
                   mentions: firstMessage.mentions ?? [],
                   personaId: firstMessage.personaId,
+                  recipeId: firstMessage.recipeId,
                 }
               : null
           }

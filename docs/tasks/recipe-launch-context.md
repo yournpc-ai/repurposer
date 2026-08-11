@@ -1,6 +1,6 @@
 # recipe-launch-context 实施简报——配方脱离 mention 体系（recipe_id 发射通道）
 
-> Status: 📐 设计定稿（2026-08-11 立项，用户拍板：mention 哲学升级——mention 面向"与 AI 交流"，配方不是对 AI 说的话，是发射上下文）
+> Status: ✅ 已落地（2026-08-11 立项，用户拍板：mention 哲学升级——mention 面向"与 AI 交流"，配方不是对 AI 说的话，是发射上下文；同日实施：改键不改行为，harness S5/S10/S11/S15/S22 走 `recipe_id` 通道全绿——S22 期望值随 08-07 注册表语言裁决修正为 zh/fr/es）
 > 方针母文档：`docs/MENTIONS.md`（§2 两族分类、§3 排除清单）；配方卡架构归 `RECIPES.md`。
 > 排期：PROGRESS 第二周闭环链期间顺做（改动面小、无新表、harness 有回归网）。
 

@@ -520,13 +520,11 @@ const en = {
         "Turn my talk into a short video with AI-generated scenes.",
     },
   },
-  // @-mention system (docs/tasks/recipe-mention.md): picker copy, type
-  // names, and input-slot hints (the picker's muted subtitle).
+  // @-mention system (MENTIONS §4): picker copy and type names.
   mentions: {
     pickerEmpty: "No matches",
     remove: "Remove mention",
     types: {
-      recipe: "Template",
       asset: "Asset",
     },
     fileType: {
@@ -535,16 +533,6 @@ const en = {
       image: "Image",
       document: "Document",
     },
-    input: {
-      video: "a video",
-      audio: "an audio file",
-      images: "a few photos",
-      slides: "slides",
-      transcript: "a transcript",
-    },
-    // Lead-in composing the slot nouns into one service-minded line (mention
-    // picker hint + the overlay dropzone's subtitle).
-    inputLead: "All it takes is {{slots}}",
   },
   projects: {
     title: "Projects",

@@ -154,17 +154,17 @@ export function HomeComposer({
     [files],
   )
 
-  // Mention chip laws (docs/tasks/recipe-mention.md §2.4): visible (inline
-  // chip in the sentence, MentionEditor), consumed on send (onSent clears
-  // the draft, before navigating), × purifies (removing the chip removes
-  // every trace — no residual pin).
+  // Mention chip laws (MENTIONS §4): visible (inline chip in the sentence,
+  // MentionEditor), consumed on send (onSent clears the draft, before
+  // navigating), × purifies (removing the chip removes every trace — no
+  // residual pin).
   //
   // The send mechanism is the shared `useProjectLaunch` (2026-08-08, D6 二次
   // 修订): composer and the recipe overlay's launch zone ride the identical
   // path (create project → upload → navigate → first /chat message). A
-  // recipe mention is pinned server-side in the plan path
-  // (resolve_recipe_mentions) — the composer never builds a prior
-  // (docs/tasks/recipe-mention.md, prohibition #1).
+  // recipe launch is seeded server-side in the plan path
+  // (resolve_recipe_launch, fed by the `recipe_id` transport) — the composer
+  // never builds a prior (MENTIONS §3).
   const handleGenerate = () =>
     launch({
       prompt,
@@ -192,10 +192,13 @@ export function HomeComposer({
 
   return (
     <>
-    {/* Dark mode: no shadows at all — the card's edge is the ring hairline,
-        separation comes from the tonal step (card 0.21 on canvas 0.12).
-        Light mode keeps edge-glow. */}
-    <Card className="overflow-visible rounded-2xl py-0 ring-0 edge-glow dark:ring-1 dark:ring-foreground/10">
+    {/* Flat chrome, the same recipe as the sign-in modal (DialogContent):
+        solid card + the base primitive's ring-foreground/10 hairline +
+        shadow-xl (light only — dark shadows compile to transparent). NO
+        backdrop-filter on this card: it would make the card the containing
+        block for the fixed MentionPicker inside the editor (teleporting it),
+        and the home page behind is a uniform fill with nothing to blur. */}
+    <Card className="overflow-visible rounded-2xl py-0 shadow-xl">
       <CardContent className="p-5 text-left">
         {/* Entity blocks (Assets = source materials, Persona = whose voice)
             ride the card's top edge via negative margin; the textarea fills
@@ -212,7 +215,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left ring-1 ring-foreground/10 transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {files.length === 0 ? (
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -238,7 +241,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-persona"
               onClick={() => setPersonaPickerOpen(true)}
-              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left edge-glow transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
+              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left ring-1 ring-foreground/10 transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {selectedPersona ? (
                 <Avatar size="sm">

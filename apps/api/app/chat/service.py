@@ -78,7 +78,7 @@ from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
-from app.pipeline.recipes import resolve_recipe_mentions
+from app.pipeline.recipes import resolve_recipe_launch
 from app.skills import SkillRejected, dispatchable_skills
 
 _ASK_BACK_TEXT = (
@@ -891,10 +891,10 @@ async def _plan_turn(
     first_file = next((a for a in assets if a.file_url), None)
     filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
 
-    # Recipe mention validation (fail-fast, BEFORE inference): a rejected pin
-    # (reserved / unknown / multiple recipes) must not burn an intent call.
+    # Recipe launch validation (fail-fast, BEFORE inference): a rejected id
+    # (reserved / unknown) must not burn an intent call.
     try:
-        recipe = resolve_recipe_mentions(request.mentions)
+        recipe = resolve_recipe_launch(request.recipe_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -983,14 +983,13 @@ async def _plan_turn(
             intent.dub_languages = list(prior.dub_languages)
         # else: both moved — chat wins, the inference stands.
 
-    # Recipe mention seed (docs/tasks/recipe-mention.md §2.3, revised
-    # 2026-08-05): a recipe is a PRESET, not a pin — "仅仅是第一版的东西".
-    # Resolved server-side and applied AFTER the panel prior: slot types the
-    # inference didn't produce are appended so the first book matches the
-    # card's shape; dub_languages fills only when the prompt named none.
-    # Nothing is explicit — every field (and each slot's existence) is
-    # refine-able from the very next turn. The LLM never interprets the
-    # recipe (validated pre-inference).
+    # Recipe launch seed: a recipe is a PRESET, not a pin — "仅仅是第一版的
+    # 东西". Resolved server-side (the recipe_id transport — MENTIONS §3) and
+    # applied AFTER the panel prior: slot types the inference didn't produce
+    # are appended so the first book matches the card's shape; dub_languages
+    # fills only when the prompt named none. Nothing is explicit — every
+    # field (and each slot's existence) is refine-able from the very next
+    # turn. The LLM never interprets the recipe (validated pre-inference).
     if recipe is not None:
         seeded = {s.type for s in intent.outputs}
         for slot in recipe.outputs:

@@ -148,10 +148,11 @@ class ChatMention(BaseModel):
     """An @ entity reference pinned to a definite id (CHAT_ARCH §7).
 
     The contract and the column (messages.mentions) are the seat; the picker
-    UI is the registry-driven composer surface (docs/tasks/recipe-mention.md).
-    ``recipe`` is the fifth mention type — the task-book pin family, resolved
-    only server-side (``pipeline/recipes.py``). ``workflow_step`` follows the
-    N-15 rename (one concept, one name across the stack).
+    UI is the registry-driven composer surface (MENTIONS §4). ``recipe`` is
+    retired (MENTIONS §3 — a recipe is launch context riding ``recipe_id``);
+    the type member stays so historical messages still render their chips.
+    ``workflow_step`` follows the N-15 rename (one concept, one name across
+    the stack).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -436,6 +437,10 @@ class ChatRequest(BaseModel):
     # pending intent only when the plan path docks a task book (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
+    # The recipe card's launch rides the first message (MENTIONS §3 — a recipe
+    # is launch context, never a mention): the plan path seeds the preset
+    # server-side (resolve_recipe_launch); unknown/reserved ids 422.
+    recipe_id: str | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
     # the task book by prose (PlanAgent verdict "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.

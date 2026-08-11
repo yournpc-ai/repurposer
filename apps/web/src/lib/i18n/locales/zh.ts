@@ -507,12 +507,11 @@ const zh: Resources = {
       promptTemplate: "把我的演讲变成一条短片，画面全部 AI 生成，不需要素材。",
     },
   },
-  // @-提及系统（docs/tasks/recipe-mention.md）：picker 文案、类型名与输入槽位提示。
+  // @-提及系统（MENTIONS §4）：picker 文案与类型名。
   mentions: {
     pickerEmpty: "没有匹配项",
     remove: "移除提及",
     types: {
-      recipe: "模板",
       asset: "素材",
     },
     fileType: {
@@ -521,14 +520,6 @@ const zh: Resources = {
       image: "图片",
       document: "文档",
     },
-    input: {
-      video: "一段视频",
-      audio: "一段音频",
-      images: "几张照片",
-      slides: "幻灯片",
-      transcript: "一份文字稿",
-    },
-    inputLead: "只需要{{slots}}",
   },
   projects: {
     title: "项目",

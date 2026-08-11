@@ -18,8 +18,6 @@ import { cn } from "@/lib/utils"
 import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import type { RecipeCard } from "@/lib/recipes"
-import type { ChatMention } from "@/lib/mentions"
-import { MentionChip } from "@/components/mentions/MentionChip"
 import { ASSETS_ACCEPT } from "@/components/home/AssetsModal"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,11 +40,13 @@ import { recipeProcessFlow } from "./recipeFlow"
  * never runs generation (the A-form rejection stands).
  *
  * Chrome = the shared Dialog primitive (portal → overlay + popup siblings,
- * overlay-surface glass, esc/outside-click, scroll lock — all stock). ONE
- * deviation: the popup is composed by hand and centered with `inset-0
- * m-auto`, NOT DialogContent — DialogContent centers via -translate-1/2,
- * and a transformed ancestor becomes the containing block for `fixed`
- * descendants, which would teleport the MentionPicker (viewport coords).
+ * overlay-surface glass, esc/outside-click, scroll lock — all stock). The
+ * popup is composed by hand and centered with `inset-0 m-auto`, NOT
+ * DialogContent — a transformed popup becomes the containing block for
+ * `fixed` descendants, so a hand-composed popup is the safe host for any
+ * viewport-anchored floater (the CLAUDE.md rule), and its chrome MIRRORS
+ * DialogContent exactly (overlay-surface + hairline + shadow-xl +
+ * rounded-xl).
  *
  * Right = read-only views of the Recipe data pack in ONE screen, with the
  * graph rendered exactly ONCE (ElevenCreative 2026-08-08 evidence):
@@ -56,12 +56,11 @@ import { recipeProcessFlow } from "./recipeFlow"
  *   process steps (fanout expanded) → the baked outputs as terminal nodes.
  *
  * Preset visibility: the prompt area IS the visible preset — a plain
- * textarea prefilled with the template, the recipe mention as a chip row
- * above it (2026-08-10: replaces the MentionEditor — mount-time chip seeding
- * raced the dialog's portal mount and could silently land empty; a textarea
- * + static chip is deterministic and reads as a simple form). The only edit
- * entry stays the prompt text (before send) / chat (after send); chat
- * always wins.
+ * textarea prefilled with the template. The recipe's identity never enters
+ * the sentence: the card click already said everything (MENTIONS §3), and
+ * `recipeId` rides the launch as a transport field. The only edit entry
+ * stays the prompt text (before send) / chat (after send); chat always
+ * wins.
  */
 /** Input slot type → the Input section's icon (registry-driven, one map). */
 const INPUT_TYPE_ICONS: Record<string, typeof Video> = {
@@ -89,12 +88,10 @@ export function RecipeInspectOverlay({
   const InputIcon =
     INPUT_TYPE_ICONS[card.input_slots[0]?.type ?? ""] ?? FileText
 
-  // The draft: the template as plain editable text + the recipe mention as a
-  // chip row (chip law ① visible ② dies with navigation ③ × purifies).
+  // The draft: the template as plain editable text. The recipe's identity
+  // rides the launch as `recipeId` — no chip row (the card click already
+  // said everything; a third repetition is noise, MENTIONS §3).
   const [prompt, setPrompt] = useState(template)
-  const [mentions, setMentions] = useState<ChatMention[]>([
-    { type: "recipe", id: card.id, label: title },
-  ])
   const [files, setFiles] = useState<File[]>([])
 
   // Inspect tabs (right zone): 示例 = flat cards; 流程 = the one canvas.
@@ -127,11 +124,11 @@ export function RecipeInspectOverlay({
   }
 
   // Send = the composer's send, parked here. Nothing to consume onSent — the
-  // overlay's draft dies with navigation (chip law ② holds structurally).
-  // Identity rides the default-persona chain server-side (ADR-038) — the
-  // overlay carries no persona picker.
+  // overlay's draft dies with navigation. Identity rides the default-persona
+  // chain server-side (ADR-038) — the overlay carries no persona picker; the
+  // recipe's identity rides as `recipeId` (MENTIONS §3).
   const handleLaunch = () =>
-    launch({ prompt, mentions, files })
+    launch({ prompt, mentions: [], files, recipeId: card.id })
 
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video
@@ -154,11 +151,11 @@ export function RecipeInspectOverlay({
     >
       <DialogPortal>
         <DialogOverlay />
-        {/* Hand-composed popup (the MentionPicker needs a transform-free
-            ancestor, so DialogContent is out) — but the chrome MIRRORS
-            DialogContent exactly: overlay-surface + the ring-foreground/10
-            hairline + shadow-xl + rounded-xl. Without the hairline the
-            light-theme glass dissolves into the white backdrop wash. */}
+        {/* Hand-composed popup (transform-free ancestor, so viewport-anchored
+            floaters never teleport) — the chrome MIRRORS DialogContent
+            exactly: overlay-surface + the ring-foreground/10 hairline +
+            shadow-xl + rounded-xl. Without the hairline the light-theme
+            glass dissolves into the white backdrop wash. */}
         <DialogPrimitive.Popup
           className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl shadow-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
         >
@@ -255,20 +252,6 @@ export function RecipeInspectOverlay({
                   {t("recipes.inspect.promptLabel")}
                 </p>
                 <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
-                  {/* The chip row needs its own flex-wrap container — a bare
-                      chip as a direct flex-col child stretches full-width
-                      (cross-axis), reading as a bar instead of a chip. */}
-                  {mentions.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {mentions.map((m) => (
-                        <MentionChip
-                          key={`${m.type}:${m.id}`}
-                          mention={m}
-                          onRemove={() => setMentions([])}
-                        />
-                      ))}
-                    </div>
-                  )}
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}

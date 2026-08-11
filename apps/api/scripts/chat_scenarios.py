@@ -17,7 +17,7 @@ birth-ordered and never recycled; position in this file = family.
     能力咨询   S4 capability · S18 lost "what suits me"
     修订       S3 loop · S19 inarticulate · S15 recipe refine · S16 three-way
     边界       S6 post-run · S7 smalltalk+publish · S8 empty · S20 venting
-    配方       S5 mention pin · S10 dub classify · S11 no-media · S22 hesitant
+    配方       S5 launch seed · S10 dub classify · S11 no-media · S22 hesitant
     素材       S12 declared · S13 no-material · S14 bare paste · S21 lost+empty
     契约       S23 bail+reopen · S24 autonomy→run · S25 dup-409 · S26 rebuild
                S27 QA archive · S28 plain no-media · S29 count 422 · S30 attach-only
@@ -700,9 +700,8 @@ async def s15_recipe_refine_count(ctx: Ctx) -> None:
     → 数量落在 docked 书上（配方只铺第一版，不钉任何字段）。"""
     pid = await ctx.new_project("S15 recipe refine count")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
-    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
 
-    turn1 = await ctx.chat(pid, "cut highlight clips from my talk", mentions=mentions)
+    turn1 = await ctx.chat(pid, "cut highlight clips from my talk", recipe_id="dub")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
 
@@ -821,21 +820,20 @@ async def s20_anxious_venting_stays_in_scope(ctx: Ctx) -> None:
 # ---- Scenarios: 配方 ----------------------------------------------------------
 
 
-async def s5_recipe_mention_pin(ctx: Ctx) -> None:
-    """S5 recipe mention：用户点名语言赢配方默认；unknown/reserved 422。"""
-    pid = await ctx.new_project("S5 recipe mention")
+async def s5_recipe_launch_seed(ctx: Ctx) -> None:
+    """S5 recipe launch（recipe_id 通道）：用户点名语言赢配方默认；unknown/reserved 422。"""
+    pid = await ctx.new_project("S5 recipe launch")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
-    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
 
-    turn1 = await ctx.chat(pid, "dub my clips into Chinese please", mentions=mentions)
+    turn1 = await ctx.chat(pid, "dub my clips into Chinese please", recipe_id="dub")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     check((book["intent"].get("dub_languages") or []) == ["zh"],
           "user-named language wins the recipe default", book["intent"].get("dub_languages"))
 
-    res = await ctx.chat_raw(pid, "again", mentions=[{"type": "recipe", "id": "nope", "label": "nope"}])
+    res = await ctx.chat_raw(pid, "again", recipe_id="nope")
     check(res.status_code == 422, "unknown recipe id → 422", res.status_code)
-    res = await ctx.chat_raw(pid, "again", mentions=[{"type": "recipe", "id": "reframe", "label": "Reframe"}])
+    res = await ctx.chat_raw(pid, "again", recipe_id="reframe")
     check(res.status_code == 422, "reserved recipe → 422", res.status_code)
 
 
@@ -843,12 +841,11 @@ async def s10_dub_language_classification(ctx: Ctx) -> None:
     """S10 dub 归类回归：'dub them into Chinese' → dub_languages=['zh']（用户手测原句）。"""
     pid = await ctx.new_project("S10 dub classification")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
-    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
 
     turn1 = await ctx.chat(
         pid,
         "Cut highlight clips from my talk and dub them into Chinese",
-        mentions=mentions,
+        recipe_id="dub",
     )
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
@@ -862,9 +859,8 @@ async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
     """S11 纯文字稿 + dub 配方：Start 422（缺媒体）→ 去 clips 再 Start 成功（dub 被丢弃）。"""
     pid = await ctx.new_project("S11 clips without media")
     await seed_asset(pid, ctx.user_id, AssetType.TRANSCRIPT, "talk.txt")
-    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
 
-    turn1 = await ctx.chat(pid, "use this recipe on my talk", mentions=mentions)
+    turn1 = await ctx.chat(pid, "use this recipe on my talk", recipe_id="dub")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
@@ -896,23 +892,23 @@ async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
           "vacuous dub languages dropped at the birthplace", run_ctx.get("dub_languages"))
 
 
-async def s22_hesitant_behind_recipe_mention(ctx: Ctx) -> None:
-    """S22 迷失点卡（配方×迷失）：犹豫措辞不破 mention 解析——照样播种 dock，默认语言填齐。"""
-    pid = await ctx.new_project("S22 hesitant recipe mention")
+async def s22_hesitant_behind_recipe_launch(ctx: Ctx) -> None:
+    """S22 迷失点卡（配方×迷失）：犹豫措辞不破 recipe_id 播种——照样播种 dock，默认语言填齐。"""
+    pid = await ctx.new_project("S22 hesitant recipe launch")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
-    mentions = [{"type": "recipe", "id": "dub", "label": "Multilingual dub"}]
 
-    # 配方卡就是迷失用户的答案——犹豫不构成拒绝。mention 解析是确定性的；
-    # 用户没点名语言时配方默认填齐（S5 验"点名覆盖"，这里验"没点名填默认"）。
+    # 配方卡就是迷失用户的答案——犹豫不构成拒绝。播种是确定性的（recipe_id
+    # 直查注册表）；用户没点名语言时配方默认填齐（S5 验"点名覆盖"，这里验
+    # "没点名填默认"）。
     turn1 = await ctx.chat(pid, "朋友推荐我点这张卡，但我不太懂这些……就按这张卡帮我做吧？",
-                           mentions=mentions)
+                           recipe_id="dub")
     check(is_task_book_dock(turn1["assistant_message"]),
           "a hesitant mention still docks the seeded book", turn1["assistant_message"])
     book = await pending_book(ctx, pid)
     slots = book_slots(book)
     check(any(s["type"] == "clips" for s in slots),
           "the recipe seed keeps the clips slot", slots)
-    check(sorted(((book or {}).get("intent") or {}).get("dub_languages") or []) == ["de", "es", "fr"],
+    check(sorted(((book or {}).get("intent") or {}).get("dub_languages") or []) == ["es", "fr", "zh"],
           "unnamed languages fill from the recipe default",
           ((book or {}).get("intent") or {}).get("dub_languages"))
 
@@ -1811,10 +1807,10 @@ SCENARIOS = {
     "S8": s8_empty_project_visibility,
     "S20": s20_anxious_venting_stays_in_scope,
     # 配方
-    "S5": s5_recipe_mention_pin,
+    "S5": s5_recipe_launch_seed,
     "S10": s10_dub_language_classification,
     "S11": s11_recipe_clips_without_media_escape,
-    "S22": s22_hesitant_behind_recipe_mention,
+    "S22": s22_hesitant_behind_recipe_launch,
     # 素材
     "S12": s12_declared_material_promotes,
     "S13": s13_no_material_asks,
