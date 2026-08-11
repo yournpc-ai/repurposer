@@ -177,6 +177,15 @@ function ProjectDetailPage() {
   const [resultsTourOpen, setResultsTourOpen] = useState(false)
   const tabInitializedRef = useRef(false)
   const resultsTourCheckedRef = useRef(false)
+  /** The tour's anchor poll — survives effect re-runs, cleared on success
+   * or unmount only. */
+  const tourPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(
+    () => () => {
+      if (tourPollRef.current) clearInterval(tourPollRef.current)
+    },
+    []
+  )
 
   // ── Results canvas (ADR-041) ─────────────────────────────────────────
   // Desktop (≥768px = iPad up, D1/D10): the terminal state is the results
@@ -361,6 +370,17 @@ function ProjectDetailPage() {
         params: { id: projectId },
         replace: true,
       })
+    } else if (search.overlay === "chat") {
+      // The fullscreen chat shell collapsed into the dock — the overlay is no
+      // longer open, so the URL must stop saying it is (navigate without
+      // `search` clears the params). A stale ?overlay=chat would keep
+      // chatSearchOpen true and permanently gate off the results tour on the
+      // fresh-generation path.
+      navigate({
+        to: "/projects/$id",
+        params: { id: projectId },
+        replace: true,
+      })
     }
   }
 
@@ -387,15 +407,18 @@ function ProjectDetailPage() {
     // The canvas's node DOM lands a paint after the data (xyflow mounts
     // client-only) — open once the anchor actually exists; if it never
     // does, the tour closes itself silently (missing targets auto-skip).
+    // The poll lives in a ref, NOT the effect cleanup: a results refetch
+    // (the 2.5s render polling) re-runs this effect and a cleanup would
+    // kill the poll before the anchor appears.
     let tries = 0
-    const timer = setInterval(() => {
+    tourPollRef.current = setInterval(() => {
       tries += 1
       if (document.querySelector("[data-tour='results-menu']") || tries > 20) {
-        clearInterval(timer)
+        if (tourPollRef.current) clearInterval(tourPollRef.current)
+        tourPollRef.current = null
         setResultsTourOpen(true)
       }
     }, 100)
-    return () => clearInterval(timer)
   }, [loading, results, search.overlay, activeTab, isMobile, resultsPhase])
 
   const markResultsTourSeen = () => {

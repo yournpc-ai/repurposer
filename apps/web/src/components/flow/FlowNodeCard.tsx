@@ -163,26 +163,29 @@ function ProductCard({
     >
       {/* Hover toolbar — a floating pill with a gap above the card. It is
           part of the node (absolute, not fixed): no portal, no transformed-
-          ancestor teleport. Graph actions never live here. */}
-      <div className="pointer-events-none absolute -top-11 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/product:pointer-events-auto group-hover/product:opacity-100">
-        <div className="overlay-surface flex items-center gap-0.5 rounded-lg p-1">
-          {actions.map(({ action, Icon, label }) => (
-            <button
-              key={action}
-              type="button"
-              title={label}
-              aria-label={label}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOutputAction?.(output.id, action)
-              }}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
+          ancestor teleport. Graph actions never live here. No available
+          action (a clip still rendering) = no empty pill. */}
+      {actions.length > 0 && (
+        <div className="pointer-events-none absolute -top-11 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/product:pointer-events-auto group-hover/product:opacity-100">
+          <div className="overlay-surface flex items-center gap-0.5 rounded-lg p-1">
+            {actions.map(({ action, Icon, label }) => (
+              <button
+                key={action}
+                type="button"
+                title={label}
+                aria-label={label}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOutputAction?.(output.id, action)
+                }}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div
         data-tour={node.tourTargets ? "results-video" : undefined}
