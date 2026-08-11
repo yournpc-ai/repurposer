@@ -41,12 +41,11 @@ import { recipeProcessFlow } from "./recipeFlow"
  *
  * Chrome = the shared Dialog primitive (portal → overlay + popup siblings,
  * overlay-surface glass, esc/outside-click, scroll lock — all stock). The
- * popup is composed by hand and centered with `inset-0 m-auto`, NOT
- * DialogContent — a transformed popup becomes the containing block for
- * `fixed` descendants, so a hand-composed popup is the safe host for any
- * viewport-anchored floater (the CLAUDE.md rule), and its chrome MIRRORS
- * DialogContent exactly (overlay-surface + hairline + shadow-xl +
- * rounded-xl).
+ * popup is composed by hand (`inset-0 m-auto` centering) because the
+ * split-pane size (max-w-7xl, full-height flex) doesn't fit DialogContent's
+ * defaults — and a hand-composed popup must mirror DialogContent chrome
+ * exactly (the CLAUDE.md rule): overlay-surface + hairline + shadow-xl +
+ * rounded-xl.
  *
  * Right = read-only views of the Recipe data pack in ONE screen, with the
  * graph rendered exactly ONCE (ElevenCreative 2026-08-08 evidence):
@@ -151,11 +150,11 @@ export function RecipeInspectOverlay({
     >
       <DialogPortal>
         <DialogOverlay />
-        {/* Hand-composed popup (transform-free ancestor, so viewport-anchored
-            floaters never teleport) — the chrome MIRRORS DialogContent
-            exactly: overlay-surface + the ring-foreground/10 hairline +
-            shadow-xl + rounded-xl. Without the hairline the light-theme
-            glass dissolves into the white backdrop wash. */}
+        {/* Hand-composed popup (custom split-pane size, `inset-0 m-auto`
+            centering) — the chrome MIRRORS DialogContent exactly:
+            overlay-surface + the ring-foreground/10 hairline + shadow-xl +
+            rounded-xl. Without the hairline the light-theme glass dissolves
+            into the white backdrop wash. */}
         <DialogPrimitive.Popup
           className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl shadow-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
         >

@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
-import type { ChatMention } from "@/lib/mentions"
+import { fileKindOf, type ChatMention } from "@/lib/mentions"
 import {
   MentionEditor,
   type MentionEditorHandle,
@@ -150,7 +150,7 @@ export function HomeComposer({
   // The asset mention's candidate feed (memoized — the picker reloads when
   // the identity changes, so it must track `files`, not renders).
   const mentionContext = useMemo(
-    () => ({ files: files.map((f) => ({ name: f.name, type: f.type })) }),
+    () => ({ files: files.map((f) => ({ name: f.name, kind: fileKindOf(f.type) })) }),
     [files],
   )
 
@@ -195,9 +195,8 @@ export function HomeComposer({
     {/* Flat chrome, the same recipe as the sign-in modal (DialogContent):
         solid card + the base primitive's ring-foreground/10 hairline +
         shadow-xl (light only — dark shadows compile to transparent). NO
-        backdrop-filter on this card: it would make the card the containing
-        block for the fixed MentionPicker inside the editor (teleporting it),
-        and the home page behind is a uniform fill with nothing to blur. */}
+        backdrop-filter on this card: the home page behind is a uniform fill
+        with nothing to blur. */}
     <Card className="overflow-visible rounded-2xl py-0 shadow-xl">
       <CardContent className="p-5 text-left">
         {/* Entity blocks (Assets = source materials, Persona = whose voice)
@@ -206,16 +205,19 @@ export function HomeComposer({
         <div className="flex items-start gap-3">
           <div className="-mt-9 flex flex-shrink-0 items-start gap-2">
             {/* Assets block — Opus anatomy: icon at the top, spacer, then
-                title with the info line at the very bottom. The block
-                STRADDLES the card's top edge, so its hover must stay SOLID —
-                a translucent veil would reveal the page/card seam behind it.
-                Light: bg-accent gray step; dark: a solid color-mix lift of
-                the block's own muted step (same recipe as button secondary). */}
+                title with the info line at the very bottom. Fill-first
+                separation: the bg-subtle step (faintest ladder rung)
+                distinguishes the block from the white card / page, so it
+                takes NO ring (hairline is the fallback for same-fill
+                boundaries only). The block STRADDLES the card's top edge,
+                so its hover must stay SOLID — a translucent veil would
+                reveal the page/card seam behind it. Light: one rung down to
+                bg-muted; dark: a solid color-mix lift of the muted step. */}
             <button
               type="button"
               data-tour="composer-assets"
               onClick={() => setAssetsOpen(true)}
-              className="relative flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left ring-1 ring-foreground/10 transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
+              className="relative flex h-24 w-20 flex-col rounded-lg bg-subtle p-2 text-left transition-colors hover:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {files.length === 0 ? (
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -241,7 +243,7 @@ export function HomeComposer({
               type="button"
               data-tour="composer-persona"
               onClick={() => setPersonaPickerOpen(true)}
-              className="flex h-24 w-20 flex-col rounded-lg bg-card p-2 text-left ring-1 ring-foreground/10 transition-colors hover:bg-accent dark:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
+              className="flex h-24 w-20 flex-col rounded-lg bg-subtle p-2 text-left transition-colors hover:bg-muted dark:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]"
             >
               {selectedPersona ? (
                 <Avatar size="sm">

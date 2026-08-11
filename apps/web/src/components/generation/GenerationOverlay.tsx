@@ -42,6 +42,16 @@ import { inferAssetType } from "@/lib/asset-type"
 import { streamChat } from "@/lib/chat-stream"
 import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
+import {
+  assetTypeKind,
+  outputMentionLabel,
+  type ChatMention,
+  type MentionContext,
+} from "@/lib/mentions"
+import {
+  MentionEditor,
+  type MentionEditorHandle,
+} from "@/components/mentions/MentionEditor"
 import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
@@ -86,7 +96,7 @@ import {
 import { RunCard } from "@/components/chat/RunCard"
 import { QaPair, qaAnswerText, type QaAnswer } from "@/components/chat/QaPair"
 import { QuestionDock, type Autonomy } from "@/components/chat/QuestionDock"
-import type { IntentSlot } from "@/lib/types"
+import type { IntentSlot, Output } from "@/lib/types"
 
 const OUTPUT_OPTIONS = [
   { key: "clips", labelKey: "results.tabs.clips", Icon: Video },
@@ -591,8 +601,21 @@ export function GenerationOverlay({
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
   const [input, setInput] = useState("")
+  const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
-  const [isComposing, setIsComposing] = useState(false)
+  // The editor is DOM-owned (MentionEditor): `input`/`mentions` are its
+  // onChange mirrors, kept only as the send payload; the live-text ref backs
+  // the failed-turn rollback's "don't clobber fresh typing" guard.
+  const editorRef = useRef<MentionEditorHandle>(null)
+  const inputMirrorRef = useRef("")
+  const handleEditorChange = useCallback(
+    (text: string, ms: ChatMention[]) => {
+      inputMirrorRef.current = text
+      setInput(text)
+      setMentions(ms)
+    },
+    [],
+  )
   // Plan versions (2026-08-05 refinement-flow rework; 2026-08-06 in-flight
   // rework): the LIVE book renders as the bottom-most card while settled;
   // during an in-flight turn it UNPINS — anchored inline right after the
@@ -825,6 +848,48 @@ export function GenerationOverlay({
   useEffect(() => {
     void fetchAssets()
   }, [fetchAssets])
+
+  // The output mention's candidate feed (reference family, MENTIONS §2): a
+  // pinned output id resolves the revision target deterministically
+  // server-side. Refresh on mount and when a run lands terminal (new
+  // outputs exist only then).
+  const [outputs, setOutputs] = useState<Output[]>([])
+  const fetchOutputs = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
+        toast: false,
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { outputs?: Output[] }
+        setOutputs(data.outputs ?? [])
+      }
+    } catch {
+      /* mention feed refresh is best-effort */
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    void fetchOutputs()
+  }, [fetchOutputs, terminal])
+
+  // Registry feeds handed to the editor's picker (memoized — the picker
+  // reloads when the identity changes).
+  const mentionContext = useMemo<MentionContext>(
+    () => ({
+      assets: assets
+        .filter((a) => a.title)
+        .map((a) => ({
+          name: a.title as string,
+          kind: assetTypeKind(a.type),
+        })),
+      outputs: outputs.map((o) => ({
+        id: o.id,
+        label: outputMentionLabel(o, t(`chat.derivativeTypes.${o.type}`)),
+        kind: o.type,
+      })),
+    }),
+    [assets, outputs, t],
+  )
 
   // Identity echo: resolve the persona name behind the project mount once —
   // a read-only reassurance line, never a question (ask primitive §2.1).
@@ -1228,6 +1293,8 @@ export function GenerationOverlay({
        * nothing on a failed turn, so the flow must not keep it either). */
       rollbackId?: string
       draft?: string
+      /** The turn's mention chips return with the draft on failure. */
+      rollbackMentions?: ChatMention[]
       /** Consumed attachment chips return to the input group on failure. */
       rollbackStaged?: StagedUpload[]
     }
@@ -1355,7 +1422,14 @@ export function GenerationOverlay({
       if (opts?.rollbackId) {
         const rollbackId = opts.rollbackId
         setMessages((prev) => prev.filter((m) => m.id !== rollbackId))
-        setInput((prev) => prev || (opts?.draft ?? ""))
+        // The editor is DOM-owned: restore imperatively, and only when the
+        // user hasn't typed something new meanwhile (chips re-land at the
+        // end — positions aren't kept).
+        if (!inputMirrorRef.current.trim()) {
+          const editor = editorRef.current
+          if (opts.draft) editor?.insertText(opts.draft)
+          for (const m of opts.rollbackMentions ?? []) editor?.insertMention(m)
+        }
       }
       if (opts?.rollbackStaged?.length) {
         const chips = opts.rollbackStaged
@@ -1519,13 +1593,16 @@ export function GenerationOverlay({
       ...prev,
       { id: rollbackId, role: "user", content: text, assets: sentAssets },
     ])
-    setInput("")
-    // Consumed on send (chip law ②); an error chip stays staged for
+    // Consumed on send (chip law ②): the editor's clear funnels the emptied
+    // {text, mentions} back through onChange; an error chip stays staged for
     // retry/removal — it never rides a message.
+    editorRef.current?.clear()
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
     void sendChat(text, {
       rollbackId,
       draft: text,
+      mentions,
+      rollbackMentions: mentions,
       attachments: ready.map((s) => ({
         id: s.asset.id,
         name: s.asset.title || s.file.name,
@@ -2249,17 +2326,12 @@ export function GenerationOverlay({
               >
                 <Paperclip className="h-4.5 w-4.5" />
               </Button>
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onCompositionStart={() => setIsComposing(true)}
-                onCompositionEnd={() => setIsComposing(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !isComposing) {
-                    e.preventDefault()
-                    handleSend()
-                  }
-                }}
+              {/* The composer family's editor (one input component across
+                  composer / overlay chat / output chat): @-chips inline —
+                  asset = context enrichment, output = the pinned revision
+                  target — Enter sends, IME guarded inside the component. */}
+              <MentionEditor
+                ref={editorRef}
                 placeholder={
                   phase !== "confirm" &&
                   pendingChoice &&
@@ -2270,8 +2342,10 @@ export function GenerationOverlay({
                       ? t("generationOverlay.chatPlaceholderConfirm")
                       : t("generationOverlay.chatPlaceholder")
                 }
-                rows={1}
-                className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+                mentionContext={mentionContext}
+                onChange={handleEditorChange}
+                onSubmit={handleSend}
+                className="max-h-32 min-h-9 text-sm"
               />
               {chatBusy ? (
                 <Button

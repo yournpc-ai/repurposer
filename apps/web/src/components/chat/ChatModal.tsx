@@ -7,8 +7,8 @@
  * server-side and the results page reflects it.
  */
 
-import { useEffect, useRef, useState } from "react"
-import { Send, Square, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Send, Square } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -20,7 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import {
+  MentionEditor,
+  type MentionEditorHandle,
+} from "@/components/mentions/MentionEditor"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import {
   Message,
@@ -37,10 +40,15 @@ import {
 import { apiFetch } from "@/lib/api"
 import { streamChat } from "@/lib/chat-stream"
 import { createTypewriter } from "@/lib/typewriter"
+import {
+  assetTypeKind,
+  outputMentionLabel,
+  type ChatMention,
+  type MentionContext,
+} from "@/lib/mentions"
 import type { Output } from "@/lib/types"
 import { Streamdown } from "streamdown"
 
-import { MentionPicker, type ChatMention } from "./MentionPicker"
 import { OpsCard } from "./OpsCard"
 import { QaPair, qaAnswerText, type QaAnswer } from "./QaPair"
 import { QuestionDock } from "./QuestionDock"
@@ -100,12 +108,55 @@ export function ChatModal({
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  const [isComposing, setIsComposing] = useState(false)
   // The docked pending question (ask primitive) — choice questions from the
   // chat loop dock above the input; answered ones archive as QA pairs.
   const [pendingQuestion, setPendingQuestion] = useState<ChatMessage | null>(null)
   const [answering, setAnswering] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const editorRef = useRef<MentionEditorHandle>(null)
+
+  // The mention feeds (registry sources read these live): the project's
+  // outputs (reference family — the pinned id resolves the revision target
+  // server-side) + its settled assets (context enrichment).
+  const [outputs, setOutputs] = useState<Output[]>([])
+  const [assets, setAssets] = useState<{ title: string | null; type: string }[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    Promise.all([
+      apiFetch(`/api/v1/projects/${projectId}/results`, { toast: false }),
+      apiFetch(`/api/v1/projects/${projectId}/assets`, { toast: false }),
+    ])
+      .then(async ([resultsRes, assetsRes]) => {
+        if (cancelled) return
+        if (resultsRes.ok) {
+          const data = (await resultsRes.json()) as { outputs?: Output[] }
+          setOutputs(data.outputs ?? [])
+        }
+        if (assetsRes.ok) {
+          setAssets((await assetsRes.json()) as { title: string | null; type: string }[])
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [open, projectId])
+
+  const mentionContext = useMemo<MentionContext>(
+    () => ({
+      assets: assets
+        .filter((a) => a.title)
+        .map((a) => ({ name: a.title as string, kind: assetTypeKind(a.type) })),
+      outputs: outputs.map((o) => ({
+        id: o.id,
+        label: outputMentionLabel(o, t(`chat.derivativeTypes.${o.type}`)),
+        kind: o.type,
+      })),
+    }),
+    [assets, outputs, t],
+  )
 
   useEffect(() => {
     if (!open || !asset) return
@@ -185,8 +236,9 @@ export function ChatModal({
       mentions,
     }
     setMessages((prev) => [...prev, optimisticUser])
-    setInput("")
-    setMentions([])
+    // Consumed on send (chip law ②) — the editor's clear funnels the emptied
+    // {text, mentions} back through onChange, so no separate state resets.
+    editorRef.current?.clear()
     setIsSending(true)
 
     const ctrl = new AbortController()
@@ -283,12 +335,14 @@ export function ChatModal({
       }
       // The server commits nothing on a failed turn — roll the optimistic
       // bubble (and any streamed preview) back out and restore the draft
-      // (+ mentions) for a retry.
+      // (+ mentions) for a retry. The editor is DOM-owned: restore
+      // imperatively (chips re-land at the end — positions aren't kept).
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticUser.id && m.id !== streamId)
       )
-      setInput(instruction)
-      setMentions(optimisticUser.mentions ?? [])
+      const editor = editorRef.current
+      editor?.insertText(instruction)
+      for (const m of optimisticUser.mentions ?? []) editor?.insertMention(m)
       toast.error(e instanceof Error ? e.message : t("chat.failed"))
     } finally {
       if (abortRef.current === ctrl) {
@@ -457,7 +511,7 @@ export function ChatModal({
 
         <div
           className={
-            pendingQuestion && mentions.length === 0
+            pendingQuestion
               ? "flex flex-col p-4 pt-2"
               : "flex flex-col gap-2 p-4 pt-2"
           }
@@ -465,7 +519,7 @@ export function ChatModal({
           {pendingQuestion ? (
             <QuestionDock
               kind="choice"
-              joined={mentions.length === 0}
+              joined
               question={pendingQuestion.content ?? ""}
               options={pendingQuestion.question?.options ?? []}
               costHint={pendingQuestion.question?.cost_hint}
@@ -473,50 +527,19 @@ export function ChatModal({
               answering={answering}
             />
           ) : null}
-          {mentions.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {mentions.map((mention) => (
-                <span
-                  key={mention.id}
-                  className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  @{mention.label}
-                  <button
-                    type="button"
-                    aria-label={t("chat.mentionRemove")}
-                    onClick={() =>
-                      setMentions((prev) => prev.filter((m) => m.id !== mention.id))
-                    }
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
           <div
             className={
-              pendingQuestion && mentions.length === 0
+              pendingQuestion
                 ? "flex items-end gap-2 rounded-b-lg bg-muted p-2"
                 : "flex items-end gap-2 rounded-lg bg-muted p-2"
             }
           >
-            <MentionPicker
-              projectId={projectId}
-              excludeIds={mentions.map((m) => m.id)}
-              onSelect={(mention) => setMentions((prev) => [...prev, mention])}
-            />
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
+            {/* The composer family's editor: @-chips live inline in the
+                sentence (asset = context enrichment; output = the pinned
+                revision target), Enter sends, IME composition is guarded
+                inside the component. */}
+            <MentionEditor
+              ref={editorRef}
               placeholder={
                 pendingQuestion &&
                 (pendingQuestion.question?.options?.length ?? 0) > 0 &&
@@ -524,8 +547,13 @@ export function ChatModal({
                   ? t("chat.choicePlaceholder")
                   : t("chat.assetPlaceholder")
               }
-              rows={1}
-              className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+              mentionContext={mentionContext}
+              onChange={(text, ms) => {
+                setInput(text)
+                setMentions(ms)
+              }}
+              onSubmit={handleSend}
+              className="max-h-32 min-h-9 text-sm"
             />
             {isSending ? (
               <Button

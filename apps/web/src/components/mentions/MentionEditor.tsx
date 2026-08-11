@@ -17,6 +17,7 @@ import {
   type MentionContext,
 } from "@/lib/mentions"
 import i18n from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 import { MentionPicker } from "@/components/mentions/MentionPicker"
 
 /**
@@ -347,9 +348,11 @@ export function MentionEditor({
         onKeyUp={updatePicker}
         onMouseUp={updatePicker}
         onPaste={handlePaste}
-        className={`min-h-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none ${
-          disabled ? "pointer-events-none opacity-60" : ""
-        } ${className ?? ""}`}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none",
+          disabled && "pointer-events-none opacity-60",
+          className,
+        )}
       />
     </>
   )

@@ -90,6 +90,7 @@
 | 08-10 | **配方卡五座位定格 + 卡面/详情窗改版**：五卡 = 视频配音 / 访谈分镜 / 口播（先占位，能力路线后定）/ 虚拟视频 / 图文视频；卡面改为卡下常驻标题+一句话说明（hover 动作区与 Remix 按钮退役，点卡即开详情窗）；详情窗左区按 ElevenCreative 模式重构——标题、一句话说明、Input 素材小节、通用上传区、**自定义提示词 textarea（模板预填可见可改）**+ 生成；左区 chrome 补齐 Dialog 发丝线（手写 Popup 须镜像 DialogContent，规则已入 CLAUDE.md）；流程图三修——fit 缩放地板 0.4→0.15（宽图不再溢出画布右缘）、边改非缩放描边（任何缩放下恒定 2px）、步骤节点双行换行（省略号节点消除）；修复详情窗预填播种竞态（MentionEditor 命令式插 chip 在 portal 挂载时静默落空，改 textarea 受控初值结构性消除） |
 | 08-11 | **配方线 review 两连修**（详情窗 chip 被 flex 交叉轴拉成通栏条、卡面 Space 键滚动、fit padding 按 xyflow `1/(1+p)` 公式校准到 ~9%/侧避开浮动 tabs、双 rAF 悬空回调、开窗时背景画廊声音不停）+ **mention 哲学升级立项（用户拍板）**：mention 只面向"与 AI 交流"——两族分类（请求 = @asset/@skill；指认 = @output/@transcript_segment/@workflow_step），配方/产出类型/参数/人设永不是 mention；新文档 `docs/MENTIONS.md` 为一切 mention 需求的判定方针（排除清单 + 判定三问 + @skill 方针：候选源 = SKILL_REGISTRY 公开投影、seat 项永不进 picker）；简报 `tasks/recipe-launch-context.md`——配方脱离 mention 体系，`recipe_id` 走 plan-path transport（`persona_id` 同座位），服务端播种改键不改行为 |
 | 08-11 | **recipe-launch-context 落地**：配方脱离 mention 体系——`ChatRequest.recipe_id`（plan-path transport）+ `resolve_recipe_launch` 改键（unknown/reserved 422 原样，存在性填充 + 三方合并原样）；overlay 发射区删 chip 行（点卡动作已是配方身份），composer @ picker 只剩 @asset；`ChatMention.type` 保留 `"recipe"` 供历史消息渲染。harness S5/S10/S11/S15/S22 走新通道全绿（S22 期望随 08-07 注册表语言裁决修正 zh/fr/es）；文档现在时同步 RECIPES 裁决⑤/§7.2、CLAUDE.md、NAMING（`recipe_id`/`resolve_recipe_launch` 入词汇表）、CHAT_ARCH/INTENT_COVERAGE 指针 |
+| 08-11 | **chat 输入组件统一（同日拍板三，提前半天收口）**：生成 overlay 底排与产物微调对话（ChatModal）换挂 composer 同款 `MentionEditor`——@ 提及进两个持久 chat 面（@素材 = 上下文富化；**@产物 = 指认族首个注册成员**，钉住的 id 服务端确定性解出修订目标，LLM 永不猜"第二条"是哪条）；ChatModal 自养的 `components/chat/MentionPicker` 退役删除；picker 改 portal 到 `document.body`（transformed/backdrop-filter 祖先传送问题根治，dialog 内输入面结构性安全）；失败回滚恢复草稿走 imperative handle（chip 落尾部位）。零服务端改动 |
 
 ---
 
@@ -132,6 +133,8 @@
 > **2026-08-10 拍板**：架构迭代（ADR-039）与配方卡闭环链按实测节奏并入本周，与人设模块同周收口；意图层收尾（顾问姿态）随闭环链合流；周五 08-14 联合验收。施工依据：ADR-037/038 + 简报 `tasks/persona-identity.md`；ADR-039 + NAMING N-29~N-35 + 简报 `tasks/arch-overhaul.md`（08-10 已立项）；ADR-035/036 + 简报 `tasks/results-workspace.md`。铁律不变：行为零变化，剧本 harness（S1–S40）为回归网；改 pipeline 代码必重启常驻 worker。
 >
 > **2026-08-10 拍板（二）**：人设模块重构完工线 = **最小闭合三件**——过渡清创（sidebar 撤「品牌模板」+ `/brand-template` 重定向 `/personas`）+ 人设页皮肤分区 + 人设页声音分区；声音分区落**壳形态**（展示当前绑定 + 换绑声音样本），因为 STOCK_VOICES 注册表与 dub 声纹缓存链随本轮缓做。简报第二刀其余项（声纹缓存 / 系统音色试听 / 触点入口 / 本人含量门禁 v1）全部缓做，不阻塞周五联合验收。
+>
+> **2026-08-11 拍板（三）**：**chat 输入组件统一**——chat overlay（GenerationOverlay 底排）与 ChatModal（产物微调对话）等持久 chat 面复用 composer 同款 MentionEditor 族（@ mention 经注册表进入这两个面），禁各用各的 textarea + 自养 picker（`components/chat/MentionPicker` 退役，`output` 成指认族首个注册成员）。估 1.5 天（08-11 晚起，08-12 收），顺做不占联合验收关键路径。**同日提前落地，见 §1.3。**
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|

@@ -513,6 +513,7 @@ const zh: Resources = {
     remove: "移除提及",
     types: {
       asset: "素材",
+      output: "产物",
     },
     fileType: {
       video: "视频",
@@ -888,8 +889,6 @@ const zh: Resources = {
       set_caption_text: "修改字幕",
       restore_version: "恢复版本",
     },
-    mentionAdd: "引用一个产物",
-    mentionRemove: "移除引用",
     assetModalTitle: "向 AI 提问：{{asset}}",
     intro: "告诉我你想怎么改——比如剪短一点、更正式一些，或者翻译成别的语言。",
     assetPlaceholder: "例如：再短一点、更正式一些",

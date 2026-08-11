@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -18,9 +19,15 @@ import {
  * window capture-phase keydown owns Arrow/Enter/Escape while open, so the
  * editor's Enter-to-send never fires on a pick.
  *
+ * The popup PORTALS to document.body: a `fixed` element's containing block
+ * is corrupted by any transformed / backdrop-filtered ancestor (dialog
+ * popups center via -translate-1/2), teleporting the caret-anchored coords
+ * — the portal escapes every surface's chrome, so one editor family serves
+ * the composer and dialog-hosted chats alike.
+ *
  * Registry-driven: candidates come from `MENTION_REGISTRY` sources, rows get
- * their icon from the type's entry — adding an @ type is a registry entry,
- * never a branch here.
+ * their icon from the candidate's override or the type's entry — adding an
+ * @ type is a registry entry, never a branch here.
  */
 export function MentionPicker({
   query,
@@ -109,7 +116,7 @@ export function MentionPicker({
     return () => window.removeEventListener("keydown", handler, true)
   }, [filtered, activeIndex, onSelect, onClose])
 
-  return (
+  return createPortal(
     // Anchor to the caret: above it while there's room, below otherwise.
     <div
       style={
@@ -129,7 +136,7 @@ export function MentionPicker({
         </span>
       ) : (
         filtered.map(({ type, candidate }, index) => {
-          const Icon = mentionTypeDef(type)?.icon
+          const Icon = candidate.icon ?? mentionTypeDef(type)?.icon
           return (
             <button
               key={`${type}:${candidate.id}`}
@@ -154,6 +161,7 @@ export function MentionPicker({
           )
         })
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

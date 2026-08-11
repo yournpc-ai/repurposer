@@ -526,6 +526,7 @@ const en = {
     remove: "Remove mention",
     types: {
       asset: "Asset",
+      output: "Output",
     },
     fileType: {
       video: "Video",
@@ -901,8 +902,6 @@ const en = {
       set_caption_text: "Edit caption",
       restore_version: "Restore version",
     },
-    mentionAdd: "Mention an output",
-    mentionRemove: "Remove mention",
     assetModalTitle: "Ask AI about {{asset}}",
     intro: "Tell me how to change this — for example, make it shorter, more formal, or translate it.",
     assetPlaceholder: "e.g. make it shorter and more formal",
