@@ -87,7 +87,7 @@ class NodeBase:
 |---|---|
 | **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
 | **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
-| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422 |
+| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——任务书槽位经 `node_for_output` 派生产出节点的 requires，与技能清单路径同一个驱动器（clips 需媒体 = SelectClips 自己的声明） |
 | **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），人肉评审退役 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
@@ -171,7 +171,8 @@ skills/dub/          配音技能
 ## 8. 估价与计量
 
 - **估价（计划侧）**：`node.estimate(ctx)`——机械节点精确价（TTS 按字符 / render 按秒 / 克隆按次），agent 节点 token 区间（按 prompt 规模 + 输出 schema 给上下界），checkpoint = 0。
-- **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）。
+- **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
+- **价目住 Model 层**：`clients/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
 - **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第六周。
 - 用户呈现（PROGRESS 第六周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。

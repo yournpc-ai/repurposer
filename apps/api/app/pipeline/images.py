@@ -15,6 +15,7 @@ from uuid import UUID
 import structlog
 
 from app.clients.minimax import MiniMaxError, minimax_client
+from app.metering import record_media_usage
 from app.models.tables import Project
 from app.tools.storage import output_url, save_output
 
@@ -57,6 +58,7 @@ async def _save_minimax_image(
         )
         if not images:
             return None
+        await record_media_usage({"images": float(len(images))})
         image_bytes = base64.b64decode(images[0])
         relative_path = await save_output(
             project.id,

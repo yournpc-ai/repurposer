@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import AssetType
 from app.models.tables import Asset, Output, Persona, Project
+from app.metering import record_media_usage
 from app.pipeline.errors import TransientNodeError
 from app.skills.captions.procedure import translate_caption_track, translate_text
 from app.tools.dubbing import DubAssemblyError, group_units, synthesize_aligned_track
@@ -118,6 +119,9 @@ async def synthesize_dub(
                 raise TransientNodeError(
                     "voice cloning unavailable (provider returned no voice_id)"
                 )
+            # Billed on first T2A use of the fresh voice (provider rule) — the
+            # clone immediately synthesizes below, so the charge lands here.
+            await record_media_usage({"voice_clones": 1.0})
             sample.meta = {**(sample.meta or {}), "voice_id": voice_id}
 
         persona = (

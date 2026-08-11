@@ -16,6 +16,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.minimax import MiniMaxError, minimax_client
+from app.metering import record_media_usage
 from app.models.tables import Music, Output
 from app.tools.music import (
     AUDIO_EXT,
@@ -56,6 +57,7 @@ async def generate_music(
     )
     if not result.audio_url:
         raise MiniMaxError("MiniMax music generation returned no audio URL")
+    await record_media_usage({"music_pieces": 1.0})
 
     async with httpx.AsyncClient(timeout=120) as client:
         dl = await client.get(result.audio_url)

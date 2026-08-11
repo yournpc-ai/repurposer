@@ -23,6 +23,7 @@ import numpy as np
 import structlog
 from starlette.concurrency import run_in_threadpool
 
+from app.metering import record_media_usage
 from app.tools.voice import synthesize
 
 logger = structlog.get_logger()
@@ -142,6 +143,9 @@ async def _synthesize_fit_unit(
     window = max(0.2, (unit["end"] - unit["start"]) + min(max(gap_s, 0.0), _GAP_ALLOW_S))
     async with sem:
         audio = await run_in_threadpool(synthesize, unit["text"], voice_id, target_language)
+    # Every synthesis call bills its characters — pass 2 re-synthesizes are
+    # metered as a second call below.
+    await record_media_usage({"tts_chars": float(len(unit["text"]))})
     pcm = await run_in_threadpool(_decode_mp3, audio)
     duration = len(pcm) / _RATE
     if duration > window * 1.05:
@@ -150,6 +154,7 @@ async def _synthesize_fit_unit(
             audio = await run_in_threadpool(
                 synthesize, unit["text"], voice_id, target_language, speed
             )
+        await record_media_usage({"tts_chars": float(len(unit["text"]))})
         pcm = await run_in_threadpool(_decode_mp3, audio)
         return unit["start"], pcm, True
     return unit["start"], pcm, False

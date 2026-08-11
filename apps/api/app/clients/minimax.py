@@ -23,6 +23,48 @@ logger = structlog.get_logger()
 
 T = TypeVar("T", bound=BaseModel)
 
+# ---- vendor price list (N-34 对称面) -----------------------------------------
+#
+# Nodes declare QUANTITIES (estimate.units / metered actuals); the Model layer
+# declares PRICES — this table is the only place MiniMax pricing knowledge
+# lives, and both sides of the calibration loop read it: the quotation fold
+# (estimate units × price) and the metering ledger's fixed_cost (actual units
+# × price). List prices in USD, snapshot 2026-08 (platform.minimax.io pay-go):
+# adjust to contract pricing when it differs.
+PRICING = {
+    # minimax-m3 standard tier (≤512K input): $0.30 / $1.20 per 1M tokens.
+    "prompt_per_mtoken": 0.30,
+    "completion_per_mtoken": 1.20,
+    # speech-2.6-hd (tools/voice._TTS_MODEL): $100 per 1M characters.
+    "tts_per_mchar": 100.0,
+    # Rapid voice clone: $1.50 per voice, billed on its first T2A use.
+    "voice_clone_per_use": 1.50,
+    # image-01: $0.0035 per image.
+    "image_per_piece": 0.0035,
+    # music-2.6-free SKU in use: $0 (music-2.6 list price is $0.15/track).
+    "music_per_piece": 0.0,
+    # render_seconds carries no vendor price (own infrastructure) — the unit
+    # is metered for quota/calibration, priced at zero here.
+}
+
+
+def price_units(units: dict[str, float]) -> float:
+    """Money value (USD) of a mechanical-units record against ``PRICING``."""
+    return (
+        units.get("tts_chars", 0.0) / 1_000_000 * PRICING["tts_per_mchar"]
+        + units.get("voice_clones", 0.0) * PRICING["voice_clone_per_use"]
+        + units.get("images", 0.0) * PRICING["image_per_piece"]
+        + units.get("music_pieces", 0.0) * PRICING["music_per_piece"]
+    )
+
+
+def price_tokens(prompt_tokens: int, completion_tokens: int) -> float:
+    """Money value (USD) of a token-usage record against ``PRICING``."""
+    return (
+        prompt_tokens / 1_000_000 * PRICING["prompt_per_mtoken"]
+        + completion_tokens / 1_000_000 * PRICING["completion_per_mtoken"]
+    )
+
 
 @dataclass(frozen=True)
 class MusicGenerationResult:

@@ -87,7 +87,8 @@ def step_estimate_deviation(node: WorkflowStep) -> dict | None:
     calibration regression's read shape (AGENT_ARCH §8):
 
         {prompt_tokens:     {actual, low, high, delta},
-         completion_tokens: {actual, low, high, delta}}
+         completion_tokens: {actual, low, high, delta},
+         units?:            {<unit>: {expected, actual, delta}}}
 
     delta = actual − clamp(actual, low, high): 0 = in range, positive = the
     quote undershot, negative = it overshot. None when either side is
@@ -116,10 +117,24 @@ def step_estimate_deviation(node: WorkflowStep) -> dict | None:
             "delta": actual - min(max(actual, low), high),
         }
 
-    return {
+    out = {
         "prompt_tokens": field("prompt_tokens"),
         "completion_tokens": field("completion_tokens"),
     }
+    # Mechanical units (media metering, record_media_usage): estimate carries
+    # exact quantities, cost carries actuals — delta is signed drift.
+    est_units = node.estimate.get("units") or {}
+    act_units = node.cost.get("units") or {}
+    if est_units or act_units:
+        out["units"] = {
+            key: {
+                "expected": float(est_units.get(key) or 0.0),
+                "actual": float(act_units.get(key) or 0.0),
+                "delta": float(act_units.get(key) or 0.0) - float(est_units.get(key) or 0.0),
+            }
+            for key in sorted(set(est_units) | set(act_units))
+        }
+    return out
 
 
 def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:

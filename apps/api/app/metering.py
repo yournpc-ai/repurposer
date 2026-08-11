@@ -6,18 +6,25 @@ The single LLM choke point (``clients/minimax.py``) reports API ``usage`` here;
 (asyncio tasks) each meter their own node, and retries/fallbacks inside one
 node accumulate naturally — every attempt is billed.
 
+Media calls (TTS / clone / image / music) report through ``record_media_usage``:
+actual units merge into ``cost.units`` and their priced money (the client's
+``price_units`` — quantities from nodes, prices from the Model layer, N-34)
+accumulates into ``cost.fixed_cost``.
+
 Usage lands directly on ``workflow_steps.cost`` as
-``{prompt_tokens, completion_tokens, fixed_cost}`` — no step-name intermediate.
-Run-level cost is an aggregate view (sum over the run's nodes).
+``{prompt_tokens, completion_tokens, fixed_cost, units?}`` — no step-name
+intermediate. Run-level cost is an aggregate view (sum over the run's nodes).
 """
 
 import contextvars
+import json
 from uuid import UUID
 
 import structlog
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.models.database import AsyncSessionLocal
+from app.models.tables import WorkflowStep
 
 logger = structlog.get_logger()
 
@@ -79,6 +86,49 @@ async def record_usage(usage: dict | None) -> None:
                     """
                 ),
                 {"pt": prompt, "ct": completion, "nid": node_id},
+            )
+            await db.commit()
+    except Exception as e:  # noqa: BLE001 — metering must never break generation
+        logger.warning("metering_record_failed", error=str(e), node_id=str(node_id))
+
+
+async def record_media_usage(units: dict[str, float]) -> None:
+    """Accumulate one media call's actual units + priced money onto the bound
+    workflow step (TTS chars / voice clones / images / music pieces).
+
+    Units merge into ``cost.units`` (the actuals the estimate's mechanical
+    units calibrate against); the money side (``price_units`` — the client's
+    price list, imported deferred to keep client→metering the only import
+    direction) adds into ``cost.fixed_cost``. Same no-op and never-break
+    disciplines as ``record_usage``.
+    """
+    if not units:
+        return
+    node_id = _current_workflow_step_id.get()
+    if node_id is None:
+        return
+    from app.clients.minimax import price_units  # deferred: import cycle
+
+    money = price_units(units)
+    try:
+        async with AsyncSessionLocal() as db:
+            row = await db.scalar(
+                select(WorkflowStep.cost).where(WorkflowStep.id == node_id)
+            )
+            cost = dict(row or {})
+            cost["fixed_cost"] = round(
+                float(cost.get("fixed_cost") or 0.0) + money, 6
+            )
+            merged = dict(cost.get("units") or {})
+            for key, value in units.items():
+                merged[key] = round(float(merged.get(key) or 0.0) + float(value), 4)
+            cost["units"] = merged
+            await db.execute(
+                text(
+                    "UPDATE workflow_steps SET cost = CAST(:cost AS jsonb), "
+                    "updated_at = now() WHERE id = :nid"
+                ),
+                {"cost": json.dumps(cost), "nid": node_id},
             )
             await db.commit()
     except Exception as e:  # noqa: BLE001 — metering must never break generation
