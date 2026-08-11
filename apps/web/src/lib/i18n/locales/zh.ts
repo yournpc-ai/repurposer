@@ -475,7 +475,7 @@ const zh: Resources = {
     dub: {
       title: "视频配音",
       promise: "上传你的视频，用你自己的声音配成中文、法语和西语。",
-      inputTitle: "输入视频",
+      inputTitle: "原始视频",
       inputHint: "要配音的原始录像——演讲、课程或播客节目。",
       promptTemplate: "把我的演讲剪成高光切片，并用我的声音配音成中文、法语和西语。",
     },

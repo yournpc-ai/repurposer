@@ -482,7 +482,7 @@ const en = {
       title: "Video dubbing",
       promise:
         "Upload your video and dub it into Chinese, French and Spanish — in your own voice.",
-      inputTitle: "Input video",
+      inputTitle: "Source video",
       inputHint:
         "The original recording you want dubbed — a talk, lecture or podcast episode.",
       promptTemplate:
