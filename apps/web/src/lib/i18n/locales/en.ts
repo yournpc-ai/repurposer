@@ -474,7 +474,8 @@ const en = {
         inputs: "Source material",
       },
       dropzone: "Upload or drag & drop files",
-      promptLabel: "Custom prompt — tweak it to your needs",
+      promptTitle: "Custom prompt",
+      promptHint: "Tweak it to your needs",
       send: "Generate",
     },
     dub: {

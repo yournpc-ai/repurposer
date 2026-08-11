@@ -7,6 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Music,
+  PenLine,
   Upload,
   Video,
   Volume2,
@@ -262,18 +263,23 @@ export function RecipeInspectOverlay({
               )}
 
               <div>
-                <p className="mb-1.5 text-xs text-muted-foreground">
-                  {t("recipes.inspect.promptLabel")}
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <PenLine className="h-4 w-4 text-muted-foreground" />
+                  {t("recipes.inspect.promptTitle")}
                 </p>
-                <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    disabled={launching}
-                    placeholder={t("home.pastePlaceholder")}
-                    className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(`recipes.inspect.promptHint`)}
+                </p>
+              </div>
+
+              <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={launching}
+                  placeholder={t("home.pastePlaceholder")}
+                  className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
               </div>
 
               <Button
