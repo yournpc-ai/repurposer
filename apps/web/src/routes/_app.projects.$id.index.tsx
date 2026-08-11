@@ -1,16 +1,20 @@
 import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
 import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
+import { ClipDetailModal } from "@/components/results/ClipDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
+import { downloadOutput } from "@/components/results/downloadOutput"
 import { GenerationOverlay, normalizeIntent, normalizeSlots, type GenerationOverlayHandle } from "@/components/generation/GenerationOverlay"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
+import type { FlowOutputAction } from "@/components/flow/types"
 import type { RunFlowAsset } from "@/components/flow/runFlow"
 import { PostCard } from "@/components/results/PostCard"
+import { PublishDialog } from "@/components/publish/PublishDialog"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
   ResultsTabs,
@@ -20,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import { apiFetch, apiPost } from "@/lib/api"
+import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
@@ -191,6 +196,15 @@ function ProjectDetailPage() {
   const [witnessedRunId, setWitnessedRunId] = useState<string | null>(null)
   const [canvasAssets, setCanvasAssets] = useState<RunFlowAsset[]>([])
 
+  // ── Product actions (ADR-041 D5/D8) ──────────────────────────────────
+  // The canvas's product nodes ARE the cards: click sets the dock focus
+  // (焦点注入) and opens the clip's detail modal; the hover toolbar reports
+  // preview / download / publish. Both modals are the old card-face logic,
+  // mounted as-is.
+  const [detailOutput, setDetailOutput] = useState<Output | null>(null)
+  const [publishOutput, setPublishOutput] = useState<Output | null>(null)
+  const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null)
+
   const fetchResults = async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`)
@@ -266,8 +280,49 @@ function ProjectDetailPage() {
     setStickyCompletedRun(null)
     setWitnessedRunId(null)
     setCanvasAssets([])
+    setDetailOutput(null)
+    setPublishOutput(null)
+    setFocusedOutputId(null)
     prevRunRef.current = null
   }, [projectId])
+
+  // Re-point the modal/focus state at the freshest rows after every refetch
+  // (polling and refinement turns replace output objects in place); a focus
+  // whose product left the visible set clears itself.
+  const outputsList = useMemo(() => results?.outputs ?? [], [results])
+  useEffect(() => {
+    const byId = new Map(outputsList.map((o) => [o.id, o]))
+    setDetailOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
+    setPublishOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
+    setFocusedOutputId((prev) => (prev && !byId.has(prev) ? null : prev))
+  }, [outputsList])
+
+  const focusedOutputChip = useMemo(() => {
+    const output = outputsList.find((o) => o.id === focusedOutputId)
+    if (!output) return null
+    return {
+      id: output.id,
+      label: outputMentionLabel(
+        output,
+        t(`chat.derivativeTypes.${output.type}`, {
+          defaultValue: t("results.tabs.clips"),
+        }),
+      ),
+    }
+  }, [outputsList, focusedOutputId, t])
+
+  const handleOutputClick = (output: Output) => {
+    setFocusedOutputId(output.id)
+    // 单击 = detail modal 旧逻辑原样 (D5): clips with a render open the
+    // detail view; every product click also becomes the dock's focus.
+    if (output.type === "clip" && output.files.video) setDetailOutput(output)
+  }
+
+  const handleOutputAction = (output: Output, action: FlowOutputAction) => {
+    if (action === "preview") setDetailOutput(output)
+    else if (action === "download") downloadOutput(output)
+    else setPublishOutput(output)
+  }
 
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
@@ -309,16 +364,17 @@ function ProjectDetailPage() {
     }
   }
 
-  // First-visit results tour. Fires whenever clips are ready and the chat
-  // overlay is closed — no matter how the user got here (fresh generation or
-  // straight from the projects list). Seen flag is its own localStorage key.
-  // The targets live on the clip cards in the mobile list world — the
-  // desktop canvas re-anchors the tour onto the output nodes (周四 brief).
+  // First-visit results tour. Fires whenever a ready clip exists and the
+  // chat overlay is closed — no matter how the user got here (fresh
+  // generation or straight from the projects list). Seen flag is its own
+  // localStorage key. Anchors: the canvas's first ready product node on
+  // desktop (ADR-041 — data-tour="results-*" live on the output card), the
+  // clip card in the mobile list world.
   useEffect(() => {
     if (resultsTourCheckedRef.current) return
     if (loading || !results) return
     if (search.overlay) return
-    if (!isMobile) return
+    if (!isMobile && !resultsPhase) return
     if (!results.outputs.some(isClipReady)) return
     resultsTourCheckedRef.current = true
     try {
@@ -327,9 +383,20 @@ function ProjectDetailPage() {
     } catch {
       return // storage unavailable — tour simply never auto-opens
     }
-    if (activeTab !== "clips") setActiveTab("clips")
-    setResultsTourOpen(true)
-  }, [loading, results, search.overlay, activeTab, isMobile])
+    if (isMobile && activeTab !== "clips") setActiveTab("clips")
+    // The canvas's node DOM lands a paint after the data (xyflow mounts
+    // client-only) — open once the anchor actually exists; if it never
+    // does, the tour closes itself silently (missing targets auto-skip).
+    let tries = 0
+    const timer = setInterval(() => {
+      tries += 1
+      if (document.querySelector("[data-tour='results-menu']") || tries > 20) {
+        clearInterval(timer)
+        setResultsTourOpen(true)
+      }
+    }, 100)
+    return () => clearInterval(timer)
+  }, [loading, results, search.overlay, activeTab, isMobile, resultsPhase])
 
   const markResultsTourSeen = () => {
     try {
@@ -567,7 +634,6 @@ function ProjectDetailPage() {
               <ClipCard
                 key={clip.id}
                 output={clip}
-                onRegenerate={fetchResults}
                 isTopPick={
                   topClipScore > 0 && clip.score?.value === topClipScore
                 }
@@ -708,6 +774,9 @@ function ProjectDetailPage() {
               steps={completedRun.steps}
               outputs={outputs}
               choreograph={choreograph}
+              tourOutputId={resultsTourClipId}
+              onOutputClick={handleOutputClick}
+              onOutputAction={handleOutputAction}
               onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
             />
           </div>
@@ -844,6 +913,8 @@ function ProjectDetailPage() {
                 : undefined
           }
           initialShell={resultsPhase ? "dock" : "fullscreen"}
+          focusOutput={focusedOutputChip}
+          onClearFocus={() => setFocusedOutputId(null)}
           completionMode={isMobile ? "navigate" : "dock"}
           onClose={
             attachOpen
@@ -853,6 +924,27 @@ function ProjectDetailPage() {
                 : () => {}
           }
           onComplete={handleOverlayComplete}
+        />
+      )}
+
+      {detailOutput && (
+        <ClipDetailModal
+          output={detailOutput}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetailOutput(null)
+          }}
+          onRegenerate={fetchResults}
+        />
+      )}
+
+      {publishOutput && (
+        <PublishDialog
+          output={publishOutput}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPublishOutput(null)
+          }}
         />
       )}
 

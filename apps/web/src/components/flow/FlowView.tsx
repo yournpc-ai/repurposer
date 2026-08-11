@@ -15,7 +15,7 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
-import { FLOW_NODE_SIZE, layoutFlow } from "./layout"
+import { flowNodeSize, layoutFlow } from "./layout"
 import type { FlowViewProps } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
@@ -91,6 +91,7 @@ export function FlowView({
   edges,
   selectedId = null,
   onSelect,
+  onOutputAction,
   navigation = "fit",
   choreograph = false,
   dots = false,
@@ -110,14 +111,12 @@ export function FlowView({
       position: layout.positions.get(n.id) ?? { x: 0, y: 0 },
       // Explicit dims keep the DOM in lockstep with the layout math (fixed
       // sizes = pure-math layout, zero measurement).
-      style: {
-        width: FLOW_NODE_SIZE[n.kind].width,
-        height: FLOW_NODE_SIZE[n.kind].height,
-      },
+      style: flowNodeSize(n),
       data: {
         node: n,
         bornIndex: choreograph ? layout.revealOrder.get(n.id) : undefined,
         selected: n.id === selectedId,
+        onOutputAction,
       },
       draggable: false,
       connectable: false,
@@ -143,7 +142,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges }
-  }, [nodes, edges, selectedId, choreograph])
+  }, [nodes, edges, selectedId, choreograph, onOutputAction])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

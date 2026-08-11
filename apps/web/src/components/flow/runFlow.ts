@@ -1,7 +1,10 @@
 import type { TFunction } from "i18next"
 
-import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
+import { toAbsoluteUrl } from "@/lib/api"
 import type { Output, WorkflowStep } from "@/lib/types"
+
+import { PRODUCT_NODE_SIZE } from "./layout"
+import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
  * run's real topology → the FlowView contract, consumed by the results
@@ -54,12 +57,15 @@ export function runFlowGraph(
     assets: RunFlowAsset[]
     steps: WorkflowStep[]
     outputs: Output[]
+    /** The node carrying the results tour's data-tour anchors (first ready
+     * product, chosen by the surface). */
+    tourOutputId?: string | null
   },
   t: TFunction
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const nodes: FlowNode[] = []
   const edges: FlowEdge[] = []
-  const { assets, steps, outputs } = input
+  const { assets, steps, outputs, tourOutputId } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
 
@@ -121,6 +127,14 @@ export function runFlowGraph(
   const products = [...outputs]
     .filter((o) => o.type in PRODUCT_TYPE_LABEL_KEY)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  // Top pick: the batch's highest-scored clip gets the accent badge — the
+  // same triage rule the old results grid used (score → what to post first).
+  const topClipScore = Math.max(
+    0,
+    ...products
+      .filter((o) => o.type === "clip")
+      .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
+  )
   products.forEach((output, i) => {
     const id = `output:${output.id}`
     nodes.push({
@@ -130,7 +144,18 @@ export function runFlowGraph(
       detail: output.language
         ? t(`languages.${output.language}`, { defaultValue: output.language })
         : undefined,
-      thumbUrl: output.files.image ?? null,
+      thumbUrl: toAbsoluteUrl(
+        output.files.image ?? output.publishing.cover_image_url ?? null,
+      ),
+      // The product card skin (D5): the node carries the row, sized as the
+      // canvas's 大卡; the tour anchors ride the surface's chosen node.
+      output,
+      topPick:
+        output.type === "clip" &&
+        topClipScore > 0 &&
+        output.score?.value === topClipScore,
+      size: PRODUCT_NODE_SIZE,
+      tourTargets: output.id === tourOutputId,
       order: i,
     })
     // Lineage = the server-resolved producing step (prohibition #11). Rows

@@ -13,7 +13,7 @@
  * `ChatMention` so historical messages still render their chips.
  *
  * Surfaces: one MentionEditor family serves the composer AND the persistent
- * chat surfaces (generation overlay, output ChatModal) — the registry's
+ * chat surfaces (the generation overlay / results dock) — the registry's
  * candidate feeds differ per surface via `MentionContext`, the component
  * never does.
  */

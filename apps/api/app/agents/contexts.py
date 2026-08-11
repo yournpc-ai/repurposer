@@ -13,6 +13,7 @@ stands on — the services orchestrate, they never assemble:
 """
 
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +25,6 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
-    Conversation,
     Message,
     Persona,
     Project,
@@ -92,17 +92,18 @@ def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
 async def _build_context(
     db: AsyncSession,
     project: Project,
-    conversation: Conversation,
     recent: list[Message],
     mentions: list[ChatMention],
     pending: Message | None,
+    focus_output_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
     rounds + the mention list. Not a chat-history dump. ``pending`` (the
     conversation's still-open question, if any) is queried by the caller —
     this module assembles, it never queries the chat store's question
-    lifecycle."""
+    lifecycle. ``focus_output_id`` is the canvas's pointed-at product
+    (ADR-041 D8 焦点注入) — one context line, never a conversation scope."""
     lines = [
         f"Project: {project.title} (id={project.id}, language={project.language})",
     ]
@@ -152,11 +153,19 @@ async def _build_context(
             lines.append("Latest run steps:")
             lines.extend(progress)
 
-    if conversation.asset_id:
-        lines.append(
-            f"This conversation is about the single {conversation.asset_type} "
-            f"output id={conversation.asset_id}."
+    if focus_output_id is not None:
+        # 焦点注入 (ADR-041 D8): the canvas's pointed-at product joins as ONE
+        # line — the default target for instructions naming no other output.
+        # A stale id (the output left the visible set) drops silently.
+        focused = next(
+            (o for o in outputs if str(o.id) == str(focus_output_id)), None
         )
+        if focused is not None:
+            one_liner = _output_one_liner(focused)
+            lines.append(
+                f"Current focus output: {focused.type} id={focused.id}"
+                + (f": {one_liner}" if one_liner else "")
+            )
 
     if recent:
         lines.append("Recent rounds:")

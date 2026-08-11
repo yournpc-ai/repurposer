@@ -2,8 +2,9 @@
 
 Conversations are the universal container for multi-turn interaction, but the
 public API hides conversation management behind a single ``POST /api/v1/chat``
-endpoint. The backend locates or creates the right conversation based on
-``project_id`` and optional ``asset_id`` / ``asset_type``.
+endpoint. The backend locates or creates the project conversation from
+``project_id`` (project scope only — the asset scope is retired, ADR-041 D8;
+a pointed-at product rides as ``focus_output_id``).
 
 Transport (chat SSE): the endpoint content-negotiates on the ``Accept``
 header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
@@ -16,7 +17,6 @@ authoritative.
 
 import asyncio
 import json
-from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -50,12 +50,11 @@ chat_router = APIRouter()
 @chat_router.get("/conversation", response_model=ConversationResponse)
 async def get_conversation(
     project_id: UUID,
-    asset_id: UUID | None = None,
-    asset_type: Literal["clip", "derivative"] | None = None,
     db: DBDep = None,
     current_user: User = Depends(get_current_user_required),
 ) -> ConversationResponse | None:
-    """Get the existing conversation for a project or asset scope.
+    """Get the project's conversation (project scope only — the asset scope
+    is retired, ADR-041 D8).
 
     Returns 404 if no conversation exists yet; the frontend should then show
     the initial intro and create the conversation on first message via
@@ -66,8 +65,6 @@ async def get_conversation(
         db,
         UUID(str(current_user.id)),
         project_id,
-        asset_id,
-        asset_type,
     )
     if conversation is None:
         raise HTTPException(
@@ -182,13 +179,13 @@ async def send_chat_message(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ):
-    """Send a message to a project or asset chat.
+    """Send a message to the project's chat.
 
-    The backend automatically locates or creates the conversation, builds the
-    appropriate context, and dispatches any background work. With
-    ``Accept: text/event-stream`` the reply streams (assistant.delta previews
-    + a terminal turn.completed envelope); anything else gets the one-shot
-    JSON ChatResponse (201) exactly as before.
+    The backend locates or creates the conversation, builds the context, and
+    dispatches any background work. With ``Accept: text/event-stream`` the
+    reply streams (assistant.delta previews + a terminal turn.completed
+    envelope); anything else gets the one-shot JSON ChatResponse (201)
+    exactly as before.
     """
     # Access check stays pre-stream on the request session — a 404/403 here is
     # a plain HTTP error on both paths.

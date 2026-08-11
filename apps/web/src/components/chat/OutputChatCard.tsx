@@ -1,8 +1,6 @@
 /** OutputChatCard — results-page cards inlined into the chat flow.
  *
- * Renders the exact card components as-is (chat button inside an inline card
- * simply opens another modal — acceptable per 2026-07-26 review: the five
- * cards stay untouched). Never duplicate card markup here.
+ * Renders the exact card components as-is. Never duplicate card markup here.
  */
 
 import { ArticleCard } from "@/components/results/ArticleCard"

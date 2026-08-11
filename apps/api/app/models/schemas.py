@@ -411,21 +411,27 @@ class AnswerResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Send a message to a project or asset chat.
+    """Send a message to the project's chat.
 
-    The backend locates or creates the appropriate conversation, builds the
-    right context (project-level vs asset-level), and dispatches any
-    background work.
+    The backend locates or creates the project conversation, builds the
+    context, and dispatches any background work. Asset-scoped conversations
+    are retired (ADR-041 D8 — 产物对话归 dock + 焦点注入): a product the user
+    points at rides as ``focus_output_id`` (one context line), never as a
+    separate conversation scope.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     project_id: UUID
-    asset_id: UUID | None = None
-    asset_type: Literal["clip", "derivative"] | None = None
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
+    # The canvas's focused product (ADR-041 D8 焦点注入): the output the user
+    # last pointed at. Carried per turn, never persisted — the context
+    # assembly adds one "current focus" line so an instruction naming no
+    # other target resolves to it. Not a second intent entry: the mention
+    # registry stays the definite-reference channel.
+    focus_output_id: UUID | None = None
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
     # The review panel's current task book (hand-edited slots marked

@@ -79,7 +79,10 @@
 | 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
 | 依赖边 | dependency edge | FlowView 边语义之二：step 间工艺顺序（step `inputs`） | 不是血缘边 |
-| run 进度图 | run flow graph | 单 run 拓扑的只读状态动画投影（编译期定死的死图，ADR-036 第 3 条排产项）；适配器组件 `RunFlowGraph` | 不是 spike（spike 只剩血缘板）；不取代打勾流 |
+| 结果画布 | results canvas | 项目页收官态默认中心（ADR-041 D1，run 进度图排产随它撤销）：FlowView 渲染当前 run 拓扑 + 最新产物——产物节点即卡（缩略图/分数+top-pick/下一步建议 + hover toolbar）；适配器 `runFlowGraph`（`components/flow/runFlow.ts`） | 不是可操作画布（ADR-035 永拒）；进度不进图（打勾流唯一进度面） |
+| 底部 dock | chat dock | 结果期的输入组停靠位（GenerationOverlay dock shell）：摘要卡 + 历史抽屉 + 输入组；agent 发声必自动升起 | 不是第二意图入口（推断/合并/确认全在 plan path） |
+| 焦点注入 | focus injection（`focus_output_id`） | 画布点选产物 → 每轮 chat 携带焦点 id，context 加一行"当前焦点 output"（ADR-041 D8）；每轮携带、不落库 | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
+| 诞生回放 | birth choreography | 收官时画布按 `seq` 编译序逐节点入场 + 边描画（真实编译顺序的缓动回放，ADR-036 补记 3）；reduced-motion / 断线重连 / 历史打开直接终态 | 禁剧场（动画 = 真实事件投影） |
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |
@@ -121,6 +124,7 @@
 | N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S40）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与技能同名 | 技能包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
+| N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output_id`（每轮携带，context 一行，不落库）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
 
 ## 4. API 命名
 

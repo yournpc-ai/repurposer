@@ -10,6 +10,16 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   step: { width: 192, height: 72 },
 }
 
+/** The results canvas's product card (ADR-041 D5 大卡): thumb + score /
+ * top-pick + title + next-step suggestion. */
+export const PRODUCT_NODE_SIZE = { width: 208, height: 264 }
+
+/** A node's resolved size — the per-kind default unless the adapter pinned
+ * an override (product cards on the results canvas). */
+export function flowNodeSize(node: FlowNode): { width: number; height: number } {
+  return node.size ?? FLOW_NODE_SIZE[node.kind]
+}
+
 const GAP_MAIN = 96
 const GAP_CROSS = 24
 
@@ -62,11 +72,11 @@ export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
   const revealOrder = new Map<string, number>()
   // Column widths (main axis) and heights (cross axis).
   const colWidth = ordered.map(({ nodes: ns }) =>
-    Math.max(...ns.map((n) => FLOW_NODE_SIZE[n.kind].width), 0),
+    Math.max(...ns.map((n) => flowNodeSize(n).width), 0),
   )
   const colHeight = ordered.map(
     ({ nodes: ns }) =>
-      ns.reduce((h, n) => h + FLOW_NODE_SIZE[n.kind].height, 0) +
+      ns.reduce((h, n) => h + flowNodeSize(n).height, 0) +
       GAP_CROSS * Math.max(ns.length - 1, 0),
   )
   const cross = Math.max(...colHeight, 0)
@@ -78,7 +88,7 @@ export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
     for (const n of ns) {
       positions.set(n.id, { x: main, y: offset })
       revealOrder.set(n.id, reveal++)
-      offset += FLOW_NODE_SIZE[n.kind].height + GAP_CROSS
+      offset += flowNodeSize(n).height + GAP_CROSS
     }
     main += colWidth[col] + GAP_MAIN
   })

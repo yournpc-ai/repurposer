@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -6,7 +5,6 @@ import { Card } from "@/components/ui/card"
 import { apiPost } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
-import { AssetChatModal } from "./AssetChatModal"
 
 import type { Output } from "@/lib/types"
 
@@ -17,7 +15,6 @@ interface CarouselCardProps {
 
 export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
   const { t } = useTranslation()
-  const [chatOpen, setChatOpen] = useState(false)
   const slides = output.payload.slides || []
 
   const handleDownload = () => {
@@ -54,7 +51,6 @@ export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
-          onChat={() => setChatOpen(true)}
         />
       </div>
       <div className="space-y-4">
@@ -75,14 +71,6 @@ export function CarouselCard({ output, onRegenerate }: CarouselCardProps) {
         )}
       </div>
 
-      <AssetChatModal
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        asset={output}
-        assetType="derivative"
-        projectId={output.project_id}
-        onUpdated={onRegenerate}
-      />
     </Card>
   )
 }

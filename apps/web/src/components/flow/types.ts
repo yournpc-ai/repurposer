@@ -12,6 +12,11 @@ export type FlowNodeStatus = "pending" | "running" | "done" | "failed" | "skippe
  * dependency 依赖边 = process order (step→step). Visually distinct. */
 export type FlowEdgeSemantic = "lineage" | "dependency"
 
+/** Product-node actions (ADR-041 D5) — the old card-face actions moved onto
+ * the canvas toolbar: preview / download / publish. Graph operations (run /
+ * rewire) are permanently banned from it. */
+export type FlowOutputAction = "preview" | "download" | "publish"
+
 export interface FlowNode {
   id: string
   kind: FlowNodeKind
@@ -21,6 +26,17 @@ export interface FlowNode {
   /** Quantified one-liner / language tag / score. */
   detail?: string
   thumbUrl?: string | null
+  /** The product row behind an output node (results canvas only, D5 — the
+   * node IS the product card: score / top-pick / next-step live on it).
+   * Absent on the recipe surface, whose output nodes stay compact thumbs. */
+  output?: import("@/lib/types").Output
+  /** The batch's recommended pick (score triage) — adapter-computed. */
+  topPick?: boolean
+  /** Size override (pure-math layout stays measurement-free): the results
+   * canvas's product cards are bigger than the shared per-kind defaults. */
+  size?: { width: number; height: number }
+  /** Carries the surface's data-tour anchors (first ready product only). */
+  tourTargets?: boolean
   /** Stable within-layer ordering key (step `seq` / output `created_at`) —
    * append-only growth stability: chat adds nodes, the graph only grows,
    * existing nodes never move (ADR-036). */
@@ -43,6 +59,9 @@ export interface FlowViewProps {
   edges: FlowEdge[]
   selectedId?: string | null
   onSelect?: (id: string) => void
+  /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
+   * surface owns the actions; the card only reports them. */
+  onOutputAction?: (outputId: string, action: FlowOutputAction) => void
   /** "fit" (default) = bounded surface, zoom locked; "explore" = lineage
    * board (zoom / pan / pinch unlocked). */
   navigation?: FlowNavigation

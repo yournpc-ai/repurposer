@@ -849,6 +849,24 @@ const en = {
     dock: {
       history: "History",
       collapse: "Hide",
+      focus: "Working on: {{name}}",
+      clearFocus: "Clear focus",
+    },
+    // Canvas product-card chrome (ADR-041 D5): the hover toolbar's labels.
+    canvas: {
+      preview: "Preview",
+      download: "Download",
+      publish: "Publish",
+    },
+    // The product node's deterministic next-step line (D5 — zero-LLM,
+    // derived from the output type; presented, never a control).
+    nextStep: {
+      clip: "Want changes? Ask below — trim, captions, or another language.",
+      post: "Want changes? Ask below — rewrite, tone, or another language.",
+      quotes: "Want changes? Ask below — different quotes or a new look.",
+      carousel: "Want changes? Ask below — slide edits or another language.",
+      article: "Want changes? Ask below — revisions or another language.",
+      default: "Want changes? Describe them in the chat below.",
     },
     stepper: {
       transcribing: "Transcribing your media…",
@@ -915,10 +933,6 @@ const en = {
       set_caption_text: "Edit caption",
       restore_version: "Restore version",
     },
-    assetModalTitle: "Ask AI about {{asset}}",
-    intro: "Tell me how to change this — for example, make it shorter, more formal, or translate it.",
-    assetPlaceholder: "e.g. make it shorter and more formal",
-    loadingHistory: "Loading conversation...",
     choicePlaceholder: "Something else…",
     derivativeTypes: {
       post: "Social post",
@@ -1071,7 +1085,6 @@ const en = {
     publishOnSocial: "Publish on Social",
     share: "Share",
     shareCopied: "Link copied",
-    remix: "Remix",
   },
   login: {
     title: "Sign in to Repurposer",
@@ -1120,12 +1133,12 @@ const en = {
       scoreTitle: "Recommendation score",
       scoreDesc:
         "The AI scores each clip's hook, clarity and completeness. Higher scores are more worth posting first — the best one is marked Top pick.",
-      videoTitle: "Open clip details",
+      videoTitle: "Open the details",
       videoDesc:
-        "Click the video anywhere except the play button to open its details — with a ready-to-copy title, caption and hashtags for your social post.",
-      menuTitle: "More actions",
+        "Click a clip's card to open its details — with a ready-to-copy title, caption and hashtags for your social post.",
+      menuTitle: "Quick actions",
       menuDesc:
-        "Download the MP4, publish to social, copy a share link, or remix this clip with AI — all from this menu.",
+        "Hover a product card for its toolbar — preview, download, or publish to social.",
     },
   },
   notifications: {

@@ -1,11 +1,8 @@
-import { useState } from "react"
-
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { apiPost } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
-import { AssetChatModal } from "./AssetChatModal"
 
 import type { Output } from "@/lib/types"
 
@@ -15,7 +12,6 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
-  const [chatOpen, setChatOpen] = useState(false)
   const title = output.payload.title || ""
   const content = output.payload.content || ""
 
@@ -51,7 +47,6 @@ export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
-          onChat={() => setChatOpen(true)}
         />
       </div>
       <div className="space-y-3">
@@ -69,14 +64,6 @@ export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
         </div>
       </div>
 
-      <AssetChatModal
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        asset={output}
-        assetType="derivative"
-        projectId={output.project_id}
-        onUpdated={onRegenerate}
-      />
     </Card>
   )
 }

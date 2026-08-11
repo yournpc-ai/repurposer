@@ -7,7 +7,6 @@ import {
   Play,
   Send,
   Share2,
-  MessageSquare,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -26,7 +25,6 @@ import {
 import { apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { formatDuration, formatRelativeTime, cn } from "@/lib/utils"
 
-import { AssetChatModal } from "./AssetChatModal"
 import { ClipDetailModal } from "./ClipDetailModal"
 import { PublishDialog } from "@/components/publish/PublishDialog"
 
@@ -34,15 +32,13 @@ import type { Output } from "@/lib/types"
 
 interface ClipCardProps {
   output: Output
-  onRegenerate?: () => void
   isTopPick?: boolean
   /** Puts the results tour's data-tour anchors on this card (first ready clip only). */
   tourTargets?: boolean
 }
 
-export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipCardProps) {
+export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
   const { t, i18n } = useTranslation()
-  const [chatOpen, setChatOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [clipState, setClipState] = useState<Output>(output)
@@ -278,10 +274,6 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
                         {t("clipMenu.share")}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={() => setChatOpen(true)}>
-                      <MessageSquare className="mr-2 h-4 w-4" />
-                      {t("clipMenu.remix")}
-                    </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -289,15 +281,6 @@ export function ClipCard({ output, onRegenerate, isTopPick, tourTargets }: ClipC
           </div>
         </div>
       </Card>
-
-      <AssetChatModal
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        asset={clipState}
-        assetType="clip"
-        projectId={clipState.project_id}
-        onUpdated={onRegenerate}
-      />
 
       <ClipDetailModal
         output={clipState}

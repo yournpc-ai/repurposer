@@ -1,8 +1,10 @@
 """Generic chat service.
 
-A conversation is the universal container. It can be project-scoped (the
-original prompt plus project-level follow-ups) or asset-scoped (a clip,
-LinkedIn post, quote card, etc.).
+A conversation is the universal container — always project-scoped (the
+original prompt plus project-level follow-ups). Asset-scoped conversations
+are retired (ADR-041 D8): product chat lives in the project conversation,
+and the product the user points at rides each turn as ``focus_output_id``
+(焦点注入 — one context line, never a scope).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
 locates or creates the right conversation, assembles deterministic context,
@@ -86,8 +88,6 @@ _ASK_BACK_TEXT = (
     "or rewrite a post."
 )
 
-_REVISE_FALLBACK_TEXT = "Got it — revising this asset based on your instruction."
-
 
 def _ask_for_material_text(prompt: str) -> str:
     """Server-composed ask-for-material reply (zero-material safety net).
@@ -168,53 +168,6 @@ async def _get_or_create_project_conversation(
     return conversation
 
 
-async def _get_or_create_asset_conversation(
-    db: AsyncSession,
-    user_id: UUID,
-    project_id: UUID,
-    asset_id: UUID,
-    asset_type: str,
-    title: str | None = None,
-) -> Conversation:
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.project_id == project_id,
-            Conversation.asset_id == asset_id,
-            Conversation.asset_type == asset_type,
-            Conversation.user_id == user_id,
-        )
-    )
-    conversation = result.scalar_one_or_none()
-    if conversation is None:
-        conversation = Conversation(
-            user_id=user_id,
-            project_id=project_id,
-            asset_id=asset_id,
-            asset_type=asset_type,
-            title=title or f"{asset_type} chat",
-        )
-        db.add(conversation)
-        await db.flush()
-        await db.refresh(conversation)
-    return conversation
-
-
-async def _get_or_create_conversation(
-    db: AsyncSession,
-    user_id: UUID,
-    request: ChatRequest,
-) -> Conversation:
-    if request.asset_id and request.asset_type:
-        return await _get_or_create_asset_conversation(
-            db,
-            user_id,
-            request.project_id,
-            request.asset_id,
-            request.asset_type,
-        )
-    return await _get_or_create_project_conversation(db, user_id, request.project_id)
-
-
 async def _create_message(
     db: AsyncSession,
     conversation_id: UUID,
@@ -250,7 +203,6 @@ async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
 async def _create_run_from_tasks(
     db: AsyncSession,
     project: Project,
-    conversation: Conversation,
     tasks: list[TaskItem],
     summary: str,
 ) -> UUID:
@@ -268,7 +220,6 @@ async def _create_run_from_tasks(
             target_language=project.language or "en",
             instruction=summary,
             scope="full",
-            target_id=UUID(str(conversation.asset_id)) if conversation.asset_id else None,
             tasks=tasks,
         ),
     )
@@ -1059,6 +1010,7 @@ async def _propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    focus_output_id: UUID | None = None,
     on_delta=None,
     on_reasoning=None,
 ) -> tuple[Message, UUID | None, list[UUID]]:
@@ -1077,10 +1029,10 @@ async def _propose_turn(
         await _build_context(
             db,
             project,
-            conversation,
             recent,
             mentions,
             await latest_pending_question(db, conversation_id),
+            focus_output_id,
         )
         if project
         else {"text": ""}
@@ -1110,30 +1062,9 @@ async def _propose_turn(
     assistant_content: str | None = None
 
     if proposal is None:
-        # LLM failure fallback: asset-scoped → revise_script兜底;
-        # project-scoped → ask back.
-        if conversation.asset_id and project is not None:
-            try:
-                run_id = await _create_run_from_tasks(
-                    db,
-                    project,
-                    conversation,
-                    [
-                        TaskItem(
-                            skill="revise_script",
-                            params={
-                                "target_output_id": str(conversation.asset_id),
-                                "instruction": text,
-                            },
-                        )
-                    ],
-                    summary=text,
-                )
-                assistant_content = _REVISE_FALLBACK_TEXT
-            except (SkillRejected, ValueError):
-                assistant_content = _ASK_BACK_TEXT
-        else:
-            assistant_content = _ASK_BACK_TEXT
+        # LLM failure: ask back — the only failure form (prohibition #7;
+        # the asset-scope revise_script guess retired with the scope itself).
+        assistant_content = _ASK_BACK_TEXT
     elif isinstance(proposal, AskProposal):
         # Ask 落库 (N-18): the structured ask becomes the docked question.
         # The chat surface only has the choice form — task_book questions
@@ -1176,7 +1107,7 @@ async def _propose_turn(
                     repaired = True
                 elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
                     run_id = await _create_run_from_tasks(
-                        db, project, conversation, retry.proposal.tasks, retry.proposal.summary
+                        db, project, retry.proposal.tasks, retry.proposal.summary
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -1228,7 +1159,7 @@ async def _propose_turn(
     else:
         try:
             run_id = await _create_run_from_tasks(
-                db, project, conversation, proposal.tasks, proposal.summary
+                db, project, proposal.tasks, proposal.summary
             )
             assistant_content = proposal.summary
         except ValueError as e:
@@ -1252,7 +1183,7 @@ async def _propose_turn(
                     and retry.proposal.tasks
                 ):
                     run_id = await _create_run_from_tasks(
-                        db, project, conversation, retry.proposal.tasks, retry.proposal.summary
+                        db, project, retry.proposal.tasks, retry.proposal.summary
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -1305,7 +1236,9 @@ async def prepare_chat_turn(
     request: ChatRequest,
 ) -> PreparedTurn:
     """chat() phase 1: settle everything up to the dispatch decision."""
-    conversation = await _get_or_create_conversation(db, user_id, request)
+    conversation = await _get_or_create_project_conversation(
+        db, user_id, request.project_id
+    )
     conversation_id = UUID(str(conversation.id))
 
     user_message = await _create_message(
@@ -1383,12 +1316,12 @@ async def prepare_chat_turn(
         )
     else:
         # Plan path dispatch (intent-surface-unification W1): this endpoint is
-        # the ONLY intent surface. A project-scope turn goes to the plan path
-        # (task-book build / refine / confirm via the PlanAgent) while a task
-        # book is pending or before the project's first run; everything else
-        # goes to the four-state proposer. Asset-scope turns never build task
-        # books.
-        if project is not None and conversation.asset_id is None:
+        # the ONLY intent surface. A turn goes to the plan path (task-book
+        # build / refine / confirm via the PlanAgent) while a task book is
+        # pending or before the project's first run; everything else goes to
+        # the four-state proposer. (Conversations are project-scope only —
+        # ADR-041 D8.)
+        if project is not None:
             if is_pending_task_book(pending):
                 plan_path = True
             elif not isinstance(project.pending_intent, dict):
@@ -1460,6 +1393,7 @@ async def execute_chat_turn(
             request.message,
             request.mentions,
             prepared.history[-6:],
+            focus_output_id=request.focus_output_id,
             on_delta=on_delta,
             on_reasoning=on_reasoning,
         )
@@ -1500,22 +1434,16 @@ async def find_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
-    asset_id: UUID | None = None,
-    asset_type: str | None = None,
 ) -> Conversation | None:
-    """Return an existing chat conversation for the given scope, or None."""
-    query = select(Conversation).where(
-        Conversation.user_id == user_id,
-        Conversation.project_id == project_id,
-    )
-    if asset_id and asset_type:
-        query = query.where(
-            Conversation.asset_id == asset_id,
-            Conversation.asset_type == asset_type,
+    """Return the project's chat conversation, or None. (Conversations are
+    project-scope only — the asset scope is retired, ADR-041 D8.)"""
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.user_id == user_id,
+            Conversation.project_id == project_id,
+            Conversation.asset_id.is_(None),
         )
-    else:
-        query = query.where(Conversation.asset_id.is_(None))
-    result = await db.execute(query)
+    )
     return result.scalar_one_or_none()
 
 

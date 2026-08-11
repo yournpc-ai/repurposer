@@ -1258,18 +1258,25 @@ async def s34_meta_info_navigation_answer(ctx: Ctx) -> None:
     check(await count_runs(pid) == 1, "run count unchanged", await count_runs(pid))
 
 
-async def s35_asset_scope_never_plan_path(ctx: Ctx) -> None:
-    """S35 asset scope 永不进 plan path：单产物会话任何消息都不出 task_book。"""
-    pid = await ctx.new_project("S35 asset scope")
+async def s35_focus_output_injection(ctx: Ctx) -> None:
+    """S35 焦点注入（ADR-041 D8）：focus_output_id 不开新会话、不进 plan path；
+    退役的 asset scope 参数被 422 拒绝（extra=forbid）。"""
+    pid = await ctx.new_project("S35 focus injection")
     output_id = await seed_clip_output(pid)
+    await seed_completed_run(pid)
 
-    turn1 = await ctx.chat(pid, "make it shorter",
-                           asset_id=output_id, asset_type="clip")
+    turn1 = await ctx.chat(pid, "make it shorter", focus_output_id=output_id)
     check(no_task_book_dock(turn1["assistant_message"]),
-          "no task book from an asset-scoped turn", turn1["assistant_message"])
-    res = await ctx.conversation(pid, asset_id=output_id, asset_type="clip")
-    check(res.status_code == 200, "the asset conversation exists", res.status_code)
-    check(res.json().get("asset_id") == output_id, "scoped to the output", res.json())
+          "no task book from a focus turn", turn1["assistant_message"])
+    res = await ctx.conversation(pid)
+    check(res.status_code == 200, "the project conversation exists", res.status_code)
+    check(res.json().get("asset_id") is None,
+          "the focus turn stays in the project conversation", res.json())
+
+    legacy = await ctx.chat_raw(pid, "make it shorter",
+                                asset_id=output_id, asset_type="clip")
+    check(legacy.status_code == 422, "retired asset scope is rejected",
+          legacy.status_code)
 
 
 # ---- Scenarios: checkpoint（seed parked run，零 LLM） ---------------------------
@@ -1825,7 +1832,7 @@ SCENARIOS = {
     "S32": s32_edit_ops_dispatch,
     "S33": s33_progress_question_answer,
     "S34": s34_meta_info_navigation_answer,
-    "S35": s35_asset_scope_never_plan_path,
+    "S35": s35_focus_output_injection,
     # checkpoint
     "S36": s36_checkpoint_three_answer_paths,
     "S37": s37_checkpoint_bail_cascade,

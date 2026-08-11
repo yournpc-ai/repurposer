@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleHelp,
+  Crosshair,
   FileText,
   History,
   Image as ImageIcon,
@@ -326,6 +327,11 @@ interface GenerationOverlayProps {
    * surface; "dock" = the results-phase bottom dock over the canvas. The
    * SAME message machine — only the outer shell differs. */
   initialShell?: "fullscreen" | "dock"
+  /** The canvas's focused product (ADR-041 D8 焦点注入): shown as a chip
+   * above the input and carried on each turn as `focus_output_id` — one
+   * context line server-side, never a second intent entry. */
+  focusOutput?: { id: string; label: string } | null
+  onClearFocus?: () => void
   /** Where a witnessed completion lands (ADR-041 D3): "dock" = the desktop
    * 收官转场 (fullscreen → dock); "navigate" = the mobile legacy hand-off
    * (the page navigates back to the results list). */
@@ -565,6 +571,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   initialReasons,
   initialRunId,
   initialShell = "fullscreen",
+  focusOutput = null,
+  onClearFocus,
   completionMode = "navigate",
   onClose,
   onComplete,
@@ -1450,6 +1458,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           message: text,
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
+          focus_output_id: focusOutput?.id,
           persona_id: opts?.personaId,
           prior_intent: phase === "confirm" && intentReady ? intent : undefined,
           // Consumed only when this turn confirms the book by prose — the
@@ -2498,6 +2507,27 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 : "rounded-lg bg-muted p-2"
             }
           >
+            {/* The canvas's focused product (D8 焦点注入): one chip riding
+                the input group — visible, × purifies; it joins each turn as
+                `focus_output_id` (a context line, never a scope). */}
+            {focusOutput && (
+              <div className="flex px-1 pb-2">
+                <span className="flex min-w-0 items-center gap-1.5 rounded-md bg-card px-2 py-1 text-xs text-muted-foreground">
+                  <Crosshair className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {t("results.dock.focus", { name: focusOutput.label })}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t("results.dock.clearFocus")}
+                    className="shrink-0 transition-colors hover:text-foreground"
+                    onClick={onClearFocus}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              </div>
+            )}
             {/* Staged attachments — the upload lifecycle lives here (never
                 auto-sent): uploading chips shimmer, done chips wait for the
                 send button, error chips offer retry; × removes (and deletes

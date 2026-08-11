@@ -21,10 +21,11 @@ import { clearAuth, getToken } from "@/lib/auth"
 
 export interface ChatTurnBody {
   project_id: string
-  asset_id?: string
-  asset_type?: "clip" | "derivative"
   message: string
   mentions?: { type: string; id: string; label: string }[]
+  /** The canvas's focused product (ADR-041 D8 焦点注入): rides the turn,
+   * never persisted — the server's context gains one "current focus" line. */
+  focus_output_id?: string
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
   attachments?: {

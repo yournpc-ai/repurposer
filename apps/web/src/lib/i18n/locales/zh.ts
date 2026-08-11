@@ -836,6 +836,23 @@ const zh: Resources = {
     dock: {
       history: "历史记录",
       collapse: "收起",
+      focus: "当前焦点：{{name}}",
+      clearFocus: "取消焦点",
+    },
+    // 画布产物卡（ADR-041 D5）：悬停工具条按钮文案。
+    canvas: {
+      preview: "预览",
+      download: "下载",
+      publish: "发布",
+    },
+    // 产物节点的下一步建议行（D5——零 LLM，按产物类型确定性派生）。
+    nextStep: {
+      clip: "想改？在下方说一句——剪辑、字幕或再来个语言版本。",
+      post: "想改？在下方说一句——重写、换语气或换个语言。",
+      quotes: "想改？在下方说一句——换引文或换个样式。",
+      carousel: "想改？在下方说一句——改页面内容或换个语言。",
+      article: "想改？在下方说一句——修订内容或换个语言。",
+      default: "想改？在下方对话里描述即可。",
     },
     stepper: {
       transcribing: "正在转写你的媒体…",
@@ -902,10 +919,6 @@ const zh: Resources = {
       set_caption_text: "修改字幕",
       restore_version: "恢复版本",
     },
-    assetModalTitle: "向 AI 提问：{{asset}}",
-    intro: "告诉我你想怎么改——比如剪短一点、更正式一些，或者翻译成别的语言。",
-    assetPlaceholder: "例如：再短一点、更正式一些",
-    loadingHistory: "正在加载对话...",
     choicePlaceholder: "其他想法…",
     derivativeTypes: {
       post: "社交帖子",
@@ -1055,7 +1068,6 @@ const zh: Resources = {
     publishOnSocial: "发布到社媒",
     share: "分享",
     shareCopied: "链接已复制",
-    remix: "重制",
   },
   login: {
     title: "登录 Repurposer",
@@ -1104,10 +1116,10 @@ const zh: Resources = {
         "AI 从钩子、表达、完整度等维度给每条片段打分，分数越高越值得优先发布——最高分标记为「首发推荐」。",
       videoTitle: "打开片段详情",
       videoDesc:
-        "点击视频区域（播放键除外）即可打开详情——里面有可直接复制的标题、正文和话题标签，发社媒时直接用。",
-      menuTitle: "更多操作",
+        "点击片段卡片即可打开详情——里面有可直接复制的标题、正文和话题标签，发社媒时直接用。",
+      menuTitle: "快捷操作",
       menuDesc:
-        "下载 MP4、发布到社交平台、复制分享链接，或用 AI 重制这条片段——都在这个菜单里。",
+        "鼠标悬停产物卡片即出工具条——预览、下载或发布到社交平台。",
     },
   },
   notifications: {

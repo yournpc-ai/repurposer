@@ -1,11 +1,8 @@
-import { useState } from "react"
-
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { apiPost } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
-import { AssetChatModal } from "./AssetChatModal"
 
 import type { Output } from "@/lib/types"
 
@@ -17,7 +14,6 @@ interface PostCardProps {
 export function PostCard({ output, onRegenerate }: PostCardProps) {
   const content = output.payload.content || ""
   const hashtags = output.payload.hashtags || []
-  const [chatOpen, setChatOpen] = useState(false)
 
   const handleDownload = () => {
     if (!content) return
@@ -51,7 +47,6 @@ export function PostCard({ output, onRegenerate }: PostCardProps) {
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
-          onChat={() => setChatOpen(true)}
         />
       </div>
       <div className="space-y-3">
@@ -67,14 +62,6 @@ export function PostCard({ output, onRegenerate }: PostCardProps) {
         )}
       </div>
 
-      <AssetChatModal
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        asset={output}
-        assetType="derivative"
-        projectId={output.project_id}
-        onUpdated={onRegenerate}
-      />
     </Card>
   )
 }

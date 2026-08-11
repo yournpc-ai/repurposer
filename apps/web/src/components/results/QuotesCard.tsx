@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -6,7 +5,6 @@ import { Card } from "@/components/ui/card"
 import { apiPost, toAbsoluteUrl } from "@/lib/api"
 
 import { AssetActionBar } from "./AssetActionBar"
-import { AssetChatModal } from "./AssetChatModal"
 
 import type { Output } from "@/lib/types"
 
@@ -17,7 +15,6 @@ interface QuotesCardProps {
 
 export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   const { t } = useTranslation()
-  const [chatOpen, setChatOpen] = useState(false)
 
   const quotes = output.payload.quotes || []
   const firstQuote = quotes[0]
@@ -82,18 +79,9 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
         <AssetActionBar
           onDownload={imageUrl ? handleDownload : undefined}
           onRegenerate={handleRegenerate}
-          onChat={() => setChatOpen(true)}
         />
       </div>
 
-      <AssetChatModal
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        asset={output}
-        assetType="derivative"
-        projectId={output.project_id}
-        onUpdated={onRegenerate}
-      />
     </Card>
   )
 }
