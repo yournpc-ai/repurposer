@@ -23,8 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, RenderStatus
 from app.models.tables import Asset, Output, WorkflowStep
+from app.pipeline.graph import runtime_fanout_kinds
 
 logger = structlog.get_logger()
+
+
+def _runtime_fanout_sql() -> str:
+    """Fan-out kinds (render, D2) as a SQL literal list — node-declared
+    (`runtime_fanout`), consumed kernel-wide. Built lazily: this module is
+    imported before the registry door opens, so a module-level constant would
+    freeze an empty set. Values are code constants, never user input."""
+    return ", ".join(f"'{k}'" for k in sorted(runtime_fanout_kinds()))
 
 
 async def claim_pending_asset(db: AsyncSession) -> UUID | None:
@@ -69,7 +78,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
     node_id = (
         await db.execute(
             text(
-                """
+                f"""
                 UPDATE workflow_steps pn
                 SET status = 'running',
                     started_at = now(),
@@ -80,7 +89,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
                     FROM workflow_steps pn2
                     JOIN workflow_runs r ON r.id = pn2.run_id
                     WHERE pn2.status = 'pending'
-                      AND pn2.kind <> 'render'
+                      AND pn2.kind NOT IN ({_runtime_fanout_sql()})
                       AND NOT EXISTS (
                         SELECT 1
                         FROM jsonb_array_elements_text(pn2.inputs) AS up(id)
@@ -136,12 +145,12 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
         .values(render_status=RenderStatus.RENDERING, render_error=None)
         .returning(Output.id)
     )
-    # Mirror the render node (if any) to running.
+    # Mirror the fan-out node (if any) to running.
     await db.execute(
         text(
-            "UPDATE workflow_steps SET status = 'running', started_at = now(), "
+            f"UPDATE workflow_steps SET status = 'running', started_at = now(), "
             "updated_at = now() "
-            "WHERE kind = 'render' AND status = 'pending' "
+            f"WHERE kind IN ({_runtime_fanout_sql()}) AND status = 'pending' "
             "AND spec->>'output_id' = :oid"
         ),
         {"oid": str(output_id)},

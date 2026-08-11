@@ -40,8 +40,7 @@ class Requirement:
     """One birthplace-gate input (create_run ∀-check, AGENT_ARCH §4.2).
 
     ``key`` is the error-message token ("media" / "transcript" / …); the check
-    itself is the node's own knowledge — the retired ``_validate_requires``
-    string matching lives here now.
+    itself is the node's own knowledge (N-35: no parallel kernel-side table).
     """
 
     key: str = ""

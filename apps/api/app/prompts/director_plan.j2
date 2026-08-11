@@ -111,13 +111,12 @@ Please output valid JSON only, with no explanations or markdown code blocks.
 
 Requirements:
 - Emit **exactly one slot per task slot, in the task book's order**: {{ task_book.slots | map(attribute='type') | join(', ') }}.
-- `slot` must be exactly one of: clips, post, quotes, carousel, article.
 - **Explicit task-slot fields are binding**: when a task slot pins `count` or `focus`, copy it verbatim — never override, reinterpret, or "improve" it. When a task slot pins a `language`, that slot's copy (focus, cta, tone_override) is written in that language.
 - **You fill the vacancies**: `argument_ids`, `quote_candidates`, `cta`, and `focus`/`count`/`tone_override` only where the task slot left them open.
 - **Same-type multi slots must be complementary**: when the task book holds several slots of one type (e.g. two posts in different languages), give them distinct angles and distribute `argument_ids` so they build on different key arguments — complementary assets, never twin drafts.
 - The clips slot is a **single aggregate slot** (`count` = the requested clip count); per-clip assignment happens downstream.
 - `argument_ids` must reference ids from the Key Arguments list above. Distribute arguments so the talk's key points are covered across the requested outputs.
 - `quote_candidates` must come from the Quote Pool above.
-- `count`: the task slot's count when given; otherwise quotes → 3, carousel → 6, clips → 5; other types → null.
+- `count`: the task slot's count when given; otherwise {{ count_defaults_text }}; other types → null.
 - Slot copy (focus, cta, tone_override) uses the slot's own language when set, else the task-book language; quotes stay verbatim.
 - Output JSON only, no other content.

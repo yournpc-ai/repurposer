@@ -65,15 +65,19 @@ def _assemble_plan(
     understanding: MaterialUnderstanding,
     context: GenerationContext,
     task_book: dict[str, Any],
+    count_defaults_text: str,
 ):
     """Director step 2 inputs — the self-sufficiency contract: only the
     understanding, the shared context, and the task book; never the raw
-    sources."""
+    sources. ``count_defaults_text`` is the registry-derived per-type count
+    defaults line (N-32), supplied by the caller — the harness never imports
+    the graph layer."""
     return (
         {
             "understanding": understanding.model_dump(),
             "context": context.model_dump(),
             "task_book": task_book,
+            "count_defaults_text": count_defaults_text,
         },
         [],
     )

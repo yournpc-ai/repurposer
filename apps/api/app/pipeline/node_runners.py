@@ -46,6 +46,7 @@ from app.pipeline.graph import (
     estimate_free,
     estimate_mechanical,
     known_output_types,
+    slot_default_counts,
     token_bounds,
 )
 from app.agents.contexts import _generation_context
@@ -420,6 +421,11 @@ class DirectorPlan(NodeBase):
             understanding=understanding,
             context=generation_context,
             task_book=task_book,
+            # Registry-derived (N-32): per-type count defaults ride the prompt
+            # as data, never restated by hand in the template.
+            count_defaults_text=", ".join(
+                f"{t} → {d}" for t, d in slot_default_counts().items()
+            ),
         )
         storyboard.slots = _align_storyboard_slots(storyboard.slots, intent_slots)
         storyboard.coverage = _compute_coverage(storyboard, understanding)

@@ -53,6 +53,11 @@ from app.skills import SKILL_REGISTRY, SkillEntry, validate_task_list
 logger = structlog.get_logger()
 
 GENERATION_NODE_KINDS = generation_node_kinds()
+# Kinds whose terminal state is owned outside the worker topo walk (D2) —
+# node-declared (`runtime_fanout`), consumed here so a new fan-out kind needs
+# zero kernel edits. The SQL fragment is built from code constants only.
+RUNTIME_FANOUT_KINDS = runtime_fanout_kinds()
+_RUNTIME_FANOUT_SQL = ", ".join(f"'{k}'" for k in sorted(RUNTIME_FANOUT_KINDS))
 
 # Targeted-regen scopes: the generic "derivative" plus every copy-writer
 # output type (node-derived — a new writer package is targetable here with
@@ -421,7 +426,7 @@ def derive_context_fields(tasks: list[TaskItem]) -> dict:
     return {"outputs": [s.model_dump(mode="json") for s in slots.values()]}
 
 
-async def _validate_requires(
+async def _validate_node_requires(
     db: AsyncSession, project: Project, entries: list[SkillEntry]
 ) -> None:
     """Birthplace rejection: every input a task list's skills declare must
@@ -519,7 +524,7 @@ async def create_run(
 
     if task.tasks:
         entries = validate_task_list(task.tasks)  # raises SkillRejected
-        await _validate_requires(db, project, entries)
+        await _validate_node_requires(db, project, entries)
 
     # Slot sanity (C3): an out-of-bounds count is real money (count=999
     # quotes = 999 image generations). Post/article carry no count — one
@@ -628,7 +633,7 @@ async def execute_step(node_id: UUID) -> None:
                 with bind_workflow_step(node.id):
                     output_ids = await executor.run(db, run, node, project)
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
-                if node.kind == "render":
+                if NODE_KINDS[node.kind].runtime_fanout:
                     # The render chain owns this node's terminal state (D2):
                     # back to pending so the render-status claim mirror moves it.
                     node.status = "pending"
@@ -800,7 +805,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             for n in nodes
             # waiting counts as active: a checkpoint parked for a human answer
             # must never let the run settle (期 4).
-            if n.status in ("pending", "running", "waiting") and n.kind != "render"
+            if n.status in ("pending", "running", "waiting") and n.kind not in RUNTIME_FANOUT_KINDS
         ]
         if active:
             await db.commit()
@@ -912,14 +917,14 @@ async def finalize_stuck_runs() -> None:
         run_ids = (
             await db.execute(
                 text(
-                    """
+                    f"""
                     SELECT r.id FROM workflow_runs r
                     WHERE r.status = 'RUNNING'
                       AND NOT EXISTS (
                         SELECT 1 FROM workflow_steps pn
                         WHERE pn.run_id = r.id
                           AND pn.status IN ('pending', 'running', 'waiting')
-                          AND pn.kind <> 'render'
+                          AND pn.kind NOT IN ({_RUNTIME_FANOUT_SQL})
                       )
                     """
                 )

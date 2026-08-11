@@ -270,8 +270,8 @@ async def translate_captions(
     """Re-translate the clip's caption track into ``target_language``.
 
     Operates on the persisted ``render_spec``, so the editor saves pending edits
-    first. Stays word-level (see services.caption_translate) and updates the
-    spec's ``target_language`` in place.
+    first. Stays word-level (the captions skill's translation procedure) and
+    updates the spec's ``target_language`` in place.
     """
     output = _require_clip(
         await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
