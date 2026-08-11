@@ -20,7 +20,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 
 | 候选 | 为什么不是 | 正确通道 |
 |---|---|---|
-| 配方 recipe | 发射上下文——点卡这个动作已经说完了一切，句中 chip 是第三遍冗余（overlay 标题与预填文案已各说一遍） | `recipe_id` 随首发消息走（plan-path transport，与 `persona_id` 同座位），服务端注册表播种唯一发生地 |
+| 配方 recipe | 发射上下文——点卡这个动作已经说完了一切，句中 chip 是第三遍冗余（overlay 标题与预填文案已各说一遍） | **配方 = 提示词**（2026-08-11 裁定）：预填模板原文即全部发射载荷，模板点名产出与语言；无 `recipe_id` transport、无服务端播种，plan path 与 composer 完全同径 |
 | 产出类型（clips / post / article…） | 大白话推断已够准；且 `@output` 已被指认族占用（引用已有产物），同词两义禁 | PlanAgent 槽位推断 |
 | 参数（语言 / 数量 / 画幅…） | mention 不是表单控件，预设空间无界 | 预填文案改字（发送前）/ chat 修订（发送后，恒胜） |
 | 人设 persona | 身份是挂载，不是点名 | composer Persona 块 / `persona_id` 载荷 |
@@ -35,7 +35,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 - **双端注册表**：前端 `MENTION_REGISTRY`（picker 候选源 + icon + i18n）+ 服务端解析注册表。新类型 = 双端各一条注册项，禁一次性分支。
 - **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（composer / 生成 overlay 底排 / 产物 ChatModal）；候选源差异走 `MentionContext`（面的数据喂注册表源），禁每面各起 textarea / 自养 picker。
 - **chip 三律**：可见（内联 chip 带 ×）/ 发送即消费 / × 即纯化（无状态跨发送残留）。
-- **服务端解析唯一发生地**：mention 的机械效果（预设播种、指认注入）只在服务端发生；前端永不构建 prior。
+- **服务端解析唯一发生地**：mention 的机械效果（上下文富化、指认注入）只在服务端发生；前端永不构建 prior。
 - **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。
 
 ## 5. @skill 方针（请求族第二成员）

@@ -56,10 +56,9 @@ import { recipeProcessFlow } from "./recipeFlow"
  *
  * Preset visibility: the prompt area IS the visible preset — a plain
  * textarea prefilled with the template. The recipe's identity never enters
- * the sentence: the card click already said everything (MENTIONS §3), and
- * `recipeId` rides the launch as a transport field. The only edit entry
- * stays the prompt text (before send) / chat (after send); chat always
- * wins.
+ * the sentence nor the wire: the template IS the entire launch payload
+ * (2026-08-11 ruling — 配方 = 提示词). The only edit entry stays the
+ * prompt text (before send) / chat (after send); chat always wins.
  */
 /** Input slot type → the Input section's icon (registry-driven, one map). */
 const INPUT_TYPE_ICONS: Record<string, typeof Video> = {
@@ -88,8 +87,8 @@ export function RecipeInspectOverlay({
     INPUT_TYPE_ICONS[card.input_slots[0]?.type ?? ""] ?? FileText
 
   // The draft: the template as plain editable text. The recipe's identity
-  // rides the launch as `recipeId` — no chip row (the card click already
-  // said everything; a third repetition is noise, MENTIONS §3).
+  // stays frontend-local — no chip row, no wire field (the template text
+  // already says everything; a repetition is noise).
   const [prompt, setPrompt] = useState(template)
   const [files, setFiles] = useState<File[]>([])
 
@@ -125,9 +124,9 @@ export function RecipeInspectOverlay({
   // Send = the composer's send, parked here. Nothing to consume onSent — the
   // overlay's draft dies with navigation. Identity rides the default-persona
   // chain server-side (ADR-038) — the overlay carries no persona picker; the
-  // recipe's identity rides as `recipeId` (MENTIONS §3).
+  // recipe's identity stays in this overlay (配方 = 提示词).
   const handleLaunch = () =>
-    launch({ prompt, mentions: [], files, recipeId: card.id })
+    launch({ prompt, mentions: [], files })
 
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video

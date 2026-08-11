@@ -1,6 +1,6 @@
 # recipe-launch-context 实施简报——配方脱离 mention 体系（recipe_id 发射通道）
 
-> Status: ✅ 已落地（2026-08-11 立项，用户拍板：mention 哲学升级——mention 面向"与 AI 交流"，配方不是对 AI 说的话，是发射上下文；同日实施：改键不改行为，harness S5/S10/S11/S15/S22 走 `recipe_id` 通道全绿——S22 期望值随 08-07 注册表语言裁决修正为 zh/fr/es）
+> Status: 🗄 已翻案（2026-08-11，ADR-040 配方 = 提示词）：`recipe_id` transport 与播种块当日退役——配方对 plan agent 不可见是结构病灶（ask 判决当轮无书可 dock，S11 连败），且双份表达可漂移；发射的全部行为载荷 = 预填模板原文，服务端永不见配方身份。本文余下章节均为历史记录（原状态：✅ 已落地 2026-08-11 晨间，mention 哲学升级——配方不是对 AI 说的话，是发射上下文）。
 > 方针母文档：`docs/MENTIONS.md`（§2 两族分类、§3 排除清单）；配方卡架构归 `RECIPES.md`。
 > 排期：PROGRESS 第二周闭环链期间顺做（改动面小、无新表、harness 有回归网）。
 

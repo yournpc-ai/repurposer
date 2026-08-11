@@ -149,8 +149,9 @@ class ChatMention(BaseModel):
 
     The contract and the column (messages.mentions) are the seat; the picker
     UI is the registry-driven composer surface (MENTIONS §4). ``recipe`` is
-    retired (MENTIONS §3 — a recipe is launch context riding ``recipe_id``);
-    the type member stays so historical messages still render their chips.
+    retired (MENTIONS §3 — a recipe is just a prompt: the card's prefilled
+    template IS the entire launch payload); the type member stays so
+    historical messages still render their chips.
     ``workflow_step`` follows the N-15 rename (one concept, one name across
     the stack).
     """
@@ -437,10 +438,6 @@ class ChatRequest(BaseModel):
     # pending intent only when the plan path docks a task book (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
-    # The recipe card's launch rides the first message (MENTIONS §3 — a recipe
-    # is launch context, never a mention): the plan path seeds the preset
-    # server-side (resolve_recipe_launch); unknown/reserved ids 422.
-    recipe_id: str | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
     # the task book by prose (PlanAgent verdict "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.

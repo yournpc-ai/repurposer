@@ -21,9 +21,9 @@ import type { ChatMention } from "@/lib/mentions"
  *
  * Boundaries (unchanged doctrine): the launcher never infers intent, never
  * builds a prior, never runs generation — intent recognition lives in the
- * chat plan path. A recipe launch carries its identity as `recipeId` (the
- * plan-path transport, MENTIONS §3); `resolve_recipe_launch` seeds
- * server-side. An overlay hosting this mechanism is NOT the rejected A-form;
+ * chat plan path. A recipe launch is just its prompt template (2026-08-11
+ * ruling — 配方 = 提示词): the card's identity stays in the frontend.
+ * An overlay hosting this mechanism is NOT the rejected A-form;
  * the A-form is a modal that runs generation itself.
  */
 
@@ -33,9 +33,6 @@ export interface LaunchInput {
   files: File[]
   /** undefined = auto persona. */
   personaId?: string
-  /** The recipe card's launch identity (MENTIONS §3 — launch context, never
-   * a mention); rides the first /chat message as `recipe_id`. */
-  recipeId?: string
   /** Fires when the send begins (spinner on). */
   onStart?: () => void
   /** Fires right before navigating — the sender consumes its own draft
@@ -142,7 +139,6 @@ export function useProjectLaunch() {
                 text,
                 mentions: input.mentions,
                 personaId: input.personaId || undefined,
-                recipeId: input.recipeId,
               },
             } as Record<string, unknown>,
           })

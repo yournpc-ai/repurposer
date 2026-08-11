@@ -670,7 +670,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 5. **修改通道不变**：chat 是唯一修改通道；图面交互白名单 = 点选聚焦 / hover 血缘路径高亮 /（闭环链第 5 周）点节点插 `@workflow_step` mention 接三档重跑。
 
 **Consequences**:
-- 后端增量三处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地，同"任务书预设归服务端"纪律）；`run.context.recipe_id` 穿线（results-workspace D5）。
+- 后端增量两处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地）。
 - DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / run 进度图 / 裁决中的血缘板）；可操作画布永不用户化（ADR-035 第 2 条）不变。
 
 **Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）；简报 `docs/tasks/results-workspace.md`（D2/D6/D7、屏 3、分期与禁令随本条修订）
@@ -756,3 +756,23 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **词汇**：NAMING N-29~N-35 同批落档（班组退役/Agent 归一/actor 退役/outputs 派生/harness 限定/estimate/kind 同名）。
 
 **Related**: ADR-028（RunPlan 持久化——本条是其规范面完成）、ADR-030（outputs 统一——本条使其可扩展）、ADR-033（能力层双注册表）、ADR-025（计量——估价是其计划侧）、NAMING N-29~N-35、AGENT_ARCHITECTURE（四层工程地图重画）、CHAT_ARCH §4/§5
+
+## ADR-040: 配方 = 提示词——`recipe_id` 传输带与服务端播种退役
+
+**Status**: Decided (2026-08-11)
+
+**Context**: recipe-launch-context（同日晨间落地）把配方身份做成 `recipe_id` transport + 服务端播种（`resolve_recipe_launch`），当日剧本回归即暴露结构性病灶：配方对 plan agent 不可见——播种块只能给一个 generate 判决补槽，LLM 判 ask 时当轮无书可 dock（S11 连败复现）。病根是双份表达：配方产出写了两遍（前端 prompt 模板文案 + 注册表 `outputs`/`dub_languages`），可漂移；且极端处播种会静默盖过用户对预填文案的编辑（违背 chat 恒胜）。用户裁定原话（2026-08-11）：**"从配方生成其实只是提示词。"**
+
+**Decision**:
+1. **发射的全部行为载荷 = 预填模板原文**：`ChatRequest.recipe_id`、`resolve_recipe_launch`、plan path 校验块与播种块删除；配方卡发射与 composer 完全同径（建项目 → 上传 → 首条消息），服务端永不见配方身份。
+2. **注册表瘦身不拆除**：`outputs`/`dub_languages` 保留为启动对账自检的**声明形态**（flow ⊆ 编译图，AGENT_ARCH §4.2），不进请求路径；卡面 / 检视 / 示例资产照旧。
+3. **剧本换考法**：S5/S11 改发模板原文（与真实前端逐字节一致）；S22（播种确定性剧本）退役，编号留空不回收。
+4. **后果自担**：任务书形状由 LLM 从模板文案推断（composer 主路同款保证）——dock 可见 + chat 纠偏是产品核心循环，不再设隐藏确定性通道。
+
+**Consequences**:
+- 删除：`ChatRequest.recipe_id` / `resolve_recipe_launch` / service.py 校验块+播种块 / 前端 `recipeId` 链路（useProjectLaunch / GenerationOverlay / chat-stream / 项目页 router state）。
+- 保留：`RECIPE_REGISTRY`（卡面 + flow ⊆ 对账自检）；`ChatMention.type="recipe"` 成员（历史消息 chip 渲染）。
+- 未决带出：results-workspace D5「配方身份贯穿三站」失去 `run.context.recipe_id` 派生源（代码从未落地），排产该线时需重新裁决（模板匹配 / 放弃配方标签）。
+- NAMING 词汇表 `recipe_id` / `resolve_recipe_launch` 两条退役；MENTIONS §3 / RECIPES 裁决⑤+§7.2 / CLAUDE.md composer 契约现在时同步。
+
+**Related**: MENTIONS §3（配方永不是 mention 的母判定）、RECIPES §7.1–7.2、ADR-036（D5 穿线条款随本条失效）、AGENT_ARCH §4.2（对账自检不变）

@@ -1,6 +1,6 @@
 # RECIPES — 配方架构（Home 能力卡 + 兑现管线）
 
-> Status: 📐 设计定稿（Remix = overlay 内发射 + `recipe_id` 发射通道，方针 `docs/MENTIONS.md` §3；R1–R4 分期见 §8）
+> Status: 📐 设计定稿（Remix = overlay 内发射，**配方 = 提示词**——预填模板原文即全部发射载荷，方针 `docs/MENTIONS.md` §3；R1–R4 分期见 §8）
 > **架构迭代叠加（ADR-039）**：技能叙事接管——配方 = 技能组合的预设数据包（配方背后是技能，技能内部 = agent 调 LLM 用 tools）；flow key = node kind，启动自检机械对账（§7.1）；配方卡估价贴（报价 = 图 fold）随第六周报价系统落地。
 > 上游定位：`STRATEGY.md` §5（配方库 = 品味的陈列窗，不做内容流）；排期唯一事实源 `PROGRESS.md`（架构迭代 + 闭环链 + 人设模块同周 08-10~08-14 三线并行收口）
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
@@ -9,7 +9,7 @@
 > ② 首页形态 = composer 下方**能力演示视频卡**（5 张座位：视频配音 dub / 访谈分镜 reframe / 口播 talking-head / 虚拟视频 ai-visuals / 图文视频 image-video，2026-08-10 定格；口播先占位、能力路线后定），源素材用云端 demo talk；
 > ③ 声音的家 = **人设块扩展**（声纹 = 人设属性；stock voices 以"系统音色"身份进人设选择器系统区，不伪装成人设——ADR-037 修订形态），composer 不加 Audio 块；
 > ④ v1 图片视频 = **无声版先行**（照片轮播+字幕+音乐，不需要真人说话，无声纹不阻塞）；声音路径（voice_gen / TTS / stock 兜底 / 换声入口）整体后置声纹线（§4.2，排期见 PROGRESS）
-> ⑤ **Remix 形态 = overlay 内发射 + `recipe_id` 载荷**（对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决；mention 哲学升级后定稿，MENTIONS §3）：点卡 = 检视 overlay 的发射区直接发射——点卡动作本身已是配方身份，句中 chip 是第三遍冗余；配方**永不是 mention**（两族都不落），身份随首发消息走 `recipe_id`（plan-path transport，与 `persona_id` 同座位）。**否全屏模态框自跑生成**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统是**双端注册表架构**（`asset` 为成员），后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点，任务书预设播种唯一发生地 = 服务端解析（`resolve_recipe_launch`）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，排期见 PROGRESS）。
+> ⑤ **Remix 形态 = overlay 内发射，配方 = 提示词**（对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决；mention 哲学升级后定稿，MENTIONS §3；2026-08-11 二次修订）：点卡 = 检视 overlay 的发射区直接发射——点卡动作本身已是配方身份，句中 chip 是第三遍冗余；配方**永不是 mention**（两族都不落）。**发射的全部行为载荷 = 预填模板原文**（模板点名产出与语言）：无 `recipe_id` transport、无服务端播种，任务书由 plan path 从消息文案推断，与 composer 完全同径（chat 恒胜绝对成立——没有隐藏第二通道能盖过用户对预填文案的编辑）。**否全屏模态框自跑生成**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统是**双端注册表架构**（`asset` 为成员），后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点（卡面 / 检视 / 启动对账自检，§7.1）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，排期见 PROGRESS）。
 > ⑥ **功能扩展的唯一门 = SKILL_REGISTRY 注册项**：重试/输入校验/拓扑约束/进度文案/计量提示随登记免费获得；禁为单节点开平行映射表或特判分支（CHAT_ARCH §4 扩展门纪律）。
 
 ## 0. 已核实的现状事实（读码确认）
@@ -151,7 +151,7 @@ Recipe = {
 - **新增配方 = 写一条数据条目**（注册项 + i18n 键 + 烘焙资产），零代码路径——除非该卡演示的能力本身是新的（如分镜的 crop_track）。"扩展配方卡"的全部工作自此统一为 authoring 数据。
 - `inputSlots` 消费者：发射区 Input 小节图标（前端展示，`input_slots[0].type`）与启动自检的输入画像（服务端 `_recipe_adds_stills`，flow ↔ outputs 对账）。
 
-### 7.2 点击链路：overlay 内发射（`recipe_id` 发射通道）
+### 7.2 点击链路：overlay 内发射（配方 = 提示词）
 
 **入口分工**：**composer = 通用 / 多种 / 复杂 / 自定义提示词的组合式需求入口；配方卡 = 预设快捷需求入口。**两者共用同一发射机构与同一 chat 主线，无平行表单。
 
@@ -160,21 +160,22 @@ Recipe = {
      → 发射区 = composer 发送机构挂载（同一发射台的第二个停放位）：
        上传暂存区（主角——素材是配方唯一的空格，Input 小节署名所需素材）
        + promptTemplate 预填 textarea（常显可改，修改唯一入口）
-     → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, persona_id, recipe_id }
+     → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, persona_id }
        （与 composer 发送完全相同的路径；overlay 零推断 / 零 prior / 零生成）
-     → 服务端 plan path resolve_recipe_launch() 预设播种（播种唯一发生地；composer/overlay 永不构建 prior）
+     → 服务端 plan path 与 composer 完全同径——模板原文即全部载荷，
+       任务书从消息文案推断（零播种、零 resolve、配方身份不过线）
      → 三方合并（merge_prior_slots）→ pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
 ```
 
-**配方身份 = `recipe_id` transport**（MENTIONS §3）：不进句子、不出 chip、无跨发送残留——点卡动作本身已说完配方身份（overlay 标题与预填文案各陈述一遍），身份字段只附着首发消息，发射后草稿随导航消亡。
+**配方身份不过线**（MENTIONS §3，2026-08-11 裁定）：不进句子、不出 chip、无 transport 字段、无跨发送残留——发射的全部行为载荷 = 预填模板原文，点卡动作与 overlay 标题已各自陈述身份；发射后草稿随导航消亡。服务端注册表的 `outputs`/`dub_languages` 仅作启动对账自检的**声明形态**（flow ⊆ 编译图，§7.1），不进请求路径。
 
 **修改通道**：预设参数（如 dub 目标语言 zh/fr/es）**永不做选择器控件**（预设空间无界；控件 = A 形态漂移 + prior 旁路）；预设的可见性 = **预填 prompt 文案本身**（模板直接点名产出与语言）+ 示例/流程检视视图——镜像 chips 撤除（与文案重复，且被误读为选择器）；**修改** = 预填文本改字（发送前）/ chat 修订（发送后）——两个时刻一个通道，chat 恒胜。
 
-点卡 = 配方唯一发射入口（composer @ picker 永不出配方项，MENTIONS §3）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的确定性靠**服务端注册表预设播种 + 三方合并**（代码保证），不靠 LLM 从 prompt 重新推断，也不靠 LLM 解释配方。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
+点卡 = 配方唯一发射入口（composer @ picker 永不出配方项，MENTIONS §3）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的形状 = **模板文案点名（用户可见可改）+ plan path 推断 + 三方合并**——与 composer 主路同一份保证；LLM 永不解释配方（配方身份不过线）。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
 
 ### 7.3 布局与素材
 
-- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排五张**（`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`，容器 max-w-6xl），视频**自动播放**（静音循环）；**右上**反色圆形声音开关（hover 浮现，同时只响一张）；**卡下 caption = 标题 + 承诺句**（ElevenCreative 卡片解剖：菜自己解释自己，2026-08-10 定形——hover 动作区退役，Remix 按钮删除；reserved 卡在标题旁挂 Soon pill）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、`ring-foreground/10` hairline、无投影（扁平媒体卡）。
+- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排五张**（`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`，容器 max-w-6xl），视频**自动播放**（静音循环）；**右上**反色圆形声音开关（hover 浮现，同时只响一张）；**卡下 caption = 标题 + 承诺句**（ElevenCreative 卡片解剖：菜自己解释自己，2026-08-10 定形——hover 动作区退役，Remix 按钮删除；reserved 卡在标题旁挂 Soon pill）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、无 ring/border、无投影（媒体内容自身即区分,fill-first 准则）。
 - 预览资源必须**公开可读**（落地页匿名受众）：`apps/web/public/` 或对象存储公开前缀——现有 asset 端点全是登录态，不可用。
 - 素材策展总账：① demo talk 恢复（桶 `demo/` 树，✅ 已核实：`demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲）；② 双人访谈横屏视频（✅ 已策展：`demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，R3 分镜卡源）；③ PPT 大型登台演讲（✅ 已策展：`demo/uploads/xy_2.mp4` 63MB，风格卡/图片视频卡源）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。3–4 张卡复用 1–2 场源演讲。
 
@@ -182,7 +183,7 @@ Recipe = {
 
 | 期 | 内容 | 上卡 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|---|
-| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；交互形态 = overlay 内发射 + `recipe_id` 载荷，MENTIONS §3） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
+| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；交互形态 = overlay 内发射 + 预填模板载荷，MENTIONS §3） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
 | **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（无声版先行，声音路径后置声纹线，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
 | **R3** | 简报 B：分镜 ADR + filmstrip 检测 + `crop_track` + `reframe_clip` | 分镜卡 | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
 | **R4** | Recipe 数据 schema 定义（§7.1）+ dub 落成第一个完整数据实例（示例 prompt / 素材账单 / 静态流程图 / 预览烘焙）+ remix→chat 链路走查补缝（08-07 启动 ~ 08-11，PROGRESS 第 2 周） | —（第四卡座位撤，§4.4） | dub 数据包五字段齐，第 2 周配方检视 overlay 装配所需内容全部就绪 |
@@ -198,20 +199,20 @@ Recipe = {
 2. **每期一份 `docs/tasks/` 简报**，模板对齐既有简报（Context / 已核实事实 / 设计论证 / 改动点 / 命名审计 / 分期验收 / Prohibited Behaviors），依据行引用本文档章节号（如 "RECIPES §3.2"）；上游文档清单见 §11。
 3. **开工前重核 §0 事实**（代码可能已漂移），事实以读码为准。
 4. **运维坑**（已踩过）：改 pipeline 代码必须重启常驻 worker；本机服务调用用 `127.0.0.1` 不用 `localhost`；验证用的手工 run 会被常驻 worker 抢跑，验后清数据。
-5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）/ `recipe_id`（发射 transport）/ `resolve_recipe_launch`（播种函数）。
+5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）。
 
 ## 10. Prohibited Behaviors
 
 1. **禁**未兑现能力的卡可点（点亮纪律修订后：reserved 卡渲染但 Remix 必须置灰/替换为 Soon——承诺永远先于能力）。
-2. **禁**配方承诺靠 LLM 从 prompt 重新推断——必须服务端预设播种 + 三方合并确定性兑现。
+2. **禁**配方承诺的形状来自模板文案之外的隐藏通道（2026-08-11 修订）：发射载荷 = 预填模板原文，任务书 = plan path 从消息文案推断 + 三方合并，与 composer 同一份保证。
 3. **禁**新表——卡片数据硬编码前端，能力扩展全住 JSON 载荷层。
 4. **禁**字幕样式绕过 catalog 加一次性分支；新原语值必须过 libass 映射检查。
 5. **禁** composer 加 Audio 块 / 绕过人设另建声音存储（裁决③）。
 6. **禁**无声纹阻塞出片（裁决④）；禁 ReAct/多步推理（CHAT_ARCH 铁律延伸）；禁绕过 `orchestrator.create_run`。
 7. **禁**卡片预览走登录态 asset 端点（匿名受众必须公开可读）。
 8. **禁**分镜跳过 ADR 直接动工；`reframe_clip` 未过 NAMING §7 不进 registry。
-9. **禁**前端构造任务书预设（裁决⑤）：预设播种唯一发生地 = 服务端配方注册表解析（`resolve_recipe_launch`）；composer/overlay 只发 `recipe_id` 载荷，永不构建 prior。
-10. **禁**配方身份编码进 prompt 文本或句中 chip——唯一通道 = 首发消息的 `recipe_id` transport（MENTIONS §3）；**禁**全屏配方模态框与 DAG 画布外显。
+9. **禁**服务端播种与前端构造任务书预设（裁决⑤，2026-08-11 修订）：配方发射的全部行为载荷 = 预填模板原文；服务端永不见配方身份，composer/overlay 永不构建 prior。
+10. **禁**配方身份编码进 transport 字段或句中 chip——发射载荷只有 prompt 文本（MENTIONS §3）；**禁**全屏配方模态框与 DAG 画布外显。
 11. **禁** mention 类型一次性分支——新 @ 类型 = 双端注册表各一条注册项，立案先过 MENTIONS §3 判定三问。
 
 ## 11. 与其他文档的关系（引导章节）

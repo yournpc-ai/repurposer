@@ -8,22 +8,25 @@ truth for recipe cards.
     prompt          example prompt (i18n: recipes.<id>.promptTemplate)
     example_assets  demo source materials (public demo/ tree URLs)
     example_outputs baked result previews (content-addressed URLs)
-    outputs         preset task slots (server-only substance)
 
 Every consumer reads the same package: the card face, the inspect overlay
-(= the package's renderer, docs/tasks/results-workspace.md D6), the composer
-prefill, and the plan-path seeding. Static registry deployed with code —
-SKILL_REGISTRY 同款纪律 (NAMING §5, N-25): NOT a plugin system, NOT a table.
+(= the package's renderer, docs/tasks/results-workspace.md D6), and the
+composer prefill. Static registry deployed with code — SKILL_REGISTRY 同款
+纪律 (NAMING §5, N-25): NOT a plugin system, NOT a table.
+
+**发射 = 提示词** (2026-08-11 ruling): a recipe launch's ENTIRE behavioral
+payload is the prefilled prompt template — the card's identity never crosses
+the wire (no ``recipe_id`` transport, no server-side seeding; MENTIONS §3).
+``outputs`` / ``dub_languages`` stay server-only as the card's DECLARED
+compile shape — the startup self-check's input (the orchestrator compiles
+this shape and reconciles flow keys ⊆ the compiled kinds, AGENT_ARCH §4.2);
+they never feed a request path.
 
 Visibility is a FIELD-LEVEL property: the public ``GET /api/v1/recipes``
-serves the public projection (base / flow / example_* / input_slots) — the
-preset substance (``outputs`` / ``dub_languages``) never leaves the server,
-and seeding happens exclusively here via ``resolve_recipe_launch`` (the
-recipe's identity rides the first message as a ``recipe_id`` transport,
-never a client-built prior — MENTIONS §3).
+serves the public projection (base / flow / example_* / input_slots).
 
 Drift guard: ``flow`` is curated display data but must truthfully mirror the
-graph its ``outputs`` actually compile to — both live in this file and are
+graph the declared shape compiles to — both live in this file and are
 reviewed together (RECIPES §7.1).
 """
 
@@ -82,17 +85,13 @@ class ExampleOutput(BaseModel):
 
 
 class RecipeEntry(BaseModel):
-    """One registered recipe: a task-book template awaiting material.
+    """One registered recipe: a card awaiting material.
 
-    Merge policy (2026-08-05 ruling — a recipe is a PRESET, never a pin):
-    - ``outputs``: **SEED** — slot types the inference didn't produce are
-      appended so the first book matches the card's shape. Nothing is
-      explicit: count / language / focus / even the slot's existence are all
-      refine-able from the very next turn ("chat 就是在修改 plan，没有什么是
-      定死的").
-    - ``dub_languages``: **DEFAULT** — languages the user named in the
-      (possibly edited) prompt win; the recipe fills only when inference
-      found none.
+    ``outputs`` / ``dub_languages`` are the card's DECLARED compile shape —
+    the startup self-check compiles this shape and reconciles the curated
+    ``flow`` against it (AGENT_ARCH §4.2). They are never a request-path
+    input: a launch's behavioral payload is the prompt template alone
+    (2026-08-11 ruling — 配方 = 提示词).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -110,8 +109,9 @@ class RecipeEntry(BaseModel):
 
 
 class RecipePublic(BaseModel):
-    """The public card catalogue shape (``GET /api/v1/recipes``) — pin
-    substance (outputs / dub_languages) deliberately excluded."""
+    """The public card catalogue shape (``GET /api/v1/recipes``) — the
+    server-internal compile-shape declarations (outputs / dub_languages)
+    are not part of the projection."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -254,25 +254,3 @@ def list_public_recipes() -> list[RecipePublic]:
         )
         for recipe_id, entry in RECIPE_REGISTRY.items()
     ]
-
-
-def resolve_recipe_launch(recipe_id: str | None) -> RecipeEntry | None:
-    """Resolve the recipe a launch carries (preset, not a pin).
-
-    The recipe's identity arrives as the first message's ``recipe_id``
-    transport (MENTIONS §3 — launch context, never a mention). Returns
-    ``None`` when the turn carries no recipe (path identical to a plain
-    composer send). Raises ``ValueError`` on a rejected id — the chat plan
-    path maps it to 422 (fail-fast, before any LLM call):
-
-    - unknown id or a ``reserved`` card (a preset is never deliverable
-      before its capability is real).
-    """
-    if recipe_id is None:
-        return None
-    entry = RECIPE_REGISTRY.get(recipe_id)
-    if entry is None:
-        raise ValueError(f"Unknown recipe: {recipe_id}")
-    if entry.status != "live":
-        raise ValueError(f"Recipe not yet available: {recipe_id}")
-    return entry

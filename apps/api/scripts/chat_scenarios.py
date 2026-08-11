@@ -701,7 +701,7 @@ async def s15_recipe_refine_count(ctx: Ctx) -> None:
     pid = await ctx.new_project("S15 recipe refine count")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
-    turn1 = await ctx.chat(pid, "cut highlight clips from my talk", recipe_id="dub")
+    turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
 
@@ -711,7 +711,7 @@ async def s15_recipe_refine_count(ctx: Ctx) -> None:
     slots = book_slots((await ctx.results(pid)).get("pending_intent"))
     clips = [s for s in slots if s["type"] == "clips"]
     check(clips and clips[0].get("count") == 2,
-          "the chat revision lands on the recipe-seeded clips slot", slots)
+          "the chat revision lands on the first book's clips slot", slots)
 
 
 async def s16_panel_edit_three_way(ctx: Ctx) -> None:
@@ -820,21 +820,27 @@ async def s20_anxious_venting_stays_in_scope(ctx: Ctx) -> None:
 # ---- Scenarios: 配方 ----------------------------------------------------------
 
 
-async def s5_recipe_launch_seed(ctx: Ctx) -> None:
-    """S5 recipe launch（recipe_id 通道）：用户点名语言赢配方默认；unknown/reserved 422。"""
-    pid = await ctx.new_project("S5 recipe launch")
+async def s5_recipe_launch_template_prose(ctx: Ctx) -> None:
+    """S5 配方发射 = 模板原文（2026-08-11 裁定：配方 = 提示词）：dub 模板
+    原样发送 → clips 槽 + zh/fr/es 全提取。"""
+    pid = await ctx.new_project("S5 recipe template launch")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
-    turn1 = await ctx.chat(pid, "dub my clips into Chinese please", recipe_id="dub")
+    # 与真实前端一致：配方卡发射发的就是预填模板原文
+    # （recipes.dub.promptTemplate），无 recipe_id 传输带——模板点名产出
+    # 与三种语言，LLM 提取即"播种"。
+    turn1 = await ctx.chat(
+        pid,
+        "Cut highlight clips from my talk and dub them into Chinese, French "
+        "and Spanish with my voice.",
+    )
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    check((book["intent"].get("dub_languages") or []) == ["zh"],
-          "user-named language wins the recipe default", book["intent"].get("dub_languages"))
-
-    res = await ctx.chat_raw(pid, "again", recipe_id="nope")
-    check(res.status_code == 422, "unknown recipe id → 422", res.status_code)
-    res = await ctx.chat_raw(pid, "again", recipe_id="reframe")
-    check(res.status_code == 422, "reserved recipe → 422", res.status_code)
+    slots = book_slots(book)
+    check(any(s["type"] == "clips" for s in slots),
+          "the template's clips slot lands in the book", slots)
+    check(sorted(book["intent"].get("dub_languages") or []) == ["es", "fr", "zh"],
+          "all three template languages extracted", book["intent"].get("dub_languages"))
 
 
 async def s10_dub_language_classification(ctx: Ctx) -> None:
@@ -845,43 +851,49 @@ async def s10_dub_language_classification(ctx: Ctx) -> None:
     turn1 = await ctx.chat(
         pid,
         "Cut highlight clips from my talk and dub them into Chinese",
-        recipe_id="dub",
     )
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     check((book["intent"].get("dub_languages") or []) == ["zh"],
-          "voice-dub language lands in dub_languages, recipe default stays out",
+          "voice-dub language lands in dub_languages",
           book["intent"].get("dub_languages"))
 
 
-async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
-    """S11 纯文字稿 + dub 配方：Start 422（缺媒体）→ 去 clips 再 Start 成功（dub 被丢弃）。"""
+async def s11_clips_without_media_escape(ctx: Ctx) -> None:
+    """S11 纯文字稿项目：PlanAgent 排除 clips（设计行为）→ 面板手加 clips
+    Start 422（缺媒体）→ 去 clips 再 Start 成功（dub 空转丢弃）。"""
     pid = await ctx.new_project("S11 clips without media")
     await seed_asset(pid, ctx.user_id, AssetType.TRANSCRIPT, "talk.txt")
 
-    turn1 = await ctx.chat(pid, "use this recipe on my talk", recipe_id="dub")
+    # 设计行为（CLAUDE.md composer 契约）：纯文字稿输入 PlanAgent 排除
+    # clips，dock 出文本书。出生地的 422 是它的镜像兜底——用户面板手加
+    # clips 槽是触达它的真实路径（也是 recipe 时代 S11 的考纲，不变）。
+    turn1 = await ctx.chat(pid, "Turn my talk into LinkedIn posts, quote cards and an article.")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     slots = book_slots(book)
-    check(any(s["type"] == "clips" for s in slots),
-          "the recipe seed keeps the clips slot (the card's shape)", slots)
-    check("clips_without_media" in (book.get("reasons") or []),
-          "the no-media warning rides the dock", book.get("reasons"))
+    check(not any(s["type"] == "clips" for s in slots),
+          "the PlanAgent excludes clips on a text-only project", slots)
     qid = turn1["assistant_message"]["id"]
 
-    res = await ctx.answer(qid, {"kind": "start"})
-    check(res.status_code == 422, "Start without media is rejected", res.status_code)
+    # The panel hand edit: add the clips slot (+ a dub language) → Start →
+    # the birthplace mirror 422s.
+    edited = dict(book["intent"])
+    edited["outputs"] = [*slots, {"type": "clips"}]
+    edited["dub_languages"] = ["zh"]
+    res = await ctx.answer(qid, {"kind": "start", "intent": edited})
+    check(res.status_code == 422, "Start with clips but no media is rejected", res.status_code)
     check((await ctx.results(pid)).get("pending_intent") is not None,
           "the book survives the 422 (dock intact)")
 
     # The escape the 422 message names: deselect clips in the panel, Start
-    # again. The recipe-pinned dub languages must not cause a second 422 —
-    # they drop at the run birthplace (vacuous without clips).
-    edited = dict(book["intent"])
-    edited["outputs"] = [s for s in slots if s["type"] != "clips"]
-    res2 = await ctx.answer(qid, {"kind": "start", "intent": edited})
+    # again. The hand-added dub language must not cause a second 422 —
+    # it drops at the run birthplace (vacuous without clips).
+    edited2 = dict(book["intent"])
+    edited2["dub_languages"] = ["zh"]
+    res2 = await ctx.answer(qid, {"kind": "start", "intent": edited2})
     check(res2.status_code == 200, "re-Start without clips succeeds", res2.text)
     check(res2.json()["answered_question"].get("workflow_run_id"),
           "a run was born", res2.json())
@@ -892,25 +904,8 @@ async def s11_recipe_clips_without_media_escape(ctx: Ctx) -> None:
           "vacuous dub languages dropped at the birthplace", run_ctx.get("dub_languages"))
 
 
-async def s22_hesitant_behind_recipe_launch(ctx: Ctx) -> None:
-    """S22 迷失点卡（配方×迷失）：犹豫措辞不破 recipe_id 播种——照样播种 dock，默认语言填齐。"""
-    pid = await ctx.new_project("S22 hesitant recipe launch")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
-
-    # 配方卡就是迷失用户的答案——犹豫不构成拒绝。播种是确定性的（recipe_id
-    # 直查注册表）；用户没点名语言时配方默认填齐（S5 验"点名覆盖"，这里验
-    # "没点名填默认"）。
-    turn1 = await ctx.chat(pid, "朋友推荐我点这张卡，但我不太懂这些……就按这张卡帮我做吧？",
-                           recipe_id="dub")
-    check(is_task_book_dock(turn1["assistant_message"]),
-          "a hesitant mention still docks the seeded book", turn1["assistant_message"])
-    book = await pending_book(ctx, pid)
-    slots = book_slots(book)
-    check(any(s["type"] == "clips" for s in slots),
-          "the recipe seed keeps the clips slot", slots)
-    check(sorted(((book or {}).get("intent") or {}).get("dub_languages") or []) == ["es", "fr", "zh"],
-          "unnamed languages fill from the recipe default",
-          ((book or {}).get("intent") or {}).get("dub_languages"))
+# S22（迷失点卡：犹豫措辞不破播种）retired（2026-08-11）：播种确定性剧本随
+# recipe_id 传输带一起退役——配方发射 = 模板原文，覆盖由 S5 承担。
 
 
 # ---- Scenarios: 素材 ----------------------------------------------------------
@@ -1807,10 +1802,10 @@ SCENARIOS = {
     "S8": s8_empty_project_visibility,
     "S20": s20_anxious_venting_stays_in_scope,
     # 配方
-    "S5": s5_recipe_launch_seed,
+    "S5": s5_recipe_launch_template_prose,
     "S10": s10_dub_language_classification,
-    "S11": s11_recipe_clips_without_media_escape,
-    "S22": s22_hesitant_behind_recipe_launch,
+    "S11": s11_clips_without_media_escape,
+    # S22 retired（2026-08-11，随 recipe_id 传输带），编号留空不回收。
     # 素材
     "S12": s12_declared_material_promotes,
     "S13": s13_no_material_asks,

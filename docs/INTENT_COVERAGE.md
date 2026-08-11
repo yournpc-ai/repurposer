@@ -73,7 +73,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | C 撤销自己上次修订 | 无 chat 命令（重说一遍反向修订 = 新修订）；面板上旧版本 chip 可展开只读快照并一键恢复（2026-08-05 版本条） | ✅（UI 恢复路径） |
 | E/T/M/S | /chat plan path → LLM 折算成任务书修订（如"配德语"→ dub_languages）或 answer | 🚧（M 类改品牌/说话人靠 answer 引导；chat 相位见 §3.3 M 行） |
 | 手编面板后 Start | dock Start → answer kind=start（edited intent 优先于 stored） | ✅ |
-| recipe 发射（点配方卡） | /chat plan path → `recipe_id` 载荷 → resolve_recipe_launch 服务端预设播种（补缺失槽位类型 + dub 默认；LLM 前 fail-fast 422） | ✅（S5） |
+| recipe 发射（点配方卡） | /chat plan path——发射载荷 = 预填模板原文（配方 = 提示词，ADR-040），任务书从消息文案推断，与 composer 完全同径 | ✅（S5） |
 
 ### 3.2 运行相位（run 在跑）
 

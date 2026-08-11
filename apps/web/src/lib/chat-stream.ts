@@ -39,10 +39,6 @@ export interface ChatTurnBody {
    * project (ADR-038 — the single identity payload; the skin follows the
    * persona). */
   persona_id?: string
-  /** A recipe card's launch identity, riding the first message (MENTIONS §3
-   * — launch context, never a mention; the plan path seeds the preset
-   * server-side, unknown/reserved ids 422). */
-  recipe_id?: string
   prior_intent?: unknown
   autonomy?: string
 }

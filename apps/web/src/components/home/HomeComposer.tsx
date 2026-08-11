@@ -162,9 +162,8 @@ export function HomeComposer({
   // The send mechanism is the shared `useProjectLaunch` (2026-08-08, D6 二次
   // 修订): composer and the recipe overlay's launch zone ride the identical
   // path (create project → upload → navigate → first /chat message). A
-  // recipe launch is seeded server-side in the plan path
-  // (resolve_recipe_launch, fed by the `recipe_id` transport) — the composer
-  // never builds a prior (MENTIONS §3).
+  // recipe launch is just its prompt template (配方 = 提示词, 2026-08-11) —
+  // the composer never builds a prior (MENTIONS §3).
   const handleGenerate = () =>
     launch({
       prompt,

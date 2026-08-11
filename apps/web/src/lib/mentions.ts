@@ -8,8 +8,8 @@
  * Members: `asset` (request family — context enrichment, the effect lives
  * server-side in `_build_context`) and `output` (reference family — the
  * pinned id resolves `target_output_id` deterministically server-side).
- * `recipe` is retired (MENTIONS §3 — a recipe is launch context riding the
- * `recipe_id` transport, never a mention); its type member stays on
+ * `recipe` is retired (MENTIONS §3 — a recipe is just a prompt: the card's
+ * prefilled template IS the launch payload); its type member stays on
  * `ChatMention` so historical messages still render their chips.
  *
  * Surfaces: one MentionEditor family serves the composer AND the persistent

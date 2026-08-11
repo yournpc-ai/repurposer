@@ -78,7 +78,6 @@ from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
-from app.pipeline.recipes import resolve_recipe_launch
 from app.skills import SkillRejected, dispatchable_skills
 
 _ASK_BACK_TEXT = (
@@ -841,8 +840,8 @@ async def _plan_turn(
     prose confirmation) or before the project's first run (first turn / after
     a bail). The PlanAgent's three-action verdict dispatches:
 
-    - generate → three-way merge (panel prior / recipe seed) + reasons + dock
-      the (refined) task book
+    - generate → three-way merge (panel prior / fresh inference) + reasons +
+      dock the (refined) task book
     - answer   → a plain assistant message; the stored book stays untouched
     - start    → the docked task book is answered kind=start (G-1 path: the
                  run comes from the only birthplace, answer_question)
@@ -890,13 +889,6 @@ async def _plan_turn(
     )
     first_file = next((a for a in assets if a.file_url), None)
     filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
-
-    # Recipe launch validation (fail-fast, BEFORE inference): a rejected id
-    # (reserved / unknown) must not burn an intent call.
-    try:
-        recipe = resolve_recipe_launch(request.recipe_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # plan_agent never raises MiniMaxError — its declared fallback (Agent
     # funnel 的声明兜底) is the default task book (dockable, editable,
@@ -982,22 +974,6 @@ async def _plan_turn(
         elif not intent.dub_languages or intent.dub_languages == stored_dub:
             intent.dub_languages = list(prior.dub_languages)
         # else: both moved — chat wins, the inference stands.
-
-    # Recipe launch seed: a recipe is a PRESET, not a pin — "仅仅是第一版的
-    # 东西". Resolved server-side (the recipe_id transport — MENTIONS §3) and
-    # applied AFTER the panel prior: slot types the inference didn't produce
-    # are appended so the first book matches the card's shape; dub_languages
-    # fills only when the prompt named none. Nothing is explicit — every
-    # field (and each slot's existence) is refine-able from the very next
-    # turn. The LLM never interprets the recipe (validated pre-inference).
-    if recipe is not None:
-        seeded = {s.type for s in intent.outputs}
-        for slot in recipe.outputs:
-            if slot.type not in seeded:
-                intent.outputs.append(slot.model_copy())
-        if not intent.dub_languages:
-            intent.dub_languages = list(recipe.dub_languages)
-        intent.outputs_explicit = True
 
     clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
     reasons: list[str] = []

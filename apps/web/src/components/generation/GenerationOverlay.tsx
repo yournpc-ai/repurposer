@@ -311,9 +311,6 @@ interface GenerationOverlayProps {
     text: string
     mentions: { type: string; id: string; label: string }[]
     personaId?: string
-    /** A recipe card's launch identity (MENTIONS §3) — rides the first
-     * /chat message as `recipe_id`; the plan path seeds server-side. */
-    recipeId?: string
   } | null
   initialIntent?: InferredIntent | null
   initialNeedsClarification?: boolean
@@ -1276,8 +1273,6 @@ export function GenerationOverlay({
     opts?: {
       mentions?: { type: string; id: string; label: string }[]
       personaId?: string
-      /** A recipe launch's identity — first-message transport only. */
-      recipeId?: string
       /** Files staged in the input group, sent with this turn — persisted on
        * the user message row so a refresh re-renders the chips. */
       attachments?: {
@@ -1345,7 +1340,6 @@ export function GenerationOverlay({
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
           persona_id: opts?.personaId,
-          recipe_id: opts?.recipeId,
           prior_intent: phase === "confirm" && intentReady ? intent : undefined,
           // Consumed only when this turn confirms the book by prose — the
           // dock's tier must survive a typed "looks good, start it".
@@ -1505,7 +1499,6 @@ export function GenerationOverlay({
       await sendChat(firstMessage.text, {
         mentions: firstMessage.mentions,
         personaId: firstMessage.personaId,
-        recipeId: firstMessage.recipeId,
       })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -7,7 +7,7 @@
 > 关键形态事实：
 > - 拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达（AGENT_ARCH §4  NodeBase）。
 > - `synthesize_talk_video` 已登记未实装（runner=None 座位，不可派发；归 R2，见 RECIPES §8）。
-> - 提及系统 = 双端注册表架构（前端 `MENTION_REGISTRY` + 服务端解析注册表，方针 MENTIONS §4）；配方不是 mention——任务书预设播种唯一发生地 = 服务端 `resolve_recipe_launch`（`recipe_id` 首发载荷，存在性填充，chat 修订永远赢）。
+> - 提及系统 = 双端注册表架构（前端 `MENTION_REGISTRY` + 服务端解析注册表，方针 MENTIONS §4）；配方不是 mention——配方 = 提示词（ADR-040）：发射的全部行为载荷 = 预填模板原文，无 `recipe_id` transport、无服务端播种，plan path 与 composer 完全同径（chat 修订永远赢）。
 > - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；processing 项目开 `?overlay=run` attach 模式）；step 状态枚举含 `waiting`（HITL/suspend-resume，§8.5）。
 
 ## 1. 定位与三条原则
