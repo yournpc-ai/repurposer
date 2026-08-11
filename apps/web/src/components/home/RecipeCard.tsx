@@ -45,7 +45,10 @@ export function RecipeCard({
       tabIndex={live ? 0 : undefined}
       onClick={() => live && onInspect(card)}
       onKeyDown={(e) => {
-        if (live && (e.key === "Enter" || e.key === " ")) onInspect(card)
+        if (live && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault() // Space would otherwise scroll the page
+          onInspect(card)
+        }
       }}
       className={`group flex flex-col gap-2.5 outline-none ${live ? "cursor-pointer" : ""}`}
     >

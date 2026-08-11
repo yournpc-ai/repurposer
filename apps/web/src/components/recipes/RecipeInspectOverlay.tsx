@@ -255,18 +255,26 @@ export function RecipeInspectOverlay({
                   {t("recipes.inspect.promptLabel")}
                 </p>
                 <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
-                  {mentions.map((m) => (
-                    <MentionChip
-                      key={`${m.type}:${m.id}`}
-                      mention={m}
-                      onRemove={() => setMentions([])}
-                    />
-                  ))}
+                  {/* The chip row needs its own flex-wrap container — a bare
+                      chip as a direct flex-col child stretches full-width
+                      (cross-axis), reading as a bar instead of a chip. */}
+                  {mentions.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {mentions.map((m) => (
+                        <MentionChip
+                          key={`${m.type}:${m.id}`}
+                          mention={m}
+                          onRemove={() => setMentions([])}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={launching}
-                    className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none"
+                    placeholder={t("home.pastePlaceholder")}
+                    className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                   />
                 </div>
               </div>

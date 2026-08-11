@@ -49,7 +49,9 @@ function ViewportController({
       const el = wrapperRef.current
       if (!el || !el.clientWidth || !el.clientHeight) return
       if (rf.getNodes().length === 0) return
-      void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.15, duration })
+      // padding 0.2 ≈ 9% per side (xyflow's 1/(1+p) formula) — clears the
+      // overlay's floating tab bar (top-5 + h-9 ≈ 56px).
+      void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.2, duration })
     },
     [rf, wrapperRef],
   )
@@ -57,10 +59,16 @@ function ViewportController({
   useEffect(() => {
     const first = prevCountRef.current === null
     prevCountRef.current = count
-    const raf = requestAnimationFrame(() =>
-      requestAnimationFrame(() => fit(first ? 0 : 300)),
-    )
-    return () => cancelAnimationFrame(raf)
+    // Double rAF (after paint + measurement); BOTH frames are tracked so a
+    // mid-flight unmount never leaves a dangling callback.
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => fit(first ? 0 : 300))
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
   }, [count, fit])
 
   useEffect(() => {
