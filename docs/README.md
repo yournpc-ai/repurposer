@@ -32,6 +32,7 @@
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：task list 契约 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现（2026-07-26：chat UI + RunCard + edit ops 接线；plan 级节点重跑 📋） | 动 chat / registry / 进度推送前 |
 | `INTENT_COVERAGE.md` | 意图层覆盖全景：单一表面（/chat）× 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建；**2026-08-04 意图层单面化**——/intent 退役、任务书并入 plan path，简报 `tasks/intent-surface-unification.md`） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
+| `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R4 分期 | 🚧 R1/R2 已落地（caption catalog + stacking + dub 接线 + 卡片层 + align_stills 无声图片视频；R3–R4 待施工）；Remix = mention chip（简报 `tasks/recipe-mention.md`） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
