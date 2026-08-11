@@ -17,12 +17,12 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
+from app.pipeline.graph import media_missing
 from app.tools.extraction import extract_text, render_pdf_pages_and_upload
 from app.tools.storage import download_to_temp, get_project_output_dir
 
@@ -48,27 +48,11 @@ Processor = Callable[[Asset], Awaitable[ProcessResult]]
 async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     """Whether the project has a renderable media source (file-backed).
 
-    Clips need video / audio / image / slides bytes to render. The run
-    birthplace gates on this predicate (``create_run``); the chat plan path
-    also reads it to surface the clips-needs-media clarification reason.
+    The predicate's single home is the MEDIA birthplace requirement
+    (``graph.media_missing``); this helper keeps the project_id-shaped call
+    the chat plan path uses for the clips-needs-media clarification reason.
     """
-    result = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project_id,
-            Asset.type.in_(
-                [
-                    AssetType.VIDEO,
-                    AssetType.AUDIO,
-                    AssetType.IMAGE,
-                    AssetType.SLIDES,
-                ]
-            ),
-            Asset.file_url.isnot(None),
-        )
-        .limit(1)
-    )
-    return result.scalar_one_or_none() is not None
+    return not await media_missing(db, project_id)
 
 
 async def _extract_text_processor(asset: Asset) -> ProcessResult:

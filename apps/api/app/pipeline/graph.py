@@ -53,18 +53,25 @@ class _MediaRequirement(Requirement):
     key = "media"
 
     async def missing(self, db: AsyncSession, project: Project) -> bool:
-        result = await db.execute(
-            select(Asset.id)
-            .where(
-                Asset.project_id == project.id,
-                Asset.type.in_(
-                    [AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES]
-                ),
-                Asset.file_url.isnot(None),
-            )
-            .limit(1)
+        return await media_missing(db, project.id)
+
+
+async def media_missing(db: AsyncSession, project_id) -> bool:
+    """The single renderable-media predicate (VIDEO / AUDIO / IMAGE / SLIDES
+    with bytes) — every consumer (birthplace ∀-check, chat plan-path
+    clarification reason) reads this one definition."""
+    result = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project_id,
+            Asset.type.in_(
+                [AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES]
+            ),
+            Asset.file_url.isnot(None),
         )
-        return result.scalar_one_or_none() is None
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is None
 
 
 class _TranscriptRequirement(Requirement):
@@ -86,7 +93,29 @@ class _TranscriptRequirement(Requirement):
             )
             .limit(1)
         )
-        return result.scalar_one_or_none() is None
+        if result.scalar_one_or_none() is not None:
+            return False
+        # "Transcript" means words to work with — and words-in-waiting count:
+        # a text-typed asset with bytes yields them at extraction, ASR-able
+        # media yields them at preprocess (the claim gate holds the run until
+        # asset processing finishes). Photos alone do NOT qualify.
+        derivable = await db.execute(
+            select(Asset.id)
+            .where(
+                Asset.project_id == project.id,
+                Asset.type.in_(
+                    [
+                        AssetType.TRANSCRIPT,
+                        AssetType.PAST_MATERIAL,
+                        AssetType.VIDEO,
+                        AssetType.AUDIO,
+                    ]
+                ),
+                Asset.file_url.isnot(None),
+            )
+            .limit(1)
+        )
+        return derivable.scalar_one_or_none() is None
 
 
 class _PersonaPhotoRequirement(Requirement):

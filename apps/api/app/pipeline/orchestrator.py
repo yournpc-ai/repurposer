@@ -32,10 +32,10 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step
-from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError
 from app.pipeline.graph import (
+    MEDIA,
     NODE_KINDS,
     Requirement,
     generation_node_kinds,
@@ -426,23 +426,39 @@ def derive_context_fields(tasks: list[TaskItem]) -> dict:
     return {"outputs": [s.model_dump(mode="json") for s in slots.values()]}
 
 
-async def _validate_node_requires(
-    db: AsyncSession, project: Project, entries: list[SkillEntry]
+async def _check_birthplace_requires(
+    db: AsyncSession, project: Project, task: "TaskSpec"
 ) -> None:
-    """Birthplace rejection: every input a task list's skills declare must
-    exist on the project before the run is created (CHAT_ARCH §5). The
-    requirements live on the node classes (AGENT_ARCH §4.2: 校验 = ∀requires)."""
+    """Birthplace ∀-check (AGENT_ARCH §4.2: 校验 = ∀requires) — one driver,
+    two declaration sources, both node-owned: a task list carries its
+    skills' ``requires`` (mode②); a task book's slots carry their producing
+    nodes' ``requires`` (mode①, derived via ``node_for_output`` — the clips
+    gate is SelectClips' own declaration, not a kernel special case).
+    Raises ValueError; request handlers translate to 422."""
     needs: dict[str, Requirement] = {}
-    for entry in entries:
-        for req in NODE_KINDS[entry.name].requires:
-            needs[req.key] = req
+    if task.tasks:
+        entries = validate_task_list(task.tasks)  # raises SkillRejected
+        for entry in entries:
+            for req in NODE_KINDS[entry.name].requires:
+                needs.setdefault(req.key, req)
+    for slot in task.outputs:
+        producer = node_for_output(slot.type)
+        if producer is not None:
+            for req in producer.requires:
+                needs.setdefault(req.key, req)
+    has_clips_slot = any(s.type == "clips" for s in task.outputs)
     for key in sorted(needs):
         if await needs[key].missing(db, project):
+            # The clips-media 422 keeps its own copy: it names the way out
+            # ("deselect clips") in task-book terms, not skill terms.
+            if key == MEDIA.key and has_clips_slot:
+                raise ValueError(CLIPS_NEED_MEDIA)
             raise ValueError(f"Missing required input: {key}")
 
 
-# Birthplace rejection message for the clips-media gate (A1: the gate lives
-# here, not at the call sites — every run-creation path gets it for free).
+# Birthplace rejection copy for the clips-media gate — fired by the ∀-check
+# when a clips slot's MEDIA requirement fails (the knowledge is the node's;
+# only this user-facing way-out copy lives here).
 CLIPS_NEED_MEDIA = (
     "Clips need a video, audio, or image source. Upload one or deselect clips."
 )
@@ -503,11 +519,11 @@ async def create_run(
 ) -> WorkflowRun:
     """Create a run and materialize its plan graph. THE ONLY WorkflowRun birthplace.
 
-    Every entry constraint rejects here, once — targeted-scope validity,
-    mode② skill required inputs, and the clips-media gate — so the entry
-    points (/generate, the task_book start answer, chat dispatch) only
-    assemble the TaskSpec. Raises ValueError; request handlers translate to
-    422, chat dispatch degrades to an ask-back.
+    Every entry constraint rejects here, once — targeted-scope validity and
+    the birthplace ∀-check (task-list skills' and book slots' requires, all
+    node-declared) — so the entry points (/generate, the task_book start
+    answer, chat dispatch) only assemble the TaskSpec. Raises ValueError;
+    request handlers translate to 422, chat dispatch degrades to an ask-back.
 
     Flush-only — the caller commits at the request boundary, so the run, the
     answer that started it, and the project state land in ONE transaction
@@ -522,9 +538,11 @@ async def create_run(
             raise ValueError(f"Target output type {target.type} is not regenerable")
         target_type = target.type
 
-    if task.tasks:
-        entries = validate_task_list(task.tasks)  # raises SkillRejected
-        await _validate_node_requires(db, project, entries)
+    # One ∀-check for every birth constraint (AGENT_ARCH §4.2) — task-list
+    # skills' requires (mode②) and book slots' producing nodes' requires
+    # (mode①), all node-declared. Unconditional: targeted re-renders read
+    # the same source media, so no scope is exempt.
+    await _check_birthplace_requires(db, project, task)
 
     # Slot sanity (C3): an out-of-bounds count is real money (count=999
     # quotes = 999 image generations). Post/article carry no count — one
@@ -537,14 +555,6 @@ async def create_run(
                 f"{slot.type} count must be between {limits[0]} and {limits[1]} "
                 f"(got {slot.count})"
             )
-
-    # Clips need a renderable media source — reject at birth instead of
-    # letting the run produce unrenderable clips. Unconditional: targeted
-    # re-renders read the same source media, so no scope is exempt.
-    if any(s.type == "clips" for s in task.outputs) and not await has_renderable_media(
-        db, project.id
-    ):
-        raise ValueError(CLIPS_NEED_MEDIA)
 
     # Vacuous dubs drop at the birthplace (2026-08-04): dub_languages only act
     # on clips, so a book without a clips slot can't honor them. The scenario
