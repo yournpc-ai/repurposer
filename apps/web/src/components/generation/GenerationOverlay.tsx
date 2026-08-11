@@ -11,7 +11,7 @@
  * chat-loop turns itself.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef, useImperativeHandle } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -41,7 +41,9 @@ import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamChat } from "@/lib/chat-stream"
 import { createTypewriter } from "@/lib/typewriter"
+import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
+import { cn } from "@/lib/utils"
 import {
   assetTypeKind,
   outputMentionLabel,
@@ -320,8 +322,25 @@ interface GenerationOverlayProps {
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
+  /** The shell at mount (ADR-041 D4): "fullscreen" = the planning/progress
+   * surface; "dock" = the results-phase bottom dock over the canvas. The
+   * SAME message machine — only the outer shell differs. */
+  initialShell?: "fullscreen" | "dock"
+  /** Where a witnessed completion lands (ADR-041 D3): "dock" = the desktop
+   * 收官转场 (fullscreen → dock); "navigate" = the mobile legacy hand-off
+   * (the page navigates back to the results list). */
+  completionMode?: "dock" | "navigate"
   onClose: () => void
-  onComplete: () => void
+  /** The run reached a terminal-success state while this overlay was
+   * watching. Awaited on the dock-capable path: the page refetches and
+   * mounts the (choreographed) canvas BEFORE the collapse starts. */
+  onComplete: (runId: string | null) => void | Promise<void>
+}
+
+/** Dock controls the page can trigger (D4: 点画布收回 — a canvas pointer
+ * down collapses the history drawer back to the summary card). */
+export interface GenerationOverlayHandle {
+  collapseDrawer: () => void
 }
 
 function StepMarker({
@@ -537,7 +556,7 @@ function PlanVersionChip({
   )
 }
 
-export function GenerationOverlay({
+export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationOverlayProps>(function GenerationOverlay({
   projectId,
   prompt,
   firstMessage,
@@ -545,10 +564,33 @@ export function GenerationOverlay({
   initialNeedsClarification = true,
   initialReasons,
   initialRunId,
+  initialShell = "fullscreen",
+  completionMode = "navigate",
   onClose,
   onComplete,
-}: GenerationOverlayProps) {
+}, ref) {
   const { t } = useTranslation()
+
+  // Shell state machine (ADR-041 D3/D4): fullscreen (planning / progress) →
+  // collapsing (收官转场: backdrop fades + the message area retracts upward,
+  // the input group never moves) → dock (results-phase bottom dock over the
+  // canvas). Mount-time shell comes from the page's run data; the only
+  // post-mount transition is the witnessed completion below.
+  type Shell = "fullscreen" | "collapsing" | "dock"
+  const [shell, setShell] = useState<Shell>(
+    initialShell === "dock" ? "dock" : "fullscreen"
+  )
+  /** Dock view: summary = input group + latest agent message card (default);
+   * drawer = full history展开; collapsed = slim history pill only. Agent
+   * speech always forces the summary back up (prohibition #6). */
+  const [dockView, setDockView] = useState<"summary" | "drawer" | "collapsed">(
+    "summary"
+  )
+  const reducedMotion = useReducedMotion()
+  useImperativeHandle(ref, () => ({
+    collapseDrawer: () =>
+      setDockView((v) => (v === "drawer" ? "summary" : v)),
+  }))
 
   const [phase, setPhase] = useState<Phase>(
     initialRunId ? "running" : initialIntent ? "confirm" : "chat"
@@ -654,6 +696,16 @@ export function GenerationOverlay({
   onCompleteRef.current = onComplete
 
   const { steps, status, terminal, summary } = useRunEvents(runId)
+  // Ref mirror: sendChat's async continuation must read the live terminal
+  // state, not a stale closure.
+  const terminalRef = useRef(terminal)
+  useEffect(() => {
+    terminalRef.current = terminal
+  }, [terminal])
+  // Dock-summary priority: the run's terminal aggregate is the收官摘要
+  // until a chat turn lands AFTER it (set in sendChat, reset on each fresh
+  // terminal) — the newer agent line always wins.
+  const postTerminalReplyRef = useRef(false)
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
@@ -912,18 +964,68 @@ export function GenerationOverlay({
     }
   }, [projectId])
 
-  // Terminal: success hands off to the results page; failure stays put so
-  // the step list shows what broke (the results page carries the retry).
+  // Witnessed-run tracking (declared BEFORE the terminal effect so a single
+  // SSE commit settles it first): only a run seen live (pending/running)
+  // may play the收官转场. A historical run arrives terminal in the first
+  // snapshot — straight to the dock, never a replay (prohibition #5).
+  const seenLiveRef = useRef(false)
+  useEffect(() => {
+    if (status === "pending" || status === "running") seenLiveRef.current = true
+  }, [status])
+
+  // Terminal: failure stays put so the step list shows what broke; success
+  // either plays the collapse into the dock (desktop, witnessed) or keeps
+  // the legacy hand-off (mobile navigates back to the results list).
   useEffect(() => {
     if (!terminal) return
     if (status === "failed") {
       toast.error(t("generationOverlay.failed"))
       return
     }
-    toast.success(t("generationOverlay.completed"))
-    onCompleteRef.current()
+    if (!seenLiveRef.current) {
+      // Rehydrated history (refresh / direct entry / another device): the
+      // dock appears instantly — no toast, no replay.
+      if (completionMode === "dock") setShell("dock")
+      return
+    }
+    if (completionMode === "navigate") {
+      toast.success(t("generationOverlay.completed"))
+      onCompleteRef.current(runIdRef.current)
+      return
+    }
+    void (async () => {
+      // A fresh terminal resets the dock-summary priority: the new run's
+      // aggregate is the latest agent line until a chat reply supersedes it.
+      postTerminalReplyRef.current = false
+      // The page refetches + mounts the choreographed canvas underneath
+      // BEFORE the shell starts collapsing — the graph's birth replay and
+      // the backdrop fade overlap (D3).
+      await onCompleteRef.current(runIdRef.current)
+      // Only a fullscreen shell plays the collapse — a dock watching a
+      // refinement run finish just refreshes its summary in place.
+      if (shell !== "fullscreen") return
+      if (reducedMotion) {
+        setShell("dock")
+        return
+      }
+      setShell("collapsing")
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminal])
+
+  // The collapse is one CSS beat (backdrop fade + message-area retract,
+  // duration-500); then the dock takes over the bottom row.
+  useEffect(() => {
+    if (shell !== "collapsing") return
+    const timer = setTimeout(() => setShell("dock"), 560)
+    return () => clearTimeout(timer)
+  }, [shell])
+
+  // Entering the dock always lands on the summary view — the收官摘要 (or
+  // the latest agent line) is the raised default (D4).
+  useEffect(() => {
+    if (shell === "dock") setDockView("summary")
+  }, [shell])
 
   /** Shared landing for every path that starts a run (the dock's Start
    * button, a prose confirmation via /chat): the answered task book
@@ -1352,6 +1454,9 @@ export function GenerationOverlay({
       )
       // Envelope wins: release any buffered prose, then land the turn.
       typewriter.flush()
+      // A reply landing after the run's terminal supersedes the收官摘要 in
+      // the dock summary (it is the newer agent line).
+      if (terminalRef.current) postTerminalReplyRef.current = true
       // A turn can create assets server-side (declared-material promotion) —
       // refresh the prompt attachments when the project started empty.
       if (assets.length === 0) void fetchAssets()
@@ -1615,15 +1720,21 @@ export function GenerationOverlay({
     onClose()
   }
 
-  // Esc mirrors the back pill.
+  // Esc mirrors the back pill (fullscreen); in the dock it retracts the
+  // history drawer — the dock itself has no close (it IS the page's chrome).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose()
+      if (e.key !== "Escape") return
+      if (shell === "dock") {
+        setDockView((v) => (v === "drawer" ? "summary" : v))
+        return
+      }
+      if (shell === "fullscreen") handleClose()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, terminal])
+  }, [phase, terminal, shell])
 
   const sectionLabel = "text-[11px] font-medium text-meta"
 
@@ -1640,6 +1751,47 @@ export function GenerationOverlay({
     !pendingQuestion.answer
       ? pendingQuestion
       : null
+
+  // Dock summary (D4): the run's terminal aggregate ("Done · 3 clips · …")
+  // is the收官摘要; a chat reply sent AFTER the terminal is newer and
+  // supersedes it. Restored docks read the summary off the SSE snapshot.
+  const lastAssistant = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role === "assistant" && !m.qa && !m.streaming && m.content.trim()) {
+        return m
+      }
+    }
+    return null
+  }, [messages])
+  const dockSummary =
+    terminal && status !== "failed" && summary && !postTerminalReplyRef.current
+      ? summary
+      : (lastAssistant?.content ?? null)
+
+  // Prohibition #6 — the dock never goes silent: new agent speech (a chat
+  // reply / the收官摘要 landing / a choice ask) raises the summary back
+  // from the collapsed pill.
+  const lastAgentKey =
+    shell === "dock"
+      ? (lastAssistant?.id ?? (terminal && summary ? `summary:${runId ?? "run"}` : null))
+      : null
+  const lastAgentKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!lastAgentKey) return
+    const first = lastAgentKeyRef.current === null
+    if (lastAgentKeyRef.current !== lastAgentKey) {
+      lastAgentKeyRef.current = lastAgentKey
+    }
+    if (!first) setDockView((v) => (v === "collapsed" ? "summary" : v))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastAgentKey])
+  useEffect(() => {
+    if (shell === "dock" && pendingChoice) {
+      setDockView((v) => (v === "collapsed" ? "summary" : v))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingChoice?.id, shell])
 
   // Plan-card placement (2026-08-06 in-flight rework): settled → pinned
   // bottom-most (order-10); while a chat turn is in flight → inline at its
@@ -1964,25 +2116,10 @@ export function GenerationOverlay({
     </Message>
   )
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      {/* Header band — the back pill owns a real strip, so scrolled content
-          structurally never enters its zone (a fade alone still lets text
-          slide under the pill). */}
-      <div className="shrink-0 px-4 pt-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-9 gap-1.5 rounded-md px-3"
-          onClick={handleClose}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("generationOverlay.backToProjects")}
-        </Button>
-      </div>
-
-      {/* Chat column */}
-      <div className="min-h-0 flex-1">
+  /* The message flow — one JSX block, two hosts: the fullscreen chat
+      region, or the dock's history drawer (never mounted in both at once).
+      The message machine itself is untouched — only the shell changes. */
+  const chatScroller = (
         <MessageScrollerProvider>
           <MessageScroller className="h-full">
             <MessageScrollerViewport className="scroll-fade-y">
@@ -2185,17 +2322,130 @@ export function GenerationOverlay({
             <MessageScrollerButton direction="end" />
           </MessageScroller>
         </MessageScrollerProvider>
-      </div>
+  )
 
-      {/* Bottom input — one floating bar in the chat column's width. The
-          pending question docks directly above it (ask primitive): the flow
-          archives decisions, the dock holds the one still open. The task-
-          book dock HIDES while a turn is in flight (a stale plan must not be
-          Start-able mid-revision); a choice dock JOINS the input visually
-          (joined + the input drops its top rounding) — the input IS the
-          freeform "something else" row, its placeholder already says so. */}
-      <div className="shrink-0 px-4 pb-5 pt-2">
-        <div className="mx-auto w-full max-w-3xl">
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col">
+      {/* Backdrop — a pure visual layer (always pointer-events-none):
+          opaque while fullscreen, fades away on the收官 frame (D3); in the
+          dock the shell is click-through and the canvas shows through. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-background transition-opacity duration-500 motion-reduce:transition-none",
+          shell === "fullscreen" ? "opacity-100" : "opacity-0"
+        )}
+      />
+
+      {/* Header band — the back pill owns a real strip, so scrolled content
+          structurally never enters its zone (a fade alone still lets text
+          slide under the pill). Fullscreen only: the dock has no close. */}
+      {shell === "fullscreen" && (
+        <div className="relative shrink-0 px-4 pt-4">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-9 gap-1.5 rounded-md px-3"
+            onClick={handleClose}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("generationOverlay.backToProjects")}
+          </Button>
+        </div>
+      )}
+
+      {/* Chat region — fullscreen it hosts the flow; on the收官 frame the
+          flow retracts upward and fades (消息区上收); in the dock the
+          region is an empty click-through spacer (the canvas owns the
+          center). The REGION keeps its flex-1 slot throughout, so the
+          bottom input row never moves (D3: 输入组全程零位移). */}
+      {shell !== "dock" ? (
+        <div
+          className={cn(
+            "relative min-h-0 flex-1 transition-all duration-500 motion-reduce:transition-none",
+            shell === "collapsing" && "pointer-events-none -translate-y-4 opacity-0"
+          )}
+        >
+          {chatScroller}
+        </div>
+      ) : (
+        <div className="pointer-events-none min-h-0 flex-1" aria-hidden />
+      )}
+
+      {/* Bottom row — the input group's immutable slot across the three
+          parking spots (composer / overlay / dock): it never moves (D3).
+          The pending question docks directly above it (ask primitive): the
+          flow archives decisions, the dock holds the one still open. The
+          task-book dock HIDES while a turn is in flight (a stale plan must
+          not be Start-able mid-revision); a choice dock JOINS the input
+          visually (joined + the input drops its top rounding) — the input
+          IS the freeform "something else" row, its placeholder already says
+          so. In the dock shell the history drawer / summary card stack
+          above everything (D4), floating over the canvas. */}
+      <div
+        className={cn(
+          "relative shrink-0 px-4 pb-5 pt-2",
+          shell === "dock" && "pointer-events-none"
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto w-full max-w-3xl",
+            shell === "dock" && "pointer-events-auto"
+          )}
+        >
+          {/* Dock extras — the history drawer opens above the summary row;
+              the summary card (latest agent line) is the drawer's toggle.
+              Both use the shared overlay-surface frost over the canvas. */}
+          {shell === "dock" && dockView === "drawer" && (
+            <div className="overlay-surface mb-2 h-[min(55vh,520px)] overflow-hidden rounded-xl">
+              {chatScroller}
+            </div>
+          )}
+          {shell === "dock" && (
+            <div className="mb-2 flex items-center gap-2">
+              {dockView !== "collapsed" && dockSummary ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDockView((v) => (v === "drawer" ? "summary" : "drawer"))
+                  }
+                  className="overlay-surface flex min-w-0 flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left"
+                >
+                  <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug">
+                    {dockSummary}
+                  </span>
+                  {dockView === "drawer" ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDockView((v) => (v === "drawer" ? "summary" : "drawer"))
+                  }
+                  className="overlay-surface flex h-9 items-center gap-1.5 rounded-md px-3 text-sm"
+                >
+                  <History className="h-4 w-4" />
+                  {t("results.dock.history")}
+                </button>
+              )}
+              {dockView !== "collapsed" && dockSummary && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("results.dock.collapse")}
+                  onClick={() => setDockView("collapsed")}
+                  className="overlay-surface h-9 w-9 shrink-0 rounded-md"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
           {phase === "confirm" && intentReady && !chatBusy && (
             <QuestionDock
               kind="task_book"
@@ -2371,4 +2621,4 @@ export function GenerationOverlay({
       </div>
     </div>
   )
-}
+})

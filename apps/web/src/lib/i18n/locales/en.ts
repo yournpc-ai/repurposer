@@ -838,6 +838,18 @@ const en = {
       descNoPlan: "No generation run yet — set one up with the assistant.",
       cta: "Continue setup",
     },
+    runActive: {
+      title: "Working on it",
+      desc: "Your content is being made — this usually takes a few minutes.",
+      cta: "View progress",
+    },
+    failedPanel: {
+      cta: "Retry in chat",
+    },
+    dock: {
+      history: "History",
+      collapse: "Hide",
+    },
     stepper: {
       transcribing: "Transcribing your media…",
       queued: "Queued, starting soon…",

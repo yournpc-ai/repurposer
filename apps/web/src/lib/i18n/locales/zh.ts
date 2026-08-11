@@ -825,6 +825,18 @@ const zh: Resources = {
       descNoPlan: "还没有生成计划——和助手聊一句就能开始。",
       cta: "继续设置",
     },
+    runActive: {
+      title: "正在制作",
+      desc: "内容正在生成，通常需要几分钟。",
+      cta: "查看进度",
+    },
+    failedPanel: {
+      cta: "在对话中重试",
+    },
+    dock: {
+      history: "历史记录",
+      collapse: "收起",
+    },
     stepper: {
       transcribing: "正在转写你的媒体…",
       queued: "正在排队，马上开始…",

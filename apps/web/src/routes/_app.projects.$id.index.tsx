@@ -7,7 +7,9 @@ import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
-import { GenerationOverlay, normalizeIntent, normalizeSlots } from "@/components/generation/GenerationOverlay"
+import { GenerationOverlay, normalizeIntent, normalizeSlots, type GenerationOverlayHandle } from "@/components/generation/GenerationOverlay"
+import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
+import type { RunFlowAsset } from "@/components/flow/runFlow"
 import { PostCard } from "@/components/results/PostCard"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -18,6 +20,8 @@ import { Button } from "@/components/ui/button"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import { apiFetch, apiPost } from "@/lib/api"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
 
 import type { IntentSlot, Output, WorkflowStep, Project } from "@/lib/types"
@@ -169,6 +173,24 @@ function ProjectDetailPage() {
   const tabInitializedRef = useRef(false)
   const resultsTourCheckedRef = useRef(false)
 
+  // ── Results canvas (ADR-041) ─────────────────────────────────────────
+  // Desktop (≥768px = iPad up, D1/D10): the terminal state is the results
+  // canvas + the chat dock; mobile keeps the list world (prohibition #13).
+  const isMobile = useIsMobile()
+  const reducedMotion = useReducedMotion()
+  const overlayRef = useRef<GenerationOverlayHandle>(null)
+  /** The latest COMPLETED run snapshot — the canvas's data source. The
+   * sticky copy survives a later refinement run going active/failed (D9:
+   * the canvas shows the current run + latest products); the live value
+   * takes precedence the moment it exists, so the dock mounts in one pass
+   * (no effect lag on refresh). */
+  const [stickyCompletedRun, setStickyCompletedRun] = useState<WorkflowRun | null>(null)
+  /** Birth-replay gate (prohibition #5): set only when THIS page session
+   * watched the run go live → terminal; every other entry renders the
+   * final frame instantly. */
+  const [witnessedRunId, setWitnessedRunId] = useState<string | null>(null)
+  const [canvasAssets, setCanvasAssets] = useState<RunFlowAsset[]>([])
+
   const fetchResults = async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`)
@@ -201,7 +223,7 @@ function ProjectDetailPage() {
   // is seen, and keep the overlay mounted on it until IT navigates away.
   // Gating the render on live `runActive` would unmount the overlay mid-flow
   // the moment this page's own SSE refetch flips the run to completed —
-  // before the overlay's terminal handler can toast + navigate.
+  // before the overlay's terminal handler can play the收官转场.
   const [attachRunId, setAttachRunId] = useState<string | null>(null)
   const attachableRunId = runActive && latestRun ? latestRun.id : null
   useEffect(() => {
@@ -218,16 +240,75 @@ function ProjectDetailPage() {
     })
   }
 
+  // The completed-run snapshot + the witnessed flag (page-side detection:
+  // this session saw the SAME run go active → completed — e.g. the attach
+  // flow, where the page's own SSE refetch beats the overlay's hand-off).
+  const prevRunRef = useRef<{ id: string; status: string } | null>(null)
+  useEffect(() => {
+    if (!latestRun) return
+    const prev = prevRunRef.current
+    if (latestRun.status === "completed") {
+      setStickyCompletedRun(latestRun)
+      if (
+        prev?.id === latestRun.id &&
+        (prev.status === "pending" || prev.status === "running")
+      ) {
+        setWitnessedRunId(latestRun.id)
+      }
+    }
+    prevRunRef.current = { id: latestRun.id, status: latestRun.status }
+  }, [latestRun])
+
+  const completedRun =
+    latestRun?.status === "completed" ? latestRun : stickyCompletedRun
+
+  // Canvas assets carry titles/file urls (the /results asset list is a
+  // lightweight status view) — the full asset endpoint, fetched once.
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`/api/v1/projects/${projectId}/assets`, { toast: false })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        if (!cancelled) setCanvasAssets(rows as RunFlowAsset[])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
+  // Desktop results phase (ADR-041 D1): the canvas + the dock. Mobile and
+  // pre-completion states fall through to their own surfaces below.
+  const resultsPhase = !isMobile && completedRun != null
+  const choreograph =
+    !reducedMotion && witnessedRunId != null && completedRun?.id === witnessedRunId
+
+  /** The overlay's completion hand-off: refetch (the canvas data lands),
+   * mark the witnessed replay, and on mobile keep the legacy hand-off back
+   * to the list (the desktop overlay plays the collapse into the dock). */
+  const handleOverlayComplete = async (completedRunId: string | null) => {
+    await fetchResults()
+    if (completedRunId) setWitnessedRunId(completedRunId)
+    if (isMobile) {
+      setAttachRunId(null)
+      navigate({
+        to: "/projects/$id",
+        params: { id: projectId },
+        replace: true,
+      })
+    }
+  }
+
   // First-visit results tour. Fires whenever clips are ready and the chat
   // overlay is closed — no matter how the user got here (fresh generation or
   // straight from the projects list). Seen flag is its own localStorage key.
-  // The targets live on the clips tab, so the tour switches to it first; the
-  // tab grid is committed in the same render pass, before Tour queries the
-  // DOM in its own effect.
+  // The targets live on the clip cards in the mobile list world — the
+  // desktop canvas re-anchors the tour onto the output nodes (周四 brief).
   useEffect(() => {
     if (resultsTourCheckedRef.current) return
     if (loading || !results) return
     if (search.overlay) return
+    if (!isMobile) return
     if (!results.outputs.some(isClipReady)) return
     resultsTourCheckedRef.current = true
     try {
@@ -238,7 +319,7 @@ function ProjectDetailPage() {
     }
     if (activeTab !== "clips") setActiveTab("clips")
     setResultsTourOpen(true)
-  }, [loading, results, search.overlay, activeTab])
+  }, [loading, results, search.overlay, activeTab, isMobile])
 
   const markResultsTourSeen = () => {
     try {
@@ -548,66 +629,184 @@ function ProjectDetailPage() {
     }
   }
 
-  return (
-    <div className="flex flex-1 flex-col p-6 md:p-8">
-      <div className="mx-auto w-full max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{project.title}</h1>
-          {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
-        </div>
+  // ── The one overlay instance (ADR-041 D4) ────────────────────────────
+  // chat search = the planning/conversation surface; attach = watching a
+  // live run; resultsPhase = the results dock. One mounted instance parks
+  // across all three — the input group is never remounted between them.
+  const chatSearchOpen = search.overlay === "chat" || search.overlay === "intent"
+  const attachOpen = search.overlay === "run" && attachRunId != null && latestRun != null
+  const overlayMounted = chatSearchOpen || attachOpen || resultsPhase
 
-        {/* Tabs + content only exist once a run has started; before that the
-            project is awaiting plan confirmation (or setup). */}
-        {!latestRun ? (
-          <div className="rounded-lg bg-muted p-8 text-center">
-            <p className="font-medium">{t("results.pendingPlan.title")}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {pendingIntent
-                ? t("results.pendingPlan.desc")
-                : t("results.pendingPlan.descNoPlan")}
-            </p>
-            <Button
-              className="mt-4"
-              onClick={() =>
-                navigate({
-                  to: "/projects/$id",
-                  params: { id: projectId },
-                  search: { overlay: "chat" },
-                })
-              }
-            >
-              {t("results.pendingPlan.cta")}
-            </Button>
+  /** The dock's plan-summary line, rebuilt from the completed run's context
+   * (the same read-tolerance shape the attach flow uses). */
+  const completedRunSlots = normalizeSlots(
+    completedRun?.context?.outputs,
+    completedRun?.context?.clip_count
+  )
+  const completedRunIntent = completedRun
+    ? normalizeIntent({
+        outputs: completedRunSlots.length ? completedRunSlots : normalizeSlots(["clips"]),
+        language: completedRun.context?.target_language ?? project.language ?? "en",
+        dub_languages: completedRun.context?.dub_languages,
+        specific_instruction: completedRun.context?.instruction,
+      })
+    : undefined
+
+  const overlayInitialIntent = attachOpen
+    ? normalizeIntent({
+        outputs: (runSlots.length ? runSlots : normalizeSlots(["clips"])).map(
+          (slot) => ({
+            ...slot,
+            language:
+              slot.language ??
+              latestRun?.context?.target_language ??
+              project.language ??
+              "en",
+          })
+        ),
+        language: latestRun?.context?.target_language ?? project.language ?? "en",
+        dub_languages: latestRun?.context?.dub_languages,
+        specific_instruction: latestRun?.context?.instruction,
+      })
+    : resultsPhase
+      ? completedRunIntent
+      : pendingIntent
+        ? normalizeIntent(pendingIntent.intent)
+        : undefined
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {resultsPhase && completedRun ? (
+        <>
+          {/* Results phase (ADR-041 D1): slim header + full-bleed canvas.
+              The bottom padding is the dock's safe area (D4 — the fitted
+              graph stays clear of the floating input group). */}
+          <div className="shrink-0 space-y-1 px-6 pt-6 md:px-8 md:pt-8">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {project.title}
+            </h1>
+            {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
           </div>
-        ) : (
-          <>
-            {/* Tabs */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <ResultsTabs
-                active={activeTab}
-                onChange={setActiveTab}
-                counts={counts}
-                visible={visibleTabs}
-                running={runningTabs}
-                failed={failedTabs}
-              />
+          <div className="min-h-0 flex-1 px-2 pb-40 md:pb-44">
+            <ResultsCanvas
+              className="h-full"
+              assets={canvasAssets}
+              steps={completedRun.steps}
+              outputs={outputs}
+              choreograph={choreograph}
+              onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-1 flex-col p-6 md:p-8">
+          <div className="mx-auto w-full max-w-7xl space-y-6">
+            {/* Header */}
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight">{project.title}</h1>
+              {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
             </div>
 
-            {/* Content — live progress shows inline (running tab indicators,
-                skeleton grids, per-clip render spinners); the full-screen
-                progress surface is the chat overlay, opened via ?overlay=run. */}
-            <div>{renderTabContent()}</div>
-          </>
-        )}
-      </div>
+            {!latestRun ? (
+              <div className="rounded-lg bg-muted p-8 text-center">
+                <p className="font-medium">{t("results.pendingPlan.title")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {pendingIntent
+                    ? t("results.pendingPlan.desc")
+                    : t("results.pendingPlan.descNoPlan")}
+                </p>
+                <Button
+                  className="mt-4"
+                  onClick={() =>
+                    navigate({
+                      to: "/projects/$id",
+                      params: { id: projectId },
+                      search: { overlay: "chat" },
+                    })
+                  }
+                >
+                  {t("results.pendingPlan.cta")}
+                </Button>
+              </div>
+            ) : isMobile ? (
+              <>
+                {/* Mobile keeps the list world (prohibition #13 — no canvas
+                    below iPad width); the conversation surface opens through
+                    the same overlay entries as before. */}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <ResultsTabs
+                    active={activeTab}
+                    onChange={setActiveTab}
+                    counts={counts}
+                    visible={visibleTabs}
+                    running={runningTabs}
+                    failed={failedTabs}
+                  />
+                </div>
+                <div>{renderTabContent()}</div>
+              </>
+            ) : latestRun.status === "failed" ? (
+              /* Desktop, first-run failure (no completed run yet): the
+                 retry channel is the conversation (D8 — chat is the only
+                 modification channel). */
+              <div className="rounded-lg bg-muted p-8 text-center">
+                <p className="text-sm text-destructive">
+                  {latestRun.error || t("results.retryFailed")}
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() =>
+                    navigate({
+                      to: "/projects/$id",
+                      params: { id: projectId },
+                      search: { overlay: "chat" },
+                    })
+                  }
+                >
+                  {t("results.failedPanel.cta")}
+                </Button>
+              </div>
+            ) : (
+              /* Desktop, run in flight with no completed snapshot: progress
+                 belongs to the chat flow alone (D2 — it never enters the
+                 graph). */
+              <div className="rounded-lg bg-muted p-8 text-center">
+                <p className="font-medium">{t("results.runActive.title")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("results.runActive.desc")}
+                </p>
+                <Button
+                  className="mt-4"
+                  onClick={() =>
+                    navigate({
+                      to: "/projects/$id",
+                      params: { id: projectId },
+                      search: { overlay: "run" },
+                    })
+                  }
+                >
+                  {t("results.runActive.cta")}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-      {(search.overlay === "chat" || search.overlay === "intent") && (
+      {overlayMounted && (
         <GenerationOverlay
+          ref={overlayRef}
           projectId={projectId}
-          prompt={firstMessage?.text ?? pendingIntent?.prompt ?? prompt ?? ""}
+          prompt={
+            firstMessage?.text ??
+            pendingIntent?.prompt ??
+            (attachOpen ? latestRun?.context?.instruction : null) ??
+            prompt ??
+            ""
+          }
           firstMessage={
-            firstMessage
+            chatSearchOpen && firstMessage
               ? {
                   text: firstMessage.text,
                   mentions: firstMessage.mentions ?? [],
@@ -615,63 +814,24 @@ function ProjectDetailPage() {
                 }
               : null
           }
-          initialIntent={
-            pendingIntent ? normalizeIntent(pendingIntent.intent) : undefined
-          }
+          initialIntent={overlayInitialIntent}
           initialNeedsClarification={
             pendingIntent ? (pendingIntent.reasons?.length ?? 0) > 0 : true
           }
           initialReasons={pendingIntent?.reasons ?? []}
-          onClose={() => navigate({ to: "/projects" })}
-          onComplete={() => {
-            // The overlay created the run after this page's initial fetch —
-            // refetch so latest_run/outputs are live when it unmounts
-            // (same-route search navigation does not remount the page).
-            fetchResults()
-            navigate({
-              to: "/projects/$id",
-              params: { id: projectId },
-              replace: true,
-            })
-          }}
-        />
-      )}
-
-      {/* Attach mode (processing project opened from the list): the same
-          chat overlay, but bound to the live run — no confirm phase. The
-          intent is reconstructed from the run context purely for the
-          confirmed-plan summary line. Settled runs fall through to the
-          normal results view. */}
-      {search.overlay === "run" && attachRunId && latestRun && (
-        <GenerationOverlay
-          projectId={projectId}
-          prompt={latestRun.context?.instruction ?? prompt ?? ""}
-          initialIntent={{
-            action: "generate",
-            answer: null,
-            // Language is a per-slot property (book-level field retired):
-            // materialize each slot from the run's recorded fallback.
-            outputs: (runSlots.length ? runSlots : normalizeSlots(["clips"])).map(
-              (slot) => ({
-                ...slot,
-                language:
-                  slot.language ??
-                  latestRun.context?.target_language ??
-                  project.language ??
-                  "en",
-              })
-            ),
-            dub_languages: Array.isArray(latestRun.context?.dub_languages)
-              ? (latestRun.context.dub_languages as string[])
-              : [],
-            specific_instruction: latestRun.context?.instruction ?? null,
-          }}
-          initialRunId={attachRunId}
-          onClose={closeAttachOverlay}
-          onComplete={() => {
-            fetchResults()
-            closeAttachOverlay()
-          }}
+          initialRunId={
+            attachOpen ? attachRunId : resultsPhase ? completedRun?.id : undefined
+          }
+          initialShell={resultsPhase ? "dock" : "fullscreen"}
+          completionMode={isMobile ? "navigate" : "dock"}
+          onClose={
+            attachOpen
+              ? closeAttachOverlay
+              : chatSearchOpen
+                ? () => navigate({ to: "/projects" })
+                : () => {}
+          }
+          onComplete={handleOverlayComplete}
         />
       )}
 
