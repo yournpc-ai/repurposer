@@ -25,7 +25,7 @@
 | D2 | **中央区状态机** | **run 进度图**（2026-08-07 修订，ADR-036：run 拓扑编译期定死 = 死图 + SSE 状态动画，取代原"进度网格"）→ 结果网格（类型分段）⇄ 舞台（焦点单产物 + 检视器）。否决"顶部产物栏"：单类型形态假设，装不下 N 类 × M 条 |
 | D3 | **流=档案 / 网格=当前 / 舞台=焦点** | 消息流 = 各轮记录卡（RunCard 终态产物条，历史可点击 → 拉回舞台检视）；网格 = `outputs` 当前态物化视图（无 run 分组逻辑）；舞台焦点规则 = 刚被碰的产物自动上焦点 / 点任意记录卡切换 |
 | D4 | **chips 双级派生** | 网格模式 = 批次级（"全部加法语版"）；舞台模式 = 产物级（"翻译成法语 / 去口头禅 / 再来一版"）。零 LLM，按焦点产物类型 + 状态 + 配方确定性派生；顾问姿态"永给唯一下一步"的呈现层 |
-| D5 | **配方身份贯穿三站** | dock 抬头（配方名 + 所需素材）/ 打勾流皮肤（步骤名 = 配方工艺名）/ 下一步 chips（配方感知）。**禁产物徽章**（2026-08-06 拍板）。实现：`RECIPE_REGISTRY` 注册项加 display 字段，run.context 带 recipe_id |
+| D5 | ~~配方身份贯穿三站~~ **待重裁**（ADR-040） | 原案（dock 抬头配方名 / 打勾流配方工艺名 / 下一步 chips 配方感知）依赖 `run.context.recipe_id`——ADR-040 后服务端永不见配方身份，派生源不存在。**重裁方向（排产时拍板）：步骤名 = 技能自己的名字（`NodeBase.label`），dock 抬头 = 任务书实际形状**；配方标签不复活（展示戳与书本可漂移）。**禁产物徽章**（2026-08-06 拍板）不变 |
 | D6 | **配方检视 overlay = 检视 tabs + 发射区** | 点卡面 → 全屏 overlay。**左区 = 发射区**（固定）：title / promise / tags + 素材需求提示 + 上传暂存区（主角——素材是配方唯一的空格）+ **产出预设 chips 可见** + 收起态可编辑预填 prompt（recipe chip + promptTemplate）+ 发送按钮。**右区 = 检视 tabs**（单屏不滚动，**图只画一次**——ElevenCreative 证据：示例平铺输入/输出，流程才是图）：示例 = 输出/输入平铺卡（自动静音循环 + 单张发声开关，零边零图）；流程 = **唯一图画布**——素材 → 策展步骤（`fanout` 展开）→ 烘焙成片终节点的一张图（素材→步骤 = 依赖边，终步→成片 = 血缘边）。手风琴整体退役（原素材在输入区，prompt 住进发射区）。**发射区 = composer 发送机构的挂载**（同一 useProjectLaunch 路径，同一发射台的第二个停放位）——overlay 零推断 / 零 prior / 零生成，生成永远在 chat 之后；A 形态否决精确化为"禁 modal 直接跑 run"，发射机构的位置不再受限。**修改通道**：预设参数（如 dub 目标语言）永不做选择器控件——可见 = chips，修改 = 预填文本改字 / chat 修订（chat 恒胜，merge_prior_slots）。**入口分工**：composer = 通用组合式需求，配方卡 = 预设快捷需求 |
 | D7 | **FlowView 基座**（2026-08-07 升格，ADR-036 及补记） | 共享只读图基座（`components/flow/`）：节点皮（asset / output / step）× 双边语义（lineage 血缘边 ⊥ dependency 依赖边）× 确定性分层布局（append-only 保序，"chat 加节点，图只长不晃"）；四个消费面（配方扇出 / run 进度图 / 舞台家族视图 / spike 血缘板）各做"领域数据 → nodes/edges"适配器，禁自绘边、禁自写布局（`packages/clip` 同款单一画笔纪律）。**引擎 = `@xyflow/react`**（摆位 + 视口；布局自算，不引 dagre）。**只读结构性执行**：`nodesDraggable`/`nodesConnectable` 常锁（拓扑编辑手势物理缺席，ADR-035 第 2 条）；**缩放 = 导航按面门禁**——有界面 fit-first 锁缩放，血缘板全开。**过渡动画三层**（用户拍板）：诞生编排（按 `seq` 编译序逐节点入场 + 边描画，真实编译序的缓动回放）/ 状态动画（running 脉冲、边流动，SSE 驱动）/ 生长动画（chat 加节点即诞生+描画）；动画 = 真实事件投影，禁假进度，`prefers-reduced-motion` 降级即时呈现。flow ↔ outputs 同文件登记防漂移不变（RECIPES §7.1） |
 | D8 | **精修闭环** | 指出（舞台：transcript 行点选/文字框选 → 确定性指认，`transcript_segment` mention 已有座位）→ 表态（chat 说感受 / chips / 检视器参数直操——字幕样式/画幅/音乐/语言控件即改即预览）→ 执行（**系统选执行深度**：edit op / 单节点 / 子图重跑，用户只听一句代价"会重做文案和渲染，约 2 分钟"）→ 验证（舞台原位更新 + Before/After + undo） |
@@ -67,7 +67,7 @@
 
 | 交付 | 文件 |
 |---|---|
-| **run 进度图**（2026-08-07 排产，ADR-036）：`StepResponse.inputs` 下发 + `RunFlowGraph` 适配器（steps → nodes/edges，`chat.stepKinds.*` 友好名 + 状态动画）+ GenerationOverlay 进度态挂载（打勾流保留为线性旁白）+ `run.context.recipe_id` 穿线 | `pipeline/outputs.py`、`lib/types.ts`、`components/flow/RunFlowGraph.tsx`、`GenerationOverlay`、`chat/service.py` |
+| **run 进度图**（2026-08-07 排产，ADR-036）：`StepResponse.inputs` 下发 + `RunFlowGraph` 适配器（steps → nodes/edges，`chat.stepKinds.*` 友好名 + 状态动画）+ GenerationOverlay 进度态挂载（打勾流保留为线性旁白） | `pipeline/outputs.py`、`lib/types.ts`、`components/flow/RunFlowGraph.tsx`、`GenerationOverlay` |
 | 结果网格重构：类型分段、分数+理由卡面可见、动作抬出一级、失败/空态带下一步；组件 props 驱动（工作面双挂载准备） | `routes/_app.projects.$id.index.tsx`、`components/results/*` |
 | 批次级 chips（确定性派生）+ 终态不跳转（网格版：run 收官就地落网格，toast+关窗退役） | `components/results/` chips 行；`GenerationOverlay` 终态分支 |
 | 成功定义对照呈现（⚠️ 依赖轨 A schema——同周合流） | 对照区块 |
@@ -100,7 +100,7 @@
 | 故事地图 story map | ~~运行期活图（spike 名）~~ **2026-08-07 拆分为二**（ADR-036）：run 进度图（排产项，`RunFlowGraph`）/ 血缘板（spike 名，`LineageBoard`，闭环链验收时裁决去留） | 均已入 NAMING §2（2026-08-07，连同 `FlowView` / 血缘边 / 依赖边 / 家族视图） |
 | 退役 | `ChatModal` / `AssetChatModal` / `ClipDetailModal`（闭环链·下） | 入 NAMING 判例库 |
 
-无新表。新列/字段：`RECIPE_REGISTRY` display 字段（注册内容，非表）；`run.context.recipe_id`（上下文键）；§6 context 焦点行（不落成表）。
+无新表。新列/字段：§6 context 焦点行（不落成表）。（原 `RECIPE_REGISTRY` display 字段与 `run.context.recipe_id` 上下文键随 D5 重裁，ADR-040。）
 
 ## 5. 验收
 
@@ -115,7 +115,7 @@
 1. **禁**第二意图入口——overlay/composer 只构建首发消息；推断/合并/确认全在 plan path（意图单面化禁令平移）。
 2. **禁**可操作画布——接线/自由拓扑/节点运行按钮/模型 SKU 货架永不面向用户；拓扑唯一来源 = `compile_graph`（LLM 亦只准提议 task list）。
 3. **禁** toast+关窗式承接（第 3 周起）；终态信号 = 网格落位 + 舞台亮起本身。
-4. **禁**产物配方徽章——配方身份只走 dock 抬头 / 打勾流皮肤 / chips 三站（2026-08-06 拍板）。
+4. **禁**产物配方徽章（2026-08-06 拍板）——原"dock 抬头 / 打勾流皮肤 / chips 三站"通道随 D5 重裁（ADR-040）。
 5. **禁**翻译失败亮图——ask 反问是唯一失败形态；图永不当错误信息或兜底界面。
 6. **禁**图内堆历史——活图只画当前 run + 最新产物；历史归消息流记录卡。
 7. **禁**每类型专属编辑 modal——准入规则：修改需 ≥3 结构化字段或多步流程才可立案（发布对话框为现存先例）；一两个变量永远走检视器/chip+chat。
