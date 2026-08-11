@@ -102,7 +102,12 @@ function Home() {
                   onToggleSound={(id) =>
                     setSoundingId((prev) => (prev === id ? null : id))
                   }
-                  onInspect={setInspecting}
+                  onInspect={(c) => {
+                    // The overlay owns attention now — a gallery video must
+                    // not keep sounding behind the modal.
+                    setSoundingId(null)
+                    setInspecting(c)
+                  }}
                 />
               </div>
             ))}
