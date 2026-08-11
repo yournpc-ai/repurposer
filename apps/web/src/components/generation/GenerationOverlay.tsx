@@ -224,7 +224,7 @@ interface QuestionPayload {
   kind: "task_book" | "choice" | "confirm"
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
-  cost_hint?: string | null
+  estimate?: string | null
   /** task_book: needs-clarification reason KEYS (data — localize at render,
    * never baked into the question's prose). */
   reasons?: string[]
@@ -2222,7 +2222,7 @@ export function GenerationOverlay({
               joined
               question={pendingChoice.content ?? ""}
               options={pendingChoice.question?.options ?? []}
-              costHint={pendingChoice.question?.cost_hint}
+              estimate={pendingChoice.question?.estimate}
               onAnswer={handleChoiceAnswer}
               answering={answering}
               onBail={

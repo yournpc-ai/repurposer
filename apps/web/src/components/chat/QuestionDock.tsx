@@ -5,8 +5,8 @@
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
  * - task_book: two rows (2026-08-06 rework) — the confirm line on the
- *   top-left, the reserved credit slot on the top-right (the week-8 cost
- *   estimate rides `costHint`), the actions (Cancel / Start) on the bottom
+ *   top-left, the reserved credit slot on the top-right (the week-6 cost
+ *   quote rides `estimate`), the actions (Cancel / Start) on the bottom
  *   row; the needs-your-check reasons squeeze between as one compact line.
  * - choice: the question line plus its options as full-width ROWS (letter
  *   badges mirror the deterministic autoResume mapping — typing "a" picks
@@ -58,7 +58,7 @@ interface TaskBookDockProps {
   startDisabled?: boolean
   /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
    * when present; the slot is the layout reservation. */
-  costHint?: string | null
+  estimate?: string | null
 }
 
 interface ChoiceDockProps {
@@ -67,7 +67,7 @@ interface ChoiceDockProps {
   question: string
   options: DockOption[]
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
-  costHint?: string | null
+  estimate?: string | null
   onAnswer: (optionId: string) => void
   answering: boolean
   /** Bail affordance — only passed for checkpoint questions (a run is
@@ -92,7 +92,7 @@ function TaskBookForm({
   onCancel,
   starting,
   startDisabled,
-  costHint,
+  estimate,
 }: TaskBookDockProps) {
   const { t } = useTranslation()
   const reasonLabels = (reasons ?? [])
@@ -108,9 +108,9 @@ function TaskBookForm({
           <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
           <span className="truncate">{question}</span>
         </div>
-        {costHint ? (
+        {estimate ? (
           <span className="shrink-0 text-xs text-muted-foreground">
-            {costHint}
+            {estimate}
           </span>
         ) : null}
       </div>
@@ -178,7 +178,7 @@ function TaskBookForm({
 function ChoiceForm({
   question,
   options,
-  costHint,
+  estimate,
   onAnswer,
   answering,
   onBail,
@@ -196,9 +196,9 @@ function ChoiceForm({
       <div className="flex items-start gap-2 text-sm">
         <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
         <span className="min-w-0 break-words">{question}</span>
-        {costHint ? (
+        {estimate ? (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-            {costHint}
+            {estimate}
           </span>
         ) : null}
       </div>

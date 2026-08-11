@@ -75,7 +75,7 @@ interface ChatMessage {
     kind: "task_book" | "choice" | "confirm"
     options?: { id: string; label: string }[]
     allow_freeform?: boolean
-    cost_hint?: string | null
+    estimate?: string | null
   } | null
   answer?: QaAnswer | null
   intent?: {
@@ -522,7 +522,7 @@ export function ChatModal({
               joined
               question={pendingQuestion.content ?? ""}
               options={pendingQuestion.question?.options ?? []}
-              costHint={pendingQuestion.question?.cost_hint}
+              estimate={pendingQuestion.question?.estimate}
               onAnswer={handleChoiceAnswer}
               answering={answering}
             />

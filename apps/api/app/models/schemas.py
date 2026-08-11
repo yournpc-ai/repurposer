@@ -188,7 +188,7 @@ class AskPayload(BaseModel):
     # The stored cost-quote seat. Its supply is code, never the LLM: the
     # estimate fold (N-34) — wired in with the week-6 presentation (dock
     # total / chat unit price); NULL until then.
-    cost_hint: str | None = None
+    estimate: str | None = None
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
