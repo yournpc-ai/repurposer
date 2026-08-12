@@ -64,9 +64,12 @@ function current(): I18n {
   return registry.fallback
 }
 
-/** Change the active language and persist the choice to a cookie. */
-export function setLocale(lng: Locale) {
-  current().changeLanguage(lng)
+/** Change the active language and persist the choice to a cookie. Interactive
+ * callers pass their context instance (from `useTranslation`) — the subscribed
+ * instance is always the right one, immune to dev HMR module duplication;
+ * the registry is only the fallback for non-React callers. */
+export function setLocale(lng: Locale, instance?: I18n) {
+  ;(instance ?? current()).changeLanguage(lng)
   if (typeof document !== "undefined") {
     document.cookie = `${LANG_COOKIE}=${lng};path=/;max-age=31536000;samesite=lax`
   }

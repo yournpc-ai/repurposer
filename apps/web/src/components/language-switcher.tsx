@@ -41,7 +41,7 @@ export function LanguageSwitcher() {
                 variant={active ? "secondary" : "ghost"}
                 className="justify-between"
                 size="sm"
-                onClick={() => setLocale(loc.value)}
+                onClick={() => setLocale(loc.value, i18n)}
               >
                 <span>{t(loc.labelKey)}</span>
                 {active && <Check className="h-3.5 w-3.5" />}
