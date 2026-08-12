@@ -28,7 +28,7 @@ from sqlalchemy import select, text
 from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Output, Project
+from app.models.tables import Output, Project, WorkflowRun
 from app.tools.storage import (
     delete,
     get_output_path,
@@ -101,11 +101,34 @@ async def _mirror_render_node(
     """
     try:
         async with AsyncSessionLocal() as db:
+            # A done mirror also bakes the step's done summary — otherwise the
+            # finished render row keeps the progressive stage copy ("正在渲染
+            # 视频…" on a ✓ row, the same bug class as the kernel nodes). The
+            # locale comes off the run's pinned UI language (display chain).
+            summary: str | None = None
+            if node_status == "done":
+                run_id = (
+                    await db.execute(
+                        text(
+                            "SELECT run_id FROM workflow_steps WHERE kind = 'render' "
+                            "AND spec->>'output_id' = :oid LIMIT 1"
+                        ),
+                        {"oid": str(output_id)},
+                    )
+                ).scalar_one_or_none()
+                run = await db.get(WorkflowRun, run_id) if run_id else None
+                ctx = run.context if run is not None and isinstance(run.context, dict) else {}
+                zh = str(ctx.get("ui_language") or "").startswith("zh")
+                summary = "渲染完成" if zh else "Rendered"
             await db.execute(
                 text(
                     "UPDATE workflow_steps SET status = CAST(:st AS varchar), error = :err, "
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
-                    "ELSE finished_at END, updated_at = now() "
+                    "ELSE finished_at END, "
+                    "spec = CASE WHEN CAST(:st AS varchar) = 'done' "
+                    "  THEN jsonb_set(spec, '{summary}', to_jsonb(CAST(:summary AS varchar)), true) "
+                    "  ELSE spec END, "
+                    "updated_at = now() "
                     "WHERE kind = 'render' "
                     # pending/running take any mirror; a success mirror must
                     # also recover a node left 'failed' by an earlier attempt
@@ -114,7 +137,7 @@ async def _mirror_render_node(
                     "     OR (CAST(:st AS varchar) = 'done' AND status = 'failed')) "
                     "AND spec->>'output_id' = :oid"
                 ),
-                {"st": node_status, "err": error, "oid": str(output_id)},
+                {"st": node_status, "err": error, "oid": str(output_id), "summary": summary},
             )
             await db.commit()
     except Exception as e:  # noqa: BLE001

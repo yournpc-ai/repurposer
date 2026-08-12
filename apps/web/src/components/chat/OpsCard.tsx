@@ -103,7 +103,7 @@ export function OpsCard({ messageId, intent, onDone }: OpsCardProps) {
       {rows.map((row) => (
         <Marker key={row.id} className={row.undone_at ? "opacity-50 line-through" : undefined}>
           <MarkerIcon>
-            <Check className="text-green-600 dark:text-green-400" />
+            <Check className="text-muted-foreground" />
           </MarkerIcon>
           <MarkerContent>{opLabel(row.op, row.params, t)}</MarkerContent>
         </Marker>

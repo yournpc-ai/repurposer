@@ -105,7 +105,7 @@ function TaskBookForm({
           substance. */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-sm">
-          <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+          <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{question}</span>
         </div>
         {estimate ? (
@@ -194,7 +194,7 @@ function ChoiceForm({
       }
     >
       <div className="flex items-start gap-2 text-sm">
-        <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 break-words">{question}</span>
         {estimate ? (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">

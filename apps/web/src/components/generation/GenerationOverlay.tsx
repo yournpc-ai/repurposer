@@ -371,7 +371,9 @@ function StepMarker({
     status === "running" ? (
       <Loader2 className="animate-spin text-primary" />
     ) : status === "done" ? (
-      <Check className="text-green-600 dark:text-green-400" />
+      // Plain check, no green (invideo reference): done is the neutral
+      // resting state, not a success badge — only failure carries color.
+      <Check className="text-muted-foreground" />
     ) : status === "failed" ? (
       <X className="text-destructive" />
     ) : status === "waiting" ? (
@@ -2400,8 +2402,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                               <Message align="start">
                                 <MessageContent>
                                   <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
-                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
-                                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent">
+                                      <Check className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
                                     <div className="min-w-0 truncate text-sm">
                                       <span className="font-medium">
@@ -2526,8 +2528,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                         <Message align="start">
                           <MessageContent>
                             <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
-                                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent">
+                                <Check className="h-3.5 w-3.5 text-muted-foreground" />
                               </span>
                               <div className="min-w-0 truncate text-sm">
                                 <span className="font-medium">

@@ -104,6 +104,13 @@ class Preprocess(NodeBase):
             text_count=len(asset_texts),
             media_asset_count=sum(1 for a in assets if a.file_url),
         )
+        # Done summary (a finished step must never keep the progressive stage
+        # copy — "正在分析…" reading on a ✓ row). Quantified by file count.
+        n = sum(1 for a in assets if a.file_url) or len(assets)
+        await _set_summary(
+            node.id,
+            f"分析了 {n} 个素材" if _display_zh(run, project, assets) else f"Analyzed {n} assets",
+        )
         return []
 
 
@@ -127,13 +134,27 @@ class PersonaBootstrap(NodeBase):
         Moved verbatim out of run_generation: the homepage no longer forces the
         user to pick/create a persona, so the first run derives a default persona
         from the transcript. Now addressable + metered as its own node.
+
+        Every exit bakes a done summary — a finished step must never keep the
+        progressive stage copy (the ✓ "正在准备你的人设…" bug class).
         """
+        zh = _display_zh(run, project, await _list_assets(db, project.id))
         if project.persona_id:
+            mounted = await db.get(Persona, project.persona_id)
+            name = mounted.name if mounted is not None else None
+            await _set_summary(
+                node.id,
+                f"人设就位：{name}" if zh and name else f"Persona ready: {name}" if name else "人设就位" if zh else "Persona ready",
+            )
             return []
 
         asset_texts = await collect_asset_texts(db, project.id)
         trimmed = [t[:20_000] for t in asset_texts if t and t.strip()]
         if not trimmed:
+            await _set_summary(
+                node.id,
+                "没有文字素材，未建人设" if zh else "No text material — persona skipped",
+            )
             return []
 
         try:
@@ -148,6 +169,10 @@ class PersonaBootstrap(NodeBase):
                 "auto_persona_extraction_failed",
                 project_id=str(project.id),
                 error=str(e),
+            )
+            await _set_summary(
+                node.id,
+                "人设提取失败，继续生成" if zh else "Persona extraction failed — continuing",
             )
             return []
 
@@ -181,12 +206,19 @@ class PersonaBootstrap(NodeBase):
             project_id=str(project.id),
             persona_id=str(persona_row.id),
         )
+        await _set_summary(
+            node.id,
+            f"创建了人设「{persona_row.name}」" if zh else f"Created persona “{persona_row.name}”",
+        )
         return []
 
 
 class DirectorUnderstand(NodeBase):
     kind = "director_understand"
     agents = (director_understand,)
+
+    def canvas_group(self, node):
+        return "plan"
 
     def estimate(self, ctx: dict) -> dict | None:
         """One multimodal call: texts trimmed to MAX_CHARS_PER_TEXT each plus
@@ -294,6 +326,15 @@ class DirectorUnderstand(NodeBase):
 class Checkpoint(NodeBase):
     kind = "checkpoint"
 
+    def canvas_group(self, node):
+        return "plan"
+
+    def canvas_text(self, node):
+        # The plan card's body = the direction the user picked, in full (the
+        # spec summary is truncated to a line).
+        answer = (node.spec or {}).get("answer") or {}
+        return answer.get("text") or None
+
     def estimate(self, ctx: dict) -> dict | None:
         """Zero by ruling (P4): thin node, no LLM — the options are
         code-derived from the understanding."""
@@ -341,6 +382,12 @@ class Checkpoint(NodeBase):
             label = label or answer.get("text")
             assets = await _list_assets(db, project.id)
             zh = _display_zh(run, project, assets)
+            # The option label already carries the "Focus: "/"聚焦：" prefix —
+            # strip it before wrapping with the direction word (no "方向：聚焦：").
+            for prefix in ("聚焦：", "Focus: "):
+                if label and label.startswith(prefix):
+                    label = label[len(prefix):]
+                    break
             picked = _truncate(label, 60) or ("默认" if zh else "default")
             await _set_summary(node.id, f"方向：{picked}" if zh else f"Direction: {picked}")
             return []
@@ -406,6 +453,9 @@ class Checkpoint(NodeBase):
 class DirectorPlan(NodeBase):
     kind = "director_plan"
     agents = (director_plan,)
+
+    def canvas_group(self, node):
+        return "plan"
 
     def estimate(self, ctx: dict) -> dict | None:
         """One call: prompt = the upstream understanding (≤ 2500 completion
@@ -493,6 +543,9 @@ class RenderRequest(NodeBase):
     # well as at compile time (targeted re-render) — the recipe-flow
     # reconciliation treats them as present in every producer graph.
     runtime_fanout = True
+    # Render is 1:1 with its clip product — never a canvas node; its state
+    # projects onto the product card in place (ADR-041 D6 修订).
+    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """Render 按秒 (mechanical exact): the target clip's payload duration,

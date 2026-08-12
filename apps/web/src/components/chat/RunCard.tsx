@@ -30,7 +30,7 @@ function StepRow({ step }: { step: WorkflowStep }) {
     step.status === "running" ? (
       <Loader2 className="animate-spin text-primary" />
     ) : step.status === "done" ? (
-      <Check className="text-green-600 dark:text-green-400" />
+      <Check className="text-muted-foreground" />
     ) : step.status === "failed" ? (
       <X className="text-destructive" />
     ) : step.status === "waiting" ? (
