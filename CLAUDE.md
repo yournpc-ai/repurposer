@@ -141,8 +141,8 @@ t("home.allProjects", { count: projects.length })
 ```
 
 ### SSR
-- First screen defaults to **English** rendering to avoid hydration mismatches.
-- `I18nProvider` reads the `repurposer-lang` cookie after hydration to switch languages.
+- **SSR renders in the cookie language**: the root route loader reads the `repurposer-lang` cookie server-side, and `I18nProvider` mounts a fresh per-mount i18n instance already in that language (client reads the same cookie) — SSR HTML and the first client render always agree. Per-request instances are mandatory: a shared singleton's language is mutable state that leaks across concurrent SSR requests.
+- **Never switch language after hydration** (no "EN first, switch in effect"): lazy route boundaries hydrate after root effects have run, so a post-hydration `changeLanguage` makes their SSR'd text mismatch. Language changes come only from explicit user action (`setLocale`) after mount.
 
 ## Theme
 

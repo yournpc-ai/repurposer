@@ -13,6 +13,7 @@ import {
   LogOut,
   LogIn,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
@@ -71,7 +72,11 @@ export function AppSidebar() {
   const { isAuthenticated, setLoginOpen, refreshAuth } = useAuth()
 
   // Re-read on every render; auth-state changes re-render via context.
-  const user = getUser()
+  // Gated on mounted: getUser() reads localStorage, which the server cannot
+  // see — rendering it pre-hydration mismatches SSR (访客 vs real name).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const user = mounted ? getUser() : null
   const displayName = user?.name || user?.email || t("common.guest")
   const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase()
 

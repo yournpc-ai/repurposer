@@ -1,4 +1,5 @@
 import { HeadContent, Scripts, createRootRoute, Outlet } from "@tanstack/react-router"
+import { createServerFn } from "@tanstack/react-start"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -7,9 +8,30 @@ import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
 import { AuthProvider } from "@/components/AuthProvider"
+import { LANG_COOKIE, normalizeLocale, type Locale } from "@/lib/i18n"
 import appCss from "../styles.css?url"
 
+// Server-module imports are denied in the client bundle (import-protection),
+// even behind a dynamic import — the cookie read crosses via a server fn,
+// whose handler is eliminated from the client build.
+const readLangCookieOnServer = createServerFn({ method: "GET" }).handler(
+  async (): Promise<Locale | null> => {
+    const { getCookie } = await import("@tanstack/react-start/server")
+    return normalizeLocale(getCookie(LANG_COOKIE))
+  }
+)
+
 export const Route = createRootRoute({
+  loader: async (): Promise<{ lang: Locale | null }> => {
+    // SSR: read the language cookie so the server renders in the user's
+    // language — the first client render reads the same cookie, so hydration
+    // never sees a language switch. On client navigations the mounted
+    // provider keeps its own language; this value is unused there.
+    if (typeof document === "undefined") {
+      return { lang: await readLangCookieOnServer() }
+    }
+    return { lang: null }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -48,9 +70,10 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
+  const { lang } = Route.useLoaderData()
   return (
     <ThemeProvider>
-      <I18nProvider>
+      <I18nProvider lang={lang}>
         <TooltipProvider>
           <AuthProvider>
             <Outlet />
