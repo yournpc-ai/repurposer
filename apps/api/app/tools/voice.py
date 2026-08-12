@@ -59,7 +59,17 @@ def clone_voice(audio_path: Path) -> str | None:
                     files={"file": (audio_path.name, fh)},
                 )
             up.raise_for_status()
-            file_id = up.json().get("file", {}).get("file_id")
+            # MiniMax returns HTTP 200 with an error base_resp on business
+            # failure — check it before touching the payload (landmine: a
+            # failed upload answers {"file": null, "base_resp": {...}}).
+            up_data = up.json()
+            base_resp = up_data.get("base_resp") or {}
+            if base_resp.get("status_code") != 0:
+                raise VoiceError(
+                    f"MiniMax file upload failed: {base_resp.get('status_msg')}"
+                    f" (code {base_resp.get('status_code')})"
+                )
+            file_id = (up_data.get("file") or {}).get("file_id")
             if not file_id:
                 raise VoiceError(f"file upload returned no file_id: {up.text[:300]}")
             cl = client.post(
@@ -68,6 +78,12 @@ def clone_voice(audio_path: Path) -> str | None:
                 json={"file_id": file_id, "voice_id": voice_id},
             )
             cl.raise_for_status()
+            cl_resp = cl.json().get("base_resp") or {}
+            if cl_resp.get("status_code") != 0:
+                raise VoiceError(
+                    f"MiniMax voice clone failed: {cl_resp.get('status_msg')}"
+                    f" (code {cl_resp.get('status_code')})"
+                )
         return voice_id
     except VoiceError:
         raise
