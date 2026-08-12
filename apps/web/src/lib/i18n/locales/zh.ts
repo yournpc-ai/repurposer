@@ -580,7 +580,19 @@ const zh: Resources = {
     saveChanges: "保存更改",
     tone: "情绪基调",
     sentenceStyle: "句式风格",
-    fieldPlaceholder: "每行一个{{label}}",
+    addItem: "添加",
+    emptyList: "暂无",
+    removeItem: "移除",
+    editItem: "编辑",
+    overview: {
+      voice: "声音",
+      skin: "皮肤",
+      skinDefault: "默认",
+      skinCustom: "自定义",
+      materials: "素材",
+      calibrated: "最近提炼",
+      never: "尚未提炼",
+    },
     fields: {
       core_values: "核心价值观",
       favorite_metaphors: "偏爱隐喻",
@@ -849,6 +861,16 @@ const zh: Resources = {
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
       spine: "处理过程",
       spineSteps: "{{count}} 个步骤",
+      // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/音乐。
+      artifact: {
+        plan: "计划",
+        selection: "选段",
+        dub: "配音",
+        music: "音乐",
+      },
+      // render 状态原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
+      renderFailed: "渲染失败——在下方说一句重试。",
+      rendering: "渲染中…",
     },
     // 产物节点的下一步建议行（D5——零 LLM，按产物类型确定性派生）。
     nextStep: {

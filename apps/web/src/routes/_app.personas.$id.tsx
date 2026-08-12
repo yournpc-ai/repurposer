@@ -5,6 +5,9 @@ import {
   ArrowLeft,
   FileText,
   Fingerprint,
+  History,
+  Mic,
+  Palette,
   Pencil,
   Save,
   Trash2,
@@ -34,8 +37,10 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { apiFetch } from "@/lib/api"
+import { formatRelativeTime } from "@/lib/utils"
 import { SkinEditor } from "@/components/persona/skin-editor"
 import { VoiceSection, type VoiceBlock } from "@/components/persona/voice-section"
+import { ChipList, QuoteCardList } from "@/components/persona/style-chips"
 
 interface Persona {
   id: string
@@ -54,6 +59,7 @@ interface Persona {
   audience: string | null
   guidelines: string | null
   cta: string | null
+  calibrated_at: string | null
   created_at: string
   updated_at: string | null
 }
@@ -72,9 +78,37 @@ export const Route = createFileRoute("/_app/personas/$id")({
   component: PersonaDetailPage,
 })
 
+function OverviewStat({
+  icon: Icon,
+  label,
+  value,
+  onClick,
+}: {
+  icon: typeof Mic
+  label: string
+  value: string
+  onClick?: () => void
+}) {
+  const inner = (
+    <div className="space-y-0.5">
+      <p className="flex items-center gap-1 text-[11px] font-medium text-meta">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </p>
+      <p className="text-sm">{value}</p>
+    </div>
+  )
+  if (!onClick) return inner
+  return (
+    <button type="button" onClick={onClick} className="text-left outline-none">
+      {inner}
+    </button>
+  )
+}
+
 function PersonaDetailPage() {
   const { id } = Route.useParams()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const [persona, setPersona] = useState<Persona | null>(null)
   const [materials, setMaterials] = useState<Asset[]>([])
@@ -92,12 +126,12 @@ function PersonaDetailPage() {
 
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
-  const [coreValues, setCoreValues] = useState("")
-  const [favoriteMetaphors, setFavoriteMetaphors] = useState("")
+  const [coreValues, setCoreValues] = useState<string[]>([])
+  const [favoriteMetaphors, setFavoriteMetaphors] = useState<string[]>([])
   const [sentenceStyle, setSentenceStyle] = useState("")
   const [emotionalTone, setEmotionalTone] = useState<Persona["emotional_tone"]>("rational")
-  const [typicalHooks, setTypicalHooks] = useState("")
-  const [avoidWords, setAvoidWords] = useState("")
+  const [typicalHooks, setTypicalHooks] = useState<string[]>([])
+  const [avoidWords, setAvoidWords] = useState<string[]>([])
   const [audience, setAudience] = useState("")
   const [guidelines, setGuidelines] = useState("")
   const [cta, setCta] = useState("")
@@ -120,12 +154,12 @@ function PersonaDetailPage() {
       setMaterials(materialsData)
       setName(personaData.name)
       setTitle(personaData.title || "")
-      setCoreValues(personaData.core_values.join("\n"))
-      setFavoriteMetaphors(personaData.favorite_metaphors.join("\n"))
+      setCoreValues(personaData.core_values)
+      setFavoriteMetaphors(personaData.favorite_metaphors)
       setSentenceStyle(personaData.sentence_style)
       setEmotionalTone(personaData.emotional_tone)
-      setTypicalHooks(personaData.typical_hooks.join("\n"))
-      setAvoidWords(personaData.avoid_words.join("\n"))
+      setTypicalHooks(personaData.typical_hooks)
+      setAvoidWords(personaData.avoid_words)
       setAudience(personaData.audience || "")
       setGuidelines(personaData.guidelines || "")
       setCta(personaData.cta || "")
@@ -152,12 +186,12 @@ function PersonaDetailPage() {
         body: {
           name,
           title,
-          core_values: coreValues.split("\n").filter((s) => s.trim()),
-          favorite_metaphors: favoriteMetaphors.split("\n").filter((s) => s.trim()),
+          core_values: coreValues,
+          favorite_metaphors: favoriteMetaphors,
           sentence_style: sentenceStyle,
           emotional_tone: emotionalTone,
-          typical_hooks: typicalHooks.split("\n").filter((s) => s.trim()),
-          avoid_words: avoidWords.split("\n").filter((s) => s.trim()),
+          typical_hooks: typicalHooks,
+          avoid_words: avoidWords,
           audience: audience || null,
           guidelines: guidelines || null,
           cta: cta || null,
@@ -179,12 +213,13 @@ function PersonaDetailPage() {
       })
       if (!res.ok) return
       const data: Persona = await res.json()
-      setCoreValues(data.core_values.join("\n"))
-      setFavoriteMetaphors(data.favorite_metaphors.join("\n"))
+      setPersona(data)
+      setCoreValues(data.core_values)
+      setFavoriteMetaphors(data.favorite_metaphors)
       setSentenceStyle(data.sentence_style)
       setEmotionalTone(data.emotional_tone)
-      setTypicalHooks(data.typical_hooks.join("\n"))
-      setAvoidWords(data.avoid_words.join("\n"))
+      setTypicalHooks(data.typical_hooks)
+      setAvoidWords(data.avoid_words)
       setAudience(data.audience || "")
       setGuidelines(data.guidelines || "")
       setCta(data.cta || "")
@@ -302,17 +337,58 @@ function PersonaDetailPage() {
           its own width (skin editor breathes to 6xl) so page chrome never
           jumps sideways on tab switch. */}
       <div className="mx-auto w-full max-w-4xl">
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-4">
           <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/personas" />}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{persona.name}</h1>
-            {persona.title && (
-              <p className="truncate text-sm text-muted-foreground">{persona.title}</p>
-            )}
-          </div>
         </div>
+        <Card className="mb-6 shadow-lg">
+          <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div className="min-w-0 flex-1 basis-48">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">{persona.name}</h1>
+              {persona.title && (
+                <p className="truncate text-sm text-muted-foreground">{persona.title}</p>
+              )}
+            </div>
+            <OverviewStat
+              icon={Mic}
+              label={t("personaDetail.overview.voice")}
+              value={
+                persona.voice === null
+                  ? t("personaDetail.voice.auto")
+                  : persona.voice.kind === "cloned"
+                    ? t("personaDetail.voice.mine")
+                    : t("personaDetail.voice.stock")
+              }
+              onClick={() => setTab("persona")}
+            />
+            <OverviewStat
+              icon={Palette}
+              label={t("personaDetail.overview.skin")}
+              value={
+                persona.brand === null
+                  ? t("personaDetail.overview.skinDefault")
+                  : t("personaDetail.overview.skinCustom")
+              }
+              onClick={() => setTab("skin")}
+            />
+            <OverviewStat
+              icon={FileText}
+              label={t("personaDetail.overview.materials")}
+              value={String(materials.length)}
+              onClick={() => setTab("materials")}
+            />
+            <OverviewStat
+              icon={History}
+              label={t("personaDetail.overview.calibrated")}
+              value={
+                persona.calibrated_at
+                  ? formatRelativeTime(persona.calibrated_at, i18n.language)
+                  : t("personaDetail.overview.never")
+              }
+            />
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="flex-1">
@@ -381,25 +457,46 @@ function PersonaDetailPage() {
                     </div>
                   </div>
 
-                  {([
-                    { key: "core_values", value: coreValues, setter: setCoreValues, rows: 4 },
-                    { key: "favorite_metaphors", value: favoriteMetaphors, setter: setFavoriteMetaphors, rows: 3 },
-                    { key: "typical_hooks", value: typicalHooks, setter: setTypicalHooks, rows: 4 },
-                    { key: "avoid_words", value: avoidWords, setter: setAvoidWords, rows: 3 },
-                  ] as const).map((item) => {
-                    const label = t(`personaDetail.fields.${item.key}` as const)
-                    return (
-                      <div key={item.key} className="space-y-2">
-                        <Label>{label}</Label>
-                        <Textarea
-                          value={item.value}
-                          onChange={(e) => item.setter(e.target.value)}
-                          rows={item.rows}
-                          placeholder={t("personaDetail.fieldPlaceholder", { label })}
-                        />
-                      </div>
-                    )
-                  })}
+                  <div className="space-y-2">
+                    <Label>{t("personaDetail.fields.core_values")}</Label>
+                    <ChipList
+                      items={coreValues}
+                      onChange={setCoreValues}
+                      addLabel={t("personaDetail.addItem")}
+                      emptyText={t("personaDetail.emptyList")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("personaDetail.fields.favorite_metaphors")}</Label>
+                    <QuoteCardList
+                      items={favoriteMetaphors}
+                      onChange={setFavoriteMetaphors}
+                      addLabel={t("personaDetail.addItem")}
+                      emptyText={t("personaDetail.emptyList")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("personaDetail.fields.typical_hooks")}</Label>
+                    <QuoteCardList
+                      items={typicalHooks}
+                      onChange={setTypicalHooks}
+                      addLabel={t("personaDetail.addItem")}
+                      emptyText={t("personaDetail.emptyList")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("personaDetail.fields.avoid_words")}</Label>
+                    <ChipList
+                      items={avoidWords}
+                      onChange={setAvoidWords}
+                      addLabel={t("personaDetail.addItem")}
+                      emptyText={t("personaDetail.emptyList")}
+                      variant="warning"
+                    />
+                  </div>
 
                   <div className="space-y-2">
                     <CardTitle className="text-base">{t("personaDetail.contentStrategyTitle")}</CardTitle>

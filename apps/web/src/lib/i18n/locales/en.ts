@@ -593,7 +593,19 @@ const en = {
     saveChanges: "Save Changes",
     tone: "Emotional tone",
     sentenceStyle: "Sentence style",
-    fieldPlaceholder: "One {{label}} per line",
+    addItem: "Add",
+    emptyList: "None yet",
+    removeItem: "Remove",
+    editItem: "Edit",
+    overview: {
+      voice: "Voice",
+      skin: "Skin",
+      skinDefault: "Default",
+      skinCustom: "Custom",
+      materials: "Assets",
+      calibrated: "Last generated",
+      never: "Not yet",
+    },
     fields: {
       core_values: "Core values",
       favorite_metaphors: "Favorite metaphors",
@@ -862,6 +874,18 @@ const en = {
       // 过程脊 group node (D6): the folded middle steps as one container.
       spine: "Process",
       spineSteps: "{{count}} steps",
+      // Artifact node cards (D6 修订 — the render unit is the intervenable
+      // artifact): plan / selection / dub / music.
+      artifact: {
+        plan: "Plan",
+        selection: "Selection",
+        dub: "Dub",
+        music: "Music",
+      },
+      // Render state projected onto the product card in place (never a
+      // separate node); the retry channel is the chat dock (D8).
+      renderFailed: "Render failed — ask below to retry.",
+      rendering: "Rendering…",
     },
     // The product node's deterministic next-step line (D5 — zero-LLM,
     // derived from the output type; presented, never a control).
