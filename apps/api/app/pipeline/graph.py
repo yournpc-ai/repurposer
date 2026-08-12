@@ -176,13 +176,26 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
-    # Canvas 展示档 (ADR-041 D6, 与 label() 同哲学——节点类自描述): "spine"
-    # folds into the results canvas's collapsible 过程脊 group node;
-    # "primary" always stays visible. The test for any node: "hide it — does
-    # the user make a wrong decision or lose trust?" Folding is a VIEW
+    # Canvas 渲染单元 (2026-08-12 ADR-041 D6 修订, 与 label() 同哲学——节点类
+    # 自描述): the results canvas renders ARTIFACT nodes, not steps — the unit
+    # is "something produced the user may point at in chat and say 'change
+    # this'". ``canvas_group`` returns the node's artifact key; steps sharing
+    # a key within one run merge into ONE canvas node (director's
+    # understand+checkpoint+plan = the single "plan" card). None = fold into
+    # the 过程脊 group node (plumbing nobody intervenes on). ``canvas_hidden``
+    # = never a node at all — the step's state projects onto the product card
+    # in place (render is 1:1 with its clip). Folding/projection is a VIEW
     # behavior — the step rows stay full (cost / rerun / lineage rely on
-    # them); a failed step breaks out of the spine on the canvas regardless.
-    display_tier: str = "spine"
+    # them).
+    canvas_hidden: bool = False
+
+    def canvas_group(self, node: Any) -> str | None:
+        return None
+
+    def canvas_text(self, node: Any) -> str | None:
+        """The canvas node's body copy (the card shows it verbatim). Default
+        None = the surface falls back to the step's summary line."""
+        return None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

@@ -1460,10 +1460,17 @@ class StepResponse(BaseModel):
     output_refs: list[UUID] = Field(default_factory=list)
     # DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036).
     inputs: list[UUID] = Field(default_factory=list)
-    # Canvas 展示档 (ADR-041 D6) — the node class's self-described tier,
-    # lifted by the serializer: "spine" folds into the 过程脊 group node,
-    # "primary" stays visible. View behavior only; the row set is always full.
-    display_tier: str = "spine"
+    # Canvas 渲染单元 (ADR-041 D6 修订 2026-08-12) — the node class's
+    # self-described artifact identity, lifted by the serializer: steps
+    # sharing a ``canvas_key`` within one run merge into ONE canvas node
+    # ("plan" = understand+checkpoint+plan); None folds into the 过程脊;
+    # ``canvas_hidden`` never renders (render projects onto the product
+    # card). View behavior only; the row set is always full.
+    canvas_key: str | None = None
+    canvas_hidden: bool = False
+    # The canvas node's body copy (e.g. the checkpoint's full direction
+    # answer) — None = the surface falls back to ``summary``.
+    canvas_text: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
 

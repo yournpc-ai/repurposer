@@ -87,6 +87,13 @@ export function ResultsCanvas({
             onOutputClick?.(output)
             return
           }
+          if (id.startsWith("artifact:")) {
+            // 工件卡 = 可干预的产出物 (D6 修订): clicking points the dock at
+            // the group's representative step (@workflow_step, D8).
+            const node = nodeById.get(id)
+            if (node?.anchorStepId) onStepClick?.(node.anchorStepId, node.label)
+            return
+          }
           if (id.startsWith("step:")) {
             const node = nodeById.get(id)
             if (node) onStepClick?.(id.slice(5), node.label)

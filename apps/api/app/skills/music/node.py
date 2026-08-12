@@ -30,6 +30,9 @@ class AddMusic(NodeBase):
     after = ("select_clips",)
     requires = (MEDIA,)
 
+    def canvas_group(self, node):
+        return "music"
+
     def estimate(self, ctx: dict) -> dict | None:
         """Library pick by code — no LLM, no generation (the same fan-out
         render caveat as the other morphs)."""

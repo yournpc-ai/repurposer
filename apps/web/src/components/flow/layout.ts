@@ -9,6 +9,10 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   output: { width: 128, height: 216 },
   step: { width: 192, height: 72 },
   spine: { width: 192, height: 72 },
+  /** Artifact nodes (D6 修订 — plan / selection / dub / music cards): the
+   * three-section anatomy (type + status / body copy / spec line) sized for
+   * a four-line body clamp. */
+  artifact: { width: 224, height: 168 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡): thumb + score /

@@ -53,9 +53,12 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
-        # 展示档 (D6) comes from the node CLASS (self-description, like
-        # label()), never the row — legacy/unknown kinds fold by default.
-        display_tier=node_cls.display_tier if node_cls else "spine",
+        # 渲染单元 (D6 修订) comes from the node CLASS (self-description,
+        # like label()), never the row — legacy/unknown kinds fold into the
+        # spine by default.
+        canvas_key=node_cls.canvas_group(node) if node_cls else None,
+        canvas_hidden=node_cls.canvas_hidden if node_cls else False,
+        canvas_text=(node_cls.canvas_text(node) if node_cls else None),
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         started_at=node.started_at,

@@ -191,9 +191,14 @@ export interface WorkflowStep {
   output_refs?: string[]
   /** DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036). */
   inputs?: string[]
-  /** Canvas 展示档 (ADR-041 D6): "spine" folds into the 过程脊 group node;
-   * "primary" stays visible. Absent on legacy payloads = spine. */
-  display_tier?: string | null
+  /** Canvas 渲染单元 (ADR-041 D6 修订): steps sharing a canvas_key merge
+   * into ONE artifact node; null folds into the 过程脊; canvas_hidden never
+   * renders (render projects onto the product card in place). */
+  canvas_key?: string | null
+  canvas_hidden?: boolean
+  /** The artifact node's body copy (e.g. the checkpoint's full direction
+   * answer); absent = the card falls back to the summary line. */
+  canvas_text?: string | null
   started_at: string | null
   finished_at: string | null
 }

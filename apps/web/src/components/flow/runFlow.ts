@@ -8,14 +8,24 @@ import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
  * run's real topology → the FlowView contract, consumed by the results
- * canvas. Composition (brief §2): assets left, process steps middle,
- * product outputs right.
+ * canvas. Composition: assets left, ARTIFACT nodes middle, product outputs
+ * right.
+ *
+ * 渲染单元 (D6 修订 2026-08-12): the canvas renders artifact nodes, not
+ * steps — the unit is "something produced the user may point at in chat and
+ * say 'change this'" (plan / selection / dub / music). Steps sharing the
+ * class-declared `canvas_key` merge into ONE node; keyless steps fold into
+ * the 过程脊; `canvas_hidden` steps (render) never appear — their state
+ * projects onto the product card in place. All of it is VIEW behavior over
+ * the full step rows.
  *
  * Edge discipline (prohibitions #9 / #11): dependency edges come from the
  * server's edge table (step `inputs`) plus the structural fact every recipe
  * adapter already relies on — source assets feed the root steps; lineage
  * edges come from server-resolved fields only (output.workflow_step_id).
- * The frontend never invents derivation. */
+ * Endpoint rewiring (step → its artifact card / the spine; hidden step →
+ * its first rendered ancestor via `inputs`) is mechanical projection over
+ * that same real data — the frontend never invents derivation. */
 export interface RunFlowAsset {
   id: string
   type: string
@@ -52,6 +62,16 @@ function stepNodeStatus(status: string): FlowNodeStatus {
   }
 }
 
+/** Aggregate status over a canvas node's member steps: failure is always
+ * visible (in place — the card itself turns red), then liveness. */
+function aggregateStatus(members: WorkflowStep[]): FlowNodeStatus {
+  const statuses = members.map((s) => stepNodeStatus(s.status))
+  if (statuses.some((s) => s === "failed")) return "failed"
+  if (statuses.some((s) => s === "running")) return "running"
+  if (statuses.every((s) => s === "done" || s === "skipped")) return "done"
+  return "pending"
+}
+
 /** The 过程脊 group node's reserved id (D6) — every folded step's edges
  * rewire to it; the surface toggles expansion off this id. */
 export const SPINE_NODE_ID = "spine"
@@ -64,8 +84,10 @@ export function runFlowGraph(
     /** The node carrying the results tour's data-tour anchors (first ready
      * product, chosen by the surface). */
     tourOutputId?: string | null
-    /** 过程脊 state (D6): collapsed (default) folds every spine-tier step
-     * into one group node; expanded renders the full step topology. */
+    /** 过程脊 state (D6): collapsed (default) folds the keyless plumbing
+     * steps into one group node; expanded renders them as step pills.
+     * Artifact cards stay cards either way — they are render units, not
+     * steps. */
     spineExpanded?: boolean
   },
   t: TFunction
@@ -75,6 +97,7 @@ export function runFlowGraph(
   const { assets, steps, outputs, tourOutputId, spineExpanded = false } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
+  const byId = new Map(steps.map((s) => [s.id, s]))
 
   assets.forEach((asset, i) => {
     const typeLabel = t(`generationOverlay.assetTypes.${asset.type}`, {
@@ -90,33 +113,112 @@ export function runFlowGraph(
     })
   })
 
-  // 过程脊 (ADR-041 D6): spine-tier steps fold into one expandable group
-  // node. Folding is a VIEW behavior — the step rows stay full (cost /
-  // rerun / lineage read them). A FAILED step always breaks out (the D6
-  // test: "hide it — does the user lose trust?"), as does a node class
-  // self-describing "primary" (NodeBase.display_tier).
-  const foldable = (s: WorkflowStep) =>
-    s.display_tier !== "primary" && s.status !== "failed"
-  const hiddenSteps = spineExpanded ? [] : steps.filter(foldable)
-  const hiddenNodeIds = new Set(hiddenSteps.map((s) => `step:${s.id}`))
-  const visibleSteps = spineExpanded ? steps : steps.filter((s) => !foldable(s))
+  // ── 渲染单元分组 (D6 修订) ────────────────────────────────────────────
+  // canvas_hidden → never a node; canvas_key → merge into one artifact card
+  // per key; the rest → the 过程脊.
+  const artifactGroups = new Map<string, WorkflowStep[]>()
+  const spineSteps: WorkflowStep[] = []
+  for (const step of steps) {
+    if (step.canvas_hidden) continue
+    if (step.canvas_key) {
+      const group = artifactGroups.get(step.canvas_key) ?? []
+      artifactGroups.set(step.canvas_key, [...group, step])
+    } else {
+      spineSteps.push(step)
+    }
+  }
 
-  for (const step of visibleSteps) {
+  // step id → rendered node id. A hidden step (render) resolves through its
+  // own inputs to the first rendered ancestor — projection over the real
+  // edge table, never invented lineage.
+  const resolvedNode = new Map<string, string | null>()
+  const resolveStepNode = (
+    stepId: string,
+    trail: Set<string> = new Set()
+  ): string | null => {
+    if (resolvedNode.has(stepId)) return resolvedNode.get(stepId)!
+    if (trail.has(stepId)) return null // cycle guard — input is a DAG, never trust it
+    trail.add(stepId)
+    const step = byId.get(stepId)
+    let id: string | null = null
+    if (step) {
+      if (step.canvas_key) {
+        id = `artifact:${step.canvas_key}`
+      } else if (!step.canvas_hidden) {
+        id = spineExpanded ? `step:${step.id}` : SPINE_NODE_ID
+      } else {
+        for (const upstream of step.inputs ?? []) {
+          id = resolveStepNode(upstream, trail)
+          if (id) break
+        }
+      }
+    }
+    resolvedNode.set(stepId, id)
+    return id
+  }
+
+  // Artifact cards (D6 修订): body = the group's own copy (the plan card
+  // shows the picked direction in full via canvas_text; the others their
+  // summary line); the mention anchors to the group's last step.
+  for (const [key, members] of artifactGroups) {
+    const sorted = [...members].sort((a, b) => a.seq - b.seq)
+    const anchor = sorted[sorted.length - 1]
+    const bodyMember = sorted.find((s) => s.canvas_text) ?? anchor
+    const type = key.split(":", 1)[0]
     nodes.push({
-      id: `step:${step.id}`,
-      kind: "step",
-      // The same friendly-name chain the chat step flow uses (prohibition
-      // #10 — never a model name on the canvas).
-      label:
-        step.summary ||
-        (step.stage
-          ? t(`results.stepper.${step.stage}`, { defaultValue: "" })
-          : "") ||
-        t(`chat.stepKinds.${step.kind}`, { defaultValue: step.kind }),
-      status: stepNodeStatus(step.status),
-      order: step.seq,
+      id: `artifact:${key}`,
+      kind: "artifact",
+      artifact: key,
+      label: t(`results.canvas.artifact.${type}`, { defaultValue: type }),
+      body: bodyMember.canvas_text ?? bodyMember.summary ?? undefined,
+      // The plan card's second line = what the understanding found in the
+      // material ("11 arguments · 10 quotes").
+      detail:
+        key === "plan"
+          ? (sorted.find((s) => s.kind === "director_understand")?.summary ??
+            undefined)
+          : undefined,
+      status: aggregateStatus(sorted),
+      anchorStepId: anchor.id,
+      order: sorted[0].seq,
     })
   }
+
+  // The 过程脊: keyless plumbing folds into one expandable group node;
+  // expanding reveals the step pills (artifact cards are unaffected). A
+  // failed plumbing step no longer breaks out — the group node itself
+  // carries the failed aggregate (the run's failure is narrated in chat).
+  if (spineExpanded) {
+    for (const step of spineSteps) {
+      nodes.push({
+        id: `step:${step.id}`,
+        kind: "step",
+        // The same friendly-name chain the chat step flow uses (prohibition
+        // #10 — never a model name on the canvas).
+        label:
+          step.summary ||
+          (step.stage
+            ? t(`results.stepper.${step.stage}`, { defaultValue: "" })
+            : "") ||
+          t(`chat.stepKinds.${step.kind}`, { defaultValue: step.kind }),
+        status: stepNodeStatus(step.status),
+        order: step.seq,
+      })
+    }
+  } else if (spineSteps.length > 0) {
+    nodes.push({
+      id: SPINE_NODE_ID,
+      kind: "spine",
+      label: t("results.canvas.spine"),
+      detail: t("results.canvas.spineSteps", { count: spineSteps.length }),
+      status: aggregateStatus(spineSteps),
+      expanded: false,
+      order: Math.min(...spineSteps.map((s) => s.seq)),
+    })
+  }
+
+  // Step-level dependency edges (the raw table; endpoints resolve to canvas
+  // nodes in the final pass).
   for (const step of steps) {
     for (const upstream of step.inputs ?? []) {
       // Guard: edges only between steps present in this run's payload.
@@ -128,26 +230,6 @@ export function runFlowGraph(
         })
       }
     }
-  }
-
-  // The spine group node: one stand-in for the folded steps, carrying their
-  // count and aggregate state. Click expands in place (the surface owns the
-  // toggle; the adapter just renders the state it is handed).
-  if (hiddenSteps.length > 0) {
-    const statuses = hiddenSteps.map((s) => stepNodeStatus(s.status))
-    nodes.push({
-      id: SPINE_NODE_ID,
-      kind: "spine",
-      label: t("results.canvas.spine"),
-      detail: t("results.canvas.spineSteps", { count: hiddenSteps.length }),
-      status: statuses.every((s) => s === "done" || s === "skipped")
-        ? "done"
-        : statuses.some((s) => s === "running")
-          ? "running"
-          : "pending",
-      expanded: false,
-      order: 0,
-    })
   }
 
   // Source assets feed the root steps (the run's entry points) — process
@@ -210,14 +292,20 @@ export function runFlowGraph(
     }
   })
 
-  // Fold: hidden steps' edge endpoints rewire to the spine node (self-loops
-  // and duplicates collapse) — the visible graph stays真边, never invented.
+  // Final pass: step endpoints resolve to their canvas node (artifact card /
+  // spine / step pill when the spine is expanded; hidden steps walk to their
+  // first rendered ancestor). Self-loops and duplicates collapse — the
+  // visible graph stays 真边, never invented.
   const seen = new Set<string>()
   const edges: FlowEdge[] = []
   for (const e of rawEdges) {
-    const from = hiddenNodeIds.has(e.from) ? SPINE_NODE_ID : e.from
-    const to = hiddenNodeIds.has(e.to) ? SPINE_NODE_ID : e.to
-    if (from === to) continue
+    const from = e.from.startsWith("step:")
+      ? resolveStepNode(e.from.slice(5))
+      : e.from
+    const to = e.to.startsWith("step:")
+      ? resolveStepNode(e.to.slice(5))
+      : e.to
+    if (!from || !to || from === to) continue
     const key = `${from}|${to}|${e.semantic}`
     if (seen.has(key)) continue
     seen.add(key)

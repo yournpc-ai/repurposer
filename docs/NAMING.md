@@ -83,7 +83,8 @@
 | 底部 dock | chat dock | 结果期的输入组停靠位（GenerationOverlay dock shell）：摘要卡 + 历史抽屉 + 输入组；agent 发声必自动升起 | 不是第二意图入口（推断/合并/确认全在 plan path） |
 | 焦点注入 | focus injection（`focus_output_id`） | 画布点选产物 → 每轮 chat 携带焦点 id，context 加一行"当前焦点 output"（ADR-041 D8）；每轮携带、不落库 | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
 | 诞生回放 | birth choreography | 收官时画布按 `seq` 编译序逐节点入场 + 边描画（真实编译顺序的缓动回放，ADR-036 补记 3）；reduced-motion / 断线重连 / 历史打开直接终态 | 禁剧场（动画 = 真实事件投影） |
-| 过程脊 | process spine | 结果画布的中间步骤折叠组节点（ADR-041 D6）：骨架密度 = 素材 + 产物主角，spine 档步骤折为一个可就地展开的组节点（步骤计数 + 聚合状态，组节点 id 恒 `spine`）；展示档由节点类自描述（`NodeBase.display_tier`，与 `label()` 同哲学），失败步骤自动破脊 | 折叠是视图行为不是数据行为——图数据永远全量（成本 / 重跑 / 血缘靠它） |
+| 过程脊 | process spine | 结果画布的无键步骤折叠组节点（ADR-041 D6）：渲染单元之外的管道步骤（preprocess / persona_bootstrap / 修饰 morphs）折为一个可就地展开的组节点（步骤计数 + 聚合状态，组节点 id 恒 `spine`）；失败不再破脊，聚合状态承载 | 折叠是视图行为不是数据行为——图数据永远全量（成本 / 重跑 / 血缘靠它） |
+| 渲染单元 | canvas render unit（`canvas_key` / `canvas_hidden` / `canvas_text`） | 结果画布的节点粒度（ADR-041 D6 修订 2026-08-12）：画布渲染工件卡，不渲染 step——节点类自描述聚合键（与 `label()` 同哲学），同键 steps 合一卡（`plan` = understand+checkpoint+plan / `selection` / `dub:{lang}` 按语言分卡 / `music`）；`canvas_hidden`（render）永不上图，状态原地投影到产物卡；`canvas_text` = 卡面主体文案（如 checkpoint 的方向全文） | 不是 step 一一对应；判定问句："用户会想 @它 说改这个吗？" |
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |

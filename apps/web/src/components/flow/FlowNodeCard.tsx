@@ -137,6 +137,33 @@ function SpineCard({ node }: { node: FlowNode }) {
   )
 }
 
+/** The artifact node's card (D6 修订 — the render unit is the intervenable
+ * artifact: plan / selection / dub / music). Three-section anatomy (the
+ * Lovart anatomy, interaction NOT copied): the type + status up top, the
+ * produced thing as the body copy, the spec line at the bottom — read-only;
+ * changing it happens in chat via the @workflow_step mention, never on the
+ * card. No toolbar (D5: process nodes never carry one). */
+function ArtifactCard({ node }: { node: FlowNode }) {
+  return (
+    <div className="flex h-full w-full flex-col gap-1.5 rounded-lg bg-card p-3 ring-foreground/10 ring-1">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-meta text-[11px]">{node.label}</p>
+        {node.status && node.status !== "pending" && (
+          <StatusBadge status={node.status} />
+        )}
+      </div>
+      {node.body && (
+        <p className="line-clamp-4 text-xs leading-snug">{node.body}</p>
+      )}
+      {node.detail && (
+        <p className="mt-auto truncate text-[11px] leading-tight text-muted-foreground">
+          {node.detail}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** The output node's product-card skin (ADR-041 D5 — the node IS the card):
  * thumbnail with the score / top-pick badge, title, and the deterministic
  * next-step line. On hover a floating toolbar rides above the card (with a
@@ -162,6 +189,15 @@ function ProductCard({
   const score = typeof output.score?.value === "number" ? output.score.value : null
   const duration = output.type === "clip" ? (output.payload.duration ?? null) : null
   const hasVideo = !!output.files.video
+  // Render state projects onto the card in place (D6 修订): a failed render
+  // is the CARD turning failed — never a separate node hanging off the
+  // graph; the retry channel is the chat dock (D8), so no toolbar action.
+  const renderFailed =
+    output.type === "clip" && output.render_status === "failed"
+  const renderActive =
+    output.type === "clip" &&
+    !hasVideo &&
+    (output.render_status === "pending" || output.render_status === "rendering")
   // The toolbar only carries actions that exist for this product type —
   // moved over from the old card faces, nothing new invented (D5 平移): a
   // clip without its MP4 yet offers neither preview nor download (the old
@@ -226,14 +262,18 @@ function ProductCard({
           <img src={node.thumbUrl} alt={title} className="h-full w-full object-cover" />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-            {output.type === "clip" ? (
+            {renderFailed ? (
+              <X className="h-5 w-5 text-destructive" />
+            ) : renderActive ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : output.type === "clip" ? (
               <Clapperboard className="h-5 w-5" />
             ) : (
               <FileText className="h-5 w-5" />
             )}
           </span>
         )}
-        {score !== null && (
+        {score !== null && !renderFailed && (
           <span
             data-tour={node.tourTargets ? "results-score" : undefined}
             title={output.score?.reason ?? undefined}
@@ -247,7 +287,7 @@ function ProductCard({
             {node.topPick ? `${t("results.topPick")} · ${score}` : score}
           </span>
         )}
-        {duration !== null && duration > 0 && (
+        {duration !== null && duration > 0 && !renderFailed && (
           <span className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
             {duration}s
           </span>
@@ -262,12 +302,24 @@ function ProductCard({
         </p>
         {/* The deterministic next-step line (D5 下一步建议 — zero-LLM,
             derived from the product type; the consultant posture's "always
-            one next step", presented, never a control). */}
-        <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-          {t(`results.nextStep.${output.type}`, {
-            defaultValue: t("results.nextStep.default"),
-          })}
-        </p>
+            one next step", presented, never a control). A failed/active
+            render replaces it with the in-place state + the chat retry
+            channel (D8). */}
+        {renderFailed ? (
+          <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-destructive">
+            {t("results.canvas.renderFailed")}
+          </p>
+        ) : renderActive ? (
+          <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+            {t("results.canvas.rendering")}
+          </p>
+        ) : (
+          <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+            {t(`results.nextStep.${output.type}`, {
+              defaultValue: t("results.nextStep.default"),
+            })}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -300,6 +352,8 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         <StepCard node={node} />
       ) : node.kind === "spine" ? (
         <SpineCard node={node} />
+      ) : node.kind === "artifact" ? (
+        <ArtifactCard node={node} />
       ) : node.kind === "output" ? (
         <ProductCard node={node} onOutputAction={onOutputAction} />
       ) : (

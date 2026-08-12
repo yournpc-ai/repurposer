@@ -66,6 +66,11 @@ class SelectClips(NodeBase):
     count_limits = (1, 10)
     agents = (clip_writer,)
 
+    def canvas_group(self, node):
+        # The selection is an intervention target of its own ("swap segment
+        # 3") and the lineage anchor for the clip cards' fan-out.
+        return "selection"
+
     def estimate(self, ctx: dict) -> dict | None:
         """One clip_writer call (multimodal): anchored transcript + asset
         texts + media snippets, completion scaling with the clip count. The

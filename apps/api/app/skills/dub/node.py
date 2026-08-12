@@ -41,6 +41,12 @@ class DubClip(NodeBase):
     retries = 2
     agents = (translator,)
 
+    def canvas_group(self, node):
+        # One dub card per language — multi-language runs stack them in
+        # parallel, each its own mention target.
+        lang = (node.spec or {}).get("target_language") or ""
+        return f"dub:{lang}"
+
     def estimate(self, ctx: dict) -> dict | None:
         """TTS 按字符 / 克隆按次 + translator token range, driven by the
         target clips' caption text — knowable only when the clips EXIST at
