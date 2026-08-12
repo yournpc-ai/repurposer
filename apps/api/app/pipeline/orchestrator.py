@@ -113,6 +113,11 @@ class TaskSpec(BaseModel):
     operation: str = "regenerate"
     target_id: UUID | None = None
     tasks: list[TaskItem] | None = None
+    # The UI locale the run was launched under (Accept-Language, pinned at
+    # the birthplace): display-layer strings (step summaries, ask chrome)
+    # follow it, never the material's language. None on legacy rows → the
+    # display layer falls back to project/source language.
+    ui_language: str | None = None
 
 
 class _NodeSpec:
@@ -150,7 +155,7 @@ def ordered_slots(slots: list[IntentSlot]) -> list[IntentSlot]:
     return ordered
 
 
-def slot_step_label(slot: IntentSlot) -> str | None:
+def slot_step_label(slot: IntentSlot, ui_language: str = "en") -> str | None:
     """Display label distinguishing same-kind sibling steps (per-slot fan-out).
 
     The label derives from the slot type's node (``NodeBase.label`` — the
@@ -159,12 +164,13 @@ def slot_step_label(slot: IntentSlot) -> str | None:
     English/German) read differently in the stepper before they run; the
     runner rewrites it with the quantified line + the same tag when done.
     ``None`` when the slot carries nothing distinguishing (the common case —
-    the stepper then falls back to the kind copy as before).
+    the stepper then falls back to the kind copy as before). ``ui_language``
+    is the run's pinned UI locale — the label word follows it.
     """
     owner = node_for_output(slot.type)
     if owner is None:
         return None
-    return owner.label(slot)
+    return owner.label(slot, ui_language)
 
 
 def compile_graph(
@@ -235,7 +241,7 @@ def compile_graph(
                 "slot": slot.model_dump(mode="json"),
                 "slot_index": slot_index,
             }
-            label = slot_step_label(slot)
+            label = slot_step_label(slot, task.ui_language or "en")
             if label:
                 spec["summary"] = label
             inputs = [plan_idx]
@@ -256,6 +262,7 @@ def compile_graph(
         if task.dub_languages:
             if clips_idx is None:
                 raise ValueError("dub_languages requires a clips slot")
+            zh_ui = (task.ui_language or "").startswith("zh")
             for lang in dict.fromkeys(task.dub_languages):
                 nodes.append(
                     _NodeSpec(
@@ -265,7 +272,11 @@ def compile_graph(
                         spec={
                             "target_language": lang,
                             "fork": True,
-                            "summary": f"Dub · {lang.upper()}",
+                            # Step lines follow the run's UI locale (same rule
+                            # as slot_step_label above).
+                            "summary": (
+                                f"配音 · {lang.upper()}" if zh_ui else f"Dub · {lang.upper()}"
+                            ),
                         },
                     )
                 )
@@ -529,6 +540,13 @@ async def create_run(
     answer that started it, and the project state land in ONE transaction
     (the run only becomes claimable by the worker on commit).
     """
+    # Pin the requesting browser's locale into the task book (stored verbatim
+    # on run.context below) — the worker process has no request context, so
+    # display strings read the pinned value off the run.
+    if task.ui_language is None:
+        from app.ui_locale import current_ui_language  # deferred: import cycle
+
+        task.ui_language = current_ui_language()
     target_type: str | None = None
     if task.scope in _TARGETED_DERIVATIVE_SCOPES and task.target_id is not None:
         target = await db.get(Output, task.target_id)

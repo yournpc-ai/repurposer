@@ -969,7 +969,7 @@ const en = {
     qa: {
       q: "Q",
       a: "A",
-      started: "Started generation",
+      started: "Start generation",
       cancelled: "Cancelled — back to draft",
       superseded: "Superseded by a newer plan",
       expired: "Timed out — continued with the default",

@@ -43,6 +43,7 @@ from app.pipeline.step_display import (
     _node_slot,
     _set_stage,
     slot_tag,
+    ui_lang_of,
 )
 from app.platform.project_context import collect_asset_texts, resolve_run_persona
 from app.skills.clips.agents import clip_writer
@@ -56,6 +57,7 @@ class SelectClips(NodeBase):
     kind = "select_clips"
     output_type = "clips"
     slot_label = "Clips"
+    slot_label_zh = "切片"
     slot_ordinal = 0
     needs_director = True
     requires = (MEDIA, TRANSCRIPT)
@@ -325,6 +327,7 @@ class SelectClips(NodeBase):
             node.id,
             self.kind,
             tag=slot_tag(slot),
+            ui_language=ui_lang_of(run, project),
             n=len(output_ids),
             total_seconds=sum(
                 int(plan.duration_seconds or 0) for plan in plans.clips[:clip_count]

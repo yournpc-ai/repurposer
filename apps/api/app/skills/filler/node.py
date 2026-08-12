@@ -20,7 +20,7 @@ from app.pipeline.morph import (
     _run_origin,
     _target_clips,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary
+from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
 from app.tools.filler import detect
 
 
@@ -46,7 +46,10 @@ class RemoveFiller(NodeBase):
         await _set_stage(node.id, "removing_fillers")
         clips = await _target_clips(db, node, project)
         if not clips:
-            await _set_summary(node.id, "No clips to clean")
+            await _set_summary(
+                node.id,
+                "没有可清理的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to clean",
+            )
             return []
 
         origin = await _run_origin(db, run)
@@ -99,7 +102,10 @@ class RemoveFiller(NodeBase):
             total_repeats += applied_repeats
 
         if not touched:
-            await _set_summary(node.id, "No fillers found")
+            await _set_summary(
+                node.id,
+                "没有发现口水词" if ui_lang_of(run, project).startswith("zh") else "No fillers found",
+            )
             return []
 
         await _fan_out_renders(db, run, node, touched)
@@ -107,6 +113,7 @@ class RemoveFiller(NodeBase):
         await _fill_summary(
             node.id,
             self.kind,
+            ui_language=ui_lang_of(run, project),
             filler_count=total_fillers,
             repeat_count=total_repeats,
         )

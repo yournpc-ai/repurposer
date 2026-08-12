@@ -49,6 +49,10 @@ def _run_frame(run: WorkflowRun, nodes: list[WorkflowStep]) -> dict:
         "status": run.status,
         "progress": run.progress,
         "error": run.error,
+        # The overlay interleaves chat messages and run blocks by real time
+        # (#5: the stream keeps chronological order), so the run needs its
+        # anchor in every frame.
+        "created_at": run.created_at.isoformat() if run.created_at else None,
     }
     if run.status in _TERMINAL:
         frame["summary"] = aggregate_run_summary(nodes)

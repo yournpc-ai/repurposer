@@ -165,6 +165,7 @@ class NodeBase:
     kind: str = ""  # unique key; a skill node's kind IS the skill name (N-35)
     output_type: str | None = None  # producer nodes only (outputs extensibility seat, N-32)
     slot_label: str | None = None  # the output type's display word ("Clips")
+    slot_label_zh: str | None = None  # its Chinese form ("切片") — step lines follow the UI locale
     slot_ordinal: int = 99  # canonical fan-out order among output types
     after: tuple[str, ...] = ()  # topology constraint (modifier ordering)
     needs_director: bool = False  # needs the director prelude (preprocess→persona∥understand→plan)
@@ -217,15 +218,21 @@ class NodeBase:
         """
         return None
 
-    def label(self, slot: IntentSlot | None) -> str | None:
+    def label(self, slot: IntentSlot | None, ui_language: str = "en") -> str | None:
         """Display name preset as the step's creation-time summary — run
         progress graph and step list share this one source. ``None`` when the
         slot carries nothing distinguishing (the stepper then falls back to
-        the kind copy as before)."""
+        the kind copy as before). ``ui_language`` is the run's pinned UI
+        locale: the label word follows it, never the material's language."""
         tag = slot_tag(slot)
         if tag is None:
             return None
-        return f"{self.slot_label or self.kind} · {tag}"
+        word = (
+            self.slot_label_zh
+            if ui_language.startswith("zh") and self.slot_label_zh
+            else self.slot_label
+        )
+        return f"{word or self.kind} · {tag}"
 
     async def reuse(self, *args: Any, **kwargs: Any) -> UUID | None:
         """Idempotent-reuse predicate (asset-hash class): a hit returns the

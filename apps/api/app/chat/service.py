@@ -1308,11 +1308,17 @@ async def prepare_chat_turn(
         decided = (answered_question.answer or {}).get("text") or (
             answered_question.answer or {}
         ).get("option_id") or ""
+        # Deterministic acknowledgment — display language follows the
+        # request's UI locale (the option label is already localized).
+        from app.ui_locale import current_ui_language
+
         checkpoint_reply = await _create_message(
             db,
             conversation_id,
             "assistant",
-            f"Direction locked: {decided}. Resuming the run.",
+            f"方向已锁定：{decided}。继续生成。"
+            if (current_ui_language() or "").startswith("zh")
+            else f"Direction locked: {decided}. Resuming the run.",
         )
     else:
         # Plan path dispatch (intent-surface-unification W1): this endpoint is

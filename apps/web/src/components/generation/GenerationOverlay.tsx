@@ -212,6 +212,10 @@ interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** Chronological anchor (ISO) — the flow interleaves run blocks and
+   * mid-run QA archives by real time (#5: the stream never scrambles).
+   * Server-rebuilt items carry the row's created_at; live pushes stamp now. */
+  at?: string
   /** Files uploaded mid-conversation (the chat's attach button) — rendered
    * as attachment chips on the user bubble. */
   assets?: ProjectAsset[]
@@ -241,6 +245,7 @@ interface QuestionMessage {
   question: QuestionPayload | null
   answer: QaAnswer | null
   workflow_run_id: string | null
+  created_at?: string
 }
 
 interface ProjectAsset {
@@ -709,7 +714,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
 
-  const { steps, status, terminal, summary } = useRunEvents(runId)
+  const { steps, status, terminal, summary, createdAt: runCreatedAt } = useRunEvents(runId)
   // Ref mirror: sendChat's async continuation must read the live terminal
   // state, not a stale closure.
   const terminalRef = useRef(terminal)
@@ -812,6 +817,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               id: m.id,
               role: "user",
               content: m.content ?? "",
+              at: m.created_at,
               // Sent attachments persist on the message row — re-render the
               // chips so a refresh / another device keeps the record.
               assets: (m.attachments ?? []).map((a) => ({
@@ -829,6 +835,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 id: m.id,
                 role: "assistant",
                 content: "",
+                at: m.created_at,
                 qa: {
                   question: m.content ?? "",
                   answer: display.text,
@@ -843,6 +850,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               role: "assistant",
               content: m.content ?? "",
               runId: m.workflow_run_id,
+              at: m.created_at,
             })
           }
         }
@@ -1105,6 +1113,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       setPhase("running")
     } catch (e) {
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
+    } finally {
+      // Success AND failure both release the gate — a stuck isStarting
+      // silently swallows every later chat send (handleSend's guard), which
+      // is exactly how "typed an answer, send does nothing" happens.
       setIsStarting(false)
     }
   }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
@@ -1236,7 +1248,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   }
 
   const pushMessage = (message: Omit<OverlayMessage, "id">) => {
-    setMessages((prev) => [...prev, { ...message, id: crypto.randomUUID() }])
+    // Live pushes anchor at "now"; the QA archive anchors at the question's
+    // own created_at when the server row carries one (chronology, #5).
+    setMessages((prev) => [
+      ...prev,
+      { ...message, at: message.at ?? new Date().toISOString(), id: crypto.randomUUID() },
+    ])
   }
 
   /** The chat input's attach button: picked files stage as chips INSIDE the
@@ -1330,6 +1347,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     pushMessage({
       role: "assistant",
       content: "",
+      at: message.created_at,
       qa: {
         question: message.content ?? "",
         answer: display.text,
@@ -1433,14 +1451,20 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             )
           : [
               ...prev,
-              { id: streamId, role: "assistant", content: delta, streaming: true },
+              {
+                id: streamId,
+                role: "assistant",
+                content: delta,
+                streaming: true,
+                at: new Date().toISOString(),
+              },
             ]
       )
     }
     const typewriter = createTypewriter(appendDelta)
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount. */
-    const finalizePreview = (content?: string, runId?: string | null) =>
+    const finalizePreview = (content?: string, runId?: string | null, at?: string) =>
       setMessages((prev) =>
         prev.map((m) =>
           m.id === streamId
@@ -1448,6 +1472,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 ...m,
                 content: content ?? m.content,
                 runId: runId === undefined ? m.runId : runId,
+                // Re-anchor on the server row's created_at when the envelope
+                // carries it — the preview's client clock was only a stand-in.
+                at: at ?? m.at,
                 streaming: false,
               }
             : m
@@ -1488,7 +1515,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         // G-1: the prose confirmation answered the docked task book
         // server-side (kind=start) and the run is live — the same landing
         // as the dock's Start button.
-        finalizePreview()
+        finalizePreview(undefined, undefined, data.assistant_message.created_at)
         landOnStartedRun(data.run_id, data.answered_question ?? null)
         return
       }
@@ -1523,7 +1550,11 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       } else if (streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
         // the envelope content + run id are authoritative).
-        finalizePreview(message.content ?? "", message.workflow_run_id)
+        finalizePreview(
+          message.content ?? "",
+          message.workflow_run_id,
+          message.created_at,
+        )
       } else {
         setMessages((prev) => prev.filter((m) => m.id !== streamId))
         await handleAssistantMessage(message)
@@ -1713,7 +1744,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     const rollbackId = crypto.randomUUID()
     setMessages((prev) => [
       ...prev,
-      { id: rollbackId, role: "user", content: text, assets: sentAssets },
+      {
+        id: rollbackId,
+        role: "user",
+        content: text,
+        assets: sentAssets,
+        at: new Date().toISOString(),
+      },
     ])
     // Consumed on send (chip law ②): the editor's clear funnels the emptied
     // {text, mentions} back through onChange; an error chip stays staged for
@@ -1816,6 +1853,93 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChoice?.id, shell])
+
+  // Message-flow chronology (#5 — the Claude Code reference: the stream is
+  // ONE timeline that never scrambles; a QA archives inline at its real
+  // time, and NEWER replies keep flowing BELOW it). Once the run's birth
+  // time is known, header / steps / messages / terminal all sort by real
+  // time into a single walk: pre-run messages (the task-book reply, #2b)
+  // land above the run header; a mid-run QA lands right after its
+  // checkpoint step — before the render steps — and the assistant's
+  // follow-up to it stays below the QA, between the step groups.
+  // Consecutive steps merge into one bubble (today's visual); a message
+  // splits the group. No run anchor (confirm phase, pre-snapshot window) →
+  // the legacy fixed block + flat list below.
+  const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
+  const pendingSteps = useMemo(() => steps.filter((s) => !s.started_at), [steps])
+  type RunStreamUnit =
+    | { kind: "header" }
+    | { kind: "stepGroup"; steps: typeof steps }
+    | { kind: "message"; message: OverlayMessage }
+    | { kind: "pendingGroup" }
+    | { kind: "terminal" }
+  const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
+    if (phase !== "running" || runStartAt == null) return null
+    type Timed = { t: number; order: number; unit: RunStreamUnit }
+    const timed: Timed[] = []
+    let order = 0
+    timed.push({ t: runStartAt, order: order++, unit: { kind: "header" } })
+    for (const s of steps) {
+      if (s.started_at) {
+        timed.push({
+          t: Date.parse(s.started_at),
+          order: order++,
+          unit: { kind: "stepGroup", steps: [s] },
+        })
+      }
+    }
+    const undated: OverlayMessage[] = []
+    for (const m of messages) {
+      const t = m.at ? Date.parse(m.at) : NaN
+      if (Number.isNaN(t)) undated.push(m)
+      else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
+    }
+    if (terminal) {
+      // Anchor just after the last step so post-run replies sort BELOW the
+      // terminal markers.
+      const lastStepT = Math.max(
+        runStartAt,
+        ...steps.map((s) =>
+          Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
+        ),
+      )
+      timed.push({ t: lastStepT + 1, order: order++, unit: { kind: "terminal" } })
+    }
+    timed.sort((a, b) => a.t - b.t || a.order - b.order)
+    const units: RunStreamUnit[] = []
+    for (const entry of timed) {
+      const last = units[units.length - 1]
+      if (entry.unit.kind === "stepGroup" && last?.kind === "stepGroup") {
+        last.steps.push(...entry.unit.steps)
+      } else if (entry.unit.kind === "stepGroup") {
+        units.push({ kind: "stepGroup", steps: [...entry.unit.steps] })
+      } else {
+        units.push(entry.unit)
+      }
+    }
+    // Un-started steps (upcoming while live, skipped once finished) sit
+    // right before the terminal marker; with no steps at all the group
+    // hosts the queued stand-in. Undated legacy messages tail the stream.
+    const needPending =
+      pendingSteps.length > 0 || (steps.length === 0 && !terminal)
+    if (needPending) {
+      const terminalIdx = units.findIndex((u) => u.kind === "terminal")
+      if (terminalIdx >= 0) units.splice(terminalIdx, 0, { kind: "pendingGroup" })
+      else units.push({ kind: "pendingGroup" })
+    }
+    for (const m of undated) units.push({ kind: "message", message: m })
+    return units
+  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, pendingSteps])
+
+  // Refresh path: the start confirmation rebuilds from history as a pre-run
+  // QA archive ABOVE the header — the header's summary stand-in (attach /
+  // legacy fallback) must not duplicate it.
+  const hasPreRunQaArchive = useMemo(
+    () =>
+      runStartAt != null &&
+      messages.some((m) => m.qa && m.at && Date.parse(m.at) < runStartAt),
+    [messages, runStartAt],
+  )
 
   // Plan-card placement (2026-08-06 in-flight rework): settled → pinned
   // bottom-most (order-10); while a chat turn is in flight → inline at its
@@ -2143,6 +2267,77 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   /* The message flow — one JSX block, two hosts: the fullscreen chat
       region, or the dock's history drawer (never mounted in both at once).
       The message machine itself is untouched — only the shell changes. */
+  /** Step marker label — the same chain as RunCard: live summary →
+   * friendly stage copy → kind fallback. */
+  const stepLabel = (step: (typeof steps)[number]) =>
+    step.summary ||
+    (step.stage
+      ? t(`results.stepper.${step.stage}`, { defaultValue: "" })
+      : "") ||
+    t(`chat.stepKinds.${step.kind}`, { defaultValue: step.kind })
+
+  /** One conversation message with its anchors: superseded plan-version
+   * chips sit right after the echo bubble whose turn produced them; an
+   * in-flight live plan card anchors after its own echo bubble. */
+  const renderConversationMessage = (m: OverlayMessage) => (
+    <Fragment key={m.id}>
+      <MessageScrollerItem>
+        {m.qa ? (
+          <QaPair
+            question={m.qa.question}
+            questionDetail={m.qa.detail}
+            answer={m.qa.answer}
+            muted={m.qa.muted}
+          />
+        ) : m.role === "user" ? (
+          <UserBubble text={m.content} assets={m.assets} />
+        ) : (
+          <>
+            {m.content ? (
+              <AssistantText text={m.content} streaming={m.streaming} />
+            ) : null}
+            {m.runId ? (
+              <Message align="start">
+                <MessageContent>
+                  <RunCard runId={m.runId} projectId={projectId} />
+                </MessageContent>
+              </Message>
+            ) : null}
+          </>
+        )}
+      </MessageScrollerItem>
+      {planVersions.map((version, index) =>
+        version.messageId === m.id ? (
+          <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
+            <PlanVersionChip
+              n={index + 1}
+              book={version.book}
+              summary={summarizeBook(version.book)}
+              expanded={expandedVersion === index}
+              onToggle={() =>
+                setExpandedVersion(
+                  expandedVersion === index ? null : index
+                )
+              }
+              onRestore={() => restoreVersion(index)}
+              slotLabel={slotLabel}
+            />
+          </MessageScrollerItem>
+        ) : null
+      )}
+      {/* In-flight only: the live plan card unpins from the
+          bottom and anchors right after its own echo bubble —
+          above the new user bubble and the thinking row. When
+          the turn lands, the version chip takes this slot and
+          the fresh card pins bottom-most again. */}
+      {planCardInline && m.id === liveBookMessageId ? (
+        <MessageScrollerItem key={`${m.id}-live-plan`}>
+          {planCard}
+        </MessageScrollerItem>
+      ) : null}
+    </Fragment>
+  )
+
   const chatScroller = (
         <MessageScrollerProvider>
           <MessageScroller className="h-full">
@@ -2167,9 +2362,147 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   </MessageScrollerItem>
                 )}
 
-                {/* Running: the confirmed plan archives as a QA pair (start
-                    via the dock) or collapses to a summary line (attach /
-                    legacy paths rebuild it from the run context). */}
+                {/* The flow (#5 chronology): once the run's birth time is
+                    known everything sorts into ONE timeline — run header at
+                    the run's birth, steps at started_at, messages at their
+                    real time, terminal markers last. A mid-run QA lands
+                    right after its checkpoint step (before the render
+                    steps) and the assistant's follow-up stays below the QA
+                    — the Claude Code reference. Fallback (confirm phase /
+                    pre-snapshot window): the legacy fixed block + flat
+                    list below. */}
+                {runStreamUnits ? (
+                  <>
+                    {runStreamUnits.map((unit, i) => {
+                      if (unit.kind === "message") {
+                        return renderConversationMessage(unit.message)
+                      }
+                      if (unit.kind === "header") {
+                        return (
+                          <MessageScrollerItem key="run-header">
+                            {answeredQuestion && answeredDisplay ? (
+                              <QaPair
+                                question={t("generationOverlay.confirmQuestion")}
+                                questionDetail={planSummary}
+                                answer={answeredDisplay.text}
+                                muted={answeredDisplay.muted}
+                              />
+                            ) : hasPreRunQaArchive ? null : (
+                              <Message align="start">
+                                <MessageContent>
+                                  <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
+                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600/10 dark:bg-green-400/10">
+                                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                                    </span>
+                                    <div className="min-w-0 truncate text-sm">
+                                      <span className="font-medium">
+                                        {t("generationOverlay.title")}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {" · "}
+                                        {planSummary}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </MessageContent>
+                              </Message>
+                            )}
+                          </MessageScrollerItem>
+                        )
+                      }
+                      if (unit.kind === "terminal") {
+                        return (
+                          <MessageScrollerItem key="run-terminal">
+                            <Message align="start">
+                              <MessageContent>
+                                <div className="w-full">
+                                  {summary && (
+                                    <Marker variant="border" className="pt-2">
+                                      <MarkerContent>{summary}</MarkerContent>
+                                    </Marker>
+                                  )}
+                                  {status === "failed" && (
+                                    <Marker
+                                      variant="border"
+                                      className="pt-2 text-destructive"
+                                    >
+                                      <MarkerContent>
+                                        {t("generationOverlay.failed")}
+                                      </MarkerContent>
+                                    </Marker>
+                                  )}
+                                </div>
+                              </MessageContent>
+                            </Message>
+                          </MessageScrollerItem>
+                        )
+                      }
+                      // stepGroup / pendingGroup — consecutive steps merge
+                      // into one bubble; the FIRST group carries the
+                      // starting line (today's visual).
+                      const groupSteps =
+                        unit.kind === "stepGroup" ? unit.steps : pendingSteps
+                      const firstGroup = !runStreamUnits
+                        .slice(0, i)
+                        .some(
+                          (u) =>
+                            u.kind === "stepGroup" || u.kind === "pendingGroup",
+                        )
+                      return (
+                        <MessageScrollerItem key={`run-steps-${i}`}>
+                          <Message align="start">
+                            <MessageContent>
+                              <div className="w-full space-y-4">
+                                {firstGroup && (
+                                  <p className="text-sm leading-relaxed">
+                                    {t("generationOverlay.startingLine")}
+                                  </p>
+                                )}
+                                <div className="flex flex-col gap-2">
+                                  {/* Run still queued (assets processing /
+                                      worker hasn't claimed it): no workflow
+                                      steps exist yet, so stand in with a
+                                      friendly marker. */}
+                                  {unit.kind === "pendingGroup" &&
+                                    steps.length === 0 &&
+                                    !terminal && (
+                                      <StepMarker
+                                        status="running"
+                                        label={
+                                          assets.some(
+                                            (a) =>
+                                              a.processing_status ===
+                                                "pending" ||
+                                              a.processing_status ===
+                                                "processing",
+                                          )
+                                            ? t("results.stepper.transcribing")
+                                            : t("results.stepper.queued")
+                                        }
+                                      />
+                                    )}
+                                  {groupSteps.map((step) => (
+                                    <StepMarker
+                                      key={step.id}
+                                      status={step.status}
+                                      label={stepLabel(step)}
+                                      error={step.error}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            </MessageContent>
+                          </Message>
+                        </MessageScrollerItem>
+                      )
+                    })}
+                  </>
+                ) : (
+                  <>
+                {/* Running (legacy fixed block, pre-snapshot window): the
+                    confirmed plan archives as a QA pair (start via the dock)
+                    or collapses to a summary line (attach / legacy paths
+                    rebuild it from the run context). */}
                 {phase === "running" && (
                   <>
                     <MessageScrollerItem>
@@ -2270,67 +2603,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   </>
                 )}
 
-                {/* Conversation below the pinned regions. A superseded plan
-                    version's chip sits right after the echo bubble whose
-                    turn produced it; the live book is the bottom-most card. */}
-                {messages.map((m) => (
-                  <Fragment key={m.id}>
-                    <MessageScrollerItem>
-                      {m.qa ? (
-                        <QaPair
-                          question={m.qa.question}
-                          questionDetail={m.qa.detail}
-                          answer={m.qa.answer}
-                          muted={m.qa.muted}
-                        />
-                      ) : m.role === "user" ? (
-                        <UserBubble text={m.content} assets={m.assets} />
-                      ) : (
-                        <>
-                          {m.content ? (
-                            <AssistantText text={m.content} streaming={m.streaming} />
-                          ) : null}
-                          {m.runId ? (
-                            <Message align="start">
-                              <MessageContent>
-                                <RunCard runId={m.runId} projectId={projectId} />
-                              </MessageContent>
-                            </Message>
-                          ) : null}
-                        </>
-                      )}
-                    </MessageScrollerItem>
-                    {planVersions.map((version, index) =>
-                      version.messageId === m.id ? (
-                        <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
-                          <PlanVersionChip
-                            n={index + 1}
-                            book={version.book}
-                            summary={summarizeBook(version.book)}
-                            expanded={expandedVersion === index}
-                            onToggle={() =>
-                              setExpandedVersion(
-                                expandedVersion === index ? null : index
-                              )
-                            }
-                            onRestore={() => restoreVersion(index)}
-                            slotLabel={slotLabel}
-                          />
-                        </MessageScrollerItem>
-                      ) : null
-                    )}
-                    {/* In-flight only: the live plan card unpins from the
-                        bottom and anchors right after its own echo bubble —
-                        above the new user bubble and the thinking row. When
-                        the turn lands, the version chip takes this slot and
-                        the fresh card pins bottom-most again. */}
-                    {planCardInline && m.id === liveBookMessageId ? (
-                      <MessageScrollerItem key={`${m.id}-live-plan`}>
-                        {planCard}
-                      </MessageScrollerItem>
-                    ) : null}
-                  </Fragment>
-                ))}
+                {/* Conversation below the pinned regions (legacy layout).
+                    A superseded plan version's chip sits right after the
+                    echo bubble whose turn produced it; the live book is the
+                    bottom-most card. */}
+                {messages.map(renderConversationMessage)}
+                  </>
+                )}
 
                 {/* Thinking row covers send → first delta; once the preview
                     bubble exists it IS the progress indicator. */}
@@ -2349,8 +2628,17 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col">
-      {/* Backdrop — a pure visual layer (always pointer-events-none):
+    // Dock shell = click-through by design (the canvas owns the screen): the
+    // root itself must be pointer-events-none too — without it the root box
+    // is still the hit target and swallows every canvas hover/click even
+    // though all three children opt out individually. The bottom row's inner
+    // container re-enables events for the input group / summary / drawer.
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex flex-col",
+        shell === "dock" && "pointer-events-none"
+      )}
+    >      {/* Backdrop — a pure visual layer (always pointer-events-none):
           opaque while fullscreen, fades away on the收官 frame (D3); in the
           dock the shell is click-through and the canvas shows through. */}
       <div
@@ -2507,11 +2795,22 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
           <div
-            className={
+            className={cn(
+              // The dock's input group is frosted glass over the canvas
+              // (overlay-surface, same recipe as the summary card above it);
+              // fullscreen keeps the solid muted fill it always had (it sits
+              // over the opaque backdrop, and a joined QuestionDock is
+              // bg-muted — the pair must read as one piece). A joined choice
+              // dock drops the input's top rounding.
+              "p-2",
               phase !== "confirm" && pendingChoice
-                ? "rounded-b-lg bg-muted p-2"
-                : "rounded-lg bg-muted p-2"
-            }
+                ? shell === "dock"
+                  ? "overlay-surface rounded-b-xl"
+                  : "rounded-b-lg bg-muted"
+                : shell === "dock"
+                  ? "overlay-surface rounded-xl"
+                  : "rounded-lg bg-muted"
+            )}
           >
             {/* The canvas's focused product (D8 焦点注入): one chip riding
                 the input group — visible, × purifies; it joins each turn as

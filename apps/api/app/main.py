@@ -30,6 +30,7 @@ from app.pipeline.routes import (
 )
 from app.platform.routes import auth_router, files_router, notifications_router
 from app.operations.routes import router as operations_router
+from app.ui_locale import capture_ui_language
 
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
@@ -60,6 +61,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class UiLocaleMiddleware:
+    """Capture the browser's Accept-Language into the request-scoped
+    ContextVar (app.ui_locale) — create_run pins it into the task book so
+    display strings follow the UI language, not the material's. Pure ASGI
+    (BaseHTTPMiddleware's task hop makes ContextVar propagation fragile)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            raw = dict(scope["headers"]).get(b"accept-language")
+            capture_ui_language(raw.decode() if raw else None)
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(UiLocaleMiddleware)
 
 
 # Keys whose values must never land in logs (credentials, one-time codes).

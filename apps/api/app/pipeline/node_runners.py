@@ -66,6 +66,22 @@ from app.platform.project_context import (
 logger = structlog.get_logger()
 
 
+def _display_zh(run: WorkflowRun, project: Project, assets: list) -> bool:
+    """Should this step's display strings render in Chinese?
+
+    Follows the UI locale pinned on the run (display_language chain:
+    run.context.ui_language → project language → material language) — NEVER
+    the material's language alone: a Chinese UI generating from an English
+    video reads Chinese step lines."""
+    from app.ui_locale import display_language
+
+    return display_language(
+        run.context if isinstance(run.context, dict) else None,
+        project.language,
+        _source_language(project, assets),
+    ).startswith("zh")
+
+
 class Preprocess(NodeBase):
     kind = "preprocess"
 
@@ -185,6 +201,7 @@ class DirectorUnderstand(NodeBase):
     async def reuse(
         self,
         db: AsyncSession,
+        run: WorkflowRun,
         node: WorkflowStep,
         project: Project,
         asset_texts: list[str],
@@ -217,9 +234,14 @@ class DirectorUnderstand(NodeBase):
                     "understanding_reuse_payload_invalid", output_id=str(latest.id)
                 )
             else:
+                # Step lines follow the UI locale pinned on the run, never
+                # the material's language (display_language chain).
+                zh = _display_zh(run, project, assets)
                 await _set_summary(
                     node.id,
-                    f"Reused understanding · {len(cached.key_arguments)} arguments",
+                    f"复用素材理解 · {len(cached.key_arguments)} 个论点"
+                    if zh
+                    else f"Reused understanding · {len(cached.key_arguments)} arguments",
                 )
                 logger.info(
                     "director_understand_reused",
@@ -236,7 +258,7 @@ class DirectorUnderstand(NodeBase):
         asset_texts = await collect_asset_texts(db, project.id)
         assets = await _list_assets(db, project.id)
 
-        reused = await self.reuse(db, node, project, asset_texts, assets)
+        reused = await self.reuse(db, run, node, project, asset_texts, assets)
         if reused is not None:
             return [reused]
 
@@ -257,9 +279,13 @@ class DirectorUnderstand(NodeBase):
         )
         db.add(row)
         await db.flush()
+        zh = _display_zh(run, project, assets)
         await _set_summary(
             node.id,
-            f"Understood {len(understanding.key_arguments)} arguments · "
+            f"理解了 {len(understanding.key_arguments)} 个论点 · "
+            f"{len(understanding.quote_candidates)} 条金句"
+            if zh
+            else f"Understood {len(understanding.key_arguments)} arguments · "
             f"{len(understanding.quote_candidates)} quotes",
         )
         return [row.id]
@@ -313,12 +339,15 @@ class Checkpoint(NodeBase):
                 chosen = by_id.get(answer.get("option_id")) or {}
                 label = chosen.get("label")
             label = label or answer.get("text")
-            await _set_summary(node.id, f"Direction: {_truncate(label, 60) or 'default'}")
+            assets = await _list_assets(db, project.id)
+            zh = _display_zh(run, project, assets)
+            picked = _truncate(label, 60) or ("默认" if zh else "default")
+            await _set_summary(node.id, f"方向：{picked}" if zh else f"Direction: {picked}")
             return []
 
         understanding = await _load_understanding(db, node)
         assets = await _list_assets(db, project.id)
-        zh = _source_language(project, assets).lower().startswith("zh")
+        zh = _display_zh(run, project, assets)
 
         # Options (code-derived, zero LLM): up to 3 "Focus: {argument}" + the
         # full-talk default; freeform rides via allow_freeform. The option's
@@ -440,9 +469,14 @@ class DirectorPlan(NodeBase):
         )
         db.add(row)
         await db.flush()
+        assets = await _list_assets(db, project.id)
+        zh = _display_zh(run, project, assets)
         await _set_summary(
             node.id,
-            f"Planned {len(storyboard.slots)} slots · "
+            f"规划了 {len(storyboard.slots)} 个槽位 · "
+            f"{len(storyboard.coverage.unused_arguments)} 个论点未使用"
+            if zh
+            else f"Planned {len(storyboard.slots)} slots · "
             f"{len(storyboard.coverage.unused_arguments)} arguments unused",
         )
         return [row.id]

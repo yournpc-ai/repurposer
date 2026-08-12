@@ -35,6 +35,7 @@ from app.pipeline.step_display import (
     _node_slot,
     _set_stage,
     slot_tag,
+    ui_lang_of,
 )
 from app.pipeline.edges import _load_director_outputs
 from app.platform.project_context import collect_asset_texts, resolve_persona
@@ -162,7 +163,8 @@ class DerivativeWriterNode(NodeBase):
             output.workflow_step_id = node.id
             await db.flush()
             await _fill_summary(
-                node.id, self.kind, tag=slot_tag(slot), word_count=_count_words(content)
+                node.id, self.kind, tag=slot_tag(slot),
+                ui_language=ui_lang_of(run, project), word_count=_count_words(content),
             )
             return [output.id]
 
@@ -214,6 +216,7 @@ class DerivativeWriterNode(NodeBase):
                     await db.flush()
 
         await _fill_summary(
-            node.id, self.kind, tag=slot_tag(slot), word_count=_count_words(content)
+            node.id, self.kind, tag=slot_tag(slot),
+            ui_language=ui_lang_of(run, project), word_count=_count_words(content),
         )
         return [output.id]

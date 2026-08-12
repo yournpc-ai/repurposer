@@ -9,6 +9,7 @@ class WriteCarousel(DerivativeWriterNode):
     kind = "write_carousel"
     output_type = "carousel"
     slot_label = "Carousel"
+    slot_label_zh = "轮播"
     slot_ordinal = 3
     count_default = 6
     count_limits = (2, 15)

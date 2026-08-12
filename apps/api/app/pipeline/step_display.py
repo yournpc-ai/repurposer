@@ -71,18 +71,21 @@ async def _set_summary(node_id: UUID, summary: str) -> None:
 
 
 async def _fill_summary(
-    node_id: UUID, kind: str, *, tag: str | None = None, **params: object
+    node_id: UUID, kind: str, *, tag: str | None = None, ui_language: str = "en", **params: object
 ) -> None:
-    """Fill spec.summary from the registry's summary_template for ``kind``.
+    """Fill spec.summary from the registry's summary_templates for ``kind``.
 
     Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8). ``tag``
     appends the slot's distinguishing label (language/focus) so same-kind
     sibling steps stay distinguishable after completion. ``kind`` IS the
-    skill name (N-35) — the registry key directly."""
+    skill name (N-35) — the registry key directly. ``ui_language`` is the
+    run's pinned UI locale (NOT the material's); unknown locales fall back
+    to the English template."""
     from app.skills import SKILL_REGISTRY  # deferred: import cycle
 
     entry = SKILL_REGISTRY.get(kind)
-    template = entry.summary_template if entry is not None else None
+    templates = entry.summary_templates if entry is not None else {}
+    template = templates.get(ui_language) or templates.get("en")
     if not template:
         return
     try:
@@ -93,6 +96,18 @@ async def _fill_summary(
     if tag:
         line = f"{line} · {tag}"
     await _set_summary(node_id, line)
+
+
+def ui_lang_of(run: Any, project: Any) -> str:
+    """The display locale for a run's step lines: the run's pinned UI
+    locale, falling back to the project language (display_language chain —
+    never the material's language alone)."""
+    from app.ui_locale import display_language
+
+    return display_language(
+        run.context if isinstance(run.context, dict) else None,
+        getattr(project, "language", None),
+    )
 
 
 def slot_tag(slot: IntentSlot | None) -> str | None:

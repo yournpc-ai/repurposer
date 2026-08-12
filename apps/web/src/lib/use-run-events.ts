@@ -21,6 +21,9 @@ export interface RunEventsState {
   progress: number
   /** Terminal aggregate summary ("Done · 3 clips · …"), null while running. */
   summary: string | null
+  /** The run's creation time — the overlay's chronological anchor for
+   * interleaving chat messages with the run block (#5). */
+  createdAt: string | null
   /** True once the stream carried a terminal run state. */
   terminal: boolean
 }
@@ -30,6 +33,7 @@ const INITIAL: RunEventsState = {
   status: null,
   progress: 0,
   summary: null,
+  createdAt: null,
   terminal: false,
 }
 
@@ -73,7 +77,12 @@ export function useRunEvents(
       onmessage: (msg) => {
         if (msg.event === "run.snapshot") {
           const data = JSON.parse(msg.data) as {
-            run: { status: string; progress: number; summary?: string | null }
+            run: {
+              status: string
+              progress: number
+              summary?: string | null
+              created_at?: string | null
+            }
             steps: WorkflowStep[]
           }
           // Historical runs arrive terminal in the snapshot itself — the
@@ -86,6 +95,7 @@ export function useRunEvents(
             status: data.run.status,
             progress: data.run.progress,
             summary: data.run.summary ?? null,
+            createdAt: data.run.created_at ?? null,
             terminal,
           })
           if (terminal) fireTerminal()

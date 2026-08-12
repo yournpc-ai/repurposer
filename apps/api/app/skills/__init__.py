@@ -9,7 +9,7 @@ the same table:
 - the intent agent (LLM) sees the proposal space (``dispatchable_skills``
   feeds its prompt);
 - ``compile_graph`` adjudicates existence / params / topology against it;
-- progress display and metering read ``summary_template`` / ``behavior``.
+- progress display and metering read ``summary_templates`` / ``behavior``.
 
 It is NOT a plugin system (static dict, deployed with the code). Admission
 discipline: a new skill passes the NAMING §7/§8 review before it is
@@ -94,7 +94,10 @@ class SkillEntry(BaseModel):
     description: str  # "when to use" — injected into the intent prompt
     behavior: Literal["deterministic", "probabilistic"]
     params_model: type[BaseModel] | None = None
-    summary_template: str = ""
+    # Per-locale display templates ("en" required, others fall back to it):
+    # _fill_summary picks by the run's pinned UI locale — step lines follow
+    # the UI language, never the material's.
+    summary_templates: dict[str, str] = {}
     seat: bool = False  # registered-but-not-implemented (no node yet)
 
 
@@ -106,65 +109,95 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Cut highlight clips from the source media (batch re-cut)",
             behavior="probabilistic",
             params_model=SelectClipsParams,
-            summary_template="Selected {n} clips · {total_seconds}s total",
+            summary_templates={
+                "en": "Selected {n} clips · {total_seconds}s total",
+                "zh": "选出了 {n} 个片段 · 共 {total_seconds} 秒",
+            },
         ),
         SkillEntry(
             name="write_post",
             description="Write a LinkedIn long-form post from the talk",
             behavior="probabilistic",
-            summary_template="Wrote a LinkedIn post · {word_count} words",
+            summary_templates={
+                "en": "Wrote a LinkedIn post · {word_count} words",
+                "zh": "写好了 LinkedIn 帖子 · {word_count} 词",
+            },
         ),
         SkillEntry(
             name="write_quotes",
             description="Write quote cards from the talk's best lines",
             behavior="probabilistic",
-            summary_template="Wrote quote cards · {word_count} words",
+            summary_templates={
+                "en": "Wrote quote cards · {word_count} words",
+                "zh": "写好了金句卡 · {word_count} 词",
+            },
         ),
         SkillEntry(
             name="write_carousel",
             description="Write a LinkedIn carousel (slide deck copy)",
             behavior="probabilistic",
-            summary_template="Wrote a carousel · {word_count} words",
+            summary_templates={
+                "en": "Wrote a carousel · {word_count} words",
+                "zh": "写好了轮播 · {word_count} 词",
+            },
         ),
         SkillEntry(
             name="write_article",
             description="Write a long-form article / newsletter draft",
             behavior="probabilistic",
-            summary_template="Wrote an article · {word_count} words",
+            summary_templates={
+                "en": "Wrote an article · {word_count} words",
+                "zh": "写好了文章 · {word_count} 词",
+            },
         ),
         SkillEntry(
             name="revise_script",
             description="Revise one existing output (shorter/longer/tone/language) in place",
             behavior="probabilistic",
             params_model=ReviseScriptParams,
-            summary_template="Revised {scope}",
+            summary_templates={
+                "en": "Revised {scope}",
+                "zh": "修订了 {scope}",
+            },
         ),
         SkillEntry(
             name="dub_clip",
             description="Dub existing clips with the persona's cloned voice into a target language, then re-render",
             behavior="probabilistic",
             params_model=DubClipParams,
-            summary_template="Dubbed {n} clips · {lang}",
+            summary_templates={
+                "en": "Dubbed {n} clips · {lang}",
+                "zh": "配音了 {n} 个片段 · {lang}",
+            },
         ),
         SkillEntry(
             name="translate_clip",
             description="Translate existing clips' captions into another language, then re-render",
             behavior="probabilistic",
             params_model=TranslateClipParams,
-            summary_template="Translated {n} clips · {lang}",
+            summary_templates={
+                "en": "Translated {n} clips · {lang}",
+                "zh": "翻译了 {n} 个片段 · {lang}",
+            },
         ),
         SkillEntry(
             name="remove_filler",
             description="Remove filler words and repeated takes from existing clips, then re-render",
             behavior="deterministic",
-            summary_template="Removed {filler_count} fillers · {repeat_count} repeated takes",
+            summary_templates={
+                "en": "Removed {filler_count} fillers · {repeat_count} repeated takes",
+                "zh": "剪掉了 {filler_count} 处口水词 · {repeat_count} 处重拍",
+            },
         ),
         SkillEntry(
             name="add_music",
             description="Score existing clips with a music bed, then re-render",
             behavior="deterministic",
             params_model=AddMusicParams,
-            summary_template="Scored · {mood} bed",
+            summary_templates={
+                "en": "Scored · {mood} bed",
+                "zh": "配乐完成 · {mood} 风格",
+            },
         ),
         SkillEntry(
             name="align_stills",
@@ -172,14 +205,20 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             "slideshow gets word-level caption timing — use when there is NO recording "
             "(transcript + photos only; RECIPES §2's third time source: reading pace)",
             behavior="deterministic",
-            summary_template="Aligned transcript · {n} words · {total_seconds}s",
+            summary_templates={
+                "en": "Aligned transcript · {n} words · {total_seconds}s",
+                "zh": "对齐了逐字稿 · {n} 词 · {total_seconds} 秒",
+            },
         ),
         SkillEntry(
             name="synthesize_talk_video",
             description="Synthesize a talking-head video from transcript + persona photo + voiceprint",
             behavior="probabilistic",
             params_model=SynthesizeTalkVideoParams,
-            summary_template="Synthesized a talk video",
+            summary_templates={
+                "en": "Synthesized a talk video",
+                "zh": "合成了口播视频",
+            },
             seat=True,  # seat: virtual chain lands with docs/tasks/synthetic-talk-video.md
         ),
     ]

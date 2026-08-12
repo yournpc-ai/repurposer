@@ -9,6 +9,7 @@ class WriteQuotes(DerivativeWriterNode):
     kind = "write_quotes"
     output_type = "quotes"
     slot_label = "Quotes"
+    slot_label_zh = "金句"
     slot_ordinal = 2
     count_default = 3
     count_limits = (1, 20)

@@ -955,7 +955,7 @@ const zh: Resources = {
     qa: {
       q: "问",
       a: "答",
-      started: "已开始生成",
+      started: "开始生成",
       cancelled: "已取消——回到草稿",
       superseded: "已被更新的计划取代",
       expired: "超时未选——已按默认方向继续",

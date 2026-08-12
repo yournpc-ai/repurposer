@@ -21,7 +21,7 @@ from app.pipeline.morph import (
     _record_target_output_ids,
     _run_origin,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary
+from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
 from app.skills.captions.procedure import translate_caption_track
 
 
@@ -56,7 +56,10 @@ class TranslateClip(NodeBase):
         await _set_stage(node.id, "translating_captions")
         clips = await _modifier_target_clips(db, node, project)
         if not clips:
-            await _set_summary(node.id, "No clips to translate")
+            await _set_summary(
+                node.id,
+                "没有可翻译的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to translate",
+            )
             return []
 
         origin = await _run_origin(db, run)
@@ -87,9 +90,14 @@ class TranslateClip(NodeBase):
             touched.append(output.id)
 
         if not touched:
-            await _set_summary(node.id, "No captions to translate")
+            await _set_summary(
+                node.id,
+                "没有可翻译的字幕" if ui_lang_of(run, project).startswith("zh") else "No captions to translate",
+            )
             return []
         await _fan_out_renders(db, run, node, touched)
         await _record_target_output_ids(node.id, touched)
-        await _fill_summary(node.id, self.kind, n=len(touched), lang=lang)
+        await _fill_summary(
+            node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang
+        )
         return touched

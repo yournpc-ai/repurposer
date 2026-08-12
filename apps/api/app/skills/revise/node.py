@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import ClipPayload, Segment
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.pipeline.graph import NodeBase, estimate_agent
-from app.pipeline.step_display import _fill_summary
+from app.pipeline.step_display import _fill_summary, ui_lang_of
 from app.platform.project_context import persona_context_from_row, resolve_persona
 from app.skills.revise.agents import reviser
 from app.skills.revise.procedure import revise_by_instruction
@@ -69,5 +69,8 @@ class ReviseScript(NodeBase):
         output.updated_at = datetime.now(UTC)
         output.workflow_step_id = node.id
         await db.flush()
-        await _fill_summary(node.id, self.kind, scope=node.spec.get("scope", "clip"))
+        await _fill_summary(
+            node.id, self.kind,
+            ui_language=ui_lang_of(run, project), scope=node.spec.get("scope", "clip"),
+        )
         return [output.id]

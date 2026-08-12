@@ -10,6 +10,7 @@ class WritePost(DerivativeWriterNode):
     kind = "write_post"
     output_type = "post"
     slot_label = "Post"
+    slot_label_zh = "帖子"
     slot_ordinal = 1
     writer = post_writer
     completion_bounds = (400, 1500)  # a long-form post (~800 words)

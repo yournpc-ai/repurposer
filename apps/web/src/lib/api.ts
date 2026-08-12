@@ -39,6 +39,14 @@ export async function apiFetch(
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`)
   }
+  // The UI locale rides every call (CORS-safelisted): the API pins it into
+  // the run's task book so server-baked display strings (step summaries,
+  // ask chrome) follow the UI language, never the material's. i18n.language
+  // is client-side only — read it lazily, never during SSR.
+  if (!headers.has("Accept-Language") && typeof window !== "undefined") {
+    const lang = i18n.language
+    if (lang) headers.set("Accept-Language", lang)
+  }
 
   let body: BodyInit | undefined
   if (init.body instanceof FormData) {
