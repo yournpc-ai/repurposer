@@ -41,6 +41,29 @@ export interface RecipeCard extends RecipePublic {
   preview: { posterUrl: string; videoUrl?: string }
 }
 
+/** Does a staged file cover a required input slot? The launch gate reads
+ * this (a recipe's required blank must be filled before send — same posture
+ * as the composer's prompt-required toast). Mirrors inferAssetType's MIME
+ * families; slides travel as deck files (pdf/ppt). */
+export function slotCoversFile(slotType: string, file: File): boolean {
+  switch (slotType) {
+    case "video":
+      return file.type.startsWith("video/")
+    case "audio":
+      return file.type.startsWith("audio/")
+    case "images":
+      return file.type.startsWith("image/")
+    case "slides":
+      return (
+        file.type === "application/pdf" ||
+        /\.(pdf|pptx?|key)$/i.test(file.name)
+      )
+    default:
+      // transcript — the document/text fallback, same as inferAssetType.
+      return !/^(video|audio|image)\//.test(file.type)
+  }
+}
+
 /** Content-hashed teaser URLs — the URL changes exactly when the content
  * does, so objects cache immutably and stale media-cache copies are
  * impossible by construction. */

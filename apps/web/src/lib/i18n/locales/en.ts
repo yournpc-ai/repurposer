@@ -474,6 +474,7 @@ const en = {
         inputs: "Source material",
       },
       dropzone: "Upload or drag & drop files",
+      requiredMissing: "Add the material first: {{input}}",
       promptTitle: "Custom prompt",
       promptHint: "Tweak it to your needs",
       send: "Generate",

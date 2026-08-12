@@ -468,6 +468,7 @@ const zh: Resources = {
         inputs: "原始素材",
       },
       dropzone: "上传或拖放文件",
+      requiredMissing: "先上传素材：{{input}}",
       promptTitle: "自定义提示词",
       promptHint: "按你的需要改",
       send: "生成",

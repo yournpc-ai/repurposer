@@ -15,9 +15,10 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
-import type { RecipeCard } from "@/lib/recipes"
+import { slotCoversFile, type RecipeCard } from "@/lib/recipes"
 import { ASSETS_ACCEPT } from "@/components/home/AssetsModal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -114,8 +115,23 @@ export function RecipeInspectOverlay({
   // overlay's draft dies with navigation. Identity rides the default-persona
   // chain server-side (ADR-038) — the overlay carries no persona picker; the
   // recipe's identity stays in this overlay (配方 = 提示词).
-  const handleLaunch = () =>
+  // The recipe's required input slots are the launch gate (input_slots is
+  // the card's declared blank): a required type with no staged file blocks
+  // the send with a toast — same posture as the composer's empty prompt.
+  const handleLaunch = () => {
+    const uncovered = card.input_slots.some(
+      (slot) => slot.required && !files.some((f) => slotCoversFile(slot.type, f))
+    )
+    if (uncovered) {
+      toast.error(
+        t("recipes.inspect.requiredMissing", {
+          input: t(`recipes.${card.id}.inputTitle`),
+        })
+      )
+      return
+    }
     launch({ prompt, mentions: [], files })
+  }
 
   const fileIconFor = (file: File) => {
     if (file.type.startsWith("video/")) return Video
