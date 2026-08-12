@@ -556,6 +556,10 @@ const zh: Resources = {
     renamePlaceholder: "项目名称",
     deleteDesc: "「{{title}}」及其所有切片、帖子和聊天记录将被永久删除。",
   },
+  projectMenu: {
+    open: "项目菜单",
+    backToProjects: "返回项目列表",
+  },
   personas: {
     title: "人设",
     subtitle: "管理人设与各自的风格画像",

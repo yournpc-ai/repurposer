@@ -14,6 +14,10 @@ import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import type { FlowOutputAction } from "@/components/flow/types"
 import type { RunFlowAsset } from "@/components/flow/runFlow"
 import { PostCard } from "@/components/results/PostCard"
+import { ProjectMenu } from "@/components/project/ProjectMenu"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { NotificationBell } from "@/components/notifications/NotificationBell"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { PublishDialog } from "@/components/publish/PublishDialog"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -146,7 +150,7 @@ const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
   write_article: "article",
 }
 
-export const Route = createFileRoute("/_app/projects/$id/")({
+export const Route = createFileRoute("/projects/$id/")({
   component: ProjectDetailPage,
 })
 
@@ -540,7 +544,7 @@ function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="grid h-dvh place-items-center bg-background text-muted-foreground">
         {t("common.loading")}
       </div>
     )
@@ -548,7 +552,7 @@ function ProjectDetailPage() {
 
   if (error || !results) {
     return (
-      <div className="flex flex-1 items-center justify-center text-destructive">
+      <div className="grid h-dvh place-items-center bg-background text-destructive">
         {error || "Project not found"}
       </div>
     )
@@ -784,126 +788,142 @@ function ProjectDetailPage() {
         : undefined
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {resultsPhase && completedRun ? (
-        <>
-          {/* Results phase (ADR-041 D1): slim header + full-bleed canvas.
-              The bottom padding is the dock's safe area (D4 — the fitted
-              graph stays clear of the floating input group). */}
-          <div className="shrink-0 space-y-1 px-6 pt-6 md:px-8 md:pt-8">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {project.title}
-            </h1>
-            {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
-          </div>
-          <div className="min-h-0 flex-1 px-2 pb-40 md:pb-44">
-            <ResultsCanvas
-              className="h-full"
-              assets={canvasAssets}
-              steps={completedRun.steps}
-              outputs={outputs}
-              choreograph={choreograph}
-              tourOutputId={resultsTourClipId}
-              onOutputClick={handleOutputClick}
-              onOutputAction={handleOutputAction}
-              onStepClick={handleStepClick}
-              onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
-            />
-          </div>
-        </>
-      ) : (
-        <div className="flex flex-1 flex-col p-6 md:p-8">
-          <div className="mx-auto w-full max-w-7xl space-y-6">
-            {/* Header */}
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">{project.title}</h1>
-              {prompt && <p className="text-sm text-muted-foreground">{prompt}</p>}
-            </div>
+    // Fullscreen canvas world (ADR-041 全屏化): this route lives OUTSIDE the
+    // _app layout — no sidebar / header / title block. Floating chrome: the
+    // project menu (top-left) + the minimal tools pill (top-right), both
+    // frosted; the canvas fills the viewport, the chat dock parks at the
+    // bottom. The fullscreen planning overlay (z-50) naturally covers the
+    // chrome while it is open.
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
+      <div className="absolute left-3 top-3 z-30 md:left-4 md:top-4">
+        <ProjectMenu
+          projectId={project.id}
+          title={project.title}
+          runActive={runActive}
+          onRenamed={(title) =>
+            setResults((prev) =>
+              prev ? { ...prev, project: { ...prev.project, title } } : prev
+            )
+          }
+          onDeleted={() => navigate({ to: "/projects" })}
+        />
+      </div>
+      <div className="overlay-surface absolute right-3 top-3 z-30 flex items-center rounded-md md:right-4 md:top-4">
+        <ThemeToggle />
+        <LanguageSwitcher />
+        <NotificationBell />
+      </div>
 
-            {!latestRun ? (
-              <div className="rounded-lg bg-muted p-8 text-center">
-                <p className="font-medium">{t("results.pendingPlan.title")}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {pendingIntent
-                    ? t("results.pendingPlan.desc")
-                    : t("results.pendingPlan.descNoPlan")}
-                </p>
-                <Button
-                  className="mt-4"
-                  onClick={() =>
-                    navigate({
-                      to: "/projects/$id",
-                      params: { id: projectId },
-                      search: { overlay: "chat" },
-                    })
-                  }
-                >
-                  {t("results.pendingPlan.cta")}
-                </Button>
+      {resultsPhase && completedRun ? (
+        /* Results phase (ADR-041 D1): the canvas is full-bleed; the bottom
+           padding is the dock's safe area (D4 — the fitted graph stays clear
+           of the floating input group). */
+        <div className="min-h-0 flex-1 pb-40 md:pb-44">
+          <ResultsCanvas
+            className="h-full"
+            assets={canvasAssets}
+            steps={completedRun.steps}
+            outputs={outputs}
+            choreograph={choreograph}
+            tourOutputId={resultsTourClipId}
+            onOutputClick={handleOutputClick}
+            onOutputAction={handleOutputAction}
+            onStepClick={handleStepClick}
+            onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {!latestRun || !isMobile ? (
+            /* Centered states: pending plan / desktop first-run failure /
+               desktop run-in-flight (D2 — progress never enters the graph). */
+            <div className="flex min-h-full items-center justify-center p-6">
+              <div className="w-full max-w-md">
+                {!latestRun ? (
+                  <div className="rounded-lg bg-muted p-8 text-center">
+                    <p className="font-medium">{t("results.pendingPlan.title")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {pendingIntent
+                        ? t("results.pendingPlan.desc")
+                        : t("results.pendingPlan.descNoPlan")}
+                    </p>
+                    <Button
+                      className="mt-4"
+                      onClick={() =>
+                        navigate({
+                          to: "/projects/$id",
+                          params: { id: projectId },
+                          search: { overlay: "chat" },
+                        })
+                      }
+                    >
+                      {t("results.pendingPlan.cta")}
+                    </Button>
+                  </div>
+                ) : latestRun.status === "failed" ? (
+                  /* Desktop, first-run failure (no completed run yet): the
+                     retry channel is the conversation (D8 — chat is the only
+                     modification channel). */
+                  <div className="rounded-lg bg-muted p-8 text-center">
+                    <p className="text-sm text-destructive">
+                      {latestRun.error || t("results.retryFailed")}
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() =>
+                        navigate({
+                          to: "/projects/$id",
+                          params: { id: projectId },
+                          search: { overlay: "chat" },
+                        })
+                      }
+                    >
+                      {t("results.failedPanel.cta")}
+                    </Button>
+                  </div>
+                ) : (
+                  /* Desktop, run in flight with no completed snapshot:
+                     progress belongs to the chat flow alone. */
+                  <div className="rounded-lg bg-muted p-8 text-center">
+                    <p className="font-medium">{t("results.runActive.title")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("results.runActive.desc")}
+                    </p>
+                    <Button
+                      className="mt-4"
+                      onClick={() =>
+                        navigate({
+                          to: "/projects/$id",
+                          params: { id: projectId },
+                          search: { overlay: "run" },
+                        })
+                      }
+                    >
+                      {t("results.runActive.cta")}
+                    </Button>
+                  </div>
+                )}
               </div>
-            ) : isMobile ? (
-              <>
-                {/* Mobile keeps the list world (prohibition #13 — no canvas
-                    below iPad width); the conversation surface opens through
-                    the same overlay entries as before. */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <ResultsTabs
-                    active={activeTab}
-                    onChange={setActiveTab}
-                    counts={counts}
-                    visible={visibleTabs}
-                    running={runningTabs}
-                    failed={failedTabs}
-                  />
-                </div>
-                <div>{renderTabContent()}</div>
-              </>
-            ) : latestRun.status === "failed" ? (
-              /* Desktop, first-run failure (no completed run yet): the
-                 retry channel is the conversation (D8 — chat is the only
-                 modification channel). */
-              <div className="rounded-lg bg-muted p-8 text-center">
-                <p className="text-sm text-destructive">
-                  {latestRun.error || t("results.retryFailed")}
-                </p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() =>
-                    navigate({
-                      to: "/projects/$id",
-                      params: { id: projectId },
-                      search: { overlay: "chat" },
-                    })
-                  }
-                >
-                  {t("results.failedPanel.cta")}
-                </Button>
+            </div>
+          ) : (
+            /* Mobile keeps the list world (prohibition #13 — no canvas below
+               iPad width); the conversation surface opens through the same
+               overlay entries as before. pt-16 clears the floating chrome. */
+            <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-8 pt-16">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <ResultsTabs
+                  active={activeTab}
+                  onChange={setActiveTab}
+                  counts={counts}
+                  visible={visibleTabs}
+                  running={runningTabs}
+                  failed={failedTabs}
+                />
               </div>
-            ) : (
-              /* Desktop, run in flight with no completed snapshot: progress
-                 belongs to the chat flow alone (D2 — it never enters the
-                 graph). */
-              <div className="rounded-lg bg-muted p-8 text-center">
-                <p className="font-medium">{t("results.runActive.title")}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("results.runActive.desc")}
-                </p>
-                <Button
-                  className="mt-4"
-                  onClick={() =>
-                    navigate({
-                      to: "/projects/$id",
-                      params: { id: projectId },
-                      search: { overlay: "run" },
-                    })
-                  }
-                >
-                  {t("results.runActive.cta")}
-                </Button>
-              </div>
-            )}
-          </div>
+              <div>{renderTabContent()}</div>
+            </div>
+          )}
         </div>
       )}
 

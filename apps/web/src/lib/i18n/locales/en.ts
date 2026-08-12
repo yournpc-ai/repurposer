@@ -569,6 +569,10 @@ const en = {
     renamePlaceholder: "Project name",
     deleteDesc: "\"{{title}}\" and all its clips, posts and conversations will be permanently deleted.",
   },
+  projectMenu: {
+    open: "Project menu",
+    backToProjects: "Back to projects",
+  },
   personas: {
     title: "Personas",
     subtitle: "Manage personas and their style profiles",

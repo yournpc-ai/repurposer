@@ -124,10 +124,11 @@ export function ClipDetailModal({
             isLandscape ? "flex-col" : "flex-col md:flex-row"
           }`}
         >
-          {/* Video player */}
+          {/* Video player — no fill: media is its own separation, the
+              letterbox shows the modal's glass. */}
           <div
             className={cn(
-              "relative overflow-hidden bg-muted",
+              "relative overflow-hidden",
               isLandscape
                 ? "w-full"
                 : "w-full md:w-auto md:max-h-[75vh]",
