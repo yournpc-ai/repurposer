@@ -6,9 +6,22 @@ import type { ClipSpec } from "@repurposer/clip";
 import express from "express";
 
 import { renderClip } from "./render";
+import { CACHE_DIR } from "./stage";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
+
+// Locally staged sources (see stage.ts), served back to Remotion over
+// loopback. CORS "*" because the composition's <Audio> fetches the staged URL
+// from the bundle-server origin.
+app.use(
+  "/cache",
+  (_req, res, next) => {
+    res.setHeader("access-control-allow-origin", "*");
+    next();
+  },
+  express.static(CACHE_DIR),
+);
 
 const PORT = Number(process.env.RENDER_PORT ?? 3001);
 

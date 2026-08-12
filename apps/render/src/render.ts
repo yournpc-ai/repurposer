@@ -9,6 +9,7 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { type ClipSpec, keptSegments } from "@repurposer/clip";
 
 import { captionTrackToSrt } from "./srt";
+import { stageRemoteSource } from "./stage";
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -40,8 +41,20 @@ export async function renderClip(
 ): Promise<RenderResult> {
   await fs.mkdir(outDir, { recursive: true });
 
+  // Stage the remote source into the local cache first — Remotion's internal
+  // asset fetch is a raw node:https GET (ignores HTTPS_PROXY, whole-file
+  // download inside the frame-extraction budget), so a slow origin surfaces
+  // as an opaque delayRender timeout. Our staging fetch is proxy-aware,
+  // dedupes per URL across this run's clips, and hands Remotion a loopback
+  // URL (see stage.ts).
+  const stagedUrl = await stageRemoteSource(spec.source.url);
+  const stagedSpec =
+    stagedUrl === spec.source.url
+      ? spec
+      : { ...spec, source: { ...spec.source, url: stagedUrl } };
+
   const serveUrl = await getBundle();
-  const inputProps = { spec };
+  const inputProps = { spec: stagedSpec };
   const composition = await selectComposition({ serveUrl, id: "Clip", inputProps });
 
   const videoPath = path.join(outDir, `${basename}.mp4`);
@@ -51,11 +64,10 @@ export async function renderClip(
     codec: "h264",
     outputLocation: videoPath,
     inputProps,
-    // OffthreadVideo extracts frames by fetching the remote source through
-    // Remotion's internal asset proxy; slow origin range responses (observed
-    // 3-6 s/MB from TOS) can exceed the 28 s delayRender default and abort
-    // the whole render. Give slow origins room; the HTTP client timeout
-    // upstream (900 s) still bounds the real failure case.
+    // The source itself is staged locally before we get here; the remaining
+    // remote assets (music / dub / stills images) are MB-scale and still
+    // fetched through Remotion's internal proxy, so keep headroom over the
+    // 28 s delayRender default for slow origins.
     timeoutInMilliseconds: 180_000,
   });
 
