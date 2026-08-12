@@ -1797,7 +1797,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, terminal, shell])
 
-  const sectionLabel = "text-[11px] font-medium text-meta"
+  const sectionLabel = "text-sm font-medium text-foreground"
 
   // The answered task_book question's QA archive display (start via dock).
   const answeredDisplay = answeredQuestion?.answer
@@ -1918,14 +1918,23 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       }
     }
     // Un-started steps (upcoming while live, skipped once finished) sit
-    // right before the terminal marker; with no steps at all the group
-    // hosts the queued stand-in. Undated legacy messages tail the stream.
+    // right before the terminal marker — MERGED into the adjacent step
+    // group when nothing intervenes: the started/pending boundary is a
+    // data boundary, never a visual seam (a gap-8 blank row between two
+    // bubbles mid-list, #15). A standalone group only remains for the
+    // queued stand-in (no steps at all) or right after a message (the
+    // mid-run QA's resume tail — an intended break).
     const needPending =
       pendingSteps.length > 0 || (steps.length === 0 && !terminal)
     if (needPending) {
       const terminalIdx = units.findIndex((u) => u.kind === "terminal")
-      if (terminalIdx >= 0) units.splice(terminalIdx, 0, { kind: "pendingGroup" })
-      else units.push({ kind: "pendingGroup" })
+      const insertAt = terminalIdx >= 0 ? terminalIdx : units.length
+      const prev = insertAt > 0 ? units[insertAt - 1] : undefined
+      if (steps.length > 0 && prev?.kind === "stepGroup") {
+        prev.steps.push(...pendingSteps)
+      } else {
+        units.splice(insertAt, 0, { kind: "pendingGroup" })
+      }
     }
     for (const m of undated) units.push({ kind: "message", message: m })
     return units

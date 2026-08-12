@@ -9,6 +9,7 @@ A separate planning step will use your output — **without access to the origin
 ## Rules
 
 - Write all analysis in the dominant language of the source material.
+- Every key argument ALSO gets two faithful one-sentence renderings for user-facing display: `text_en` (English) and `text_zh` (Simplified Chinese). A rendering may repeat `text` when the material is already in that language. Planning reads `text`; only the display layer reads the renderings.
 - `quote_candidates` must be **verbatim** sentences from the material — no translation, no paraphrase, no invented quotes.
 - Every key argument gets a stable id (`a1`, `a2`, …) and a `position`: a short free-text marker of where the argument appears (e.g. "opening", "right after the pricing anecdote, about a third in").
 - Be complete: capture every argument worth building content on. Anything missing here cannot be planned on later.
@@ -36,8 +37,8 @@ Please output valid JSON only, with no explanations or markdown code blocks.
   "overall_summary": "2-3 sentence summary of the entire talk",
   "core_thesis": "The single most important claim or idea",
   "key_arguments": [
-    {"id": "a1", "text": "The argument, stated precisely", "position": "where it appears in the material"},
-    {"id": "a2", "text": "…", "position": "…"}
+    {"id": "a1", "text": "The argument, stated precisely", "text_en": "English rendering", "text_zh": "中文表述", "position": "where it appears in the material"},
+    {"id": "a2", "text": "…", "text_en": "…", "text_zh": "…", "position": "…"}
   ],
   "themes": ["Theme 1", "Theme 2"],
   "target_audience": "The audience this material speaks to",

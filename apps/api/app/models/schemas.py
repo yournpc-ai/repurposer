@@ -1233,6 +1233,12 @@ class KeyArgument(BaseModel):
 
     id: str = Field(description="Stable id within the understanding (a1, a2, …)")
     text: str
+    # Display alternates (checkpoint options render in the UI language,
+    # never the material's): faithful English / Simplified-Chinese
+    # renderings of the same argument. Empty on legacy cached payloads —
+    # the display layer falls back to ``text``.
+    text_en: str = ""
+    text_zh: str = ""
     # Free-text location marker — the director never sees word-level
     # timestamps, so an honest text marker instead of fake seconds.
     position: str = ""

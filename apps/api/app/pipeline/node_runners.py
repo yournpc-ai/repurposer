@@ -352,12 +352,17 @@ class Checkpoint(NodeBase):
         # Options (code-derived, zero LLM): up to 3 "Focus: {argument}" + the
         # full-talk default; freeform rides via allow_freeform. The option's
         # argument id rides only in suspend_payload (the message payload stays a
-        # plain AskOption list, same shape as a chat choice question).
+        # plain AskOption list, same shape as a chat choice question). The
+        # argument TEXT renders in the UI language (text_zh/text_en display
+        # alternates, legacy payloads fall back to the material's text).
         focus_word = "聚焦：" if zh else "Focus: "
         default_label = "全场高光" if zh else "Full-talk highlights"
         arguments = understanding.key_arguments[:3]
         options = [
-            AskOption(id=chr(ord("a") + i), label=f"{focus_word}{arg.text}")
+            AskOption(
+                id=chr(ord("a") + i),
+                label=f"{focus_word}{(arg.text_zh if zh else arg.text_en) or arg.text}",
+            )
             for i, arg in enumerate(arguments)
         ]
         options.append(AskOption(id=chr(ord("a") + len(arguments)), label=default_label))

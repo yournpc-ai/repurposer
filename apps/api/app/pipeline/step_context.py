@@ -74,8 +74,13 @@ def _asset_digest(asset_texts: list[str], assets: list[Asset]) -> str:
     trim window does not alter the LLM input, so it must not invalidate).
     Media identity = file_url (unique storage path per upload); ``words`` meta
     is not an understanding input and stays out of the hash.
+
+    The ``understanding_v2`` salt invalidates pre-alternate payloads: the
+    KeyArgument display renderings (text_en/text_zh, 2026-08-12) change the
+    prompt's requested output, so a v1 cache row must regenerate once.
     """
     h = hashlib.sha256()
+    h.update(b"understanding_v2\x00")
     for text in asset_texts:
         if text and text.strip():
             h.update(text[:MAX_CHARS_PER_TEXT].encode("utf-8"))
