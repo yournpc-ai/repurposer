@@ -61,14 +61,6 @@ import { recipeProcessFlow } from "./recipeFlow"
  * (2026-08-11 ruling — 配方 = 提示词). The only edit entry stays the
  * prompt text (before send) / chat (after send); chat always wins.
  */
-/** Input slot type → the Input section's icon (registry-driven, one map). */
-const INPUT_TYPE_ICONS: Record<string, typeof Video> = {
-  video: Video,
-  audio: Music,
-  images: ImageIcon,
-  transcript: FileText,
-}
-
 export function RecipeInspectOverlay({
   card,
   onClose,
@@ -82,10 +74,6 @@ export function RecipeInspectOverlay({
 
   const title = t(`recipes.${card.id}.title`)
   const template = t(`recipes.${card.id}.promptTemplate`)
-  // The Input section's icon follows the recipe's first input slot — the
-  // material ask is registry data, never per-card branches.
-  const InputIcon =
-    INPUT_TYPE_ICONS[card.input_slots[0]?.type ?? ""] ?? FileText
 
   // The draft: the template as plain editable text. The recipe's identity
   // stays frontend-local — no chip row, no wire field (the template text
@@ -203,7 +191,6 @@ export function RecipeInspectOverlay({
                   the dropzone copy itself stays generic. */}
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
-                  <InputIcon className="h-4 w-4 text-muted-foreground" />
                   {t(`recipes.${card.id}.inputTitle`)}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
