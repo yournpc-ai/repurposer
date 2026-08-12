@@ -8,6 +8,7 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   asset: { width: 128, height: 216 },
   output: { width: 128, height: 216 },
   step: { width: 192, height: 72 },
+  spine: { width: 192, height: 72 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡): thumb + score /

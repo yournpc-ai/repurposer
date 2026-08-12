@@ -19,7 +19,7 @@ from app.models.schemas import (
     RunResponse,
 )
 from app.models.tables import Output, WorkflowStep, WorkflowRun
-from app.pipeline.graph import fold_estimates
+from app.pipeline.graph import fold_estimates, node_for
 
 
 def visible_outputs_stmt() -> Select:
@@ -43,6 +43,7 @@ async def list_visible_outputs(
 
 def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
     """Serialize a node; ``stage`` is the display hint from spec (results.stepper.* keys)."""
+    node_cls = node_for(node.kind)
     return StepResponse(
         id=node.id,
         kind=node.kind,
@@ -52,6 +53,9 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
+        # 展示档 (D6) comes from the node CLASS (self-description, like
+        # label()), never the row — legacy/unknown kinds fold by default.
+        display_tier=node_cls.display_tier if node_cls else "spine",
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         started_at=node.started_at,

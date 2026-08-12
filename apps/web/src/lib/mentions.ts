@@ -23,6 +23,7 @@ import {
   FileText,
   Layers,
   Paperclip,
+  Workflow,
   type LucideIcon,
 } from "lucide-react"
 
@@ -144,6 +145,16 @@ export const MENTION_REGISTRY: MentionTypeDef[] = [
     icon: Layers,
     i18nKey: "mentions.types.output",
     source: outputSource,
+  },
+  {
+    type: "workflow_step",
+    icon: Workflow,
+    i18nKey: "mentions.types.workflow_step",
+    // 本面限定候选源 (ADR-041 D8): chips enter ONLY by clicking a process
+    // node on the results canvas — the @ picker never lists steps (a user
+    // doesn't type step names). The chip still serializes into the turn's
+    // mentions and lands in the server context as a definite reference.
+    source: async () => [],
   },
 ]
 

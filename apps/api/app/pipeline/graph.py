@@ -175,6 +175,13 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
+    # Canvas 展示档 (ADR-041 D6, 与 label() 同哲学——节点类自描述): "spine"
+    # folds into the results canvas's collapsible 过程脊 group node;
+    # "primary" always stays visible. The test for any node: "hide it — does
+    # the user make a wrong decision or lose trust?" Folding is a VIEW
+    # behavior — the step rows stay full (cost / rerun / lineage rely on
+    # them); a failed step breaks out of the spine on the canvas regardless.
+    display_tier: str = "spine"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

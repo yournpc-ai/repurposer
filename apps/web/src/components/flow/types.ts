@@ -4,7 +4,7 @@
  * edge carries its meaning, every node is real (step `inputs` /
  * `derived_from_output_id` — decorative illustration is prohibited). */
 
-export type FlowNodeKind = "asset" | "output" | "step"
+export type FlowNodeKind = "asset" | "output" | "step" | "spine"
 
 export type FlowNodeStatus = "pending" | "running" | "done" | "failed" | "skipped"
 
@@ -37,6 +37,9 @@ export interface FlowNode {
   size?: { width: number; height: number }
   /** Carries the surface's data-tour anchors (first ready product only). */
   tourTargets?: boolean
+  /** Spine group node only (results canvas, D6 过程脊): the fold's current
+   * state — the card flips its chevron on it. */
+  expanded?: boolean
   /** Stable within-layer ordering key (step `seq` / output `created_at`) —
    * append-only growth stability: chat adds nodes, the graph only grows,
    * existing nodes never move (ADR-036). */

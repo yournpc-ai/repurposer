@@ -333,6 +333,12 @@ function ProjectDetailPage() {
     else setPublishOutput(output)
   }
 
+  // 点过程节点 = @workflow_step 指认 (D8): the chip lands in the dock's
+  // input — the mention rides the next turn as a definite reference.
+  const handleStepClick = (stepId: string, label: string) => {
+    overlayRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
+  }
+
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
@@ -800,6 +806,7 @@ function ProjectDetailPage() {
               tourOutputId={resultsTourClipId}
               onOutputClick={handleOutputClick}
               onOutputAction={handleOutputAction}
+              onStepClick={handleStepClick}
               onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
             />
           </div>

@@ -1,6 +1,8 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Clapperboard,
   Download,
   FileText,
@@ -8,6 +10,7 @@ import {
   Minus,
   Play,
   Send,
+  Waypoints,
   X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -102,6 +105,34 @@ function StepCard({ node }: { node: FlowNode }) {
           <p className="truncate text-xs leading-tight text-muted-foreground">{node.detail}</p>
         )}
       </div>
+    </div>
+  )
+}
+
+/** The 过程脊 group node (ADR-041 D6): the folded middle steps as ONE
+ * container — muted fill reads as a group, not a step (fill-first, no
+ * ring); click expands in place. It never carries a toolbar (D5: process
+ * nodes never do). */
+function SpineCard({ node }: { node: FlowNode }) {
+  return (
+    <div className="flex h-full w-full items-center gap-2.5 rounded-md bg-muted px-3 py-2">
+      {node.status ? (
+        <StatusBadge status={node.status} />
+      ) : (
+        <span className="h-5 w-5 shrink-0 rounded-full bg-card" />
+      )}
+      <Waypoints className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm leading-snug">{node.label}</p>
+        {node.detail && (
+          <p className="truncate text-xs leading-tight text-muted-foreground">{node.detail}</p>
+        )}
+      </div>
+      {node.expanded ? (
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+      ) : (
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      )}
     </div>
   )
 }
@@ -267,6 +298,8 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
       />
       {node.kind === "step" ? (
         <StepCard node={node} />
+      ) : node.kind === "spine" ? (
+        <SpineCard node={node} />
       ) : node.kind === "output" ? (
         <ProductCard node={node} onOutputAction={onOutputAction} />
       ) : (

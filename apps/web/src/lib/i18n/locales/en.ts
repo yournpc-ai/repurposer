@@ -528,6 +528,7 @@ const en = {
     types: {
       asset: "Asset",
       output: "Output",
+      workflow_step: "Step",
     },
     fileType: {
       video: "Video",
@@ -857,6 +858,9 @@ const en = {
       preview: "Preview",
       download: "Download",
       publish: "Publish",
+      // 过程脊 group node (D6): the folded middle steps as one container.
+      spine: "Process",
+      spineSteps: "{{count}} steps",
     },
     // The product node's deterministic next-step line (D5 — zero-LLM,
     // derived from the output type; presented, never a control).

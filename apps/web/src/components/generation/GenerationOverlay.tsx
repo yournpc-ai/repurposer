@@ -347,6 +347,10 @@ interface GenerationOverlayProps {
  * down collapses the history drawer back to the summary card). */
 export interface GenerationOverlayHandle {
   collapseDrawer: () => void
+  /** Insert an @-mention chip into the input (results canvas node clicks —
+   * the @workflow_step 本面限定候选源, ADR-041 D8). No-op when the editor
+   * isn't mounted. */
+  insertMention: (mention: ChatMention) => void
 }
 
 function StepMarker({
@@ -598,6 +602,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   useImperativeHandle(ref, () => ({
     collapseDrawer: () =>
       setDockView((v) => (v === "drawer" ? "summary" : v)),
+    insertMention: (mention: ChatMention) =>
+      editorRef.current?.insertMention(mention),
   }))
 
   const [phase, setPhase] = useState<Phase>(

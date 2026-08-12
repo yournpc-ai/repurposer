@@ -52,6 +52,10 @@ function stepNodeStatus(status: string): FlowNodeStatus {
   }
 }
 
+/** The 过程脊 group node's reserved id (D6) — every folded step's edges
+ * rewire to it; the surface toggles expansion off this id. */
+export const SPINE_NODE_ID = "spine"
+
 export function runFlowGraph(
   input: {
     assets: RunFlowAsset[]
@@ -60,12 +64,15 @@ export function runFlowGraph(
     /** The node carrying the results tour's data-tour anchors (first ready
      * product, chosen by the surface). */
     tourOutputId?: string | null
+    /** 过程脊 state (D6): collapsed (default) folds every spine-tier step
+     * into one group node; expanded renders the full step topology. */
+    spineExpanded?: boolean
   },
   t: TFunction
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const nodes: FlowNode[] = []
-  const edges: FlowEdge[] = []
-  const { assets, steps, outputs, tourOutputId } = input
+  const rawEdges: FlowEdge[] = []
+  const { assets, steps, outputs, tourOutputId, spineExpanded = false } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
 
@@ -83,7 +90,18 @@ export function runFlowGraph(
     })
   })
 
-  for (const step of steps) {
+  // 过程脊 (ADR-041 D6): spine-tier steps fold into one expandable group
+  // node. Folding is a VIEW behavior — the step rows stay full (cost /
+  // rerun / lineage read them). A FAILED step always breaks out (the D6
+  // test: "hide it — does the user lose trust?"), as does a node class
+  // self-describing "primary" (NodeBase.display_tier).
+  const foldable = (s: WorkflowStep) =>
+    s.display_tier !== "primary" && s.status !== "failed"
+  const hiddenSteps = spineExpanded ? [] : steps.filter(foldable)
+  const hiddenNodeIds = new Set(hiddenSteps.map((s) => `step:${s.id}`))
+  const visibleSteps = spineExpanded ? steps : steps.filter((s) => !foldable(s))
+
+  for (const step of visibleSteps) {
     nodes.push({
       id: `step:${step.id}`,
       kind: "step",
@@ -98,10 +116,12 @@ export function runFlowGraph(
       status: stepNodeStatus(step.status),
       order: step.seq,
     })
+  }
+  for (const step of steps) {
     for (const upstream of step.inputs ?? []) {
       // Guard: edges only between steps present in this run's payload.
       if (stepIds.has(upstream)) {
-        edges.push({
+        rawEdges.push({
           from: `step:${upstream}`,
           to: `step:${step.id}`,
           semantic: "dependency",
@@ -110,12 +130,32 @@ export function runFlowGraph(
     }
   }
 
+  // The spine group node: one stand-in for the folded steps, carrying their
+  // count and aggregate state. Click expands in place (the surface owns the
+  // toggle; the adapter just renders the state it is handed).
+  if (hiddenSteps.length > 0) {
+    const statuses = hiddenSteps.map((s) => stepNodeStatus(s.status))
+    nodes.push({
+      id: SPINE_NODE_ID,
+      kind: "spine",
+      label: t("results.canvas.spine"),
+      detail: t("results.canvas.spineSteps", { count: hiddenSteps.length }),
+      status: statuses.every((s) => s === "done" || s === "skipped")
+        ? "done"
+        : statuses.some((s) => s === "running")
+          ? "running"
+          : "pending",
+      expanded: false,
+      order: 0,
+    })
+  }
+
   // Source assets feed the root steps (the run's entry points) — process
   // order, so the dependency semantic (recipe adapter precedent).
   const roots = steps.filter((s) => (s.inputs ?? []).length === 0)
   for (const asset of assets) {
     for (const root of roots) {
-      edges.push({
+      rawEdges.push({
         from: `asset:${asset.id}`,
         to: `step:${root.id}`,
         semantic: "dependency",
@@ -162,13 +202,27 @@ export function runFlowGraph(
     // carried over from an earlier run point at steps outside this payload —
     // the node still renders, edgeless, rather than inventing a parent.
     if (output.workflow_step_id && stepIds.has(output.workflow_step_id)) {
-      edges.push({
+      rawEdges.push({
         from: `step:${output.workflow_step_id}`,
         to: id,
         semantic: "lineage",
       })
     }
   })
+
+  // Fold: hidden steps' edge endpoints rewire to the spine node (self-loops
+  // and duplicates collapse) — the visible graph stays真边, never invented.
+  const seen = new Set<string>()
+  const edges: FlowEdge[] = []
+  for (const e of rawEdges) {
+    const from = hiddenNodeIds.has(e.from) ? SPINE_NODE_ID : e.from
+    const to = hiddenNodeIds.has(e.to) ? SPINE_NODE_ID : e.to
+    if (from === to) continue
+    const key = `${from}|${to}|${e.semantic}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    edges.push({ from, to, semantic: e.semantic })
+  }
 
   return { nodes, edges }
 }

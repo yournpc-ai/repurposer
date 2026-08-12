@@ -515,6 +515,7 @@ const zh: Resources = {
     types: {
       asset: "素材",
       output: "产物",
+      workflow_step: "步骤",
     },
     fileType: {
       video: "视频",
@@ -844,6 +845,9 @@ const zh: Resources = {
       preview: "预览",
       download: "下载",
       publish: "发布",
+      // 过程脊组节点（D6）：折起的中间步骤为一个容器。
+      spine: "处理过程",
+      spineSteps: "{{count}} 个步骤",
     },
     // 产物节点的下一步建议行（D5——零 LLM，按产物类型确定性派生）。
     nextStep: {

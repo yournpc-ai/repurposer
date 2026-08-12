@@ -191,6 +191,9 @@ export interface WorkflowStep {
   output_refs?: string[]
   /** DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036). */
   inputs?: string[]
+  /** Canvas 展示档 (ADR-041 D6): "spine" folds into the 过程脊 group node;
+   * "primary" stays visible. Absent on legacy payloads = spine. */
+  display_tier?: string | null
   started_at: string | null
   finished_at: string | null
 }
