@@ -90,9 +90,16 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
 class MiniMaxError(Exception):
-    """MiniMax API error."""
+    """MiniMax API error.
 
-    pass
+    ``user_key`` names the localized user-facing line (pipeline/errors.py's
+    USER_ERROR_LINES) for when this surfaces on a failed step row — set at the
+    raise site by failure mode, propagated through wrapper layers via
+    ``propagate_key``."""
+
+    def __init__(self, message: str, *, user_key: str | None = None) -> None:
+        super().__init__(message)
+        self.user_key = user_key
 
 
 class MiniMaxSchemaError(MiniMaxError):
@@ -106,22 +113,32 @@ class MiniMaxSchemaError(MiniMaxError):
     a transport concern, never repaired by the harness.
     """
 
-    pass
+    def __init__(self, message: str, *, user_key: str = "ai_unreadable") -> None:
+        super().__init__(message, user_key=user_key)
 
 
-def _raise_for_status(response: httpx.Response) -> None:
+def _raise_for_status(
+    response: httpx.Response, *, unavailable_key: str = "provider_unavailable"
+) -> None:
     """``raise_for_status`` that speaks MiniMaxError.
 
     Callers up the stack (intent agents, chat loop) all catch MiniMaxError to
     degrade gracefully — a raw httpx.HTTPStatusError (402/429/5xx from the
     provider) would slip past every one of them and surface as a bare 500.
-    """
+    Rate limiting gets its own user key (the honest "busy, try again" line);
+    every other status reads as unavailable (402 billing is an ops problem —
+    the user line stays generic)."""
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise MiniMaxError(
             f"MiniMax HTTP {exc.response.status_code}: "
-            f"{exc.response.text[:300]}"
+            f"{exc.response.text[:300]}",
+            user_key=(
+                "provider_rate_limited"
+                if exc.response.status_code == 429
+                else unavailable_key
+            ),
         ) from exc
 
 
@@ -291,11 +308,18 @@ class MiniMaxClient:
             except (httpx.TransportError, MiniMaxError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
-                    raise MiniMaxError(str(exc)) from exc
+                    if isinstance(exc, MiniMaxError):
+                        # Already keyed — re-raise intact, never re-wrap.
+                        raise
+                    raise MiniMaxError(
+                        str(exc), user_key="provider_unreachable"
+                    ) from exc
                 continue
             break
         else:
-            raise MiniMaxError(str(last_exc))
+            if isinstance(last_exc, MiniMaxError):
+                raise last_exc
+            raise MiniMaxError(str(last_exc), user_key="provider_unreachable")
 
         # ADR-025 metering (same contract as ``generate``: report before
         # validation — tokens were consumed either way).
@@ -366,7 +390,8 @@ class MiniMaxClient:
         base_resp = data.get("base_resp") or {}
         if base_resp.get("status_code") != 0:
             raise MiniMaxError(
-                f"MiniMax image generation failed: {base_resp.get('status_msg')}"
+                f"MiniMax image generation failed: {base_resp.get('status_msg')}",
+                user_key="provider_unavailable",
             )
 
         if response_format == "base64":
@@ -422,7 +447,8 @@ class MiniMaxClient:
         base_resp = data.get("base_resp") or {}
         if base_resp.get("status_code") != 0:
             raise MiniMaxError(
-                f"MiniMax music generation failed: {base_resp.get('status_msg')}"
+                f"MiniMax music generation failed: {base_resp.get('status_msg')}",
+                user_key="provider_unavailable",
             )
 
         inner = data.get("data") or {}
@@ -430,7 +456,8 @@ class MiniMaxClient:
         status = int(inner.get("status", 0))
         if status != 2:
             raise MiniMaxError(
-                f"MiniMax music generation did not complete (status={status})"
+                f"MiniMax music generation did not complete (status={status})",
+                user_key="provider_unavailable",
             )
 
         audio = inner.get("audio")

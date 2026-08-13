@@ -40,6 +40,9 @@ class DubAssemblyError(Exception):
     """Mechanical dub-track assembly failure (decode/encode) — the dub
     skill's procedure maps it onto its error contract."""
 
+    # Assembly failures surface with the voice family line (pipeline/errors.py).
+    user_key = "voice_unavailable"
+
 
 def group_units(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Chunk word-level cues into timed synthesis units (~``_UNIT_WORDS`` each)."""

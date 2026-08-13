@@ -27,6 +27,9 @@ class VoiceError(Exception):
     client (N-29), so the voice wrapper speaks its own error; callers up the
     stack (dub procedure) map it onto their error contract."""
 
+    # Every voice failure reads as the same user line (pipeline/errors.py).
+    user_key = "voice_unavailable"
+
 # Map our ISO codes to MiniMax `language_boost` names.
 _LANG_BOOST = {
     "en": "English",

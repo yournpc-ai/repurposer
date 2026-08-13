@@ -26,7 +26,7 @@ from app.clients.minimax import MiniMaxError
 from app.models.schemas import AssetType
 from app.models.tables import Asset, Output, Persona, Project
 from app.metering import record_media_usage
-from app.pipeline.errors import TransientNodeError
+from app.pipeline.errors import TransientNodeError, propagate_key
 from app.skills.captions.procedure import translate_caption_track, translate_text
 from app.tools.dubbing import DubAssemblyError, group_units, synthesize_aligned_track
 from app.tools.storage import download_to_temp, get_output_path, output_url, save
@@ -117,7 +117,8 @@ async def synthesize_dub(
             voice_id = await run_in_threadpool(clone_voice, audio_path)
             if not voice_id:
                 raise TransientNodeError(
-                    "voice cloning unavailable (provider returned no voice_id)"
+                    "voice cloning unavailable (provider returned no voice_id)",
+                    user_key="voice_unavailable",
                 )
             # Billed on first T2A use of the fresh voice (provider rule) — the
             # clone immediately synthesizes below, so the charge lands here.
@@ -157,7 +158,9 @@ async def synthesize_dub(
             encoder=ext,
         )
     except (MiniMaxError, VoiceError, DubAssemblyError) as e:
-        raise TransientNodeError(f"dub provider call failed: {e}") from e
+        raise TransientNodeError(
+            f"dub provider call failed: {e}", user_key=propagate_key(e, "voice_unavailable")
+        ) from e
     finally:
         if tmp_audio_path is not None:
             tmp_audio_path.unlink(missing_ok=True)
@@ -174,7 +177,9 @@ async def synthesize_dub(
     try:
         out_key = await save(out_key, audio_bytes)
     except Exception as e:  # storage layer raises plain network/IO errors
-        raise TransientNodeError(f"dub audio upload failed: {e}") from e
+        raise TransientNodeError(
+            f"dub audio upload failed: {e}", user_key="storage_unavailable"
+        ) from e
 
     return {
         **spec,

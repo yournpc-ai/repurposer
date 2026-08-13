@@ -35,7 +35,8 @@ from app.platform.project_context import (
     resolve_persona,
 )
 from app.skills.dub.procedure import synthesize_dub
-from app.pipeline.errors import TransientNodeError
+from app.pipeline.errors import TransientNodeError, user_error_line
+from app.ui_locale import current_ui_language
 
 router = APIRouter()
 
@@ -340,11 +341,16 @@ async def dub_output(
 
     # Shell translation (agent-loop-upgrade W3): the core speaks
     # TransientNodeError for provider/storage hiccups; the endpoint's contract
-    # is HTTP — map to 502. Deterministic input errors stay HTTPException.
+    # is HTTP — map to 502. The toast shows the detail, so it gets the
+    # humanized line (request-scoped UI locale), never raw provider innards.
+    # Deterministic input errors stay HTTPException.
     try:
         new_spec = await synthesize_dub(db, output, project, data.target_language)
     except TransientNodeError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            user_error_line(e, current_ui_language() or "en"),
+        ) from e
     await apply_precomputed(
         db,
         output,

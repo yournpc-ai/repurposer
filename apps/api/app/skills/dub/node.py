@@ -153,6 +153,6 @@ class DubClip(NodeBase):
         await _fan_out_renders(db, run, node, touched)
         await _record_target_output_ids(node.id, touched)
         await _fill_summary(
-            node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang
+            node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()
         )
         return touched

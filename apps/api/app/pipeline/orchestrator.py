@@ -33,7 +33,8 @@ from app.models.schemas import (
 from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step
 from app.pipeline.derivative_dispatch import derivative_output_types
-from app.pipeline.errors import TransientNodeError
+from app.pipeline.errors import TransientNodeError, user_error_line
+from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
     MEDIA,
     NODE_KINDS,
@@ -713,7 +714,18 @@ async def execute_step(node_id: UUID) -> None:
                     )
                     return
                 node.status = "failed"
-                node.error = str(e)[:2000]
+                # node.error is USER copy — the failed step row's tail. Bake the
+                # localized line (errors.USER_ERROR_LINES, the run's pinned UI
+                # locale — same bake-at-write discipline as step summaries);
+                # the raw exception stays in the structlog event above, never
+                # in the DB the UI reads.
+                run = await db.get(WorkflowRun, node.run_id)
+                project = await db.get(Project, run.project_id) if run else None
+                node.error = (
+                    user_error_line(e, ui_lang_of(run, project))
+                    if run is not None
+                    else user_error_line(e)
+                )
                 node.finished_at = datetime.now(UTC)
                 await db.commit()
                 await _cascade_skip(db, node)

@@ -110,7 +110,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=SelectClipsParams,
             summary_templates={
-                "en": "Selected {n} clips · {total_seconds}s total",
+                "en": "Selected {n} clip{n_s} · {total_seconds}s total",
                 "zh": "选出了 {n} 个片段 · 共 {total_seconds} 秒",
             },
         ),
@@ -119,7 +119,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Write a LinkedIn long-form post from the talk",
             behavior="probabilistic",
             summary_templates={
-                "en": "Wrote a LinkedIn post · {word_count} words",
+                "en": "Wrote a LinkedIn post · {word_count} word{word_count_s}",
                 "zh": "写好了 LinkedIn 帖子 · {word_count} 词",
             },
         ),
@@ -128,7 +128,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Write quote cards from the talk's best lines",
             behavior="probabilistic",
             summary_templates={
-                "en": "Wrote quote cards · {word_count} words",
+                "en": "Wrote quote cards · {word_count} word{word_count_s}",
                 "zh": "写好了金句卡 · {word_count} 词",
             },
         ),
@@ -137,7 +137,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Write a LinkedIn carousel (slide deck copy)",
             behavior="probabilistic",
             summary_templates={
-                "en": "Wrote a carousel · {word_count} words",
+                "en": "Wrote a carousel · {word_count} word{word_count_s}",
                 "zh": "写好了轮播 · {word_count} 词",
             },
         ),
@@ -146,7 +146,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Write a long-form article / newsletter draft",
             behavior="probabilistic",
             summary_templates={
-                "en": "Wrote an article · {word_count} words",
+                "en": "Wrote an article · {word_count} word{word_count_s}",
                 "zh": "写好了文章 · {word_count} 词",
             },
         ),
@@ -156,8 +156,8 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=ReviseScriptParams,
             summary_templates={
-                "en": "Revised {scope}",
-                "zh": "修订了 {scope}",
+                "en": "Revised · {title}",
+                "zh": "修订了 · {title}",
             },
         ),
         SkillEntry(
@@ -166,7 +166,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=DubClipParams,
             summary_templates={
-                "en": "Dubbed {n} clips · {lang}",
+                "en": "Dubbed {n} clip{n_s} · {lang}",
                 "zh": "配音了 {n} 个片段 · {lang}",
             },
         ),
@@ -176,7 +176,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             behavior="probabilistic",
             params_model=TranslateClipParams,
             summary_templates={
-                "en": "Translated {n} clips · {lang}",
+                "en": "Translated {n} clip{n_s} · {lang}",
                 "zh": "翻译了 {n} 个片段 · {lang}",
             },
         ),
@@ -185,7 +185,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             description="Remove filler words and repeated takes from existing clips, then re-render",
             behavior="deterministic",
             summary_templates={
-                "en": "Removed {filler_count} fillers · {repeat_count} repeated takes",
+                "en": "Removed {filler_count} filler{filler_count_s} · {repeat_count} repeated take{repeat_count_s}",
                 "zh": "剪掉了 {filler_count} 处口水词 · {repeat_count} 处重拍",
             },
         ),
@@ -206,7 +206,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             "(transcript + photos only; RECIPES §2's third time source: reading pace)",
             behavior="deterministic",
             summary_templates={
-                "en": "Aligned transcript · {n} words · {total_seconds}s",
+                "en": "Aligned transcript · {n} word{n_s} · {total_seconds}s",
                 "zh": "对齐了逐字稿 · {n} 词 · {total_seconds} 秒",
             },
         ),

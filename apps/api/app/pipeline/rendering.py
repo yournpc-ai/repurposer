@@ -29,6 +29,7 @@ from app.config import settings
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, Project, WorkflowRun
+from app.pipeline.errors import user_line
 from app.tools.storage import (
     delete,
     get_output_path,
@@ -36,6 +37,7 @@ from app.tools.storage import (
     presign_upload,
     public_url,
 )
+from app.ui_locale import display_language
 
 logger = structlog.get_logger()
 
@@ -158,7 +160,7 @@ async def render_output(output_id: UUID) -> None:
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(Output, Project.user_id)
+            select(Output, Project)
             .join(Project, Output.project_id == Project.id)
             .where(Output.id == output_id)
         )
@@ -166,10 +168,16 @@ async def render_output(output_id: UUID) -> None:
         if row is None:
             logger.warning("render_output_missing", output_id=str(output_id))
             return
-        output, user_id = row
+        output, project = row
+        user_id = project.user_id
+        # render_error is USER copy (the clip card + the mirrored render node
+        # row) — localized human lines only; raw httpx/storage innards stay in
+        # the structlog event. Locale = the project's display chain (no run
+        # context lives on this path).
+        lang = display_language(None, project.language)
         if not output.render_spec:
             output.render_status = RenderStatus.FAILED
-            output.render_error = "output has no render_spec"
+            output.render_error = user_line("render_failed", lang)
             await db.commit()
             await _mirror_render_node(output_id, "failed", output.render_error)
             return
@@ -240,6 +248,6 @@ async def render_output(output_id: UUID) -> None:
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("render_output_failed", output_id=str(output_id), error=str(e))
             output.render_status = RenderStatus.FAILED
-            output.render_error = str(e)
+            output.render_error = user_line("render_failed", lang)
             await db.commit()
-            await _mirror_render_node(output_id, "failed", str(e)[:2000])
+            await _mirror_render_node(output_id, "failed", output.render_error)

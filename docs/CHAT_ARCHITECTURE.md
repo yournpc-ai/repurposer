@@ -44,7 +44,7 @@ node.spec.summary = "Removed 12 fillers · 3 repeated takes"（量化摘要，§
 打勾流逐行亮起 → outputs（render_status=PENDING）→ Remotion → MP4
  │
  ▼
-Done · 3 clips · 12 fillers removed · 1 score ── [Open in editor]（outputs 链接）
+recap（技能行聚合）：Selected 3 clips · 64s total · Removed 12 fillers · 2 repeated takes
  │
  ▼（下一轮：改现有产物而非跑新任务）
 "第二条再短一点" ──► intent ──► edit ops ──► Operation Model（📋，§9 边界）
@@ -237,7 +237,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **choice 形态与 autoResume（期 3）**：dock 渲染选项按钮组（字母徽章镜像映射规则）；待决中自由文本确定性映射——命中选项字母/序号/原文 → option 回答，否则 allow_freeform → freeform，否则按新 intent 处理、问题保持待决（零 LLM；task_book 待决不参与）。`ChatResponse.answered_question` 携带本回合掉的问题行供 QA 入档。成本 quote（confirm 形态，cost_hint 解剖位已预留）归 v3。
 - **checkpoint 形态（期 4）**：方向检查点是 choice 问题 + `workflow_run_id` 分派标记。`Suspend` 异常把瘦节点停进 `waiting`（选项住 `spec.suspend_payload`）、run 停进 `WAITING_HUMAN`；答案端点/autoResume 写 `spec.answer`、节点回 pending、run 回 RUNNING——队列式重入（runner 从顶上重跑，answer 分支直达 done），不是调用栈续跑。选项代码派生自 `key_arguments`（零 LLM）；bail = 节点 done(spec.bailed) + 下游级联 skipped("user bailed") + run COMPLETED（永不 failed）；`director_plan` 经 `task_book.direction` 消费（option → 优先论点，freeform → 指引原文，默认 → 现状；slot.focus > checkpoint > director）。**过期**：park 超过 `checkpoint_expiry_seconds`（默认 30 分钟）由 worker 扫描自动以默认项回答并续跑（`answer.text="expired"` 机器标记；review 档超时降级为 auto 档，兑现"离开不中断"，永不 auto-bail）。**多 run 并停**：新题 dock 取代开口 checkpoint 题时同笔级联 bail 那个 run（`finalize_bailed_runs` 收官 COMPLETED）——单待决不变量不会搁浅 run。
 
-**量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色），随 step.updated 推送——这是打勾流"Removed 12 fillers · 3 repeated takes"的数据来源。run 收尾聚合节点摘要成 "Done · 3 clips · 12 fillers removed"。
+**量化摘要**：`node.spec.summary` 由 runner 按 registry 的 `summary_template` 填充（模板填数字，不是 LLM 润色；英文模板用自动注入的 `{参数名}_s` 复数位——n=1 为空、否则 "s"），随 step.updated 推送——这是打勾流"Removed 12 fillers · 2 repeated takes"的数据来源。**run 收官 recap 只聚技能行**：`aggregate_run_summary` 按 seq 序拼接 done 节点的 spec.summary，但只收 `SKILL_REGISTRY` 成员 kind + bailed checkpoint（"Bailed by user" 用户中止注记）——内部班组行（理解/规划/渲染簿记）留在各自步骤行，不进 recap；派生发生在读取时，无列。**失败行是人话不是原文**：异常携带 `user_key`（`pipeline/errors.py` 的 `USER_ERROR_LINES` 键；MiniMax 客户端按 429/5xx/传输/schema 分键，voice 族自带，包装层 `propagate_key` 透传），终态 `node.error` 烘焙成 run UI 语言的本地化短句——原始异常全文只进 structlog，SQL/SQLAlchemy/httpx 内脏永不上脸。渲染链同理：`render_error` 写人话行（项目语言链），output 行与 render 节点镜像同源。
 
 ### 8.6 chat 回合 SSE（2026-08-04）
 

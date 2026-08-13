@@ -71,6 +71,11 @@ class ReviseScript(NodeBase):
         await db.flush()
         await _fill_summary(
             node.id, self.kind,
-            ui_language=ui_lang_of(run, project), scope=node.spec.get("scope", "clip"),
+            ui_language=ui_lang_of(run, project),
+            # The recap names the human target (title option, hook fallback),
+            # never the internal scope slug ("hook_and_title" is not copy).
+            title=next((t for t in (payload.title_options or []) if t), None)
+            or payload.hook[:40]
+            or "clip",
         )
         return [output.id]

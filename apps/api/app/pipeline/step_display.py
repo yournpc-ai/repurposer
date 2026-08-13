@@ -80,7 +80,11 @@ async def _fill_summary(
     sibling steps stay distinguishable after completion. ``kind`` IS the
     skill name (N-35) — the registry key directly. ``ui_language`` is the
     run's pinned UI locale (NOT the material's); unknown locales fall back
-    to the English template."""
+    to the English template.
+
+    Plural helper: every int param ``n`` auto-injects ``{n}_s`` ("" when the
+    value is 1, else "s") so English templates inflect — ``clip{n_s}`` reads
+    "1 clip" / "3 clips". zh templates leave the keys unused (no inflection)."""
     from app.skills import SKILL_REGISTRY  # deferred: import cycle
 
     entry = SKILL_REGISTRY.get(kind)
@@ -88,6 +92,9 @@ async def _fill_summary(
     template = templates.get(ui_language) or templates.get("en")
     if not template:
         return
+    for name, value in list(params.items()):
+        if isinstance(value, int) and not isinstance(value, bool):
+            params[f"{name}_s"] = "" if value == 1 else "s"
     try:
         line = template.format(**params)
     except KeyError:
