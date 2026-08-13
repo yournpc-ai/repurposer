@@ -80,15 +80,16 @@
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
 | 依赖边 | dependency edge | FlowView 边语义之二：step 间工艺顺序（step `inputs`） | 不是血缘边 |
 | 结果画布 | results canvas | 项目页收官态默认中心（ADR-041 D1，run 进度图排产随它撤销）：FlowView 渲染当前 run 拓扑 + 最新产物——产物节点即卡（缩略图/分数+top-pick/下一步建议 + hover toolbar）；适配器 `runFlowGraph`（`components/flow/runFlow.ts`） | 不是可操作画布（ADR-035 永拒）；进度不进图（打勾流唯一进度面） |
-| 底部 dock | chat dock | 结果期的输入组停靠位（GenerationOverlay dock shell）：摘要卡 + 历史抽屉 + 输入组；agent 发声必自动升起 | 不是第二意图入口（推断/合并/确认全在 plan path） |
-| 焦点注入 | focus injection（`focus_output_id`） | 画布点选产物 → 每轮 chat 携带焦点 id，context 加一行"当前焦点 output"（ADR-041 D8）；每轮携带、不落库 | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
+| 底部 dock | chat dock | 结果期的输入组停靠位（GenerationOverlay dock shell）：**一体容器两态**——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在同一容器内向上生长；agent 发声必自动展开（#6） | 不是第二意图入口（推断/合并/确认全在 plan path） |
+| meta 行 | meta row（`MetaRow`） | 系统层事实的消息流内灰色渲染（Claude Code 解剖：muted + xs + 无填充无卡片 + 流内左对齐 + 超长截断可点开）——步骤勾选项 / recap 行（`RecapRow`，run 收官摘要单行）/ 焦点行（`FocusRow`）共用一族；**信息入流，控制留底** | 不是卡片、不是气泡、不是流外 chrome（独立摘要卡 / 焦点 chip 已退役） |
+| 焦点注入 | focus injection（`focus_output`） | 画布点选产物 → 下一轮 chat 携带焦点 `{id,label}`，context 加一行"当前焦点 output"（ADR-041 D8）；一次性消费（发完即清、点画布空白即清）+ **落库为用户消息焦点前缀**（`messages.focus_output`，历史回读渲染灰行） | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
 | 诞生回放 | birth choreography | 收官时画布按 `seq` 编译序逐节点入场 + 边描画（真实编译顺序的缓动回放，ADR-036 补记 3）；reduced-motion / 断线重连 / 历史打开直接终态 | 禁剧场（动画 = 真实事件投影） |
 | 过程脊 | process spine | 结果画布的无键步骤折叠组节点（ADR-041 D6）：渲染单元之外的管道步骤（preprocess / persona_bootstrap / 修饰 morphs）折为一个可就地展开的组节点（步骤计数 + 聚合状态，组节点 id 恒 `spine`）；失败不再破脊，聚合状态承载 | 折叠是视图行为不是数据行为——图数据永远全量（成本 / 重跑 / 血缘靠它） |
 | 渲染单元 | canvas render unit（`canvas_key` / `canvas_hidden` / `canvas_text`） | 结果画布的节点粒度（ADR-041 D6 修订 2026-08-12）：画布渲染工件卡，不渲染 step——节点类自描述聚合键（与 `label()` 同哲学），同键 steps 合一卡（`plan` = understand+checkpoint+plan / `selection` / `dub:{lang}` 按语言分卡 / `music`）；`canvas_hidden`（render）永不上图，状态原地投影到产物卡；`canvas_text` = 卡面主体文案（如 checkpoint 的方向全文） | 不是 step 一一对应；判定问句："用户会想 @它 说改这个吗？" |
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |
-| 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037/038，N-27）：身份卡 + 风格 + 策略 + 声音 + 皮肤块（`brand`），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族 | 不是 speaker——`speaker` 只指素材里说话的人（`speaker_map` 合法居民）；不是 IP（承诺层词，禁入英文文案） |
+| 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037/038，N-27）：身份卡 + 风格 + 策略 + 声音 + 皮肤块（`brand`），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族。【已拍板重构（ADR-042 / `POSITIONING.md`，未实施）：根升格为「定位 `positioning`」，人设收窄为表达分区（风格 + 声纹 + 皮肤）；落地时本行改写并登记 `positioning` / `topics`】 | 不是 speaker——`speaker` 只指素材里说话的人（`speaker_map` 合法居民）；不是 IP（承诺层词，禁入英文文案） |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
@@ -126,7 +127,7 @@
 | N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S40）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与技能同名 | 技能包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
-| N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output_id`（每轮携带，context 一行，不落库）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
+| N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
 
 ## 4. API 命名
 

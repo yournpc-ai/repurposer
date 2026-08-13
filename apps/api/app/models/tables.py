@@ -385,6 +385,10 @@ class Message(Base):
     # @ entity refs (asset/output/transcript_segment/workflow_step); the
     # picker UI lands in a later iteration — the column is the seat.
     mentions = Column(JSONB, nullable=False, default=list, server_default="[]")
+    # The canvas product this turn was pointed at ({id, label}, denormalized
+    # like mentions): persisted so the rebuilt history honestly shows the
+    # focus prefix row on the user message after a refresh.
+    focus_output = Column(JSONB, nullable=True)
     workflow_run_id = Column(
         UUID(as_uuid=True),
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),

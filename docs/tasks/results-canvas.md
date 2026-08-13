@@ -17,11 +17,11 @@
 | D1 | **结果画布 = 桌面/iPad 默认中心** | 项目页收官态 = FlowView 渲染当前 run 拓扑 + 最新产物（真节点真边）。多 tab 结果页与"结果网格为默认中心"退役；已动工的网格重构件降级为移动端列表渲染件复用，零浪费 |
 | D2 | **进度不进图** | 打勾流是唯一进度面（run 进度图排产撤销）——run 进行中是图信息量最低的时刻；时间信息归 chat，空间信息归 canvas |
 | D3 | **转场 = 输入组零位移** | 收官帧：遮罩淡出 + 消息区上收 + 画布按 `seq` 编译序诞生回放（真实事件的缓动回放，禁剧场）；reduced-motion 即时呈现；断线重连 / 历史打开直接呈现终态，不播回放 |
-| D4 | **底部 dock** | chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（带 padding，非通栏；同一消息机器内脏不动）。默认态 = 输入组 + 最新一条 agent 消息摘要；chips 行与任务书 dock 挂输入框上方；历史 = 向上展开抽屉（点画布收回）；**agent 发声（ask / 任务书 / chips / 收官摘要）dock 必自动升起**；画布视口留 bottom safe-area ≥ dock 高 + padding。一个输入组三停靠位：首页 composer / overlay 底排 / 结果 dock |
+| D4 | **底部 dock**（2026-08-13 修订：一体容器 + 灰行入流） | chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（带 padding，非通栏；同一消息机器内脏不动）。**两态**：收起 = 输入组（唯一常驻 chrome）；展开 = 历史区域在**同一磨砂容器内**向上生长（容器独占圆角与玻璃，子件全方；摘要卡条 / 焦点 chip / 三态机退役）。**系统层灰行入流**：步骤勾选 / run 收官 recap / 焦点事件 = 消息流内灰色 meta 行（`MetaRow`，muted + xs + 无填充 + 超长截断可点开）——信息入流，控制留底。**agent 发声（含焦点设置等系统事件）历史必自动展开**；点画布空白 = 回中性（历史收起 + 焦点清除，pane 级）；画布视口留 bottom safe-area ≥ dock 高 + padding。一个输入组三停靠位：首页 composer / overlay 底排 / 结果 dock |
 | D5 | **产物节点 = 卡** | 缩略图 / 分数 + top-pick / 下一步建议长在节点上；hover 出带 gap 悬浮 toolbar（预览 / 下载 / 发布——旧卡面动作平移）；单击 = detail modal 旧逻辑原样；publish modal 保留。**过程节点永无 toolbar；toolbar 装图操作（运行 / 接线）永久禁区** |
 | D6 | **密度三档 + 渲染单元**（2026-08-12 修订） | 配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 工件密度（素材 + 工件卡 + 产物主角）；run 期无图。**渲染单元 ≠ 执行单元**——step 全量落库（成本 / 重跑 / 血缘靠它），画布按节点类自描述 `canvas_key` 聚合：同键合一卡（计划 = understand+checkpoint+plan / 选段 / 配音按语言分卡 / 音乐），无键折"过程脊"组节点，`canvas_hidden`（render）永不上图、状态原地投影到产物卡。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。判定任一节点只问："用户会想 @它 说改这个吗？" |
-| D7 | **导航门禁** | 缩放 = 导航不是编辑：配方卡说明书锁 fit；结果画布开放 pan / zoom / minimap。拓扑编辑手势（拖节点 / 接线）在任何面物理缺席——拓扑唯一来源 = `compile_graph` |
-| D8 | **修改通道唯一 = chat** | @mention 确定性指认（点过程节点插 `@workflow_step`）；ChatModal / AssetChatModal 退役——产物对话归 dock + 焦点注入（context 加一行"当前焦点 output"；asset scope 会话退役判例随本条执行，剧本 harness 同步）；undo 常驻；大改前一句代价提示（undo 撤产物状态，撤不回已花积分） |
+| D7 | **导航门禁** | 缩放 = 导航不是编辑：配方卡说明书锁 fit；结果画布开放 pan / zoom（minimap 退役——稀疏小图无导航价值）。拓扑编辑手势（拖节点 / 接线）在任何面物理缺席——拓扑唯一来源 = `compile_graph` |
+| D8 | **修改通道唯一 = chat** | @mention 确定性指认（点过程节点插 `@workflow_step`）；ChatModal / AssetChatModal 退役——产物对话归 dock + 焦点注入（context 加一行"当前焦点 output"；asset scope 会话退役判例随本条执行，剧本 harness 同步）。**焦点 = 一次性消费 + 落库**（2026-08-13 修订）：点画布产物 → 流尾焦点灰行 + 历史自动展开；发送携带 `focus_output {id,label}` 即消费（点画布空白即清，失败回滚即还）；焦点持久化在用户消息上（`messages.focus_output`），历史回读渲染焦点前缀灰行。undo 常驻；大改前一句代价提示（undo 撤产物状态，撤不回已花积分） |
 | D9 | **历史与资产：存是数据律，显是视图律** | 产物与操作全量落库（outputs / operations append-only）；画布只画当前 run + 最新产物；历史经 chat 档案流（RunCard 缩略条点了拉回 detail） |
 | D10 | **移动端 = UI in chat** | 不渲染 canvas（< iPad 宽度）；对话沉底（与桌面 dock 同心智模型）；一回合一张 RunCard——卡头血缘摘要行（"素材→…→成片"，可展开过程脊）+ 产物分组缩略条（带分数徽章）+ 卡下 chips；点缩略图进全屏查看器（家族兄妹滑动 + 底部迷你输入条）；点卡即焦点免 @。卡片种类注册表制：计划 / 操作 / 结果三型，新增 = 注册项 |
 
@@ -57,7 +57,7 @@
 | 交付 | 文件 |
 |---|---|
 | 过程脊折叠（组节点 + 步骤计数 + 就地展开）+ 节点展示档（NodeBase 自描述） | `components/flow/`、`app/skills/` 节点类属性 |
-| 导航门禁：结果画布 pan / zoom / minimap 开放（配方卡锁 fit 不变） | FlowView 门禁 props |
+| 导航门禁：结果画布 pan / zoom 开放（配方卡锁 fit 不变；minimap 退役） | FlowView 门禁 props |
 | 点过程节点插 `@workflow_step` mention（本面限定的候选源） | 画布 `onSelect` → dock |
 | 【联合验收】+ 小白复述测试（画布转正复核门） | — |
 

@@ -853,9 +853,7 @@ const zh: Resources = {
     },
     dock: {
       history: "历史记录",
-      collapse: "收起",
       focus: "当前焦点：{{name}}",
-      clearFocus: "取消焦点",
     },
     // 画布产物卡（ADR-041 D5）：悬停工具条按钮文案。
     canvas: {

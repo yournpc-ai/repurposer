@@ -22,9 +22,11 @@ import {
   CircleHelp,
   Crosshair,
   FileText,
+  Flag,
   History,
   Image as ImageIcon,
   Images,
+  Languages,
   Loader2,
   Mic2,
   Minus,
@@ -141,6 +143,9 @@ export interface InferredIntent {
   /** 配音语言集 (dub_languages, RECIPES §4.1): task-book-level voice-dub
    * languages for the run's clips; empty = no dubbing. */
   dub_languages: string[]
+  /** 字幕语言集 (caption_languages, RECIPES §4.1 多语言字幕卡): task-book-level
+   * caption-translation languages for the run's clips; empty = no translation. */
+  caption_languages: string[]
   specific_instruction: string | null
 }
 
@@ -203,6 +208,9 @@ export function normalizeIntent(raw: unknown): InferredIntent {
     dub_languages: Array.isArray(data.dub_languages)
       ? data.dub_languages.filter((l): l is string => typeof l === "string" && !!l)
       : [],
+    caption_languages: Array.isArray(data.caption_languages)
+      ? data.caption_languages.filter((l): l is string => typeof l === "string" && !!l)
+      : [],
     specific_instruction: (data.specific_instruction as string | null) ?? null,
   }
 }
@@ -224,6 +232,10 @@ interface OverlayMessage {
   streaming?: boolean
   /** QA archive item (answered question collapsing into the flow). */
   qa?: { question: string; answer: string; muted: boolean; detail?: string }
+  /** The canvas product this turn was pointed at (ADR-041 D8): rendered as
+   * the gray focus prefix row above the user bubble. Persisted server-side
+   * (messages.focus_output), so the rebuilt history stays honest. */
+  focus?: { id: string; label: string }
 }
 
 /** The typed question payload mirrored from the API (messages.question). */
@@ -332,11 +344,14 @@ interface GenerationOverlayProps {
    * surface; "dock" = the results-phase bottom dock over the canvas. The
    * SAME message machine — only the outer shell differs. */
   initialShell?: "fullscreen" | "dock"
-  /** The canvas's focused product (ADR-041 D8 焦点注入): shown as a chip
-   * above the input and carried on each turn as `focus_output_id` — one
-   * context line server-side, never a second intent entry. */
+  /** The canvas's focused product (ADR-041 D8 焦点注入): rendered as a gray
+   * meta row in the flow (待发焦点尾行), carried on the next turn as
+   * `focus_output` — one context line server-side AND persisted on the user
+   * message (the history's focus prefix row). One-shot: consumed on send. */
   focusOutput?: { id: string; label: string } | null
-  onClearFocus?: () => void
+  /** Focus lifecycle: the overlay consumes the focus on send (null) and
+   * restores it on a failed-turn rollback (the consumed id). */
+  onFocusChange?: (outputId: string | null) => void
   /** Where a witnessed completion lands (ADR-041 D3): "dock" = the desktop
    * 收官转场 (fullscreen → dock); "navigate" = the mobile legacy hand-off
    * (the page navigates back to the results list). */
@@ -348,14 +363,75 @@ interface GenerationOverlayProps {
   onComplete: (runId: string | null) => void | Promise<void>
 }
 
-/** Dock controls the page can trigger (D4: 点画布收回 — a canvas pointer
- * down collapses the history drawer back to the summary card). */
+/** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
+ * closes the history region and clears the focus). */
 export interface GenerationOverlayHandle {
-  collapseDrawer: () => void
+  closeHistory: () => void
   /** Insert an @-mention chip into the input (results canvas node clicks —
    * the @workflow_step 本面限定候选源, ADR-041 D8). No-op when the editor
    * isn't mounted. */
   insertMention: (mention: ChatMention) => void
+}
+
+/** MetaRow — the gray system-layer row (一切入流, the Claude Code anatomy):
+ * system facts (step ticks, the run recap, focus events) render IN the
+ * message flow as muted meta text — never as separate chrome anywhere.
+ * Over-long text clamps (`lines`) and toggles on click (ctrl+o, translated). */
+function MetaRow({
+  icon,
+  children,
+  destructive = false,
+  shimmer = false,
+  lines = 2,
+}: {
+  icon?: React.ReactNode
+  children: string
+  destructive?: boolean
+  shimmer?: boolean
+  lines?: 1 | 2
+}) {
+  // Char-length proxy (no DOM measurement): ~90 chars/line at text-xs in the
+  // max-w-3xl column — short rows never grow a pointer cursor for nothing.
+  const clampable = children.length > lines * 90
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <Marker>
+      {icon ? <MarkerIcon>{icon}</MarkerIcon> : null}
+      <MarkerContent
+        className={cn(
+          shimmer && "shimmer",
+          destructive && "text-destructive",
+          clampable && !expanded && (lines === 1 ? "line-clamp-1" : "line-clamp-2"),
+          clampable && "cursor-pointer"
+        )}
+        onClick={clampable ? () => setExpanded((v) => !v) : undefined}
+      >
+        {children}
+      </MarkerContent>
+    </Marker>
+  )
+}
+
+/** The run's terminal recap (D4 修订 — 收官摘要入流): one gray row at the
+ * flow's end, single-line clamped; the separate summary card is retired. */
+function RecapRow({ text }: { text: string }) {
+  return (
+    <MetaRow icon={<Flag />} lines={1}>
+      {text}
+    </MetaRow>
+  )
+}
+
+/** A canvas focus event (D8 修订 — 焦点入流): the tail row = the PENDING
+ * focus (consumed on send); the same row rides a user message as its
+ * persisted prefix. */
+function FocusRow({ label }: { label: string }) {
+  const { t } = useTranslation()
+  return (
+    <MetaRow icon={<Crosshair />}>
+      {t("results.dock.focus", { name: label })}
+    </MetaRow>
+  )
 }
 
 function StepMarker({
@@ -384,13 +460,13 @@ function StepMarker({
     )
 
   return (
-    <Marker>
-      <MarkerIcon>{icon}</MarkerIcon>
-      <MarkerContent className={status === "running" ? "shimmer" : undefined}>
-        {label}
-        {status === "failed" && error ? ` — ${error}` : ""}
-      </MarkerContent>
-    </Marker>
+    <MetaRow
+      icon={icon}
+      shimmer={status === "running"}
+      destructive={status === "failed"}
+    >
+      {status === "failed" && error ? `${label} — ${error}` : label}
+    </MetaRow>
   )
 }
 
@@ -548,6 +624,18 @@ function PlanVersionChip({
                     </span>
                   </div>
                 )}
+                {book.caption_languages.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>
+                      {t("generationOverlay.planSummarySubs", {
+                        langs: book.caption_languages
+                          .map((l) => t(`languages.${l}`, { defaultValue: l }))
+                          .join(", "),
+                      })}
+                    </span>
+                  </div>
+                )}
                 {book.specific_instruction ? (
                   <p className="line-clamp-2 text-xs text-muted-foreground">
                     {book.specific_instruction}
@@ -583,7 +671,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   initialRunId,
   initialShell = "fullscreen",
   focusOutput = null,
-  onClearFocus,
+  onFocusChange,
   completionMode = "navigate",
   onClose,
   onComplete,
@@ -599,16 +687,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   const [shell, setShell] = useState<Shell>(
     initialShell === "dock" ? "dock" : "fullscreen"
   )
-  /** Dock view: summary = input group + latest agent message card (default);
-   * drawer = full history展开; collapsed = slim history pill only. Agent
-   * speech always forces the summary back up (prohibition #6). */
-  const [dockView, setDockView] = useState<"summary" | "drawer" | "collapsed">(
-    "summary"
-  )
+  /** History region (dock D4 修订 — 一体容器两态): the flow lives INSIDE the
+   * input group's container, growing upward; closed = the input group alone
+   * (the canvas owns the screen). Agent speech always raises it (#6). */
+  const [historyOpen, setHistoryOpen] = useState(false)
   const reducedMotion = useReducedMotion()
   useImperativeHandle(ref, () => ({
-    collapseDrawer: () =>
-      setDockView((v) => (v === "drawer" ? "summary" : v)),
+    closeHistory: () => setHistoryOpen(false),
     insertMention: (mention: ChatMention) =>
       editorRef.current?.insertMention(mention),
   }))
@@ -627,6 +712,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             language: "en",
           })),
           dub_languages: [],
+          caption_languages: [],
           specific_instruction: prompt,
         }
   )
@@ -723,10 +809,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   useEffect(() => {
     terminalRef.current = terminal
   }, [terminal])
-  // Dock-summary priority: the run's terminal aggregate is the收官摘要
-  // until a chat turn lands AFTER it (set in sendChat, reset on each fresh
-  // terminal) — the newer agent line always wins.
-  const postTerminalReplyRef = useRef(false)
+  // Same mirroring for the focus prop: the failed-turn rollback restores the
+  // consumed focus only when the user hasn't re-pointed meanwhile.
+  const focusOutputRef = useRef(focusOutput)
+  useEffect(() => {
+    focusOutputRef.current = focusOutput
+  }, [focusOutput])
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
@@ -803,6 +891,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         const data = (await res.json()) as {
           items?: (QuestionMessage & {
             role: "user" | "assistant"
+            focus_output?: { id: string; label: string } | null
             attachments?: {
               id: string
               name: string
@@ -820,6 +909,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               role: "user",
               content: m.content ?? "",
               at: m.created_at,
+              focus: m.focus_output ?? undefined,
               // Sent attachments persist on the message row — re-render the
               // chips so a refresh / another device keeps the record.
               assets: (m.attachments ?? []).map((a) => ({
@@ -1018,9 +1108,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       return
     }
     void (async () => {
-      // A fresh terminal resets the dock-summary priority: the new run's
-      // aggregate is the latest agent line until a chat reply supersedes it.
-      postTerminalReplyRef.current = false
       // The page refetches + mounts the choreographed canvas underneath
       // BEFORE the shell starts collapsing — the graph's birth replay and
       // the backdrop fade overlap (D3).
@@ -1043,12 +1130,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if (shell !== "collapsing") return
     const timer = setTimeout(() => setShell("dock"), 560)
     return () => clearTimeout(timer)
-  }, [shell])
-
-  // Entering the dock always lands on the summary view — the收官摘要 (or
-  // the latest agent line) is the raised default (D4).
-  useEffect(() => {
-    if (shell === "dock") setDockView("summary")
   }, [shell])
 
   /** Shared landing for every path that starts a run (the dock's Start
@@ -1102,6 +1183,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           target_language:
             intent.outputs.find((s) => s.language)?.language ?? "en",
           dub_languages: intent.dub_languages,
+          caption_languages: intent.caption_languages,
           instruction: intent.specific_instruction || prompt,
           autonomy,
         },
@@ -1154,7 +1236,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
 
   // The clips slot backing the voice-over multiplication line (null → the
   // 422-escape state; the dock's warning carries that case instead).
-  const clipsSlotForDub = intent.outputs.find((s) => s.type === "clips") ?? null
+  const clipsSlotForVersions = intent.outputs.find((s) => s.type === "clips") ?? null
 
   // Slot edits — every hand edit marks the slot explicit so it pins through
   // the next re-inference (pin-merge rule).
@@ -1206,6 +1288,15 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         parts.push(
           t("generationOverlay.planSummaryDub", {
             langs: book.dub_languages
+              .map((l) => t(`languages.${l}`, { defaultValue: l }))
+              .join(", "),
+          })
+        )
+      }
+      if (book.caption_languages.length > 0) {
+        parts.push(
+          t("generationOverlay.planSummarySubs", {
+            langs: book.caption_languages
               .map((l) => t(`languages.${l}`, { defaultValue: l }))
               .join(", "),
           })
@@ -1437,6 +1528,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       rollbackMentions?: ChatMention[]
       /** Consumed attachment chips return to the input group on failure. */
       rollbackStaged?: StagedUpload[]
+      /** The turn's focus, captured at send time (the prop clears on
+       * consume); on failure it returns to the canvas/dock. */
+      focus?: { id: string; label: string } | null
+      rollbackFocus?: { id: string; label: string } | null
     }
   ) => {
     const ctrl = new AbortController()
@@ -1493,7 +1588,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           message: text,
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
-          focus_output_id: focusOutput?.id,
+          focus_output: (opts?.focus ?? focusOutput) ?? undefined,
           persona_id: opts?.personaId,
           prior_intent: phase === "confirm" && intentReady ? intent : undefined,
           // Consumed only when this turn confirms the book by prose — the
@@ -1507,9 +1602,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       )
       // Envelope wins: release any buffered prose, then land the turn.
       typewriter.flush()
-      // A reply landing after the run's terminal supersedes the收官摘要 in
-      // the dock summary (it is the newer agent line).
-      if (terminalRef.current) postTerminalReplyRef.current = true
       // A turn can create assets server-side (declared-material promotion) —
       // refresh the prompt attachments when the project started empty.
       if (assets.length === 0) void fetchAssets()
@@ -1594,6 +1686,11 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           return [...prev, ...chips.filter((c) => !kept.has(c.localId))]
         })
       }
+      // The consumed focus returns too — unless the user already pointed at
+      // another product while the turn was failing (their newer click wins).
+      if (opts?.rollbackFocus && !focusOutputRef.current) {
+        onFocusChange?.(opts.rollbackFocus.id)
+      }
       toast.error(e instanceof Error ? e.message : t("chat.failed"))
     } finally {
       if (abortRef.current === ctrl) {
@@ -1628,6 +1725,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 outputs?: unknown
                 target_language?: string
                 dub_languages?: string[]
+                caption_languages?: string[]
                 instruction?: string | null
               } | null
             } | null
@@ -1643,6 +1741,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   outputs: runCtx.outputs,
                   language: runCtx.target_language,
                   dub_languages: runCtx.dub_languages,
+                  caption_languages: runCtx.caption_languages,
                   specific_instruction: runCtx.instruction,
                 })
               )
@@ -1743,6 +1842,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if ((!text && ready.length === 0) || chatBusy || isStarting) return
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
+    // One-shot focus (D8 修订): captured for the echo + the turn, then
+    // consumed — the message's prefix row becomes its permanent record.
+    const sentFocus = focusOutput
     const rollbackId = crypto.randomUUID()
     setMessages((prev) => [
       ...prev,
@@ -1751,6 +1853,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         role: "user",
         content: text,
         assets: sentAssets,
+        focus: sentFocus ?? undefined,
         at: new Date().toISOString(),
       },
     ])
@@ -1759,6 +1862,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     // retry/removal — it never rides a message.
     editorRef.current?.clear()
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
+    if (sentFocus) onFocusChange?.(null)
+    // Your own send opens the flow — the reply lands there.
+    setHistoryOpen(true)
     void sendChat(text, {
       rollbackId,
       draft: text,
@@ -1773,6 +1879,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         status: "uploaded" as const,
       })),
       rollbackStaged: ready,
+      focus: sentFocus,
+      rollbackFocus: sentFocus,
     })
   }
 
@@ -1783,13 +1891,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     onClose()
   }
 
-  // Esc mirrors the back pill (fullscreen); in the dock it retracts the
-  // history drawer — the dock itself has no close (it IS the page's chrome).
+  // Esc mirrors the back pill (fullscreen); in the dock it closes the
+  // history region — the dock itself has no close (it IS the page's chrome).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
       if (shell === "dock") {
-        setDockView((v) => (v === "drawer" ? "summary" : v))
+        setHistoryOpen(false)
         return
       }
       if (shell === "fullscreen") handleClose()
@@ -1815,9 +1923,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       ? pendingQuestion
       : null
 
-  // Dock summary (D4): the run's terminal aggregate ("Done · 3 clips · …")
-  // is the收官摘要; a chat reply sent AFTER the terminal is newer and
-  // supersedes it. Restored docks read the summary off the SSE snapshot.
+  // Prohibition #6 — the dock never goes silent: new agent speech (a chat
+  // reply landing / the run's terminal recap) raises the history region.
   const lastAssistant = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
@@ -1827,14 +1934,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
     return null
   }, [messages])
-  const dockSummary =
-    terminal && status !== "failed" && summary && !postTerminalReplyRef.current
-      ? summary
-      : (lastAssistant?.content ?? null)
-
-  // Prohibition #6 — the dock never goes silent: new agent speech (a chat
-  // reply / the收官摘要 landing / a choice ask) raises the summary back
-  // from the collapsed pill.
   const lastAgentKey =
     shell === "dock"
       ? (lastAssistant?.id ?? (terminal && summary ? `summary:${runId ?? "run"}` : null))
@@ -1846,15 +1945,18 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if (lastAgentKeyRef.current !== lastAgentKey) {
       lastAgentKeyRef.current = lastAgentKey
     }
-    if (!first) setDockView((v) => (v === "collapsed" ? "summary" : v))
+    if (!first) setHistoryOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
+  // A fresh canvas focus is system speech too (灰行入流): the focus row
+  // lands in the flow, so the history opens to show it.
+  const prevFocusRef = useRef<string | null>(null)
   useEffect(() => {
-    if (shell === "dock" && pendingChoice) {
-      setDockView((v) => (v === "collapsed" ? "summary" : v))
-    }
+    const id = focusOutput?.id ?? null
+    if (id && id !== prevFocusRef.current) setHistoryOpen(true)
+    prevFocusRef.current = id
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChoice?.id, shell])
+  }, [focusOutput?.id])
 
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real
@@ -2229,17 +2331,76 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   </div>
                   {/* The multiplication, in the open: every
                       clip gets one version per language. */}
-                  {clipsSlotForDub && (
+                  {clipsSlotForVersions && (
                     <p className="text-xs text-muted-foreground">
                       {t("generationOverlay.dubVersionCount", {
                         clips:
-                          clipsSlotForDub.count ??
+                          clipsSlotForVersions.count ??
                           SLOT_COUNT_DEFAULT.clips,
                         langs: intent.dub_languages.length,
                         total:
-                          (clipsSlotForDub.count ??
+                          (clipsSlotForVersions.count ??
                             SLOT_COUNT_DEFAULT.clips) *
                           intent.dub_languages.length,
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Subtitle versions (caption_languages) — same fork semantics
+                  as the voice-over block above: one DERIVED subtitled version
+                  per language, original voice stays. Chips removable; adding
+                  a language goes through chat refine. */}
+              {intent.caption_languages.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className={sectionLabel}>
+                      {t("generationOverlay.subsLabel")}
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      {t("generationOverlay.subsHint")}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {intent.caption_languages.map((lang) => (
+                      <span
+                        key={lang}
+                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
+                      >
+                        <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t(`languages.${lang}`, { defaultValue: lang })}
+                        <button
+                          type="button"
+                          aria-label={t(
+                            "generationOverlay.removeSubsLanguage"
+                          )}
+                          className="text-muted-foreground transition-colors hover:text-foreground"
+                          onClick={() =>
+                            setIntent((prev) => ({
+                              ...prev,
+                              caption_languages: prev.caption_languages.filter(
+                                (l) => l !== lang
+                              ),
+                            }))
+                          }
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {clipsSlotForVersions && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("generationOverlay.subsVersionCount", {
+                        clips:
+                          clipsSlotForVersions.count ??
+                          SLOT_COUNT_DEFAULT.clips,
+                        langs: intent.caption_languages.length,
+                        total:
+                          (clipsSlotForVersions.count ??
+                            SLOT_COUNT_DEFAULT.clips) *
+                          intent.caption_languages.length,
                       })}
                     </p>
                   )}
@@ -2301,7 +2462,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             muted={m.qa.muted}
           />
         ) : m.role === "user" ? (
-          <UserBubble text={m.content} assets={m.assets} />
+          <div className="flex w-full flex-col gap-2">
+            {/* The turn's persisted focus rides as a gray prefix row (D8
+                修订 — 焦点入流): system fact first, the bubble below it. */}
+            {m.focus ? <FocusRow label={m.focus.label} /> : null}
+            <UserBubble text={m.content} assets={m.assets} />
+          </div>
         ) : (
           <>
             {m.content ? (
@@ -2426,21 +2592,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                           <MessageScrollerItem key="run-terminal">
                             <Message align="start">
                               <MessageContent>
-                                <div className="w-full">
-                                  {summary && (
-                                    <Marker variant="border" className="pt-2">
-                                      <MarkerContent>{summary}</MarkerContent>
-                                    </Marker>
-                                  )}
+                                <div className="w-full pt-2">
+                                  {summary && <RecapRow text={summary} />}
                                   {status === "failed" && (
-                                    <Marker
-                                      variant="border"
-                                      className="pt-2 text-destructive"
-                                    >
-                                      <MarkerContent>
-                                        {t("generationOverlay.failed")}
-                                      </MarkerContent>
-                                    </Marker>
+                                    <MetaRow destructive>
+                                      {t("generationOverlay.failed")}
+                                    </MetaRow>
                                   )}
                                 </div>
                               </MessageContent>
@@ -2592,19 +2749,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                                 />
                               ))}
                               {terminal && summary && (
-                                <Marker variant="border" className="pt-2">
-                                  <MarkerContent>{summary}</MarkerContent>
-                                </Marker>
+                                <div className="pt-2">
+                                  <RecapRow text={summary} />
+                                </div>
                               )}
                               {terminal && status === "failed" && (
-                                <Marker
-                                  variant="border"
-                                  className="pt-2 text-destructive"
-                                >
-                                  <MarkerContent>
+                                <div className="pt-2">
+                                  <MetaRow destructive>
                                     {t("generationOverlay.failed")}
-                                  </MarkerContent>
-                                </Marker>
+                                  </MetaRow>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -2622,6 +2776,15 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   </>
                 )}
 
+                {/* The PENDING canvas focus — a gray tail row, not a message
+                    yet (D8 修订): it rides the next send and lands as that
+                    message's persisted prefix row. */}
+                {focusOutput ? (
+                  <MessageScrollerItem>
+                    <FocusRow label={focusOutput.label} />
+                  </MessageScrollerItem>
+                ) : null}
+
                 {/* Thinking row covers send → first delta; once the preview
                     bubble exists it IS the progress indicator. */}
                 {chatBusy && !messages.some((m) => m.streaming) && (
@@ -2636,6 +2799,180 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             <MessageScrollerButton direction="end" />
           </MessageScroller>
         </MessageScrollerProvider>
+  )
+
+  // The choice dock and the input body are shared verbatim across the two
+  // bottom-row shells (fullscreen muted group / dock unified container) —
+  // the dock renders them as square children of ONE frosted container (D4
+  // 修订 一体容器); fullscreen keeps the joined muted pairing.
+  const choiceDock =
+    phase !== "confirm" && pendingChoice ? (
+      <QuestionDock
+        kind="choice"
+        joined={shell !== "dock"}
+        plain={shell === "dock"}
+        question={pendingChoice.content ?? ""}
+        options={pendingChoice.question?.options ?? []}
+        estimate={pendingChoice.question?.estimate}
+        onAnswer={handleChoiceAnswer}
+        answering={answering}
+        onBail={
+          // Checkpoint questions (a run parked on the answer) get the bail
+          // affordance; plain chat asks don't — their graceful exit is just
+          // typing the next message.
+          pendingChoice.workflow_run_id ? handleCheckpointBail : undefined
+        }
+      />
+    ) : null
+  const inputBody = (
+    <>
+      {/* Staged attachments — the upload lifecycle lives here (never
+          auto-sent): uploading chips shimmer, done chips wait for the
+          send button, error chips offer retry; × removes (and deletes
+          the already-created asset). */}
+      {staged.length > 0 && (
+        <AttachmentGroup className="px-1 pb-2">
+          {staged.map((s) => {
+            const Icon = s.asset
+              ? assetTypeIcon(s.asset.type)
+              : s.file.type.startsWith("video/")
+                ? Video
+                : s.file.type.startsWith("audio/")
+                  ? Mic2
+                  : s.file.type.startsWith("image/")
+                    ? ImageIcon
+                    : FileText
+            const typeLabel = s.asset
+              ? t(`generationOverlay.assetTypes.${s.asset.type}`, {
+                  defaultValue: s.asset.type,
+                })
+              : t("generationOverlay.assetTypes.file")
+            return (
+              <Attachment
+                key={s.localId}
+                size="sm"
+                state={
+                  s.status === "uploading"
+                    ? "uploading"
+                    : s.status === "error"
+                      ? "error"
+                      : "done"
+                }
+              >
+                <AttachmentMedia>
+                  <Icon />
+                </AttachmentMedia>
+                <AttachmentContent>
+                  <AttachmentTitle>{s.file.name}</AttachmentTitle>
+                  <AttachmentDescription>
+                    {s.status === "error"
+                      ? t("composer.uploadFailed")
+                      : typeLabel}
+                  </AttachmentDescription>
+                </AttachmentContent>
+                <AttachmentActions>
+                  {s.status === "error" && (
+                    <AttachmentAction
+                      aria-label={t("generationOverlay.retryUpload")}
+                      onClick={() => retryStaged(s)}
+                    >
+                      <Undo2 />
+                    </AttachmentAction>
+                  )}
+                  <AttachmentAction
+                    aria-label={t("generationOverlay.removeAttachment")}
+                    onClick={() => removeStaged(s)}
+                  >
+                    <X />
+                  </AttachmentAction>
+                </AttachmentActions>
+              </Attachment>
+            )
+          })}
+        </AttachmentGroup>
+      )}
+      <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
+          onChange={(e) => handleFilesPicked(e.target.files)}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          aria-label={t("generationOverlay.attachFiles")}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Paperclip className="h-4.5 w-4.5" />
+        </Button>
+        {/* The composer family's editor (one input component across
+            composer / overlay chat / output chat): @-chips inline —
+            asset = context enrichment, output = the pinned revision
+            target — Enter sends, IME guarded inside the component. */}
+        <MentionEditor
+          ref={editorRef}
+          placeholder={
+            phase !== "confirm" &&
+            pendingChoice &&
+            (pendingChoice.question?.options?.length ?? 0) > 0 &&
+            pendingChoice.question?.allow_freeform !== false
+              ? t("chat.choicePlaceholder")
+              : phase === "confirm"
+                ? t("generationOverlay.chatPlaceholderConfirm")
+                : t("generationOverlay.chatPlaceholder")
+          }
+          mentionContext={mentionContext}
+          onChange={handleEditorChange}
+          onSubmit={handleSend}
+          className="max-h-32 min-h-9 text-sm"
+        />
+        {shell === "dock" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            aria-label={t("results.dock.history")}
+            aria-pressed={historyOpen}
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            {historyOpen ? (
+              <ChevronDown className="h-4.5 w-4.5" />
+            ) : (
+              <History className="h-4.5 w-4.5" />
+            )}
+          </Button>
+        )}
+        {chatBusy ? (
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-9 w-9 shrink-0 rounded-full"
+            onClick={handleStop}
+            aria-label={t("chat.stop")}
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            className="h-9 w-9 shrink-0 rounded-full"
+            disabled={
+              (!input.trim() &&
+                !staged.some((s) => s.status === "done")) ||
+              staged.some((s) => s.status === "uploading")
+            }
+            onClick={handleSend}
+            aria-label={t("chat.send")}
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </>
   )
 
   return (
@@ -2701,10 +3038,11 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           flow archives decisions, the dock holds the one still open. The
           task-book dock HIDES while a turn is in flight (a stale plan must
           not be Start-able mid-revision); a choice dock JOINS the input
-          visually (joined + the input drops its top rounding) — the input
-          IS the freeform "something else" row, its placeholder already says
-          so. In the dock shell the history drawer / summary card stack
-          above everything (D4), floating over the canvas. */}
+          visually — the input IS the freeform "something else" row, its
+          placeholder already says so. The dock shell is ONE frosted
+          container (D4 修订 一体容器): the history region grows upward
+          inside it, and every child is square — the container owns all
+          rounding and the frost. */}
       <div
         className={cn(
           "relative shrink-0 px-4 pb-5 pt-2",
@@ -2717,61 +3055,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             shell === "dock" && "pointer-events-auto"
           )}
         >
-          {/* Dock extras — the history drawer opens above the summary row;
-              the summary card (latest agent line) is the drawer's toggle.
-              Both use the shared overlay-surface frost over the canvas. */}
-          {shell === "dock" && dockView === "drawer" && (
-            <div className="overlay-surface mb-2 h-[min(55vh,520px)] overflow-hidden rounded-xl">
-              {chatScroller}
-            </div>
-          )}
-          {shell === "dock" && (
-            <div className="mb-2 flex items-center gap-2">
-              {dockView !== "collapsed" && dockSummary ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDockView((v) => (v === "drawer" ? "summary" : "drawer"))
-                  }
-                  className="overlay-surface flex min-w-0 flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left"
-                >
-                  <Streamdown
-                    mode="static"
-                    className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug [&_p]:inline"
-                  >
-                    {dockSummary}
-                  </Streamdown>
-                  {dockView === "drawer" ? (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDockView((v) => (v === "drawer" ? "summary" : "drawer"))
-                  }
-                  className="overlay-surface flex h-9 items-center gap-1.5 rounded-md px-3 text-sm"
-                >
-                  <History className="h-4 w-4" />
-                  {t("results.dock.history")}
-                </button>
-              )}
-              {dockView !== "collapsed" && dockSummary && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("results.dock.collapse")}
-                  onClick={() => setDockView("collapsed")}
-                  className="overlay-surface h-9 w-9 shrink-0 rounded-md"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          )}
           {phase === "confirm" && intentReady && !chatBusy && (
             <QuestionDock
               kind="task_book"
@@ -2785,196 +3068,36 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               startDisabled={!canStartGeneration || chatBusy}
             />
           )}
-          {phase !== "confirm" && pendingChoice && (
-            <QuestionDock
-              kind="choice"
-              joined
-              question={pendingChoice.content ?? ""}
-              options={pendingChoice.question?.options ?? []}
-              estimate={pendingChoice.question?.estimate}
-              onAnswer={handleChoiceAnswer}
-              answering={answering}
-              onBail={
-                // Checkpoint questions (a run parked on the answer) get the
-                // bail affordance; plain chat asks don't — their graceful
-                // exit is just typing the next message.
-                pendingChoice.workflow_run_id ? handleCheckpointBail : undefined
-              }
-            />
-          )}
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
-          <div
-            className={cn(
-              // The dock's input group is frosted glass over the canvas
-              // (overlay-surface, same recipe as the summary card above it);
-              // fullscreen keeps the solid muted fill it always had (it sits
-              // over the opaque backdrop, and a joined QuestionDock is
-              // bg-muted — the pair must read as one piece). A joined choice
-              // dock drops the input's top rounding.
-              "p-2",
-              phase !== "confirm" && pendingChoice
-                ? shell === "dock"
-                  ? "overlay-surface rounded-b-xl"
-                  : "rounded-b-lg bg-muted"
-                : shell === "dock"
-                  ? "overlay-surface rounded-xl"
-                  : "rounded-lg bg-muted"
-            )}
-          >
-            {/* The canvas's focused product (D8 焦点注入): one chip riding
-                the input group — visible, × purifies; it joins each turn as
-                `focus_output_id` (a context line, never a scope). */}
-            {focusOutput && (
-              <div className="flex px-1 pb-2">
-                <span className="flex min-w-0 items-center gap-1.5 rounded-md bg-card px-2 py-1 text-xs text-muted-foreground">
-                  <Crosshair className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">
-                    {t("results.dock.focus", { name: focusOutput.label })}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={t("results.dock.clearFocus")}
-                    className="shrink-0 transition-colors hover:text-foreground"
-                    onClick={onClearFocus}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-              </div>
-            )}
-            {/* Staged attachments — the upload lifecycle lives here (never
-                auto-sent): uploading chips shimmer, done chips wait for the
-                send button, error chips offer retry; × removes (and deletes
-                the already-created asset). */}
-            {staged.length > 0 && (
-              <AttachmentGroup className="px-1 pb-2">
-                {staged.map((s) => {
-                  const Icon = s.asset
-                    ? assetTypeIcon(s.asset.type)
-                    : s.file.type.startsWith("video/")
-                      ? Video
-                      : s.file.type.startsWith("audio/")
-                        ? Mic2
-                        : s.file.type.startsWith("image/")
-                          ? ImageIcon
-                          : FileText
-                  const typeLabel = s.asset
-                    ? t(`generationOverlay.assetTypes.${s.asset.type}`, {
-                        defaultValue: s.asset.type,
-                      })
-                    : t("generationOverlay.assetTypes.file")
-                  return (
-                    <Attachment
-                      key={s.localId}
-                      size="sm"
-                      state={
-                        s.status === "uploading"
-                          ? "uploading"
-                          : s.status === "error"
-                            ? "error"
-                            : "done"
-                      }
-                    >
-                      <AttachmentMedia>
-                        <Icon />
-                      </AttachmentMedia>
-                      <AttachmentContent>
-                        <AttachmentTitle>{s.file.name}</AttachmentTitle>
-                        <AttachmentDescription>
-                          {s.status === "error"
-                            ? t("composer.uploadFailed")
-                            : typeLabel}
-                        </AttachmentDescription>
-                      </AttachmentContent>
-                      <AttachmentActions>
-                        {s.status === "error" && (
-                          <AttachmentAction
-                            aria-label={t("generationOverlay.retryUpload")}
-                            onClick={() => retryStaged(s)}
-                          >
-                            <Undo2 />
-                          </AttachmentAction>
-                        )}
-                        <AttachmentAction
-                          aria-label={t("generationOverlay.removeAttachment")}
-                          onClick={() => removeStaged(s)}
-                        >
-                          <X />
-                        </AttachmentAction>
-                      </AttachmentActions>
-                    </Attachment>
-                  )
-                })}
-              </AttachmentGroup>
-            )}
-            <div className="flex items-end gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
-                onChange={(e) => handleFilesPicked(e.target.files)}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                aria-label={t("generationOverlay.attachFiles")}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip className="h-4.5 w-4.5" />
-              </Button>
-              {/* The composer family's editor (one input component across
-                  composer / overlay chat / output chat): @-chips inline —
-                  asset = context enrichment, output = the pinned revision
-                  target — Enter sends, IME guarded inside the component. */}
-              <MentionEditor
-                ref={editorRef}
-                placeholder={
-                  phase !== "confirm" &&
-                  pendingChoice &&
-                  (pendingChoice.question?.options?.length ?? 0) > 0 &&
-                  pendingChoice.question?.allow_freeform !== false
-                    ? t("chat.choicePlaceholder")
-                    : phase === "confirm"
-                      ? t("generationOverlay.chatPlaceholderConfirm")
-                      : t("generationOverlay.chatPlaceholder")
-                }
-                mentionContext={mentionContext}
-                onChange={handleEditorChange}
-                onSubmit={handleSend}
-                className="max-h-32 min-h-9 text-sm"
-              />
-              {chatBusy ? (
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="h-9 w-9 shrink-0 rounded-full"
-                  onClick={handleStop}
-                  aria-label={t("chat.stop")}
-                >
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                </Button>
-              ) : (
-                <Button
-                  size="icon"
-                  className="h-9 w-9 shrink-0 rounded-full"
-                  disabled={
-                    (!input.trim() &&
-                      !staged.some((s) => s.status === "done")) ||
-                    staged.some((s) => s.status === "uploading")
-                  }
-                  onClick={handleSend}
-                  aria-label={t("chat.send")}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
+          {shell === "dock" ? (
+            <div className="overlay-surface overflow-hidden rounded-xl">
+              {historyOpen && (
+                <div className="h-[min(50vh,480px)]">{chatScroller}</div>
               )}
+              {choiceDock}
+              <div className="p-2">{inputBody}</div>
             </div>
-          </div>
+          ) : (
+            <>
+              {choiceDock}
+              <div
+                className={cn(
+                  // Fullscreen keeps the solid muted fill it always had (it
+                  // sits over the opaque backdrop, and a joined QuestionDock
+                  // is bg-muted — the pair must read as one piece). A joined
+                  // choice dock drops the input's top rounding.
+                  "p-2",
+                  pendingChoice
+                    ? "rounded-b-lg bg-muted"
+                    : "rounded-lg bg-muted"
+                )}
+              >
+                {inputBody}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

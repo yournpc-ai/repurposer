@@ -36,8 +36,11 @@ export interface ResultsCanvasProps {
   /** A process step node was clicked (the spine expanded) — the surface
    * inserts the step's @workflow_step mention into the dock (D8). */
   onStepClick?: (stepId: string, label: string) => void
-  /** Canvas interaction collapses the dock's history drawer (D4 点画布收回). */
-  onCanvasPointerDown?: () => void
+  /** The dock-focused product id — its node carries the selected ring. */
+  focusedOutputId?: string | null
+  /** Pane-only click (node clicks excluded) — back to neutral: the surface
+   * collapses the dock's history and clears the focus (D4/D8). */
+  onPaneClick?: () => void
   className?: string
 }
 
@@ -50,7 +53,8 @@ export function ResultsCanvas({
   onOutputClick,
   onOutputAction,
   onStepClick,
-  onCanvasPointerDown,
+  focusedOutputId = null,
+  onPaneClick,
   className,
 }: ResultsCanvasProps) {
   const { t } = useTranslation()
@@ -67,7 +71,7 @@ export function ResultsCanvas({
   )
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
   return (
-    <div className={className} onPointerDown={onCanvasPointerDown}>
+    <div className={className}>
       <FlowView
         nodes={nodes}
         edges={edges}
@@ -75,6 +79,8 @@ export function ResultsCanvas({
         choreograph={choreograph}
         dots
         className="h-full"
+        selectedId={focusedOutputId ? `output:${focusedOutputId}` : null}
+        onPaneClick={onPaneClick}
         onSelect={(id) => {
           // The spine group node toggles in place; a step node points the
           // dock at it (@workflow_step); a product node focuses / details.

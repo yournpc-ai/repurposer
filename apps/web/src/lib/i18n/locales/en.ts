@@ -866,9 +866,7 @@ const en = {
     },
     dock: {
       history: "History",
-      collapse: "Hide",
       focus: "Working on: {{name}}",
-      clearFocus: "Clear focus",
     },
     // Canvas product-card chrome (ADR-041 D5): the hover toolbar's labels.
     canvas: {

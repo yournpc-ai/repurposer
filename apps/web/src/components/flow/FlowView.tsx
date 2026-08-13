@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   BackgroundVariant,
-  MiniMap,
   ReactFlow,
   useReactFlow,
 } from "@xyflow/react"
@@ -93,6 +92,7 @@ export function FlowView({
   selectedId = null,
   onSelect,
   onOutputAction,
+  onPaneClick,
   navigation = "fit",
   choreograph = false,
   dots = false,
@@ -176,6 +176,7 @@ export function FlowView({
         elementsSelectable
         edgesFocusable={false}
         onNodeClick={(_, node) => onSelect?.(node.id)}
+        onPaneClick={onPaneClick}
       >
         {dots && (
           <Background
@@ -184,18 +185,6 @@ export function FlowView({
             size={1.5}
             color="var(--muted-foreground)"
             className="opacity-30 dark:opacity-40"
-          />
-        )}
-        {/* Minimap = navigation, not editing (D7 门禁): explore surfaces
-            only — fit-locked surfaces (the recipe manual) never get one. */}
-        {explore && (
-          <MiniMap
-            pannable
-            zoomable
-            className="flow-minimap"
-            nodeColor="var(--muted-foreground)"
-            maskColor="color-mix(in oklch, var(--background) 72%, transparent)"
-            maskStrokeColor="var(--muted-foreground)"
           />
         )}
         <ViewportController

@@ -77,6 +77,9 @@ interface ChoiceDockProps {
   /** Fuse the dock with the input below (the input IS the freeform
    * "something else" row) — drops the bottom margin and rounding. */
   joined?: boolean
+  /** Bare child of the dock shell's unified container (D4 修订 一体容器):
+   * no fill / rounding / margin of its own — the container owns the chrome. */
+  plain?: boolean
 }
 
 export type QuestionDockProps = TaskBookDockProps | ChoiceDockProps
@@ -183,14 +186,17 @@ function ChoiceForm({
   answering,
   onBail,
   joined,
+  plain,
 }: ChoiceDockProps) {
   const { t } = useTranslation()
   return (
     <div
       className={
-        joined
-          ? "rounded-t-lg bg-muted px-4 py-3"
-          : "mb-2 rounded-lg bg-muted px-4 py-3"
+        plain
+          ? "px-4 py-3"
+          : joined
+            ? "rounded-t-lg bg-muted px-4 py-3"
+            : "mb-2 rounded-lg bg-muted px-4 py-3"
       }
     >
       <div className="flex items-start gap-2 text-sm">

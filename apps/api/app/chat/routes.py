@@ -4,7 +4,7 @@ Conversations are the universal container for multi-turn interaction, but the
 public API hides conversation management behind a single ``POST /api/v1/chat``
 endpoint. The backend locates or creates the project conversation from
 ``project_id`` (project scope only — the asset scope is retired, ADR-041 D8;
-a pointed-at product rides as ``focus_output_id``).
+a pointed-at product rides as ``focus_output``).
 
 Transport (chat SSE): the endpoint content-negotiates on the ``Accept``
 header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);

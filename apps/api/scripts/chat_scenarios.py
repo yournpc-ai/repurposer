@@ -1259,15 +1259,21 @@ async def s34_meta_info_navigation_answer(ctx: Ctx) -> None:
 
 
 async def s35_focus_output_injection(ctx: Ctx) -> None:
-    """S35 焦点注入（ADR-041 D8）：focus_output_id 不开新会话、不进 plan path；
+    """S35 焦点注入（ADR-041 D8）：focus_output 随轮且落库、不开新会话、不进 plan path；
     退役的 asset scope 参数被 422 拒绝（extra=forbid）。"""
     pid = await ctx.new_project("S35 focus injection")
     output_id = await seed_clip_output(pid)
     await seed_completed_run(pid)
 
-    turn1 = await ctx.chat(pid, "make it shorter", focus_output_id=output_id)
+    turn1 = await ctx.chat(pid, "make it shorter",
+                           focus_output={"id": output_id, "label": "S35 focal clip"})
     check(no_task_book_dock(turn1["assistant_message"]),
           "no task book from a focus turn", turn1["assistant_message"])
+    messages = await ctx.messages(turn1["conversation_id"])
+    focused = [m for m in messages
+               if m["role"] == "user" and (m.get("focus_output") or {}).get("id") == output_id]
+    check(len(focused) == 1 and focused[0]["focus_output"]["label"] == "S35 focal clip",
+          "the focus rides the turn AND persists on the user message", messages)
     res = await ctx.conversation(pid)
     check(res.status_code == 200, "the project conversation exists", res.status_code)
     check(res.json().get("asset_id") is None,

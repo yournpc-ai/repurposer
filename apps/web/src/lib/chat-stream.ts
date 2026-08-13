@@ -23,9 +23,10 @@ export interface ChatTurnBody {
   project_id: string
   message: string
   mentions?: { type: string; id: string; label: string }[]
-  /** The canvas's focused product (ADR-041 D8 焦点注入): rides the turn,
-   * never persisted — the server's context gains one "current focus" line. */
-  focus_output_id?: string
+  /** The canvas's focused product (ADR-041 D8 焦点注入): rides the turn as
+   * one context line AND persists on the user message row — the rebuilt
+   * history renders the gray focus prefix row after a refresh. */
+  focus_output?: { id: string; label: string }
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
   attachments?: {

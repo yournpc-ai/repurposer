@@ -72,6 +72,9 @@ export interface FlowViewProps {
   /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
    * surface owns the actions; the card only reports them. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** Pane-only click (node clicks never fire this) — the results canvas's
+   * "back to neutral" gesture: collapse the history, clear the focus. */
+  onPaneClick?: () => void
   /** "fit" (default) = bounded surface, zoom locked; "explore" = lineage
    * board (zoom / pan / pinch unlocked). */
   navigation?: FlowNavigation

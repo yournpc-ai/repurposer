@@ -829,7 +829,12 @@ function ProjectDetailPage() {
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
             onStepClick={handleStepClick}
-            onCanvasPointerDown={() => overlayRef.current?.collapseDrawer()}
+            focusedOutputId={focusedOutputId}
+            onPaneClick={() => {
+              // 点画布空白 = 回中性: history 收起 + 焦点清除 (D4/D8).
+              overlayRef.current?.closeHistory()
+              setFocusedOutputId(null)
+            }}
           />
         </div>
       ) : (
@@ -964,7 +969,7 @@ function ProjectDetailPage() {
           }
           initialShell={resultsPhase ? "dock" : "fullscreen"}
           focusOutput={focusedOutputChip}
-          onClearFocus={() => setFocusedOutputId(null)}
+          onFocusChange={(id) => setFocusedOutputId(id)}
           completionMode={isMobile ? "navigate" : "dock"}
           onClose={
             attachOpen

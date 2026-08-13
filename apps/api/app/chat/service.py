@@ -3,7 +3,7 @@
 A conversation is the universal container — always project-scoped (the
 original prompt plus project-level follow-ups). Asset-scoped conversations
 are retired (ADR-041 D8): product chat lives in the project conversation,
-and the product the user points at rides each turn as ``focus_output_id``
+and the product the user points at rides each turn as ``focus_output``
 (焦点注入 — one context line, never a scope).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
@@ -176,6 +176,7 @@ async def _create_message(
     *,
     attachments: list[dict[str, Any]] | None = None,
     mentions: list[dict[str, Any]] | None = None,
+    focus_output: dict[str, Any] | None = None,
     workflow_run_id: UUID | None = None,
     intent: dict[str, Any] | None = None,
     question: dict[str, Any] | None = None,
@@ -186,6 +187,7 @@ async def _create_message(
         content=content,
         attachments=attachments or [],
         mentions=mentions or [],
+        focus_output=focus_output,
         workflow_run_id=workflow_run_id,
         intent=intent,
         question=question,
@@ -1248,6 +1250,9 @@ async def prepare_chat_turn(
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
+        focus_output=(
+            request.focus_output.model_dump(mode="json") if request.focus_output else None
+        ),
     )
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
@@ -1399,7 +1404,7 @@ async def execute_chat_turn(
             request.message,
             request.mentions,
             prepared.history[-6:],
-            focus_output_id=request.focus_output_id,
+            focus_output_id=(request.focus_output.id if request.focus_output else None),
             on_delta=on_delta,
             on_reasoning=on_reasoning,
         )
