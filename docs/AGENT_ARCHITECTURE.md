@@ -174,8 +174,8 @@ skills/dub/          配音技能
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
 - **价目住 Model 层**：`clients/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
-- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第六周。
-- 用户呈现（PROGRESS 第六周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
+- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第九周。
+- 用户呈现（PROGRESS 第九周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
 
 ## 9. 质检方向（Phase 3，未实现）
 

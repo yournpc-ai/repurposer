@@ -691,9 +691,8 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 1. **身份模块正名 = 人设（en `Persona`）**：多实例扁平（工作号/生活号 = 两个人设）；用户面 zh「人设」/ en「Persona」，代码层 `persona`（表 `personas`、`PersonaContext`、路由 `/personas`；节点 `persona_bootstrap` 名零改动）——三层同词族，无需双轨。人设 = **任务完成后沉淀的记忆**（语气/风格/禁忌词/声纹等稳定特征），行为规则：per-user 隔离（`user_id` 在表）；composer 可选选择、**未选则任务分析后 auto-create** 并挂到当前项目；多实例不强制单例；两层分工不变——人设 = 稳定风格记忆，项目 = 当次主题/意图 + 素材。
 2. **`speaker` 让位素材域**：指"素材里说话的人"（纯数据层，用户不可见）；`speaker_map`（RECIPES §6）是该词的合法居民，保持原名落地。landing 的 "keynote speakers" 是普通英文词，不受影响。
 3. **IP = 承诺层词，不进产品内导航**：对外叙事/landing 可讲"打造你的 IP / 自媒体"（zh）——IP 是整个 agent 的产出（账号+受众+内容+声誉），不是某个模块。**"IP" 禁入英文文案**（英语语境 IP = intellectual property，法律词）：en 叙事用 **personal brand**（LinkedIn/职业人群）/ **thought leadership**（知识专家语境）。营销文案按 locale 适配属正常；NAMING §2 中英唯一映射约束领域词汇，不管营销 slogan。
-4. **IP 容器升格路径（未来）**：Distribution 直发 + 发布数据回流落地后，"IP"可作为产品内容器名实双归登场——每个 IP = 人设（身份页，对象原样迁入）+ 绑定平台账号 + 表现数据。演进为加法式（新增容器模型，非改名）；用户"修不像我"的维修点（人设页）位置永不变。
-5. **stock voices 不伪装人设**（修订 RECIPES §5 裁决③的形态描述）：系统音色以"音色"身份进人设选择器的系统区（如 Rachel · Confident，带试听）；声纹 = 人设属性不变。
-6. **迁移**：第一刀（全栈改名 `speakers`→`personas`：表 + Alembic 迁移 / schemas / `memory/routes.py` 端点 / persona skill / 前端路由与 i18n / composer 人设块）已于 08-09 落地；皮肤吸收（ADR-038）随插入周推进，排期以 PROGRESS 为准。现状事实源文档（MODULE_ARCHITECTURE / AGENT_ARCHITECTURE / NAMING §2）随代码迁移同步更新。
+4. **stock voices 不伪装人设**（修订 RECIPES §5 裁决③的形态描述）：系统音色以"音色"身份进人设选择器的系统区（如 Rachel · Confident，带试听）；声纹 = 人设属性不变。
+5. **迁移**：第一刀（全栈改名 `speakers`→`personas`：表 + Alembic 迁移 / schemas / `memory/routes.py` 端点 / persona skill / 前端路由与 i18n / composer 人设块）已于 08-09 落地；皮肤吸收（ADR-038）随插入周推进，排期以 PROGRESS 为准。现状事实源文档（MODULE_ARCHITECTURE / AGENT_ARCHITECTURE / NAMING §2）随代码迁移同步更新。
 
 **Consequences**:
 - 闭环叙事三层归档：对外/愿景 = 管理 IP → outputs → 发布（STRATEGY §2.2 落档）；产品内导航 = 人设 / composer / projects（/ 未来 Distribution）；工程层 = 理解 → 生成 → 审校 → 分发（STRATEGY §3 牌 1 不变）。
@@ -801,3 +800,25 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 移动端本期保留现有结果列表兜底；RunCard 增强排第三周。
 
 **Related**: ADR-035（可操作画布永久拒绝不变；第 3 条裁决口关闭）、ADR-036（本条修订其第 3 条与补记 1/3）、ADR-040（D5 条款退役的母因）、ADR-028（RunPlan）；简报 `docs/tasks/results-canvas.md`
+
+## ADR-042: 身份根升格——定位（Positioning）为根、人设收窄为表达分区、选题库升一等公民
+
+**Status**: Decided (2026-08-13)
+
+**Context**: persona 超载的三重病灶在 ADR-037/038 落地后显形——① **定位缺位**：策略三件（audience/guidelines/cta）只是定位的薄切片，因无处安放寄存人设；agent 顾问姿态（诊断听众/目的）问完无落点，"用户到来即彷徨"（STRATEGY §5）没有持久答案；② **渠道空壳**：`channel_accounts` 只是 OAuth token 行，不知道自己属于谁、服务哪个受众，发布数据回流（P2）将无处可挂；③ **人设被偷渡**："多实例扁平（工作号/生活号）"实为两个定位压成两行风格对象，同一真人克隆两次声纹。运营全链路对照（定位 → 账号 → 对标 → 选题库 → 生产）显示：现有架构只覆盖生产层，运营层（持续回答"该做什么"）整体缺失。ADR-037 D4 预留的"IP 容器加法式升格"路径经复审否决：**根词不是被打造的结果**（品牌/IP 留在营销承诺层——自媒体新人听到的第一句话是"找定位"，不是品牌相关的话），且行业话语里定位天然三分（内容定位/人设定位/平台定位），定位 ⊇ 人设是标准用法。更根本的分界：**定位是选择（对话共建带确认），人设是特征（素材提取+维修点）**——两种来源、两种生命周期，混在一个对象里，页面既想当接待处又想当维修点。
+
+**Decision**:
+1. **身份根 = 定位（`positioning`）**，多实例（工作号/生活号 = 两个定位）。表 `personas`→`positionings`、FK 网 `persona_id`→`positioning_id` 全栈平移（speakers→personas 改名先例同构，纯机械刀）。
+2. **三分结构**（行业话语映射）：内容定位 = 战略字段（territory/audience/differentiation/goals/guidelines/cta，**对话共建带确认**）；人设定位 = 表达分区（风格六件 + `voice` 块 + `brand` 块原样保留，`persona` 收窄为逻辑分区词，不物理嵌套）；平台定位 = 渠道（`channel_accounts.positioning_id` FK + 公共档案 + 适配默认）。
+3. **选题库升一等公民**：`topics` 表 + 生命周期（灵感/已排期/生产中/已发布/有数据）；选题卡 = 发射单元（点卡 → 任务书预填 → chat 确认 → run，chat 唯一意图面不变）；来源 = 素材档案挖矿（主）+ 对标/回流信号（P2）。配方卡（新用户能做什么）与选题卡（老用户下一条做什么）分工并存，共用同一发射机构。
+4. **project 退居内部执行容器**：用户可见工作单元 = 选题（管道）+ 产物（成果库）；projects/runs 留管线层做分组与重跑载体。
+5. **素材档案上提根级**（assets 挂 positioning，back-catalog 挖矿底座）；**声纹资产用户层共享**（声带是人的不是定位的，多定位引用同一份克隆）。
+6. **品牌/IP 留在承诺层**：落地页叙事继续 personal brand / 个人品牌；`brand` 维持皮肤块一词不动（不引入 `look`）；产品内导航用「定位」。
+
+**Consequences**:
+- ADR-037 D4（IP 容器加法式升格）作废，由本条取代（容器升格 = 定位根改名路径）。
+- 排期（PROGRESS §2）：生产层闭环（第二~五周）不动；**运营端插第六~八周**（定位根重构 → 选题库 → 回访 home + 素材上提）；商业化/分发/合规/法务顺延 3 周，go/no-go 10-02 → **10-23**（回退 10-30）。
+- 明确不做：对标作为支柱（与反 slop 定位相悖，P2 降级为选题校准信号）；工具格形态（chat 唯一意图面不变）；昵称取名场景（目标用户有名字有机构）。
+- 母文档 `docs/POSITIONING.md`；MODULE_ARCHITECTURE / NAMING / CLAUDE.md 的现状描述随第一刀落地时改写（落地前它们仍是现状事实源）。
+
+**Related**: ADR-037/038（身份模块前史）、ADR-016（clip-spec 不动）、ADR-041（结果画布——运营端 home 复用其面）、STRATEGY §5（用户到来即彷徨）、PROGRESS §2 第六~八周

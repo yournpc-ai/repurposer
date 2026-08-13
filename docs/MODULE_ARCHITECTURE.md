@@ -122,9 +122,9 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（plan path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（PlanAgent + ChatIntentAgent，op 词汇注入）、`components/chat/`（ChatModal/RunCard/OpsCard/MentionPicker）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
-| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第八周联调） |
-| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地 |
-| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第八周；EU 驻留 📋 需求池 |
+| **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第十一周联调） |
+| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
+| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第十一周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
 
@@ -140,7 +140,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；内部类型（`content_plan`）经 `visible_outputs()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
-| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建） |
+| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第六~八周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
 | operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
@@ -167,7 +167,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | Threads / Conversations | `conversations` + `messages` | OpenAI Conversations API 同款 |
 | Agent Observability | metering（workflow_steps.cost）+ structlog + 📋 METRICS.md | 横切不开包（§5） |
 | Channels | `distribution/` | 直发渠道 |
-| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | PROGRESS 第八周 |
+| Guardrails | 📋 合规底座（ADR-026 分类器/C2PA） | PROGRESS 第十一周 |
 
 反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
