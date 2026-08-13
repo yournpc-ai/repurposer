@@ -736,6 +736,20 @@ class InferredIntent(BaseModel):
             "slot and renderable media."
         ),
     )
+    # 字幕语言集 (caption_languages, RECIPES §4.1 多语言字幕卡): task-book-level
+    # field — the caption-translation languages for this run's clips (empty =
+    # no translation). Same cross-output-modifier posture as dub_languages:
+    # compile_graph fans out one fork-semantic translate_clip node per
+    # language after clips (originals and subtitled versions coexist).
+    caption_languages: list[str] = Field(
+        default_factory=list,
+        description=(
+            "ISO codes for captioned versions of the run's clips with "
+            "translated subtitles (e.g. ['de','fr']). Empty = no caption "
+            "translation. Only meaningful with a clips slot and renderable "
+            "media."
+        ),
+    )
     specific_instruction: str | None = Field(
         default=None,
         description="Free-form instruction distilled from the prompt.",
@@ -1622,6 +1636,9 @@ class GenerateRequest(BaseModel):
     # Task-book dub languages (RECIPES §4.1) — mirrored into TaskSpec and
     # run.context; None/[] = no dubbing. Requires a clips slot (422 mirror).
     dub_languages: list[str] | None = None
+    # Task-book caption languages (RECIPES §4.1 字幕卡) — same mirror posture
+    # as dub_languages; None/[] = no caption translation.
+    caption_languages: list[str] | None = None
     autonomy: Literal["auto", "review"] | None = Field(
         default=None,
         description=(

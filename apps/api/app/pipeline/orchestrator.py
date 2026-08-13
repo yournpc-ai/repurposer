@@ -106,6 +106,11 @@ class TaskSpec(BaseModel):
     # fan out one fork-semantic dub node per language after the clips node.
     # Empty = no dubbing. Requires a clips slot (compile_graph raises).
     dub_languages: list[str] = []
+    # 字幕语言集 (RECIPES §4.1 多语言字幕卡): task-book-level caption-
+    # translation languages — full runs fan out one fork-semantic
+    # translate_clip node per language after the clips node. Empty = no
+    # caption translation. Requires a clips slot (compile_graph raises).
+    caption_languages: list[str] = []
     # Autonomy tier (intent-ask-primitive §2.7): stored verbatim on
     # run.context; the review tier inserts a direction checkpoint between
     # director_understand and director_plan on full runs (期 4).
@@ -277,6 +282,32 @@ def compile_graph(
                             # as slot_step_label above).
                             "summary": (
                                 f"配音 · {lang.upper()}" if zh_ui else f"Dub · {lang.upper()}"
+                            ),
+                        },
+                    )
+                )
+                seq += 1
+        # Caption fan-out (RECIPES §4.1 多语言字幕卡): one translate_clip
+        # node per requested language, chained after the clips node — same
+        # fork semantics as the dub block above (originals and subtitled
+        # versions coexist as their own Output rows).
+        if task.caption_languages:
+            if clips_idx is None:
+                raise ValueError("caption_languages requires a clips slot")
+            zh_ui = (task.ui_language or "").startswith("zh")
+            for lang in dict.fromkeys(task.caption_languages):
+                nodes.append(
+                    _NodeSpec(
+                        "translate_clip",
+                        seq,
+                        inputs=[clips_idx],
+                        spec={
+                            "target_language": lang,
+                            "fork": True,
+                            # Step lines follow the run's UI locale (same rule
+                            # as slot_step_label above).
+                            "summary": (
+                                f"字幕 · {lang.upper()}" if zh_ui else f"Subs · {lang.upper()}"
                             ),
                         },
                     )
@@ -584,6 +615,10 @@ async def create_run(
     # nothing by definition.
     if task.dub_languages and not any(s.type == "clips" for s in task.outputs):
         task.dub_languages = []
+    # Vacuous caption translations drop at the birthplace — same rule as the
+    # vacuous dubs above (RECIPES §4.1 字幕卡).
+    if task.caption_languages and not any(s.type == "clips" for s in task.outputs):
+        task.caption_languages = []
 
     run = WorkflowRun(
         project_id=project.id,
@@ -1050,7 +1085,11 @@ def assert_runners_registered() -> None:
         compiled = {
             ns.kind
             for ns in compile_graph(
-                TaskSpec(outputs=entry.outputs, dub_languages=entry.dub_languages),
+                TaskSpec(
+                    outputs=entry.outputs,
+                    dub_languages=entry.dub_languages,
+                    caption_languages=entry.caption_languages,
+                ),
                 add_stills_align=add_stills,
             )
         } | runtime_fanout_kinds()

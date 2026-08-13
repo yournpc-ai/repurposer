@@ -10,9 +10,12 @@ export const RECIPE_ASSETS = {
   "dub-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/dub-preview-ba2a2ea7.mp4",
   "image-video-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/image-video-poster-b715a075.jpg",
   "image-video-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/image-video-preview-818e015e.mp4",
+  "multilingual-subs-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/multilingual-subs-poster-bdd161d5.jpg",
+  "multilingual-subs-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/multilingual-subs-preview-3689d6e7.mp4",
   "reframe-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/reframe-poster-8644f689.jpg",
   "reframe-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/reframe-preview-cca9916b.mp4",
   "style-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/style-poster-cad259dc.jpg",
   "style-preview.mp4": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/style-preview-a330fe7d.mp4",
+  "talk-clips-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/talk-clips-poster-b9637acc.jpg",
   "talking-head-poster.jpg": "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/talking-head-poster-494deafa.jpg",
 } as const

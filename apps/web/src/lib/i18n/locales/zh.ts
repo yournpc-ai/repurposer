@@ -437,26 +437,25 @@ const zh: Resources = {
       director_plan: "规划剪辑",
       align_stills: "按文字稿对齐照片",
       select_clips: "选出高光片段",
-      dub_clip: "用你的声音配音",
+      translate_clip: "翻译字幕",
       render: "渲染",
     },
     // 配方标签 chip（信息卡）——共享命名空间。
     tags: {
       multilingual: "多语言",
-      "voice-clone": "声音克隆",
       "no-footage": "无需录像",
     },
     // 示例素材 / 成片标签（overlay 堆叠项）。
     materials: {
       demo_talk: "示例演讲片段",
+      demo_keynote: "示例登台演讲片段",
       demo_photos: "现场照片",
       demo_transcript: "演讲文字稿",
-      dub_preview: "配音预览（德语）",
       image_video_preview: "轮播预览",
-      dub_en: "英语原声",
-      dub_zh: "中文配音",
-      dub_fr: "法语配音",
-      dub_es: "西语配音",
+      subs_en: "英语原声",
+      subs_fr: "法语字幕",
+      subs_de: "德语字幕",
+      subs_es: "西语字幕",
     },
     inspect: {
       tabs: {
@@ -473,19 +472,30 @@ const zh: Resources = {
       promptHint: "按你的需要改",
       send: "生成",
     },
-    dub: {
-      title: "视频配音",
-      promise: "上传你的视频，用你自己的声音配成中文、法语和西语。",
+    "multilingual-subs": {
+      title: "多语言字幕",
+      promise: "上传你的演讲——原声保留，字幕译成法语、德语、西语。",
       inputTitle: "原始视频",
-      inputHint: "要配音的原始录像——演讲、课程或播客节目。",
-      promptTemplate: "把我的演讲剪成高光切片，并用我的声音配音成中文、法语和西语。",
+      inputHint: "演讲、发布会或播客录像——你的原声就是主角。",
+      promptTemplate: "把我的演讲剪成高光短片，加上法语、德语、西语字幕——保留我的原声。",
+      variants: {
+        languages: "任意语言都可以——在提示词或对话里点名。",
+        dub: "想要出声版？说「用我的声音配一版」。",
+      },
     },
     "image-video": {
       title: "图文视频",
       promise: "没有录像——照片加文字稿，变成带字幕和音乐的轮播短片。",
       inputTitle: "文字稿和照片",
-      inputHint: "你的演讲文字稿，加一组照片——现场图、幻灯片、人像都可以。",
+      inputHint: "你的演讲文字稿，加一组照片或直接给课件（PDF/PPT）——现场图、幻灯片、人像都可以。",
       promptTemplate: "把我的文字稿和照片做成带字幕和音乐的短片。",
+    },
+    "talk-clips": {
+      title: "演讲短片",
+      promise: "大型演讲重剪成竖屏高光短片——画面跟着台上的你走。",
+      inputTitle: "原始视频",
+      inputHint: "登台演讲或发布会录像——中景画面效果最好。",
+      promptTemplate: "把我的演讲重剪成竖屏高光短片，画面一直跟着台上的我。",
     },
     reframe: {
       title: "访谈分镜",
@@ -493,13 +503,6 @@ const zh: Resources = {
       inputTitle: "输入视频",
       inputHint: "双人对话的横屏录像——访谈或对谈节目。",
       promptTemplate: "把我的双人访谈重剪成跟着说话人切换的竖屏切片。",
-    },
-    "talking-head": {
-      title: "口播",
-      promise: "只有稿子——收获一条你出镜口播的视频。",
-      inputTitle: "输入文字稿",
-      inputHint: "你想出镜口播的稿子。",
-      promptTemplate: "把我的稿子做成我出镜口播的视频。",
     },
     "ai-visuals": {
       title: "虚拟视频",
@@ -863,11 +866,12 @@ const zh: Resources = {
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
       spine: "处理过程",
       spineSteps: "{{count}} 个步骤",
-      // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/音乐。
+      // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/字幕/音乐。
       artifact: {
         plan: "计划",
         selection: "选段",
         dub: "配音",
+        subs: "字幕",
         music: "音乐",
       },
       // render 状态原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
@@ -1040,6 +1044,11 @@ const zh: Resources = {
     removeDubLanguage: "移除此配音语言",
     dubVersionCount: "{{clips}} 条切片 × {{langs}} 种语言 = 多出 {{total}} 版",
     planSummaryDub: "配音 {{langs}}",
+    subsLabel: "字幕版本",
+    subsHint: "每种语言给切片多出一版字幕：原声保留，只有屏上文字翻译。帖子、金句、文章不受影响。",
+    removeSubsLanguage: "移除此字幕语言",
+    subsVersionCount: "{{clips}} 条切片 × {{langs}} 种语言 = 多出 {{total}} 版",
+    planSummarySubs: "字幕 {{langs}}",
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",

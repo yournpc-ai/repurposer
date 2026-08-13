@@ -92,6 +92,8 @@ interface WorkflowRun {
     target_language?: string
     /** 配音语言集 (RECIPES §4.1): absent on pre-recipe runs. */
     dub_languages?: string[]
+    /** 字幕语言集 (RECIPES §4.1 字幕卡): absent on pre-R6 runs. */
+    caption_languages?: string[]
     /** The run-pinned persona (ADR-038); legacy runs' brand_template_id key
      * is ignored on read — re-runs resolve via the persona chain. */
     persona_id?: string | null
@@ -757,6 +759,7 @@ function ProjectDetailPage() {
         outputs: completedRunSlots.length ? completedRunSlots : normalizeSlots(["clips"]),
         language: completedRun.context?.target_language ?? project.language ?? "en",
         dub_languages: completedRun.context?.dub_languages,
+        caption_languages: completedRun.context?.caption_languages,
         specific_instruction: completedRun.context?.instruction,
       })
     : undefined
@@ -775,6 +778,7 @@ function ProjectDetailPage() {
         ),
         language: latestRun?.context?.target_language ?? project.language ?? "en",
         dub_languages: latestRun?.context?.dub_languages,
+        caption_languages: latestRun?.context?.caption_languages,
         specific_instruction: latestRun?.context?.instruction,
       })
     : pendingIntent

@@ -326,6 +326,7 @@ async def generate_content(
                     request.tone_settings.model_dump() if request.tone_settings else None
                 ),
                 dub_languages=request.dub_languages or [],
+                caption_languages=request.caption_languages or [],
                 autonomy=request.autonomy or "auto",
                 scope=request.scope,
                 operation=request.operation,

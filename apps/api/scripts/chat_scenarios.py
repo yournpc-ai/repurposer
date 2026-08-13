@@ -821,26 +821,29 @@ async def s20_anxious_venting_stays_in_scope(ctx: Ctx) -> None:
 
 
 async def s5_recipe_launch_template_prose(ctx: Ctx) -> None:
-    """S5 配方发射 = 模板原文（2026-08-11 裁定：配方 = 提示词）：dub 模板
-    原样发送 → clips 槽 + zh/fr/es 全提取。"""
+    """S5 配方发射 = 模板原文（2026-08-11 裁定：配方 = 提示词）：字幕卡模板
+    原样发送 → clips 槽 + fr/de/es 字幕语言全提取（2026-08-13 阵容重构后
+    旗舰模板换成 multilingual-subs；dub 模板语义由 S10 继续覆盖）。"""
     pid = await ctx.new_project("S5 recipe template launch")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
     # 与真实前端一致：配方卡发射发的就是预填模板原文
-    # （recipes.dub.promptTemplate），无 recipe_id 传输带——模板点名产出
-    # 与三种语言，LLM 提取即"播种"。
+    # （recipes.multilingual-subs.promptTemplate），无 recipe_id 传输带——
+    # 模板点名产出与三种字幕语言，LLM 提取即"播种"。
     turn1 = await ctx.chat(
         pid,
-        "Cut highlight clips from my talk and dub them into Chinese, French "
-        "and Spanish with my voice.",
+        "Cut highlight clips from my talk and add French, German and Spanish "
+        "subtitles — keep my original voice.",
     )
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     slots = book_slots(book)
     check(any(s["type"] == "clips" for s in slots),
           "the template's clips slot lands in the book", slots)
-    check(sorted(book["intent"].get("dub_languages") or []) == ["es", "fr", "zh"],
-          "all three template languages extracted", book["intent"].get("dub_languages"))
+    check(sorted(book["intent"].get("caption_languages") or []) == ["de", "es", "fr"],
+          "all three template caption languages extracted", book["intent"].get("caption_languages"))
+    check(not book["intent"].get("dub_languages"),
+          "a subtitle template never lands in dub_languages", book["intent"].get("dub_languages"))
 
 
 async def s10_dub_language_classification(ctx: Ctx) -> None:
@@ -857,6 +860,27 @@ async def s10_dub_language_classification(ctx: Ctx) -> None:
     book = (await ctx.results(pid)).get("pending_intent")
     check((book["intent"].get("dub_languages") or []) == ["zh"],
           "voice-dub language lands in dub_languages",
+          book["intent"].get("dub_languages"))
+
+
+async def s43_caption_language_classification(ctx: Ctx) -> None:
+    """S43 字幕归类（R6 字幕卡）：'subtitle them in French' → caption_languages=['fr']
+    ——字幕请求永不落 dub_languages（声音）或槽位语言（文案）。"""
+    pid = await ctx.new_project("S43 caption classification")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+
+    turn1 = await ctx.chat(
+        pid,
+        "Cut highlight clips from my talk and subtitle them in French and German",
+    )
+    check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
+          turn1["assistant_message"])
+    book = (await ctx.results(pid)).get("pending_intent")
+    check(sorted(book["intent"].get("caption_languages") or []) == ["de", "fr"],
+          "subtitle languages land in caption_languages",
+          book["intent"].get("caption_languages"))
+    check(not book["intent"].get("dub_languages"),
+          "a subtitle request never lands in dub_languages",
           book["intent"].get("dub_languages"))
 
 
@@ -1795,6 +1819,56 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
         modifier,
     )
 
+    # 3b. caption fan-out (RECIPES §4.1 字幕卡, R6): same NULL semantics —
+    # an initial-run translate fan-out (its target clips don't exist at
+    # compile) stays NULL; a modifier translate on existing clips quotes.
+    with_caps = compile_graph(
+        TaskSpec(
+            outputs=[IntentSlot(type="clips", language="en")],
+            caption_languages=["fr", "de"],
+        )
+    )
+    cap_ns = [ns for ns in with_caps if ns.kind == "translate_clip"]
+    check(
+        len(cap_ns) == 2 and all(ns.spec.get("fork") for ns in cap_ns),
+        "caption_languages fans out one fork translate node per language",
+        [(ns.kind, ns.spec) for ns in cap_ns],
+    )
+    cap_est = NODE_KINDS["translate_clip"].estimate(
+        {
+            **facts,
+            "spec": cap_ns[0].spec,
+            "input_kinds": [with_caps[i].kind for i in cap_ns[0].inputs],
+        }
+    )
+    check(cap_est is None, "the initial-run caption fan-out stays NULL", cap_est)
+    cap_modifier = NODE_KINDS["translate_clip"].estimate(
+        {
+            **facts,
+            "clips": [{"seconds": 30.0, "caption_chars": 420}],
+            "spec": {"target_language": "fr"},
+            "input_kinds": [],
+        }
+    )
+    check(
+        cap_modifier is not None,
+        "the modifier translate quotes",
+        cap_modifier,
+    )
+    # 3c. 出生地空集丢弃之外的上游门禁: caption_languages without a clips
+    # slot is a compile-time ValueError (create_run drops vacuous lists
+    # before this — the raise guards direct TaskSpec callers).
+    try:
+        compile_graph(
+            TaskSpec(
+                outputs=[IntentSlot(type="post", language="en")],
+                caption_languages=["fr"],
+            )
+        )
+        check(False, "caption_languages without clips raises", None)
+    except ValueError:
+        check(True, "caption_languages without clips raises", None)
+
 
 SCENARIOS = {
     # 首轮路由
@@ -1817,6 +1891,7 @@ SCENARIOS = {
     # 配方
     "S5": s5_recipe_launch_template_prose,
     "S10": s10_dub_language_classification,
+    "S43": s43_caption_language_classification,
     "S11": s11_clips_without_media_escape,
     # S22 retired（2026-08-11，随 recipe_id 传输带），编号留空不回收。
     # 素材

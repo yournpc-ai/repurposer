@@ -185,6 +185,19 @@ export function RecipeInspectOverlay({
                 <DialogDescription className="mt-1.5 text-sm">
                   {t(`recipes.${card.id}.promise`)}
                 </DialogDescription>
+                {/* variants desc (2026-08-13 ruling, RECIPES §7.2): guidance
+                    lines teaching how else the dish can be made — copy, never
+                    controls. Chips say what was used; desc says how it can
+                    vary. */}
+                {card.variants.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {card.variants.map((v) => (
+                      <p key={v} className="text-xs text-muted-foreground">
+                        {t(`recipes.${card.id}.variants.${v}`)}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {/* Applied-skill annotation (2026-08-12 ruling): the registry's
                     curated capability tags as chips — facts, not adjectives. */}
                 {card.tags.length > 0 && (

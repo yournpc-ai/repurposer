@@ -438,26 +438,25 @@ const en = {
       director_plan: "Plan the edit",
       align_stills: "Align photos to the script",
       select_clips: "Select highlight segments",
-      dub_clip: "Dub in your voice",
+      translate_clip: "Translate the subtitles",
       render: "Render",
     },
     // Recipe tag chips (info card) — shared namespace.
     tags: {
       multilingual: "Multilingual",
-      "voice-clone": "Voice clone",
       "no-footage": "No footage needed",
     },
     // Example material / output labels (overlay stack items).
     materials: {
       demo_talk: "Demo talk excerpt",
+      demo_keynote: "Demo keynote excerpt",
       demo_photos: "Event photos",
       demo_transcript: "Talk transcript",
-      dub_preview: "Dubbed preview (DE)",
       image_video_preview: "Slideshow preview",
-      dub_en: "Original (EN)",
-      dub_zh: "Chinese dub",
-      dub_fr: "French dub",
-      dub_es: "Spanish dub",
+      subs_en: "Original (EN)",
+      subs_fr: "French subtitles",
+      subs_de: "German subtitles",
+      subs_es: "Spanish subtitles",
     },
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
     // right = inspect tabs; left = the launch zone (composer's send
@@ -479,23 +478,35 @@ const en = {
       promptHint: "Tweak it to your needs",
       send: "Generate",
     },
-    dub: {
-      title: "Video dubbing",
+    "multilingual-subs": {
+      title: "Multilingual subtitles",
       promise:
-        "Upload your video and dub it into Chinese, French and Spanish — in your own voice.",
+        "Upload your talk — your voice stays, the subtitles speak French, German and Spanish.",
       inputTitle: "Source video",
       inputHint:
-        "The original recording you want dubbed — a talk, lecture or podcast episode.",
+        "A talk, keynote or podcast episode — your original voice is the star.",
       promptTemplate:
-        "Cut highlight clips from my talk and dub them into Chinese, French and Spanish with my voice.",
+        "Cut highlight clips from my talk and add French, German and Spanish subtitles — keep my original voice.",
+      variants: {
+        languages: "Any language works — name it in the prompt or in chat.",
+        dub: "Prefer a voiced version? Ask to dub it in your own voice.",
+      },
     },
     "image-video": {
       title: "Photos to video",
       promise: "No footage — photos plus your script become a captioned video with music.",
       inputTitle: "Script and photos",
-      inputHint: "Your talk transcript, plus a set of photos — event shots, slides, portraits.",
+      inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
         "Turn my script and photos into short clips with captions and music.",
+    },
+    "talk-clips": {
+      title: "Keynote clips",
+      promise: "Your stage talk, recut into vertical highlight clips — the frame tracks you.",
+      inputTitle: "Source video",
+      inputHint: "A keynote or stage presentation recording — mid-shot works best.",
+      promptTemplate:
+        "Cut my keynote into vertical highlight clips that keep me centered on stage.",
     },
     reframe: {
       title: "Interview reframe",
@@ -504,14 +515,6 @@ const en = {
       inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
-    },
-    "talking-head": {
-      title: "Talking head",
-      promise: "Just a script — get a video of you delivering it on camera.",
-      inputTitle: "Input script",
-      inputHint: "The script you want delivered on camera.",
-      promptTemplate:
-        "Turn my script into a talking-head video of me delivering it.",
     },
     "ai-visuals": {
       title: "Virtual scenes",
@@ -877,11 +880,12 @@ const en = {
       spine: "Process",
       spineSteps: "{{count}} steps",
       // Artifact node cards (D6 修订 — the render unit is the intervenable
-      // artifact): plan / selection / dub / music.
+      // artifact): plan / selection / dub / subs / music.
       artifact: {
         plan: "Plan",
         selection: "Selection",
         dub: "Dub",
+        subs: "Subtitles",
         music: "Music",
       },
       // Render state projected onto the product card in place (never a
@@ -1056,6 +1060,12 @@ const en = {
     dubHint:
       "Each language adds a version of the clips with your cloned voice — voice and subtitles follow that language. Text outputs aren't affected.",
     removeDubLanguage: "Remove this dub language",
+    subsLabel: "Subtitle versions",
+    subsHint:
+      "Each language adds a version of the clips with translated subtitles — your original voice stays. Text outputs aren't affected.",
+    removeSubsLanguage: "Remove this subtitle language",
+    subsVersionCount: "{{clips}} clips × {{langs}} languages = {{total}} extra versions",
+    planSummarySubs: "subs {{langs}}",
     dubVersionCount: "{{clips}} clips × {{langs}} languages = {{total}} extra versions",
     planSummaryDub: "dub {{langs}}",
     planVersion: "Plan v{{n}}",

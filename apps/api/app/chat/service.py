@@ -686,6 +686,7 @@ async def answer_question(
                             else None
                         ),
                         dub_languages=intent.dub_languages,
+                        caption_languages=intent.caption_languages,
                         autonomy=data.autonomy or "auto",
                         scope="full",
                     ),
@@ -926,6 +927,13 @@ async def _plan_turn(
             pass  # panel untouched — inference owns it
         elif not intent.dub_languages or intent.dub_languages == stored_dub:
             intent.dub_languages = list(prior.dub_languages)
+        # else: both moved — chat wins, the inference stands.
+        # caption_languages: identical three-way shape (RECIPES §4.1 字幕卡).
+        stored_caps = stored.intent.caption_languages if stored else []
+        if prior.caption_languages == stored_caps:
+            pass  # panel untouched — inference owns it
+        elif not intent.caption_languages or intent.caption_languages == stored_caps:
+            intent.caption_languages = list(prior.caption_languages)
         # else: both moved — chat wins, the inference stands.
 
     clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
