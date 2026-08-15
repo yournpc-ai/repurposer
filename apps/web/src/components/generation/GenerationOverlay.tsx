@@ -2074,15 +2074,11 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if (!first) setHistoryOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
-  // A fresh canvas focus is system speech too (灰行入流): the focus row
-  // lands in the flow, so the history opens to show it.
-  const prevFocusRef = useRef<string | null>(null)
-  useEffect(() => {
-    const id = focusOutput?.id ?? null
-    if (id && id !== prevFocusRef.current) setHistoryOpen(true)
-    prevFocusRef.current = id
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusOutput?.id])
+  // Canvas focus does NOT pop the history (2026-08-16 走查拍板): the focus
+  // chip shows in the input group and its gray row lands in the flow — that
+  // is the acknowledgment; force-opening the history on every card click
+  // reads as a jump-scare (worst when a detail modal just opened over it).
+  // Agent speech (above) remains the only auto-open trigger.
 
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real

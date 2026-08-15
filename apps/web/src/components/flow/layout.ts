@@ -18,11 +18,11 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-15 anatomy):
  * a corner-info band above the card (type left / language right), the media
  * flush full-bleed inside the card, a padded interaction area under it (the
- * run's prompt + the deterministic next-step line), and the always-on
- * action pill in a reserved band under the card. The thumb keeps the clip's
- * own frame — three aspect sizes, never a forced crop (2026-08-14 ruling).
- * The media fills the card edge to edge (no inner padding), so the aspect
- * heights are computed at the full lane width (208). */
+ * run's prompt), and the always-on action bar in a reserved band under the
+ * card. The thumb keeps the clip's own frame — three aspect sizes, never a
+ * forced crop (2026-08-14 ruling). The media fills the card edge to edge
+ * (no inner padding), so the aspect heights are computed at the full lane
+ * width (208). */
 export const PRODUCT_THUMB_PX: Record<string, number> = {
   "9:16": 370,
   "1:1": 208,
@@ -33,11 +33,14 @@ export const PRODUCT_THUMB_PX: Record<string, number> = {
 export const PRODUCT_THUMB_DEFAULT_PX = 117
 
 /** Node-box bands around the product card: corner info above, the action
- * pill below (reserved even while a render leaves it empty — geometry never
- * shifts), and the card's own padded interaction area. */
-const PRODUCT_LABEL_PX = 22
-const PRODUCT_TOOLBAR_PX = 44
-const PRODUCT_BODY_PX = 96
+ * bar below (reserved even while a render leaves it empty — geometry never
+ * shifts), and the card's own padded interaction area (the prompt — 2-line
+ * clamp + padding; 2026-08-16 走查: the next-step line retired). Band
+ * budgets mirror FlowNodeCard's real chrome: caption = 26px (4px inset +
+ * 8px breath), toolbar = 56px (12px gap + 44px frosted bar). */
+const PRODUCT_LABEL_PX = 26
+const PRODUCT_TOOLBAR_PX = 56
+const PRODUCT_BODY_PX = 64
 
 /** Product node size by clip aspect. */
 export function productNodeSize(aspect?: string | null): { width: number; height: number } {

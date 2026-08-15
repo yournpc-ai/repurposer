@@ -13,9 +13,10 @@ export type FlowNodeStatus = "pending" | "running" | "done" | "failed" | "skippe
 export type FlowEdgeSemantic = "lineage" | "dependency"
 
 /** Product-node actions (ADR-041 D5) — the old card-face actions moved onto
- * the canvas toolbar: preview / download / publish. Graph operations (run /
- * rewire) are permanently banned from it. */
-export type FlowOutputAction = "preview" | "download" | "publish"
+ * the canvas toolbar: download / publish (no preview — the video plays
+ * inline and the big player is the hover expand, 2026-08-16 走查拍板).
+ * Graph operations (run / rewire) are permanently banned from it. */
+export type FlowOutputAction = "download" | "publish"
 
 export interface FlowNode {
   id: string

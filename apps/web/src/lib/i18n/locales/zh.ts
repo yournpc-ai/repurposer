@@ -861,9 +861,9 @@ const zh: Resources = {
       history: "历史记录",
       focus: "当前焦点：{{name}}",
     },
-    // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。
+    // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
+    // 播，hover 放大开大屏；2026-08-16 走查拍板。）
     canvas: {
-      preview: "预览",
       download: "下载",
       publish: "发布",
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
@@ -888,15 +888,6 @@ const zh: Resources = {
     // 媒体 lightbox 的信息栏（媒体左侧）。
     lightbox: {
       prompt: "提示词",
-    },
-    // 产物节点的下一步建议行（D5——零 LLM，按产物类型确定性派生）。
-    nextStep: {
-      clip: "想改？在下方说一句——剪辑、字幕或再来个语言版本。",
-      post: "想改？在下方说一句——重写、换语气或换个语言。",
-      quotes: "想改？在下方说一句——换引文或换个样式。",
-      carousel: "想改？在下方说一句——改页面内容或换个语言。",
-      article: "想改？在下方说一句——修订内容或换个语言。",
-      default: "想改？在下方对话里描述即可。",
     },
     stepper: {
       transcribing: "正在转写你的媒体…",
@@ -928,6 +919,7 @@ const zh: Resources = {
     clipDetail: {
       publishTab: "发布",
       socialCaptionTab: "社交配文",
+      topicTab: "选题",
       transcriptTab: "字幕稿",
       title: "标题",
       caption: "配文",

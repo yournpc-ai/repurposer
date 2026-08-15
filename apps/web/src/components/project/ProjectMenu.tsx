@@ -46,7 +46,7 @@ export function ProjectMenu({
 
   return (
     <>
-      <div className="overlay-surface flex h-9 items-center rounded-md shadow-md ring-1 ring-foreground/10">
+      <div className="dock-surface flex h-9 items-center rounded-md ring-1 ring-foreground/10">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

@@ -12,7 +12,6 @@ import {
   Maximize2,
   Minus,
   Newspaper,
-  Play,
   Quote,
   Send,
   Volume2,
@@ -23,6 +22,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { BrandLoader } from "@/components/BrandLoader"
+import { toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 import { PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
@@ -75,7 +75,9 @@ function StatusBadge({ status }: { status: FlowNodeStatus }) {
 /** The corner-info band above a media node (the figma-style anatomy): the
  * node's label top-LEFT, its secondary info top-RIGHT — both OUTSIDE the
  * card body, so the card carries content, not chrome. The band's height is
- * part of the node size budget (layout.ts), never an overlay. */
+ * part of the node size budget (layout.ts), never an overlay. Spacing tuned
+ * against the reference canvas (2026-08-16 走查): 4px side inset, a real
+ * 8px breath above the card — the band never hugs the media. */
 function NodeCaption({
   label,
   detail,
@@ -86,7 +88,7 @@ function NodeCaption({
   Icon?: typeof Clapperboard
 }) {
   return (
-    <div className="flex h-[22px] shrink-0 items-end justify-between gap-2 px-0.5 pb-1">
+    <div className="flex h-[26px] shrink-0 items-end justify-between gap-2 px-1 pb-2">
       <span className="flex min-w-0 items-center gap-1 text-[11px] leading-none text-muted-foreground">
         {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null}
         <span className="truncate">{label}</span>
@@ -102,7 +104,7 @@ function NodeCaption({
 
 /** Hover media affordance button (the reference canvas's media chrome):
  * a small dark circle revealed on the media's hover — expand top-left,
- * sound top-right. */
+ * sound top-right, both 8px off the corner. */
 function MediaHoverButton({
   className,
   onClick,
@@ -186,7 +188,7 @@ function ThumbCard({
         )}
         {expandable && (
           <MediaHoverButton
-            className="left-1.5 top-1.5"
+            className="left-2 top-2"
             label={t("results.canvas.expand")}
             onClick={() => onExpandMedia(node.id)}
           >
@@ -195,7 +197,7 @@ function ThumbCard({
         )}
         {node.videoUrl && (
           <MediaHoverButton
-            className="right-1.5 top-1.5"
+            className="right-2 top-2"
             label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
             onClick={() => setMuted((v) => !v)}
           >
@@ -207,7 +209,7 @@ function ThumbCard({
           </MediaHoverButton>
         )}
         {node.status && node.status !== "pending" && (
-          <span className="absolute right-1.5 top-1.5">
+          <span className="absolute right-2 top-2">
             <StatusBadge status={node.status} />
           </span>
         )}
@@ -302,18 +304,20 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
 }
 
 /** The output node's product-card skin (ADR-041 D5 — the node IS the card),
- * 2026-08-15 anatomy (figma-style, the reference canvas's node language):
+ * 2026-08-15 anatomy (figma-style, the reference canvas's node language;
+ * 08-16 走查修订):
  *  1. corner-info band ABOVE the card — type + glyph top-left, language
  *     top-right; the card body carries no text chrome.
- *  2. media flush full-bleed inside the card (score / duration ride the
- *     media as badges); a rendering clip projects its state in place as the
- *     BrandLoader (never a spinner, never a status line).
- *  3. the padded interaction area below the media — the run's prompt (spec
- *     on the body, read-only; changes happen in chat) + the deterministic
- *     next-step line.
- *  4. the action pill in a reserved band UNDER the card — always visible
- *     (not hover-gated); preview / download / publish only, graph
- *     operations permanently banned (prohibition #3). The band stays
+ *  2. media flush full-bleed inside the card — a clip's MP4 PLAYS INLINE
+ *     (muted ambient loop, recipe-gallery 同款); hover affordances: expand
+ *     top-LEFT, sound top-RIGHT; score / duration ride the media's bottom
+ *     corners as badges; a rendering clip projects its state in place as
+ *     the BrandLoader (never a spinner, never a status line).
+ *  3. the padded interaction area below the media — the run's prompt only
+ *     (spec on the body, read-only; changes happen in chat).
+ *  4. the action bar in a reserved band UNDER the card — one frosted bar
+ *     (dock-surface + hairline, never bare icons); download / publish only,
+ *     graph operations permanently banned (prohibition #3). The band stays
  *     reserved while a render leaves it empty — geometry never shifts. */
 function ProductCard({
   node,
@@ -333,6 +337,11 @@ function ProductCard({
   const score = typeof output.score?.value === "number" ? output.score.value : null
   const duration = output.type === "clip" ? (output.payload.duration ?? null) : null
   const hasVideo = !!output.files.video
+  // The clip's MP4 plays inline (recipe-gallery 同款 ambient loop, 2026-08-16
+  // 走查拍板) — muted by default (autoplay policy); the hover sound icon
+  // flips it, the poster gives an instant first frame.
+  const videoUrl = hasVideo ? toAbsoluteUrl(output.files.video) : null
+  const [muted, setMuted] = useState(true)
   // The thumb keeps the clip's own frame (2026-08-14 三档画幅 on the canvas):
   // the node's height was already sized for this aspect in runFlow — the
   // strip here mirrors it exactly, and the poster letterboxes (black) rather
@@ -353,18 +362,16 @@ function ProductCard({
     (output.render_status === "pending" || output.render_status === "rendering")
   // The toolbar only carries actions that exist for this product type —
   // moved over from the old card faces, nothing new invented (D5 平移): a
-  // clip without its MP4 yet offers neither preview nor download (the old
-  // menu gated the same way).
+  // clip without its MP4 yet offers no download (the old menu gated the
+  // same way). No play/preview action (2026-08-16 走查拍板): the video
+  // plays inline on its own, and the big player is the hover expand.
   const canDownload =
     output.type === "clip"
       ? hasVideo
       : output.type === "quotes"
         ? !!output.files.image
         : true
-  const actions: { action: FlowOutputAction; Icon: typeof Play; label: string }[] = []
-  if (output.type === "clip" && hasVideo) {
-    actions.push({ action: "preview", Icon: Play, label: t("results.canvas.preview") })
-  }
+  const actions: { action: FlowOutputAction; Icon: typeof Download; label: string }[] = []
   if (canDownload) {
     actions.push({
       action: "download",
@@ -391,7 +398,7 @@ function ProductCard({
           the node's top center on hover; each tile is one produced item. */}
       {variants.length > 1 && (
         <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/product:opacity-100">
-          <div className="overlay-surface pointer-events-auto flex items-center gap-1 rounded-lg p-1 shadow-md ring-1 ring-foreground/10">
+          <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
             {variants.map((variant, vi) => (
               <button
                 key={vi}
@@ -403,7 +410,7 @@ function ProductCard({
                   setVariantIndex(vi)
                 }}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center overflow-hidden rounded-md text-[11px] font-medium transition-opacity",
+                  "flex h-8 w-8 items-center justify-center overflow-hidden rounded-md text-[11px] font-medium transition-opacity",
                   vi === (variantIndex < variants.length ? variantIndex : 0)
                     ? "ring-2 ring-foreground/60"
                     : "opacity-60 hover:opacity-100",
@@ -458,6 +465,19 @@ function ProductCard({
                 </p>
               ) : null}
             </span>
+          ) : videoUrl ? (
+            <video
+              src={videoUrl}
+              poster={mediaThumb ?? undefined}
+              aria-label={node.label}
+              className="pointer-events-none h-full w-full object-contain"
+              muted={muted}
+              loop
+              playsInline
+              autoPlay
+              preload="metadata"
+              disablePictureInPicture
+            />
           ) : mediaThumb ? (
             <img
               src={mediaThumb}
@@ -482,12 +502,15 @@ function ProductCard({
               )}
             </span>
           )}
+          {/* Media meta badges ride the BOTTOM corners (video convention);
+              the top corners belong to the hover affordances (expand left,
+              sound right). */}
           {score !== null && !renderFailed && (
             <span
               data-tour={node.tourTargets ? "results-score" : undefined}
               title={output.score?.reason ?? undefined}
               className={cn(
-                "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                "absolute bottom-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-medium",
                 node.topPick
                   ? "bg-primary text-primary-foreground"
                   : "bg-black/70 text-white",
@@ -496,28 +519,38 @@ function ProductCard({
               {node.topPick ? `${t("results.topPick")} · ${score}` : score}
             </span>
           )}
-          {/* The hover expand rides the top-right; the duration badge moves
-              to the bottom-right (video convention) to free the corner. */}
           {(hasVideo || node.thumbUrl) && !renderActive && onExpandMedia ? (
             <MediaHoverButton
-              className="right-1.5 top-1.5"
+              className="left-2 top-2"
               label={t("results.canvas.expand")}
               onClick={() => onExpandMedia(node.id)}
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </MediaHoverButton>
           ) : null}
+          {videoUrl && (
+            <MediaHoverButton
+              className="right-2 top-2"
+              label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
+              onClick={() => setMuted((v) => !v)}
+            >
+              {muted ? (
+                <VolumeX className="h-3.5 w-3.5" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5" />
+              )}
+            </MediaHoverButton>
+          )}
           {duration !== null && duration > 0 && !renderFailed && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
               {duration}s
             </span>
           )}
         </div>
 
         {/* The padded interaction area: the run's prompt (read-only — the
-            edit channel is the chat dock, which the node click focuses) +
-            the deterministic next-step line. A failed render replaces the
-            next-step with the in-place failure + the chat retry channel. */}
+            edit channel is the chat dock, which the node click focuses). A
+            failed render speaks here in place (retry = the chat dock, D8). */}
         <div className="flex min-h-0 flex-1 flex-col gap-1 p-3">
           {node.prompt ? (
             <p title={node.prompt} className="line-clamp-2 text-xs leading-snug">
@@ -528,32 +561,30 @@ function ProductCard({
             <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-destructive">
               {t("results.canvas.renderFailed")}
             </p>
-          ) : renderActive ? null : (
-            <p className="mt-auto line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-              {t(`results.nextStep.${output.type}`, {
-                defaultValue: t("results.nextStep.default"),
-              })}
-            </p>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* The always-on action band under the card. The pill carries only
-          actions that exist for this product; the band itself is reserved
-          either way, so a finishing render never shifts the graph. */}
+      {/* The always-on action band under the card — one frosted bar
+          (dock-surface + hairline, 2026-08-16 走查拍板: never bare icons
+          floating on the canvas). Padding/airiness tuned against the
+          reference canvas's bar (p-1.5 + h-8 hit areas = a 44px bar, a real
+          12px gap off the card). It carries only actions that exist for
+          this product; the band itself is reserved either way, so a
+          finishing render never shifts the graph. */}
       <div
         data-tour={node.tourTargets ? "results-menu" : undefined}
-        className="flex h-[44px] shrink-0 items-start justify-center pt-2"
+        className="flex h-[56px] shrink-0 items-start justify-center pt-3"
       >
         {actions.length > 0 && (
-          <div className="overlay-surface flex items-center gap-0.5 rounded-lg p-1">
+          <div className="dock-surface flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
             {actions.map(({ action, Icon, label }) => (
               <button
                 key={action}
                 type="button"
                 title={label}
                 aria-label={label}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onOutputAction?.(output.id, action)

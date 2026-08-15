@@ -223,8 +223,8 @@ function ProjectDetailPage() {
 
   // ── Product actions (ADR-041 D5/D8) ──────────────────────────────────
   // The canvas's product nodes ARE the cards: click sets the dock focus
-  // (焦点注入) and opens the clip's detail modal; the hover toolbar reports
-  // preview / download / publish. Both modals are the old card-face logic,
+  // (焦点注入) and opens the clip's detail modal; the action bar reports
+  // download / publish. Both modals are the old card-face logic,
   // mounted as-is.
   const [detailOutput, setDetailOutput] = useState<Output | null>(null)
   const [publishOutput, setPublishOutput] = useState<Output | null>(null)
@@ -344,8 +344,7 @@ function ProjectDetailPage() {
   }
 
   const handleOutputAction = (output: Output, action: FlowOutputAction) => {
-    if (action === "preview") setDetailOutput(output)
-    else if (action === "download") downloadOutput(output)
+    if (action === "download") downloadOutput(output)
     else setPublishOutput(output)
   }
 
@@ -821,7 +820,7 @@ function ProjectDetailPage() {
           onDeleted={() => navigate({ to: "/projects" })}
         />
       </div>
-      <div className="overlay-surface absolute right-3 top-3 z-30 flex items-center rounded-md shadow-md ring-1 ring-foreground/10 md:right-4 md:top-4">
+      <div className="dock-surface absolute right-3 top-3 z-30 flex items-center rounded-md ring-1 ring-foreground/10 md:right-4 md:top-4">
         <ThemeToggle />
         <LanguageSwitcher />
         <NotificationBell />

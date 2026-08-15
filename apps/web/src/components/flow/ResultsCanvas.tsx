@@ -6,8 +6,7 @@
  * layout here). Navigation is open (pan/zoom, D7); editing gestures are
  * structurally absent in the substrate. Product nodes are cards (D5): the
  * surface owns their actions — click focuses (焦点注入, D8; a clip also
- * opens its detail modal), the hover toolbar reports preview / download /
- * publish. */
+ * opens its detail modal), the action bar reports download / publish. */
 
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -54,7 +53,7 @@ export interface ResultsCanvasProps {
   /** A product node was clicked — the surface sets the dock focus and opens
    * the detail modal (clips). */
   onOutputClick?: (output: Output) => void
-  /** A product node's hover-toolbar action (preview / download / publish). */
+  /** A product node's action-bar action (download / publish). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
   /** A process step node was clicked (the spine expanded) — the surface
    * inserts the step's @workflow_step mention into the dock (D8). */

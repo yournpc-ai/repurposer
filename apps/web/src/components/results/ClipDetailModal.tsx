@@ -41,7 +41,14 @@ export function ClipDetailModal({
   }, [output])
 
   const videoUrl = clipState.files.video ?? null
-  const title = clipState.publishing.title || clipState.payload.hook || ""
+  const rawTitle = clipState.publishing.title || clipState.payload.hook || ""
+  // Whole-video / translated products carry no clip-writer publishing copy —
+  // the honest fallback is what the canvas card says: type · language.
+  const title =
+    rawTitle ||
+    `${t("results.tabs.clips")}${
+      clipState.language ? ` · ${t(`languages.${clipState.language}`, { defaultValue: clipState.language })}` : ""
+    }`
   const description = clipState.publishing.description ?? null
   const hashtags = clipState.publishing.hashtags ?? []
   const topic = clipState.publishing.topic ?? null
@@ -49,6 +56,10 @@ export function ClipDetailModal({
   const duration = clipState.payload.duration ?? 0
   const startTime = clipState.source_ref?.start_seconds ?? null
   const endTime = clipState.source_ref?.end_seconds ?? null
+  // The source range is information only for an EXCERPT (a highlight cut out
+  // of a longer source). A whole-span product (materialize_source: [0, n))
+  // showing "0:00 - 5:40 · 340s" is noise — duration alone speaks.
+  const showRange = startTime != null && endTime != null && startTime > 0
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -85,29 +96,56 @@ export function ClipDetailModal({
   const aspectRatio =
     aspect === "1:1" ? "1 / 1" : aspect === "16:9" ? "16 / 9" : "9 / 16"
 
-  const transcript =
-    (clipState.render_spec as { caption_track?: { start: number; end: number; text: string }[] } | null)
-      ?.caption_track || []
+  const renderSpec = clipState.render_spec as {
+    caption_track?: { start: number; end: number; text: string }[]
+    translation_track?: { start: number; end: number; text: string }[]
+  } | null
+  // The transcript speaks the product's own language first (2026-08-16 走查):
+  // a translated fork reads its translation_track (unit-level cues = the
+  // on-screen main line); the original word-level caption_track groups into
+  // sentence lines otherwise.
+  const translationUnits = (renderSpec?.translation_track ?? []).filter((c) =>
+    c.text?.trim()
+  )
+  const captionTrack = renderSpec?.caption_track ?? []
 
   // Word-level captions are grouped into sentence-level lines for readable transcript browsing.
-  const transcriptLines = transcript.reduce<
-    { start: number; end: number; text: string }[]
-  >((lines, cue) => {
-    const text = cue.text.trim()
-    if (!text) return lines
+  const transcriptLines =
+    translationUnits.length > 0
+      ? translationUnits.map((c) => ({
+          start: c.start,
+          end: c.end,
+          text: c.text.trim(),
+        }))
+      : captionTrack.reduce<
+          { start: number; end: number; text: string }[]
+        >((lines, cue) => {
+          const text = cue.text.trim()
+          if (!text) return lines
 
-    const last = lines[lines.length - 1]
-    const endsSentence = /[.!?。！？]$/.test(text)
+          const last = lines[lines.length - 1]
+          const endsSentence = /[.!?。！？]$/.test(text)
 
-    if (!last || endsSentence || last.text.length > 120) {
-      lines.push({ start: cue.start, end: cue.end, text })
-    } else {
-      last.end = cue.end
-      last.text += ` ${text}`
-    }
+          if (!last || endsSentence || last.text.length > 120) {
+            lines.push({ start: cue.start, end: cue.end, text })
+          } else {
+            last.end = cue.end
+            last.text += ` ${text}`
+          }
 
-    return lines
-  }, [])
+          return lines
+        }, [])
+
+  // Tabs with no content hide rather than render an empty pane (2026-08-16
+  // 走查): the social tab is only as real as its publishing copy (a
+  // materialized/translated whole video has none).
+  const hasSocial = !!(
+    clipState.publishing.title ||
+    description ||
+    hashtags.length
+  )
+  const hasTopic = !!topic
+  const defaultTab = hasSocial ? "social" : "transcript"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,14 +163,19 @@ export function ClipDetailModal({
           }`}
         >
           {/* Video player — no fill: media is its own separation, the
-              letterbox shows the modal's glass. */}
+              letterbox shows the modal's glass. Desktop portrait sizes by
+              HEIGHT (2026-08-16 走查): an aspect-ratio box with w-auto and
+              only a max-h never binds — the video element's intrinsic
+              1080×1920 size blew the modal past the viewport. A definite h +
+              aspect-ratio derives the width instead; mobile keeps w-full
+              with a vh cap. */}
           <div
             className={cn(
               "relative overflow-hidden",
               isLandscape
                 ? "w-full"
-                : "w-full md:w-auto md:max-h-[75vh]",
-              aspect === "1:1" && "md:max-h-[55vh]"
+                : "w-full max-h-[55vh] md:w-auto md:max-h-none",
+              !isLandscape && (aspect === "1:1" ? "md:h-[55vh]" : "md:h-[72vh]")
             )}
             style={{ aspectRatio: aspectRatio }}
           >
@@ -166,8 +209,11 @@ export function ClipDetailModal({
             <div className="flex flex-col gap-1">
               <h2 className="text-lg font-medium leading-tight">{title}</h2>
               <span className="text-xs text-muted-foreground">
-                {formatTime(startTime)} - {formatTime(endTime)}
-                {duration > 0 && ` · ${duration}s`}
+                {showRange
+                  ? `${formatTime(startTime)} - ${formatTime(endTime)}${duration > 0 ? ` · ${duration}s` : ""}`
+                  : duration > 0
+                    ? `${duration}s`
+                    : null}
               </span>
             </div>
 
@@ -185,43 +231,47 @@ export function ClipDetailModal({
               </div>
             )}
 
-            <Tabs defaultValue="social" className="w-full">
+            <Tabs defaultValue={defaultTab} className="w-full">
               <TabsList variant="line" className="w-full">
-                <TabsTrigger value="social">{t("results.clipDetail.socialCaptionTab")}</TabsTrigger>
-                <TabsTrigger value="topic">Topic</TabsTrigger>
+                {hasSocial && (
+                  <TabsTrigger value="social">{t("results.clipDetail.socialCaptionTab")}</TabsTrigger>
+                )}
+                {hasTopic && (
+                  <TabsTrigger value="topic">{t("results.clipDetail.topicTab")}</TabsTrigger>
+                )}
                 <TabsTrigger value="transcript">{t("results.clipDetail.transcriptTab")}</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="social" className="space-y-4 pt-3">
-                <CopyField
-                  label={t("results.clipDetail.title")}
-                  value={clipState.publishing.title || ""}
-                  copied={copiedKey === "title"}
-                  onCopy={() => handleCopy(clipState.publishing.title || "", "title")}
-                />
-                <CopyField
-                  label={t("results.clipDetail.caption")}
-                  value={description || ""}
-                  copied={copiedKey === "caption"}
-                  onCopy={() => handleCopy(description || "", "caption")}
-                />
-                <CopyField
-                  label={t("results.clipDetail.hashtags")}
-                  value={hashtags.map((h) => `#${h}`).join(" ")}
-                  copied={copiedKey === "hashtags"}
-                  onCopy={() =>
-                    handleCopy(hashtags.map((h) => `#${h}`).join(" "), "hashtags")
-                  }
-                />
-              </TabsContent>
+              {hasSocial && (
+                <TabsContent value="social" className="space-y-4 pt-3">
+                  <CopyField
+                    label={t("results.clipDetail.title")}
+                    value={clipState.publishing.title || ""}
+                    copied={copiedKey === "title"}
+                    onCopy={() => handleCopy(clipState.publishing.title || "", "title")}
+                  />
+                  <CopyField
+                    label={t("results.clipDetail.caption")}
+                    value={description || ""}
+                    copied={copiedKey === "caption"}
+                    onCopy={() => handleCopy(description || "", "caption")}
+                  />
+                  <CopyField
+                    label={t("results.clipDetail.hashtags")}
+                    value={hashtags.map((h) => `#${h}`).join(" ")}
+                    copied={copiedKey === "hashtags"}
+                    onCopy={() =>
+                      handleCopy(hashtags.map((h) => `#${h}`).join(" "), "hashtags")
+                    }
+                  />
+                </TabsContent>
+              )}
 
-              <TabsContent value="topic" className="pt-3">
-                {topic ? (
+              {hasTopic && (
+                <TabsContent value="topic" className="pt-3">
                   <p className="text-sm leading-relaxed text-foreground">{topic}</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No topic available.</p>
-                )}
-              </TabsContent>
+                </TabsContent>
+              )}
 
               <TabsContent value="transcript" className="pt-3">
                 {transcriptLines.length > 0 ? (

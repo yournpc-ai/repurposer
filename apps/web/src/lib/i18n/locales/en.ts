@@ -880,9 +880,9 @@ const en = {
       focus: "Working on: {{name}}",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
-    // labels.
+    // labels. (No "preview" — the video plays inline, the hover expand opens
+    // the big player; 2026-08-16 走查拍板.)
     canvas: {
-      preview: "Preview",
       download: "Download",
       publish: "Publish",
       // 过程脊 group node (D6): the folded middle steps as one container.
@@ -911,16 +911,6 @@ const en = {
     // The media lightbox's info column (left of the media).
     lightbox: {
       prompt: "Prompt",
-    },
-    // The product node's deterministic next-step line (D5 — zero-LLM,
-    // derived from the output type; presented, never a control).
-    nextStep: {
-      clip: "Want changes? Ask below — trim, captions, or another language.",
-      post: "Want changes? Ask below — rewrite, tone, or another language.",
-      quotes: "Want changes? Ask below — different quotes or a new look.",
-      carousel: "Want changes? Ask below — slide edits or another language.",
-      article: "Want changes? Ask below — revisions or another language.",
-      default: "Want changes? Describe them in the chat below.",
     },
     stepper: {
       transcribing: "Transcribing your media…",
@@ -952,6 +942,7 @@ const en = {
     clipDetail: {
       publishTab: "Publish",
       socialCaptionTab: "Social caption",
+      topicTab: "Topic",
       transcriptTab: "Transcript",
       title: "Title",
       caption: "Caption",
