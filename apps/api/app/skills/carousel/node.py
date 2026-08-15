@@ -7,10 +7,11 @@ from app.skills.carousel.agents import carousel_writer
 
 class WriteCarousel(DerivativeWriterNode):
     kind = "write_carousel"
+    task_name = "Build carousel"
+    task_name_zh = "制作轮播图"
     output_type = "carousel"
     slot_label = "Carousel"
     slot_label_zh = "轮播"
-    slot_ordinal = 3
     count_default = 6
     count_limits = (2, 15)
     writer = carousel_writer

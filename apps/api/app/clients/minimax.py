@@ -126,8 +126,10 @@ def _raise_for_status(
     degrade gracefully — a raw httpx.HTTPStatusError (402/429/5xx from the
     provider) would slip past every one of them and surface as a bare 500.
     Rate limiting gets its own user key (the honest "busy, try again" line);
-    every other status reads as unavailable (402 billing is an ops problem —
-    the user line stays generic)."""
+    402 billing exhaustion gets its own ("out of quota" — the Claude-style
+    exhausted line, 2026-08-14 裁定: a quota failure must SAY quota, never
+    hide behind a generic unavailable line or a fabricated default answer);
+    every other status reads as unavailable."""
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
@@ -137,6 +139,8 @@ def _raise_for_status(
             user_key=(
                 "provider_rate_limited"
                 if exc.response.status_code == 429
+                else "provider_quota_exhausted"
+                if exc.response.status_code == 402
                 else unavailable_key
             ),
         ) from exc

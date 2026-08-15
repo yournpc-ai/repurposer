@@ -32,6 +32,7 @@ from app.models.tables import (
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.edges import _load_director_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
+from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
@@ -53,16 +54,80 @@ from app.tools.storage import stream_url
 logger = structlog.get_logger()
 
 
+async def resolve_render_source(
+    db: AsyncSession, node: WorkflowStep, assets: list[Asset]
+) -> tuple[Asset | None, str, list[str]]:
+    """The render-source decision shared by select_clips and materialize_source
+    (ADR-043 — one home, never a second copy): an upstream align_stills edge
+    wins (its timeline-materialized transcript asset); else a video with
+    words; else an audio with words; else a stills set. Returns
+    ``(render_source, render_kind, still_images)``."""
+    aligned_source: Asset | None = None
+    for upstream_id in node.inputs or []:
+        upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
+        if upstream is None or upstream.kind != "align_stills":
+            continue
+        aligned_id = (upstream.spec or {}).get("aligned_asset_id")
+        if aligned_id:
+            candidate = await db.get(Asset, UUID(str(aligned_id)))
+            if candidate is not None and (candidate.meta or {}).get("words"):
+                aligned_source = candidate
+        break
+
+    def _has_words(a: Asset) -> bool:
+        return bool(a.file_url and (a.meta or {}).get("words"))
+
+    slide_page_urls = [
+        u
+        for a in assets
+        if a.type == AssetType.SLIDES
+        for p in (a.slide_pages or [])
+        if (u := stream_url(p))
+    ]
+    image_urls = [
+        u
+        for a in assets
+        if a.type == AssetType.IMAGE and (u := stream_url(a.file_url))
+    ]
+    still_images = slide_page_urls + image_urls
+    source_video = next(
+        (a for a in assets if a.type == AssetType.VIDEO and _has_words(a)),
+        None,
+    )
+    source_audio = next(
+        (a for a in assets if a.type == AssetType.AUDIO and _has_words(a)),
+        None,
+    )
+    first_visual = next(
+        (
+            a
+            for a in assets
+            if a.type in (AssetType.SLIDES, AssetType.IMAGE) and a.file_url
+        ),
+        None,
+    )
+    if aligned_source is not None:
+        return aligned_source, "stills", still_images
+    if source_video is not None:
+        return source_video, "video", still_images
+    if source_audio is not None:
+        return source_audio, "stills", still_images
+    if first_visual is not None and still_images:
+        return first_visual, "stills", still_images
+    return None, "video", still_images
+
+
 class SelectClips(NodeBase):
     kind = "select_clips"
+    task_name = "Generate clips"
+    task_name_zh = "生成短片"
     output_type = "clips"
     slot_label = "Clips"
     slot_label_zh = "切片"
-    slot_ordinal = 0
     needs_director = True
     requires = (MEDIA, TRANSCRIPT)
     produces_outputs = True
-    count_default = 5
+    count_default = 3
     count_limits = (1, 10)
     agents = (clip_writer,)
 
@@ -112,64 +177,11 @@ class SelectClips(NodeBase):
         generation_context.target_language = target_language
         understanding, storyboard = await _load_director_outputs(db, node)
 
-        # Render source selection (docs/VIDEO_EDITOR.md §4). The DAG edge wins
-        # first: an upstream align_stills node hands its timeline-materialized
-        # transcript asset directly (spec.aligned_asset_id); only without that
-        # edge do we scan the project's assets.
-        aligned_source: Asset | None = None
-        for upstream_id in node.inputs or []:
-            upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
-            if upstream is None or upstream.kind != "align_stills":
-                continue
-            aligned_id = (upstream.spec or {}).get("aligned_asset_id")
-            if aligned_id:
-                candidate = await db.get(Asset, UUID(str(aligned_id)))
-                if candidate is not None and (candidate.meta or {}).get("words"):
-                    aligned_source = candidate
-            break
-
-        def _has_words(a: Asset) -> bool:
-            return bool(a.file_url and (a.meta or {}).get("words"))
-
-        slide_page_urls = [
-            u
-            for a in assets
-            if a.type == AssetType.SLIDES
-            for p in (a.slide_pages or [])
-            if (u := stream_url(p))
-        ]
-        image_urls = [
-            u
-            for a in assets
-            if a.type == AssetType.IMAGE and (u := stream_url(a.file_url))
-        ]
-        still_images = slide_page_urls + image_urls
-        source_video = next(
-            (a for a in assets if a.type == AssetType.VIDEO and _has_words(a)),
-            None,
+        # Render source selection (docs/VIDEO_EDITOR.md §4) — the shared
+        # decision (materialize_source resolves the same way).
+        render_source, render_kind, still_images = await resolve_render_source(
+            db, node, assets
         )
-        source_audio = next(
-            (a for a in assets if a.type == AssetType.AUDIO and _has_words(a)),
-            None,
-        )
-        first_visual = next(
-            (
-                a
-                for a in assets
-                if a.type in (AssetType.SLIDES, AssetType.IMAGE) and a.file_url
-            ),
-            None,
-        )
-        if aligned_source is not None:
-            render_source, render_kind = aligned_source, "stills"
-        elif source_video is not None:
-            render_source, render_kind = source_video, "video"
-        elif source_audio is not None:
-            render_source, render_kind = source_audio, "stills"
-        elif first_visual is not None and still_images:
-            render_source, render_kind = first_visual, "stills"
-        else:
-            render_source, render_kind = None, "video"
 
         async def _load_music_pieces() -> list[dict[str, str]]:
             music_rows = (
@@ -234,7 +246,14 @@ class SelectClips(NodeBase):
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None
         cfg = brand_cfg
-        aspect = str(cfg.get("aspect", "9:16"))
+        # Frame format: the chain's aspect param (spec, user-named) wins,
+        # then the run.context carry-over (legacy books), then the skin
+        # default (2026-08-14 三档画幅; ADR-043 参数化).
+        aspect = str(
+            (node.spec or {}).get("aspect")
+            or ctx.get("aspect")
+            or cfg.get("aspect", "9:16")
+        )
         cap_pos = cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")
         cap_style = cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
@@ -244,6 +263,12 @@ class SelectClips(NodeBase):
         ttl_enabled_raw = cfg.get("titleEnabled")
         ttl_enabled = True if ttl_enabled_raw is None else bool(ttl_enabled_raw)
 
+        # Render ownership (2026-08-15 morph/render race): when a NON-FORK
+        # morph sits later in this run, it rewrites these outputs' specs in
+        # place and owns the render — the base fan-out would be dead work and
+        # a last-writer-wins race on the rows. Leave render_status NULL; the
+        # morph pends + fans out (skips are rescued by the morph).
+        suppressed = await _later_inplace_morph_exists(db, run, node)
         output_ids: list[UUID] = []
         for plan in plans.clips[:clip_count]:
             segment = plan.to_segment()
@@ -295,7 +320,7 @@ class SelectClips(NodeBase):
                     "asset_id": str(render_source.id) if render_source is not None else None,
                 },
                 render_spec=spec.model_dump(mode="json") if spec else None,
-                render_status=RenderStatus.PENDING if spec else None,
+                render_status=(RenderStatus.PENDING if not suppressed else None) if spec else None,
                 score={
                     "value": plan.recommendation_score,
                     "reason": plan.score_reason or None,
@@ -314,19 +339,25 @@ class SelectClips(NodeBase):
         # Render fan-out (D2): one render node per clip with a render spec. These
         # nodes are NOT claimed via the node claim — the render worker claims the
         # output row (render_status=PENDING) and mirrors terminal state back here.
-        max_seq = int(node.seq)
-        for idx, output_id in enumerate(output_ids, start=1):
-            db.add(
-                WorkflowStep(
-                    run_id=run.id,
-                    kind="render",
-                    status="pending",
-                    seq=max_seq + idx,
-                    inputs=[str(node.id)],
-                    spec={"output_id": str(output_id)},
+        # (Skipped when a later non-fork morph owns the render — see above.)
+        if not suppressed:
+            max_seq = int(node.seq)
+            label = await _render_step_label(db, run)
+            for idx, output_id in enumerate(output_ids, start=1):
+                db.add(
+                    WorkflowStep(
+                        run_id=run.id,
+                        kind="render",
+                        status="pending",
+                        seq=max_seq + idx,
+                        inputs=[str(node.id)],
+                        spec={
+                            "output_id": str(output_id),
+                            **({"summary": label} if label else {}),
+                        },
+                    )
                 )
-            )
-        await db.flush()
+            await db.flush()
 
         await _fill_summary(
             node.id,

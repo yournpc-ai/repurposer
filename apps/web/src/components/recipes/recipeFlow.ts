@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next"
 
+import { thumbNodeSize } from "@/components/flow/layout"
 import type { FlowEdge, FlowNode } from "@/components/flow/types"
 import type { RecipeCard } from "@/lib/recipes"
 
@@ -27,12 +28,19 @@ export function recipeProcessFlow(
   const sharedPoster =
     card.example_outputs.find((o) => o.poster_url)?.poster_url ?? null
 
+  // Thumbs keep the card's own frame (2026-08-15 三档画幅 on the flow
+  // surface): the bake preserves the source's shape, so assets and outputs
+  // share one aspect — sized exactly, letterboxed never cropped.
+  const thumbSize = thumbNodeSize(card.aspect)
+
   card.example_assets.forEach((a, i) => {
     nodes.push({
       id: `asset:${i}`,
       kind: "asset",
       label: materialLabel(t, a.label_key) ?? a.kind,
       thumbUrl: a.kind === "video" ? sharedPoster : null,
+      size: thumbSize,
+      containThumb: true,
       order: i,
     })
   })
@@ -80,6 +88,8 @@ export function recipeProcessFlow(
       kind: "output",
       label: materialLabel(t, o.label_key) ?? o.kind,
       thumbUrl: o.poster_url ?? null,
+      size: thumbSize,
+      containThumb: true,
       order: i,
     })
     for (const from of prevIds) {

@@ -7,9 +7,10 @@ from app.skills.article.agents import article_writer
 
 class WriteArticle(DerivativeWriterNode):
     kind = "write_article"
+    task_name = "Write article"
+    task_name_zh = "撰写文章"
     output_type = "article"
     slot_label = "Article"
     slot_label_zh = "文章"
-    slot_ordinal = 4
     writer = article_writer
     completion_bounds = (800, 3000)  # a long-form article / newsletter

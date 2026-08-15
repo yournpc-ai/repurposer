@@ -69,6 +69,17 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
   const videoUrl = clipState.files.video ?? null
   const title = clipState.publishing.title || clipState.payload.hook || ""
   const coverUrl = clipState.publishing.cover_image_url ?? null
+  // The frame keeps the clip's own aspect (2026-08-14 三档画幅 ruling — no
+  // forced square): the media already renders object-contain, so the frame
+  // simply stops letterboxing it into a square.
+  const clipAspect =
+    (clipState.render_spec as { aspect?: string } | null)?.aspect || "9:16"
+  const frameAspect =
+    clipAspect === "1:1"
+      ? "aspect-square"
+      : clipAspect === "16:9"
+        ? "aspect-video"
+        : "aspect-[9/16]"
 
   const handleDownload = () => {
     if (!videoUrl) return
@@ -119,7 +130,8 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
         <div
           data-tour={tourTargets ? "results-video" : undefined}
           className={cn(
-            "relative aspect-square w-full overflow-hidden bg-muted",
+            "relative w-full overflow-hidden bg-muted",
+            frameAspect,
             !isRendering && "cursor-pointer"
           )}
           onClick={(e) => {

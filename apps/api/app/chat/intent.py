@@ -7,9 +7,12 @@ fallback / the adjudication repair echo are funnel stages, not bespoke code.
 ``plan_agent`` — the task-book builder (plan path, CHAT_ARCH §3): free-form
 text → a structured task book (language/outputs/tone) plus the three-action
 verdict (generate / answer / start). Invoked only from the chat service's
-plan path — first-turn projects and pending-task-book refinement turns. Its
-declared ``fallback`` (the default task book) is the never-a-white-screen
-precedent every other declared fallback follows.
+plan path — first-turn projects and pending-task-book refinement turns.
+Provider failures propagate as MiniMaxError: the route boundary answers 502
+with the localized provider line (2026-08-14 裁定 — a fabricated default
+book looks like a real plan and Start would spend a paid run on it; an
+honest failure beats a wrong plan, and the user_key taxonomy makes the
+failure presentable).
 
 ``chat_intent_agent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
 user message + assembled context → a four-state ``IntentProposal``
@@ -21,18 +24,21 @@ tool-calling-style call per turn, never a ReAct loop; the LLM proposes and
 from typing import Any
 
 from app.agents.base import StreamingAgent
-from app.models.schemas import InferredIntent, IntentResult, IntentSlot
+from app.models.schemas import InferredIntent, IntentResult
 from app.operations.registry import OP_REGISTRY
-from app.pipeline.graph import slot_type_order
 from app.skills import dispatchable_skills
 
 
-def _output_type_list() -> str:
-    """The plan prompt's output-type enumeration, registry-injected
-    (N-32): a new output type is one registry entry away, and the prompt
-    knows it the same turn. Canonical slot order (clips first)."""
-    ordered = sorted(slot_type_order().items(), key=lambda p: p[1])
-    return "|".join(f'"{name}"' for name, _ in ordered)
+def _params_doc(model) -> str:
+    """"name: description" pairs for a params model (agent-loop-upgrade W2).
+
+    Falls back to the bare name when a field carries no description — the
+    prompt degrades to the pre-W2 shape for that field instead of breaking.
+    """
+    parts = []
+    for fname, field in model.model_fields.items():
+        parts.append(f"{fname}: {field.description}" if field.description else fname)
+    return ", ".join(parts)
 
 
 def _assemble_plan_turn(
@@ -63,32 +69,16 @@ def _assemble_plan_turn(
     )
 
 
-def _plan_fallback(
-    prompt: str, filename: str | None = None, **_: Any
-) -> InferredIntent:
-    """Declared fallback (ADR-039: fallbacks are declarations, never silent):
-    the default task book — dockable, editable, startable — so the UI never
-    white-screens. Clips need a media source file, so text-only input falls
-    back to text outputs. Every slot carries a concrete language (per-slot
-    property since the 2026-08-05 restructure — no book-level field anymore).
-    """
-    has_media = filename is not None and filename.lower().endswith(
-        (".mp4", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".aac",
-         ".ogg", ".png", ".jpg", ".jpeg", ".webp")
-    )
-    types = (
-        ["clips", "post", "quotes", "article"]
-        if has_media
-        else ["post", "quotes", "article"]
-    )
-    return InferredIntent(
-        action="generate",
-        answer=None,
-        outputs=[IntentSlot(type=t, language="en") for t in types],
-        outputs_explicit=False,
-        tone="professional",
-        specific_instruction=prompt.strip() or None,
-        confidence=0.0,
+def _plan_skill_lines() -> str:
+    """The plan surface's skill vocabulary, registry-injected (ADR-043): the
+    plan agent proposes the SAME task lists the chat loop adjudicates.
+    revise_script is excluded — it targets an EXISTING output and the plan
+    path runs before the project's first run, when none exist."""
+    return "\n".join(
+        f"- {s.name}: {s.description}"
+        + (f" (params: {_params_doc(s.params_model)})" if s.params_model else "")
+        for s in dispatchable_skills()
+        if s.name != "revise_script"
     )
 
 
@@ -106,7 +96,7 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
         "into assets. 'answer' if they are asking about what the tool can do, "
         "how it works, pricing, or other meta/capability questions without "
         "providing source material to repurpose. 'start' ONLY when a task "
-        "book (a plan of outputs) is already on the table and the user's "
+        "book (a planned skill chain) is already on the table and the user's "
         "message confirms it and asks to begin — a confirmation is not a "
         "revision.\n"
         "  Examples for action='answer': 'what can you generate?', "
@@ -118,10 +108,10 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
         "  Examples for action='start': 'looks good, start', 'go ahead', "
         "'perfect, run it', '好的开始吧', '可以了，开始', 'start it' — the "
         "user approves the presented plan WITHOUT asking for any change. "
-        "If the message asks for any modification (add/remove/change an "
-        "output, language, focus), it is 'generate', never 'start'.\n"
+        "If the message asks for any modification (add/remove/change a "
+        "task, a language, a focus), it is 'generate', never 'start'.\n"
         "  The prompt may accumulate several user turns; judge the action "
-        "by the LAST line. When earlier turns requested outputs but the "
+        "by the LAST line. When earlier turns requested work but the "
         "last line is a short approval or go-ahead, the action is 'start' "
         "— those requests are already captured in the presented plan.\n"
         "  'generate' requires source material: when NO file is attached "
@@ -142,113 +132,91 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
         "- answer: when action is 'answer', provide a concise, helpful response "
         "(max 200 words) in the same language as the user prompt that explains "
         "the tool's capabilities and invites the user to upload or paste talk "
-        "content. When action is 'generate', write ONE short sentence in the "
-        "user's language stating the plan you understood — a natural "
-        "paraphrase, never a stiff meta preamble (no literal 'Here's what "
-        "I understood:', it translates awkwardly): e.g. \"Got it — 5 clips, "
-        "3 quote cards and an article in English, dubbed into German.\" / "
-        "\"好的——5 条切片、3 张金句卡和 1 篇文章，中文版，再配德语配音。\" "
-        "— it is shown above the plan card as the plan's own words. Set to "
-        "null only when action is 'start'. "
-        "EXCEPTION — clips without media: when no media file is attached "
-        "but the plan keeps a clips slot (e.g. a recipe card pinned it), "
-        "the echo must ALSO tell the user, in their language: clips and "
-        "voice dub need a video, audio, or image upload — they can upload "
-        "one to unlock them, or remove the clips row in the plan panel "
-        "and start with the text outputs only.\n"
-        "- outputs: array of requested task slots — one object per "
-        "requested output:\n"
-        '  {"type": ' + _output_type_list() + ', '
-        '"count": int|null, "focus": string|null, "language": string, '
-        '"tone_override": string|null, "explicit": false}\n'
-        "  Default to bare slots (count/focus/tone null) for clips, post, "
-        "quotes and article when unclear.\n"
-        "  - language: REQUIRED on every slot — the ISO code this output "
-        "is written/shown in (posts, quotes, articles: the text; clips: "
-        "the subtitles). Infer from the prompt's own language or explicit "
-        "requests like 'in German'; default to the prompt language, or "
-        "en when unclear. Language is a PER-SLOT property — there is no "
-        "book-level language field.\n"
-        "  IMPORTANT: only include a 'clips' slot when a media source file "
-        "(video, audio, or image) is attached — clips are rendered videos "
-        "and need visual or audio source material. When no file is "
-        "uploaded, or the uploaded file is a document/text file, exclude "
-        "'clips' (default to post/quotes/article slots instead).\n"
-        "  If the user explicitly asks for only some types, return only "
-        "those slots.\n"
-        "  If the user says 'no clips', 'without clips', 'just a post', or "
-        "excludes an output type, respect that.\n"
-        "  Only include 'carousel' if the user explicitly asks for a carousel, "
-        "slide deck, or swipeable post; otherwise leave it out.\n"
-        "  - count: the quantity the user asked for ON THAT SLOT "
-        "(e.g. '5 clips' → clips slot count 5, '8 张金句卡' → quotes slot "
-        "count 8, 'a 10-slide carousel' → carousel slot count 10). null "
-        "when no quantity is mentioned for that type.\n"
-        "  - focus: a short angle phrase when the user assigns a specific "
-        "angle to an output (e.g. '切片剪定价争议' → clips slot focus "
-        "'pricing debate', 'the post should summarize the whole talk' → "
-        "post slot focus). null when the user gives no per-output angle.\n"
-        "  - Multi-version requests are the classic multi-slot case: "
-        "'一版英文帖和一版德语帖' / 'an English and a German LinkedIn "
-        "post' → TWO post slots, one language 'en', one language 'de'.\n"
-        "  - Same-type multi slots are allowed ONLY for such multi-version "
-        "requests (different language or clearly different angle). Never "
-        "emit more than one 'clips' slot — clips is a single aggregate "
-        "slot; its count covers the batch.\n"
-        "  - tone_override: a short tone note when the user asks for a "
-        "per-output tone (e.g. '帖子正式一点、金句活泼一点' → post slot "
-        "'formal', quotes slot 'playful'). Otherwise null.\n"
-        "  - explicit: always false — it is a UI-side marker, never "
-        "inferred.\n"
-        "- dub_languages: array of ISO codes when the user asks for VOICE "
-        "DUBBING of their clips into other languages — the persona's own "
-        "cloned voice speaking another language (e.g. '配音成德语和法语', "
-        "'dub my clips into German and French', '再来一版西语配音'). "
-        "Empty array otherwise. If the user asks for dubbing but names no "
-        "specific languages, return an empty array — downstream defaults "
-        "will apply; never invent languages. This is distinct from slot languages "
-        "(which set an output's text language) — dubbing produces extra "
-        "VOICE-OVER versions of the same clips. Same gating as clips: "
-        "only when a media source file (video/audio/image) is attached; "
-        "text-only input gets an empty array.\n"
-        "  A voice-dub request ALWAYS lands in dub_languages, never in "
-        "a slot's language: 'dub them into Chinese' / '配音成中文' → "
-        "dub_languages ['zh']. A slot's language is the WRITTEN-text "
-        "language of posts/quotes/subtitles; only change it when the "
-        "user asks for the text itself in another language.\n"
-        "- caption_languages: array of ISO codes when the user asks for "
-        "SUBTITLE translation of their clips into other languages — the "
-        "original voice stays, the on-screen captions are translated "
-        "(e.g. '字幕译成德语和法语', 'subtitle my clips in German and "
-        "French', '再来一版西语字幕', 'French subtitles'). Empty array "
-        "otherwise. If the user asks for subtitles but names no specific "
-        "languages, return an empty array — downstream defaults will "
-        "apply; never invent languages. This is distinct from slot "
-        "languages (which set an output's text language) — caption "
-        "translation produces extra SUBTITLED versions of the same "
-        "clips. Same gating as clips: only when a media source file "
-        "(video/audio/image) is attached; text-only input gets an "
-        "empty array.\n"
-        "  A subtitle request ALWAYS lands in caption_languages, never "
-        "in a slot's language and never in dub_languages: 'subtitle "
-        "them in Chinese' / '字幕译成中文' → caption_languages ['zh']. "
-        "Subtitles are TEXT on screen — dub_languages is the VOICE; "
-        "'中文字幕' is caption_languages, '中文配音' is dub_languages.\n"
-        "- outputs_explicit: true only when the user explicitly asked for "
-        "specific outputs (e.g. 'just clips', 'a post and quotes', "
-        "'no carousel'). false when using the default set.\n"
-        "- tone: one of professional, thoughtLeadership, conversational, "
-        "academic. Default professional.\n"
+        "content. When action is 'generate', write the message that introduces "
+        "the plan card — the card has no title of its own, this message IS "
+        "the introduction: 2-4 short sentences in the user's language that "
+        "(1) name what the source material is, when one is present (a talk, "
+        "a podcast episode, a meeting recording — judged from the user's own "
+        "words or the filename), (2) restate the plan you understood as a "
+        "natural paraphrase (the work, languages, counts the user named), and "
+        "(3) say the plan is below and invite review — check it, fix anything "
+        "wrong directly, then start. E.g. \"Got it — this is a keynote "
+        "recording, and you'd like highlight clips plus a French subtitled "
+        "version. My plan is below — check it, fix anything I got wrong, "
+        "then hit Start generation.\" / \"我知道了——这是一段演讲视频，要剪"
+        "成高光短片，再配一版法语字幕。下面是我的生成计划：检查一遍，有理解"
+        "不对的地方直接改掉，然后点击开始生成。\" Plain and warm, never a "
+        "stiff meta preamble (no literal 'Here's what I understood:', it "
+        "translates awkwardly). Set to null only when action is 'start'. "
+        "EXCEPTION — media work without media: when no media file is "
+        "attached but the plan keeps media-needing tasks (clips, subtitles, "
+        "dubbing — e.g. a recipe card pinned them), the echo must ALSO tell "
+        "the user, in their language: clips and voice dub need a video, "
+        "audio, or image upload — they can upload one to unlock them, or "
+        "remove that row in the plan panel and start with the text work "
+        "only.\n"
+        "- tasks: array of tasks — the skill chain to run, one object per "
+        "piece of work, in execution order: "
+        '{"skill": "<name>", "params": {...}}.\n'
+        "  Available skills:\n" + _plan_skill_lines() + "\n"
+        "  Rules:\n"
+        "  - Propose the FEWEST tasks that express the request. Never "
+        "invent skills or params not in the list.\n"
+        "  - WHOLE-SOURCE vs HIGHLIGHTS: when the user asks to TRANSFORM "
+        "their video/audio as a whole — add subtitles, dub it, remove "
+        "filler, add music ('给我的视频加中英双语字幕', 'subtitle my talk "
+        "in French', 'dub this into German') — propose the transform "
+        "skill(s) ALONE, never select_clips: the system materializes the "
+        "whole source itself. Add select_clips ONLY when the user wants "
+        "highlight clips cut; transforms after it then act on the clips "
+        "([select_clips, translate_clip] = subtitled highlight clips).\n"
+        "  - Default chain when the request is vague ('帮我做内容', "
+        "'repurpose this'): with a media file attached → select_clips, "
+        "write_post, write_quotes, write_article; text only → write_post, "
+        "write_quotes, write_article. Set tasks_explicit false in this "
+        "case.\n"
+        "  - Media gating: select_clips / translate_clip / dub_clip / "
+        "remove_filler / add_music need an attached media file (video, "
+        "audio, or image). Text-only input → writer skills only.\n"
+        "  - Language is a per-task param: write_* skills take 'language' "
+        "(the text's language); select_clips takes 'language' (on-screen "
+        "copy — captions always follow the spoken words); translate_clip / "
+        "dub_clip take 'target_language' (required). Default to the "
+        "prompt's own language; 'in German' sets that task's language.\n"
+        "  - Subtitles vs dubbing: '中文字幕' / 'subtitles in Chinese' → "
+        "translate_clip (TEXT on screen); '中文配音' / 'dub into Chinese' "
+        "→ dub_clip (VOICE). Bilingual side-by-side subtitles ('双语字幕', "
+        "'中英对照', 'bilingual subtitles') → translate_clip with "
+        "bilingual: true.\n"
+        "  - Multi-version requests are repeated skills with different "
+        "params: '一版英文帖和一版德语帖' / 'an English and a German "
+        "post' → TWO write_post tasks (language 'en' and 'de'); '字幕译成"
+        "德语和法语' → two translate_clip tasks.\n"
+        "  - Counts ride params: '5 clips' → select_clips count 5; '8 张金"
+        "句卡' → write_quotes count 8; 'a 10-slide carousel' → "
+        "write_carousel count 10. Omit count when unnamed.\n"
+        "  - Frame format ('竖版/vertical', '方形/square', '横版/16:9/', "
+        "'保持原画幅/keep the original frame' → the value matching the "
+        "source's shape) → select_clips params.aspect.\n"
+        "  - Angle / tone ride params: '切片剪定价争议' → select_clips "
+        "focus 'pricing debate'; '帖子正式一点' → write_post tone_override "
+        "'formal'.\n"
+        "  - When a plan is already presented (the prompt carries it as a "
+        "JSON task chain), output the WHOLE refined chain: preserve every "
+        "task the user's message does not revise — the presented chain may "
+        "carry the user's hand edits, and losing one is a bug.\n"
+        "- tasks_explicit: true only when the user explicitly named the "
+        "work themselves (e.g. 'just clips', 'a post and quotes'). false "
+        "when the chain is your default proposal.\n"
         "- specific_instruction: a short distilled EXTRA instruction for "
         "the generator — only constraints or focus NOT already expressed "
-        "by the slots/language/tone fields (e.g. 'focus on the Q&A "
-        "section', 'the audience is first-time founders'). NEVER restate "
-        "the output request itself: 'cut the talk into highlight clips' "
-        "is already the clips slot, 'dub into Chinese' is already "
-        "dub_languages, 'Chinese subtitles' is already caption_languages "
-        "— repeating them here produces a confusing "
-        "redundant book-level instruction. null when nothing extra "
-        "remains. For action='answer' or 'start', set this to null.\n"
+        "by the task params (e.g. 'focus on the Q&A section', 'the "
+        "audience is first-time founders'). NEVER restate the requested "
+        "work itself: 'cut the talk into highlight clips' is already the "
+        "select_clips task, 'dub into Chinese' is already the dub_clip "
+        "task — repeating them here produces a confusing redundant "
+        "book-level instruction. null when nothing extra remains. For "
+        "action='answer' or 'start', set this to null.\n"
         "- confidence: 0.0-1.0 indicating how clearly the intent was "
         "expressed.\n"
         "- Key order: emit 'answer' as the FIRST key of the JSON object — "
@@ -258,20 +226,7 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
     ),
     temperature=0.2,
     assemble=_assemble_plan_turn,
-    fallback=_plan_fallback,
 )
-
-
-def _params_doc(model) -> str:
-    """"name: description" pairs for a params model (agent-loop-upgrade W2).
-
-    Falls back to the bare name when a field carries no description — the
-    prompt degrades to the pre-W2 shape for that field instead of breaking.
-    """
-    parts = []
-    for fname, field in model.model_fields.items():
-        parts.append(f"{fname}: {field.description}" if field.description else fname)
-    return ", ".join(parts)
 
 
 def _chat_intent_system() -> str:

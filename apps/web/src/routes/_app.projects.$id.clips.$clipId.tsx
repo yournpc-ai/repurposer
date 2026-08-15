@@ -471,6 +471,7 @@ function ClipEditorPage() {
                   <SelectContent>
                     <SelectItem value="9:16">9:16</SelectItem>
                     <SelectItem value="1:1">1:1</SelectItem>
+                    <SelectItem value="16:9">16:9</SelectItem>
                   </SelectContent>
                 </Select>
               </label>

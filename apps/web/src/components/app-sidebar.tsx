@@ -110,7 +110,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
-      <SidebarHeader className="gap-3 p-3 pt-5 group-data-[state=collapsed]:items-center">
+      {/* Vertical padding mirrors AppHeader's `py-4` exactly: the rail's
+          LogoMark and the top bar's controls share one 60px strip and one
+          center line (the old `pt-5` parked the logo 4px low). */}
+      <SidebarHeader className="gap-3 p-3 py-4 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
             <LogoMark />

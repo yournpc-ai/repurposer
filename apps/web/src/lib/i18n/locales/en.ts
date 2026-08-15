@@ -437,8 +437,10 @@ const en = {
       director_understand: "Understand the material",
       director_plan: "Plan the edit",
       align_stills: "Align photos to the script",
+      materialize_source: "Prepare the full video",
       select_clips: "Select highlight segments",
       translate_clip: "Translate the subtitles",
+      dub_clip: "Dub it in your own voice",
       render: "Render",
     },
     // Recipe tag chips (info card) — shared namespace.
@@ -452,11 +454,12 @@ const en = {
       demo_keynote: "Demo keynote excerpt",
       demo_photos: "Event photos",
       demo_transcript: "Talk transcript",
+      demo_article: "Talk write-up",
       image_video_preview: "Slideshow preview",
       subs_en: "Original (EN)",
+      subs_zh_bilingual: "CN-EN bilingual",
       subs_fr: "French subtitles",
-      subs_de: "German subtitles",
-      subs_es: "Spanish subtitles",
+      dub_es: "Spanish dub",
     },
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
     // right = inspect tabs; left = the launch zone (composer's send
@@ -474,23 +477,19 @@ const en = {
       },
       dropzone: "Upload or drag & drop files",
       requiredMissing: "Add the material first: {{input}}",
-      promptTitle: "Custom prompt",
-      promptHint: "Tweak it to your needs",
+      promptTitle: "Example prompt",
       send: "Generate",
     },
     "multilingual-subs": {
       title: "Multilingual subtitles",
       promise:
-        "Upload your talk — your voice stays, the subtitles speak French, German and Spanish.",
+        "Multilingual single-line or bilingual subtitles for your video — or dub it in your own voice.",
       inputTitle: "Source video",
-      inputHint:
-        "A talk, keynote or podcast episode — your original voice is the star.",
+      inputHint: "Upload your original video here.",
       promptTemplate:
-        "Cut highlight clips from my talk and add French, German and Spanish subtitles — keep my original voice.",
-      variants: {
-        languages: "Any language works — name it in the prompt or in chat.",
-        dub: "Prefer a voiced version? Ask to dub it in your own voice.",
-      },
+        "Can you make the subtitles Chinese-English bilingual? A French-subtitled version too — and for Spanish, just dub it in my voice.",
+      promptHint:
+        "Send it as is, or try “bilingual subtitles”, “Chinese subtitles”, “a Spanish dub”…",
     },
     "image-video": {
       title: "Photos to video",
@@ -499,14 +498,19 @@ const en = {
       inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
         "Turn my script and photos into short clips with captions and music.",
+      promptHint:
+        "Use the example to tell Repurposer what you need — feel free to edit it.",
     },
-    "talk-clips": {
-      title: "Keynote clips",
-      promise: "Your stage talk, recut into vertical highlight clips — the frame tracks you.",
+    "highlight-clips": {
+      title: "Highlight clips",
+      promise:
+        "The best moments of your long video, cut into vertical clips — the frame tracks the speaker, and the one to post first is flagged.",
       inputTitle: "Source video",
-      inputHint: "A keynote or stage presentation recording — mid-shot works best.",
+      inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
-        "Cut my keynote into vertical highlight clips that keep me centered on stage.",
+        "Find the best moments of this video and cut them into vertical clips, keeping the speaker centered.",
+      promptHint:
+        "Send it as is, or try “make them landscape”, “cut a few more”…",
     },
     reframe: {
       title: "Interview reframe",
@@ -515,6 +519,8 @@ const en = {
       inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
         "Recut my two-person interview into vertical clips that follow whoever is speaking.",
+      promptHint:
+        "Use the example to tell Repurposer what you need — feel free to edit it.",
     },
     "ai-visuals": {
       title: "Virtual scenes",
@@ -523,6 +529,8 @@ const en = {
       inputHint: "A recording of your talk — every visual is generated around it.",
       promptTemplate:
         "Turn my talk into a short video with AI-generated scenes.",
+      promptHint:
+        "Use the example to tell Repurposer what you need — feel free to edit it.",
     },
   },
   // @-mention system (MENTIONS §4): picker copy and type names.
@@ -871,7 +879,8 @@ const en = {
       history: "History",
       focus: "Working on: {{name}}",
     },
-    // Canvas product-card chrome (ADR-041 D5): the hover toolbar's labels.
+    // Canvas product-card chrome (ADR-041 D5): the always-on action band's
+    // labels.
     canvas: {
       preview: "Preview",
       download: "Download",
@@ -880,18 +889,28 @@ const en = {
       spine: "Process",
       spineSteps: "{{count}} steps",
       // Artifact node cards (D6 修订 — the render unit is the intervenable
-      // artifact): plan / selection / dub / subs / music.
+      // artifact): plan / selection / dub / music. (The subs card retired
+      // 2026-08-15: a translation is an attribute of the derived video —
+      // the product card already says it; the step folds into the spine.)
       artifact: {
         plan: "Plan",
         selection: "Selection",
         dub: "Dub",
-        subs: "Subtitles",
         music: "Music",
       },
-      // Render state projected onto the product card in place (never a
-      // separate node); the retry channel is the chat dock (D8).
+      // Render failure projected onto the product card in place (never a
+      // separate node); the retry channel is the chat dock (D8). An active
+      // render speaks through the BrandLoader alone — no status line.
       renderFailed: "Render failed — ask below to retry.",
-      rendering: "Rendering…",
+      // Hover media affordances: expand (top-left) opens the lightbox;
+      // sound (top-right) flips the inline video's ambient mute.
+      expand: "Expand",
+      mute: "Mute",
+      unmute: "Unmute",
+    },
+    // The media lightbox's info column (left of the media).
+    lightbox: {
+      prompt: "Prompt",
     },
     // The product node's deterministic next-step line (D5 — zero-LLM,
     // derived from the output type; presented, never a control).
@@ -996,6 +1015,7 @@ const en = {
       write_article: "Writing your article…",
       synth_talk_video: "Generating your video…",
       align_stills: "Timing your transcript…",
+      materialize_source: "Preparing your full video…",
     },
     qa: {
       q: "Q",
@@ -1021,15 +1041,6 @@ const en = {
     composerFollowUpPlaceholder: "Ask a follow-up, e.g. 'make the hook shorter' or 'add German version'...",
     emptyStateSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs.",
     noResultsYet: "Results will appear here...",
-    markerQueued: "Queued for generation",
-    markerStarting: "Starting generation...",
-    markerLoading: "Loading assets...",
-    markerClips: "Generating clips...",
-    markerPost: "Generating social post...",
-    markerQuotes: "Generating quote cards...",
-    markerCarousel: "Generating carousel...",
-    markerArticle: "Generating article...",
-    markerDone: "All done!",
     quickActions: {
       regenerateHooks: "Regenerate hooks",
       addLanguage: "Add {{language}} version",
@@ -1050,31 +1061,38 @@ const en = {
   },
   generationOverlay: {
     title: "Generation plan",
-    subtitle: "Check it over — fix anything I misunderstood, here or in chat.",
     backToProjects: "Projects",
-    planProse: "Here's what I understood: {{summary}}.",
-    outputsLabel: "Outputs",
-    outputsHint:
-      "What you'll get — one row per output. Adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
-    dubLabel: "Voice-over versions",
-    dubHint:
-      "Each language adds a version of the clips with your cloned voice — voice and subtitles follow that language. Text outputs aren't affected.",
-    removeDubLanguage: "Remove this dub language",
-    subsLabel: "Subtitle versions",
-    subsHint:
-      "Each language adds a version of the clips with translated subtitles — your original voice stays. Text outputs aren't affected.",
-    removeSubsLanguage: "Remove this subtitle language",
-    subsVersionCount: "{{clips}} clips × {{langs}} languages = {{total}} extra versions",
-    planSummarySubs: "subs {{langs}}",
-    dubVersionCount: "{{clips}} clips × {{langs}} languages = {{total}} extra versions",
-    planSummaryDub: "dub {{langs}}",
+    planProse:
+      "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
+    chainLabel: "Task chain",
+    chainHint:
+      "The steps I'll run, in order — adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
+    addTask: "Add task",
+    skills: {
+      translate_clip: "Subtitled version",
+      dub_clip: "Voice-over version",
+      remove_filler: "Remove filler words",
+      add_music: "Background music",
+    },
+    derivedLabel: "What you'll get",
+    derive: {
+      video: "Full video",
+      clips: "Clips",
+      post: "Post",
+      quotes: "Quote cards",
+      carousel: "Carousel",
+      article: "Article",
+      subs: "subtitled",
+      dub: "voice-over",
+      bilingual: "bilingual",
+    },
+    bilingualToggle: "Bilingual",
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",
     identityEcho: "Style: {{persona}}",
     identityPersonaAuto: "auto-generated",
-    addOutput: "Add output",
-    removeSlot: "Remove this output",
+    removeSlot: "Remove this task",
     slotFocusPlaceholder: "What these {{type}} should emphasize (optional)",
     countDecrease: "Decrease",
     countIncrease: "Increase",
@@ -1113,12 +1131,6 @@ const en = {
       review: "Review",
     },
     bail: "Stop generation",
-    reasons: {
-      title: "Needs your check:",
-      outputs_default: "outputs are the default set",
-      clip_count_default: "clip count is a default",
-      clips_without_media: "clips need a video, audio or image source — upload one, or remove clips to start with text outputs only",
-    },
   },
   clipMenu: {
     more: "More actions",
@@ -1179,7 +1191,7 @@ const en = {
         "Click a clip's card to open its details — with a ready-to-copy title, caption and hashtags for your social post.",
       menuTitle: "Quick actions",
       menuDesc:
-        "Hover a product card for its toolbar — preview, download, or publish to social.",
+        "Every product card keeps its actions right under it — preview, download, or publish to social.",
     },
   },
   notifications: {

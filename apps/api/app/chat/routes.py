@@ -42,7 +42,10 @@ from app.chat.service import (
     prepare_chat_turn,
 )
 from app.chat.stream_extract import ProseDeltaExtractor
+from app.clients.minimax import MiniMaxError
+from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
+from app.ui_locale import current_ui_language
 
 chat_router = APIRouter()
 
@@ -86,7 +89,7 @@ def _sse(event: str, data: str) -> str:
 _HEARTBEAT_SECONDS = 15
 
 
-async def _turn_stream(user_id: UUID, data: ChatRequest):
+async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     """SSE generator for one chat turn.
 
     The whole turn (prepare + execute) runs as a task on its OWN session —
@@ -143,11 +146,19 @@ async def _turn_stream(user_id: UUID, data: ChatRequest):
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
             # HTTPException detail is client-facing by contract (4xx reasons
-            # the JSON path would surface). Anything else is an internal
-            # failure — the JSON path answers "Internal server error" via the
-            # global handler, so the SSE path must not leak str(exc) either.
+            # the JSON path would surface). MiniMaxError = the provider
+            # failed (no fabricated default book, 2026-08-14 裁定) — the
+            # localized provider line (errors.USER_ERROR_LINES) rides the
+            # frame; the raw 402/429/5xx text stays in structlog. Anything
+            # else is an internal failure — the JSON path answers "Internal
+            # server error" via the global handler, so the SSE path must not
+            # leak str(exc) either.
             detail = (
-                exc.detail if isinstance(exc, HTTPException) else "Internal server error"
+                exc.detail
+                if isinstance(exc, HTTPException)
+                else user_error_line(exc, ui_language)
+                if isinstance(exc, MiniMaxError)
+                else "Internal server error"
             )
             await queue.put(("failed", str(detail)))
 
@@ -191,9 +202,20 @@ async def send_chat_message(
     # a plain HTTP error on both paths.
     await get_project_for_user(db, data.project_id, UUID(str(current_user.id)))
     if "text/event-stream" not in request.headers.get("accept", ""):
-        return await chat(db, UUID(str(current_user.id)), data)
+        try:
+            return await chat(db, UUID(str(current_user.id)), data)
+        except MiniMaxError as e:
+            # Provider failure on the one-shot path — same honesty rule as
+            # the SSE frame: 502 with the localized line, never a fabricated
+            # default book (editor dub endpoint precedent, routes/outputs).
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                user_error_line(e, current_ui_language() or "en"),
+            ) from e
     return StreamingResponse(
-        _turn_stream(UUID(str(current_user.id)), data),
+        _turn_stream(
+            UUID(str(current_user.id)), data, current_ui_language() or "en"
+        ),
         media_type="text/event-stream",
         status_code=status.HTTP_200_OK,
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

@@ -14,7 +14,7 @@ You do **not** have access to the original talk. The understanding below is ever
   {{ loop.index }}. **{{ s.type }}**
      {%- if s.type in ['clips', 'quotes', 'carousel'] %}
        {%- if s.count is not none %} — count: {{ s.count }} (explicit — do not deviate)
-       {%- else %} — count: default ({{ 5 if s.type == 'clips' else 3 if s.type == 'quotes' else 6 }})
+       {%- else %} — count: default ({{ s.count_default }})
        {%- endif %}
      {%- endif %}
      {%- if s.language %} — language: **{{ s.language }}** (explicit — this slot is written in {{ s.language }}, not the task-book language)

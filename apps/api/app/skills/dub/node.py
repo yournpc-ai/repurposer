@@ -26,6 +26,7 @@ from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
     _fan_out_renders,
     _modifier_target_clips,
+    _pend_suppressed_base_renders,
     _record_target_output_ids,
     _run_origin,
 )
@@ -37,6 +38,11 @@ logger = structlog.get_logger()
 
 class DubClip(NodeBase):
     kind = "dub_clip"
+    task_name = "Dub voice"
+    task_name_zh = "声音配音"
+    # Acts on clips: this run's select_clips / materialize_source when one
+    # exists (ADR-043), else the project's existing clips (empty inputs).
+    after = ("select_clips", "materialize_source")
     requires = (MEDIA,)
     retries = 2
     agents = (translator,)
@@ -51,8 +57,9 @@ class DubClip(NodeBase):
         """TTS 按字符 / 克隆按次 + translator token range, driven by the
         target clips' caption text — knowable only when the clips EXIST at
         compile time. A dub fan-out chained on this run's own clips node
-        (initial generation) is unquotable here: NULL (未估价)."""
-        if "select_clips" in ctx.get("input_kinds", ()):
+        (select_clips or materialize_source — initial generation) is
+        unquotable here: NULL (未估价)."""
+        if {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ())):
             return None
         clips = ctx["clips"]
         if not clips:
@@ -149,8 +156,15 @@ class DubClip(NodeBase):
                 touched.append(output.id)
 
         if not touched:
+            # Whole batch unresolvable — rescue the suppressed base renders
+            # first so the clips still come out (pre-suppression behavior),
+            # then fail the step.
+            await _pend_suppressed_base_renders(db, run, node, clips)
             raise ValueError("No clips could be dubbed (missing captions or voice sample)")
-        await _fan_out_renders(db, run, node, touched)
+        # Skip-rescue: per-clip skips keep their base spec — they still owe
+        # a render when the producer's fan-out was suppressed for this chain.
+        await _pend_suppressed_base_renders(db, run, node, clips, exclude=set(touched))
+        await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
         await _record_target_output_ids(node.id, touched)
         await _fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()

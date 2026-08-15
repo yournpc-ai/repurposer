@@ -449,11 +449,11 @@ class ChatRequest(BaseModel):
     focus_output: FocusRef | None = None
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
-    # The review panel's current task book (hand-edited slots marked
-    # explicit). Its explicit slots are three-way merged against the stored
-    # book and the fresh inference — panel edits survive LLM parroting, but
-    # anything the user's message revises wins (merge_prior_slots);
-    # None = merge against the stored pending intent, if any.
+    # The review panel's current task book (the user may have hand-edited the
+    # chain). Panel edits ARE task-list mutations (ADR-043) — the panel's
+    # chain is shown to the PlanAgent as the presented plan and re-emitted
+    # whole on every revision, so hand edits survive unless the message
+    # revises them; None = the stored pending intent is presented, if any.
     prior_intent: "InferredIntent | None" = None
     # The composer's persona choice rides the first message; written into the
     # pending intent only when the plan path docks a task book (a later turn
@@ -584,15 +584,14 @@ class IntentSlot(BaseModel):
     """任务槽: one line of the task book — one requested output (request layer).
 
     N-20 layering: the IntentSlot says WHAT the user wants; the director's
-    ``StoryboardSlot`` (派工层) says how the work is assigned. ``None`` fields
-    mean "task-book default": count → the per-type default (clips 5 / quotes 3
+    ``StoryboardSlot`` (派工层） says how the work is assigned. ``None`` fields
+    mean "task-book default": count → the per-type default (clips 3 / quotes 3
     / carousel 6). Language is a per-slot property (2026-08-05 restructure —
-    the book-level field is retired): the PlanAgent always fills it; ``None``
-    is legacy/read-tolerant and inherits the run's derived fallback. Same-type
-    multi slots are how one run produces e.g. an English and a German post.
-    ``explicit`` marks user-edited slots — they are three-way merged across
-    re-inference (panel edits survive LLM parroting; chat revisions always
-    win, ``merge_prior_slots``).
+    the book-level field is retired): ``None`` is legacy/read-tolerant and
+    inherits the run's derived fallback. Same-type multi slots are how one run
+    produces e.g. an English and a German post. With ADR-043 the slot is a
+    COMPILE-TIME PROJECTION of the task chain (node ``spec.slot``), never a
+    request-layer declaration.
 
     N-32: ``type`` is a plain ``str`` validated against the outputs registry
     (the producer nodes' ``output_type`` declarations — a new output type is
@@ -634,57 +633,124 @@ class IntentSlot(BaseModel):
         return self
 
 
-class InferredIntent(BaseModel):
-    """AI-recognized user intent from a prompt and optional file metadata.
+_SLOT_TO_SKILL = {
+    # Legacy outputs-grammar slot type → its producing skill (ADR-043 read
+    # tolerance for stored pending_intent rows — never written).
+    "clips": "select_clips",
+    "post": "write_post",
+    "quotes": "write_quotes",
+    "carousel": "write_carousel",
+    "article": "write_article",
+}
 
-    Returned by ``/infer-intent`` so the frontend can present a confirmation
-    layer before generation. All fields have sensible defaults; the user can
-    edit any of them.
+
+def _legacy_slots_to_tasks(data: dict) -> list[dict]:
+    """outputs-grammar book → task list (ADR-043): each slot becomes its
+    producing skill's task (slot fields sink to params — params models ignore
+    stray keys at adjudication); the retired book-level modifiers fan out
+    into per-language transform tasks; a book-level aspect rides the clips
+    task. Read tolerance only — new writes are born as task lists."""
+    tasks: list[dict] = []
+    aspect = data.get("aspect")
+    for slot in data.get("outputs") or []:
+        if isinstance(slot, str):
+            slot = {"type": slot}
+        if not isinstance(slot, dict):
+            continue
+        skill = _SLOT_TO_SKILL.get(slot.get("type"))
+        if skill is None:
+            continue
+        params = {
+            k: slot[k]
+            for k in ("count", "focus", "language", "tone_override")
+            if slot.get(k) is not None
+        }
+        if skill == "select_clips" and aspect:
+            params["aspect"] = aspect
+        tasks.append({"skill": skill, "params": params})
+    for lang in data.get("dub_languages") or []:
+        # fork: the slots-era compile produced dub/translate as fork nodes
+        # (derived rows, source untouched) — the upgrade keeps that shape.
+        tasks.append(
+            {"skill": "dub_clip", "params": {"target_language": lang, "fork": True}}
+        )
+    bilingual = bool(data.get("caption_bilingual"))
+    for lang in data.get("caption_languages") or []:
+        tasks.append(
+            {
+                "skill": "translate_clip",
+                "params": {
+                    "target_language": lang,
+                    "bilingual": bilingual,
+                    "fork": True,
+                },
+            }
+        )
+    return tasks
+
+
+class InferredIntent(BaseModel):
+    """The PlanAgent's verdict: three actions + the proposed skill chain.
+
+    ADR-043 (outputs → derive): the request layer carries NO output
+    declarations — ``tasks`` is the only grammar (a registry skill + its
+    params, the same shape the chat loop's task_list proposals use). Outputs
+    are a derived projection of the compiled graph, never a request field.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
-    def _tolerate_flat_shape(cls, data: Any) -> Any:
-        """Upgrade a legacy flat task book (pre-slot quality-phase-1 shape)
-        on read: string outputs become bare slots (inheriting the retired
-        flat counts) and the retired count keys are dropped. Read tolerance
-        for stored ``pending_intent`` rows only — never written."""
+    def _tolerate_legacy_shape(cls, data: Any) -> Any:
+        """Upgrade stored legacy books on read (never written): the pre-slot
+        flat shape → slots, the slots/modifiers grammar → a task list; the
+        retired keys (outputs / tone / the four book-level modifiers) are
+        stripped. Read tolerance for stored ``pending_intent`` rows only."""
         if not isinstance(data, dict):
             return data
-        # An explicit ``outputs: null`` (the LLM's habit on start/answer
-        # verdicts, where slots are irrelevant) reads as "use the default" —
-        # dropping the key lets the field default apply instead of failing
-        # validation and degrading a correct verdict to the fallback intent.
-        if data.get("outputs") is None:
-            data = {k: v for k, v in data.items() if k != "outputs"}
-        # 2026-08-05 restructure: the book-level ``language`` /
-        # ``language_explicit`` fields are retired — language is a per-slot
-        # property. Legacy stored books still carry them; strip on read
-        # (their value survives per-slot materialization on the client, and
-        # the run birthplace derives the fallback from the slots).
+        data = dict(data)
+        # An explicit ``tasks: null`` (the LLM's habit on start/answer
+        # verdicts) reads as "no opinion" — dropping the key lets the field
+        # default apply instead of failing validation.
+        if data.get("tasks") is None:
+            data.pop("tasks", None)
+        # 2026-08-05 restructure leftover: legacy stored books carry
+        # book-level ``language`` / ``language_explicit`` — strip on read.
         for retired in ("language", "language_explicit"):
-            if retired in data:
-                data = {k: v for k, v in data.items() if k != retired}
+            data.pop(retired, None)
         outputs = data.get("outputs")
-        if not isinstance(outputs, list) or not any(
-            isinstance(o, str) for o in outputs
+        if isinstance(outputs, list) and any(isinstance(o, str) for o in outputs):
+            # Pre-slot flat shape → slot dicts (the retired flat counts ride).
+            flat_counts = {
+                "clips": data.get("clip_count"),
+                "quotes": data.get("quotes_count"),
+                "carousel": data.get("carousel_count"),
+            }
+            data["outputs"] = [
+                {"type": o, "count": flat_counts.get(o)} if isinstance(o, str) else o
+                for o in outputs
+            ]
+        if "tasks" not in data and isinstance(data.get("outputs"), list):
+            tasks = _legacy_slots_to_tasks(data)
+            if tasks:
+                data["tasks"] = tasks
+                data["tasks_explicit"] = bool(data.get("outputs_explicit"))
+        for retired in (
+            "outputs",
+            "tone",
+            "dub_languages",
+            "caption_languages",
+            "caption_bilingual",
+            "aspect",
+            "outputs_explicit",
+            "clip_count",
+            "quotes_count",
+            "carousel_count",
+            "clip_count_explicit",
         ):
-            return data
-        flat_counts = {
-            "clips": data.get("clip_count"),
-            "quotes": data.get("quotes_count"),
-            "carousel": data.get("carousel_count"),
-        }
-        upgraded = dict(data)
-        upgraded["outputs"] = [
-            {"type": o, "count": flat_counts.get(o)} if isinstance(o, str) else o
-            for o in outputs
-        ]
-        for key in ("clip_count", "quotes_count", "carousel_count", "clip_count_explicit"):
-            upgraded.pop(key, None)
-        return upgraded
+            data.pop(retired, None)
+        return data
 
     action: Literal["generate", "answer", "start"] = Field(
         default="generate",
@@ -708,46 +774,13 @@ class InferredIntent(BaseModel):
             "a bare request is never material."
         ),
     )
-    outputs: list[IntentSlot] = Field(
-        default_factory=lambda: [
-            IntentSlot(type="clips"),
-            IntentSlot(type="post"),
-            IntentSlot(type="quotes"),
-            IntentSlot(type="article"),
-        ],
-        description=(
-            "The requested task slots — one per requested output. Same-type "
-            "multi slots carry distinct language/focus (e.g. an English and a "
-            "German post in one run). Carousel is not selected by default."
-        ),
-    )
-    tone: Literal["professional", "thoughtLeadership", "conversational", "academic"] = (
-        Field(default="professional", description="Detected tone preset.")
-    )
-    # 配音语言集 (dub_languages, RECIPES §4.1): task-book-level field — the
-    # voice-dub languages for this run's clips (empty = no dubbing). NOT an
-    # IntentSlot field: dubbing is a cross-output modifier, not an output
-    # type. compile_graph fans out one dub node per language after clips.
-    dub_languages: list[str] = Field(
+    tasks: list[TaskItem] = Field(
         default_factory=list,
         description=(
-            "ISO codes for voice-dub versions of the run's clips (e.g. "
-            "['de','fr']). Empty = no dubbing. Only meaningful with a clips "
-            "slot and renderable media."
-        ),
-    )
-    # 字幕语言集 (caption_languages, RECIPES §4.1 多语言字幕卡): task-book-level
-    # field — the caption-translation languages for this run's clips (empty =
-    # no translation). Same cross-output-modifier posture as dub_languages:
-    # compile_graph fans out one fork-semantic translate_clip node per
-    # language after clips (originals and subtitled versions coexist).
-    caption_languages: list[str] = Field(
-        default_factory=list,
-        description=(
-            "ISO codes for captioned versions of the run's clips with "
-            "translated subtitles (e.g. ['de','fr']). Empty = no caption "
-            "translation. Only meaningful with a clips slot and renderable "
-            "media."
+            "The proposed skill chain — one task per piece of work, in "
+            "execution order (e.g. an English and a German post = two "
+            "write_post tasks; whole-video bilingual subtitles = one "
+            "translate_clip task). Empty for start/answer verdicts."
         ),
     )
     specific_instruction: str | None = Field(
@@ -755,11 +788,11 @@ class InferredIntent(BaseModel):
         description="Free-form instruction distilled from the prompt.",
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    outputs_explicit: bool = Field(
+    tasks_explicit: bool = Field(
         default=False,
         description=(
-            "True when outputs were explicitly requested by the user. "
-            "False when using the default output set."
+            "True when the user explicitly named the work themselves. "
+            "False when the chain is the default proposal."
         ),
     )
 
@@ -789,6 +822,12 @@ class PendingIntent(BaseModel):
     intent: InferredIntent
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
+    # Derived preview (ADR-043): the dry-run-compiled graph's user-facing
+    # projection — what this chain will produce — computed at dock time
+    # (outputs are derived, never declared). Rows: {"type": "video"|"clips"|
+    # "post"|"quotes"|"carousel"|"article", "variant": "subs"|"dub"|None,
+    # "language"?, "count"?, "bilingual"?}. Empty on legacy rows.
+    derived: list[dict] = Field(default_factory=list)
 
 
 class ProjectBase(BaseModel):
@@ -948,7 +987,10 @@ class Segment(BaseModel):
     hook: str = ""
     recommendation_score: int = Field(default=50, ge=1, le=100)
     golden_quote: str = ""
-    duration_seconds: int = Field(default=30, ge=5, le=120)
+    # Span-carrier bound: highlights stay ≤120s by the ClipPlan contract (the
+    # LLM-facing schema); Segment also carries materialize_source's full-span
+    # [0, source duration) segment (ADR-043), so the ceiling here is 4h.
+    duration_seconds: int = Field(default=30, ge=5, le=14400)
 
 
 class ClipPlan(BaseModel):
@@ -1442,10 +1484,16 @@ class ClipSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: ClipSource
-    aspect: Literal["9:16", "1:1"] = "9:16"
+    aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
     segments: list[ClipSegment] = Field(default_factory=list)
     crop: ClipCrop = Field(default_factory=ClipCrop)
     caption_track: list[CaptionCue] = Field(default_factory=list)
+    # 双语对照轨 (translation_track, 2026-08-14 双语字幕): the translated half
+    # of a bilingual caption pair — UNIT-level cues (one per ~10 words, no
+    # karaoke word timing), paired with caption_track's word-level ORIGINAL
+    # lines by time overlap. Empty = single-language captions. Only
+    # translate_clip with spec.bilingual writes it (fork/morph alike).
+    translation_track: list[CaptionCue] = Field(default_factory=list)
     # Preset enum, NOT free styling — keeps preview=render parity and the
     # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset). The preset
     # ids MIRROR the caption catalog in packages/clip/src/captions.ts, which
@@ -1615,30 +1663,21 @@ class GenerateResponse(BaseModel):
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
-    slots: list[IntentSlot] | None = Field(
-        default=None,
-        description=(
-            "Requested task slots — one per requested output (same-type multi "
-            "slots for multi-language / multi-angle versions). Required for "
-            "full-scope requests (422 otherwise — the task book is built and "
-            "confirmed via the chat plan path); None is only tolerated on "
-            "non-full scopes."
-        ),
-    )
+    # The confirmed task chain (ADR-043 — the plan path's only grammar).
+    # Required for full-scope requests (422 otherwise — the task book is
+    # built and confirmed via the chat plan path); None only on targeted
+    # scopes (hook/clip/derivative/render re-run one node family off
+    # target_id).
+    tasks: list[TaskItem] | None = None
     tone_settings: ToneSettings | None = None
     target_language: str | None = Field(
         default=None,
         description=(
-            "Target language code, e.g. en/zh/fr/de/es/it. None = derived "
-            "by the intent step (fallback en)."
+            "Spec-level language fallback, e.g. en/zh/fr/de/es/it. Language "
+            "is a per-task param now — None derives from the first task that "
+            "carries one (fallback en)."
         ),
     )
-    # Task-book dub languages (RECIPES §4.1) — mirrored into TaskSpec and
-    # run.context; None/[] = no dubbing. Requires a clips slot (422 mirror).
-    dub_languages: list[str] | None = None
-    # Task-book caption languages (RECIPES §4.1 字幕卡) — same mirror posture
-    # as dub_languages; None/[] = no caption translation.
-    caption_languages: list[str] | None = None
     autonomy: Literal["auto", "review"] | None = Field(
         default=None,
         description=(

@@ -23,6 +23,8 @@ logger = structlog.get_logger()
 
 class AlignStills(NodeBase):
     kind = "align_stills"
+    task_name = "Time transcript"
+    task_name_zh = "对齐文字稿节奏"
     requires = (TRANSCRIPT,)
 
     def estimate(self, ctx: dict) -> dict | None:

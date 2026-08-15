@@ -19,6 +19,8 @@ from app.skills.revise.procedure import revise_by_instruction
 
 class ReviseScript(NodeBase):
     kind = "revise_script"
+    task_name = "Write script"
+    task_name_zh = "撰写脚本"
     produces_outputs = True
     agents = (reviser,)
 

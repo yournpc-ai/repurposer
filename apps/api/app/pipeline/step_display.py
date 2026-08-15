@@ -136,9 +136,10 @@ def slot_tag(slot: IntentSlot | None) -> str | None:
 def _node_slot(node: WorkflowStep, ctx: dict, slot_type: str) -> IntentSlot | None:
     """The executor node's own task slot.
 
-    Mode① per-slot nodes carry it in spec; mode② / targeted nodes fall back
-    to the first same-type slot in the backfilled run context (then to None
-    = all task-book defaults)."""
+    Compiled nodes carry it in spec (``spec.slot`` — the chain's compile-time
+    projection); the context fallback is read tolerance for pre-ADR-043 runs
+    (their slots lived on run.context.outputs), then None = all task-book
+    defaults."""
     raw = (node.spec or {}).get("slot")
     if isinstance(raw, dict):
         return IntentSlot.model_validate(raw)

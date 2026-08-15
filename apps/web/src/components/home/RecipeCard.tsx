@@ -52,12 +52,16 @@ export function RecipeCard({
       }}
       className={`group flex flex-col gap-2.5 outline-none ${live ? "cursor-pointer" : ""}`}
     >
-      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-card">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-black">
+        {/* object-contain, never crop (2026-08-14 ruling): a square or
+            landscape teaser letterboxes with black bars — the Douyin/TikTok
+            landscape-in-vertical convention. Vertical teasers fill the frame
+            exactly as before (contain == cover when the ratios match). */}
         <video
           ref={videoRef}
           src={card.preview.videoUrl}
           poster={card.preview.posterUrl}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           autoPlay
           muted
           loop

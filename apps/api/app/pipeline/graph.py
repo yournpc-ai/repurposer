@@ -15,9 +15,9 @@ imports the internal crew (``pipeline/node_runners``) and every skill
 package; this module itself imports no concrete node (no cycles).
 
 Derived views (``known_output_types`` / ``node_for_output`` /
-``slot_type_order`` / …) are computed from the table — the retired parallel
-maps (output→kind, slot-type→label, count limits…) have no home anywhere
-else (prohibition: no parallel maps).
+``slot_default_counts`` / …) are computed from the table — the retired
+parallel maps (output→kind, slot-type→label, count limits…) have no home
+anywhere else (prohibition: no parallel maps).
 """
 
 from __future__ import annotations
@@ -166,7 +166,13 @@ class NodeBase:
     output_type: str | None = None  # producer nodes only (outputs extensibility seat, N-32)
     slot_label: str | None = None  # the output type's display word ("Clips")
     slot_label_zh: str | None = None  # its Chinese form ("切片") — step lines follow the UI locale
-    slot_ordinal: int = 99  # canonical fan-out order among output types
+    # The step's static task name (declarative — no "正在…"), en/zh. Preset as
+    # the step's creation-time spec.summary by the graph builder (label()): the
+    # task list's pending-row text is builder-written, never a frontend
+    # kind→copy dictionary. A future custom-graph builder (user-defined steps)
+    # writes the same field — the frontend reader never changes.
+    task_name: str | None = None
+    task_name_zh: str | None = None
     after: tuple[str, ...] = ()  # topology constraint (modifier ordering)
     needs_director: bool = False  # needs the director prelude (preprocess→persona∥understand→plan)
     retries: int = 0  # step-level transient retry budget
@@ -176,6 +182,13 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
+    # Internal topology node (ADR-043): compile-injected, never a registered
+    # skill — users never say its name (materialize_source is the whole-
+    # source materialization, the transform chain's implied object). The
+    # startup self-check exempts internal nodes from the registry-membership
+    # requirement (same standing as the app.pipeline.* crew, declared here
+    # because the class lives in its skill package for cohesion).
+    internal: bool = False
     # Canvas 渲染单元 (2026-08-12 ADR-041 D6 修订, 与 label() 同哲学——节点类
     # 自描述): the results canvas renders ARTIFACT nodes, not steps — the unit
     # is "something produced the user may point at in chat and say 'change
@@ -233,19 +246,23 @@ class NodeBase:
 
     def label(self, slot: IntentSlot | None, ui_language: str = "en") -> str | None:
         """Display name preset as the step's creation-time summary — run
-        progress graph and step list share this one source. ``None`` when the
-        slot carries nothing distinguishing (the stepper then falls back to
-        the kind copy as before). ``ui_language`` is the run's pinned UI
+        progress graph and step list share this one source. With a slot tag:
+        "{output word} · {tag}" so same-kind siblings read differently before
+        they run. Without: the static ``task_name`` (declarative). ``None``
+        only when the class declares neither — legacy/unknown kinds then fall
+        back to the raw kind string. ``ui_language`` is the run's pinned UI
         locale: the label word follows it, never the material's language."""
+        zh = ui_language.startswith("zh")
+        name = (self.task_name_zh if zh and self.task_name_zh else None) or self.task_name
         tag = slot_tag(slot)
-        if tag is None:
-            return None
-        word = (
-            self.slot_label_zh
-            if ui_language.startswith("zh") and self.slot_label_zh
-            else self.slot_label
-        )
-        return f"{word or self.kind} · {tag}"
+        if tag is not None:
+            word = (
+                (self.slot_label_zh if zh and self.slot_label_zh else None)
+                or self.slot_label
+                or name
+            )
+            return f"{word or self.kind} · {tag}"
+        return name
 
     async def reuse(self, *args: Any, **kwargs: Any) -> UUID | None:
         """Idempotent-reuse predicate (asset-hash class): a hit returns the
@@ -275,24 +292,6 @@ def node_for_output(output_type: str) -> NodeBase | None:
         if n.output_type == output_type:
             return n
     return None
-
-
-def slot_type_order() -> dict[str, int]:
-    """Canonical fan-out order of output types (the nodes' ``slot_ordinal``)."""
-    return {
-        n.output_type: n.slot_ordinal
-        for n in NODE_KINDS.values()
-        if n.output_type is not None
-    }
-
-
-def slot_count_limits() -> dict[str, tuple[int, int]]:
-    """Per-type count bounds (birthplace C3), from the nodes' declarations."""
-    return {
-        n.output_type: n.count_limits
-        for n in NODE_KINDS.values()
-        if n.output_type is not None and n.count_limits is not None
-    }
 
 
 def slot_default_counts() -> dict[str, int]:

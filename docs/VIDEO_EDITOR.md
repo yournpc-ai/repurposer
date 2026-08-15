@@ -54,13 +54,16 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
   // kind="video": real person on camera, url is the video; kind="stills": image audio slideshow,
   // url is the optional audio track (empty string if no recording), image_urls are background images (0→solid color / 1→full screen / N→evenly split hard-cut slideshow)
   "source": { "asset_id": "uuid", "kind": "video", "url": "/api/v1/files/...mp4", "image_urls": [], "fps": 30, "duration": 120.5 },
-  "aspect": "9:16",                         // 9:16 | 1:1
+  "aspect": "9:16",                         // 9:16 | 1:1 | 16:9（2026-08-14 三档画幅）
   "segments": [                              // retained interval list; deleting a sentence = mark a segment as hidden (non-destructive). Each retained segment must be at least 5 seconds after agent planning.
     { "start": 12.4, "end": 31.0, "hidden": false }
   ],
   "crop": { "x": 0.5, "y": 0.5, "scale": 1.0 }, // normalized center + scale; implemented with transform, not object-position
   "caption_track": [                         // from ASR word-level timestamps; user can edit text
     { "start": 12.4, "end": 12.9, "text": "So", "lang": "en" }
+  ],
+  "translation_track": [                     // 双语对照轨（2026-08-14）：单元级译文 cue（无逐字 karaoke 时轴），与 caption_track 原文行按时间重叠配对；空 = 单语字幕。渲染 = 译文主行 + 原文小行在下（stack 布局只画原文轨）
+    { "start": 12.4, "end": 16.8, "text": "Donc une entreprise d'Oxford…", "lang": "fr" }
   ],
   "caption_style_preset": "clean-bottom",   // preset enum, not free-form styling
   "caption_position": { "x": 0.5, "y": 0.84 }, // normalized center point (drag to position); null → default bottom
@@ -88,11 +91,11 @@ clip-spec(JSON)  ← permanent contract (renderer-agnostic, only describes "what
 - **Music enters rendering**: `music.url` is the music piece's **direct public object URL** (baked from `Music.file_path` at generation time — the renderer fetches audio straight from object storage). `<Audio>` loops and mixes, gain controlled by `gain_db`.
 - **Intro/outro**: when `brand.intro` / `brand.outro` are present, a card is inserted before and after the main video timeline for `duration_seconds` (null → 2s default); each card is `{kind: "text"|"image"|"video", text?, media_url?, duration_seconds?}` — text renders the existing title-card look, image/video fill the frame, cut at the window edge if the source is longer. The video body `<Sequence>` shifts backward, and subtitle remapping auto-aligns.
 - **Two source kinds (output is not limited to real-person recordings)**: `source.kind="video"` uses `<OffthreadVideo>` (current state); `source.kind="stills"` is an **image audio slideshow** — `image_urls` serve as the background visual (1 image = full screen / N images = evenly split hard-cut slideshow / 0 images = solid color fallback), `url` is the optional audio track. When audio is present, reuse ASR word-level `caption_track`; when no audio, it becomes a fixed-duration slideshow (each image `SECS_PER_IMAGE` seconds). Background visual source priority: **slideshow PDF page renders (`Asset.slide_pages`) first** + uploaded photos after; source selection priority VIDEO→AUDIO→SLIDES/IMAGE. **Deliberately not doing** transitions / Ken-Burns / multi-sentence animated text tracks / B-roll (staying at L2, see ADR-020). 若做 PROGRESS 需求池的 clip-spec motion 枚举（P2，STRATEGY §2.5 L2），限于 **video 源**的 crop 动态预设（如 slow push / 强调 pulse），与本行 stills 幻灯片的 Ken-Burns 拒绝不冲突；落地时需新 ADR 明确边界（ADR-028 关联）。
-- **Text drag positioning**: `caption_position` / `title.position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` / `caption_size` are the composite pixel font size. 人设页皮肤分区 overlays a transparent layer on the preview for these text overlays (safe-zone + clamp): the marker shows while its settings row is hovered/active, or while the user hovers the live text directly in the preview; drag to move, drag a corner to scale the font size uniformly (no independent box width/height — no keyframe animation).
+- **Text drag positioning**: `caption_position` / `title.position` are normalized center points `{x,y}∈[0,1]` (= libass `\pos`, portable), null → renderer default. `title.size` / `caption_size` are **reference sizes on the 1080×1920 vertical canvas** — the renderer scales them by frame height (2026-08-14 尺寸按画面推导： 9:16 不变，1:1/16:9 ≈ ×0.56; 双语对照译文主行再 ×0.82、原文小行 ×0.55; 字幕块宽 84% = 两侧 8% 边距随帧宽自适应）。人设页皮肤分区 overlays a transparent layer on the preview for these text overlays (safe-zone + clamp): the marker shows while its settings row is hovered/active, or while the user hovers the live text directly in the preview; drag to move, drag a corner to scale the font size uniformly (no independent box width/height — no keyframe animation).
 - **Voice-clone dubbing (dub)**: `POST /outputs/{id}/dub` uses the persona's voice (VOICE_SAMPLE / AUDIO / VIDEO track extraction) via MiniMax voice_clone + T2A to dub the (translated) subtitles into the target language, baked into the `dub` track; when rendering, if `dub.enabled`, **mute original audio** and play the dub instead (overlay, no lip-sync, see ADR-037 and memory).
 - **Image visual understanding**: IMAGE assets are consumed directly by the generation agents as raw media — M3 multimodal reads the original image (`pipeline/asset_processing.py` registers a no-op processor for IMAGE).
 - **Intent channel**: the composer prompt rides the first chat message; the plan path folds it into the task book (`TaskSpec.instruction`) and `GenerationContext`, used by the director and every executing skill package to shape understanding, select clips, determine hook/title, and bias output focus.
-- **Skin & format defaults**: caption/title/intro-outro 皮肤字段烘焙自 `persona.brand`；`aspect`（9:16/1:1）等产物格式默认归配方注册表 / 任务书（ADR-038 三分流），不进人设。
+- **Skin & format defaults**: caption/title/intro-outro 皮肤字段烘焙自 `persona.brand`；`aspect`（9:16/1:1/16:9）等产物格式默认归配方注册表 / 任务书（ADR-038 三分流），不进人设。
 - **Persona = user profile** (ADR-037/038): style memory + voiceprint (voice sample / clone voice_id) attached to the profile; dub prefers the profile's voiceprint, clone once and reuse. Theme/intent for this project belongs to the Project.
 
 ## 5. Hard Prerequisites (Upgraded from Optional P1 to Hard Blockers)

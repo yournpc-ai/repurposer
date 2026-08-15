@@ -18,6 +18,7 @@ birth-ordered and never recycled; position in this file = family.
     修订       S3 loop · S19 inarticulate · S15 recipe refine · S16 three-way
     边界       S6 post-run · S7 smalltalk+publish · S8 empty · S20 venting
     配方       S5 launch seed · S10 dub classify · S11 no-media · S22 hesitant
+               S44 整条视频字幕（ADR-043 考纲原点：materialize 注入 + derived 预览）
     素材       S12 declared · S13 no-material · S14 bare paste · S21 lost+empty
     契约       S23 bail+reopen · S24 autonomy→run · S25 dup-409 · S26 rebuild
                S27 QA archive · S28 plain no-media · S29 count 422 · S30 attach-only
@@ -26,6 +27,7 @@ birth-ordered and never recycled; position in this file = family.
     流式       S9 SSE
     harness    S41 repair 只一轮（Agent 漏斗自检，进程内 stub，不打 API）
     估价       S42 对账自检 + 报价单调性 + NULL 语义（进程内编译，不打 API）
+               S45 materialize 注入矩阵（media/stills/existing/none/with-clips）
 
 S31/S35 起的 run 是真的（worker 会执行）；checkpoint 族（S36–S39）seed parked
 run 手工行，答题/过期唤醒后由 worker 跑零 LLM 的 answer 分支收官——需要 dev
@@ -70,7 +72,7 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.clients.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
-from app.models.schemas import IntentSlot, MediaInput  # noqa: E402
+from app.models.schemas import MediaInput, TaskItem  # noqa: E402
 from app.pipeline.graph import NODE_KINDS, fold_estimates  # noqa: E402
 from app.pipeline.orchestrator import (  # noqa: E402
     TaskSpec,
@@ -521,8 +523,14 @@ def has_prose(msg: dict) -> bool:
     return bool((msg.get("content") or "").strip())
 
 
-def book_slots(book: dict) -> list[dict]:
-    return ((book or {}).get("intent") or {}).get("outputs") or []
+def book_tasks(book: dict) -> list[dict]:
+    """The docked chain (ADR-043): pending_intent.intent.tasks — the plan
+    card's rows, one {skill, params} dict per task."""
+    return ((book or {}).get("intent") or {}).get("tasks") or []
+
+
+def task_params(task: dict) -> dict:
+    return task.get("params") or {}
 
 
 async def pending_book(ctx: Ctx, pid: str) -> dict | None:
@@ -553,19 +561,20 @@ async def s1_vague_first_turn_then_prose_start(ctx: Ctx) -> None:
 
 
 async def s2_explicit_first_turn_then_dock_start(ctx: Ctx) -> None:
-    """S2 精确首次 → dock（clips×5 + post(de)）→ dock Start 起 run，slots 一致。"""
+    """S2 精确首次 → dock（select_clips×5 + write_post(de)）→ dock Start 起 run，链一致。"""
     pid = await ctx.new_project("S2 explicit start")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "interview.mp4")
 
     turn1 = await ctx.chat(pid, "Cut 5 clips and a German LinkedIn post from this talk")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    slots = book_slots(book)
-    clips = next((s for s in slots if s["type"] == "clips"), None)
-    posts = [s for s in slots if s["type"] == "post"]
-    check(clips is not None and clips.get("count") == 5, "clips slot with count 5", slots)
-    check(any(p.get("language") == "de" for p in posts) or (book["intent"].get("language") == "de" and posts),
-          "a German post slot", slots)
+    tasks = book_tasks(book)
+    clips = next((t for t in tasks if t["skill"] == "select_clips"), None)
+    posts = [t for t in tasks if t["skill"] == "write_post"]
+    check(clips is not None and task_params(clips).get("count") == 5,
+          "select_clips task with count 5", tasks)
+    check(any(task_params(p).get("language") == "de" for p in posts),
+          "a German post task", tasks)
 
     res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
     check(res.status_code == 200, "dock Start answers the task book", res.text)
@@ -573,9 +582,9 @@ async def s2_explicit_first_turn_then_dock_start(ctx: Ctx) -> None:
     check(answered.get("workflow_run_id"), "run id on the answered book", answered)
     runs = await ctx.client.get(f"/projects/{pid}/runs")
     run_ctx = runs.json()[0].get("context") or {}
-    run_slots = run_ctx.get("outputs") or []
-    check(any(s.get("type") == "clips" for s in run_slots if isinstance(s, dict)),
-          "run carries the clips slot", run_ctx)
+    run_tasks = run_ctx.get("tasks") or []
+    check(any(t.get("skill") == "select_clips" for t in run_tasks if isinstance(t, dict)),
+          "run carries the select_clips task", run_ctx)
 
 
 async def s17_lost_first_turn_journey(ctx: Ctx) -> None:
@@ -655,17 +664,17 @@ async def s3_refinement_loop(ctx: Ctx) -> None:
     turn2 = await ctx.chat(pid, "add a French version too")
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks", turn2["assistant_message"])
     check(turn2["assistant_message"]["id"] != first_qid, "old book superseded by a new question row")
-    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
-    posts = [s for s in slots if s["type"] == "post"]
-    check(any(p.get("language") == "fr" for p in posts) or len(posts) >= 2,
-          "a French post version appeared", slots)
+    tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
+    posts = [t for t in tasks if t["skill"] == "write_post"]
+    check(any(task_params(p).get("language") == "fr" for p in posts) or len(posts) >= 2,
+          "a French post version appeared", tasks)
 
     turn3 = await ctx.chat(pid, "focus on the Q&A section")
     check(is_task_book_dock(turn3["assistant_message"]), "turn3 re-docks", turn3["assistant_message"])
-    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
-    posts = [s for s in slots if s["type"] == "post"]
-    check(any(p.get("language") == "fr" for p in posts) or len(posts) >= 2,
-          "the French version survives refinement (accumulated prompt)", slots)
+    tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
+    posts = [t for t in tasks if t["skill"] == "write_post"]
+    check(any(task_params(p).get("language") == "fr" for p in posts) or len(posts) >= 2,
+          "the French version survives refinement (accumulated prompt)", tasks)
 
     turn4 = await ctx.chat(pid, "looks good, start")
     check(turn4["run_id"] is not None, "prose confirmation starts the run", turn4)
@@ -708,15 +717,16 @@ async def s15_recipe_refine_count(ctx: Ctx) -> None:
     turn2 = await ctx.chat(pid, "clips only needs 2")
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
           turn2["assistant_message"])
-    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
-    clips = [s for s in slots if s["type"] == "clips"]
-    check(clips and clips[0].get("count") == 2,
-          "the chat revision lands on the first book's clips slot", slots)
+    tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
+    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    check(clips and task_params(clips[0]).get("count") == 2,
+          "the chat revision lands on the select_clips task", tasks)
 
 
 async def s16_panel_edit_three_way(ctx: Ctx) -> None:
-    """S16 三方合并：面板手改（explicit）在无关 refine 中存活；chat 修订覆盖手改。"""
-    pid = await ctx.new_project("S16 three-way merge")
+    """S16 面板手改存活（ADR-043）：手改的链整链 ride prior_intent，无关 refine 不丢；
+    chat 修订覆盖手改（chat 恒胜）。"""
+    pid = await ctx.new_project("S16 panel edit survives")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
     turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
@@ -724,11 +734,13 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
           turn1["assistant_message"])
 
     def pin_count(book: dict, count: int) -> dict:
-        """Simulate a panel hand edit: clips count pinned, slot explicit."""
+        """Simulate a panel hand edit: the select_clips count set in params —
+        the edited chain IS the prior_intent (no merge machinery, ADR-043)."""
         edited = dict(book["intent"])
-        edited["outputs"] = [
-            {**s, "count": count, "explicit": True} if s["type"] == "clips" else s
-            for s in book_slots(book)
+        edited["tasks"] = [
+            {**t, "params": {**task_params(t), "count": count}}
+            if t["skill"] == "select_clips" else t
+            for t in book_tasks(book)
         ]
         return edited
 
@@ -738,12 +750,12 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
     )
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
           turn2["assistant_message"])
-    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
-    clips = [s for s in slots if s["type"] == "clips"]
-    check(clips and clips[0].get("count") == 3,
-          "the panel hand edit survives an unrelated refine", slots)
-    check(any(s["type"] == "post" and s.get("language") == "de" for s in slots),
-          "the German post arrived", slots)
+    tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
+    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    check(clips and task_params(clips[0]).get("count") == 3,
+          "the panel hand edit survives an unrelated refine", tasks)
+    check(any(t["skill"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
+          "the German post arrived", tasks)
 
     book2 = (await ctx.results(pid)).get("pending_intent")
     turn3 = await ctx.chat(
@@ -751,10 +763,10 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
     )
     check(is_task_book_dock(turn3["assistant_message"]), "turn3 re-docks",
           turn3["assistant_message"])
-    slots = book_slots((await ctx.results(pid)).get("pending_intent"))
-    clips = [s for s in slots if s["type"] == "clips"]
-    check(clips and clips[0].get("count") == 2,
-          "the chat revision overrides the panel pin (chat always wins)", slots)
+    tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
+    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    check(clips and task_params(clips[0]).get("count") == 2,
+          "the chat revision overrides the panel pin (chat always wins)", tasks)
 
 
 # ---- Scenarios: 边界 ----------------------------------------------------------
@@ -837,17 +849,21 @@ async def s5_recipe_launch_template_prose(ctx: Ctx) -> None:
     )
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    slots = book_slots(book)
-    check(any(s["type"] == "clips" for s in slots),
-          "the template's clips slot lands in the book", slots)
-    check(sorted(book["intent"].get("caption_languages") or []) == ["de", "es", "fr"],
-          "all three template caption languages extracted", book["intent"].get("caption_languages"))
-    check(not book["intent"].get("dub_languages"),
-          "a subtitle template never lands in dub_languages", book["intent"].get("dub_languages"))
+    tasks = book_tasks(book)
+    check(any(t["skill"] == "select_clips" for t in tasks),
+          "the template's select_clips task lands in the book", tasks)
+    subs = sorted(
+        task_params(t).get("target_language")
+        for t in tasks if t["skill"] == "translate_clip"
+    )
+    check(subs == ["de", "es", "fr"],
+          "all three template caption languages extracted as translate tasks", tasks)
+    check(not any(t["skill"] == "dub_clip" for t in tasks),
+          "a subtitle template never lands a dub task", tasks)
 
 
 async def s10_dub_language_classification(ctx: Ctx) -> None:
-    """S10 dub 归类回归：'dub them into Chinese' → dub_languages=['zh']（用户手测原句）。"""
+    """S10 dub 归类回归：'dub them into Chinese' → dub_clip(zh) 任务（用户手测原句）。"""
     pid = await ctx.new_project("S10 dub classification")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
@@ -858,14 +874,16 @@ async def s10_dub_language_classification(ctx: Ctx) -> None:
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    check((book["intent"].get("dub_languages") or []) == ["zh"],
-          "voice-dub language lands in dub_languages",
-          book["intent"].get("dub_languages"))
+    dubs = [task_params(t).get("target_language")
+            for t in book_tasks(book) if t["skill"] == "dub_clip"]
+    check(dubs == ["zh"],
+          "voice-dub language lands as a dub_clip task",
+          book_tasks(book))
 
 
 async def s43_caption_language_classification(ctx: Ctx) -> None:
-    """S43 字幕归类（R6 字幕卡）：'subtitle them in French' → caption_languages=['fr']
-    ——字幕请求永不落 dub_languages（声音）或槽位语言（文案）。"""
+    """S43 字幕归类（R6 字幕卡）：'subtitle them in French' → translate_clip(fr/de)
+    ——字幕请求永不落 dub_clip（声音）或写稿任务语言（文案）。"""
     pid = await ctx.new_project("S43 caption classification")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
@@ -876,56 +894,107 @@ async def s43_caption_language_classification(ctx: Ctx) -> None:
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    check(sorted(book["intent"].get("caption_languages") or []) == ["de", "fr"],
-          "subtitle languages land in caption_languages",
-          book["intent"].get("caption_languages"))
-    check(not book["intent"].get("dub_languages"),
-          "a subtitle request never lands in dub_languages",
-          book["intent"].get("dub_languages"))
+    tasks = book_tasks(book)
+    subs = sorted(task_params(t).get("target_language")
+                  for t in tasks if t["skill"] == "translate_clip")
+    check(subs == ["de", "fr"],
+          "subtitle languages land as translate_clip tasks",
+          tasks)
+    check(not any(t["skill"] == "dub_clip" for t in tasks),
+          "a subtitle request never lands a dub task",
+          tasks)
+
+
+async def s44_whole_video_subs_materialize(ctx: Ctx) -> None:
+    """S44 整条视频字幕（ADR-043 考纲原点）："给我的视频加中英双语字幕" →
+    链 = translate_clip 单独（无 select_clips）；derived 预览 = 整条视频 +
+    字幕版；Start 后编译图 = materialize_source → translate_clip。"""
+    pid = await ctx.new_project("S44 whole-video subs")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
+
+    turn1 = await ctx.chat(pid, "给我的视频加中英双语字幕")
+    check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
+          turn1["assistant_message"])
+    book = (await ctx.results(pid)).get("pending_intent")
+    tasks = book_tasks(book)
+    check(not any(t["skill"] == "select_clips" for t in tasks),
+          "whole-source intent never routes through select_clips", tasks)
+    subs = [t for t in tasks if t["skill"] == "translate_clip"]
+    check(len(subs) == 1 and task_params(subs[0]).get("target_language") == "zh",
+          "one translate task into Chinese", tasks)
+    check(task_params(subs[0]).get("bilingual") is True,
+          "双语 → bilingual: true", tasks)
+    derived = (book or {}).get("derived") or []
+    check(any(r.get("type") == "video" for r in derived),
+          "the derived preview shows the whole video", derived)
+    check(any(r.get("variant") == "subs" for r in derived),
+          "the derived preview shows the subtitled version", derived)
+
+    res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
+    check(res.status_code == 200, "dock Start answers the task book", res.text)
+    run_id = res.json()["answered_question"]["workflow_run_id"]
+    steps = await step_rows(run_id)
+    kinds = [s["kind"] for s in steps]
+    check("materialize_source" in kinds,
+          "the compiled graph materializes the source", kinds)
+    check("translate_clip" in kinds, "the translate node is in the graph", kinds)
+    check("select_clips" not in kinds, "no highlight extraction anywhere", kinds)
 
 
 async def s11_clips_without_media_escape(ctx: Ctx) -> None:
-    """S11 纯文字稿项目：PlanAgent 排除 clips（设计行为）→ 面板手加 clips
-    Start 422（缺媒体）→ 去 clips 再 Start 成功（dub 空转丢弃）。"""
+    """S11 纯文字稿项目：PlanAgent 排除 clips（设计行为）→ 面板手加 select_clips
+    Start 422（缺媒体）→ 去掉 clips 但留悬空的 dub 仍 422（ADR-043：悬空变换
+    在出生地指名拒绝，不再静默丢弃）→ 回到纯写稿链 Start 成功。"""
     pid = await ctx.new_project("S11 clips without media")
     await seed_asset(pid, ctx.user_id, AssetType.TRANSCRIPT, "talk.txt")
 
     # 设计行为（CLAUDE.md composer 契约）：纯文字稿输入 PlanAgent 排除
     # clips，dock 出文本书。出生地的 422 是它的镜像兜底——用户面板手加
-    # clips 槽是触达它的真实路径（也是 recipe 时代 S11 的考纲，不变）。
+    # clips 行是触达它的真实路径（也是 recipe 时代 S11 的考纲，不变）。
     turn1 = await ctx.chat(pid, "Turn my talk into LinkedIn posts, quote cards and an article.")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
-    slots = book_slots(book)
-    check(not any(s["type"] == "clips" for s in slots),
-          "the PlanAgent excludes clips on a text-only project", slots)
+    tasks = book_tasks(book)
+    check(not any(t["skill"] == "select_clips" for t in tasks),
+          "the PlanAgent excludes clips on a text-only project", tasks)
     qid = turn1["assistant_message"]["id"]
 
-    # The panel hand edit: add the clips slot (+ a dub language) → Start →
+    # The panel hand edit: add a select_clips task (+ a dub task) → Start →
     # the birthplace mirror 422s.
     edited = dict(book["intent"])
-    edited["outputs"] = [*slots, {"type": "clips"}]
-    edited["dub_languages"] = ["zh"]
+    edited["tasks"] = [
+        *tasks,
+        {"skill": "select_clips", "params": {}},
+        {"skill": "dub_clip", "params": {"target_language": "zh"}},
+    ]
     res = await ctx.answer(qid, {"kind": "start", "intent": edited})
     check(res.status_code == 422, "Start with clips but no media is rejected", res.status_code)
     check((await ctx.results(pid)).get("pending_intent") is not None,
           "the book survives the 422 (dock intact)")
 
-    # The escape the 422 message names: deselect clips in the panel, Start
-    # again. The hand-added dub language must not cause a second 422 —
-    # it drops at the run birthplace (vacuous without clips).
+    # ADR-043 semantics: a transform with nothing to act on is REJECTED with
+    # the culprit named, never silently dropped (the outputs-grammar era
+    # dropped vacuous dub_languages — that was the lie this iteration kills).
     edited2 = dict(book["intent"])
-    edited2["dub_languages"] = ["zh"]
+    edited2["tasks"] = [
+        *tasks,
+        {"skill": "dub_clip", "params": {"target_language": "zh"}},
+    ]
     res2 = await ctx.answer(qid, {"kind": "start", "intent": edited2})
-    check(res2.status_code == 200, "re-Start without clips succeeds", res2.text)
-    check(res2.json()["answered_question"].get("workflow_run_id"),
-          "a run was born", res2.json())
+    check(res2.status_code == 422, "a dangling dub task is rejected too", res2.text[:200])
+    check("dub" in res2.text.lower(), "the 422 names the dangling transform", res2.text[:200])
+
+    # The escape the 422 names: back to the writers-only chain, Start again.
+    res3 = await ctx.answer(qid, {"kind": "start", "intent": dict(book["intent"])})
+    check(res3.status_code == 200, "re-Start with the writers-only chain succeeds", res3.text)
+    check(res3.json()["answered_question"].get("workflow_run_id"),
+          "a run was born", res3.json())
 
     runs = await ctx.client.get(f"/projects/{pid}/runs")
     run_ctx = runs.json()[0].get("context") or {}
-    check(not run_ctx.get("dub_languages"),
-          "vacuous dub languages dropped at the birthplace", run_ctx.get("dub_languages"))
+    check(not any(t.get("skill") == "dub_clip" for t in (run_ctx.get("tasks") or [])),
+          "no dub task in the born run", run_ctx.get("tasks"))
 
 
 # S22（迷失点卡：犹豫措辞不破播种）retired（2026-08-11）：播种确定性剧本随
@@ -1156,7 +1225,7 @@ async def s28_plain_clips_without_media(ctx: Ctx) -> None:
     msg = turn1["assistant_message"]
     if is_task_book_dock(msg):
         book = await pending_book(ctx, pid)
-        clips = [s for s in book_slots(book) if s["type"] == "clips"]
+        clips = [t for t in book_tasks(book) if t["skill"] == "select_clips"]
         check(
             not clips or "clips_without_media" in ((book or {}).get("reasons") or []),
             "clips excluded, or flagged clips_without_media when kept",
@@ -1167,7 +1236,8 @@ async def s28_plain_clips_without_media(ctx: Ctx) -> None:
 
 
 async def s29_count_boundary_422(ctx: Ctx) -> None:
-    """S29 出生地 count 边界：手编 clips=11 Start → 422（SLOT_COUNT_LIMITS），书存活。"""
+    """S29 出生地 count 边界：手编 select_clips count=11 Start → 422
+    （count_limits 是节点声明的唯一事实源），书存活。"""
     pid = await ctx.new_project("S29 count boundary")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
@@ -1177,10 +1247,13 @@ async def s29_count_boundary_422(ctx: Ctx) -> None:
     book = (await ctx.results(pid)).get("pending_intent")
     qid = turn1["assistant_message"]["id"]
 
-    # 替换或注入 clips 槽位——不依赖 LLM 一定出了 clips 槽。
+    # 替换或注入 select_clips 任务——不依赖 LLM 一定出了它。
     edited = dict(book["intent"])
-    clips_slot = next((s for s in book_slots(book) if s["type"] == "clips"), None)
-    edited["outputs"] = [{**(clips_slot or {"type": "clips"}), "count": 11}]
+    clips_task = next((t for t in book_tasks(book) if t["skill"] == "select_clips"), None)
+    edited["tasks"] = [
+        {**(clips_task or {"skill": "select_clips"}),
+         "params": {**task_params(clips_task or {}), "count": 11}}
+    ]
     res = await ctx.answer(qid, {"kind": "start", "intent": edited})
     check(res.status_code == 422, "an out-of-bounds count rejects at the birthplace",
           res.status_code)
@@ -1750,10 +1823,10 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
     #    graph, every field non-negative.
     full = compile_graph(
         TaskSpec(
-            outputs=[
-                IntentSlot(type="clips", language="en"),
-                IntentSlot(type="post", language="en"),
-                IntentSlot(type="quotes", language="en"),
+            tasks=[
+                TaskItem(skill="select_clips", params={"language": "en"}),
+                TaskItem(skill="write_post", params={"language": "en"}),
+                TaskItem(skill="write_quotes", params={"language": "en"}),
             ]
         )
     )
@@ -1790,8 +1863,13 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
     #    quotes its exact mechanical units.
     with_dub = compile_graph(
         TaskSpec(
-            outputs=[IntentSlot(type="clips", language="en")],
-            dub_languages=["de"],
+            tasks=[
+                TaskItem(skill="select_clips", params={"language": "en"}),
+                TaskItem(
+                    skill="dub_clip",
+                    params={"target_language": "de", "fork": True},
+                ),
+            ]
         )
     )
     dub_ns = next(ns for ns in with_dub if ns.kind == "dub_clip")
@@ -1819,19 +1897,28 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
         modifier,
     )
 
-    # 3b. caption fan-out (RECIPES §4.1 字幕卡, R6): same NULL semantics —
-    # an initial-run translate fan-out (its target clips don't exist at
+    # 3b. translate fan-out (R6's chain shape): same NULL semantics — an
+    # initial-run translate fan-out (its target clips don't exist at
     # compile) stays NULL; a modifier translate on existing clips quotes.
     with_caps = compile_graph(
         TaskSpec(
-            outputs=[IntentSlot(type="clips", language="en")],
-            caption_languages=["fr", "de"],
+            tasks=[
+                TaskItem(skill="select_clips", params={"language": "en"}),
+                TaskItem(
+                    skill="translate_clip",
+                    params={"target_language": "fr", "fork": True},
+                ),
+                TaskItem(
+                    skill="translate_clip",
+                    params={"target_language": "de", "fork": True},
+                ),
+            ]
         )
     )
     cap_ns = [ns for ns in with_caps if ns.kind == "translate_clip"]
     check(
         len(cap_ns) == 2 and all(ns.spec.get("fork") for ns in cap_ns),
-        "caption_languages fans out one fork translate node per language",
+        "fork translate tasks fan out one node per language",
         [(ns.kind, ns.spec) for ns in cap_ns],
     )
     cap_est = NODE_KINDS["translate_clip"].estimate(
@@ -1841,7 +1928,7 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
             "input_kinds": [with_caps[i].kind for i in cap_ns[0].inputs],
         }
     )
-    check(cap_est is None, "the initial-run caption fan-out stays NULL", cap_est)
+    check(cap_est is None, "the initial-run translate fan-out stays NULL", cap_est)
     cap_modifier = NODE_KINDS["translate_clip"].estimate(
         {
             **facts,
@@ -1855,19 +1942,101 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
         "the modifier translate quotes",
         cap_modifier,
     )
-    # 3c. 出生地空集丢弃之外的上游门禁: caption_languages without a clips
-    # slot is a compile-time ValueError (create_run drops vacuous lists
-    # before this — the raise guards direct TaskSpec callers).
+    # 3c. dangling-transform gate: translate with no clip selection and no
+    # materialize profile is a compile-time ValueError naming the transform
+    # (create_run's requires ∀-check rejects media-less chains before this —
+    # the raise guards direct TaskSpec callers; S45 covers the profile
+    # matrix).
     try:
         compile_graph(
             TaskSpec(
-                outputs=[IntentSlot(type="post", language="en")],
-                caption_languages=["fr"],
+                tasks=[
+                    TaskItem(skill="write_post", params={"language": "en"}),
+                    TaskItem(
+                        skill="translate_clip", params={"target_language": "fr"}
+                    ),
+                ]
             )
         )
-        check(False, "caption_languages without clips raises", None)
-    except ValueError:
-        check(True, "caption_languages without clips raises", None)
+        check(False, "dangling translate raises", None)
+    except ValueError as exc:
+        check("translate clip" in str(exc), "dangling translate raises", str(exc))
+
+
+async def s45_materialize_injection_matrix(ctx: Ctx) -> None:
+    """S45 materialize 注入矩阵（ADR-043，进程内编译）：media/stills 注入
+    materialize_source（stills 先 align_stills）；existing 裸变换空 inputs；
+    无画像编译期指名拒绝；select_clips 在场不注入。"""
+    del ctx  # in-process — compiles only, no API, no DB rows
+
+    def kinds(nodes: list) -> list[str]:
+        return [ns.kind for ns in nodes]
+
+    translate = TaskItem(
+        skill="translate_clip",
+        params={"target_language": "zh", "bilingual": True},
+    )
+
+    # media profile: preprocess → materialize_source → translate.
+    media = compile_graph(
+        TaskSpec(tasks=[translate]),
+        materialize_profile="media",
+    )
+    check("materialize_source" in kinds(media),
+          "media profile injects materialize_source", kinds(media))
+    check("select_clips" not in kinds(media), "no highlight extraction", kinds(media))
+    mat = next(ns for ns in media if ns.kind == "materialize_source")
+    check(any(media[i].kind == "preprocess" for i in mat.inputs),
+          "materialize hangs off preprocess", mat.inputs)
+    tr = next(ns for ns in media if ns.kind == "translate_clip")
+    check(any(media[i].kind == "materialize_source" for i in tr.inputs),
+          "translate hangs off materialize via its after declaration", tr.inputs)
+
+    # stills profile: align_stills first, materialize takes both inputs.
+    stills = compile_graph(
+        TaskSpec(tasks=[translate]),
+        materialize_profile="stills",
+    )
+    check("align_stills" in kinds(stills),
+          "stills profile injects align_stills first", kinds(stills))
+    mat = next(ns for ns in stills if ns.kind == "materialize_source")
+    mat_input_kinds = [stills[i].kind for i in mat.inputs]
+    check("preprocess" in mat_input_kinds and "align_stills" in mat_input_kinds,
+          "materialize takes preprocess + align_stills", mat_input_kinds)
+
+    # existing profile: bare translate with empty inputs (= act on existing clips).
+    existing = compile_graph(
+        TaskSpec(tasks=[translate]),
+        materialize_profile="existing",
+    )
+    check("materialize_source" not in kinds(existing),
+          "existing clips need no materialization", kinds(existing))
+    tr = next(ns for ns in existing if ns.kind == "translate_clip")
+    check(tr.inputs == [], "the modifier's inputs stay empty (existing clips)", tr.inputs)
+
+    # No profile: compile-time rejection naming the culprit.
+    try:
+        compile_graph(TaskSpec(tasks=[translate]), materialize_profile=None)
+        check(False, "a dangling transform rejects at compile", None)
+    except ValueError as exc:
+        check("translate clip" in str(exc),
+              "the error names the dangling transform", str(exc))
+
+    # select_clips present: no injection, translate hangs off select_clips.
+    with_clips = compile_graph(
+        TaskSpec(
+            tasks=[
+                TaskItem(skill="select_clips", params={"count": 3}),
+                translate,
+            ]
+        ),
+        materialize_profile=None,
+    )
+    check("materialize_source" not in kinds(with_clips),
+          "select_clips present — no injection", kinds(with_clips))
+    tr = next(ns for ns in with_clips if ns.kind == "translate_clip")
+    check(any(with_clips[i].kind == "select_clips" for i in tr.inputs),
+          "translate hangs off select_clips", tr.inputs)
 
 
 SCENARIOS = {
@@ -1892,6 +2061,7 @@ SCENARIOS = {
     "S5": s5_recipe_launch_template_prose,
     "S10": s10_dub_language_classification,
     "S43": s43_caption_language_classification,
+    "S44": s44_whole_video_subs_materialize,
     "S11": s11_clips_without_media_escape,
     # S22 retired（2026-08-11，随 recipe_id 传输带），编号留空不回收。
     # 素材
@@ -1926,6 +2096,7 @@ SCENARIOS = {
     "S41": s41_repair_one_bounded_round,
     # 估价地基
     "S42": s42_quotation_foundation,
+    "S45": s45_materialize_injection_matrix,
 }
 
 

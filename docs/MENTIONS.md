@@ -11,7 +11,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 
 | 族 | 回答的问题 | 成员 | 效果族 | 消费面 |
 |---|---|---|---|---|
-| **请求** request | "用什么做"——计划时的材料与能力 | `asset`（素材）、`skill`（技能，方针见 §5） | 上下文富化为底；注册项可声明书字段硬钩子（如 `dub_languages` 存在性填充） | composer / 配方 overlay 首发 |
+| **请求** request | "用什么做"——计划时的材料与能力 | `asset`（素材）、`skill`（技能，方针见 §5） | 上下文富化为底（点名素材进 LLM 上下文，推断归 PlanAgent） | composer / 配方 overlay 首发 |
 | **指认** reference | "改哪个"——已有之物的引用 | `output`、`transcript_segment`、`workflow_step` | 确定性指认注入（LLM 永不猜"第二条"是哪条） | chat 修订 |
 
 两族不混：请求族进计划路径，指认族进修订路径。一个新 mention 类型必须唯一落族；两族都落不了的实体（如配方）说明它根本不是 mention。
@@ -21,7 +21,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 | 候选 | 为什么不是 | 正确通道 |
 |---|---|---|
 | 配方 recipe | 发射上下文——点卡这个动作已经说完了一切，句中 chip 是第三遍冗余（overlay 标题与预填文案已各说一遍） | **配方 = 提示词**（2026-08-11 裁定）：预填模板原文即全部发射载荷，模板点名产出与语言；无 `recipe_id` transport、无服务端播种，plan path 与 composer 完全同径 |
-| 产出类型（clips / post / article…） | 大白话推断已够准；且 `@output` 已被指认族占用（引用已有产物），同词两义禁 | PlanAgent 槽位推断 |
+| 产出类型（clips / post / article…） | 大白话推断已够准；且 `@output` 已被指认族占用（引用已有产物），同词两义禁 | PlanAgent 链推断 |
 | 参数（语言 / 数量 / 画幅…） | mention 不是表单控件，预设空间无界 | 预填文案改字（发送前）/ chat 修订（发送后，恒胜） |
 | 人设 persona | 身份是挂载，不是点名 | composer Persona 块 / `persona_id` 载荷 |
 

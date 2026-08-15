@@ -183,7 +183,7 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 10. 验收器
 
-- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S42，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S41/S42）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S45，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S41/S42）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
 - e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
 

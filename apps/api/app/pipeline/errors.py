@@ -39,6 +39,10 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "The AI service is busy right now — please try again in a moment",
         "zh": "AI 服务正忙，请稍后重试",
     },
+    "provider_quota_exhausted": {
+        "en": "The AI service is out of quota — please try again later",
+        "zh": "AI 服务额度已用完，请稍后再试",
+    },
     "provider_unavailable": {
         "en": "The AI service is unavailable right now — please try again later",
         "zh": "AI 服务暂时不可用，请稍后重试",

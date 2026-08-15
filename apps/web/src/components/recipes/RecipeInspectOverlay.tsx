@@ -185,19 +185,6 @@ export function RecipeInspectOverlay({
                 <DialogDescription className="mt-1.5 text-sm">
                   {t(`recipes.${card.id}.promise`)}
                 </DialogDescription>
-                {/* variants desc (2026-08-13 ruling, RECIPES §7.2): guidance
-                    lines teaching how else the dish can be made — copy, never
-                    controls. Chips say what was used; desc says how it can
-                    vary. */}
-                {card.variants.length > 0 && (
-                  <div className="mt-2 flex flex-col gap-1">
-                    {card.variants.map((v) => (
-                      <p key={v} className="text-xs text-muted-foreground">
-                        {t(`recipes.${card.id}.variants.${v}`)}
-                      </p>
-                    ))}
-                  </div>
-                )}
                 {/* Applied-skill annotation (2026-08-12 ruling): the registry's
                     curated capability tags as chips — facts, not adjectives. */}
                 {card.tags.length > 0 && (
@@ -282,7 +269,7 @@ export function RecipeInspectOverlay({
                   {t("recipes.inspect.promptTitle")}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {t(`recipes.inspect.promptHint`)}
+                  {t(`recipes.${card.id}.promptHint`)}
                 </p>
               </div>
 
@@ -352,7 +339,7 @@ export function RecipeInspectOverlay({
                               url={o.url}
                               poster={o.poster_url ?? null}
                               label={materialLabel(o.label_key) ?? o.kind}
-                              vertical
+                              aspect={card.aspect}
                               sounding={soundingId === `output:${i}`}
                               onToggleSound={(id) =>
                                 setSoundingId((prev) => (prev === id ? null : id))
@@ -408,16 +395,17 @@ export function RecipeInspectOverlay({
 }
 
 /** One baked example card (示例 tab): auto-playing muted loop with the home
- * gallery's sound-toggle circle (one card sounds at a time). Outputs render
- * vertical (the recipe's aspect); inputs render 16:9 — a source may be
- * landscape (e.g. a two-person interview) and object-cover thumbs both. */
+ * gallery's sound-toggle circle (one card sounds at a time). OUTPUT cards
+ * take the card's declared aspect (2026-08-14 三档画幅 — a recipe shows the
+ * frame it bakes: vertical, square, or landscape); INPUT cards stay 16:9 —
+ * the source material is not the product, the wide thumb reads best. */
 function ExampleCard({
   id,
   kind,
   url,
   poster,
   label,
-  vertical = false,
+  aspect = "16:9",
   sounding,
   onToggleSound,
 }: {
@@ -426,7 +414,7 @@ function ExampleCard({
   url: string
   poster: string | null
   label: string
-  vertical?: boolean
+  aspect?: string
   sounding: boolean
   onToggleSound: (id: string) => void
 }) {
@@ -439,11 +427,18 @@ function ExampleCard({
     if (videoRef.current) videoRef.current.muted = !sounding
   }, [sounding])
 
+  const aspectClass =
+    aspect === "9:16"
+      ? "aspect-[9/16]"
+      : aspect === "1:1"
+        ? "aspect-square"
+        : "aspect-video"
+
   return (
     <div
       className={cn(
         "group relative overflow-hidden rounded-lg bg-black",
-        vertical ? "aspect-[9/16]" : "aspect-video",
+        aspectClass,
       )}
     >
       {kind === "video" ? (
@@ -457,6 +452,19 @@ function ExampleCard({
           loop
           playsInline
         />
+      ) : kind === "transcript" || kind === "slides" || kind === "audio" ? (
+        /* Documents aren't renderable media — a quiet icon tile carries the
+           label (the label pill below names the file kind). */
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted text-muted-foreground transition-colors hover:bg-accent"
+        >
+          <FileText className="h-6 w-6" />
+          <span className="max-w-[85%] truncate text-xs">{url.split("/").pop()}</span>
+        </a>
       ) : (
         <img src={url} alt={label} className="h-full w-full object-cover" />
       )}

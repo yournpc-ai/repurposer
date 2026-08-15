@@ -21,6 +21,7 @@ import {
   ChevronUp,
   CircleHelp,
   Crosshair,
+  Eraser,
   FileText,
   Flag,
   History,
@@ -30,11 +31,13 @@ import {
   Loader2,
   Mic2,
   Minus,
+  Music,
   Newspaper,
   Paperclip,
   Plus,
   Quote,
   Square,
+  TriangleAlert,
   Undo2,
   Video,
   X,
@@ -47,6 +50,7 @@ import { createTypewriter } from "@/lib/typewriter"
 import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
+import { BrandLoader } from "@/components/BrandLoader"
 import {
   assetTypeKind,
   outputMentionLabel,
@@ -101,15 +105,8 @@ import {
 import { RunCard } from "@/components/chat/RunCard"
 import { QaPair, qaAnswerText, type QaAnswer } from "@/components/chat/QaPair"
 import { QuestionDock, type Autonomy } from "@/components/chat/QuestionDock"
+import { RunTaskList } from "@/components/generation/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
-
-const OUTPUT_OPTIONS = [
-  { key: "clips", labelKey: "results.tabs.clips", Icon: Video },
-  { key: "post", labelKey: "results.tabs.post", Icon: FileText },
-  { key: "quotes", labelKey: "results.tabs.quotes", Icon: Quote },
-  { key: "article", labelKey: "results.tabs.article", Icon: Newspaper },
-  { key: "carousel", labelKey: "results.tabs.carousel", Icon: Images },
-] as const
 
 const LANGUAGE_OPTIONS = [
   { code: "en", labelKey: "languages.en" },
@@ -120,64 +117,246 @@ const LANGUAGE_OPTIONS = [
   { code: "it", labelKey: "languages.it" },
 ] as const
 
-/** Per-type count bounds (mirrors the retired flat-field limits) and the
- * task-book defaults for `count: null` slots. */
-const SLOT_COUNT_LIMITS: Record<string, [number, number]> = {
-  clips: [1, 10],
-  quotes: [1, 20],
-  carousel: [2, 15],
-}
-const SLOT_COUNT_DEFAULT: Record<string, number> = {
-  clips: 5,
-  quotes: 3,
-  carousel: 6,
-}
-
-type OutputKey = (typeof OUTPUT_OPTIONS)[number]["key"]
 type Phase = "confirm" | "running" | "chat"
+
+/** One task in the plan chain (ADR-043 — the request layer's only grammar:
+ * a registry skill + its params, the same shape the PlanAgent proposes and
+ * the chat loop adjudicates). Outputs are a derived projection of the
+ * compiled chain, never a panel declaration. */
+export interface TaskItem {
+  skill: string
+  params: Record<string, unknown>
+}
 
 export interface InferredIntent {
   action: "generate" | "answer"
   answer: string | null
-  outputs: IntentSlot[]
-  /** 配音语言集 (dub_languages, RECIPES §4.1): task-book-level voice-dub
-   * languages for the run's clips; empty = no dubbing. */
-  dub_languages: string[]
-  /** 字幕语言集 (caption_languages, RECIPES §4.1 多语言字幕卡): task-book-level
-   * caption-translation languages for the run's clips; empty = no translation. */
-  caption_languages: string[]
+  tasks: TaskItem[]
   specific_instruction: string | null
 }
 
-function bareSlot(type: string, count: number | null = null): IntentSlot {
+/** Derived preview row (ADR-043): the server dry-run-compiles the chain at
+ * dock time and projects what it will MAKE — the card's "you'll get"
+ * section. `video` = the whole-source materialization (整条视频). */
+export interface DerivedRow {
+  type: string
+  variant?: "subs" | "dub" | null
+  language?: string | null
+  count?: number | null
+  bilingual?: boolean
+}
+
+/** Per-skill card anatomy (which controls a chain row gets). The label keys
+ * reuse the results-tabs vocabulary for the five output skills; transforms
+ * get their own words under generationOverlay.skills.*. */
+const SKILL_META: Record<
+  string,
+  {
+    Icon: typeof Video
+    labelKey: string
+    /** param carrying the row's language ("language" | "target_language") */
+    langParam?: string
+    /** count stepper bounds + the default shown when the param is unset */
+    countLimits?: [number, number]
+    countDefault?: number
+    /** focus input (param "focus") */
+    focus?: boolean
+    /** bilingual toggle (param "bilingual") */
+    bilingual?: boolean
+  }
+> = {
+  select_clips: {
+    Icon: Video,
+    labelKey: "results.tabs.clips",
+    langParam: "language",
+    countLimits: [1, 10],
+    countDefault: 3,
+    focus: true,
+  },
+  write_post: {
+    Icon: FileText,
+    labelKey: "results.tabs.post",
+    langParam: "language",
+    focus: true,
+  },
+  write_quotes: {
+    Icon: Quote,
+    labelKey: "results.tabs.quotes",
+    langParam: "language",
+    countLimits: [1, 20],
+    countDefault: 3,
+    focus: true,
+  },
+  write_article: {
+    Icon: Newspaper,
+    labelKey: "results.tabs.article",
+    langParam: "language",
+    focus: true,
+  },
+  write_carousel: {
+    Icon: Images,
+    labelKey: "results.tabs.carousel",
+    langParam: "language",
+    countLimits: [2, 15],
+    countDefault: 6,
+    focus: true,
+  },
+  translate_clip: {
+    Icon: Languages,
+    labelKey: "generationOverlay.skills.translate_clip",
+    langParam: "target_language",
+    bilingual: true,
+  },
+  dub_clip: {
+    Icon: Mic2,
+    labelKey: "generationOverlay.skills.dub_clip",
+    langParam: "target_language",
+  },
+  remove_filler: {
+    Icon: Eraser,
+    labelKey: "generationOverlay.skills.remove_filler",
+  },
+  add_music: {
+    Icon: Music,
+    labelKey: "generationOverlay.skills.add_music",
+  },
+}
+
+/** The add-row menu's order (generation skills first, then transforms). */
+const ADDABLE_SKILLS = [
+  "select_clips",
+  "write_post",
+  "write_quotes",
+  "write_article",
+  "write_carousel",
+  "translate_clip",
+  "dub_clip",
+  "remove_filler",
+  "add_music",
+] as const
+
+/** Legacy outputs-grammar slot type → its producing skill (read tolerance,
+ * mirrors the server-side `_legacy_slots_to_tasks` — stored run contexts
+ * and old clients' payloads upgrade on read, never on write). */
+const LEGACY_SLOT_TO_SKILL: Record<string, string> = {
+  clips: "select_clips",
+  post: "write_post",
+  quotes: "write_quotes",
+  carousel: "write_carousel",
+  article: "write_article",
+}
+
+function normalizeTasks(raw: unknown): TaskItem[] {
+  if (!Array.isArray(raw)) return []
+  const tasks: TaskItem[] = []
+  for (const item of raw) {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof (item as { skill?: unknown }).skill === "string"
+    ) {
+      const params = (item as { params?: unknown }).params
+      tasks.push({
+        skill: (item as { skill: string }).skill,
+        params:
+          params && typeof params === "object" && !Array.isArray(params)
+            ? (params as Record<string, unknown>)
+            : {},
+      })
+    }
+  }
+  return tasks
+}
+
+/** outputs-grammar → task list (client-side read tolerance for legacy
+ * run.context rows; the same conversion the server applies to stored
+ * pending_intent books). */
+function legacyOutputsToTasks(data: Record<string, unknown>): TaskItem[] {
+  const tasks: TaskItem[] = []
+  const aspect = typeof data.aspect === "string" ? data.aspect : null
+  for (const slot of normalizeSlots(data.outputs, data.clip_count as number | null)) {
+    const skill = LEGACY_SLOT_TO_SKILL[slot.type]
+    if (!skill) continue
+    const params: Record<string, unknown> = {}
+    if (slot.count != null) params.count = slot.count
+    if (slot.focus) params.focus = slot.focus
+    if (slot.language) params.language = slot.language
+    if (slot.tone_override) params.tone_override = slot.tone_override
+    if (skill === "select_clips" && aspect) params.aspect = aspect
+    tasks.push({ skill, params })
+  }
+  for (const lang of Array.isArray(data.dub_languages) ? data.dub_languages : []) {
+    if (typeof lang === "string" && lang) {
+      // fork: pre-ADR-043 compiles produced dub/translate as fork nodes
+      // (derived rows, source untouched) — the upgrade keeps that shape so a
+      // panel re-submit / tab retry doesn't morph the originals in place.
+      tasks.push({ skill: "dub_clip", params: { target_language: lang, fork: true } })
+    }
+  }
+  const bilingual = data.caption_bilingual === true
+  for (const lang of Array.isArray(data.caption_languages) ? data.caption_languages : []) {
+    if (typeof lang === "string" && lang) {
+      tasks.push({
+        skill: "translate_clip",
+        params: { target_language: lang, bilingual, fork: true },
+      })
+    }
+  }
+  return tasks
+}
+
+/** Normalize an intent payload into the task-chain InferredIntent the panel
+ * edits. Tasks pass through verbatim; a legacy outputs-grammar payload
+ * (stored run contexts, old books) upgrades on read. */
+export function normalizeIntent(raw: unknown): InferredIntent {
+  const data = (raw ?? {}) as Record<string, unknown>
+  const tasks = Array.isArray(data.tasks)
+    ? normalizeTasks(data.tasks)
+    : legacyOutputsToTasks(data)
   return {
+    action: data.action === "answer" ? "answer" : "generate",
+    answer: (data.answer as string | null) ?? null,
+    tasks,
+    specific_instruction: (data.specific_instruction as string | null) ?? null,
+  }
+}
+
+/** A run's chain (ADR-043): context.tasks verbatim; legacy outputs-grammar
+ * contexts upgrade on read (the same conversion as normalizeIntent's). */
+export function tasksFromRunContext(ctx: unknown): TaskItem[] {
+  const data = (ctx ?? {}) as Record<string, unknown>
+  return Array.isArray(data.tasks)
+    ? normalizeTasks(data.tasks)
+    : legacyOutputsToTasks(data)
+}
+
+/** Tolerate both run.context slot shapes (outputs = derive, ADR-043): slot
+ * objects pass through; legacy flat rows (string outputs + flat counts)
+ * upgrade to bare slots. Internal to the legacy→tasks upgrader — read
+ * tolerance only, never written back. */
+function normalizeSlots(
+  raw: unknown,
+  legacyClipCount?: number | null
+): IntentSlot[] {
+  if (!Array.isArray(raw)) return []
+  const bare = (type: string, count: number | null = null): IntentSlot => ({
     type: type as IntentSlot["type"],
     count,
     focus: null,
     language: null,
     tone_override: null,
     explicit: false,
-  }
-}
-
-/** Tolerate both task-book shapes: new slot objects pass through; legacy flat
- * run.context / pending_intent rows (string outputs + flat counts) upgrade to
- * bare slots — read tolerance only, never written back. */
-export function normalizeSlots(
-  raw: unknown,
-  legacyClipCount?: number | null
-): IntentSlot[] {
-  if (!Array.isArray(raw)) return []
+  })
   const slots: IntentSlot[] = []
   for (const item of raw) {
     if (typeof item === "string") {
-      if (OUTPUT_OPTIONS.some((o) => o.key === item)) {
-        slots.push(bareSlot(item, item === "clips" ? (legacyClipCount ?? null) : null))
+      if (item in LEGACY_SLOT_TO_SKILL) {
+        slots.push(bare(item, item === "clips" ? (legacyClipCount ?? null) : null))
       }
     } else if (item && typeof item === "object" && typeof item.type === "string") {
-      if (OUTPUT_OPTIONS.some((o) => o.key === item.type)) {
+      if (item.type in LEGACY_SLOT_TO_SKILL) {
         slots.push({
-          ...bareSlot(item.type),
+          ...bare(item.type),
           count: item.count ?? null,
           focus: item.focus ?? null,
           language: item.language ?? null,
@@ -188,31 +367,6 @@ export function normalizeSlots(
     }
   }
   return slots
-}
-
-/** Normalize an intent payload of either shape (legacy flat or slot) into the
- * slot-shaped InferredIntent the panel edits. Language is a per-slot
- * property (2026-08-05 restructure — the book-level field is retired): slot
- * languages are MATERIALIZED here (null slot → the legacy book language, or
- * "en"), so every row's dropdown shows a concrete language — no sentinel. */
-export function normalizeIntent(raw: unknown): InferredIntent {
-  const data = (raw ?? {}) as Record<string, unknown>
-  const fallbackLanguage =
-    typeof data.language === "string" && data.language ? data.language : "en"
-  return {
-    action: data.action === "answer" ? "answer" : "generate",
-    answer: (data.answer as string | null) ?? null,
-    outputs: normalizeSlots(data.outputs, data.clip_count as number | null).map(
-      (slot) => ({ ...slot, language: slot.language ?? fallbackLanguage })
-    ),
-    dub_languages: Array.isArray(data.dub_languages)
-      ? data.dub_languages.filter((l): l is string => typeof l === "string" && !!l)
-      : [],
-    caption_languages: Array.isArray(data.caption_languages)
-      ? data.caption_languages.filter((l): l is string => typeof l === "string" && !!l)
-      : [],
-    specific_instruction: (data.specific_instruction as string | null) ?? null,
-  }
 }
 
 interface OverlayMessage {
@@ -236,6 +390,11 @@ interface OverlayMessage {
    * the gray focus prefix row above the user bubble. Persisted server-side
    * (messages.focus_output), so the rebuilt history stays honest. */
   focus?: { id: string; label: string }
+  /** A turn-failure system row (turn.failed / transport error): renders as
+   * the gray MetaRow, never a toast. Local-only — the server commits nothing
+   * on a failed turn, so a refresh drops it (the conversation stays honest:
+   * nothing was answered). */
+  meta?: "error"
 }
 
 /** The typed question payload mirrored from the API (messages.question). */
@@ -244,9 +403,6 @@ interface QuestionPayload {
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
   estimate?: string | null
-  /** task_book: needs-clarification reason KEYS (data — localize at render,
-   * never baked into the question's prose). */
-  reasons?: string[]
 }
 
 /** A question-carrying chat message (ask primitive): the dock's pending
@@ -306,21 +462,6 @@ function assetFilename(fileUrl: string | null): string {
   return fileUrl.split("/").pop() || fileUrl
 }
 
-/** Localize a task_book question's reason keys for the QA archive's detail
- * line (payload data → display; the keys themselves are the agent's
- * vocabulary, never user-facing). */
-function qaReasonsDetail(
-  question: QuestionPayload | null | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string
-): string | undefined {
-  const reasons = question?.reasons ?? []
-  if (reasons.length === 0) return undefined
-  const items = reasons.map((r) =>
-    t(`questionDock.reasons.${r}`, { defaultValue: r })
-  )
-  return `${t("questionDock.reasons.title")} ${items.join(" · ")}`
-}
-
 interface GenerationOverlayProps {
   projectId: string
   prompt: string
@@ -333,10 +474,9 @@ interface GenerationOverlayProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
-  initialNeedsClarification?: boolean
-  /** needs_clarification reason keys from the last inference — the dock
-   * shows them as the "needs your check" line (回显). */
-  initialReasons?: string[]
+  /** The parked book's derived preview (ADR-043 — pending_intent.derived):
+   * the card's "you'll get" section on a restored session. */
+  initialDerived?: DerivedRow[]
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
@@ -430,6 +570,18 @@ function FocusRow({ label }: { label: string }) {
   return (
     <MetaRow icon={<Crosshair />}>
       {t("results.dock.focus", { name: label })}
+    </MetaRow>
+  )
+}
+
+/** A failed turn's system fact (turn.failed / transport error — e.g. the
+ * provider's balance running out): the gray in-flow row is the ONLY surface,
+ * never a toast (the Claude Code inline usage-limit row is the reference
+ * anatomy — a turn failure is a fact of the conversation, not chrome). */
+function TurnErrorRow({ text }: { text: string }) {
+  return (
+    <MetaRow icon={<TriangleAlert />}>
+      {text}
     </MetaRow>
   )
 }
@@ -548,7 +700,9 @@ function ThinkingRow({ label }: { label: string }) {
     <Message align="start">
       <MessageContent>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {/* The brand fill-sweep (one stream fanning out) instead of a
+              generic spinner — same loader as the processing tiles. */}
+          <BrandLoader className="h-5 w-5" />
           {/* Same text shimmer the running step markers use. */}
           <span className="shimmer">{label}</span>
         </div>
@@ -568,7 +722,7 @@ function PlanVersionChip({
   expanded,
   onToggle,
   onRestore,
-  slotLabel,
+  taskLabel,
 }: {
   n: number
   book: InferredIntent
@@ -576,7 +730,7 @@ function PlanVersionChip({
   expanded: boolean
   onToggle: () => void
   onRestore: () => void
-  slotLabel: (slot: IntentSlot) => string
+  taskLabel: (task: TaskItem) => string
 }) {
   const { t } = useTranslation()
   return (
@@ -602,40 +756,17 @@ function PlanVersionChip({
           {expanded && (
             <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted p-4">
               <div className="flex flex-col gap-1.5">
-                {book.outputs.map((slot, i) => {
-                  const meta = OUTPUT_OPTIONS.find((o) => o.key === slot.type)
-                  if (!meta) return null
+                {book.tasks.map((task, i) => {
+                  const meta = SKILL_META[task.skill]
                   return (
                     <div key={i} className="flex items-center gap-1.5 text-xs">
-                      <meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>{slotLabel(slot)}</span>
+                      {meta ? (
+                        <meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : null}
+                      <span>{taskLabel(task)}</span>
                     </div>
                   )
                 })}
-                {book.dub_languages.length > 0 && (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>
-                      {t("generationOverlay.planSummaryDub", {
-                        langs: book.dub_languages
-                          .map((l) => t(`languages.${l}`, { defaultValue: l }))
-                          .join(", "),
-                      })}
-                    </span>
-                  </div>
-                )}
-                {book.caption_languages.length > 0 && (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>
-                      {t("generationOverlay.planSummarySubs", {
-                        langs: book.caption_languages
-                          .map((l) => t(`languages.${l}`, { defaultValue: l }))
-                          .join(", "),
-                      })}
-                    </span>
-                  </div>
-                )}
                 {book.specific_instruction ? (
                   <p className="line-clamp-2 text-xs text-muted-foreground">
                     {book.specific_instruction}
@@ -666,8 +797,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   prompt,
   firstMessage,
   initialIntent,
-  initialNeedsClarification = true,
-  initialReasons,
+  initialDerived,
   initialRunId,
   initialShell = "fullscreen",
   focusOutput = null,
@@ -707,15 +837,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       : {
           action: "generate",
           answer: null,
-          outputs: ["post", "quotes", "article"].map((type) => ({
-            ...bareSlot(type),
-            language: "en",
+          tasks: ["write_post", "write_quotes", "write_article"].map((skill) => ({
+            skill,
+            params: { language: "en" },
           })),
-          dub_languages: [],
-          caption_languages: [],
           specific_instruction: prompt,
         }
   )
+  /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
+   * get" projection — rides pending_intent.derived; refetched with the book. */
+  const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
   // The plan card renders only once a real inference has landed (a restored
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
@@ -734,7 +865,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   // the confirm phase; choice questions from the chat loop afterwards); the
   // answered one archives as a QA pair in the flow.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
-  const [questionLoaded, setQuestionLoaded] = useState(false)
   const [answeredQuestion, setAnsweredQuestion] = useState<QuestionMessage | null>(null)
   // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
   // so every run goes out at the review tier — the direction checkpoint
@@ -742,7 +872,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   // picker is a one-flag flip.
   const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
-  const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
@@ -795,8 +924,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   // — resolved once.
   const [identityPersona, setIdentityPersona] = useState<string | null>(null)
 
-  const autoStartedRef = useRef(false)
-  const autoStartArmedRef = useRef(false)
   const firstMessageSentRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const onCompleteRef = useRef(onComplete)
@@ -833,11 +960,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   }, [projectId])
 
   /** The panel's task book + reasons live on the project (pending_intent) —
-   * refetched after every plan-path turn (first inference, refinements). */
+   * refetched after every plan-path turn (first inference, refinements).
+   * `derived` is the server-compiled preview riding the same row. */
   const fetchPendingIntent = useCallback(async (): Promise<{
     intent: unknown
     reasons?: string[]
     persona_id?: string | null
+    derived?: DerivedRow[]
   } | null> => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
@@ -848,6 +977,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         intent: unknown
         reasons?: string[]
         persona_id?: string | null
+        derived?: DerivedRow[]
       } | null }
       return data.pending_intent ?? null
     } catch {
@@ -860,7 +990,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     fetchPendingQuestion().then((q) => {
       if (!cancelled) {
         setPendingQuestion(q)
-        setQuestionLoaded(true)
       }
     })
     return () => {
@@ -932,7 +1061,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   question: m.content ?? "",
                   answer: display.text,
                   muted: display.muted,
-                  detail: qaReasonsDetail(m.question, t),
                 },
               })
             }
@@ -1087,13 +1215,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if (status === "pending" || status === "running") seenLiveRef.current = true
   }, [status])
 
-  // Terminal: failure stays put so the step list shows what broke; success
-  // either plays the collapse into the dock (desktop, witnessed) or keeps
-  // the legacy hand-off (mobile navigates back to the results list).
+  // Terminal: failure stays put — the failed step rows carry the humanized
+  // error in-flow (provider 错误人话化梯), no toast on top; success either
+  // plays the collapse into the dock (desktop, witnessed) or keeps the
+  // legacy hand-off (mobile navigates back to the results list).
   useEffect(() => {
     if (!terminal) return
     if (status === "failed") {
-      toast.error(t("generationOverlay.failed"))
       return
     }
     if (!seenLiveRef.current) {
@@ -1175,15 +1303,22 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         return
       }
       // Legacy fallback: no question row (pre-dock projects) — /generate
-      // settles the open question server-side the same way.
+      // settles the open question server-side the same way. The confirmed
+      // chain rides `tasks` (ADR-043 — the only request grammar).
+      const firstLangTask = intent.tasks.find((task) => {
+        const param = SKILL_META[task.skill]?.langParam
+        return param != null && typeof task.params[param] === "string"
+      })
+      const firstLang = firstLangTask
+        ? (firstLangTask.params[
+            SKILL_META[firstLangTask.skill].langParam as string
+          ] as string)
+        : null
       const res = await apiFetch(`/api/v1/projects/${projectId}/generate`, {
         method: "POST",
         body: {
-          slots: intent.outputs,
-          target_language:
-            intent.outputs.find((s) => s.language)?.language ?? "en",
-          dub_languages: intent.dub_languages,
-          caption_languages: intent.caption_languages,
+          tasks: intent.tasks,
+          target_language: firstLang ?? "en",
           instruction: intent.specific_instruction || prompt,
           autonomy,
         },
@@ -1217,97 +1352,83 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     onClose()
   }, [pendingQuestion, onClose])
 
-  useEffect(() => {
-    if (
-      initialIntent &&
-      !initialRunId &&
-      initialIntent.action === "generate" &&
-      !initialNeedsClarification &&
-      phase === "confirm" &&
-      questionLoaded &&
-      !autoStartedRef.current
-    ) {
-      autoStartedRef.current = true
-      handleStartGeneration()
-    }
-  }, [initialIntent, initialRunId, initialNeedsClarification, phase, questionLoaded, handleStartGeneration])
+  const canStartGeneration = intent.tasks.length > 0
 
-  const canStartGeneration = intent.outputs.length > 0
-
-  // The clips slot backing the voice-over multiplication line (null → the
-  // 422-escape state; the dock's warning carries that case instead).
-  const clipsSlotForVersions = intent.outputs.find((s) => s.type === "clips") ?? null
-
-  // Slot edits — every hand edit marks the slot explicit so it pins through
-  // the next re-inference (pin-merge rule).
-  const updateSlot = (index: number, patch: Partial<IntentSlot>) =>
+  // Chain edits (ADR-043): panel controls mutate the task list directly —
+  // the same data structure the PlanAgent proposes, so the edited chain
+  // rides the next refine turn as prior_intent and Start ships it verbatim.
+  const updateTaskParams = (index: number, patch: Record<string, unknown>) =>
     setIntent((prev) => ({
       ...prev,
-      outputs: prev.outputs.map((s, i) =>
-        i === index ? { ...s, ...patch, explicit: true } : s
+      tasks: prev.tasks.map((task, i) =>
+        i === index ? { ...task, params: { ...task.params, ...patch } } : task
       ),
     }))
 
-  const addSlot = (type: OutputKey) =>
-    setIntent((prev) => ({
-      ...prev,
-      outputs: [
-        ...prev.outputs,
-        {
-          ...bareSlot(type),
-          // A hand-added row starts from the plan's prevailing language —
-          // the dropdown always shows a concrete value (no sentinel).
-          language: prev.outputs.find((s) => s.language)?.language ?? "en",
-          explicit: true,
-        },
-      ],
-    }))
-
-  const removeSlot = (index: number) =>
-    setIntent((prev) => ({
-      ...prev,
-      outputs: prev.outputs.filter((_, i) => i !== index),
-    }))
-
-  const slotLabel = useCallback(
-    (slot: IntentSlot) => {
-      let label = t(`results.tabs.${slot.type}`, { defaultValue: slot.type })
-      if (slot.language) {
-        label += ` (${t(`languages.${slot.language}`, { defaultValue: slot.language })})`
+  const addTask = (skill: string) =>
+    setIntent((prev) => {
+      const meta = SKILL_META[skill]
+      const params: Record<string, unknown> = {}
+      if (meta?.langParam) {
+        // A hand-added row starts from the chain's prevailing language —
+        // the dropdown always shows a concrete value (no sentinel).
+        const prevailing = prev.tasks
+          .map((task) => task.params[SKILL_META[task.skill]?.langParam ?? "language"])
+          .find((v): v is string => typeof v === "string" && !!v)
+        params[meta.langParam] = prevailing ?? "en"
       }
-      if (slot.count) label += ` ×${slot.count}`
+      return { ...prev, tasks: [...prev.tasks, { skill, params }] }
+    })
+
+  const removeTask = (index: number) =>
+    setIntent((prev) => ({
+      ...prev,
+      tasks: prev.tasks.filter((_, i) => i !== index),
+    }))
+
+  const taskLabel = useCallback(
+    (task: TaskItem) => {
+      const meta = SKILL_META[task.skill]
+      let label = meta ? t(meta.labelKey) : task.skill
+      const lang = meta?.langParam ? task.params[meta.langParam] : undefined
+      if (typeof lang === "string" && lang) {
+        label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
+      }
+      if (typeof task.params.count === "number") label += ` ×${task.params.count}`
+      if (task.params.bilingual === true) {
+        label += ` · ${t("generationOverlay.derive.bilingual")}`
+      }
       return label
     },
     [t]
   )
 
   const summarizeBook = useCallback(
-    (book: InferredIntent) => {
-      const parts = [book.outputs.map(slotLabel).join(", ")]
-      if (book.dub_languages.length > 0) {
-        parts.push(
-          t("generationOverlay.planSummaryDub", {
-            langs: book.dub_languages
-              .map((l) => t(`languages.${l}`, { defaultValue: l }))
-              .join(", "),
-          })
-        )
-      }
-      if (book.caption_languages.length > 0) {
-        parts.push(
-          t("generationOverlay.planSummarySubs", {
-            langs: book.caption_languages
-              .map((l) => t(`languages.${l}`, { defaultValue: l }))
-              .join(", "),
-          })
-        )
-      }
-      return parts.join(" · ")
-    },
-    [slotLabel, t]
+    (book: InferredIntent) => book.tasks.map(taskLabel).join(", "),
+    [taskLabel]
   )
 
   const planSummary = useMemo(() => summarizeBook(intent), [intent, summarizeBook])
+
+  /** One derived-preview row's label: the base type word + variant +
+   * language + count chips (整条视频 · 字幕版（中文）· 双语). */
+  const derivedLabel = useCallback(
+    (row: DerivedRow) => {
+      let label = t(`generationOverlay.derive.${row.type}`, {
+        defaultValue: row.type,
+      })
+      if (row.variant) {
+        label += ` · ${t(`generationOverlay.derive.${row.variant}`, { defaultValue: row.variant })}`
+      }
+      if (row.language) {
+        label += ` (${t(`languages.${row.language}`, { defaultValue: row.language })})`
+      }
+      if (row.count) label += ` ×${row.count}`
+      if (row.bilingual) label += ` · ${t("generationOverlay.derive.bilingual")}`
+      return label
+    },
+    [t]
+  )
 
   /** Assets carried by a message bubble must not also hang under the opening
    * prompt (a mid-conversation upload refreshed into `assets` would render
@@ -1445,16 +1566,14 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         question: message.content ?? "",
         answer: display.text,
         muted: display.muted,
-        detail: qaReasonsDetail(message.question, t),
       },
     })
   }
 
   /** The chat loop's reply: a pending question docks (never enters the
    * flow, prohibited-behavior #2); anything else renders as prose + an
-   * optional RunCard. A docked task book also refetches the panel's plan —
-   * and arms the fresh-flow auto-start when the first inference lands with
-   * nothing to clarify. */
+   * optional RunCard. A docked task book also refetches the panel's plan.
+   * Starting is ALWAYS the user's explicit Start press — no auto-start. */
   const handleAssistantMessage = async (message: QuestionMessage) => {
     if (message.question && !message.answer) {
       if (
@@ -1474,14 +1593,11 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         const pending = await fetchPendingIntent()
         if (pending) {
           setIntent(normalizeIntent(pending.intent))
-          setReasons(pending.reasons ?? [])
+          setDerived(pending.derived ?? [])
           setIntentReady(true)
           setPhase("confirm")
           // No "plan updated" filler line on refinements — the turn's own
           // streamed echo bubble already says what changed.
-          if (!intentReady && (pending.reasons ?? []).length === 0) {
-            autoStartArmedRef.current = true
-          }
         }
       }
       return
@@ -1495,9 +1611,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
 
   /** One endpoint for every turn (intent-surface-unification W2): the server
    * routes plan-path turns (task-book build / refine / confirm) and
-   * chat-loop turns itself. The panel's current book rides confirm-phase
-   * turns as prior_intent (its explicit slots pin through the merge);
-   * mentions / the persona choice ride only the composer's first message.
+   * chat-loop turns itself. The panel's current chain rides confirm-phase
+   * turns as prior_intent (the PlanAgent re-emits the full revised chain —
+   * chat revisions always win); mentions / the persona choice ride only the
+   * composer's first message.
    *
    * Transport is SSE (streamChat): prose deltas feed a typewriter-paced
    * preview bubble (reasoning models emit a short echo in one burst — pacing
@@ -1691,7 +1808,20 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       if (opts?.rollbackFocus && !focusOutputRef.current) {
         onFocusChange?.(opts.rollbackFocus.id)
       }
-      toast.error(e instanceof Error ? e.message : t("chat.failed"))
+      // The failure itself lands in the flow as a gray system row (never a
+      // toast — turn.failed is a fact of the conversation). The server
+      // commits nothing, so the row is local-only and a refresh drops it.
+      const detail = e instanceof Error ? e.message : t("chat.failed")
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: detail,
+          meta: "error",
+          at: new Date().toISOString(),
+        },
+      ])
     } finally {
       if (abortRef.current === ctrl) {
         abortRef.current = null
@@ -1722,10 +1852,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               id: string
               status: string
               context?: {
+                tasks?: unknown
                 outputs?: unknown
                 target_language?: string
                 dub_languages?: string[]
                 caption_languages?: string[]
+                aspect?: "9:16" | "1:1" | "16:9" | null
+                caption_bilingual?: boolean
                 instruction?: string | null
               } | null
             } | null
@@ -1735,13 +1868,18 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             if (run && (run.status === "pending" || run.status === "running")) {
               // Refresh after the run started: attach to it (intent rebuilt
               // from the run context for the confirmed-plan summary line).
+              // normalizeIntent prefers context.tasks (ADR-043) and upgrades
+              // legacy outputs/dub_languages rows via legacyOutputsToTasks.
               const runCtx = run.context ?? {}
               setIntent(
                 normalizeIntent({
+                  tasks: runCtx.tasks,
                   outputs: runCtx.outputs,
                   language: runCtx.target_language,
                   dub_languages: runCtx.dub_languages,
                   caption_languages: runCtx.caption_languages,
+                  aspect: runCtx.aspect,
+                  caption_bilingual: runCtx.caption_bilingual,
                   specific_instruction: runCtx.instruction,
                 })
               )
@@ -1764,18 +1902,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  /** Fresh-flow auto-start: the first inference docked a book with nothing
-   * to clarify (an explicit instruction) — start it once the dock state has
-   * settled, without making the user press Start. */
-  useEffect(() => {
-    if (!autoStartArmedRef.current) return
-    if (phase !== "confirm" || !intentReady) return
-    if (!pendingQuestion || pendingQuestion.question?.kind !== "task_book") return
-    autoStartArmedRef.current = false
-    autoStartedRef.current = true
-    handleStartGeneration()
-  }, [phase, intentReady, pendingQuestion, handleStartGeneration])
 
   /** Docked choice question answered by a button click — the answer
    * endpoint records it and continues the conversation (answer = resume). */
@@ -1961,21 +2087,19 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real
   // time, and NEWER replies keep flowing BELOW it). Once the run's birth
-  // time is known, header / steps / messages / terminal all sort by real
-  // time into a single walk: pre-run messages (the task-book reply, #2b)
-  // land above the run header; a mid-run QA lands right after its
-  // checkpoint step — before the render steps — and the assistant's
-  // follow-up to it stays below the QA, between the step groups.
-  // Consecutive steps merge into one bubble (today's visual); a message
-  // splits the group. No run anchor (confirm phase, pre-snapshot window) →
-  // the legacy fixed block + flat list below.
+  // time is known, header / the task list / messages / terminal all sort by
+  // real time into a single walk: pre-run messages (the task-book reply,
+  // #2b) land above the run header. The run's steps render as ONE task list
+  // (2026-08-15, the CC task anatomy): pinned bottom-most while the run is
+  // live (new chat messages land above it), settled right after the header
+  // as the archive once terminal — step rows flip state in place instead of
+  // accumulating stepGroup bubbles. No run anchor (confirm phase,
+  // pre-snapshot window) → the legacy fixed block + flat list below.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
-  const pendingSteps = useMemo(() => steps.filter((s) => !s.started_at), [steps])
   type RunStreamUnit =
     | { kind: "header" }
-    | { kind: "stepGroup"; steps: typeof steps }
+    | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
-    | { kind: "pendingGroup" }
     | { kind: "terminal" }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     if (phase !== "running" || runStartAt == null) return null
@@ -1983,21 +2107,19 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     const timed: Timed[] = []
     let order = 0
     timed.push({ t: runStartAt, order: order++, unit: { kind: "header" } })
-    for (const s of steps) {
-      if (s.started_at) {
-        timed.push({
-          t: Date.parse(s.started_at),
-          order: order++,
-          unit: { kind: "stepGroup", steps: [s] },
-        })
-      }
-    }
     const undated: OverlayMessage[] = []
     for (const m of messages) {
       const t = m.at ? Date.parse(m.at) : NaN
       if (Number.isNaN(t)) undated.push(m)
       else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
     }
+    // Pinned bottom-most while live (the +∞ sort key); on terminal the list
+    // settles right after the header as the run's archive.
+    timed.push({
+      t: terminal ? runStartAt + 1 : Number.POSITIVE_INFINITY,
+      order: order++,
+      unit: { kind: "taskList" },
+    })
     if (terminal) {
       // Anchor just after the last step so post-run replies sort BELOW the
       // terminal markers.
@@ -2010,39 +2132,18 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       timed.push({ t: lastStepT + 1, order: order++, unit: { kind: "terminal" } })
     }
     timed.sort((a, b) => a.t - b.t || a.order - b.order)
-    const units: RunStreamUnit[] = []
-    for (const entry of timed) {
-      const last = units[units.length - 1]
-      if (entry.unit.kind === "stepGroup" && last?.kind === "stepGroup") {
-        last.steps.push(...entry.unit.steps)
-      } else if (entry.unit.kind === "stepGroup") {
-        units.push({ kind: "stepGroup", steps: [...entry.unit.steps] })
+    const units: RunStreamUnit[] = timed.map((entry) => entry.unit)
+    for (const m of undated) {
+      // Undated messages (fresh optimistic sends) are chronologically NOW —
+      // they land above the pinned task list while the run is live.
+      if (!terminal && units[units.length - 1]?.kind === "taskList") {
+        units.splice(units.length - 1, 0, { kind: "message", message: m })
       } else {
-        units.push(entry.unit)
+        units.push({ kind: "message", message: m })
       }
     }
-    // Un-started steps (upcoming while live, skipped once finished) sit
-    // right before the terminal marker — MERGED into the adjacent step
-    // group when nothing intervenes: the started/pending boundary is a
-    // data boundary, never a visual seam (a gap-8 blank row between two
-    // bubbles mid-list, #15). A standalone group only remains for the
-    // queued stand-in (no steps at all) or right after a message (the
-    // mid-run QA's resume tail — an intended break).
-    const needPending =
-      pendingSteps.length > 0 || (steps.length === 0 && !terminal)
-    if (needPending) {
-      const terminalIdx = units.findIndex((u) => u.kind === "terminal")
-      const insertAt = terminalIdx >= 0 ? terminalIdx : units.length
-      const prev = insertAt > 0 ? units[insertAt - 1] : undefined
-      if (steps.length > 0 && prev?.kind === "stepGroup") {
-        prev.steps.push(...pendingSteps)
-      } else {
-        units.splice(insertAt, 0, { kind: "pendingGroup" })
-      }
-    }
-    for (const m of undated) units.push({ kind: "message", message: m })
     return units
-  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, pendingSteps])
+  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal])
 
   // Refresh path: the start confirmation rebuilds from history as a pre-run
   // QA archive ABOVE the header — the header's summary stand-in (attach /
@@ -2067,7 +2168,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
           {/* Prose echo of the understood plan — the card
               never lands naked (Opus pattern). The LLM's
-              own one-line echo (intent.answer, streamed as
+              own introduction (intent.answer, streamed as
               deltas this turn and persisted in the pending
               intent) wins; the localized template is the
               fallback for legacy/null echoes. Hidden when
@@ -2084,15 +2185,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               shadow). Depth comes from bg contrast alone. */}
           <Card className="ring-0 bg-muted">
             <div className="flex flex-col gap-7 p-6">
-              <div className="space-y-1">
-                <h3 className="text-base font-semibold">
-                  {t("generationOverlay.title")}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("generationOverlay.subtitle")}
-                </p>
-              </div>
-
+              {/* No card header: the assistant's own message above (the
+                  streamed echo) IS the introduction — a printed title would
+                  say the same thing twice. */}
               {/* Identity echo — one read-only line, never a
                   question: whose style the run generates in (the
                   skin follows the persona, ADR-038). */}
@@ -2105,31 +2200,35 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 })}
               </p>
 
-              {/* Task slots — one row per requested output.
-                  Language is a per-row property (the book-
-                  level field is retired): every row's
-                  dropdown shows a concrete language.
-                  Same-type siblings (e.g. an English and a
+              {/* The task chain (ADR-043) — one row per task, in execution
+                  order. Outputs are the chain's derived projection (the
+                  preview below), never a panel declaration: edits mutate
+                  the task list directly and ride the next refine turn as
+                  prior_intent. Same-skill siblings (e.g. an English and a
                   German post) are separate rows. */}
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
                   <span className={sectionLabel}>
-                    {t("generationOverlay.outputsLabel")}
+                    {t("generationOverlay.chainLabel")}
                   </span>
                   <p className="text-xs text-muted-foreground">
-                    {t("generationOverlay.outputsHint")}
+                    {t("generationOverlay.chainHint")}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {intent.outputs.map((slot, index) => {
-                    const meta = OUTPUT_OPTIONS.find(
-                      (o) => o.key === slot.type
-                    )
+                  {intent.tasks.map((task, index) => {
+                    const meta = SKILL_META[task.skill]
                     if (!meta) return null
                     const { labelKey, Icon } = meta
-                    const limits = SLOT_COUNT_LIMITS[slot.type]
+                    const langParam = meta.langParam
+                    const lang = langParam
+                      ? (task.params[langParam] as string | undefined) ?? "en"
+                      : null
+                    const limits = meta.countLimits
                     const count =
-                      slot.count ?? SLOT_COUNT_DEFAULT[slot.type]
+                      typeof task.params.count === "number"
+                        ? task.params.count
+                        : meta.countDefault
                     return (
                       <div
                         key={index}
@@ -2151,11 +2250,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                                   "generationOverlay.countDecrease"
                                 )}
                                 onClick={() =>
-                                  updateSlot(index, {
-                                    count: Math.max(
-                                      limits[0],
-                                      count - 1
-                                    ),
+                                  updateTaskParams(index, {
+                                    count: Math.max(limits[0], count - 1),
                                   })
                                 }
                               >
@@ -2173,11 +2269,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                                   "generationOverlay.countIncrease"
                                 )}
                                 onClick={() =>
-                                  updateSlot(index, {
-                                    count: Math.min(
-                                      limits[1],
-                                      count + 1
-                                    ),
+                                  updateTaskParams(index, {
+                                    count: Math.min(limits[1], count + 1),
                                   })
                                 }
                               >
@@ -2186,35 +2279,56 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                             </div>
                           )}
                           <div className="ml-auto flex items-center gap-1">
-                            <Select
-                              value={slot.language ?? "en"}
-                              onValueChange={(value) =>
-                                updateSlot(index, {
-                                  language: (value as string) || "en",
-                                })
-                              }
-                            >
-                              <SelectTrigger className="h-8 w-28 text-xs">
-                                <SelectValue>
-                                  {(value: string) =>
-                                    t(`languages.${value}`, {
-                                      defaultValue: value,
-                                    })
-                                  }
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {LANGUAGE_OPTIONS.map((lang) => (
-                                  <SelectItem
-                                    key={lang.code}
-                                    value={lang.code}
-                                  >
-                                    {t(lang.labelKey)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {intent.outputs.length > 1 && (
+                            {meta.bilingual && (
+                              <Button
+                                variant={
+                                  task.params.bilingual === true
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-8 text-xs"
+                                aria-pressed={task.params.bilingual === true}
+                                onClick={() =>
+                                  updateTaskParams(index, {
+                                    bilingual: task.params.bilingual !== true,
+                                  })
+                                }
+                              >
+                                {t("generationOverlay.bilingualToggle")}
+                              </Button>
+                            )}
+                            {langParam && lang != null && (
+                              <Select
+                                value={lang}
+                                onValueChange={(value) =>
+                                  updateTaskParams(index, {
+                                    [langParam]: (value as string) || "en",
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-8 w-28 text-xs">
+                                  <SelectValue>
+                                    {(value: string) =>
+                                      t(`languages.${value}`, {
+                                        defaultValue: value,
+                                      })
+                                    }
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {LANGUAGE_OPTIONS.map((lang) => (
+                                    <SelectItem
+                                      key={lang.code}
+                                      value={lang.code}
+                                    >
+                                      {t(lang.labelKey)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {intent.tasks.length > 1 && (
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -2222,26 +2336,28 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                                 aria-label={t(
                                   "generationOverlay.removeSlot"
                                 )}
-                                onClick={() => removeSlot(index)}
+                                onClick={() => removeTask(index)}
                               >
                                 <X className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
                         </div>
-                        <Input
-                          value={slot.focus ?? ""}
-                          onChange={(e) =>
-                            updateSlot(index, {
-                              focus: e.target.value || null,
-                            })
-                          }
-                          placeholder={t(
-                            "generationOverlay.slotFocusPlaceholder",
-                            { type: t(labelKey) }
-                          )}
-                          className="h-8 text-xs"
-                        />
+                        {meta.focus && (
+                          <Input
+                            value={(task.params.focus as string | undefined) ?? ""}
+                            onChange={(e) =>
+                              updateTaskParams(index, {
+                                focus: e.target.value || null,
+                              })
+                            }
+                            placeholder={t(
+                              "generationOverlay.slotFocusPlaceholder",
+                              { type: t(labelKey) }
+                            )}
+                            className="h-8 text-xs"
+                          />
+                        )}
                       </div>
                     )
                   })}
@@ -2260,150 +2376,62 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                     }
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>{t("generationOverlay.addOutput")}</span>
+                    <span>{t("generationOverlay.addTask")}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    {OUTPUT_OPTIONS.map(({ key, labelKey, Icon }) => (
-                      <DropdownMenuItem
-                        key={key}
-                        disabled={
-                          key === "clips" &&
-                          intent.outputs.some(
-                            (s) => s.type === "clips"
-                          )
-                        }
-                        onClick={() => addSlot(key)}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        {t(labelKey)}
-                      </DropdownMenuItem>
-                    ))}
+                    {ADDABLE_SKILLS.map((skill) => {
+                      const meta = SKILL_META[skill]
+                      return (
+                        <DropdownMenuItem
+                          key={skill}
+                          disabled={
+                            skill === "select_clips" &&
+                            intent.tasks.some((task) => task.skill === "select_clips")
+                          }
+                          onClick={() => addTask(skill)}
+                        >
+                          <meta.Icon className="h-3.5 w-3.5" />
+                          {t(meta.labelKey)}
+                        </DropdownMenuItem>
+                      )
+                    })}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
 
-              {/* Voice-over versions (dub_languages) — one
-                  chip per forked voice-over language. Every
-                  clip gets one DERIVED version per language
-                  (fork semantics), so the version count is a
-                  multiplication — shown explicitly below.
-                  Chips are removable (down to none = no
-                  dubbing); adding a language goes through
-                  chat refine, not panel editing (R1 scope). */}
-              {intent.dub_languages.length > 0 && (
+              {/* Derived preview (ADR-043) — what the chain will MAKE,
+                  dry-run-compiled server-side at dock time. Read-only: the
+                  chain rows above are the editing surface. */}
+              {derived.length > 0 && (
                 <div className="flex flex-col gap-2">
-                  <div className="flex flex-col gap-1">
-                    <span className={sectionLabel}>
-                      {t("generationOverlay.dubLabel")}
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      {t("generationOverlay.dubHint")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {intent.dub_languages.map((lang) => (
-                      <span
-                        key={lang}
-                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
-                      >
-                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        {t(`languages.${lang}`, { defaultValue: lang })}
-                        <button
-                          type="button"
-                          aria-label={t(
-                            "generationOverlay.removeDubLanguage"
-                          )}
-                          className="text-muted-foreground transition-colors hover:text-foreground"
-                          onClick={() =>
-                            setIntent((prev) => ({
-                              ...prev,
-                              dub_languages: prev.dub_languages.filter(
-                                (l) => l !== lang
-                              ),
-                            }))
-                          }
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
+                  <span className={sectionLabel}>
+                    {t("generationOverlay.derivedLabel")}
+                  </span>
+                  <div className="flex flex-col gap-1.5 rounded-md bg-card p-3">
+                    {derived.map((row, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-sm">
+                        {row.variant === "dub" ? (
+                          <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : row.variant === "subs" ? (
+                          <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : row.type === "video" ? (
+                          <Video className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          (() => {
+                            const Meta =
+                              Object.values(SKILL_META).find(
+                                (m) => m.labelKey === `results.tabs.${row.type}`
+                              ) ?? SKILL_META.select_clips
+                            return (
+                              <Meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                            )
+                          })()
+                        )}
+                        <span>{derivedLabel(row)}</span>
+                      </div>
                     ))}
                   </div>
-                  {/* The multiplication, in the open: every
-                      clip gets one version per language. */}
-                  {clipsSlotForVersions && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("generationOverlay.dubVersionCount", {
-                        clips:
-                          clipsSlotForVersions.count ??
-                          SLOT_COUNT_DEFAULT.clips,
-                        langs: intent.dub_languages.length,
-                        total:
-                          (clipsSlotForVersions.count ??
-                            SLOT_COUNT_DEFAULT.clips) *
-                          intent.dub_languages.length,
-                      })}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Subtitle versions (caption_languages) — same fork semantics
-                  as the voice-over block above: one DERIVED subtitled version
-                  per language, original voice stays. Chips removable; adding
-                  a language goes through chat refine. */}
-              {intent.caption_languages.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-col gap-1">
-                    <span className={sectionLabel}>
-                      {t("generationOverlay.subsLabel")}
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      {t("generationOverlay.subsHint")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {intent.caption_languages.map((lang) => (
-                      <span
-                        key={lang}
-                        className="flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-sm"
-                      >
-                        <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                        {t(`languages.${lang}`, { defaultValue: lang })}
-                        <button
-                          type="button"
-                          aria-label={t(
-                            "generationOverlay.removeSubsLanguage"
-                          )}
-                          className="text-muted-foreground transition-colors hover:text-foreground"
-                          onClick={() =>
-                            setIntent((prev) => ({
-                              ...prev,
-                              caption_languages: prev.caption_languages.filter(
-                                (l) => l !== lang
-                              ),
-                            }))
-                          }
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  {clipsSlotForVersions && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("generationOverlay.subsVersionCount", {
-                        clips:
-                          clipsSlotForVersions.count ??
-                          SLOT_COUNT_DEFAULT.clips,
-                        langs: intent.caption_languages.length,
-                        total:
-                          (clipsSlotForVersions.count ??
-                            SLOT_COUNT_DEFAULT.clips) *
-                          intent.caption_languages.length,
-                      })}
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -2441,13 +2469,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       The message machine itself is untouched — only the shell changes. */
   /** Step marker label — the same chain as RunCard: live summary →
    * friendly stage copy → kind fallback. */
-  const stepLabel = (step: (typeof steps)[number]) =>
-    step.summary ||
-    (step.stage
-      ? t(`results.stepper.${step.stage}`, { defaultValue: "" })
-      : "") ||
-    t(`chat.stepKinds.${step.kind}`, { defaultValue: step.kind })
-
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
@@ -2461,6 +2482,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             answer={m.qa.answer}
             muted={m.qa.muted}
           />
+        ) : m.meta === "error" ? (
+          <TurnErrorRow text={m.content} />
         ) : m.role === "user" ? (
           <div className="flex w-full flex-col gap-2">
             {/* The turn's persisted focus rides as a gray prefix row (D8
@@ -2497,7 +2520,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 )
               }
               onRestore={() => restoreVersion(index)}
-              slotLabel={slotLabel}
+              taskLabel={taskLabel}
             />
           </MessageScrollerItem>
         ) : null
@@ -2550,7 +2573,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                     list below. */}
                 {runStreamUnits ? (
                   <>
-                    {runStreamUnits.map((unit, i) => {
+                    {runStreamUnits.map((unit) => {
                       if (unit.kind === "message") {
                         return renderConversationMessage(unit.message)
                       }
@@ -2605,64 +2628,40 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                           </MessageScrollerItem>
                         )
                       }
-                      // stepGroup / pendingGroup — consecutive steps merge
-                      // into one bubble; the FIRST group carries the
-                      // starting line (today's visual).
-                      const groupSteps =
-                        unit.kind === "stepGroup" ? unit.steps : pendingSteps
-                      const firstGroup = !runStreamUnits
-                        .slice(0, i)
-                        .some(
-                          (u) =>
-                            u.kind === "stepGroup" || u.kind === "pendingGroup",
-                        )
-                      return (
-                        <MessageScrollerItem key={`run-steps-${i}`}>
-                          <Message align="start">
-                            <MessageContent>
-                              <div className="w-full space-y-4">
-                                {firstGroup && (
-                                  <p className="text-sm leading-relaxed">
-                                    {t("generationOverlay.startingLine")}
-                                  </p>
-                                )}
-                                <div className="flex flex-col gap-2">
-                                  {/* Run still queued (assets processing /
-                                      worker hasn't claimed it): no workflow
-                                      steps exist yet, so stand in with a
-                                      friendly marker. */}
-                                  {unit.kind === "pendingGroup" &&
-                                    steps.length === 0 &&
-                                    !terminal && (
-                                      <StepMarker
-                                        status="running"
-                                        label={
-                                          assets.some(
-                                            (a) =>
-                                              a.processing_status ===
-                                                "pending" ||
-                                              a.processing_status ===
-                                                "processing",
-                                          )
-                                            ? t("results.stepper.transcribing")
-                                            : t("results.stepper.queued")
-                                        }
-                                      />
-                                    )}
-                                  {groupSteps.map((step) => (
-                                    <StepMarker
-                                      key={step.id}
-                                      status={step.status}
-                                      label={stepLabel(step)}
-                                      error={step.error}
-                                    />
-                                  ))}
+                      // taskList — ONE persistent block (the CC anatomy):
+                      // header + narrative + the checklist flipping in place.
+                      if (unit.kind === "taskList") {
+                        return (
+                          <MessageScrollerItem key="run-task-list">
+                            <Message align="start">
+                              <MessageContent>
+                                <div className="w-full space-y-4">
+                                  {!terminal && (
+                                    <p className="text-sm leading-relaxed">
+                                      {t("generationOverlay.startingLine")}
+                                    </p>
+                                  )}
+                                  <RunTaskList
+                                    steps={steps}
+                                    title={planSummary}
+                                    runStartedAt={runCreatedAt}
+                                    terminal={terminal}
+                                    narrativeFallback={
+                                      assets.some(
+                                        (a) =>
+                                          a.processing_status === "pending" ||
+                                          a.processing_status === "processing",
+                                      )
+                                        ? t("results.stepper.transcribing")
+                                        : t("results.stepper.queued")
+                                    }
+                                  />
                                 </div>
-                              </div>
-                            </MessageContent>
-                          </Message>
-                        </MessageScrollerItem>
-                      )
+                              </MessageContent>
+                            </Message>
+                          </MessageScrollerItem>
+                        )
+                      }
                     })}
                   </>
                 ) : (
@@ -2822,6 +2821,24 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           // typing the next message.
           pendingChoice.workflow_run_id ? handleCheckpointBail : undefined
         }
+      />
+    ) : null
+  // The task-book confirm dock — one instance shared across the shells:
+  // fullscreen parks it above the muted input group (its own bg-muted
+  // card); the dock renders it as a square child of the ONE frosted
+  // container (plain — the container owns the chrome, D4 一体容器).
+  const taskBookDock =
+    phase === "confirm" && intentReady && !chatBusy ? (
+      <QuestionDock
+        kind="task_book"
+        plain={shell === "dock"}
+        question={t("generationOverlay.confirmQuestion")}
+        autonomy={autonomy}
+        onAutonomyChange={setAutonomy}
+        onStart={handleStartGeneration}
+        onCancel={handleCancel}
+        starting={isStarting}
+        startDisabled={!canStartGeneration || chatBusy}
       />
     ) : null
   const inputBody = (
@@ -3055,27 +3072,21 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
             shell === "dock" && "pointer-events-auto"
           )}
         >
-          {phase === "confirm" && intentReady && !chatBusy && (
-            <QuestionDock
-              kind="task_book"
-              question={t("generationOverlay.confirmQuestion")}
-              reasons={reasons}
-              autonomy={autonomy}
-              onAutonomyChange={setAutonomy}
-              onStart={handleStartGeneration}
-              onCancel={handleCancel}
-              starting={isStarting}
-              startDisabled={!canStartGeneration || chatBusy}
-            />
-          )}
+          {shell !== "dock" && taskBookDock}
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
           {shell === "dock" ? (
-            <div className="overlay-surface overflow-hidden rounded-xl">
+            /* The dock's one frosted container — dock-surface (2026-08-15
+               走查拍板): translucent enough that the canvas's dot grid reads
+               through the frost; hairline only, NO shadow — the dock is the
+               composer's third parking spot and inherits its hero-flat rule
+               (without the ring the glass edge dissolves into the canvas). */
+            <div className="dock-surface overflow-hidden rounded-xl ring-1 ring-foreground/10">
               {historyOpen && (
                 <div className="h-[min(50vh,480px)]">{chatScroller}</div>
               )}
+              {taskBookDock}
               {choiceDock}
               <div className="p-2">{inputBody}</div>
             </div>

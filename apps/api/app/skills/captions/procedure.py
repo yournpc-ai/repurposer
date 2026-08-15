@@ -98,3 +98,42 @@ async def translate_caption_track(
         end = float(unit[-1]["end"])
         out.extend(_redistribute(text, start, end, target_language))
     return out
+
+
+async def translate_caption_units(
+    cues: list[dict[str, Any]],
+    target_language: str,
+    style_hint: str | None = None,
+) -> list[dict[str, Any]]:
+    """Translate into UNIT-level cues — one cue per ~UNIT_WORDS words, the
+    whole translated unit as ``text`` over the unit's [start, end] span.
+
+    This is the 双语对照轨 (ClipSpec.translation_track, 2026-08-14): the
+    renderer pairs it with the word-level original track by time overlap and
+    shows it as the primary line, so it must NOT be word-split (a bilingual
+    line is read whole; karaoke stays on the original words only).
+    """
+    if not cues:
+        return []
+
+    units = _group_units(cues)
+    unit_texts = [" ".join(str(c["text"]).strip() for c in unit) for unit in units]
+
+    translated = await translator.call(
+        lines=unit_texts, target_language=target_language, style_hint=style_hint
+    )
+
+    out: list[dict[str, Any]] = []
+    for unit, text in zip(units, translated.lines, strict=False):
+        text = text.strip()
+        if not text:
+            continue
+        out.append(
+            {
+                "start": float(unit[0]["start"]),
+                "end": float(unit[-1]["end"]),
+                "text": text,
+                "lang": target_language,
+            }
+        )
+    return out

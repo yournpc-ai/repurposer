@@ -26,7 +26,10 @@ DEFAULT_BRAND_CONFIG: dict[str, Any] = {
     "aspect": "9:16",
     "fillMode": "fill",
     "captionFont": "lilita",
-    "captionSize": 44,
+    # Reference size on the 1080×1920 vertical canvas — the renderer scales
+    # it by frame height (68 → 9:16 keeps 68, 1:1/16:9 get ≈38, the
+    # TikTok/CapCut/YouTube cross-aspect norm; 2026-08-14 尺寸按画面推导).
+    "captionSize": 68,
     "captionColor": "#facc15",
     "captionPosition": {"x": 0.5, "y": 0.84},
     "captionStylePreset": "clean-bottom",

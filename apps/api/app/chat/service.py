@@ -39,6 +39,7 @@ is a new intent and the question stays pending.
 
 from datetime import UTC, datetime
 from dataclasses import dataclass
+import json
 from typing import Any
 from uuid import UUID
 
@@ -62,7 +63,6 @@ from app.models.schemas import (
     ChatResponse,
     EditOpsProposal,
     InferredIntent,
-    IntentSlot,
     PendingIntent,
     ProjectStatus,
     StartAnswerRequest,
@@ -80,7 +80,8 @@ from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
-from app.skills import SkillRejected, dispatchable_skills
+from app.pipeline.graph import MEDIA, NODE_KINDS
+from app.skills import SkillRejected, dispatchable_skills, validate_task_list
 
 _ASK_BACK_TEXT = (
     "I want to make sure I do the right thing — could you be more specific? "
@@ -209,20 +210,16 @@ async def _create_run_from_tasks(
     summary: str,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace."""
-    from app.pipeline.orchestrator import TaskSpec, create_run, derive_context_fields
+    from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
-    backfill = derive_context_fields(tasks)
     run = await create_run(
         db,
         project,
         TaskSpec(
-            outputs=[
-                IntentSlot.model_validate(s) for s in backfill.get("outputs", [])
-            ],
-            target_language=project.language or "en",
+            tasks=tasks,
+            target_language=first_task_language(tasks) or project.language or "en",
             instruction=summary,
             scope="full",
-            tasks=tasks,
         ),
     )
     return run.id
@@ -377,84 +374,49 @@ async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
         await maybe_finalize_run(run_id)
 
 
-_SLOT_MERGE_FIELDS = ("count", "focus", "language", "tone_override")
-
-
-def _match_slot(slots: list[IntentSlot], slot: IntentSlot) -> IntentSlot | None:
-    """Find the slot representing the same logical output: same type AND
-    language first (the identity that distinguishes same-type siblings — an
-    English vs a German post), then same type alone (a language revision
-    retargets the slot rather than creating a sibling)."""
-    return next(
-        (s for s in slots if s.type == slot.type and s.language == slot.language),
-        None,
-    ) or next((s for s in slots if s.type == slot.type), None)
-
-
-def merge_prior_slots(
-    base: list[IntentSlot],
-    prior: list[IntentSlot],
-    inferred: list[IntentSlot],
-) -> list[IntentSlot]:
-    """Three-way merge of the panel's book into a fresh re-inference.
-
-    base = the last-served (stored) book; prior = the panel's current book
-    (``explicit=True`` marks slots the user hand-edited); inferred = the
-    LLM's fresh read of the conversation.
-
-    Per field, for a hand-edited slot:
-
-    - inference is null → no opinion; keep the panel value;
-    - panel == base → the panel never moved this field; inference owns it;
-    - inference == base → the LLM parroted the old state; the panel's newer
-      edit wins;
-    - both moved → **chat wins** (2026-08-05 ruling: chat IS how the user
-      edits the plan — nothing is locked, the latest deliberate signal
-      prevails).
-
-    Slots the user never touched follow the inference wholesale. A hand-
-    edited slot the inference dropped entirely is re-appended (protects
-    panel edits from LLM omission; deleting a slot the user hand-edited
-    must happen in the panel itself)."""
-    merged = list(inferred)
-    for pin in prior:
-        if not pin.explicit:
-            continue
-        slot = _match_slot(merged, pin)
-        if slot is None:
-            merged.append(pin)
-            continue
-        base_slot = _match_slot(base, pin)
-        for field in _SLOT_MERGE_FIELDS:
-            inferred_value = getattr(slot, field)
-            pin_value = getattr(pin, field)
-            if inferred_value is None:
-                # null = no opinion — the panel's current value stands.
-                setattr(slot, field, pin_value)
-                continue
-            base_value = getattr(base_slot, field) if base_slot else None
-            if pin_value != base_value and inferred_value == base_value:
-                # The panel moved this field and the LLM merely parroted the
-                # old state — the panel's edit wins. (Panel untouched, or
-                # both moved: the inference stands — chat always wins.)
-                setattr(slot, field, pin_value)
-        slot.explicit = True
-    return merged
-
-
-def _task_book_summary(intent: InferredIntent) -> str:
-    """One-line plan digest stored as the question's human text (data, not
-    copy — localization happens at render time). Language is a per-slot
-    property (2026-08-05 restructure), so each slot carries its own."""
+def _task_chain_digest(tasks: list) -> str:
+    """The chain's compact digest — fed to the PlanAgent as the presented
+    plan (it revises the WHOLE chain, so it must see every task + param) and
+    used as the summary fallback when no derived preview exists."""
     labels = []
-    for slot in intent.outputs:
-        label = slot.type
-        if slot.language:
-            label += f"({slot.language})"
-        if slot.count:
-            label += f" ×{slot.count}"
+    for task in tasks:
+        params = task.params if isinstance(task.params, dict) else {}
+        label = task.skill
+        chips = []
+        lang = params.get("language") or params.get("target_language")
+        if lang:
+            chips.append(str(lang))
+        if params.get("count") is not None:
+            chips.append(f"×{params['count']}")
+        if params.get("bilingual"):
+            chips.append("bilingual")
+        if params.get("aspect"):
+            chips.append(str(params["aspect"]))
+        if chips:
+            label += "(" + ", ".join(chips) + ")"
         labels.append(label)
     return ", ".join(labels)
+
+
+def _task_book_summary(derived: list[dict], tasks: list) -> str:
+    """One-line plan digest stored as the question's human text (data, not
+    copy — localization happens at render time). The derived preview is the
+    primary source (what the user will GET, ADR-043); the raw chain is the
+    fallback when no preview was computed."""
+    labels = []
+    for row in derived:
+        label = str(row.get("type") or "")
+        if row.get("variant"):
+            label += f"·{row['variant']}"
+        if row.get("language"):
+            label += f"({row['language']})"
+        if row.get("count"):
+            label += f" ×{row['count']}"
+        if row.get("bilingual"):
+            label += " bilingual"
+        if label:
+            labels.append(label)
+    return ", ".join(labels) if labels else _task_chain_digest(tasks)
 
 
 async def sync_task_book_question(
@@ -464,6 +426,7 @@ async def sync_task_book_question(
     intent: InferredIntent,
     prompt: str,
     reasons: list[str] | None = None,
+    derived: list[dict] | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -489,7 +452,7 @@ async def sync_task_book_question(
     if has_messages is None and prompt:
         await _create_message(db, conversation_id, "user", prompt)
 
-    content = f"Plan ready for confirmation: {_task_book_summary(intent)}"
+    content = f"Plan ready for confirmation: {_task_book_summary(derived or [], intent.tasks)}"
     # Reason keys ride the question PAYLOAD (data, localized at render) —
     # never baked into content, which is user-facing prose (the QA archive
     # renders it verbatim). The LLM context line re-appends them (keys are
@@ -534,11 +497,12 @@ async def discard_unanswered_task_book(
     """Drop an unanswered task_book question on the ``/generate`` path.
 
     /generate means the run started WITHOUT the user answering the docked
-    question (auto-start on an explicit instruction, retries, targeted runs,
-    API callers). No QA interaction happened, so the archive must not carry
-    a fabricated Q/A pair — the question row is deleted outright. Genuine
-    confirmations (the dock's Start button, a prose "looks good, start it")
-    go through ``answer_question`` and still archive their QA pair.
+    question (retries, targeted runs, direct API callers — the overlay's own
+    Start always goes through ``answer_question``). No QA interaction
+    happened, so the archive must not carry a fabricated Q/A pair — the
+    question row is deleted outright. Genuine confirmations (the dock's
+    Start button, a prose "looks good, start it") go through
+    ``answer_question`` and still archive their QA pair.
     Flush-only — caller commits.
     """
     conversation = await find_conversation(db, user_id, project_id)
@@ -579,6 +543,7 @@ async def answer_question(
         TaskSpec,
         bail_waiting_checkpoint,
         create_run,
+        first_task_language,
         resume_waiting_checkpoint,
     )
 
@@ -653,28 +618,31 @@ async def answer_question(
                 raise HTTPException(
                     status.HTTP_409_CONFLICT, "No pending task book to start."
                 )
-            # The review panel's edited task book (hand-edited slots marked
-            # explicit) wins over the stored pending intent — panel edits
-            # must reach the run they confirm.
+            # The review panel's edited task book wins over the stored
+            # pending intent — panel edits must reach the run they confirm.
+            # Panel edits ARE task-list mutations (ADR-043): the same data
+            # structure the LLM proposes, so the confirmed chain ships
+            # verbatim — no merge machinery.
             intent = data.intent or pending.intent
-            outputs = list(intent.outputs) or [
-                IntentSlot(type="post"),
-                IntentSlot(type="quotes"),
-                IntentSlot(type="article"),
-            ]
+            tasks = list(intent.tasks)
+            if not tasks:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "The task book is empty — nothing to start.",
+                )
             try:
                 # Entry constraints (clips-media gate included) reject at the
                 # birthplace — ValueError here is a client-facing 422.
-                # target_language is now a pure fallback (language is a
-                # per-slot property): derive it from the first slot that
-                # carries one, for legacy/null-slot reads downstream.
+                # target_language is a pure fallback (language is a per-task
+                # param): derive it from the first task that carries one.
                 run = await create_run(
                     db,
                     project,
                     TaskSpec(
-                        outputs=outputs,
+                        tasks=tasks,
                         target_language=(
-                            next((s.language for s in outputs if s.language), None)
+                            first_task_language(tasks)
+                            or project.language
                             or "en"
                         ),
                         instruction=intent.specific_instruction
@@ -685,12 +653,14 @@ async def answer_question(
                             if pending.persona_id
                             else None
                         ),
-                        dub_languages=intent.dub_languages,
-                        caption_languages=intent.caption_languages,
                         autonomy=data.autonomy or "auto",
                         scope="full",
                     ),
                 )
+            except SkillRejected as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
+                ) from exc
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
@@ -844,9 +814,11 @@ async def _plan_turn(
     first_file = next((a for a in assets if a.file_url), None)
     filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
 
-    # plan_agent never raises MiniMaxError — its declared fallback (Agent
-    # funnel 的声明兜底) is the default task book (dockable, editable,
-    # startable; never a white screen). The presented plan rides along so the
+    # plan_agent provider failures propagate as MiniMaxError — no fabricated
+    # default book (2026-08-14 裁定: a wrong plan that looks real misleads,
+    # and Start would spend a paid run on it); the route boundary turns it
+    # into a 502 with the localized provider line. The presented plan rides
+    # along so the
     # start/revise verdict sees what is actually being confirmed; the recent
     # rounds ride along so the material/content judgment sees what just
     # happened (G-7 — e.g. the assistant asked for source material and the
@@ -863,12 +835,23 @@ async def _plan_turn(
         if attached:
             line += f" [attached: {', '.join(attached)}]"
         recent_lines.append(line)
+    # The presented chain (ADR-043): the panel's current task list when the
+    # caller sends one (hand edits ride along), else the stored book's. The
+    # PlanAgent sees it as a JSON chain and re-emits the WHOLE refined chain
+    # — panel edits survive because the LLM preserves what the message does
+    # not revise (chat revisions always win; the field-level merge machinery
+    # died with the slots grammar).
+    prior = request.prior_intent or (stored.intent if stored else None)
+    # The LLM revises the exact chain, not a prose digest — ship the JSON.
+    presented_plan = (
+        json.dumps([t.model_dump(mode="json") for t in prior.tasks], ensure_ascii=False)
+        if prior is not None and prior.tasks
+        else None
+    )
     infer_kwargs: dict[str, Any] = dict(
         prompt=prompt,
         filename=filename,
-        presented_plan=(
-            _task_book_summary(stored.intent) if stored is not None else None
-        ),
+        presented_plan=presented_plan,
         recent=recent_lines or None,
     )
     if on_delta is not None:
@@ -903,53 +886,66 @@ async def _plan_turn(
         intent.action = "answer"
         intent.answer = _ask_for_material_text(prompt)
 
+    # Chain adjudication (ADR-043): the registry validates the proposed task
+    # list — one bounded repair round on rejection (the funnel's reserved
+    # kwarg), then degrade to an answer, never a docked broken book.
+    if intent.action == "generate":
+        try:
+            validate_task_list(intent.tasks)
+            if not intent.tasks:
+                raise SkillRejected("empty task list")
+        except SkillRejected as first_error:
+            repaired_intent: InferredIntent | None = None
+            try:
+                retry = await plan_agent.call(
+                    **infer_kwargs,
+                    repair_feedback=(
+                        f"{first_error} "
+                        f"(available: {getattr(first_error, 'suggestions', [])})"
+                    ),
+                )
+                validate_task_list(retry.tasks)
+                if retry.tasks:
+                    repaired_intent = retry
+            except (SkillRejected, MiniMaxError):
+                pass
+            if repaired_intent is not None:
+                intent = repaired_intent
+            else:
+                intent.action = "answer"
+                intent.answer = _cannot_do_text()
+
     has_media = await has_renderable_media(db, UUID(str(project.id)))
 
-    # Three-way merge rule (2026-08-05 ruling): base = the last-served book,
-    # prior = the panel's current book (explicit slots = hand-edited),
-    # inferred = the LLM's fresh read. Hand-edited fields survive when the
-    # LLM has no opinion or merely parrots the old state; anything the user's
-    # message revises wins — chat IS how the plan is edited, nothing is
-    # locked. Falls back to the stored pending intent when the caller did
-    # not send its current book.
-    prior = request.prior_intent or (stored.intent if stored else None)
-    if prior is not None:
-        base_slots = stored.intent.outputs if stored else []
-        intent.outputs = merge_prior_slots(base_slots, prior.outputs, intent.outputs)
-        # dub_languages, same three-way shape: an untouched panel list
-        # follows the fresh inference wholesale (refine can add/drop/empty
-        # languages); a panel-edited list survives an inference that is
-        # silent (empty = no opinion) or merely parrots the old list; when
-        # both diverge, chat wins. The confirm path (kind=start) always
-        # honors the panel's list directly.
-        stored_dub = stored.intent.dub_languages if stored else []
-        if prior.dub_languages == stored_dub:
-            pass  # panel untouched — inference owns it
-        elif not intent.dub_languages or intent.dub_languages == stored_dub:
-            intent.dub_languages = list(prior.dub_languages)
-        # else: both moved — chat wins, the inference stands.
-        # caption_languages: identical three-way shape (RECIPES §4.1 字幕卡).
-        stored_caps = stored.intent.caption_languages if stored else []
-        if prior.caption_languages == stored_caps:
-            pass  # panel untouched — inference owns it
-        elif not intent.caption_languages or intent.caption_languages == stored_caps:
-            intent.caption_languages = list(prior.caption_languages)
-        # else: both moved — chat wins, the inference stands.
-
-    clips_slot = next((s for s in intent.outputs if s.type == "clips"), None)
     reasons: list[str] = []
-    if not intent.outputs_explicit:
-        reasons.append("outputs_default")
-    if clips_slot is not None and clips_slot.count is None:
+    if not intent.tasks_explicit:
+        reasons.append("chain_default")
+    clips_task = next((t for t in intent.tasks if t.skill == "select_clips"), None)
+    if clips_task is not None and (clips_task.params or {}).get("count") is None:
         reasons.append("clip_count_default")
-    if clips_slot is not None and not has_media:
+    # Media-needing work without media: the chain's own declarations answer —
+    # a skill whose node requires MEDIA, or a clip-spec consumer (its `after`
+    # names materialize_source). Registry-native; no parallel list.
+    def _needs_media(skill: str) -> bool:
+        node = NODE_KINDS.get(skill)
+        if node is None:
+            return False
+        return any(r.key == MEDIA.key for r in node.requires) or (
+            "materialize_source" in (node.after or ())
+        )
+
+    if not has_media and any(_needs_media(t.skill) for t in intent.tasks):
         reasons.append("clips_without_media")
 
     # An answer action without answer text is an LLM misfire — degrade to a
-    # plan turn (dock the book for confirmation) rather than clobber the
-    # stored task book with an empty answer.
+    # plan turn (dock the book for confirmation) when a chain exists, else
+    # answer with the capability line; never clobber the stored task book
+    # with an empty answer or dock an empty chain.
     if intent.action == "answer" and not intent.answer:
-        intent.action = "generate"
+        if intent.tasks:
+            intent.action = "generate"
+        else:
+            intent.answer = _cannot_do_text()
 
     if intent.action == "start":
         # G-1: a prose confirmation ("looks good, start it") is not a
@@ -973,7 +969,7 @@ async def _plan_turn(
             # unchanged.
             bailed_run_ids = await sync_task_book_question(
                 db, user_id, project, stored.intent, stored.prompt,
-                reasons=stored.reasons,
+                reasons=stored.reasons, derived=stored.derived,
             )
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
@@ -995,6 +991,17 @@ async def _plan_turn(
     if persona_id is None and isinstance(project.pending_intent, dict):
         persona_id = project.pending_intent.get("persona_id")
 
+    # Derived preview (ADR-043): dry-run the chain through compile_graph and
+    # project what it will make — the plan card's "you'll get" section. A
+    # chain that can't compile here (e.g. transform with no media anywhere)
+    # still docks, flagged by its reason — the birthplace rejects for real.
+    from app.pipeline.orchestrator import derive_plan_preview
+
+    try:
+        derived = await derive_plan_preview(db, project, intent.tasks)
+    except (SkillRejected, ValueError):
+        derived = []
+
     # Persist the unconfirmed task book on the project: leaving the chat and
     # coming back (any device) restores this exact plan. Cleared once the run
     # starts. The dock above the input rebuilds from the task_book question.
@@ -1003,9 +1010,10 @@ async def _plan_turn(
         intent=intent,
         reasons=reasons,
         persona_id=persona_id,
+        derived=derived,
     ).model_dump(mode="json")
     bailed_run_ids = await sync_task_book_question(
-        db, user_id, project, intent, prompt, reasons=reasons
+        db, user_id, project, intent, prompt, reasons=reasons, derived=derived
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it

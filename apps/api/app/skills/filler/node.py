@@ -16,6 +16,7 @@ from app.pipeline.clip_spec import remove_range
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
+    _pend_suppressed_base_renders,
     _record_target_output_ids,
     _run_origin,
     _target_clips,
@@ -26,7 +27,9 @@ from app.tools.filler import detect
 
 class RemoveFiller(NodeBase):
     kind = "remove_filler"
-    after = ("select_clips",)
+    task_name = "Remove filler words"
+    task_name_zh = "去除口头禅"
+    after = ("select_clips", "materialize_source")
     requires = (TRANSCRIPT,)
 
     def estimate(self, ctx: dict) -> dict | None:
@@ -106,6 +109,11 @@ class RemoveFiller(NodeBase):
                 node.id,
                 "没有发现口水词" if ui_lang_of(run, project).startswith("zh") else "No fillers found",
             )
+        # Skip-rescue: clips left on their base spec (no fillers found in
+        # them) still owe a render when the producer's fan-out was suppressed
+        # for this chain.
+        await _pend_suppressed_base_renders(db, run, node, clips, exclude=set(touched))
+        if not touched:
             return []
 
         await _fan_out_renders(db, run, node, touched)

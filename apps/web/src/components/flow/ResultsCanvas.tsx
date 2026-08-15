@@ -11,10 +11,30 @@
 
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import {
+  Clapperboard,
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  Languages,
+  RectangleHorizontal,
+  RectangleVertical,
+  Scissors,
+  Square,
+  Star,
+} from "lucide-react"
 
+import { toAbsoluteUrl } from "@/lib/api"
 import type { Output, WorkflowStep } from "@/lib/types"
+import { formatDuration } from "@/lib/utils"
+import {
+  MediaLightbox,
+  type MediaChip,
+  type MediaLightboxData,
+} from "@/components/results/MediaLightbox"
 
 import { FlowView } from "./FlowView"
+import { PRODUCT_TYPE_ICON } from "./FlowNodeCard"
 import { runFlowGraph, SPINE_NODE_ID, type RunFlowAsset } from "./runFlow"
 import type { FlowOutputAction } from "./types"
 
@@ -22,6 +42,9 @@ export interface ResultsCanvasProps {
   assets: RunFlowAsset[]
   steps: WorkflowStep[]
   outputs: Output[]
+  /** The run's prompt — displayed in every product node's interaction area
+   * (read-only; editing happens in the dock). */
+  prompt?: string | null
   /** Birth replay in compile order — only for a completion witnessed live
    * in this session; every other entry renders the final frame instantly
    * (prohibition #5). */
@@ -48,6 +71,7 @@ export function ResultsCanvas({
   assets,
   steps,
   outputs,
+  prompt = null,
   choreograph = false,
   tourOutputId,
   onOutputClick,
@@ -62,14 +86,123 @@ export function ResultsCanvas({
   // full; only the surface's density flips).
   const [spineExpanded, setSpineExpanded] = useState(false)
   const { nodes, edges } = useMemo(
-    () => runFlowGraph({ assets, steps, outputs, tourOutputId, spineExpanded }, t),
-    [assets, steps, outputs, tourOutputId, spineExpanded, t]
+    () => runFlowGraph({ assets, steps, outputs, prompt, tourOutputId, spineExpanded }, t),
+    [assets, steps, outputs, prompt, tourOutputId, spineExpanded, t]
   )
   const outputById = useMemo(
     () => new Map(outputs.map((o) => [`output:${o.id}`, o])),
     [outputs]
   )
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
+  const assetByNodeId = useMemo(
+    () => new Map(assets.map((a) => [`asset:${a.id}`, a])),
+    [assets]
+  )
+
+  // ── Media lightbox (2026-08-15) ──────────────────────────────────────
+  // The expand affordance / asset media click: one frosted dialog — left
+  // the scrollable info column (timestamp, full prompt, derived-attribute
+  // chips), right the media. Product chips are product facts only (never a
+  // model name, prohibition #12).
+  const [lightbox, setLightbox] = useState<MediaLightboxData | null>(null)
+
+  const handleExpandMedia = (nodeId: string) => {
+    const node = nodeById.get(nodeId)
+    if (!node) return
+    const downloadName = (url: string, base: string) => {
+      const ext = url.split("?")[0].split(".").pop() ?? ""
+      return `${base || "media"}.${ext.length > 0 && ext.length <= 4 ? ext : "mp4"}`
+    }
+
+    const output = node.output
+    if (output) {
+      const url = toAbsoluteUrl(output.files.video ?? output.files.image ?? null)
+      if (!url) return
+      const chips: MediaChip[] = [
+        {
+          Icon: PRODUCT_TYPE_ICON[output.type] ?? Clapperboard,
+          label: node.label,
+        },
+      ]
+      if (node.detail) chips.push({ Icon: Languages, label: node.detail })
+      const aspect = (output.render_spec as { aspect?: string } | null)?.aspect
+      if (aspect) {
+        chips.push({
+          Icon:
+            aspect === "1:1"
+              ? Square
+              : aspect === "16:9"
+                ? RectangleHorizontal
+                : RectangleVertical,
+          label: aspect,
+        })
+      }
+      const duration = output.payload.duration
+      if (output.type === "clip" && duration) {
+        chips.push({ Icon: Clock, label: `${duration}s` })
+      }
+      const start = output.source_ref?.start_seconds
+      const end = output.source_ref?.end_seconds
+      if (start != null && end != null) {
+        chips.push({
+          Icon: Scissors,
+          label: `${formatDuration(start)}–${formatDuration(end)}`,
+        })
+      }
+      if (typeof output.score?.value === "number") {
+        chips.push({
+          Icon: Star,
+          label: `${output.score.value}`,
+          title: output.score.reason ?? undefined,
+        })
+      }
+      const title =
+        output.publishing.title || output.payload.hook || node.label
+      setLightbox({
+        kind: output.files.video ? "video" : "image",
+        url,
+        poster: output.files.video
+          ? (node.thumbUrl ?? null)
+          : null,
+        title,
+        createdAt: output.created_at,
+        prompt: node.prompt,
+        chips,
+        downloadName: downloadName(url, title),
+      })
+      return
+    }
+
+    const asset = assetByNodeId.get(nodeId)
+    if (asset) {
+      const url = node.videoUrl ?? node.thumbUrl ?? null
+      if (!url) return
+      const chips: MediaChip[] = []
+      if (node.detail) {
+        chips.push({
+          Icon:
+            asset.type === "video"
+              ? Clapperboard
+              : asset.type === "image"
+                ? ImageIcon
+                : FileText,
+          label: node.detail,
+        })
+      }
+      if (asset.duration_seconds) {
+        chips.push({ Icon: Clock, label: `${asset.duration_seconds}s` })
+      }
+      setLightbox({
+        kind: node.videoUrl ? "video" : "image",
+        url,
+        title: node.label,
+        createdAt: asset.created_at ?? null,
+        chips,
+        downloadName: node.label,
+      })
+    }
+  }
+
   return (
     <div className={className}>
       <FlowView
@@ -81,6 +214,7 @@ export function ResultsCanvas({
         className="h-full"
         selectedId={focusedOutputId ? `output:${focusedOutputId}` : null}
         onPaneClick={onPaneClick}
+        onExpandMedia={handleExpandMedia}
         onSelect={(id) => {
           // The spine group node toggles in place; a step node points the
           // dock at it (@workflow_step); a product node focuses / details.
@@ -91,6 +225,12 @@ export function ResultsCanvas({
           const output = outputById.get(id)
           if (output) {
             onOutputClick?.(output)
+            return
+          }
+          if (id.startsWith("asset:")) {
+            // Source media nodes have no dock business — a click IS the
+            // expand gesture (the lightbox; non-media assets no-op inside).
+            handleExpandMedia(id)
             return
           }
           if (id.startsWith("artifact:")) {
@@ -108,6 +248,12 @@ export function ResultsCanvas({
         onOutputAction={(id, action) => {
           const output = outputById.get(`output:${id}`)
           if (output) onOutputAction?.(output, action)
+        }}
+      />
+      <MediaLightbox
+        data={lightbox}
+        onOpenChange={(open) => {
+          if (!open) setLightbox(null)
         }}
       />
     </div>

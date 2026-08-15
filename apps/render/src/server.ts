@@ -4,9 +4,10 @@ import os from "node:os";
 
 import type { ClipSpec } from "@repurposer/clip";
 import express from "express";
+import { fetch } from "undici";
 
 import { renderClip } from "./render";
-import { CACHE_DIR } from "./stage";
+import { CACHE_DIR, dispatcherFor } from "./stage";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
@@ -29,7 +30,17 @@ async function uploadFile(url: string, filePath: string, contentType?: string) {
   const buffer = await fs.readFile(filePath);
   const headers: Record<string, string> = {};
   if (contentType) headers["Content-Type"] = contentType;
-  const resp = await fetch(url, { method: "PUT", body: buffer, headers });
+  // The PUT upload rides the same proxy-aware dispatcher as source staging
+  // (2026-08-15: a 340s whole-video MP4 upload over the throttled direct
+  // TOS link died on undici's headersTimeout — the render had SUCCEEDED;
+  // only the upload failed). Global fetch ignores HTTPS_PROXY; the explicit
+  // dispatcher is what honors it.
+  const resp = await fetch(url, {
+    method: "PUT",
+    body: buffer,
+    headers,
+    dispatcher: dispatcherFor(url),
+  });
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
     throw new Error(`Upload failed: ${resp.status} ${body}`);

@@ -9,7 +9,7 @@ import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { ClipDetailModal } from "@/components/results/ClipDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
-import { GenerationOverlay, normalizeIntent, normalizeSlots, type GenerationOverlayHandle } from "@/components/generation/GenerationOverlay"
+import { GenerationOverlay, normalizeIntent, tasksFromRunContext, type DerivedRow, type GenerationOverlayHandle } from "@/components/generation/GenerationOverlay"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import type { FlowOutputAction } from "@/components/flow/types"
 import type { RunFlowAsset } from "@/components/flow/runFlow"
@@ -64,7 +64,7 @@ const RESULTS_TOUR_STEPS: TourStepDef[] = [
     target: "[data-tour='results-menu']",
     titleKey: "tour.results.menuTitle",
     descKey: "tour.results.menuDesc",
-    side: "top",
+    side: "bottom",
     align: "end",
   },
 ]
@@ -85,8 +85,11 @@ interface WorkflowRun {
   progress: number
   error: string | null
   context: {
+    /** The confirmed task chain (ADR-043); legacy runs carry slot-shaped
+     * outputs instead — `tasksFromRunContext` upgrades either at read time. */
+    tasks?: { skill: string; params: Record<string, unknown> }[]
     /** Slot-shaped on new runs; legacy flat runs carry string outputs +
-     * `clip_count` — normalized through `normalizeSlots` at every read. */
+     * `clip_count` — read tolerance only, upgraded by `tasksFromRunContext`. */
     outputs?: (string | IntentSlot)[]
     clip_count?: number
     target_language?: string
@@ -94,6 +97,10 @@ interface WorkflowRun {
     dub_languages?: string[]
     /** 字幕语言集 (RECIPES §4.1 字幕卡): absent on pre-R6 runs. */
     caption_languages?: string[]
+    /** 画幅 (2026-08-14 三档画幅): absent = the brand default (9:16). */
+    aspect?: "9:16" | "1:1" | "16:9" | null
+    /** 双语对照 (2026-08-14 双语字幕): absent/false = plain translation. */
+    caption_bilingual?: boolean
     /** The run-pinned persona (ADR-038); legacy runs' brand_template_id key
      * is ignored on read — re-runs resolve via the persona chain. */
     persona_id?: string | null
@@ -108,13 +115,15 @@ interface WorkflowRun {
 
 interface PendingIntent {
   prompt: string
-  /** Slot-shaped on the API (the server upgrades legacy flat rows on read);
-   * typed loosely here and normalized at the overlay boundary. */
+  /** Task-shaped on the API (the server upgrades legacy flat/slot rows on
+   * read); typed loosely here and normalized at the overlay boundary. */
   intent: unknown
   /** Why the book needs a human check — confirmation is `reasons.length > 0`
    * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
   persona_id?: string | null
+  /** The server-compiled "what you'll get" preview rows (ADR-043). */
+  derived?: DerivedRow[]
 }
 
 interface ProjectResults {
@@ -126,30 +135,31 @@ interface ProjectResults {
   pending_intent?: PendingIntent | null
 }
 
-const TAB_TO_OUTPUT_KEY: Record<ResultsTab, string> = {
-  clips: "clips",
-  post: "post",
-  quotes: "quotes",
-  carousel: "carousel",
-  article: "article",
-}
-
-const OUTPUT_KEY_TO_TAB: Record<string, ResultsTab> = {
-  clips: "clips",
-  post: "post",
-  quotes: "quotes",
-  carousel: "carousel",
-  article: "article",
-}
-
-/** Node kinds that own a results tab (ADR-028); preprocess/persona/director/
- * revise/render nodes drive the stepper, not a tab. */
+/** Skills (== node kinds, N-35) that own a results tab (ADR-028): the whole
+ * chain's clip-side work (selection, whole-source materialization, the
+ * transforms) lands on the clips tab; preprocess/persona/director/revise/
+ * render nodes drive the stepper, not a tab. */
 const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
   select_clips: "clips",
+  materialize_source: "clips",
+  translate_clip: "clips",
+  dub_clip: "clips",
+  remove_filler: "clips",
+  add_music: "clips",
   write_post: "post",
   write_quotes: "quotes",
   write_carousel: "carousel",
   write_article: "article",
+}
+
+/** The producing skill a tab's retry re-runs (a retry replays the producer
+ * with its confirmed params — the chain's transforms don't ride it). */
+const TAB_TO_RETRY_SKILL: Record<ResultsTab, string> = {
+  clips: "select_clips",
+  post: "write_post",
+  quotes: "write_quotes",
+  carousel: "write_carousel",
+  article: "write_article",
 }
 
 export const Route = createFileRoute("/projects/$id/")({
@@ -442,20 +452,17 @@ function ProjectDetailPage() {
   }
 
   // Default to the first requested output tab once, when a generation is running.
-  const runSlots = normalizeSlots(
-    latestRun?.context?.outputs,
-    latestRun?.context?.clip_count
-  )
+  const runTasks = tasksFromRunContext(latestRun?.context)
   useEffect(() => {
     if (tabInitializedRef.current) return
-    if (!runSlots.length) return
-    const tab = OUTPUT_KEY_TO_TAB[runSlots[0].type]
+    if (!runTasks.length) return
+    const tab = NODE_KIND_TO_TAB[runTasks[0].skill]
     if (tab) {
       setActiveTab(tab)
       tabInitializedRef.current = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestRun?.context?.outputs])
+  }, [latestRun?.context])
 
   // Keep polling only for what SSE does not cover: anonymous viewers (no
   // token → hook no-ops) and outputs still rendering after the run settled
@@ -485,11 +492,22 @@ function ProjectDetailPage() {
   }, [results?.latest_run, results?.outputs, sseActive])
 
   const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
-  const clipCount = runSlots.find((s) => s.type === "clips")?.count ?? 5
+  // Skeleton count for the clips pane: the confirmed count when the chain
+  // selects clips; ONE for a whole-video chain (transforms without
+  // select_clips — the compile-injected materialize_source makes one
+  // whole-source clip); writers-only chains never render the pane. The bare
+  // fallback mirrors the server's SelectClipsParams default (count unnamed
+  // → 3) — legacy 5-default runs are all settled and never replay skeletons.
+  const clipsTask = runTasks.find((task) => task.skill === "select_clips")
+  const clipsTaskCount = clipsTask?.params?.count
+  const wholeVideoChain =
+    !clipsTask && runTasks.some((task) => NODE_KIND_TO_TAB[task.skill] === "clips")
+  const clipCount =
+    typeof clipsTaskCount === "number" ? clipsTaskCount : wholeVideoChain ? 1 : 3
 
   const requestedTabs = Array.from(
     new Set(
-      runSlots.map((s) => OUTPUT_KEY_TO_TAB[s.type]).filter(Boolean)
+      runTasks.map((task) => NODE_KIND_TO_TAB[task.skill]).filter(Boolean)
     )
   ) as ResultsTab[]
 
@@ -516,22 +534,28 @@ function ProjectDetailPage() {
 
   const handleRetry = async (tab: ResultsTab) => {
     if (!results) return
-    const outputKey = TAB_TO_OUTPUT_KEY[tab] as IntentSlot["type"]
     setRetrying((prev) => ({ ...prev, [tab]: true }))
     try {
       const ctx = latestRun?.context
-      const priorSlot = runSlots.find((s) => s.type === outputKey)
+      // 整类重做 = re-run the tab's own chain verbatim (ADR-043): the clips
+      // family is the chain's clips-family tasks in order (a whole-video
+      // chain has NO select_clips — inventing one would swap the product
+      // from "subtitled whole video" to "highlight cuts"); text families
+      // are their single writer task. Chat-scoped params (target_output_id)
+      // are stripped — a full run deletes the rows they point at.
+      const family =
+        tab === "clips"
+          ? runTasks.filter((task) => NODE_KIND_TO_TAB[task.skill] === "clips")
+          : runTasks.filter((task) => task.skill === TAB_TO_RETRY_SKILL[tab])
+      const tasks = (family.length > 0 ? family : [{ skill: TAB_TO_RETRY_SKILL[tab], params: {} }]).map(
+        (task) => {
+          const params = { ...(task.params ?? {}) }
+          delete params.target_output_id
+          return { skill: task.skill, params }
+        },
+      )
       await apiPost(`/api/v1/projects/${projectId}/generate`, {
-        slots: [
-          {
-            type: outputKey,
-            count: priorSlot?.count ?? null,
-            focus: null,
-            language: null,
-            tone_override: null,
-            explicit: false,
-          },
-        ],
+        tasks,
         target_language: ctx?.target_language || results.project.language || "en",
         instruction: ctx?.instruction || undefined,
         tone_settings: ctx?.tone_settings || undefined,
@@ -749,36 +773,21 @@ function ProjectDetailPage() {
   const overlayMounted = chatSearchOpen || attachOpen || resultsPhase
 
   /** The dock's plan-summary line, rebuilt from the completed run's context
-   * (the same read-tolerance shape the attach flow uses). */
-  const completedRunSlots = normalizeSlots(
-    completedRun?.context?.outputs,
-    completedRun?.context?.clip_count
-  )
+   * (the same read-tolerance shape the attach flow uses); a run with no
+   * recorded chain at all shows a bare clips row. */
+  const completedRunTasks = tasksFromRunContext(completedRun?.context)
   const completedRunIntent = completedRun
     ? normalizeIntent({
-        outputs: completedRunSlots.length ? completedRunSlots : normalizeSlots(["clips"]),
-        language: completedRun.context?.target_language ?? project.language ?? "en",
-        dub_languages: completedRun.context?.dub_languages,
-        caption_languages: completedRun.context?.caption_languages,
+        tasks: completedRunTasks.length
+          ? completedRunTasks
+          : [{ skill: "select_clips", params: {} }],
         specific_instruction: completedRun.context?.instruction,
       })
     : undefined
 
   const overlayInitialIntent = attachOpen
     ? normalizeIntent({
-        outputs: (runSlots.length ? runSlots : normalizeSlots(["clips"])).map(
-          (slot) => ({
-            ...slot,
-            language:
-              slot.language ??
-              latestRun?.context?.target_language ??
-              project.language ??
-              "en",
-          })
-        ),
-        language: latestRun?.context?.target_language ?? project.language ?? "en",
-        dub_languages: latestRun?.context?.dub_languages,
-        caption_languages: latestRun?.context?.caption_languages,
+        tasks: runTasks.length ? runTasks : [{ skill: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
       })
     : pendingIntent
@@ -812,22 +821,25 @@ function ProjectDetailPage() {
           onDeleted={() => navigate({ to: "/projects" })}
         />
       </div>
-      <div className="overlay-surface absolute right-3 top-3 z-30 flex items-center rounded-md md:right-4 md:top-4">
+      <div className="overlay-surface absolute right-3 top-3 z-30 flex items-center rounded-md shadow-md ring-1 ring-foreground/10 md:right-4 md:top-4">
         <ThemeToggle />
         <LanguageSwitcher />
         <NotificationBell />
       </div>
 
       {resultsPhase && completedRun ? (
-        /* Results phase (ADR-041 D1): the canvas is full-bleed; the bottom
-           padding is the dock's safe area (D4 — the fitted graph stays clear
-           of the floating input group). */
-        <div className="min-h-0 flex-1 pb-40 md:pb-44">
+        /* Results phase (ADR-041 D1): the canvas is FULL-BLEED — the dock
+           is a completely floating layer above it, never a layout
+           reservation (no safe-area padding: reserving space IS the
+           occlusion). A node passing under the dock is panned back into
+           view — the canvas is explore navigation. */
+        <div className="min-h-0 flex-1">
           <ResultsCanvas
             className="h-full"
             assets={canvasAssets}
             steps={completedRun.steps}
             outputs={outputs}
+            prompt={prompt || completedRun.context?.instruction || null}
             choreograph={choreograph}
             tourOutputId={resultsTourClipId}
             onOutputClick={handleOutputClick}
@@ -960,10 +972,7 @@ function ProjectDetailPage() {
               : null
           }
           initialIntent={overlayInitialIntent}
-          initialNeedsClarification={
-            pendingIntent ? (pendingIntent.reasons?.length ?? 0) > 0 : true
-          }
-          initialReasons={pendingIntent?.reasons ?? []}
+          initialDerived={pendingIntent?.derived}
           initialRunId={
             attachOpen
               ? attachRunId

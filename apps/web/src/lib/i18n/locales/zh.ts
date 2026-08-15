@@ -436,8 +436,10 @@ const zh: Resources = {
       director_understand: "理解素材",
       director_plan: "规划剪辑",
       align_stills: "按文字稿对齐照片",
+      materialize_source: "整条视频就位",
       select_clips: "选出高光片段",
       translate_clip: "翻译字幕",
+      dub_clip: "用你的声音配音",
       render: "渲染",
     },
     // 配方标签 chip（信息卡）——共享命名空间。
@@ -451,11 +453,12 @@ const zh: Resources = {
       demo_keynote: "示例登台演讲片段",
       demo_photos: "现场照片",
       demo_transcript: "演讲文字稿",
+      demo_article: "演讲文稿",
       image_video_preview: "轮播预览",
       subs_en: "英语原声",
+      subs_zh_bilingual: "中英双语",
       subs_fr: "法语字幕",
-      subs_de: "德语字幕",
-      subs_es: "西语字幕",
+      dub_es: "西语配音",
     },
     inspect: {
       tabs: {
@@ -468,20 +471,16 @@ const zh: Resources = {
       },
       dropzone: "上传或拖放文件",
       requiredMissing: "先上传素材：{{input}}",
-      promptTitle: "自定义提示词",
-      promptHint: "按你的需要改",
+      promptTitle: "示例提示词",
       send: "生成",
     },
     "multilingual-subs": {
       title: "多语言字幕",
-      promise: "上传你的演讲——原声保留，字幕译成法语、德语、西语。",
+      promise: "为你的视频带来多语言单行或双语字幕，或原声多语言配音。",
       inputTitle: "原始视频",
-      inputHint: "演讲、发布会或播客录像——你的原声就是主角。",
-      promptTemplate: "把我的演讲剪成高光短片，加上法语、德语、西语字幕——保留我的原声。",
-      variants: {
-        languages: "任意语言都可以——在提示词或对话里点名。",
-        dub: "想要出声版？说「用我的声音配一版」。",
-      },
+      inputHint: "在这里上传你的原视频。",
+      promptTemplate: "帮我把字幕做成中英双语的，法语字幕也出一版，西语版直接用我的声音配。",
+      promptHint: "直接发送，或者试试「双语字幕」「中文字幕」「西语配音」等。",
     },
     "image-video": {
       title: "图文视频",
@@ -489,13 +488,15 @@ const zh: Resources = {
       inputTitle: "文字稿和照片",
       inputHint: "你的演讲文字稿，加一组照片或直接给课件（PDF/PPT）——现场图、幻灯片、人像都可以。",
       promptTemplate: "把我的文字稿和照片做成带字幕和音乐的短片。",
+      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
-    "talk-clips": {
-      title: "演讲短片",
-      promise: "大型演讲重剪成竖屏高光短片——画面跟着台上的你走。",
+    "highlight-clips": {
+      title: "高光切片",
+      promise: "长视频里最好的那几段剪成竖屏短片——镜头自动跟人，哪段最值得先发也标出来。",
       inputTitle: "原始视频",
-      inputHint: "登台演讲或发布会录像——中景画面效果最好。",
-      promptTemplate: "把我的演讲重剪成竖屏高光短片，画面一直跟着台上的我。",
+      inputHint: "演讲、会议、访谈录像都行——中景画面效果最好。",
+      promptTemplate: "帮我把这个视频里最好的几段剪出来，做成竖屏短片，镜头跟着人走。",
+      promptHint: "直接发送，或者试试「切成横屏」「多剪几段」等。",
     },
     reframe: {
       title: "访谈分镜",
@@ -503,6 +504,7 @@ const zh: Resources = {
       inputTitle: "输入视频",
       inputHint: "双人对话的横屏录像——访谈或对谈节目。",
       promptTemplate: "把我的双人访谈重剪成跟着说话人切换的竖屏切片。",
+      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
     "ai-visuals": {
       title: "虚拟视频",
@@ -510,6 +512,7 @@ const zh: Resources = {
       inputTitle: "输入音频",
       inputHint: "你的演讲录音——画面全部围绕它生成。",
       promptTemplate: "把我的演讲变成一条短片，画面全部 AI 生成，不需要素材。",
+      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
   },
   // @-提及系统（MENTIONS §4）：picker 文案与类型名。
@@ -858,7 +861,7 @@ const zh: Resources = {
       history: "历史记录",
       focus: "当前焦点：{{name}}",
     },
-    // 画布产物卡（ADR-041 D5）：悬停工具条按钮文案。
+    // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。
     canvas: {
       preview: "预览",
       download: "下载",
@@ -866,17 +869,25 @@ const zh: Resources = {
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
       spine: "处理过程",
       spineSteps: "{{count}} 个步骤",
-      // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/字幕/音乐。
+      // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/音乐。
+      // （字幕卡 2026-08-15 退役：翻译是派生视频的属性，产物卡已承载——折过程脊。）
       artifact: {
         plan: "计划",
         selection: "选段",
         dub: "配音",
-        subs: "字幕",
         music: "音乐",
       },
-      // render 状态原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
+      // render 失败原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
+      // 渲染中由 BrandLoader 独自表达，不落状态行。
       renderFailed: "渲染失败——在下方说一句重试。",
-      rendering: "渲染中…",
+      // 悬停媒体控件：展开（左上）打开 lightbox；声音（右上）切换内联视频的静音。
+      expand: "展开",
+      mute: "静音",
+      unmute: "取消静音",
+    },
+    // 媒体 lightbox 的信息栏（媒体左侧）。
+    lightbox: {
+      prompt: "提示词",
     },
     // 产物节点的下一步建议行（D5——零 LLM，按产物类型确定性派生）。
     nextStep: {
@@ -980,6 +991,7 @@ const zh: Resources = {
       write_article: "正在撰写文章…",
       synth_talk_video: "正在生成视频…",
       align_stills: "正在为你的文字稿对齐节奏…",
+      materialize_source: "正在准备整条视频…",
     },
     qa: {
       q: "问",
@@ -1005,15 +1017,6 @@ const zh: Resources = {
     composerFollowUpPlaceholder: "输入后续指令，例如“把 hook 改短”或“添加德语版本”...",
     emptyStateSubtitle: "上传演讲、会议或访谈的视频或文字——我们记住你的内容与风格，为每个渠道生成你需要的内容。",
     noResultsYet: "结果将在这里显示...",
-    markerQueued: "已加入生成队列",
-    markerStarting: "开始生成...",
-    markerLoading: "加载素材中...",
-    markerClips: "生成视频片段中...",
-    markerPost: "生成社交长文中...",
-    markerQuotes: "生成金句卡中...",
-    markerCarousel: "生成轮播图中...",
-    markerArticle: "生成长文章中...",
-    markerDone: "全部完成！",
     quickActions: {
       regenerateHooks: "重新生成 hook",
       addLanguage: "添加{{language}}版本",
@@ -1034,28 +1037,37 @@ const zh: Resources = {
   },
   generationOverlay: {
     title: "生成计划",
-    subtitle: "检查一遍——把我理解有偏差的地方改掉。",
     backToProjects: "项目",
-    planProse: "我的理解：{{summary}}。",
-    outputsLabel: "输出类型",
-    outputsHint: "这次要产出的内容——每行一种产物，数量、语言、角度都可在行内调整；切片需要视频、音频或图片素材。",
-    dubLabel: "配音版本",
-    dubHint: "每种语言给切片多出一版：克隆声音配音，字幕也跟着配音语言走。帖子、金句、文章不受影响。",
-    removeDubLanguage: "移除此配音语言",
-    dubVersionCount: "{{clips}} 条切片 × {{langs}} 种语言 = 多出 {{total}} 版",
-    planSummaryDub: "配音 {{langs}}",
-    subsLabel: "字幕版本",
-    subsHint: "每种语言给切片多出一版字幕：原声保留，只有屏上文字翻译。帖子、金句、文章不受影响。",
-    removeSubsLanguage: "移除此字幕语言",
-    subsVersionCount: "{{clips}} 条切片 × {{langs}} 种语言 = 多出 {{total}} 版",
-    planSummarySubs: "字幕 {{langs}}",
+    planProse:
+      "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
+    chainLabel: "任务链",
+    chainHint: "我将按顺序执行这些步骤——每行的数量、语言、角度都可在行内调整；切片需要视频、音频或图片素材。",
+    addTask: "添加任务",
+    skills: {
+      translate_clip: "字幕版",
+      dub_clip: "配音版",
+      remove_filler: "去口头禅",
+      add_music: "背景音乐",
+    },
+    derivedLabel: "你将得到",
+    derive: {
+      video: "整条视频",
+      clips: "视频片段",
+      post: "帖子",
+      quotes: "金句卡",
+      carousel: "轮播图",
+      article: "文章",
+      subs: "字幕版",
+      dub: "配音版",
+      bilingual: "双语",
+    },
+    bilingualToggle: "双语对照",
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
     identityEcho: "风格：{{persona}}",
     identityPersonaAuto: "自动生成",
-    addOutput: "添加产物",
-    removeSlot: "移除此产物",
+    removeSlot: "移除此任务",
     slotFocusPlaceholder: "这些{{type}}优先讲什么内容（可选）",
     countDecrease: "减少",
     countIncrease: "增加",
@@ -1093,12 +1105,6 @@ const zh: Resources = {
       review: "审阅",
     },
     bail: "放弃生成",
-    reasons: {
-      title: "需要你确认：",
-      outputs_default: "产物是默认组合",
-      clip_count_default: "切片数量是默认值",
-      clips_without_media: "切片需要视频、音频或图片素材——上传一个即可，或去掉切片只用文字产物开工",
-    },
   },
   clipMenu: {
     more: "更多操作",
@@ -1157,7 +1163,7 @@ const zh: Resources = {
         "点击片段卡片即可打开详情——里面有可直接复制的标题、正文和话题标签，发社媒时直接用。",
       menuTitle: "快捷操作",
       menuDesc:
-        "鼠标悬停产物卡片即出工具条——预览、下载或发布到社交平台。",
+        "产物卡片下方常驻快捷操作——预览、下载或发布到社交平台。",
     },
   },
   notifications: {

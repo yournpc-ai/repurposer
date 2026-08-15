@@ -24,10 +24,6 @@ export interface RecipePublic {
   aspect: string
   /** Shared `recipes.tags.*` i18n keys. */
   tags: string[]
-  /** Variant guidance lines (RECIPES §7.2): per-recipe
-   * `recipes.<id>.variants.*` i18n keys rendered as desc copy under the
-   * promise line — teaching, not controls. */
-  variants: string[]
   /** Static recipe flow (ADR-035): shared `recipes.flow.*` i18n keys. */
   flow: { key: string; detail_key?: string | null; fanout?: number | null }[]
   example_assets: { kind: string; url: string; label_key?: string | null }[]
@@ -77,18 +73,19 @@ const asset = (name: keyof typeof RECIPE_ASSETS) => RECIPE_ASSETS[name]
 const RECIPE_PREVIEWS: Record<string, RecipeCard["preview"]> = {
   "multilingual-subs": {
     posterUrl: asset("multilingual-subs-poster.jpg"),
-    // Interim teaser = the demo source segment; the baked subs contrast
-    // pack replaces it (content hash swaps the URL, R6 bake).
+    // The baked 1:1 contrast pack's CN-EN bilingual version — two-line
+    // translated captions on the card face state the capability before a
+    // word is read.
     videoUrl: asset("multilingual-subs-preview.mp4"),
   },
   "image-video": {
     posterUrl: asset("image-video-poster.jpg"),
     videoUrl: asset("image-video-preview.mp4"),
   },
-  "talk-clips": {
+  "highlight-clips": {
     // Poster only — the crop_track craft layer is the week-3 spike; card
     // authoring lands with the positioning-root batch (RECIPES §4.3).
-    posterUrl: asset("talk-clips-poster.jpg"),
+    posterUrl: asset("highlight-clips-poster.jpg"),
   },
   reframe: {
     posterUrl: asset("reframe-poster.jpg"),

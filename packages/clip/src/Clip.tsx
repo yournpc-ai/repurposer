@@ -123,6 +123,9 @@ function IntroOutroCardView({
   card: IntroOutroCard;
   fontFamily: string;
 }) {
+  // Same height-scaling rule as captions/title: 68 is the reference size on
+  // the 1920-tall vertical canvas, not a fixed px on every frame.
+  const { height } = useVideoConfig();
   if (card.kind === "image" && card.media_url) {
     return (
       <AbsoluteFill>
@@ -151,7 +154,7 @@ function IntroOutroCardView({
           textAlign: "center",
           color: "#ffffff",
           fontFamily,
-          fontSize: 68,
+          fontSize: Math.round(68 * (height / 1920)),
           fontWeight: 700,
           lineHeight: 1.2,
           textShadow: "0 2px 12px rgba(0,0,0,0.6)",
@@ -165,16 +168,19 @@ function IntroOutroCardView({
 
 export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, height } = useVideoConfig();
   const fpsv = fps || COMPOSITION_FPS;
 
   // Brand (baked into the spec by the API; absent -> default look).
   const brand = spec.brand ?? undefined;
   const captionColor = brand?.caption_color || "#ffffff";
-  // Default 68px on the 1080-wide canvas (≈6.3% of width) — 56 read small on
-  // phone screens; this matches the text-card weight and the TikTok/CapCut
-  // caption norm. Brand caption_size still overrides.
-  const captionSize = brand?.caption_size || 68;
+  // Dimension-derived, never a fixed px (2026-08-14 ruling): brand
+  // caption_size is the REFERENCE size on the 1080×1920 vertical canvas and
+  // scales with frame height — 68 default → 9:16 keeps 68, 1:1/16:9 get 38
+  // (≈3.5% of height, the TikTok/CapCut/YouTube caption norm across aspects).
+  // The 84% caption width is the same rule horizontally: 8% side margins
+  // scale with frame width by construction.
+  const captionSize = Math.round((brand?.caption_size || 68) * (height / 1920));
   const captionFont = fontFamilyFor(brand?.caption_font);
   const objectFit = brand?.fill_mode === "fit" ? "contain" : "cover";
   // Caption style = catalog lookup (captions.ts), never a per-id branch.
@@ -223,6 +229,17 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     lines.find((line) => sourceTime >= line[0].start && sourceTime <= line[line.length - 1].end) ??
     lines.find((line) => sourceTime < line[0].start) ??
     [];
+
+  // 双语对照轨 (translation_track): unit-level translation cues paired with
+  // the active original line by time overlap. Rendered as the PRIMARY line
+  // (full caption style) with the original words smaller beneath — the
+  // translated version's viewer reads the translation. Single layout only:
+  // a stacked bilingual wall doubles every line and reads as noise, so the
+  // stack layout keeps the original track alone.
+  const translationTrack = spec.translation_track ?? [];
+  const activeTranslation =
+    translationTrack.find((c) => sourceTime >= c.start && sourceTime <= c.end) ??
+    null;
 
   const captionsEnabled = spec.caption_enabled !== false;
   // Frame at which a line's first cue becomes visible in OUTPUT time — the
@@ -385,7 +402,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             textAlign: "center",
             color: "#ffffff",
             fontFamily: "sans-serif",
-            fontSize: spec.title.size || 58,
+            fontSize: Math.round((spec.title.size || 58) * (height / 1920)),
             fontWeight: 800,
             lineHeight: 1.15,
             textShadow: "0 2px 12px rgba(0,0,0,0.7)",
@@ -444,18 +461,48 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </div>
       ) : null}
 
-      {inVideo && captionsEnabled && preset.layout === "single" && activeLine.length > 0 ? (
+      {inVideo && captionsEnabled && preset.layout === "single" && (activeLine.length > 0 || activeTranslation) ? (
         <div
           style={{
-            ...captionTextStyle,
             ...captionPosStyle,
             transform: [captionPosStyle.transform, entrance.transformSuffix]
               .filter(Boolean)
               .join(" "),
             opacity: entrance.opacity,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: Math.round(captionSize * 0.3),
           }}
         >
-          {renderCueSpans(activeLine)}
+          {activeTranslation ? (
+            // 双语对照: the primary translation line takes a 0.82 discount —
+            // two stacked lines need the air (2026-08-14 ruling).
+            <div
+              style={{
+                ...captionTextStyle,
+                fontSize: Math.round(captionSize * 0.82),
+              }}
+            >
+              {activeTranslation.text}
+            </div>
+          ) : null}
+          {activeLine.length > 0 ? (
+            <div
+              style={
+                activeTranslation
+                  ? {
+                      ...captionTextStyle,
+                      fontSize: Math.round(captionSize * 0.55),
+                      fontWeight: 500,
+                      opacity: 0.85,
+                    }
+                  : captionTextStyle
+              }
+            >
+              {renderCueSpans(activeLine)}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </AbsoluteFill>

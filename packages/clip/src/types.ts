@@ -7,7 +7,7 @@
  * stays swappable.
  */
 
-export type Aspect = "9:16" | "1:1";
+export type Aspect = "9:16" | "1:1" | "16:9";
 
 // The preset id type is DERIVED from the catalog (captions.ts) — adding a
 // style there updates this type automatically. Re-exported here so the
@@ -121,6 +121,10 @@ export interface ClipSpec {
   segments: ClipSegment[];
   crop: ClipCrop;
   caption_track: CaptionCue[];
+  /** 双语对照轨: the translated half of a bilingual caption pair — unit-level
+   * cues (no karaoke word timing), paired with caption_track's original lines
+   * by time overlap. Absent/empty = single-language captions. */
+  translation_track?: CaptionCue[];
   caption_style_preset: CaptionStylePreset;
   /** Normalized center point of the caption block. Null -> default (bottom). */
   caption_position?: Point | null;
@@ -138,6 +142,7 @@ export interface ClipSpec {
 export const ASPECT_DIMENSIONS: Record<Aspect, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "1:1": { width: 1080, height: 1080 },
+  "16:9": { width: 1920, height: 1080 },
 };
 
 /** Composition timeline fps (independent of the source's fps). */

@@ -12,7 +12,6 @@ from app.models.schemas import (
     ExportRequest,
     GenerateRequest,
     GenerateResponse,
-    IntentSlot,
     OutputResponse,
     ProjectCreate,
     ProjectResponse,
@@ -37,7 +36,7 @@ from app.chat.service import (
     get_project_prompt,
     seed_project_prompt,
 )
-from app.pipeline.orchestrator import TaskSpec, create_run
+from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.outputs import (
     aggregate_step_cost,
     list_visible_outputs,
@@ -285,54 +284,41 @@ async def generate_content(
         db, project_id, UUID(str(current_user.id))
     )
 
-    # Full-scope runs from the composer must now provide an explicit task book
-    # resolved by POST /projects/{id}/intent. Retries, targeted runs and API
-    # callers continue to pass explicit slots.
-    slots = request.slots
-    target_language = request.target_language
-    instruction = request.instruction
-    if slots is None and request.scope == "full":
+    # Full-scope runs from the composer must provide an explicit task book
+    # resolved by POST /chat (ADR-043 — the chain is the only grammar).
+    # Targeted scopes (hook/clip/derivative/render) carry no chain — they
+    # re-run one node family off target_id.
+    if request.tasks is None and request.scope == "full":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Task book must be confirmed via the chat plan path first.",
         )
-    if slots is None:
-        # Non-full scopes without explicit slots keep the pre-intent default.
-        slots = [
-            IntentSlot(type="clips"),
-            IntentSlot(type="post"),
-            IntentSlot(type="quotes"),
-            IntentSlot(type="article"),
-        ]
-    target_language = target_language or "en"
-    instruction = instruction or "Generate content from the uploaded assets."
+    instruction = request.instruction or "Generate content from the uploaded assets."
 
     # Persist the original prompt in the project-scoped conversation if it is
     # not already there. This is a no-op when the conversation already has messages.
-    prompt_text = request.instruction or "Generate content from the uploaded assets."
-    await seed_project_prompt(db, UUID(str(current_user.id)), project_id, prompt_text)
+    await seed_project_prompt(db, UUID(str(current_user.id)), project_id, instruction)
 
     try:
         # Entry constraints (clips-media gate, targeted-scope validity) reject
         # at the birthplace — ValueError here is a client-facing 422.
-        run = await create_run(
-            db,
-            project,
-            TaskSpec(
-                outputs=slots,
-                target_language=target_language,
-                instruction=instruction,
-                tone_settings=(
-                    request.tone_settings.model_dump() if request.tone_settings else None
-                ),
-                dub_languages=request.dub_languages or [],
-                caption_languages=request.caption_languages or [],
-                autonomy=request.autonomy or "auto",
-                scope=request.scope,
-                operation=request.operation,
-                target_id=request.target_id,
+        task_spec = TaskSpec(
+            tasks=request.tasks,
+            target_language=(
+                request.target_language
+                or first_task_language(request.tasks)
+                or "en"
             ),
+            instruction=instruction,
+            tone_settings=(
+                request.tone_settings.model_dump() if request.tone_settings else None
+            ),
+            autonomy=request.autonomy or "auto",
+            scope=request.scope,
+            operation=request.operation,
+            target_id=request.target_id,
         )
+        run = await create_run(db, project, task_spec)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

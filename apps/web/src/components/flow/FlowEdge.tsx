@@ -6,7 +6,7 @@ import type { FlowEdgeSemantic } from "./types"
 
 export interface FlowEdgeData extends Record<string, unknown> {
   semantic: FlowEdgeSemantic
-  /** Draw-on delay (ms) for birth choreography; null = render instantly. */
+  /** Birth stagger delay (ms); null = render instantly (no choreography). */
   drawDelay: number | null
   /** Live "work flowing through this edge" dashes (SSE status-driven). */
   active: boolean
@@ -15,8 +15,8 @@ export interface FlowEdgeData extends Record<string, unknown> {
 export type FlowEdgeType = Edge<FlowEdgeData>
 
 /** The one edge renderer — two visual semantics (lineage = the brand stroke,
- * dependency = the quiet foreground stroke) plus the draw-on birth
- * animation (`flow-edge-draw` keyframe over `pathLength=1`). */
+ * dependency = the quiet foreground stroke) plus the dashed-flow birth
+ * animation (`flow-edge-birth`: dashes march in, then settle solid). */
 export function FlowEdge({
   id,
   sourceX,
@@ -40,7 +40,6 @@ export function FlowEdge({
     <BaseEdge
       id={id}
       path={path}
-      pathLength={draw ? 1 : undefined}
       className={cn(
         "flow-edge",
         data?.semantic === "lineage" ? "flow-edge-lineage" : "flow-edge-dependency",

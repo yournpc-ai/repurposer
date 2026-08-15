@@ -17,16 +17,16 @@ composer prefill. Static registry deployed with code — SKILL_REGISTRY 同款
 **发射 = 提示词** (2026-08-11 ruling): a recipe launch's ENTIRE behavioral
 payload is the prefilled prompt template — the card's identity never crosses
 the wire (no ``recipe_id`` transport, no server-side seeding; MENTIONS §3).
-``outputs`` / ``dub_languages`` / ``caption_languages`` stay server-only as
-the card's DECLARED compile shape — the startup self-check's input (the
-orchestrator compiles this shape and reconciles flow keys ⊆ the compiled
-kinds, AGENT_ARCH §4.2); they never feed a request path.
+``tasks`` stays server-only as the card's DECLARED compile shape (ADR-043 —
+the same task-list grammar the PlanAgent proposes): the startup self-check's
+input (the orchestrator compiles this chain and reconciles flow keys ⊆ the
+compiled kinds, AGENT_ARCH §4.2); it never feeds a request path.
 
 Visibility is a FIELD-LEVEL property: the public ``GET /api/v1/recipes``
 serves the public projection (base / flow / example_* / input_slots).
 
 Drift guard: ``flow`` is curated display data but must truthfully mirror the
-graph the declared shape compiles to — both live in this file and are
+graph the declared chain compiles to — both live in this file and are
 reviewed together (RECIPES §7.1).
 """
 
@@ -34,7 +34,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.schemas import IntentSlot
+from app.models.schemas import TaskItem
 
 
 class InputSlot(BaseModel):
@@ -87,9 +87,9 @@ class ExampleOutput(BaseModel):
 class RecipeEntry(BaseModel):
     """One registered recipe: a card awaiting material.
 
-    ``outputs`` / ``dub_languages`` / ``caption_languages`` are the card's
-    DECLARED compile shape — the startup self-check compiles this shape and
-    reconciles the curated ``flow`` against it (AGENT_ARCH §4.2). They are
+    ``tasks`` is the card's DECLARED compile shape (ADR-043 — a task list in
+    the PlanAgent's own grammar): the startup self-check compiles this chain
+    and reconciles the curated ``flow`` against it (AGENT_ARCH §4.2). It is
     never a request-path input: a launch's behavioral payload is the prompt
     template alone (2026-08-11 ruling — 配方 = 提示词).
     """
@@ -98,13 +98,10 @@ class RecipeEntry(BaseModel):
 
     status: Literal["live", "reserved"]
     input_slots: list[InputSlot] = Field(default_factory=list)
-    outputs: list[IntentSlot]
-    dub_languages: list[str] = Field(default_factory=list)
-    caption_languages: list[str] = Field(default_factory=list)
+    tasks: list[TaskItem]
     # --- Public display projection (RECIPES §7.1) ---
     aspect: str = "9:16"
     tags: list[str] = Field(default_factory=list)  # shared recipes.tags.* keys
-    variants: list[str] = Field(default_factory=list)  # recipes.<id>.variants.* keys
     flow: list[FlowStep] = Field(default_factory=list)
     example_assets: list[ExampleAsset] = Field(default_factory=list)
     example_outputs: list[ExampleOutput] = Field(default_factory=list)
@@ -112,8 +109,8 @@ class RecipeEntry(BaseModel):
 
 class RecipePublic(BaseModel):
     """The public card catalogue shape (``GET /api/v1/recipes``) — the
-    server-internal compile-shape declarations (outputs / dub_languages)
-    are not part of the projection."""
+    server-internal compile-shape declaration (``tasks``) is not part of
+    the projection."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -122,13 +119,10 @@ class RecipePublic(BaseModel):
     input_slots: list[InputSlot]
     aspect: str
     tags: list[str]
-    variants: list[str]
     flow: list[FlowStep]
     example_assets: list[ExampleAsset]
     example_outputs: list[ExampleOutput]
 
-
-_CLIPS_SLOT = IntentSlot(type="clips")
 
 # Public demo/ tree (content-addressed where baked; source materials curated
 # once, RECIPES §7.3 素材策展总账).
@@ -136,27 +130,45 @@ _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     # Card order = insertion order (2026-08-13 lineup restructure, user
-    # ruling, RECIPES §4): multilingual-subs → image-video → talk-clips →
+    # ruling, RECIPES §4): multilingual-subs → image-video → highlight-clips →
     # reframe → ai-visuals. The dub card left the gallery — the capability
     # stays as the subs card's voice-over variant (chat one-liner; the dub
     # contrast pack objects remain in the bucket as its evidence); the
     # talking-head seat is removed (低频 + 数字人信任风险).
     #
-    # R6: one talk -> clips with translated captions (original voice stays —
-    # the human voice is the authenticity fingerprint), one fork-semantic
-    # translate node per language.
+    # R6: one video -> multilingual caption forks + a voice-over dub (the card
+    # showcases the multilingual/caption capability ONLY — 2026-08-14 ruling:
+    # no clip-planning steps in the flow; the baked examples happen to be
+    # highlight clips, but the card never sells 剪辑). Original voice stays —
+    # the human voice is the authenticity fingerprint. ADR-043 chain shape:
+    # transforms alone — the whole source materializes itself (no
+    # select_clips, no highlight extraction); each language forks its own
+    # derived row.
     "multilingual-subs": RecipeEntry(
         status="live",
         input_slots=[InputSlot(type="video")],
-        outputs=[_CLIPS_SLOT],
-        caption_languages=["fr", "de", "es"],
+        tasks=[
+            TaskItem(
+                skill="translate_clip",
+                params={"target_language": "zh", "bilingual": True, "fork": True},
+            ),
+            TaskItem(
+                skill="translate_clip",
+                params={"target_language": "fr", "fork": True},
+            ),
+            TaskItem(
+                skill="dub_clip",
+                params={"target_language": "es", "fork": True},
+            ),
+        ],
+        # The demo source is square (xy_2_15s, 960×960) — the card bakes 1:1
+        # (2026-08-14 三档画幅: the card shows the frame the source keeps).
+        aspect="1:1",
         tags=["multilingual"],
-        variants=["languages", "dub"],
         flow=[
-            FlowStep(key="director_understand"),
-            FlowStep(key="director_plan"),
-            FlowStep(key="select_clips"),
-            FlowStep(key="translate_clip", fanout=3),
+            FlowStep(key="materialize_source"),
+            FlowStep(key="translate_clip", fanout=2),
+            FlowStep(key="dub_clip"),
             FlowStep(key="render"),
         ],
         example_assets=[
@@ -166,34 +178,37 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 label_key="demo_keynote",
             ),
         ],
-        # Contrast pack (R6, 2026-08-14): the same 15s keynote segment as the
-        # EN original + FR/DE/ES subtitled versions — harvested from a real
-        # pipeline run (xy_2_15s → ASR → select_clips → translate_clip×3 fork
-        # → render×4), re-uploaded to the demo/ tree by content hash.
+        # Contrast pack (R6, 2026-08-14 four-case revision): the same 5s
+        # segment as EN original + CN-EN bilingual (translation_track) + FR
+        # single-line + ES voice-cloned dub — harvested from a real pipeline
+        # run of this card's declared chain (translate zh bilingual + translate
+        # fr + dub es, all fork, at 1:1; FR produced script-side single-line)
+        # with dimension-derived caption sizing and per-language translated
+        # title overlays; per-case posters, content-hashed into the demo/ tree.
         example_outputs=[
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/subs-contrast-en-3689d6e7.mp4",
-                poster_url=f"{_DEMO}/outputs/subs-contrast-poster-bdd161d5.jpg",
+                url=f"{_DEMO}/outputs/subs-contrast-en-b5735bd2.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-en-poster-14813bde.jpg",
                 label_key="subs_en",
             ),
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/subs-contrast-fr-c5e7a871.mp4",
-                poster_url=f"{_DEMO}/outputs/subs-contrast-poster-bdd161d5.jpg",
+                url=f"{_DEMO}/outputs/subs-contrast-zh-bilingual-26f850f0.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-zh-bilingual-poster-9268b24e.jpg",
+                label_key="subs_zh_bilingual",
+            ),
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/subs-contrast-fr-d6f7dce5.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-fr-poster-6affb546.jpg",
                 label_key="subs_fr",
             ),
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/subs-contrast-de-ef29918b.mp4",
-                poster_url=f"{_DEMO}/outputs/subs-contrast-poster-bdd161d5.jpg",
-                label_key="subs_de",
-            ),
-            ExampleOutput(
-                kind="video",
-                url=f"{_DEMO}/outputs/subs-contrast-es-2c2f6a0b.mp4",
-                poster_url=f"{_DEMO}/outputs/subs-contrast-poster-bdd161d5.jpg",
-                label_key="subs_es",
+                url=f"{_DEMO}/outputs/subs-contrast-es-dub-c4d1e436.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-es-dub-poster-cf01bd16.jpg",
+                label_key="dub_es",
             ),
         ],
     ),
@@ -209,7 +224,11 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             InputSlot(type="transcript"),
             InputSlot(type="slides", required=False),
         ],
-        outputs=[_CLIPS_SLOT],
+        tasks=[TaskItem(skill="select_clips", params={})],
+        # The demo set is the WFT keynote's own material: a talk write-up
+        # (markdown — the card parses articles: PDF/Word/md/txt) + three
+        # on-site photos; the baked slideshow shows exactly these.
+        aspect="1:1",
         tags=["no-footage"],
         flow=[
             FlowStep(key="director_understand"),
@@ -217,6 +236,28 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             FlowStep(key="align_stills"),
             FlowStep(key="select_clips"),
             FlowStep(key="render"),
+        ],
+        example_assets=[
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-title.jpg",
+                label_key="demo_photos",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-industries.jpg",
+                label_key="demo_photos",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-outcomes.jpg",
+                label_key="demo_photos",
+            ),
         ],
         example_outputs=[
             ExampleOutput(
@@ -227,14 +268,16 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
     ),
-    # 演讲短片 seat (talk-clips, RECIPES §4.3): keynote mid-shot -> vertical
+    # 高光切片 seat (highlight-clips, RECIPES §4.3 — renamed from talk-clips
+    # 2026-08-15: the name says what you GET; "演讲" narrowed the input, the
+    # same bug class as the subs card's 演讲 copy). Long footage -> vertical
     # highlight clips with dynamic speaker tracking (crop_track craft layer,
     # shared with reframe). Card authoring lands with the positioning-root
     # batch (PROGRESS 第八周).
-    "talk-clips": RecipeEntry(
+    "highlight-clips": RecipeEntry(
         status="reserved",
         input_slots=[InputSlot(type="video")],
-        outputs=[_CLIPS_SLOT],
+        tasks=[TaskItem(skill="select_clips", params={})],
     ),
     # 访谈分镜 seat (reframe, RECIPES §4.3): landscape two-person interview ->
     # vertical speaker reframe — the static dish of the same crop_track
@@ -242,7 +285,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     "reframe": RecipeEntry(
         status="reserved",
         input_slots=[InputSlot(type="video")],
-        outputs=[_CLIPS_SLOT],
+        tasks=[TaskItem(skill="select_clips", params={})],
     ),
     # R5 seat: nothing but a talk — every scene AI-generated, the zero-asset
     # end of the source-material spectrum. Positioned as 趣味/实验
@@ -251,7 +294,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     "ai-visuals": RecipeEntry(
         status="reserved",
         input_slots=[InputSlot(type="audio")],
-        outputs=[_CLIPS_SLOT],
+        tasks=[TaskItem(skill="select_clips", params={})],
     ),
 }
 
@@ -265,7 +308,6 @@ def list_public_recipes() -> list[RecipePublic]:
             input_slots=entry.input_slots,
             aspect=entry.aspect,
             tags=entry.tags,
-            variants=entry.variants,
             flow=entry.flow,
             example_assets=entry.example_assets,
             example_outputs=entry.example_outputs,

@@ -3,7 +3,7 @@ import type { TFunction } from "i18next"
 import { toAbsoluteUrl } from "@/lib/api"
 import type { Output, WorkflowStep } from "@/lib/types"
 
-import { PRODUCT_NODE_SIZE } from "./layout"
+import { productNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
 import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
@@ -31,6 +31,13 @@ export interface RunFlowAsset {
   type: string
   title: string | null
   file_url: string | null
+  /** Browser-playable URL resolved through the storage seam (AssetResponse's
+   * computed field) — the media src for image thumbs and inline video. */
+  stream_url?: string | null
+  /** Lightbox meta (AssetResponse passthrough): media duration + upload
+   * time ride the info column and the chip grid. */
+  duration_seconds?: number | null
+  created_at?: string
 }
 
 /** User-facing product types (the /results payload is already filtered
@@ -81,6 +88,9 @@ export function runFlowGraph(
     assets: RunFlowAsset[]
     steps: WorkflowStep[]
     outputs: Output[]
+    /** The run's prompt — displayed in every product card's interaction
+     * area (spec on the body; changes happen in chat). */
+    prompt?: string | null
     /** The node carrying the results tour's data-tour anchors (first ready
      * product, chosen by the surface). */
     tourOutputId?: string | null
@@ -94,7 +104,7 @@ export function runFlowGraph(
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const nodes: FlowNode[] = []
   const rawEdges: FlowEdge[] = []
-  const { assets, steps, outputs, tourOutputId, spineExpanded = false } = input
+  const { assets, steps, outputs, prompt, tourOutputId, spineExpanded = false } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
   const byId = new Map(steps.map((s) => [s.id, s]))
@@ -103,12 +113,20 @@ export function runFlowGraph(
     const typeLabel = t(`generationOverlay.assetTypes.${asset.type}`, {
       defaultValue: asset.type,
     })
+    // file_url is a bare storage key on new rows — the browser-playable URL
+    // is the computed stream_url (legacy rows carry a path/URL in file_url,
+    // which toAbsoluteUrl passes through).
+    const mediaUrl = toAbsoluteUrl(asset.stream_url ?? asset.file_url)
     nodes.push({
       id: `asset:${asset.id}`,
       kind: "asset",
       label: asset.title || typeLabel,
       detail: asset.title ? typeLabel : undefined,
-      thumbUrl: asset.type === "image" ? asset.file_url : null,
+      thumbUrl: asset.type === "image" ? mediaUrl : null,
+      // The source video IS a video node — it plays inline (muted loop),
+      // sized landscape so the frame is watchable.
+      videoUrl: asset.type === "video" ? mediaUrl : null,
+      size: asset.type === "video" ? VIDEO_ASSET_NODE_SIZE : undefined,
       order: i,
     })
   })
@@ -259,6 +277,29 @@ export function runFlowGraph(
   )
   products.forEach((output, i) => {
     const id = `output:${output.id}`
+    const thumbUrl = toAbsoluteUrl(
+      output.files.image ?? output.publishing.cover_image_url ?? null,
+    )
+    // Multi-item outputs (quotes = N cards, carousel = N slides): the node
+    // carries one display variant per item — the hover switcher flips the
+    // main display (the first quote's baked image is the only media; the
+    // rest render as text tiles).
+    const quotes = output.type === "quotes" ? (output.payload.quotes ?? []) : []
+    const slides = output.type === "carousel" ? (output.payload.slides ?? []) : []
+    const variants =
+      quotes.length > 1
+        ? quotes.map((q, qi) => ({
+            label: q.quote,
+            sub: q.attribution,
+            thumbUrl: qi === 0 ? thumbUrl : null,
+          }))
+        : slides.length > 1
+          ? slides.map((s) => ({
+              label: s.title,
+              sub: s.body ?? undefined,
+              thumbUrl: null,
+            }))
+          : undefined
     nodes.push({
       id,
       kind: "output",
@@ -266,17 +307,23 @@ export function runFlowGraph(
       detail: output.language
         ? t(`languages.${output.language}`, { defaultValue: output.language })
         : undefined,
-      thumbUrl: toAbsoluteUrl(
-        output.files.image ?? output.publishing.cover_image_url ?? null,
-      ),
+      thumbUrl,
       // The product card skin (D5): the node carries the row, sized as the
-      // canvas's 大卡; the tour anchors ride the surface's chosen node.
+      // canvas's 大卡; the tour anchors ride the surface's chosen node. The
+      // node keeps the clip's own frame (2026-08-14 三档画幅 on the canvas —
+      // 9:16/1:1/16:9 node sizes, never a forced crop).
       output,
+      prompt: prompt ?? null,
+      variants,
       topPick:
         output.type === "clip" &&
         topClipScore > 0 &&
         output.score?.value === topClipScore,
-      size: PRODUCT_NODE_SIZE,
+      size: productNodeSize(
+        output.type === "clip"
+          ? ((output.render_spec as { aspect?: string } | null)?.aspect ?? null)
+          : null,
+      ),
       tourTargets: output.id === tourOutputId,
       order: i,
     })

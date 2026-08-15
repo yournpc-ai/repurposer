@@ -37,15 +37,20 @@ const SAFE_EXT = /^\.[a-z0-9]{1,8}$/i;
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/i;
 
 function proxyEnv(): string | undefined {
-  return (
+  const raw =
     process.env.HTTPS_PROXY ??
     process.env.https_proxy ??
     process.env.HTTP_PROXY ??
-    process.env.http_proxy
-  );
+    process.env.http_proxy;
+  if (!raw) return undefined;
+  // ProxyAgent's uri must be absolute — a bare host:port gets http://.
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`;
 }
 
-function dispatcherFor(url: string): Agent | ProxyAgent {
+/** Proxy-aware dispatcher shared by source staging AND result upload —
+ * loopback skips the proxy; a remote host rides HTTPS_PROXY when present
+ * (the direct TOS link from this network is throttled to ~300 KB/s). */
+export function dispatcherFor(url: string): Agent | ProxyAgent {
   // bodyTimeout is an idle (between-chunks) timeout, not a total one — slow
   // but flowing downloads survive; the AbortSignal above bounds the total.
   const opts = { headersTimeout: 60_000, bodyTimeout: 300_000 };

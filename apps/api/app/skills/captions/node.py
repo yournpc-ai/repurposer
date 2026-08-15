@@ -12,6 +12,15 @@ Two uses ride the same mechanism (N-19 — the use lives in the spec):
   run. Provenance is inherited (not hardcoded "generated"): the footage
   and the voice stay the original human ones — only the on-screen text
   is machine-translated.
+
+Two caption modes ride both uses (``spec.bilingual``, 2026-08-14 双语字幕):
+- single (default): the caption track is REPLACED by its translation.
+- bilingual: the original word-level track stays; the translation lands
+  on ``translation_track`` (unit-level cues) and the renderer shows the
+  pair — translation as the primary line, original smaller beneath.
+
+Either way the clip's title overlay is translated along (a subtitled clip
+with an untranslated title card reads broken — dub 2026-08-09 同款).
 """
 
 from uuid import UUID
@@ -28,31 +37,43 @@ from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bound
 from app.pipeline.morph import (
     _fan_out_renders,
     _modifier_target_clips,
+    _pend_suppressed_base_renders,
     _record_target_output_ids,
     _run_origin,
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
-from app.skills.captions.procedure import translate_caption_track
+from app.skills.captions.procedure import (
+    translate_caption_track,
+    translate_caption_units,
+    translate_text,
+)
 
 
 class TranslateClip(NodeBase):
     kind = "translate_clip"
+    task_name = "Translate captions"
+    task_name_zh = "翻译字幕"
+    # Acts on clips: this run's select_clips / materialize_source when one
+    # exists (ADR-043), else the project's existing clips (empty inputs).
+    after = ("select_clips", "materialize_source")
     requires = (TRANSCRIPT,)
     retries = 2
     agents = (translator,)
 
-    def canvas_group(self, node):
-        # One subs card per language — multi-language runs stack them in
-        # parallel, each its own mention target (dub_clip 同款).
-        lang = (node.spec or {}).get("target_language") or ""
-        return f"subs:{lang}"
-
+    # No canvas_group (2026-08-15 走查拍板): the translation is an ATTRIBUTE
+    # of the derived video — the fork's product card already carries its
+    # whole identity (language label + the subtitled frame). A standalone
+    # subs card duplicated that with zero incremental info and parked a
+    # progress fact in the product lane (D2 violation in spirit). The step
+    # folds into the 过程脊; intervention = click the video (dock focus, D8)
+    # or the expanded spine's step pill (@workflow_step).
     def estimate(self, ctx: dict) -> dict | None:
         """One translator call per target clip, sized by the caption text —
         knowable only when the clips EXIST at compile time. A translate
-        fan-out chained on this run's own clips node (initial generation,
-        RECIPES §4.1 字幕卡) is unquotable here: NULL (未估价)."""
-        if "select_clips" in ctx.get("input_kinds", ()):
+        fan-out chained on this run's own clips node (select_clips or
+        materialize_source — initial generation, RECIPES §4.1 字幕卡) is
+        unquotable here: NULL (未估价)."""
+        if {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ())):
             return None
         clips = ctx["clips"]
         if not clips:
@@ -74,6 +95,7 @@ class TranslateClip(NodeBase):
         if not lang:
             raise ValueError("target_language is required for translate_clip")
         fork = bool((node.spec or {}).get("fork"))
+        bilingual = bool((node.spec or {}).get("bilingual"))
         await _set_stage(node.id, "translating_captions")
         clips = await _modifier_target_clips(db, node, project)
         if not clips:
@@ -91,7 +113,20 @@ class TranslateClip(NodeBase):
             if not track:
                 continue
             try:
-                new_track = await translate_caption_track(track, lang)
+                if bilingual:
+                    # 双语对照轨: the original word-level track stays; the
+                    # translation lands as unit-level cues on
+                    # translation_track (renderer pairs them by time).
+                    translation = await translate_caption_units(track, lang)
+                else:
+                    new_track = await translate_caption_track(track, lang)
+                # The title overlay translates along — a subtitled clip with
+                # an untranslated title card reads broken (dub 2026-08-09).
+                title = dict(spec.get("title") or {})
+                if title.get("enabled") and str(title.get("text") or "").strip():
+                    title["text"] = await translate_text(
+                        str(title["text"]), lang, style_hint="a short video title overlay"
+                    )
             except MiniMaxError as e:
                 # Provider failure after the client's own retries — still
                 # transient at step level (W3 retry budget applies).
@@ -99,7 +134,23 @@ class TranslateClip(NodeBase):
                     f"caption translate failed: {e}",
                     user_key=propagate_key(e, "provider_unavailable"),
                 ) from e
-            new_spec = {**spec, "caption_track": new_track, "target_language": lang}
+            if bilingual:
+                new_spec = {
+                    **spec,
+                    "translation_track": translation,
+                    "title": title,
+                    "target_language": lang,
+                }
+            else:
+                # A plain re-translate collapses a bilingual spec back to
+                # single-language (the translation becomes THE track).
+                new_spec = {
+                    **spec,
+                    "caption_track": new_track,
+                    "translation_track": [],
+                    "title": title,
+                    "target_language": lang,
+                }
             if fork:
                 # Derived row (dub_clip 同款, RECIPES §4.1): provenance
                 # inherited — translated captions over the original voice
@@ -149,8 +200,14 @@ class TranslateClip(NodeBase):
                 node.id,
                 "没有可翻译的字幕" if ui_lang_of(run, project).startswith("zh") else "No captions to translate",
             )
+        # Skip-rescue: targets left on their base spec (no caption track)
+        # still owe a render when the producer's fan-out was suppressed for
+        # this chain; a fork's derived rows defer to nothing (exclusively
+        # this node's), an in-place morph defers to a later non-fork morph.
+        await _pend_suppressed_base_renders(db, run, node, clips, exclude=set(touched))
+        if not touched:
             return []
-        await _fan_out_renders(db, run, node, touched)
+        await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
         await _record_target_output_ids(node.id, touched)
         await _fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()

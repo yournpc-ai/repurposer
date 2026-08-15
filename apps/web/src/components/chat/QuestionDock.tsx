@@ -4,10 +4,12 @@
  * one *pending* decision (ask primitive — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
- * - task_book: two rows (2026-08-06 rework) — the confirm line on the
- *   top-left, the reserved credit slot on the top-right (the week-6 cost
- *   quote rides `estimate`), the actions (Cancel / Start) on the bottom
- *   row; the needs-your-check reasons squeeze between as one compact line.
+ * - task_book: two rows (2026-08-06 rework; 2026-08-14 对齐参考定稿) — the
+ *   confirm line on the top-left, the reserved credit slot on the top-right
+ *   (the week-6 cost quote rides `estimate`), the actions (Cancel / Start)
+ *   on the bottom row. No reasons line — the agent's inference bookkeeping
+ *   (chain_default / clip_count_default) is not user copy; the plan card
+ *   above carries the substance and the streamed echo carries the caveats.
  * - choice: the question line plus its options as full-width ROWS (letter
  *   badges mirror the deterministic autoResume mapping — typing "a" picks
  *   option a); long labels wrap, never overflow the card. With `joined`
@@ -46,9 +48,6 @@ interface TaskBookDockProps {
   kind: "task_book"
   /** The confirm display line (localized). */
   question: string
-  /** needs_clarification reason keys — why confirmation is being asked
-   * (回显: what the inference guessed). */
-  reasons?: string[]
   autonomy: Autonomy
   onAutonomyChange: (next: Autonomy) => void
   onStart: () => void
@@ -59,6 +58,10 @@ interface TaskBookDockProps {
   /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
    * when present; the slot is the layout reservation. */
   estimate?: string | null
+  /** Bare child of the dock shell's unified frosted container (D4 修订
+   * 一体容器): no fill / rounding / margin of its own — the container owns
+   * the chrome. */
+  plain?: boolean
 }
 
 interface ChoiceDockProps {
@@ -88,7 +91,6 @@ const AUTONOMY_TIERS: Autonomy[] = ["auto", "review"]
 
 function TaskBookForm({
   question,
-  reasons,
   autonomy,
   onAutonomyChange,
   onStart,
@@ -96,20 +98,18 @@ function TaskBookForm({
   starting,
   startDisabled,
   estimate,
+  plain,
 }: TaskBookDockProps) {
   const { t } = useTranslation()
-  const reasonLabels = (reasons ?? [])
-    .map((reason) => t(`questionDock.reasons.${reason}`, { defaultValue: "" }))
-    .filter(Boolean)
   return (
-    <div className="mb-2 rounded-lg bg-muted px-4 py-3">
+    <div className={plain ? "px-4 py-3" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
       {/* Top row: the confirm line (left) + the reserved credit slot
           (right). Copy stays one line — the plan card above carries the
           substance. */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-sm">
+        <div className="flex min-w-0 items-center gap-2.5">
           <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{question}</span>
+          <span className="truncate text-sm font-medium">{question}</span>
         </div>
         {estimate ? (
           <span className="shrink-0 text-xs text-muted-foreground">
@@ -117,19 +117,16 @@ function TaskBookForm({
           </span>
         ) : null}
       </div>
-      {reasonLabels.length > 0 ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          {t("questionDock.reasons.title")} {reasonLabels.join(" · ")}
-        </p>
-      ) : null}
       {/* Bottom row: the actions — Cancel quiet on the left, Start solid on
-          the right (the one dark anchor, composer-bottom-row discipline). */}
-      <div className="mt-3 flex items-center justify-between gap-2">
+          the right (the one dark anchor, composer-bottom-row discipline).
+          Both at the action-row h-9; Start gets px-5 presence — this bar is
+          the confirm phase's single decision CTA, not a toolbar chip. */}
+      <div className="mt-4 flex items-center justify-between gap-2">
         <Button
           variant="ghost"
           onClick={onCancel}
           disabled={starting}
-          className="text-muted-foreground"
+          className="h-9 px-3 text-muted-foreground"
         >
           {t("common.cancel")}
         </Button>
@@ -162,7 +159,11 @@ function TaskBookForm({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          <Button disabled={startDisabled || starting} onClick={onStart}>
+          <Button
+            disabled={startDisabled || starting}
+            onClick={onStart}
+            className="h-9 px-5"
+          >
             {starting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />

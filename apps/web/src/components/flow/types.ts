@@ -30,11 +30,27 @@ export interface FlowNode {
    * node IS the product card: score / top-pick / next-step live on it).
    * Absent on the recipe surface, whose output nodes stay compact thumbs. */
   output?: import("@/lib/types").Output
+  /** The run's prompt, shown in the product card's padded interaction area
+   * (results canvas, D5 anatomy: spec on the body — read-only; changes
+   * happen in chat, never in place). */
+  prompt?: string | null
+  /** Video asset nodes (results canvas): the browser-playable URL — the
+   * node renders an inline muted-loop <video>, never a file icon. */
+  videoUrl?: string | null
+  /** Multi-item outputs (quotes = N quote cards, carousel = N slides): the
+   * node's display variants — a hover switcher fades in at the top of the
+   * node and flips the main display. Items without their own media render
+   * as a text tile. */
+  variants?: { label: string; sub?: string; thumbUrl?: string | null }[]
   /** The batch's recommended pick (score triage) — adapter-computed. */
   topPick?: boolean
   /** Size override (pure-math layout stays measurement-free): the results
    * canvas's product cards are bigger than the shared per-kind defaults. */
   size?: { width: number; height: number }
+  /** Aspect-shaped thumb (2026-08-15 三档画幅 on the recipe flow surface):
+   * the thumb letterboxes (black, object-contain) instead of cover-cropping.
+   * Pair with a `size` pinned via thumbNodeSize so frame and media agree. */
+  containThumb?: boolean
   /** Carries the surface's data-tour anchors (first ready product only). */
   tourTargets?: boolean
   /** Spine group node only (results canvas, D6 过程脊): the fold's current
@@ -72,6 +88,9 @@ export interface FlowViewProps {
   /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
    * surface owns the actions; the card only reports them. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** Media expand (results canvas): a node's hover expand icon / media
+   * click — the surface opens the media lightbox for the node. */
+  onExpandMedia?: (nodeId: string) => void
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void

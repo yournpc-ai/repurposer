@@ -6,7 +6,7 @@
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
 > 用户裁决（现行，设计评审沉淀）：
 > ① **配方 = 能力承诺**——上了的卡必须能用用户自己的素材跑出同款，不能写死、不能仅 demo（STRATEGY"配方卡不做营销剧场"的产品化口径）；
-> ② 首页形态 = composer 下方**能力演示视频卡**（5 张座位：多语言字幕 multilingual-subs / 图文视频 image-video / 演讲短片 talk-clips / 访谈分镜 reframe / 虚拟视频 ai-visuals，2026-08-13 阵容重构——多语言旗舰从 dub 换成字幕卡（原声是真实性指纹），dub 撤座降为字幕卡配音变体，口播撤座；选卡双过滤器见 §4），源素材用云端 demo talk；
+> ② 首页形态 = composer 下方**能力演示视频卡**（5 张座位：多语言字幕 multilingual-subs / 图文视频 image-video / 高光切片 highlight-clips / 访谈分镜 reframe / 虚拟视频 ai-visuals，2026-08-13 阵容重构——多语言旗舰从 dub 换成字幕卡（原声是真实性指纹），dub 撤座降为字幕卡配音变体，口播撤座；选卡双过滤器见 §4），源素材用云端 demo talk；
 > ③ 声音的家 = **人设块扩展**（声纹 = 人设属性；stock voices 以"系统音色"身份进人设选择器系统区，不伪装成人设——ADR-037 修订形态），composer 不加 Audio 块；
 > ④ v1 图片视频 = **无声版先行**（照片轮播+字幕+音乐，不需要真人说话，无声纹不阻塞）；声音路径（voice_gen / TTS / stock 兜底 / 换声入口）整体后置声纹线（§4.2，排期见 PROGRESS）
 > ⑤ **Remix 形态 = overlay 内发射，配方 = 提示词**（对照 ElevenLabs 全屏模态框 / Agent Opus composer mention 后裁决；mention 哲学升级后定稿，MENTIONS §3；2026-08-11 二次修订）：点卡 = 检视 overlay 的发射区直接发射——点卡动作本身已是配方身份，句中 chip 是第三遍冗余；配方**永不是 mention**（两族都不落）。**发射的全部行为载荷 = 预填模板原文**（模板点名产出与语言）：无 `recipe_id` transport、无服务端播种，任务书由 plan path 从消息文案推断，与 composer 完全同径（chat 恒胜绝对成立——没有隐藏第二通道能盖过用户对预填文案的编辑）。**否全屏模态框自跑生成**（第二条派发面，与"composer = chat 第一条消息"冲突；承诺呈现归既有审阅面板）。mention 系统是**双端注册表架构**（`asset` 为成员），后续 @ 类型只填注册项；配方结构数据升服务端注册表 + 公开只读端点（卡面 / 检视 / 启动对账自检，§7.1）。DAG 永不外显，"编辑流程"等价物 = chat（plan 级 ops + 子图词汇，排期见 PROGRESS）。
@@ -19,7 +19,7 @@
 - **字幕现状**：`caption_style_preset` 枚举 5 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`），`Clip.tsx` 只渲染当前 active 行——**堆叠字幕（前行驻留、向下累积）不在枚举内**。
 - **crop 是 clip 级静态值** `ClipCrop{x,y,scale}`，无时序；ASR = faster-whisper（词级时间戳，**无 diarization**）。
 - **`packages/clip` 是 editor preview 与 render service 的同源组件**——渲染分支加一处，preview=render 双端自动生效。
-- **任务书 slot 化已落地**：`IntentSlot{type,count,focus,language,tone_override,explicit}`；chat plan path 接受 `prior_intent` 且三方合并保 explicit 槽（`merge_prior_slots`，chat 修订永远赢）；`pending_intent` + `?overlay=chat` 恢复管道在。
+- **任务书 = 技能链（ADR-043）**：请求层唯一语法 = task list（`tasks[{skill, params}]`），产物 = 编译图的派生投影（`derived` 预览行）；chat plan path 接受 `prior_intent`（整链 JSON 随行，chat 修订永远赢——无合并机器）；`pending_intent` + `?overlay=chat` 恢复管道在。
 - **composer = prompt-only**（instruction + persona_id + brand_template_id），意图识别全在管线。
 - **文字稿+照片场景已有 Ready 简报**：`docs/tasks/synthetic-talk-video.md`（`voice_gen`/`synth_visual` 节点设计，声纹 TTS 回配 ASR 时间戳，下游零感知）。
 - **demo talk 素材**：`demo/` 前缀是 reset_db 保护区（永不擦除）；配方演示资产内容寻址入桶（哈希 URL 固化在 `apps/web/src/lib/recipes.assets.ts`）。
@@ -77,28 +77,30 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 |---|---|---|---|---|---|
 | 1 | 多语言字幕 `multilingual-subs` | 原声不动，字幕上法语/德语/西语（可双语对照） | video | caption 翻译 + 重渲染（零克隆零 TTS） | 第二周 |
 | 2 | 图文视频 `image-video` | 文字稿 + 照片或 PPT → 带字幕配乐短片（可用你的声音） | images / slides + transcript | ✅ 全在跑（§0）；slides 槽接入 | ✅ Live |
-| 3 | 演讲短片 `talk-clips` | 发布会式演讲录像 → 竖屏高光短片，镜头跟人，带推荐分 | video | `crop_track` 动态单人中景追踪（第三周 spike） | 第八周（定位根落地后，ADR-042 联动） |
+| 3 | 高光切片 `highlight-clips` | 长视频里最好的那几段 → 竖屏短片，镜头跟人，带推荐分 | video | `crop_track` 动态单人中景追踪（第三周 spike） | 第八周（定位根落地后，ADR-042 联动） |
 | 4 | 访谈分镜 `reframe` | 双人访谈 → 谁在说话镜头给谁 | video | `crop_track` 静态双人分镜（第三周 spike） | 第八周（同上） |
 | 5 | 虚拟视频 `ai-visuals` | 只有稿子 → 你的虚拟形象讲出来（趣味/实验向） | transcript / audio | R5 生成管线（第四~五周） | R5 就绪后 |
 
 ### 4.1 多语言字幕卡（multilingual-subs）——新旗舰
 
 - **定位**：多语言旗舰从 dub 换成字幕卡（2026-08-13 拍板）。依据：主渠道 LinkedIn 视频默认静音自动播放，**字幕就是主消费层**；原声 = 真实性的指纹（反 slop 战略，STRATEGY 牌 4）——AI 做翻译字幕，真实人声当主角，比"AI 声音当主角"更对得起定位。
-- **承诺**：上传演讲/访谈视频 → 原声保留，字幕译成法语/德语/西语（或原语 + 目标语双语对照）。
-- **能力现状**：caption 翻译链（translator agent + `caption_translate`）在跑；重渲染零缺口。**双语对照** = caption catalog 加 dual 形态 preset（每 cue 原语 + 译语双行），新原语值须过 libass 映射检查（§3.2 纪律）。
-- **variants desc（附属选择形态）**：承诺句下方一行引导文案，告诉用户还能怎么变——双语对照 / 单语字幕 / 配音版（"再用我的声音配一版"）。**desc 是教路径的引导句，不是控件**（纪律见 §7.2）。
-- **素材账单**：`demo/uploads/xy_2_15s.mp4`（WFT 登台演讲 530–545s 截取，960×960 方幅，"We Focus on Industries" 内容页稳定窗，已策展 2026-08-13）；预览 = 同片段 EN 原声 + FR/DE/ES 字幕版（`scripts/bake_subs_contrast.py`，dub 烘焙管线同构）。
+- **承诺**（2026-08-14 二次修订，用户拍板原文）：为你的视频带来多语言单行或双语字幕，或原声多语言配音。——主语从"演讲"放开到"视频"（核心用户早已不只是演讲）；双语对照与配音并入承诺（能力同日落地，承诺不先于能力）。**卡不含剪辑**（2026-08-14 三次修订，用户拍板）：只展示多语言与字幕能力——流程图摘掉剪辑规划步骤（理解素材 → 翻译字幕×2 → 配音 → 渲染），示例提示词只点名多语言诉求（烘焙示例碰巧是高光片段，但卡不卖剪辑）。
+- **能力现状**：caption 翻译链（translator agent + `translate_caption_track`）在跑；重渲染零缺口。**双语对照已落地**（2026-08-14）：`ClipSpec.translation_track` 单元级对照轨 + `translate_clip` 任务参数 `bilingual`（ADR-043 后住任务参数，原任务书字段退役）——fork 保留原文 word 轨、译文入对照轨，渲染端译文主行 + 原文小行在下（stack 布局只画原文轨——双语堆叠墙不可读）；标题 overlay 随字幕同译（`translate_text`，dub 2026-08-09 同款教训）。配音变体同图编译（`dub_clip` fork，声纹克隆原声）。
+- **画幅**（2026-08-14 三档画幅）：clip-spec `aspect` 全链放行 `"9:16" | "1:1" | "16:9"`（schema / clip_spec clamp / 渲染端 ASPECT_DIMENSIONS 1920×1080 / `set_aspect` op / 编辑器下拉）；画幅请求 = `select_clips` 任务参数 `aspect`（ADR-043 参数化——PlanAgent 从"横版/保持原画幅"等点名识别，省略 = 皮肤默认 9:16），编译进节点 `spec.aspect` 覆盖品牌默认（run.context 的 `aspect` 仅为存量读容忍）。本卡 demo 源是方幅 → 卡烘焙 1:1。卡面/teaser 展示横、方幅时**上下留黑保原比例**（object-contain，抖音横屏竖放惯例），永不裁剪。
+- **字幕尺寸按画面推导**（2026-08-14，用户拍板）：不做固定像素——皮肤 `captionSize` 是 1080×1920 竖屏基准值，渲染端按帧高等比缩放（默认 68 → 9:16 保持 68，1:1/16:9 得 38，≈3.5% 帧高 = TikTok/CapCut/YouTube 跨画幅通用比例）；左右边距 8% 随帧宽自适应；标题 overlay 同规则缩放。**双语对照两行打折**：译文主行 ×0.82、原文小行 ×0.55（两行需要空气）。
+- **示例提示词教学位**（2026-08-14 二次修订，取代 variants desc）：左区「示例提示词」标题 + 按卡 `recipes.<id>.promptHint` 引导句（字幕卡点名「双语字幕」「中文字幕」「西语配音」示例）——变体教学从承诺句下的 desc 行移入提示词区，引导句不是控件的纪律不变（§7.2）。
+- **素材账单**：`demo/uploads/xy_2_15s.mp4`（WFT 登台演讲 530–545s 截取，960×960 方幅，"We Focus on Industries" 内容页稳定窗，已策展 2026-08-13）；预览 = 同选段 1:1 四案例对照包——EN 原声 + 中英双语对照 + FR 单行字幕 + ES 声纹配音——真管线跑出后由 `scripts/bake_subs_contrast.py` 收获（harvest 模式：run 产物 Output id 或本地 mp4 + 每案例独立 poster 帧，内容寻址入 demo/ 树；FR 单行版脚本侧产——run 级双语开关下管线 fork 出来都是双行）。
 
 ### 4.2 图文视频卡（image-video，已 Live，扩 slides 槽）
 
 R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。
 
-### 4.3 演讲短片（talk-clips）与访谈分镜（reframe）——一个能力，两道菜
+### 4.3 高光切片（highlight-clips）与访谈分镜（reframe）——一个能力，两道菜
 
-- `crop_track` 关键帧轨是同一工艺层：大型中景演讲（**动态人形追踪**）与双人访谈（**静态说话人切换**）共享第三周 spike。spike 范围扩为双验证（2026-08-13 拍板）：静态双人分镜 + 单人中景动态追踪（VIDEO_EDITOR 封存的 auto face reframe 重启评估，立项评审 08-17 已有议程）；验证不过则演讲短片卡先出静态中裁版，回退吃第四周缓冲不变。
-- 演讲短片 = 起家能力（理解 → 选段 → 字幕 → 渲染 + 首发推荐分）+ 追踪工艺。
+- `crop_track` 关键帧轨是同一工艺层：大型中景演讲（**动态人形追踪**）与双人访谈（**静态说话人切换**）共享第三周 spike。spike 范围扩为双验证（2026-08-13 拍板）：静态双人分镜 + 单人中景动态追踪（VIDEO_EDITOR 封存的 auto face reframe 重启评估，立项评审 08-17 已有议程）；验证不过则高光切片卡先出静态中裁版，回退吃第四周缓冲不变。
+- 高光切片 = 起家能力（理解 → 选段 → 字幕 → 渲染 + 首发推荐分）+ 追踪工艺。
 - **两卡点亮排在定位根落地后**（PROGRESS 第八周批次，用户拍板）：它们是选题库"你的素材还能切什么"的主承载菜，随运营端收口一起 authoring（数据条目 + 预览烘焙）。
-- **素材账单**：`xy_2.mp4`（大型登台 PPT 演讲，已策展）→ talk-clips；`xy_1.mp4`（左右对坐访谈，已策展）→ reframe。
+- **素材账单**：`xy_2.mp4`（大型登台 PPT 演讲，已策展）→ highlight-clips；`xy_1.mp4`（左右对坐访谈，已策展）→ reframe。
 
 ### 4.4 虚拟视频卡（ai-visuals，Reserved）
 
@@ -144,20 +146,19 @@ Recipe = {
   base:            名称 / 承诺 / 标签 / 画幅 / status        → 卡面 + overlay 发射区抬头
   flow:            只读静态流程图（key = node kind，展示名走 recipes.flow.* i18n，无模型名） → overlay"流程"tab 画布的步骤段（ADR-035/036）+ 启动自检对账
   prompt:          示例 prompt                                → overlay 发射区预填文本（可见可改，修改唯一入口）
-  variants:        附属变体引导（i18n 键列表）                  → overlay 发射区承诺句下方 desc 引导句（§7.2 纪律：教路径，不是控件）
   example_assets:  示例原素材（demo/ 桶引用）+ input_slots     → overlay 示例 tab 输入区 + 流程画图源节点 + 发射区素材需求提示
   example_outputs: 烘焙成片（内容寻址引用）                    → overlay 示例 tab 输出区 + 流程画布终节点 + 卡面自动播放视频
-  outputs:         预设任务槽（存在性填充：只补推断没有的槽位类型，无 explicit）→ plan path 预设播种（服务端实质）
+  tasks:           预设技能链（PlanAgent 同款 task list 语法，ADR-043）→ 仅启动对账自检消费（flow ⊆ 编译图），永不进请求路径
 }
 ```
 
-- **可见性分层 = schema 的字段级属性**：公开投影（base / flow / prompt / example_assets / example_outputs——落地页匿名受众可读）经 `GET /api/v1/recipes` 下发；**预设实质（outputs / dub_languages）永不出服务端**。原"双端分半"纪律收编为字段可见性，不再是两套机制。
+- **可见性分层 = schema 的字段级属性**：公开投影（base / flow / prompt / example_assets / example_outputs——落地页匿名受众可读）经 `GET /api/v1/recipes` 下发；**预设实质（tasks）永不出服务端**。原"双端分半"纪律收编为字段可见性，不再是两套机制。
 - **存储纪律**：结构数据与资产引用直接持有于服务端 `app/pipeline/recipes.py` 静态注册表（SKILL_REGISTRY 同款，随代码部署）；**可翻译文本**（title / promise / prompt）以 i18n 键引用（en 为源语言，现状纪律不变）；烘焙资产以内容寻址 URL 引用（`recipes.assets.ts` 由上传脚本生成，现状不变）。
-- **flow ↔ outputs 机械对账**（ADR-039）：flow 的 key = node kind（fanout 展开规则不变）；启动自检以 `compile_graph` 纯函数编译配方预设（outputs + dub_languages），断言 flow keys ⊆ 编译图 kind 集——展示图与真实图**永不漂移**，人肉评审对账退役。
+- **flow ↔ tasks 机械对账**（ADR-039/043）：flow 的 key = node kind（fanout 展开规则不变）；启动自检以 `compile_graph` 纯函数编译配方预设链（tasks + 输入画像推出 materialize 注入），断言 flow keys ⊆ 编译图 kind 集——展示图与真实图**永不漂移**，人肉评审对账退役。
 - **配方估价贴**（ADR-039 / NAMING N-34）：预设图编译期定死 → 配方估价 = 图 fold 近常量；卡面"约 X credits"随第九周报价系统（逐节点 `estimate()`）落地。
 - **flow 的消费规格（D6）**：overlay 右区两 tab——**示例** = example_outputs / example_assets 平铺卡（自动静音循环 + 单张发声开关，零边零图）；**流程** = **唯一图画布**（FlowView 渲染）：素材 → 策展步骤（`fanout=N` 展开为同深度 N 个平行分支，dub ×3 = 三条语言分支）→ 烘焙成片终节点的**一张图**——素材→步骤 = 依赖边，终步→成片 = 血缘边。图只画一次（ElevenCreative 证据：示例平铺输入/输出，流程才是图）；手风琴 / 折叠文本形态退役。
 - **新增配方 = 写一条数据条目**（注册项 + i18n 键 + 烘焙资产），零代码路径——除非该卡演示的能力本身是新的（如分镜的 crop_track）。"扩展配方卡"的全部工作自此统一为 authoring 数据。
-- `inputSlots` 消费者：发射区 Input 小节图标（前端展示，`input_slots[0].type`）与启动自检的输入画像（服务端 `_recipe_adds_stills`，flow ↔ outputs 对账）。
+- `inputSlots` 消费者：发射区 Input 小节图标（前端展示，`input_slots[0].type`）与启动自检的输入画像（服务端 `_recipe_adds_stills` + materialize 注入画像，flow ↔ tasks 对账）。
 - **配方 id 的消费谱系**（2026-08-11 裁定）：id = 橱窗项的键（注册表 / i18n 文案 / 公开端点 / 对账自检迭键），**编译期与展示期合法**（卡面目录 / 检视 overlay / 预填模板 / flow ⊆ 对账 / 估价贴 fold），**请求期禁止**——id 永不作行为输入过请求线（无播种、无 422 塑形、发射不依赖 id，prompt 文本独自完整成立）。新消费面先登记本清单（注册项准入同款纪律）。
 
 ### 7.2 点击链路：overlay 内发射（配方 = 提示词）
@@ -172,23 +173,23 @@ Recipe = {
      → 发送：建项目 → 上传 → 跳转 overlay chat → 首条 POST /chat { message, persona_id }
        （与 composer 发送完全相同的路径；overlay 零推断 / 零 prior / 零生成）
      → 服务端 plan path 与 composer 完全同径——模板原文即全部载荷，
-       任务书从消息文案推断（零播种、零 resolve、配方身份不过线）
-     → 三方合并（merge_prior_slots）→ pending_intent → overlay 审阅面板逐槽行呈现承诺 → Start
+       任务链从消息文案推断（零播种、零 resolve、配方身份不过线）
+     → pending_intent（链 + derived 预览）→ overlay 计划卡逐行呈现 → Start
 ```
 
-**配方身份不过线**（MENTIONS §3，2026-08-11 裁定）：不进句子、不出 chip、无 transport 字段、无跨发送残留——发射的全部行为载荷 = 预填模板原文，点卡动作与 overlay 标题已各自陈述身份；发射后草稿随导航消亡。服务端注册表的 `outputs`/`dub_languages` 仅作启动对账自检的**声明形态**（flow ⊆ 编译图，§7.1），不进请求路径。
+**配方身份不过线**（MENTIONS §3，2026-08-11 裁定）：不进句子、不出 chip、无 transport 字段、无跨发送残留——发射的全部行为载荷 = 预填模板原文，点卡动作与 overlay 标题已各自陈述身份；发射后草稿随导航消亡。服务端注册表的 `tasks` 仅作启动对账自检的**声明形态**（flow ⊆ 编译图，§7.1），不进请求路径。
 
 **修改通道**：预设参数（如 dub 目标语言 zh/fr/es）**永不做选择器控件**（预设空间无界；控件 = A 形态漂移 + prior 旁路）；预设的可见性 = **预填 prompt 文案本身**（模板直接点名产出与语言）+ 示例/流程检视视图——镜像 chips 撤除（与文案重复，且被误读为选择器）；**修改** = 预填文本改字（发送前）/ chat 修订（发送后）——两个时刻一个通道，chat 恒胜。
 
-**variants desc（附属选择，2026-08-13 拍板）**：承诺句下方一行引导文案（`recipes.<id>.variants` i18n 键），职责 = 告诉用户这道菜还能怎么变（如字幕卡的双语对照 / 单语字幕 / 配音版），并**把用户引到合法修改入口**——写法是教路径的引导句（"直接改上面这句话，或生成后在对话里说"），不是选项清单（选项清单读起来像灰掉的按钮，诱导点击预期）。**禁做成选择器控件**（预设参数控件禁令的延伸）；未来若要可点，唯一合法形态 = 点击把变体句子插入预填 textarea（预填文案仍是唯一事实源，chips 只是打字快捷键）——待复述测试级证据再建。与技能标注 chips 分层：chips = "这道菜用了什么"（事实陈列），variants desc = "还能怎么变"（修改引导）。
+**示例提示词教学位**（2026-08-14 二次修订，variants desc 机制同日退役）：发射区提示词块标题 = 「示例提示词」，下方一行**按卡**引导句（`recipes.<id>.promptHint` i18n 键，不进注册表——纯文案），职责 = 告诉用户这道菜还能怎么点（字幕卡点名「双语字幕」「中文字幕」「西语配音」），并把用户引到合法修改入口——写法是教路径的引导句，**禁做成选择器控件**（预设参数控件禁令的延伸）；未来若要可点，唯一合法形态 = 点击把示例句子插入预填 textarea（预填文案仍是唯一事实源）——待复述测试级证据再建。与技能标注 chips 分层：chips = "这道菜用了什么"（事实陈列），promptHint = "还能怎么点"（修改引导）。
 
-点卡 = 配方唯一发射入口（composer @ picker 永不出配方项，MENTIONS §3）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的形状 = **模板文案点名（用户可见可改）+ plan path 推断 + 三方合并**——与 composer 主路同一份保证；LLM 永不解释配方（配方身份不过线）。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
+点卡 = 配方唯一发射入口（composer @ picker 永不出配方项，MENTIONS §3）；chat 输入同组件，派发走既有 task_book dock 确认面。承诺的形状 = **模板文案点名（用户可见可改）+ plan path 推断出链 + derived 预览呈现产物**——与 composer 主路同一份保证；LLM 永不解释配方（配方身份不过线）。匿名访客点卡 → 同一套组件预填，发送时走既有 requireAuth 闸（双受众复用，STRATEGY §5）。
 
 ### 7.3 布局与素材
 
-- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排五张**（`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`，容器 max-w-6xl），卡序 = 注册表插入序（2026-08-13 阵容：multilingual-subs → image-video → talk-clips → reframe → ai-visuals，点亮序）；视频**自动播放**（静音循环）；**右上**反色圆形声音开关（hover 浮现，同时只响一张）；**卡下 caption = 标题 + 承诺句**（ElevenCreative 卡片解剖：菜自己解释自己，2026-08-10 定形——hover 动作区退役，Remix 按钮删除；reserved 卡在标题旁挂 Soon pill）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、无 ring/border、无投影（媒体内容自身即区分,fill-first 准则）。
+- home：composer 区下方卡片画廊（Opus 式）：**9:16 竖屏卡一排五张**（`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`，容器 max-w-6xl），卡序 = 注册表插入序（2026-08-13 阵容：multilingual-subs → image-video → highlight-clips → reframe → ai-visuals，点亮序）；视频**自动播放**（静音循环）；**右上**反色圆形声音开关（hover 浮现，同时只响一张）；**卡下 caption = 标题 + 承诺句**（ElevenCreative 卡片解剖：菜自己解释自己，2026-08-10 定形——hover 动作区退役，Remix 按钮删除；reserved 卡在标题旁挂 Soon pill）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、无 ring/border、无投影（媒体内容自身即区分,fill-first 准则）。
 - 预览资源必须**公开可读**（落地页匿名受众）：`apps/web/public/` 或对象存储公开前缀——现有 asset 端点全是登录态，不可用。
-- 素材策展总账：① demo talk（桶 `demo/` 树，✅ `demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲——dub 对照包源）；② 双人访谈横屏视频（✅ `demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，访谈分镜卡源）；③ PPT 大型登台演讲（✅ `demo/uploads/xy_2.mp4` 63MB 960×960 方幅 13min，演讲短片卡源）＋ **15s 展示切片**（✅ `demo/uploads/xy_2_15s.mp4`，530–545s "We Focus on Industries" 内容页稳定窗，-14 LUFS 已归一，**多语言字幕卡展示源**，2026-08-13）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。多张卡复用 1–2 场源演讲。
+- 素材策展总账：① demo talk（桶 `demo/` 树，✅ `demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲——dub 对照包源）；② 双人访谈横屏视频（✅ `demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，访谈分镜卡源）；③ PPT 大型登台演讲（✅ `demo/uploads/xy_2.mp4` 63MB 960×960 方幅 13min，高光切片卡源）＋ **15s 展示切片**（✅ `demo/uploads/xy_2_15s.mp4`，530–545s "We Focus on Industries" 内容页稳定窗，-14 LUFS 已归一，**多语言字幕卡展示源**，2026-08-13）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。多张卡复用 1–2 场源演讲。
 
 ## 8. 分期与验收
 
@@ -199,7 +200,7 @@ Recipe = {
 | **R3** | 简报 B：分镜 ADR + filmstrip 检测 + `crop_track` + `reframe_clip`（静态双人分镜 + 单人中景动态追踪双验证，PROGRESS 第三周 spike） | —（能力先行；分镜双子卡卡面 authoring 延至定位根落地后，PROGRESS 第八周） | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
 | **R4** | Recipe 数据 schema 定义（§7.1）+ dub 落成第一个完整数据实例（示例 prompt / 素材账单 / 静态流程图 / 预览烘焙）+ remix→chat 链路走查补缝（08-07 启动 ~ 08-11，PROGRESS 第 2 周） | —（第四卡座位撤，§4.5） | dub 数据包五字段齐，第 2 周配方检视 overlay 装配所需内容全部就绪 |
 | **R5** | AI 生成产物线（声纹 / 人设 / Memory，PROGRESS 第 5–6 周） | 虚拟视频卡（R5 就绪后方可点亮；卡面 authoring 随第八周批次） | — |
-| **R6** | 多语言字幕卡点亮（PROGRESS 第二周）：`multilingual-subs` 注册项 + caption 翻译接线（`caption_languages` 任务书字段全栈纵贯：schema → PlanAgent 三路语言区分 → 三方合并 → 编译期扇出 fork `translate_clip`）+ `variants` desc 字段（双语/单多语/dub 引导句，§7.2）+ 预览烘焙（`scripts/bake_subs_contrast.py`，xy_2_15s + 翻译链出字幕对照成片）；双语 dual preset 为 stretch（不及则吃第三周缓冲） | 多语言字幕卡 | 用户素材走字幕卡 → 单 run 出多语言字幕版 clips；variants desc 渲染为承诺句下引导句且非控件 |
+| **R6** | 多语言字幕卡点亮（PROGRESS 第二周）：`multilingual-subs` 注册项 + caption 翻译接线 + 预览烘焙（`scripts/bake_subs_contrast.py` harvest 模式）。08-14 二次修订：三档画幅纵贯 + 双语对照（`translation_track`）+ 标题随译 + 默认字号 68 + 承诺句放开到"视频" + 示例提示词教学位（variants desc 退役）。08-14 三次修订：卡不含剪辑（流程图摘掉剪辑规划步、提示词只点名多语言）+ 字幕尺寸按画面推导（帧高等比 + 双语两行打折）+ 卡面横方幅留黑保原比例 + 四案例对照包（EN 原声 / 中英双语 / FR 单行 / ES 配音，dub_clip 入流程图）。08-15 ADR-043 收编：预设 = 技能链（`tasks=[translate zh bilingual, translate fr, dub es]`，全 fork）——簿级字段（caption_languages / dub_languages / aspect / caption_bilingual）退役为任务参数，编译期经 materialize_source 注入兑现「整条视频」承诺 | 多语言字幕卡 | 用户素材走字幕卡 → 单 run 出整条视频的多语言字幕版；横/方/竖画幅按点名生效；双语对照出双行字幕 |
 
 每期配套：对应素材策展 + 该期 `docs/tasks/` 简报（引用本文档章节号）+ PROGRESS 状态更新。
 
@@ -211,7 +212,7 @@ Recipe = {
 2. **每期一份 `docs/tasks/` 简报**，模板对齐既有简报（Context / 已核实事实 / 设计论证 / 改动点 / 命名审计 / 分期验收 / Prohibited Behaviors），依据行引用本文档章节号（如 "RECIPES §3.2"）；上游文档清单见 §11。
 3. **开工前重核 §0 事实**（代码可能已漂移），事实以读码为准。
 4. **运维坑**（已踩过）：改 pipeline 代码必须重启常驻 worker；本机服务调用用 `127.0.0.1` 不用 `localhost`；验证用的手工 run 会被常驻 worker 抢跑，验后清数据。
-5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）、`multilingual-subs`（多语言字幕卡）、`talk-clips`（演讲短片卡）、`variants`（附属变体引导）、`caption_languages`（字幕语言集，任务书级字段，dub_languages 同构）。
+5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）、`multilingual-subs`（多语言字幕卡）、`highlight-clips`（高光切片卡，2026-08-15 自 talk-clips 更名——名字说你得到什么，"演讲"窄化输入）、`materialize_source`（整条源材料化内部节点，ADR-043）/ `derived`（派生预览）、`aspect`（画幅，select_clips 任务参数，9:16/1:1/16:9 三档）、`bilingual`（双语对照，translate_clip 任务参数）/`translation_track`（对照轨）、`fork`（派生新版本 vs 就地改写标记）、`promptHint`（示例提示词引导句，按卡 i18n 键）。
 
 ## 10. Prohibited Behaviors
 
@@ -226,7 +227,7 @@ Recipe = {
 9. **禁**服务端播种与前端构造任务书预设（裁决⑤，2026-08-11 修订）：配方发射的全部行为载荷 = 预填模板原文；服务端永不见配方身份，composer/overlay 永不构建 prior。
 10. **禁**配方身份编码进 transport 字段或句中 chip——发射载荷只有 prompt 文本（MENTIONS §3）；**禁**全屏配方模态框与 DAG 画布外显。
 11. **禁** mention 类型一次性分支——新 @ 类型 = 双端注册表各一条注册项，立案先过 MENTIONS §3 判定三问。
-12. **禁** variants desc 做成选择器控件（2026-08-13，延伸既有预设控件禁令）：附属变体唯一形态 = 承诺句下方引导句；若未来做可点形态，唯一合法交互 = 点击插入预填 textarea，且需先有 evidence 再立项（§7.2）。
+12. **禁** promptHint 引导句做成选择器控件（延伸既有预设控件禁令）：变体教学唯一形态 = 提示词块下的按卡引导句；若未来做可点形态，唯一合法交互 = 点击插入预填 textarea，且需先有 evidence 再立项（§7.2）。
 
 ## 11. 与其他文档的关系（引导章节）
 

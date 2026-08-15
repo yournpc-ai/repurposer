@@ -19,8 +19,8 @@
 
 | 中文（文档） | 英文（代码） | 定义 | 不是什么 |
 |---|---|---|---|
-| 任务书 | `TaskSpec` | 意图归一：outputs × 语言 × 数量 × instruction | 不是 plan、不是 workflow |
-| 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（skill + params），compile_graph 模式②的输入 | 不是 plan、不是 node spec |
+| 任务书 | `TaskSpec` | 意图归一：技能链（`tasks`，唯一语法，N-37）× instruction | 不是 plan、不是 workflow |
+| 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（skill + params），compile_graph 模式②的输入；**plan path 的 dock 任务书也是它**（N-37——产物请求语法已统一为技能链） | 不是 plan、不是 node spec |
 | 施工图 | RunPlan / `workflow_steps` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
 | 步骤 | `WorkflowStep` | 施工图上的一个执行单位 | 不是 job、不是 task |
 | 对话 | `Conversation` | chat 的会话容器 | 不是 thread、不是 session（撞 auth session） |
@@ -32,7 +32,7 @@
 | 机械 | tools | 确定性执行单元（`tools/`），无 LLM 决策；**禁 import agents/、禁 import LLM client**（N-29 铁律，grep 门禁） | 不是 service、不是 util |
 | 技能 | skill | 能力层注册项，**一词一义**（N-29）：agent 会做的事，与用户语言同词（"多语言字幕是我们的技能"✓）；执行者是 agent 还是机械 = 技能包的构成，不是分类字段（actor 概念退役，N-31） | 不是执行者分类标签 |
 | 技能包 | skill package（`app/skills/`） | 能力的唯一家：节点类 + params schema + 私有工序 + 估价 + 展示键（+ 技能私有 agent 声明）；新增技能 = 加一个包 + 一行 import | 不是共享资源层（agents/tools 是共享层） |
-| 内部节点 | internal nodes | 非技能的内核 crew（住 `pipeline/`）：preprocess / persona_bootstrap / director_* / checkpoint / render | 不进技能注册表（checkpoint 先例不变） |
+| 内部节点 | internal nodes | 非技能的内核 crew（住 `pipeline/`）：preprocess / persona_bootstrap / director_* / checkpoint / render；例外：`materialize_source` 住 `skills/clips/`（复用 select_clips 的源决策函数，搬入 pipeline 会成 pipeline→skills 反向 import），以 `NodeBase.internal` 声明，自检豁免注册表席位（ADR-043） | 不进技能注册表（checkpoint 先例不变） |
 | 调用面 harness | harness | 模型调用面脚手架（N-33 限定）：Agent 漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底）+ contexts 装配 + prompts 模板 | 验收语境叫剧本 harness（test harness，两义行业并存） |
 | 估价 | `estimate` | 节点级估价函数（N-34）：机械精确价 / agent token 区间；**报价 = 图 fold**（全图 = 生成前总价，子图 = 修改单价）；`workflow_steps.estimate` 计划侧列与 `cost` 账簿侧对称 | 不是 `cost_hint`（三档已退役） |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
@@ -50,12 +50,13 @@
 | 回答 | `answer` | 一词两态同域：① 落库态 messages.answer JSONB（kind: option/freeform/bail/start + answered_at）——**用户**答复待决问题，NULL = 待决，answer 端点即恢复；② 提议态 `AnswerProposal`（IntentProposal 第四态，N-21）——**系统**对信息类提问的直答，落库为普通 assistant 消息 content（B1 同款），**不进 messages.answer** | — |
 | 弃做 | `bail` | 优雅退出一等公民：入口回 draft / checkpoint 下游级联 skipped；永不标 failed | 不是 cancel（cancel 是 UI 按钮词） |
 | 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
-| 任务槽 | `IntentSlot` | 任务书一行 = 一个产物的请求（type/count/focus/language/tone_override/explicit）；请求层（期 2 已落代码） | **不是分镜槽位** `StoryboardSlot`（派工层，N-20） |
+| 任务槽 | `IntentSlot` | 任务链的**编译期投影**一行 = 一个产物的规格（type/count/focus/language/tone_override/explicit）：住生成节点 `spec.slot`（同类型兄弟区分 + 步骤标签 + 派工对账），请求层永不声明（N-37，ADR-043）；存量 run.context 行读容忍 | **不是分镜槽位** `StoryboardSlot`（派工层，N-20）；不是请求语法 |
 | 挂起 | `Suspend` | 挂起异常：checkpoint 瘦节点转 `waiting` 的机制（期 4 已落代码）；状态词从机制动词派生 | 不是 paused——启用已有 waiting 座位 |
 | 检查点 | `checkpoint` | 节点 kind：提问-等待-续跑的瘦节点（期 4 已落代码；`spec.for` 住用途） | 不进 SKILL_REGISTRY |
-| 配方卡 | `RecipeCard` | 首页能力演示卡：承诺 + 输入槽位 + slots prior + preview（RECIPES §7） | 不是模板市场、不是内容流 |
-| 配音语言集 | `dub_languages` | 任务书级字段：本 run 的配音语言清单（空列表 = 无配音，§4 不加布尔） | 不是 IntentSlot 字段（dub 是跨产物修饰，非产物类型） |
-| 派生 | `fork` | dub 节点的用途标记（`spec.fork`）：新建派生产物行而非原地改写 render_spec | 机制词仍 dub（N-19 用途住 payload）；不是 git fork |
+| 配方卡 | `RecipeCard` | 首页能力演示卡：承诺 + 输入槽位 + 预设技能链 + preview（RECIPES §7） | 不是模板市场、不是内容流 |
+| 派生预览 | `derived`（`pending_intent.derived`） | 计划卡的「你将得到」投影行：dock 时服务端干跑 compile_graph 产出（type / variant=subs\|dub / language / count / bilingual）；只读展示，编辑面是链行本身（ADR-043） | 不是产物声明（请求层无 outputs，N-37） |
+| 整条源材料化 | `materialize_source` | 编译期注入的内部节点：链含 clip-spec 消费者而无 select_clips 时，把项目主源落成一条全段 clip-spec（整条视频，无 LLM 选段）；画像分发 media / stills（先 align_stills）/ existing（不注入）/ 无（编译期 422 指名拒绝） | 不是注册技能（用户从不说"materialize"） |
+| 派生 | `fork` | 变换节点的用途标记（`spec.fork`，dub / translate 同款）：true = 新建派生产物行（原版共存）；false = 原地改写 render_spec | 机制词仍是原技能名（N-19 用途住 payload）；不是 git fork |
 | 派生来源 | `derived_from_output_id` | 派生行 `source_ref` 内的溯源指针（住 JSONB） | 不新建表列 |
 | 字幕样式目录 | `CAPTION_PRESETS` | 字幕样式注册表（packages/clip）：preset id → 原语组合；TS 类型由它推导，Python 只校验成员 | 不是自由样式（preset 枚举纪律不变） |
 | 布局 / 进场 / 词级高亮 | `layout` / `entrance` / `wordHighlight` | 字幕样式三原语：single\|stack × none\|fade-in\|pop-in\|slide-up × bool | — |
@@ -74,7 +75,7 @@
 | 皮肤块 | `personas.brand`（JSONB） | 人设的视觉皮肤（字幕字号色 / 标题 / intro/outro / logo / 音乐选择），烘焙时合并系统默认皮肤进 clip-spec `brand` 段；NULL = 系统默认皮肤。**`brand` 全栈一词**（人设块 / 烘焙 / clip-spec 段同名，N-28） | 不是 brand_templates（表已退役）；不引入 `look` |
 | 提及类型 | mention type（`ChatMention.type`） | @ 引用的实体类别：asset / output / transcript_segment / workflow_step；`recipe` 已退役（MENTIONS §3——配方 = 发射上下文，不是 mention），类型成员保留供历史消息 chip 渲染 | 不是自由文本、不是标签 |
 | 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |
-| 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：卡面数据（input_slots / status / tags）+ 示例素材/成片 + flow 图 + 启动对账自检的声明形态（outputs / dub_languages——不进请求路径，配方 = 提示词，ADR-040） | 不是前端数据文件、不是表 |
+| 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：卡面数据（input_slots / status / tags）+ 示例素材/成片 + flow 图 + 预设技能链（`tasks`——启动对账自检的声明形态，不进请求路径，配方 = 提示词，ADR-040/043） | 不是前端数据文件、不是表 |
 | 输入槽位 | `input_slots` | 配方的类型化素材要求（素材类型 + 是否必填）；发射区 Input 小节（前端）+ 启动自检输入画像（服务端）双消费者 | 不是上传组件 |
 | 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
@@ -110,7 +111,7 @@
 | N-17 | ContentPlan 拆分：素材理解 `MaterialUnderstanding` + 分镜表 `Storyboard`；DerivativePlan 退役为槽位 `StoryboardSlot` | 导演两步走落地（`docs/tasks/done/director-two-step.md`）：理解=素材级（asset-hash 复用），分镜=请求级（每 run 重排）。否决 `TaskBoard`（撞 TaskSpec/TaskItem 词族，N-11 同型三撞）与 ContentPlan 沿用（理解是描述不是计划，沿用旧名不诚实）。"两个 plan 各司其职"注记改写：RunPlan 成唯一 plan | §1、§6 |
 | N-18 | `IntentProposal` 升三态（ask 结构化提问） | 结构化 ask 的 payload 与 task_list/edit_ops 正交，判别联合加第三态；freeform 形态（options 空 + allow_freeform）承接反问——反问仍是合法输出，只是有了类型座位（简报 `tasks/done/intent-ask-primitive.md` §2.3） | §1 |
 | N-19 | 机制词与用途词分离 | 机制一词一物：`Suspend` 异常 / `waiting` 状态 / `answer` / `bail`；用途住 payload kind（`question.kind` / `spec.for`）；**用途×机制组合词永禁**；配对词整体引入（ask/answer/bail）；状态词从机制动词派生（Mastra 参照） | §1、§6 |
-| N-20 | 任务槽 vs 分镜槽分层 | `IntentSlot`（请求层：用户要什么）≠ `StoryboardSlot`（派工层：导演怎么排）——两层各有槽位词，混用即违规 | §1 |
+| N-20 | 任务槽 vs 分镜槽分层 | `IntentSlot`（任务链的编译期投影：产物规格一行，住 `spec.slot`）≠ `StoryboardSlot`（派工层：导演怎么排）——两层各有槽位词，混用即违规 | §1 |
 | N-21 | `IntentProposal` 升四态（answer 直答态，延展 N-18） | 纯信息直答（能力/进度/解释/闲聊）与 task_list/edit_ops/ask 正交，判别联合加第四态 `AnswerProposal{type:"answer", text}`——落普通 assistant 消息，不起 run、不 dock；与 ask 的边界写死在 agent 规则（无工作请求且无歧义才可用）。沿用 `answer` 词（§1 同概念同名：与 `InferredIntent.action="answer"`、messages.answer 同族）；同一机制收编发布/导航引导，不开新通道（期 4 补四已落代码） | §1 |
 | N-22 | 应用区定名 `studio`，workbench/工作台全库退役 | 创作类 AI 产品惯例（ElevenLabs/Suno/Descript/PlayHT Studio）；workbench 是企业 SaaS 语域（控制台味），与 agent/IP 孵化定位不符；studio 无夸大（一间创作的屋子，不承诺结果）。动线闭环：landing 按钮"进入工作室"→ home 接待语"欢迎来到你的工作室"。i18n key `openWorkbench`→`openStudio`，CLAUDE.md 布局节与代码注释同步 | §1 |
 | N-23 | 品类词 = agent，空间词 = studio，两层分离 | 品类自称永远是 agent（PRD one-liner "An AI agent for knowledge experts"、hero "We do the rest"）；**studio 只做应用区空间名**（"你的工作室"），永不出现在品类陈述句（"Repurposer is a …"）——避免触发 CapCut/Descript 式工具功能数量对标（外部评审 Kimi 同判：叫 studio 就被拉进工具军备竞赛，叫 agent 比的是交付与省心）。空间名成立前提：房间内永不出现工具货架（多轨/特效/素材库），UI 保持 composer + 卡片、editor 薄化；中文"工作室"双关运营团队（明星工作室 = 替名人运营自媒体的班子），与 agent 定位咬合 | §1 |
@@ -128,6 +129,7 @@
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与技能同名 | 技能包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
 | N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
+| N-37 | 产物请求语法 = 技能链；`IntentSlot` / 簿级修饰符 / 三方合并退役 | outputs 槽位语法诞生于提取族时代（请求层 schema = 产物清单），「给我的视频加字幕」被迫表达为高光提取（任务卡「视频片段 ×2」病灶）。收敛（ADR-043）：意图面唯一语法 = task list（plan path 与 chat loop 同一词汇）；产物 = 编译图的派生投影（`derived` 预览行），类型词汇仍由节点 `output_type` 派生（N-32 不变）；面板编辑 = task list 直接结构编辑，整链 ride prior_intent，chat 恒胜——merge 机械无对象自然死亡；悬空变换编译期 422 指名拒绝（禁静默丢弃）；存量 pending_intent / run.context 行读容忍升级，只读不写 | §1、§5 |
 
 ## 4. API 命名
 

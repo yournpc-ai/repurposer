@@ -23,7 +23,7 @@ from uuid import UUID
 
 import httpx
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
@@ -151,6 +151,33 @@ async def _mirror_render_node(
         )
 
 
+async def _mirror_superseded_node(output_id: UUID, project: Project) -> None:
+    """Terminal mirror for a render DISCARDED as superseded (a morph re-pended
+    the row mid-render): only the RUNNING step — the morph's fresh render step
+    stays pending for the next claim. Best-effort, same as _mirror_render_node."""
+    try:
+        lang = display_language(None, project.language)
+        summary = "已被新的渲染取代" if lang.startswith("zh") else "Replaced by a newer render"
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text(
+                    "UPDATE workflow_steps SET status = 'done', finished_at = now(), "
+                    "spec = jsonb_set(spec, '{summary}', to_jsonb(CAST(:summary AS varchar)), true), "
+                    "updated_at = now() "
+                    "WHERE kind = 'render' AND status = 'running' "
+                    "AND spec->>'output_id' = :oid"
+                ),
+                {"oid": str(output_id), "summary": summary},
+            )
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "render_node_superseded_mirror_failed",
+            output_id=str(output_id),
+            error=str(e),
+        )
+
+
 async def render_output(output_id: UUID) -> None:
     """Render a claimed output via the render service; persist terminal state.
 
@@ -176,10 +203,22 @@ async def render_output(output_id: UUID) -> None:
         # context lives on this path).
         lang = display_language(None, project.language)
         if not output.render_spec:
-            output.render_status = RenderStatus.FAILED
-            output.render_error = user_line("render_failed", lang)
+            failed = await db.execute(
+                update(Output)
+                .where(
+                    Output.id == output_id,
+                    Output.render_status == RenderStatus.RENDERING,
+                )
+                .values(
+                    render_status=RenderStatus.FAILED,
+                    render_error=user_line("render_failed", lang),
+                )
+            )
             await db.commit()
-            await _mirror_render_node(output_id, "failed", output.render_error)
+            if failed.rowcount:
+                await _mirror_render_node(
+                    output_id, "failed", user_line("render_failed", lang)
+                )
             return
 
         try:
@@ -220,10 +259,37 @@ async def render_output(output_id: UUID) -> None:
             files = output.files or {}
             old_video_key = files.get("video")
             old_srt_key = files.get("srt")
-            output.files = {**files, "video": data["video"], "srt": data["srt"]}
-            output.render_status = RenderStatus.COMPLETED
-            output.render_error = None
+            # Guarded write (2026-08-15 morph/render race): a morph landing
+            # mid-render re-pends the row (RENDERING -> PENDING) with a fresh
+            # spec. The conditional UPDATE matches 0 rows then — this render's
+            # product is STALE and must be discarded, never clobber the row
+            # (the re-pend renders the fresh spec on a later claim).
+            claimed = await db.execute(
+                update(Output)
+                .where(
+                    Output.id == output_id,
+                    Output.render_status == RenderStatus.RENDERING,
+                )
+                .values(
+                    files={**files, "video": data["video"], "srt": data["srt"]},
+                    render_status=RenderStatus.COMPLETED,
+                    render_error=None,
+                )
+            )
             await db.commit()
+            if claimed.rowcount == 0:
+                logger.info("render_superseded", output_id=str(output_id))
+                for orphan_key in (video_key, srt_key):
+                    try:
+                        await delete(orphan_key)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "render_superseded_delete_failed",
+                            key=orphan_key,
+                            error=str(e),
+                        )
+                await _mirror_superseded_node(output_id, project)
+                return
             await _mirror_render_node(output_id, "done")
 
             # Best-effort cleanup of the previous render's objects. Only bare
@@ -247,7 +313,21 @@ async def render_output(output_id: UUID) -> None:
             )
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("render_output_failed", output_id=str(output_id), error=str(e))
-            output.render_status = RenderStatus.FAILED
-            output.render_error = user_line("render_failed", lang)
+            # Same guard as the success path: a mid-render morph owns the row
+            # now — the stale failure must not clobber its re-pend.
+            failed = await db.execute(
+                update(Output)
+                .where(
+                    Output.id == output_id,
+                    Output.render_status == RenderStatus.RENDERING,
+                )
+                .values(
+                    render_status=RenderStatus.FAILED,
+                    render_error=user_line("render_failed", lang),
+                )
+            )
             await db.commit()
-            await _mirror_render_node(output_id, "failed", output.render_error)
+            if failed.rowcount:
+                await _mirror_render_node(
+                    output_id, "failed", user_line("render_failed", lang)
+                )

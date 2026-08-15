@@ -31,10 +31,14 @@ from pydantic import BaseModel
 # internal crew first, then skill packages in curated proposal order.
 import app.pipeline.node_runners  # noqa: F401
 from app.skills.clips.node import SelectClips  # noqa: F401
+from app.skills.clips.materialize import MaterializeSource  # noqa: F401 — NODE_KINDS only; an internal node (ADR-043), never a registry entry
 from app.skills.clips.params import SelectClipsParams
+from app.pipeline.derivative_dispatch import CopyWriterParams
 from app.skills.posts.node import WritePost  # noqa: F401
 from app.skills.quotes.node import WriteQuotes  # noqa: F401
+from app.skills.quotes.params import WriteQuotesParams
 from app.skills.carousel.node import WriteCarousel  # noqa: F401
+from app.skills.carousel.params import WriteCarouselParams
 from app.skills.article.node import WriteArticle  # noqa: F401
 from app.skills.revise.node import ReviseScript  # noqa: F401
 from app.skills.revise.params import ReviseScriptParams
@@ -118,6 +122,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             name="write_post",
             description="Write a LinkedIn long-form post from the talk",
             behavior="probabilistic",
+            params_model=CopyWriterParams,
             summary_templates={
                 "en": "Wrote a LinkedIn post · {word_count} word{word_count_s}",
                 "zh": "写好了 LinkedIn 帖子 · {word_count} 词",
@@ -127,6 +132,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             name="write_quotes",
             description="Write quote cards from the talk's best lines",
             behavior="probabilistic",
+            params_model=WriteQuotesParams,
             summary_templates={
                 "en": "Wrote quote cards · {word_count} word{word_count_s}",
                 "zh": "写好了金句卡 · {word_count} 词",
@@ -136,6 +142,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             name="write_carousel",
             description="Write a LinkedIn carousel (slide deck copy)",
             behavior="probabilistic",
+            params_model=WriteCarouselParams,
             summary_templates={
                 "en": "Wrote a carousel · {word_count} word{word_count_s}",
                 "zh": "写好了轮播 · {word_count} 词",
@@ -145,6 +152,7 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             name="write_article",
             description="Write a long-form article / newsletter draft",
             behavior="probabilistic",
+            params_model=CopyWriterParams,
             summary_templates={
                 "en": "Wrote an article · {word_count} word{word_count_s}",
                 "zh": "写好了文章 · {word_count} 词",
@@ -261,11 +269,24 @@ def validate_task_list(tasks: list[Any]) -> list[SkillEntry]:
             )
         if entry.params_model is not None:
             try:
-                entry.params_model.model_validate(task.params or {})
+                params = entry.params_model.model_validate(task.params or {})
             except Exception as e:
                 raise SkillRejected(
                     f"Skill '{task.skill}' rejected its params: {e}",
                     suggestions=[entry.name],
                 ) from e
+            # Count bounds adjudication (birthplace C3's mode② form): the
+            # node's count_limits declaration is the single source — an
+            # out-of-bounds count is real money (999 quotes = 999 images).
+            node = NODE_KINDS.get(entry.name)
+            count = getattr(params, "count", None)
+            if node is not None and node.count_limits and count is not None:
+                lo, hi = node.count_limits
+                if not lo <= count <= hi:
+                    raise SkillRejected(
+                        f"Skill '{task.skill}' count must be between {lo} and "
+                        f"{hi} (got {count})",
+                        suggestions=[entry.name],
+                    )
         entries.append(entry)
     return entries

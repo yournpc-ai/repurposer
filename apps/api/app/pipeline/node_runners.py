@@ -84,6 +84,8 @@ def _display_zh(run: WorkflowRun, project: Project, assets: list) -> bool:
 
 class Preprocess(NodeBase):
     kind = "preprocess"
+    task_name = "Analyze uploads"
+    task_name_zh = "分析素材"
 
     def estimate(self, ctx: dict) -> dict | None:
         """Validation only — no LLM, no priced units."""
@@ -116,6 +118,8 @@ class Preprocess(NodeBase):
 
 class PersonaBootstrap(NodeBase):
     kind = "persona_bootstrap"
+    task_name = "Prepare persona"
+    task_name_zh = "准备人设"
     agents = (persona,)
 
     def estimate(self, ctx: dict) -> dict | None:
@@ -215,6 +219,8 @@ class PersonaBootstrap(NodeBase):
 
 class DirectorUnderstand(NodeBase):
     kind = "director_understand"
+    task_name = "Understand material"
+    task_name_zh = "看懂素材"
     agents = (director_understand,)
 
     def canvas_group(self, node):
@@ -325,6 +331,8 @@ class DirectorUnderstand(NodeBase):
 
 class Checkpoint(NodeBase):
     kind = "checkpoint"
+    task_name = "Pick a direction"
+    task_name_zh = "选定方向"
 
     def canvas_group(self, node):
         return "plan"
@@ -452,6 +460,8 @@ class Checkpoint(NodeBase):
 
 class DirectorPlan(NodeBase):
     kind = "director_plan"
+    task_name = "Plan content"
+    task_name_zh = "规划内容"
     agents = (director_plan,)
 
     def canvas_group(self, node):
@@ -477,18 +487,39 @@ class DirectorPlan(NodeBase):
         ctx = run.context or {}
         understanding = await _load_understanding(db, node)
 
-        from app.pipeline.orchestrator import ordered_slots  # deferred: import cycle
-
-        parsed = [IntentSlot.model_validate(s) for s in ctx.get("outputs") or []]
-        intent_slots = ordered_slots([s for s in parsed if s.type in known_output_types()])
+        # The storyboard's intent slots come from THIS RUN'S COMPILED GRAPH
+        # (ADR-043 item 6): each generation sibling carries its task's params
+        # as spec.slot — the graph the user confirmed IS the dispatch input,
+        # so panel-edited chains and multi-version chains plan exactly as
+        # compiled. Per-type order = seq order = the compile's slot_index
+        # assignment (executors pick their slot by that same ordinal).
+        siblings = (
+            await db.execute(
+                select(WorkflowStep)
+                .where(WorkflowStep.run_id == run.id)
+                .order_by(WorkflowStep.seq)
+            )
+        ).scalars().all()
+        parsed = [
+            IntentSlot.model_validate(s.spec["slot"])
+            for s in siblings
+            if (s.spec or {}).get("slot")
+        ]
+        intent_slots = [s for s in parsed if s.type in known_output_types()]
         # Targeted derivative runs: the storyboard plans only for the target type.
         target_type = node.spec.get("target_type")
         if target_type in derivative_output_types():
             intent_slots = [IntentSlot(type=target_type)]
         if not intent_slots:
             intent_slots = [IntentSlot(type="clips")]
+        # count_default rides per slot (registry-derived — the template never
+        # hardcodes a number; the retired inline mirror drifted once already).
+        count_defaults = slot_default_counts()
         task_book = {
-            "slots": [s.model_dump(mode="json") for s in intent_slots],
+            "slots": [
+                {**s.model_dump(mode="json"), "count_default": count_defaults.get(s.type)}
+                for s in intent_slots
+            ],
             "target_language": ctx.get("target_language", "en"),
         }
         # Direction checkpoint (期 4): the user's pick steers the prompt — option
@@ -539,6 +570,8 @@ class DirectorPlan(NodeBase):
 
 class RenderRequest(NodeBase):
     kind = "render"
+    task_name = "Render video"
+    task_name_zh = "渲染视频"
     # Render nodes materialize at runtime (D2 fan-out from producer nodes) as
     # well as at compile time (targeted re-render) — the recipe-flow
     # reconciliation treats them as present in every producer graph.

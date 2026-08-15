@@ -99,11 +99,11 @@ intent agent 的轮内输出四态（N-18 三态 + N-21 第四态，均已落代
 
 plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 ComposerIntentAgent 时代相同）：
 
-- `generate` → reasons 推导（outputs_default / clip_count_default / clips_without_media）+ 三方合并（`merge_prior_slots`：base=stored 书、ours=面板 `prior_intent`（explicit=手改槽）、theirs=新推断——**逐字段**：推断为 null=无意见保留面板；面板未动的字段推断接管；推断复读旧值时面板手改赢；两边都动 **chat 赢**。手改槽被推断整体丢弃时重新挂上——删手改槽只能在面板里做）+ recipe mention 服务端**预设播种**（2026-08-05 裁定：配方=第一版预设，不是钉——只补推断没有的槽位类型 + 推断为空时填 dub 默认，无任何 explicit，下一轮起每个字段都可修订；LLM 前 fail-fast 422）→ `sync_task_book_question` dock（2026-08-05：book 级 `language`/`language_explicit` 字段退役——语言是每个槽位的属性，PlanAgent 必填；`language_default` reason 随之退役，run 出生地从槽位派生 target_language 兜底）
+- `generate` → reasons 推导（chain_default / clip_count_default / clips_without_media）→ **derived 预览**（ADR-043：服务端干跑 compile_graph 产出「你将得到」投影行，随 pending_intent 持久化）→ `sync_task_book_question` dock。**任务书载荷 = 技能链（task list），无合并机械**：面板手改 = 对 task list 的直接结构编辑（数量步进器绑 select_clips.count、语言下拉绑各任务的 language 参数、删行 = 移除技能），编辑后的整链 ride prior_intent 注入推断上下文，PlanAgent 重提全链（「保留本轮未修订的每个任务」写进 prompt），chat 恒胜——merge_prior_slots 三方合并 / explicit 钉随之退役。**整条源规则**（ADR-043 考纲原点）：「给我的视频加字幕 / 配音」类请求 = 变换技能单独成链，永不夹带 select_clips——编译期自动注入内部节点 `materialize_source`（确定性全段 clip-spec，无 LLM 选段；出生地画像分发：media 直挂 preprocess / stills 先 align_stills / 项目有既有 clips 不注入 = 作用于现有 clips / 无源可作用 = 编译期 422 指名拒绝，永不静默丢弃）
 - `answer` → 普通 assistant 消息，stored 任务书不被动
-- `start` → 复用 answer kind=start 路径起 run（唯一出生地）；dock 中的任务书以 `presented_plan` 摘要注入推断上下文——短确认看得见自己在确认什么（2026-08-04 硬化，此前裸"开始吧"在模糊首轮后 2/3 误判 generate）
+- `start` → 复用 answer kind=start 路径起 run（唯一出生地）；dock 中的任务书以 `presented_plan`（整链 JSON）注入推断上下文——短确认看得见自己在确认什么（2026-08-04 硬化，此前裸"开始吧"在模糊首轮后 2/3 误判 generate）
 
-修订回合的累积 prompt 由**服务端**拼装（stored prompt + 本轮原文）——composer/前端永不构建累积 prompt 或 prior。PlanAgent 的上下文四面体（2026-08-06 补第四面）：累积 prompt + 文件名 + `presented_plan` + **最近 5 轮对话**（"Recent conversation"——G-7：素材/请求判定需要看见"上一轮刚被要素材"，短贴文曾在真空里被系统性误判为非素材形成反问死循环；只喂上下文不加倾向规则，判定归 LLM 凭语境完成，同 presented_plan 硬化先例）。PlanAgent 的 LLM 故障兜底 = 默认任务书 dock（可编可 Start，永不白屏）；`outputs:null` 等松散输出由 schema 读容忍接住。
+修订回合的累积 prompt 由**服务端**拼装（stored prompt + 本轮原文）——composer/前端永不构建累积 prompt 或 prior。PlanAgent 的上下文四面体（2026-08-06 补第四面）：累积 prompt + 文件名 + `presented_plan` + **最近 5 轮对话**（"Recent conversation"——G-7：素材/请求判定需要看见"上一轮刚被要素材"，短贴文曾在真空里被系统性误判为非素材形成反问死循环；只喂上下文不加倾向规则，判定归 LLM 凭语境完成，同 presented_plan 硬化先例）。PlanAgent 的 provider 故障不兜底：MiniMaxError 直接穿透到 chat 路由边界——SSE 终帧 `turn.failed` / JSON 502 都带 `user_error_line` 本地化行（provider 错误人话化梯），永不 dock 编造默认书（错误计划看着像真的，Start 会为它烧一次付费 run）；`tasks:null` 等松散输出由 schema 读容忍接住（存量 outputs/簿级修饰符形状的 pending_intent 行同机制升级，只读不写）。**失败行的呈现 = 入流灰行**（2026-08-15 裁定，Claude Code 内嵌用量上限行同款解剖）：turn.failed 的本地化行渲染为消息流里的灰色 MetaRow（TurnErrorRow），永不用 toast——回合失败是对话里的事实，不是外加 chrome；服务端对失败回合零提交，灰行本地瞬态、刷新即失（历史保持诚实：没有任何回答发生过）。run 级失败同理无 toast——失败步骤行已带人话错误入流。
 
 ### 3.2 四态边界规则
 
@@ -164,7 +164,7 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 ### 4.3 不登记
 
-- **管线内部节点**：`preprocess` / `persona_bootstrap` / `director_plan`——拓扑的组成部分，不是用户可选技能。
+- **管线内部节点**：`preprocess` / `persona_bootstrap` / `director_plan` / `materialize_source`（ADR-043：整条源材料化，编译期注入——链含 clip-spec 消费者而无 select_clips 时把项目主源落成一条全段 clip-spec）——拓扑的组成部分，不是用户可选技能。
 - **`infer_intent`**：它是 loop 的入口，不是 loop 可调用的一项。
 - **edit ops**：Operation Model 的词汇（§9），产出 clip-spec diff 而非 run——两个家族分开登记。
 - **judge/verify**：Phase 3 节点 kind，非用户技能。
@@ -192,9 +192,9 @@ plan path 的推理者是 **PlanAgent**（三动作 verdict，prompt 与 Compose
 
 ## 7. Mentions（@ 实体引用）
 
-> **2026-08-01 注册表化修订**：提及系统 = 双端注册表（前端 `MENTION_REGISTRY`：icon / i18n / 候选源；服务端：效果注册表——**上下文富化**族通用注入已免费，**任务书预设播种**族为 recipe 专属，解析唯一发生地 = 服务端 `resolve_recipe_mentions`）。`recipe` 为第五提及类型（前四 = asset / output / transcript_segment / workflow_step）；LLM 不解释 recipe 提及——确定性引用直接播种，不占 intent 调用（**2026-08-05 修订**：原"钉死"语义降级为预设——只补推断没有的槽位类型 + dub 空时填默认，无 explicit，下一轮起每个字段可经 chat 修订）。后续 @ 类型 = 双端各一条注册项，无类型分支（扩展证明见简报 `docs/tasks/recipe-mention.md` §2.5）。以下为本节的原始契约描述，机制不变。
+> 提及系统 = 双端注册表（前端 `MENTION_REGISTRY`：icon / i18n / 候选源；服务端效果注册表按类型富化上下文）。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / workflow step**；新 @ 类型 = 双端各一条注册项，无类型分支。配方不是 mention（MENTIONS §3：配方 = 提示词，卡面预填模板即全部发射载荷，ADR-040）；`recipe` 类型仅作渲染容忍保留（历史消息行的 chip 还能画出）。
 
-多轮对话的模糊指代必须落为确定引用。可 @ 实体四类：**asset / output（某条 clip）/ transcript 段落 / workflow step**。
+多轮对话的模糊指代必须落为确定引用。
 
 - 前端输入框 @ 触发选择器，`messages.mentions` JSONB 存 `[{type, id, label}]`；
 - intent 收到的 prompt 中 mention 已替换为确定 ID 引用，LLM 解析歧义降一个量级；
@@ -233,7 +233,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **answer 端点即恢复**：`POST /chat/messages/{id}/answer` 写答案即解除阻塞（不显式命名 resume）。task_book 分派：bail → 清 pending_intent 回 draft（prompt 已 seed 进会话，可重开）；`start`（一等 answer kind）→ 从 pending_intent 起 run 并写 `workflow_run_id`。choice 分派（期 3）：记录后续聊——响应 `AnswerResponse{answered_question, follow_up}`（与 `ChatResponse.answered_question` 同角色同名，B2），option 答案回填 label 进 `answer.text`。重复回答 409。`/generate` 兜底 settle（`mark_task_book_started`）——两路径共用"一行一答"不变量。
 - **plan path 回合形态（B1/B4 + G-1，2026-08-04 自 /intent 迁入）**：dock 任务书 = `ChatResponse.assistant_message` 携带 pending task_book question 行；answer 回合的答复落普通消息行且**不覆盖 stored 任务书**；原话确认（G-1：PlanAgent 判 `start`）复用 answer kind=start 路径起 run，`ChatResponse` 携带 `run_id` + `answered_question`（dock 的 autonomy 档随 `ChatRequest.autonomy` 透传不丢档——打字确认与 dock Start 同待遇）；无可启动对象时 re-dock 存量书或降级 plan，同样不覆盖 stored 任务书。`needs_clarification` 布尔已摘除（`reasons.length > 0` 可推导，存量行读取容忍）。修订发累积 prompt 做推理（服务端拼装），每轮用户原文各自入档。
 - **入口约束归出生地（期 4 补）**：clips-media 门、slot count 边界（节点 `count_limits` 声明派生：clips 1-10 / quotes 1-20 / carousel 2-15）、targeted scope 校验、mode② requires 全部在 `create_run` 内拒绝（ValueError → 请求层 422 / chat 层反问兜底）——`/generate`、task_book start、chat 派发三条入口不再各持一份 guard。`create_run` 只 flush 不 commit：run、启动它的 answer、project 状态落在同一请求事务里，提交点唯一。
-- **task_book 形态（期 1）**：计划卡留在消息流做审阅面板（编辑属流内），Start/Cancel 决策 + **Auto/Review 自治档**移入 dock；`autonomy` 经 AnswerRequest/GenerateRequest/`TaskSpec` 落 run.context（行为期 4 生效：review 档 full run 插方向 checkpoint，auto/targeted/mode② 不插）。needs_clarification reasons（期 3）随 question 人话原文落库（数据存键，渲染时本地化）。
+- **task_book 形态（期 1）**：计划卡留在消息流做审阅面板（编辑属流内），Start/Cancel 决策 + **Auto/Review 自治档**移入 dock；`autonomy` 经 AnswerRequest/GenerateRequest/`TaskSpec` 落 run.context（行为期 4 生效：review 档 full run 插方向 checkpoint，auto/targeted/mode② 不插）。needs_clarification reasons 随 question 落库（数据存键）：键只驱动 auto-start 备妥判定（reasons 空 = 无疑点），不渲染成用户文案——推断簿记不是 UI 文案。
 - **choice 形态与 autoResume（期 3）**：dock 渲染选项按钮组（字母徽章镜像映射规则）；待决中自由文本确定性映射——命中选项字母/序号/原文 → option 回答，否则 allow_freeform → freeform，否则按新 intent 处理、问题保持待决（零 LLM；task_book 待决不参与）。`ChatResponse.answered_question` 携带本回合掉的问题行供 QA 入档。成本 quote（confirm 形态，cost_hint 解剖位已预留）归 v3。
 - **checkpoint 形态（期 4）**：方向检查点是 choice 问题 + `workflow_run_id` 分派标记。`Suspend` 异常把瘦节点停进 `waiting`（选项住 `spec.suspend_payload`）、run 停进 `WAITING_HUMAN`；答案端点/autoResume 写 `spec.answer`、节点回 pending、run 回 RUNNING——队列式重入（runner 从顶上重跑，answer 分支直达 done），不是调用栈续跑。选项代码派生自 `key_arguments`（零 LLM）；bail = 节点 done(spec.bailed) + 下游级联 skipped("user bailed") + run COMPLETED（永不 failed）；`director_plan` 经 `task_book.direction` 消费（option → 优先论点，freeform → 指引原文，默认 → 现状；slot.focus > checkpoint > director）。**过期**：park 超过 `checkpoint_expiry_seconds`（默认 30 分钟）由 worker 扫描自动以默认项回答并续跑（`answer.text="expired"` 机器标记；review 档超时降级为 auto 档，兑现"离开不中断"，永不 auto-bail）。**多 run 并停**：新题 dock 取代开口 checkpoint 题时同笔级联 bail 那个 run（`finalize_bailed_runs` 收官 COMPLETED）——单待决不变量不会搁浅 run。
 

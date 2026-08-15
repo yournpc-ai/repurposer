@@ -16,6 +16,7 @@ from app.operations.service import apply_precomputed
 from app.pipeline.graph import MEDIA, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
+    _pend_suppressed_base_renders,
     _record_target_output_ids,
     _run_origin,
     _target_clips,
@@ -27,7 +28,9 @@ from app.tools.storage import public_url
 
 class AddMusic(NodeBase):
     kind = "add_music"
-    after = ("select_clips",)
+    task_name = "Score clips"
+    task_name_zh = "片段配乐"
+    after = ("select_clips", "materialize_source")
     requires = (MEDIA,)
 
     def canvas_group(self, node):
@@ -78,6 +81,9 @@ class AddMusic(NodeBase):
             if track is not None:
                 break
         if track is None:
+            # Unresolvable chain — rescue the suppressed base renders first
+            # so the clips still come out, then fail the step.
+            await _pend_suppressed_base_renders(db, run, node, clips)
             raise ValueError(f"No music track found for mood '{mood}'")
 
         music = ClipMusic(

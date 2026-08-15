@@ -76,7 +76,7 @@ class SetCropParams(BaseModel):
 class SetAspectParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    aspect: Literal["9:16", "1:1"]
+    aspect: Literal["9:16", "1:1", "16:9"]
 
 
 class SetCaptionTextParams(BaseModel):
@@ -251,7 +251,7 @@ OP_REGISTRY: dict[str, OpDef] = {
     ),
     "set_aspect": OpDef(
         SetAspectParams, _apply_set_aspect,
-        description="Switch aspect ratio between 9:16 and 1:1",
+        description="Switch aspect ratio between 9:16, 1:1 and 16:9",
     ),
     "set_caption_text": OpDef(
         SetCaptionTextParams, _apply_set_caption_text,

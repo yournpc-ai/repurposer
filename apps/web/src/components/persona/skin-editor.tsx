@@ -92,7 +92,7 @@ export type SkinBlock = {
 /** Mirrors the skin keys of the backend DEFAULT_BRAND_CONFIG (memory/brand.py). */
 const DEFAULT_SKIN: SkinBlock = {
   captionFont: "lilita",
-  captionSize: 44,
+  captionSize: 68,
   captionColor: "#facc15",
   captionPosition: { x: 0.5, y: 0.84 },
   captionStylePreset: "clean-bottom",

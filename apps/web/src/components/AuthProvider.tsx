@@ -73,12 +73,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleLoginOpenChange = useCallback(
     (open: boolean) => {
       setLoginOpen(open)
-      if (!open && shouldBlock) {
+      // Bounce home only when the dialog closed WITHOUT a login. `shouldBlock`
+      // is stale here on the success path (setAuth → close → refreshAuth:
+      // the authed state refreshes after this callback), so read the storage
+      // synchronously — setAuth has already landed by the time we close.
+      if (!open && shouldBlock && !isAuthenticated()) {
         navigate({ to: "/" })
       }
     },
     [shouldBlock, navigate]
   )
+
+  const handleLoginSuccess = useCallback(() => {
+    refreshAuth()
+    // The landing page is marketing-only — a fresh login there has nothing
+    // to stay for, so carry the user into the studio. On protected pages the
+    // close handler above already keeps the user in place.
+    if (PUBLIC_PATHS.has(pathname)) {
+      void navigate({ to: "/home" })
+    }
+  }, [refreshAuth, navigate, pathname])
 
   return (
     <AuthContext.Provider
@@ -94,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       <LoginDialog
         open={loginOpen}
         onOpenChange={handleLoginOpenChange}
-        onSuccess={refreshAuth}
+        onSuccess={handleLoginSuccess}
       />
       {shouldBlock && (
         <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" />

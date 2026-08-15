@@ -19,7 +19,7 @@
 
 plan path 进入条件（`chat()` 分派，service.py）：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_intent` 为空）。start/修订/answer 的判定归 PlanAgent LLM——dock 中的任务书以 `presented_plan` 摘要注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
 
-非文本路径（不经意图层）：dock 按钮（Start/Cancel/autonomy/选项）、面板手编任务书、retry 按钮（`/generate` 单槽 full run）、发布对话框、编辑器内操作。
+非文本路径（不经意图层）：dock 按钮（Start/Cancel/autonomy/选项）、面板手编任务书、retry 按钮（`/generate` 该类链 full run）、发布对话框、编辑器内操作。
 
 ---
 
@@ -63,15 +63,15 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 修订 slots（"加条德语 post"） | /chat plan path 三方合并（`merge_prior_slots`：手改槽逐字段存活；chat 点名修订的字段永远赢）→ 新任务书 dock，旧 supersede | ✅（S3/S16） |
-| 面板手改 + chat 修订冲突 | 三方合并冲突分支：chat 赢（"chat 就是在改 plan，没有什么是定死的"，2026-08-05） | ✅（S16） |
+| G 修订链（"加条德语 post"） | /chat plan path：面板手改 = 链结构直接编辑（与 LLM 提议同一数据结构），修订回合 LLM 带 presented 整链重提 → 新任务书 dock，旧 supersede；chat 恒胜是结构事实（无合并机器，ADR-043） | ✅（S3/S16） |
+| 面板手改 + chat 修订冲突 | 同一数据结构无合并面：chat 修订覆盖链行（"chat 就是在改 plan，没有什么是定死的"，2026-08-05） | ✅（S16） |
 | G 修订焦点/指令（"聚焦定价部分"） | 同上（累积 prompt = stored prompt + 本轮原文 服务端拼装） | ✅（S3） |
 | Q 能力（"能发 TikTok 吗"） | /chat plan path → answer，任务书不被动 | ✅ |
 | Q 计划（"为什么只有 3 条"） | /chat plan path → LLM 判 answer（解释）或 generate（改成你要的数量） | ✅（LLM 判断，两可都算对） |
-| **C 确认（"好的开始吧"）** | /chat plan path → PlanAgent 判 start（`presented_plan` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；2026-08-04 硬化：`outputs:null` 读容忍 + presented_plan 上下文） |
+| **C 确认（"好的开始吧"）** | /chat plan path → PlanAgent 判 start（`presented_plan` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；读容忍硬化：`tasks:null` + presented_plan 上下文） |
 | C 取消 | dock Cancel 按钮 → answer kind=bail → 清 pending_intent 回 draft | ✅（按钮；文本"算了"仍无 chat 路径——低频，登记待真实投诉） |
 | C 撤销自己上次修订 | 无 chat 命令（重说一遍反向修订 = 新修订）；面板上旧版本 chip 可展开只读快照并一键恢复（2026-08-05 版本条） | ✅（UI 恢复路径） |
-| E/T/M/S | /chat plan path → LLM 折算成任务书修订（如"配德语"→ dub_languages）或 answer | 🚧（M 类改品牌/说话人靠 answer 引导；chat 相位见 §3.3 M 行） |
+| E/T/M/S | /chat plan path → LLM 折算成任务书修订（如"配德语"→ dub_clip 任务）或 answer | 🚧（M 类改品牌/说话人靠 answer 引导；chat 相位见 §3.3 M 行） |
 | 手编面板后 Start | dock Start → answer kind=start（edited intent 优先于 stored） | ✅ |
 | recipe 发射（点配方卡） | /chat plan path——发射载荷 = 预填模板原文（配方 = 提示词，ADR-040），任务书从消息文案推断，与 composer 完全同径 | ✅（S5） |
 
@@ -96,7 +96,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 整类重做（"post 重写一版"） | retry 按钮（/generate 单槽）或 chat task_list write_post | ✅ |
+| G 整类重做（"post 重写一版"） | retry 按钮（/generate：该类自己的链原样重跑——text 族=单 writer 任务，clips 族=链内 clips 族任务原序原参数）或 chat task_list write_post | ✅ |
 | G 全部重出（"换个角度再来一版"） | chat task_list 多 skill / /generate full | ✅ |
 | E 精确编辑（改标题/裁剪/字幕样式/音乐/裁切比/恢复版本） | /chat → edit_ops → apply_operations（undo 免费） | ✅ |
 | E 改文案内容（"开头改得更抓人"） | /chat → revise_script（或进编辑器） | ✅ |
@@ -106,7 +106,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | **C 发布（"发到 LinkedIn"）** | /chat → answer 引导文案（"产物卡的发布按钮"）；远期 publish skill 依赖 Distribution 凭据 | ✅（期 4 补四 G-5，answer 引导收编） |
 | **E 纠错（"这个词译错了，应该是 X"）** | /chat → revise_script 单点修；**无法"到处都改"** | 🚧（glossary 的对话入口——未来走 dispatch 注册表，不开新通道） |
 | **M 元信息（"换品牌模板/换说话人"）** | /chat → answer 导航文案（Brand template / Speakers 页面） | ✅（期 4 补四 G-6，answer 引导收编） |
-| M 目标语言改 | chat task_list（translate/write 新槽）折算 | ✅（产物级正解） |
+| M 目标语言改 | chat task_list（translate/write 新任务）折算 | ✅（产物级正解） |
 | 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（plan path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
 
 ### 3.4 产物会话（dock + 焦点注入；ChatModal / asset scope 退役中——ADR-041）
@@ -127,10 +127,10 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 按序生效，上一层失败落到下一层：
 
 1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。task_book 待决不参与（它的答案是 dock 按钮与 plan path 修订/确认）。
-2. **plan path（PlanAgent 三动作）**：首次 / 待决任务书的项目级文本 → generate（三方合并 + reasons + re-dock）/ answer（普通消息）/ start（answer kind=start 起 run）。
+2. **plan path（PlanAgent 三动作）**：首次 / 待决任务书的项目级文本 → generate（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ answer（普通消息）/ start（answer kind=start 起 run）。
 3. **ChatIntentAgent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + freeform 回落），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。
 4. **代码裁决**：registry 校验 skill/params（SkillRejected → 一次 repair_feedback 重试 → 再败则反问）；edit ops 校验（OpRejected → 提示）；出生地校验（requires / clips-media / count 边界 → 422 或反问）。
-5. **LLM 故障兜底**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ project scope 反问文案；asset scope revise_script 兜底；plan path → 默认任务书 dock（UI 可编可 Start，永不白屏）；`outputs:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
+5. **LLM 故障兜底**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ project scope 反问文案；asset scope revise_script 兜底；plan path → 默认任务书 dock（UI 可编可 Start，永不白屏）；`tasks:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
 6. **幂等与竞态**：单待决不变量（新题 supersede 旧题 + 级联 bail）；answer 409（重复回答）；落库去重（首条消息即会话种子）；过期扫描守护式 UPDATE（用户答案永远赢）。
 
 ---
@@ -140,7 +140,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | # | 缺口 | 影响 | 建议修法 | 量级 |
 |---|---|---|---|---|
 | ~~G-7~~ | ~~短贴文（~25 词开场白式）零素材首轮被判非素材~~ | ✅ **已修（2026-08-06）**：根因 = PlanAgent 上下文真空——`_messages` 只有累积 prompt + 文件名 + presented_plan，answer 轮后每条消息在真空里判（看不见"上一轮刚被要素材"），判不准按规则走 ask（迷失旅程反问死循环，S21 短贴文 fixture 3/3 复现）。修法 = **recent 对话注入**（`_plan_turn` 传最近 5 轮、`_messages` 加 "Recent conversation" 段）——只喂上下文不加倾向规则，素材/请求判定归 LLM 凭语境完成；同 08-04 presented_plan 硬化先例。S21 fixture 保持 25 词短贴文作回归 | — | — |
-| ~~G-1~~ | ~~确认相位文本"开始吧/可以了"被当成修订~~ | ✅ **已修（期 4 补四）**：`/intent` action 加 `"start"` 座位，复用 answer kind=start 路径；**2026-08-04 随单面化迁入 plan path**（presented_plan 注入 + `outputs:null` 读容忍硬化） | — | — |
+| ~~G-1~~ | ~~确认相位文本"开始吧/可以了"被当成修订~~ | ✅ **已修**：action 加 `"start"` 座位，复用 answer kind=start 路径（presented_plan 注入 + `tasks:null` 读容忍硬化） | — | — |
 | ~~G-4~~ | ~~/chat 无 answer 形态~~ | ✅ **已修（期 4 补四）**：IntentProposal 第四态 `AnswerProposal`（N-21），纯信息直答落普通 assistant 消息 | — | — |
 | ~~G-2~~ | ~~进度询问无节点级数据~~ | ✅ **已修（期 4 补四）**：`_build_context` 注入 latest run steps 量化摘要（`_format_step_progress`，≤12 行） | — | — |
 | ~~G-5~~ | ~~发布意图在 chat 是死路~~ | ✅ **已修（期 4 补四）**：answer 引导文案（产物卡发布按钮）；远期 publish skill 仍依赖 Distribution 凭据 | — | — |

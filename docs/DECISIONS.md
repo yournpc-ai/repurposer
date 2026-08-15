@@ -764,7 +764,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 1. **发射的全部行为载荷 = 预填模板原文**：`ChatRequest.recipe_id`、`resolve_recipe_launch`、plan path 校验块与播种块删除；配方卡发射与 composer 完全同径（建项目 → 上传 → 首条消息），服务端永不见配方身份。
-2. **注册表瘦身不拆除**：`outputs`/`dub_languages` 保留为启动对账自检的**声明形态**（flow ⊆ 编译图，AGENT_ARCH §4.2），不进请求路径；卡面 / 检视 / 示例资产照旧。
+2. **注册表瘦身不拆除**：`tasks` 技能链保留为启动对账自检的**声明形态**（flow ⊆ 编译图，AGENT_ARCH §4.2；语法经 ADR-043 与请求层统一），不进请求路径；卡面 / 检视 / 示例资产照旧。
 3. **剧本换考法**：S5/S11 改发模板原文（与真实前端逐字节一致）；S22（播种确定性剧本）退役，编号留空不回收。
 4. **后果自担**：任务书形状由 LLM 从模板文案推断（composer 主路同款保证）——dock 可见 + chat 纠偏是产品核心循环，不再设隐藏确定性通道。
 
@@ -822,3 +822,29 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 母文档 `docs/POSITIONING.md`；MODULE_ARCHITECTURE / NAMING / CLAUDE.md 的现状描述随第一刀落地时改写（落地前它们仍是现状事实源）。
 
 **Related**: ADR-037/038（身份模块前史）、ADR-016（clip-spec 不动）、ADR-041（结果画布——运营端 home 复用其面）、STRATEGY §5（用户到来即彷徨）、PROGRESS §2 第六~八周
+
+## ADR-043: 任务书语法收敛——outputs 概念退役为派生（derive），plan path 并入技能链
+
+**Status**: Decided (2026-08-15)
+
+**Context**: 多语言字幕卡点亮次日（08-14）真实场景走查：用户从字幕卡发射「给我的视频加中英双语字幕」（长视频源），任务卡呈现「视频片段 ×2 · 中文」——整条视频的变换意图被强制表达为高光提取 + 簿级修饰符，数量步进器（默认 3）出现在数量由请求完全决定的场景。根因不是 UI：outputs 槽位语法（`IntentSlot` + `InferredIntent.outputs`）诞生于「一场演讲 → N 件衍生品」时代，彼时业务只有提取族一种形状，请求层 schema 直接就是产物清单。技能注册表（ADR-039）落地后工作语法已迁至技能链：产物类型词汇由节点 `output_type` 声明派生（N-32），mode② 已能从 task list 反推槽位形状（`derive_context_fields`）——plan path 是旧语法最后的堡垒：outputs 必填；unclear 默认全家桶（clips+post+quotes+article，与 07-31 反打包裁定冲突）；固定拓扑编译。同一分叉已在配方层显形：字幕卡流程图已摘掉剪辑步骤（卡不含剪辑，RECIPES §4.1），承诺「为你的视频带来多语言字幕」，但其预设 `outputs=[clips]` 的编译图仍跑 select_clips——15s demo 源下高光≈整条掩盖了分叉，真实长视频穿帮；图文视频卡同病（承诺「短片」单数，管线只出 N 条高光）。备选：① 旧语法加 `video` 产物类型（在退役语法里加座位，双语法永存）；② clips 槽加 scope 标志（一个类型藏两种形态，消费方逐个长分支）；③ 任务书行改自由文本（推翻结构语法，merge/director/UI 全重写）——均否决。
+
+**Decision**:
+1. **outputs 概念下线，升格为 derive**：请求层不再有产物声明——产物 = 编译图的派生投影（类型词汇仍由节点 `output_type` 声明派生，N-32 不变；Output 表 / 产物行不动，死的是请求层语法）。意图面唯一语法 = 技能链（task list）：plan path 与 chat loop 四态的 task_list 臂同一词汇，一次收敛。
+2. **PlanAgent 产出 task list**：槽位字段下沉为技能参数（writer 族 language / focus / tone_override；select_clips count / focus / aspect；translate_clip target_language + bilingual；dub_clip target_language）；簿级四修饰符（caption_languages / dub_languages / caption_bilingual / aspect）退役。unclear 不出默认全家桶——最小链或顾问式反问（CHAT_ARCH §3.3 姿态不变）。
+3. **整条源材料化节点 `materialize_source`**（编译期自动注入的内部节点，不登记技能表）：确定性全段 clip-spec（span = 素材全长，无 LLM 选段；源形态分发 video/audio/stills 复用 select_clips 的源决策，stills 经 align_stills 注入先例）。注入规则：链含 clip-spec 消费者（translate / dub / music / filler）而无 select_clips、且项目无既有 clips 可作用时注入（mode② 中途「作用于现有 clips」语义不变）；preprocess 按 requires 声明入图（不再只随 director 前奏捆绑）；纯变换链不触发人设提取（08-11 先例）。fork 挂接随之修正：translate / dub 的 `after` 声明吸收材料化节点。
+4. **计划卡 = 链投影 + 派生预览**：generate 回合干跑 compile_graph（纯函数）产出卡模型——技能链人话行 + 派生产物行（「整条视频 · 英字 / 中英双语」）+ 后续报价 fold 同源；presented_plan 摘要同一 derive。**面板控件 = 对 task list 的直接结构编辑**（数量步进器绑 select_clips.count、语言 chips 增删 translate/dub 任务、删行 = 移除技能）——与 LLM 重提同一数据结构，三方合并（merge_prior_slots / prior_intent 运输 / explicit 钉）无对象自然死亡；chat 修订 = 带 presented 摘要重提全链，chat 恒胜不变。start = 以编辑后的链编译起 run（服务端编译为行为唯一事实源）。
+5. **派生类型 `video`（整条视频）= 纯展示词汇**：`materialize_source` 是编译期注入的内部节点（`NodeBase.internal`，自检豁免注册表席位），**不声明 `output_type`**——可请求类型注册表（N-32）保持原样；"video" 只活在派生预览行 / 步骤摘要 / 结果分组（节点落库的 Output 行仍是 `type="clip"`，渲染血统不变）。不可请求、无 count_limits、无步进器。
+6. **director 派工对齐改 keyed on 编译图**：storyboard 槽从编译出的生成节点（含参数）构建，不再从 `run.context.outputs` 读请求层槽位——多版本互补分配不退化，且与面板编辑后的真实执行链严格一致。
+7. **配方预设改写为 task list 形状**（multilingual-subs = [translate zh bilingual, translate fr, dub es]；image-video = [add_music] + 材料化/stills 自动注入——「变成短片」单数承诺自此为真），flow ⊆ 编译图对账不变；配方=提示词不过线不变。
+
+**Consequences**:
+- 死亡清单：`InferredIntent.outputs`（含默认全家桶）/ `outputs_explicit` / 簿级四修饰符 / `IntentSlot` 请求层身份 / merge_prior_slots / prior_intent / mode① 固定拓扑（期 2 清尸）/「clips 槽唯一」规则 /「修饰符必须挂 clips」耦合 / 前端 OUTPUT_OPTIONS 与 SLOT_COUNT_* 镜像 / 卡片「添加产物」按钮 / 字幕版本·配音版本区（折入链行）。
+- 存活不动：pending_intent 持久化（载荷换形为 task list，存量行读容忍确定性升级）、start 确认流与 autonomy 档、出生地 422（requires 双源已免费）、edit ops、打勾流 / SSE、配方=提示词、chat 恒胜、顾问姿态四律。
+- 行为变更（有意）：图文视频卡产出从 N 条高光轮播变为整条轮播一条（承诺一致）；变换意图不再夹带剪辑。
+- **目标解析不变量（同日 review 补入）**：modifier→modifier 边只是排序约束——`_target_clips` 跳过 `spec.fork` 上游的 output_refs（fork 产出是新建派生行，其原件经链基座边即达）；否则全 fork 链（R6：translate×2 + dub）会把派生行当新目标组合爆炸（7 产物而非承诺的 4）。morph 上游的 output_refs 照常下传（原地改写的交接）。**配套的兜底口径**：`_target_clips` 的「项目现存 clips」兜底只含**本 run 之前**的行（按 workflow_step_id 所属 run 排除本 run）——否则 existing 画幅下的全 fork 链（首个 modifier inputs 为空、次个只挂 fork 上游被跳过）会被同胞 fork 的新鲜派生行污染兜底集，同样组合爆炸。
+- **重试 = 该类自己的链原样重跑（同日 review 补入）**：结果页 tab 重试不再硬编码「clips  tab → select_clips」——整条源变换链（无 select_clips）的 clips 重试曾会把整条字幕片换成 3 条高光剪辑（产品形态被换）。clips 族重试发帖内 clips 族任务原序原参数（text 族 = 单个 writer 任务）；chat 域参数（target_output_id）剥离（full run 会删旧行）。配套：legacy 读容忍升级（`legacyOutputsToTasks` / `_legacy_slots_to_tasks`）给 dub/translate 任务补 `fork: true`——slots 时代编译产出即 fork 节点，升级须保持形态。
+- 排期：2026-08-15 当日全量落地（拍板 08-15：期 1 语法切换 + 材料化 + 卡换形 + 期 2 清尸同日完成），不整周插入。
+- 第九周报价系统协同：卡 derive 与估价 fold 共享同一次干跑编译。
+
+**Related**: ADR-039（技能注册表——本条的语法家）、ADR-028/029（RunPlan / plan 级 dispatch——mode② 先例）、ADR-040（配方=提示词——载荷单一通道同款哲学）、ADR-041（结果画布——派生预览的消费面）、STRATEGY §5（反打包）；简报 `docs/tasks/done/outputs-derive.md`

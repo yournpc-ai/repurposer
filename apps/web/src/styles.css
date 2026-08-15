@@ -37,6 +37,29 @@
   }
 }
 
+/* The results dock's parked glass (ADR-041 D4 一体容器, 2026-08-15 走查拍板)
+ * — one persistent input dock over the calm dotted canvas, not a transient
+ * overlay over arbitrary content: far more translucency than overlay-surface
+ * so the canvas's dot grid reads through the frost (the Lovart reference
+ * anatomy). NO shadow — the dock is the same input group's third parking
+ * spot as the home composer and inherits its hero-flat rule (hairline
+ * only); the ring rides the component, not this recipe. */
+@utility dock-surface {
+  background-color: color-mix(in oklch, var(--popover) 65%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+
+  @variant dark {
+    background-color: color-mix(in oklch, var(--popover) 55%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    backdrop-filter: blur(28px) saturate(1.4);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: var(--popover);
+  }
+}
+
 /* Meta tier — the third text level below muted-foreground: small, dimmer,
  * uppercase, tracked (the "MODEL / SEED / 2 HRS" label style from the
  * reference pass, 2026-08-05). Compose with a size class, e.g.

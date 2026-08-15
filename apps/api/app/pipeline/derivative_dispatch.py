@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +51,34 @@ def derivative_output_types() -> frozenset[str]:
         n.output_type
         for n in NODE_KINDS.values()
         if isinstance(n, DerivativeWriterNode) and n.output_type
+    )
+
+
+class CopyWriterParams(BaseModel):
+    """The four copy-writer skills' shared adjudication document (outputs-
+    derive, ADR-043): the writers share one node body, so their params are
+    one model — quotes/carousel subclass it to add ``count`` in their own
+    packages. Field descriptions ARE the LLM's parameter documentation
+    (injected into the intent prompt): write them as "when to use / what
+    null means", not as type restatements. Multi-version requests are
+    multi-task (an English and a German post = two write_post tasks, each
+    with its own language)."""
+
+    language: str = Field(
+        description="ISO code this output is WRITTEN in (e.g. 'a German "
+        "post' → 'de'). Infer from the request; default to the prompt's "
+        "language when the user names none."
+    )
+    focus: str | None = Field(
+        default=None,
+        description="A short angle phrase when the user assigns this output "
+        "a specific angle (e.g. 'the post should cover the pricing debate' "
+        "→ 'pricing debate'). null = the director picks the angle.",
+    )
+    tone_override: str | None = Field(
+        default=None,
+        description="A short tone note when the user asks for a per-output "
+        "tone (e.g. '帖子正式一点' → 'formal'). null = the persona's tone.",
     )
 
 
