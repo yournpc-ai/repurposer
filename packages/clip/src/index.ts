@@ -4,3 +4,4 @@ export { Clip } from "./Clip";
 export { RemotionRoot, DEFAULT_SPEC } from "./Root";
 export * from "./types";
 export * from "./captions";
+export * from "./tracks";

@@ -54,7 +54,7 @@ class SetTitleParams(BaseModel):
 class SetCaptionStyleParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    preset: Literal["clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up"] | None = None
+    preset: Literal["clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up", "stacking"] | None = None
     enabled: bool | None = None
     position: dict | None = None  # {x, y} normalized center; validated via ClipSpec round-trip
 
@@ -228,51 +228,70 @@ class OpDef:
     precomputed: bool = False
     # "When to use" — injected into the intent prompt's op vocabulary.
     description: str = ""
+    # Spec top-level fields this op mutates — reconciled against the track
+    # registry's fields partition at boot (ADR-044; "*" = whole-spec
+    # snapshot/system ops).
+    writes: tuple[str, ...] = ()
 
 
 OP_REGISTRY: dict[str, OpDef] = {
     "remove_range": OpDef(
         RemoveRangeParams, _apply_remove_range,
         description="Cut/delete a source time range (params: start, end in seconds)",
+        writes=("segments", "caption_track"),
     ),
     "set_trim": OpDef(
         SetTrimParams, _apply_set_trim,
         description="Move the clip's outer in/out points (params: start, end in seconds)",
+        writes=("segments",),
     ),
     "set_title": OpDef(
         SetTitleParams, _apply_set_title,
         description="Set the title/hook overlay text and on/off",
+        writes=("title",),
     ),
     "set_caption_style": OpDef(
         SetCaptionStyleParams, _apply_set_caption_style,
         description="Change caption style preset / visibility / position",
+        writes=("caption_style_preset", "caption_enabled", "caption_position"),
     ),
     "set_music": OpDef(
         SetMusicParams, _apply_set_music,
         description="Set background music track / on/off / gain",
+        writes=("music",),
     ),
     "set_crop": OpDef(
         SetCropParams, _apply_set_crop,
         description="Reframe: normalized center (x, y) + zoom scale",
+        writes=("crop",),
     ),
     "set_aspect": OpDef(
         SetAspectParams, _apply_set_aspect,
         description="Switch aspect ratio between 9:16, 1:1 and 16:9",
+        writes=("aspect",),
     ),
     "set_caption_text": OpDef(
         SetCaptionTextParams, _apply_set_caption_text,
         description="Fix the text of one caption cue (params: index, text)",
+        writes=("caption_track",),
     ),
     "restore_version": OpDef(
         RestoreVersionParams, None,  # service resolves snapshot
         description="Restore the spec to a previous operation's snapshot (undo history)",
+        writes=("*",),
     ),
-    "translate_captions": OpDef(TranslateCaptionsParams, None, precomputed=True),
-    "set_dub": OpDef(SetDubParams, None, precomputed=True),
-    "remove_filler": OpDef(RemoveFillerOpParams, None, precomputed=True),
+    "translate_captions": OpDef(
+        TranslateCaptionsParams, None, precomputed=True,
+        writes=("caption_track", "translation_track", "title", "target_language"),
+    ),
+    "set_dub": OpDef(SetDubParams, None, precomputed=True, writes=("dub",)),
+    "remove_filler": OpDef(
+        RemoveFillerOpParams, None, precomputed=True,
+        writes=("segments", "caption_track"),
+    ),
     # system-internal: baseline lazy-creation / drift self-healing (ADR-032 D7)
-    "snapshot": OpDef(SnapshotParams, None, client_allowed=False),
-    "set_spec": OpDef(SetSpecParams, None, client_allowed=False),
+    "snapshot": OpDef(SnapshotParams, None, client_allowed=False, writes=("*",)),
+    "set_spec": OpDef(SetSpecParams, None, client_allowed=False, writes=("*",)),
 }
 
 SOURCE_REGISTRY = frozenset({"editor", "chat", "mcp", "system"})

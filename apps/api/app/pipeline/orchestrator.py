@@ -1106,6 +1106,10 @@ def assert_runners_registered() -> None:
        names a kind the recipe's own preset compiles to (``compile_graph``
        is pure — compiled and compared directly; runtime fan-out kinds —
        render, D2 — count as present).
+    4. track registry (ADR-044): every ClipSpec top-level field is owned by
+       exactly one registered track (and op ``writes`` stay inside the
+       partition); a phantom track proves the consumers (bake seam /
+       addressing / compliance / pricing) fold with zero consumer changes.
     """
     for entry in SKILL_REGISTRY.values():
         if not entry.seat and entry.name not in NODE_KINDS:
@@ -1171,3 +1175,8 @@ def assert_runners_registered() -> None:
             raise RuntimeError(
                 f"Recipe '{recipe_id}': flow keys missing from the compiled graph: {missing}"
             )
+
+    from app.pipeline.tracks import assert_phantom_track, assert_track_registry
+
+    assert_track_registry()
+    assert_phantom_track()
