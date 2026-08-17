@@ -46,6 +46,7 @@ def _assemble_plan_turn(
     filename: str | None = None,
     presented_plan: str | None = None,
     recent: list[str] | None = None,
+    file_language: str | None = None,
 ):
     """Plan-turn inputs.
 
@@ -57,6 +58,8 @@ def _assemble_plan_turn(
     current message excluded) — the material/content judgment needs to SEE
     what just happened (e.g. the assistant asking for source material), not
     read the text in a vacuum (G-7).
+    ``file_language``: the uploaded file's ASR-detected language — the
+    transform-target rule's authoritative signal (2026-08-17 同源语言护栏).
     """
     return (
         {
@@ -64,6 +67,7 @@ def _assemble_plan_turn(
             "filename": filename,
             "presented_plan": presented_plan,
             "recent": recent,
+            "file_language": file_language,
         },
         [],
     )
@@ -109,7 +113,10 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
         "'perfect, run it', '好的开始吧', '可以了，开始', 'start it' — the "
         "user approves the presented plan WITHOUT asking for any change. "
         "If the message asks for any modification (add/remove/change a "
-        "task, a language, a focus), it is 'generate', never 'start'.\n"
+        "task, a language, a focus), it is 'generate', never 'start'. "
+        "A stray fragment that carries no meaning (a lone letter, "
+        "punctuation, an accidental keystroke like 'a' or '?') is neither "
+        "approval nor revision — it must never start a run.\n"
         "  The prompt may accumulate several user turns; judge the action "
         "by the LAST line. When earlier turns requested work but the "
         "last line is a short approval or go-ahead, the action is 'start' "
@@ -184,11 +191,14 @@ plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
         "dub_clip take 'target_language' (required). Default to the "
         "prompt's own language; 'in German' sets that task's language.\n"
         "  - A transform target must be a language the source LACKS: the "
-        "source already speaks the language it was recorded in (judge it "
-        "from the user's words / filename / prompt language). '中英双语' on "
-        "a Chinese talk → target_language 'en', never 'zh' — translating "
-        "Chinese into Chinese produces no English anywhere; 'dub into "
-        "中英双语' on an English source → target 'zh'.\n"
+        "source already speaks the language it was recorded in. The "
+        "uploaded-file line names its detected language when known — that "
+        "signal is authoritative, trust it over inference; absent it, "
+        "judge from the user's words / filename / prompt language. "
+        "'中英双语' on a Chinese talk → target_language 'en', never 'zh' "
+        "— translating Chinese into Chinese produces no English anywhere; "
+        "the same request on an English keynote (detected language: en) → "
+        "target 'zh'. 'dub into 中英双语' on an English source → target 'zh'.\n"
         "  - Subtitles vs dubbing: '中文字幕' / 'subtitles in Chinese' → "
         "translate_clip (TEXT on screen); '中文配音' / 'dub into Chinese' "
         "→ dub_clip (VOICE). Bilingual side-by-side subtitles ('双语字幕', "

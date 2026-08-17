@@ -853,6 +853,9 @@ async def _plan_turn(
         filename=filename,
         presented_plan=presented_plan,
         recent=recent_lines or None,
+        # The transform-target rule's authoritative signal (同源语言护栏 —
+        # the plan surface's only other language hint is the filename).
+        file_language=(first_file.meta or {}).get("language") if first_file else None,
     )
     if on_delta is not None:
         intent = await plan_agent.call_stream(

@@ -247,10 +247,13 @@ async def seed_asset(
     filename: str,
     *,
     extracted_text: str | None = None,
+    meta: dict | None = None,
 ) -> None:
     """A fake file-backed asset row — enough for the clips-media gate and the
     plan agent's filename context; the bytes never exist. ``extracted_text``
-    satisfies the "transcript" required-input check (registry requires)."""
+    satisfies the "transcript" required-input check (registry requires).
+    ``meta`` carries e.g. the ASR-detected ``language`` the plan context
+    surfaces for transform-target decisions."""
     async with AsyncSessionLocal() as db:
         db.add(
             Asset(
@@ -260,6 +263,7 @@ async def seed_asset(
                 file_url=f"scenario/{filename}",
                 title=filename,
                 extracted_text=extracted_text,
+                meta=meta,
             )
         )
         await db.commit()
@@ -910,7 +914,10 @@ async def s44_whole_video_subs_materialize(ctx: Ctx) -> None:
     链 = translate_clip 单独（无 select_clips）；derived 预览 = 整条视频 +
     字幕版；Start 后编译图 = materialize_source → translate_clip。"""
     pid = await ctx.new_project("S44 whole-video subs")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
+    # The source's language is pinned (an English keynote): the 同源语言护栏
+    # prompt (2026-08-17) resolves 中英双语 → target zh deterministically —
+    # without it the planner infers the source language from the zh prompt.
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4", meta={"language": "en"})
 
     turn1 = await ctx.chat(pid, "给我的视频加中英双语字幕")
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",

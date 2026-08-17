@@ -5,7 +5,7 @@ Recent conversation:
 {% endif -%}
 User prompt: {{ prompt }}
 {%- if filename %}
-Uploaded file: {{ filename }}
+Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- else %}
 No file uploaded (text-only input).
 {%- endif %}
