@@ -36,6 +36,7 @@ from app.platform.project_context import (
 )
 from app.skills.dub.procedure import synthesize_dub
 from app.pipeline.errors import TransientNodeError, user_error_line
+from app.tools.storage import delete_file
 from app.ui_locale import current_ui_language
 
 router = APIRouter()
@@ -126,6 +127,25 @@ async def update_output(
     await db.commit()
     await db.refresh(output)
     return output
+
+
+@router.delete("/{output_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_output(
+    output_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> None:
+    """Delete a product output — the row plus its produced storage objects
+    (video/srt/image keys + the cover). Deleting is idempotent at the storage
+    layer (S3 delete never 404s); derived fork rows are independent renders
+    and survive their source's deletion."""
+    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    files = output.files or {}
+    for key in (files.get("video"), files.get("srt"), files.get("image")):
+        await delete_file(key)
+    await delete_file((output.publishing or {}).get("cover_image_url"))
+    await db.delete(output)
+    await db.commit()
 
 
 @router.post("/{output_id}/revise", response_model=OutputResponse)

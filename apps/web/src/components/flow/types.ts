@@ -13,19 +13,42 @@ export type FlowNodeStatus = "pending" | "running" | "done" | "failed" | "skippe
 export type FlowEdgeSemantic = "lineage" | "dependency"
 
 /** Product-node actions (ADR-041 D5) — the old card-face actions moved onto
- * the canvas toolbar: download / publish (no preview — the video plays
- * inline and the big player is the hover expand, 2026-08-16 走查拍板).
- * Graph operations (run / rewire) are permanently banned from it. */
-export type FlowOutputAction = "download" | "publish"
+ * the canvas toolbar. Bar: download / publish / delete; the ⋯ menu (node
+ * business): open / focus (2026-08-17 走查拍板, Lovart 解剖). No preview —
+ * the video plays inline and the big player is the hover expand. Graph
+ * operations (run / rewire) are permanently banned from it. */
+export type FlowOutputAction = "open" | "download" | "publish" | "delete" | "focus"
+
+/** Asset-node actions (results canvas, 2026-08-17): the source file's own
+ * business — download / delete / reprocess. ("open" never travels this
+ * channel: the card opens the lightbox directly.) */
+export type FlowAssetAction = "download" | "delete" | "reprocess"
+
+/** The asset fields a results-canvas asset node carries (the card derives
+ * its toolbar facts — filename / duration / download URL — from these). */
+export interface FlowAssetInfo {
+  id: string
+  type: string
+  title: string | null
+  file_url: string | null
+  stream_url?: string | null
+  duration_seconds?: number | null
+}
 
 export interface FlowNode {
   id: string
   kind: FlowNodeKind
-  /** Friendly, pre-localized name — never a model name (prohibition #12). */
+  /** Friendly, pre-localized name — never a model name (prohibition #12).
+   * On media nodes this is the TYPE name (caption = type icon + type name,
+   * always top-left; the right slot stays empty — 2026-08-17 走查拍板). */
   label: string
   status?: FlowNodeStatus
-  /** Quantified one-liner / language tag / score. */
+  /** Secondary fact carried as data (the lightbox's info chips read it) —
+   * never rendered in the caption's right slot. Asset nodes: the filename. */
   detail?: string
+  /** The asset row behind an asset node (results canvas) — the node's
+   * toolbar facts (filename / duration / download target) derive from it. */
+  asset?: FlowAssetInfo
   thumbUrl?: string | null
   /** The product row behind an output node (results canvas only, D5 — the
    * node IS the product card: score / top-pick / next-step live on it).
@@ -89,6 +112,10 @@ export interface FlowViewProps {
   /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
    * surface owns the actions; the card only reports them. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** Asset-node toolbar dispatch (results canvas, 2026-08-17) — the surface
+   * owns download / delete / reprocess; the card only reports them. When
+   * absent the asset node renders NO toolbar (recipe manual surface). */
+  onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
   /** Media expand (results canvas): a node's hover expand icon / media
    * click — the surface opens the media lightbox for the node. */
   onExpandMedia?: (nodeId: string) => void

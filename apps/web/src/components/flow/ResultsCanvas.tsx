@@ -6,7 +6,8 @@
  * layout here). Navigation is open (pan/zoom, D7); editing gestures are
  * structurally absent in the substrate. Product nodes are cards (D5): the
  * surface owns their actions — click focuses (焦点注入, D8; a clip also
- * opens its detail modal), the action bar reports download / publish. */
+ * opens its detail modal), the action bar carries info + download / delete,
+ * and node business (publish / open / focus) lives in the bar's ⋯ menu. */
 
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -35,7 +36,7 @@ import {
 import { FlowView } from "./FlowView"
 import { PRODUCT_TYPE_ICON } from "./FlowNodeCard"
 import { runFlowGraph, SPINE_NODE_ID, type RunFlowAsset } from "./runFlow"
-import type { FlowOutputAction } from "./types"
+import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "./types"
 
 export interface ResultsCanvasProps {
   assets: RunFlowAsset[]
@@ -53,8 +54,12 @@ export interface ResultsCanvasProps {
   /** A product node was clicked — the surface sets the dock focus and opens
    * the detail modal (clips). */
   onOutputClick?: (output: Output) => void
-  /** A product node's action-bar action (download / publish). */
+  /** A product node's action-bar action (download / delete in the bar;
+   * publish / open / focus ride the ⋯ menu — all one channel). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
+  /** An asset node's toolbar action (download / delete / reprocess) — the
+   * surface owns them; absent = asset nodes render no toolbar. */
+  onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
   /** A process step node was clicked (the spine expanded) — the surface
    * inserts the step's @workflow_step mention into the dock (D8). */
   onStepClick?: (stepId: string, label: string) => void
@@ -75,6 +80,7 @@ export function ResultsCanvas({
   tourOutputId,
   onOutputClick,
   onOutputAction,
+  onAssetAction,
   onStepClick,
   focusedOutputId = null,
   onPaneClick,
@@ -125,7 +131,9 @@ export function ResultsCanvas({
       ]
       if (node.detail) chips.push({ Icon: Languages, label: node.detail })
       const aspect = (output.render_spec as { aspect?: string } | null)?.aspect
-      if (aspect) {
+      // "original" (whole-source, 2026-08-17) is not a fixed tier — the real
+      // pixels are unknown until the media loads, so no shape chip.
+      if (aspect === "1:1" || aspect === "16:9" || aspect === "9:16") {
         chips.push({
           Icon:
             aspect === "1:1"
@@ -194,10 +202,12 @@ export function ResultsCanvas({
       setLightbox({
         kind: node.videoUrl ? "video" : "image",
         url,
-        title: node.label,
+        // The caption carries the type name now — the filename (detail) is
+        // the lightbox's title.
+        title: node.detail ?? node.label,
         createdAt: asset.created_at ?? null,
         chips,
-        downloadName: node.label,
+        downloadName: node.detail ?? node.label,
       })
     }
   }
@@ -248,6 +258,7 @@ export function ResultsCanvas({
           const output = outputById.get(`output:${id}`)
           if (output) onOutputAction?.(output, action)
         }}
+        onAssetAction={onAssetAction}
       />
       <MediaLightbox
         data={lightbox}

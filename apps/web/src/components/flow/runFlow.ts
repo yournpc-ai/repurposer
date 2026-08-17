@@ -3,7 +3,7 @@ import type { TFunction } from "i18next"
 import { toAbsoluteUrl } from "@/lib/api"
 import type { Output, WorkflowStep } from "@/lib/types"
 
-import { productNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
+import { ASSET_TOOLBAR_PX, productNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
 import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
@@ -120,13 +120,30 @@ export function runFlowGraph(
     nodes.push({
       id: `asset:${asset.id}`,
       kind: "asset",
-      label: asset.title || typeLabel,
-      detail: asset.title ? typeLabel : undefined,
+      // Caption = type icon + type name, right slot empty (2026-08-17 走查
+      // 拍板): the filename moves to the toolbar's info slot — carried as
+      // `detail` (data only; the caption never renders it, the lightbox's
+      // info chips do).
+      label: typeLabel,
+      detail: asset.title ?? undefined,
+      asset: {
+        id: asset.id,
+        type: asset.type,
+        title: asset.title,
+        file_url: asset.file_url,
+        stream_url: asset.stream_url,
+        duration_seconds: asset.duration_seconds,
+      },
       thumbUrl: asset.type === "image" ? mediaUrl : null,
       // The source video IS a video node — it plays inline (muted loop),
       // sized landscape so the frame is watchable.
       videoUrl: asset.type === "video" ? mediaUrl : null,
-      size: asset.type === "video" ? VIDEO_ASSET_NODE_SIZE : undefined,
+      // Every asset node carries its toolbar on this surface — the reserved
+      // band is part of the size budget.
+      size:
+        asset.type === "video"
+          ? VIDEO_ASSET_NODE_SIZE
+          : { width: 128, height: 216 + ASSET_TOOLBAR_PX },
       order: i,
     })
   })
@@ -300,10 +317,19 @@ export function runFlowGraph(
               thumbUrl: null,
             }))
           : undefined
+    // The whole-source materialization reads as "Video", not "Clips"
+    // (2026-08-17 走查拍板): the run's only excerpt vocabulary belongs to
+    // real excerpts — materialize_source stamps segment.id="full" and the
+    // fork family (translate / dub) carries the same source_ref downstream.
+    const wholeSource =
+      output.type === "clip" &&
+      (output.source_ref?.segment as { id?: string } | undefined)?.id === "full"
     nodes.push({
       id,
       kind: "output",
-      label: t(PRODUCT_TYPE_LABEL_KEY[output.type], { defaultValue: output.type }),
+      label: wholeSource
+        ? t("generationOverlay.assetTypes.video", { defaultValue: "Video" })
+        : t(PRODUCT_TYPE_LABEL_KEY[output.type], { defaultValue: output.type }),
       detail: output.language
         ? t(`languages.${output.language}`, { defaultValue: output.language })
         : undefined,
@@ -311,7 +337,9 @@ export function runFlowGraph(
       // The product card skin (D5): the node carries the row, sized as the
       // canvas's 大卡; the tour anchors ride the surface's chosen node. The
       // node keeps the clip's own frame (2026-08-14 三档画幅 on the canvas —
-      // 9:16/1:1/16:9 node sizes, never a forced crop).
+      // 9:16/1:1/16:9 node sizes, never a forced crop; "original" whole-
+      // source rows take the landscape strip until the media element
+      // reports its real pixels to the toolbar).
       output,
       prompt: prompt ?? null,
       variants,

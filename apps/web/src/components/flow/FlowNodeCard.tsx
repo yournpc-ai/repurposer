@@ -7,13 +7,15 @@ import {
   Clapperboard,
   Download,
   FileText,
+  Image as ImageIcon,
   Images,
   Loader2,
   Maximize2,
   Minus,
+  MoreHorizontal,
   Newspaper,
   Quote,
-  Send,
+  Trash2,
   Volume2,
   VolumeX,
   Waypoints,
@@ -22,11 +24,23 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { BrandLoader } from "@/components/BrandLoader"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 import { PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
-import type { FlowNode, FlowNodeStatus, FlowOutputAction } from "./types"
+import type {
+  FlowAssetAction,
+  FlowAssetInfo,
+  FlowNode,
+  FlowNodeStatus,
+  FlowOutputAction,
+} from "./types"
 
 export interface FlowCardData extends Record<string, unknown> {
   node: FlowNode
@@ -35,6 +49,8 @@ export interface FlowCardData extends Record<string, unknown> {
   selected: boolean
   /** Product-toolbar dispatch (ADR-041 D5) — the surface owns the actions. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** Asset-toolbar dispatch (2026-08-17) — the surface owns asset actions. */
+  onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
   /** Media expand dispatch — the surface opens the lightbox for the node. */
   onExpandMedia?: (nodeId: string) => void
 }
@@ -72,32 +88,24 @@ function StatusBadge({ status }: { status: FlowNodeStatus }) {
   }
 }
 
-/** The corner-info band above a media node (the figma-style anatomy): the
- * node's label top-LEFT, its secondary info top-RIGHT — both OUTSIDE the
- * card body, so the card carries content, not chrome. The band's height is
- * part of the node size budget (layout.ts), never an overlay. Spacing tuned
- * against the reference canvas (2026-08-16 走查): 4px side inset, a real
- * 8px breath above the card — the band never hugs the media. */
+/** The corner-info band above a media node (2026-08-17 走查拍板, Lovart
+ * 解剖): ALWAYS the node's type icon + type name at the top-LEFT, and the
+ * right slot stays EMPTY — every fact (language / duration / resolution…)
+ * lives in the toolbar under the card instead. The band's height is part of
+ * the node size budget (layout.ts), never an overlay. */
 function NodeCaption({
   label,
-  detail,
   Icon,
 }: {
   label: string
-  detail?: string
   Icon?: typeof Clapperboard
 }) {
   return (
-    <div className="flex h-[26px] shrink-0 items-end justify-between gap-2 px-1 pb-2">
+    <div className="flex h-[26px] shrink-0 items-end gap-2 px-1 pb-2">
       <span className="flex min-w-0 items-center gap-1 text-[11px] leading-none text-muted-foreground">
         {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null}
         <span className="truncate">{label}</span>
       </span>
-      {detail ? (
-        <span className="shrink-0 text-[11px] leading-none text-muted-foreground">
-          {detail}
-        </span>
-      ) : null}
     </div>
   )
 }
@@ -135,22 +143,136 @@ function MediaHoverButton({
   )
 }
 
+/** The media node's toolbar (2026-08-17 走查拍板, Lovart 解剖): one frosted
+ * bar (dock-surface + hairline, never bare icons) — media facts on the left
+ * (filename / duration / resolution / language / aspect…), a hairline
+ * divider, then the actions; node business (publish / open / focus /
+ * reprocess) lives in the ⋯ menu at the right end (a floating layer,
+ * frosted by the shared DropdownMenu chrome). The bar hugs its content —
+ * width is NOT capped by the node and facts NEVER ellipsize (2026-08-17 二轮
+ * 走查拍板): it centers under the card and overhangs symmetrically when the
+ * facts are long. */
+function MediaToolbar({
+  info,
+  actions,
+  menuItems,
+  moreLabel,
+  onAction,
+}: {
+  info: string[]
+  actions: { action: string; Icon: typeof Download; label: string }[]
+  menuItems: { action: string; label: string }[]
+  /** aria/title for the ⋯ trigger (i18n from the caller). */
+  moreLabel: string
+  onAction: (action: string) => void
+}) {
+  return (
+    <div className="dock-surface flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
+      {info.length > 0 && (
+        <span className="flex items-center gap-2 pl-1.5 pr-1 text-xs whitespace-nowrap text-muted-foreground">
+          {info.map((s, i) => (
+            <span key={i}>{s}</span>
+          ))}
+        </span>
+      )}
+      {info.length > 0 && (actions.length > 0 || menuItems.length > 0) && (
+        <span className="h-4 w-px shrink-0 bg-foreground/15" />
+      )}
+      {actions.map(({ action, Icon, label }) => (
+        <button
+          key={action}
+          type="button"
+          title={label}
+          aria-label={label}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAction(action)
+          }}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+      {menuItems.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={moreLabel}
+                title={moreLabel}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+                onClick={(e) => e.stopPropagation()}
+              />
+            }
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end">
+            {menuItems.map(({ action, label }) => (
+              <DropdownMenuItem
+                key={action}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAction(action)
+                }}
+              >
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  )
+}
+
 function ThumbCard({
   node,
   onExpandMedia,
+  onAssetAction,
 }: {
   node: FlowNode
   onExpandMedia?: (nodeId: string) => void
+  onAssetAction?: FlowCardData["onAssetAction"]
 }) {
   const { t } = useTranslation()
   const FallbackIcon = node.kind === "asset" ? FileText : Clapperboard
   // The inline video's ambient playback is muted by default (autoplay
   // policy); the hover sound icon flips it.
   const [muted, setMuted] = useState(true)
+  // Media facts for the toolbar are read off the loaded media itself — the
+  // real pixels, never a hardcoded table.
+  const [dims, setDims] = useState<string | null>(null)
   const expandable = !!(node.videoUrl || node.thumbUrl) && !!onExpandMedia
+  const asset = node.asset
+  const TypeIcon =
+    asset?.type === "video"
+      ? Clapperboard
+      : asset?.type === "image"
+        ? ImageIcon
+        : FileText
+
+  // The asset toolbar (results canvas only — a node without the action
+  // channel, e.g. the recipe manual, renders no bar): media facts on the
+  // left (filename / duration / resolution), then download / delete, and
+  // the node's own business (open / reprocess) in the ⋯ menu.
+  const showBar = !!onAssetAction && !!asset
+  const info: string[] = []
+  if (node.detail) info.push(node.detail)
+  if (asset?.duration_seconds) info.push(`${asset.duration_seconds}s`)
+  if (dims) info.push(dims)
+  const handleBarAction = (action: string) => {
+    if (action === "open") {
+      onExpandMedia?.(node.id)
+      return
+    }
+    if (asset) onAssetAction?.(asset, action as FlowAssetAction)
+  }
+
   return (
     <div className="flex h-full w-full flex-col">
-      <NodeCaption label={node.label} detail={node.detail} />
+      <NodeCaption label={node.label} Icon={asset ? TypeIcon : undefined} />
       <div
         className={cn(
           "group/media relative min-h-0 flex-1 overflow-hidden rounded-md",
@@ -171,6 +293,11 @@ function ThumbCard({
             autoPlay
             preload="metadata"
             disablePictureInPicture
+            onLoadedMetadata={(e) =>
+              setDims(
+                `${e.currentTarget.videoWidth}×${e.currentTarget.videoHeight}`
+              )
+            }
           />
         ) : node.thumbUrl ? (
           <img
@@ -180,6 +307,11 @@ function ThumbCard({
               "h-full w-full",
               node.containThumb ? "object-contain" : "object-cover",
             )}
+            onLoad={(e) =>
+              setDims(
+                `${e.currentTarget.naturalWidth}×${e.currentTarget.naturalHeight}`
+              )
+            }
           />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -214,6 +346,29 @@ function ThumbCard({
           </span>
         )}
       </div>
+      {showBar && (
+        <div className="flex h-[56px] shrink-0 items-start justify-center pt-3">
+          <MediaToolbar
+            info={info}
+            actions={[
+              {
+                action: "download",
+                Icon: Download,
+                label: t("results.canvas.download"),
+              },
+              { action: "delete", Icon: Trash2, label: t("common.delete") },
+            ]}
+            menuItems={[
+              ...(expandable
+                ? [{ action: "open", label: t("results.canvas.open") }]
+                : []),
+              { action: "reprocess", label: t("results.canvas.reprocess") },
+            ]}
+            moreLabel={t("results.canvas.more")}
+            onAction={handleBarAction}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -316,23 +471,34 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
  *  3. the padded interaction area below the media — the run's prompt only
  *     (spec on the body, read-only; changes happen in chat).
  *  4. the action bar in a reserved band UNDER the card — one frosted bar
- *     (dock-surface + hairline, never bare icons); download / publish only,
- *     graph operations permanently banned (prohibition #3). The band stays
- *     reserved while a render leaves it empty — geometry never shifts. */
+ *     (dock-surface + hairline, never bare icons); info (language / real
+ *     pixels) left, divider, download / delete, and the ⋯ menu carrying the
+ *     node business (publish / open / focus). Graph operations permanently
+ *     banned (prohibition #3). The band stays reserved while a render
+ *     leaves it quiet — geometry never shifts. */
 function ProductCard({
   node,
   selected,
   onOutputAction,
   onExpandMedia,
+  onAssetAction,
 }: {
   node: FlowNode
   selected: boolean
   onOutputAction?: FlowCardData["onOutputAction"]
   onExpandMedia?: FlowCardData["onExpandMedia"]
+  onAssetAction?: FlowCardData["onAssetAction"]
 }) {
   const { t } = useTranslation()
   const output = node.output
-  if (!output) return <ThumbCard node={node} onExpandMedia={onExpandMedia} />
+  if (!output)
+    return (
+      <ThumbCard
+        node={node}
+        onExpandMedia={onExpandMedia}
+        onAssetAction={onAssetAction}
+      />
+    )
 
   const score = typeof output.score?.value === "number" ? output.score.value : null
   const duration = output.type === "clip" ? (output.payload.duration ?? null) : null
@@ -342,6 +508,8 @@ function ProductCard({
   // flips it, the poster gives an instant first frame.
   const videoUrl = hasVideo ? toAbsoluteUrl(output.files.video) : null
   const [muted, setMuted] = useState(true)
+  // Media facts for the toolbar, read off the loaded media (real pixels).
+  const [dims, setDims] = useState<string | null>(null)
   // The thumb keeps the clip's own frame (2026-08-14 三档画幅 on the canvas):
   // the node's height was already sized for this aspect in runFlow — the
   // strip here mirrors it exactly, and the poster letterboxes (black) rather
@@ -379,9 +547,41 @@ function ProductCard({
       label: t("results.canvas.download"),
     })
   }
-  if (output.type === "clip" && hasVideo) {
-    actions.push({ action: "publish", Icon: Send, label: t("results.canvas.publish") })
+  actions.push({ action: "delete", Icon: Trash2, label: t("common.delete") })
+  // The ⋯ menu = node business (2026-08-17 走查拍板): publish / open (a clip
+  // with its render opens the detail modal via the surface; anything else
+  // opens the lightbox in place) + focus (指认到对话输入框). A rendering
+  // card's bar stays info-only — geometry reserved, no half-wired actions.
+  const menuItems: { action: string; label: string }[] = [
+    ...(output.type === "clip" && hasVideo
+      ? [{ action: "publish", label: t("results.canvas.publish") }]
+      : []),
+    ...(hasVideo || node.thumbUrl
+      ? [{ action: "open", label: t("results.canvas.open") }]
+      : []),
+    { action: "focus", label: t("results.canvas.focusNode") },
+  ]
+  const handleBarAction = (action: string) => {
+    if (action === "open" && !(output.type === "clip" && hasVideo)) {
+      onExpandMedia?.(node.id)
+      return
+    }
+    onOutputAction?.(output.id, action as FlowOutputAction)
   }
+  // Toolbar facts (2026-08-17 二轮走查): language / shape / duration — the
+  // duration lives HERE, never as a media overlay badge; the bar is uncapped
+  // and never ellipsizes, so all three always render in full. The shape slot
+  // shows the media's real pixels once loaded, the spec's aspect before that.
+  const barInfo: string[] = []
+  if (output.language) {
+    barInfo.push(
+      t(`languages.${output.language}`, { defaultValue: output.language })
+    )
+  }
+  const shape =
+    dims ?? (clipAspect && clipAspect !== "original" ? clipAspect : null)
+  if (shape) barInfo.push(shape)
+  if (duration !== null && duration > 0) barInfo.push(`${duration}s`)
 
   // Multi-item outputs (quotes = N cards, carousel = N slides): the hover
   // switcher flips the main display between the node's variants; items
@@ -434,7 +634,6 @@ function ProductCard({
 
       <NodeCaption
         label={node.label}
-        detail={node.detail}
         Icon={PRODUCT_TYPE_ICON[output.type] ?? Clapperboard}
       />
 
@@ -477,6 +676,11 @@ function ProductCard({
               autoPlay
               preload="metadata"
               disablePictureInPicture
+              onLoadedMetadata={(e) =>
+                setDims(
+                  `${e.currentTarget.videoWidth}×${e.currentTarget.videoHeight}`
+                )
+              }
             />
           ) : mediaThumb ? (
             <img
@@ -486,6 +690,11 @@ function ProductCard({
                 "h-full w-full",
                 clipAspect ? "object-contain" : "object-cover",
               )}
+              onLoad={(e) =>
+                setDims(
+                  `${e.currentTarget.naturalWidth}×${e.currentTarget.naturalHeight}`
+                )
+              }
             />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -502,9 +711,10 @@ function ProductCard({
               )}
             </span>
           )}
-          {/* Media meta badges ride the BOTTOM corners (video convention);
-              the top corners belong to the hover affordances (expand left,
-              sound right). */}
+          {/* Media meta badges: the score rides the bottom-left corner; the
+              top corners belong to the hover affordances (expand left, sound
+              right). The duration is NOT a badge — it lives in the toolbar
+              facts below the card (2026-08-17 二轮走查拍板). */}
           {score !== null && !renderFailed && (
             <span
               data-tour={node.tourTargets ? "results-score" : undefined}
@@ -541,11 +751,6 @@ function ProductCard({
               )}
             </MediaHoverButton>
           )}
-          {duration !== null && duration > 0 && !renderFailed && (
-            <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-              {duration}s
-            </span>
-          )}
         </div>
 
         {/* The padded interaction area: the run's prompt (read-only — the
@@ -565,36 +770,22 @@ function ProductCard({
         </div>
       </div>
 
-      {/* The always-on action band under the card — one frosted bar
-          (dock-surface + hairline, 2026-08-16 走查拍板: never bare icons
-          floating on the canvas). Padding/airiness tuned against the
-          reference canvas's bar (p-1.5 + h-8 hit areas = a 44px bar, a real
-          12px gap off the card). It carries only actions that exist for
-          this product; the band itself is reserved either way, so a
-          finishing render never shifts the graph. */}
+      {/* The always-on action band under the card — the shared MediaToolbar
+          (2026-08-17 走查拍板, Lovart 解剖): media facts left, divider,
+          download / publish / delete, and node business in the ⋯ menu. The
+          band is reserved even while a render leaves it quiet — geometry
+          never shifts. */}
       <div
         data-tour={node.tourTargets ? "results-menu" : undefined}
         className="flex h-[56px] shrink-0 items-start justify-center pt-3"
       >
-        {actions.length > 0 && (
-          <div className="dock-surface flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
-            {actions.map(({ action, Icon, label }) => (
-              <button
-                key={action}
-                type="button"
-                title={label}
-                aria-label={label}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onOutputAction?.(output.id, action)
-                }}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-          </div>
-        )}
+        <MediaToolbar
+          info={barInfo}
+          actions={renderActive ? [] : actions}
+          menuItems={renderActive ? [] : menuItems}
+          moreLabel={t("results.canvas.more")}
+          onAction={handleBarAction}
+        />
       </div>
     </div>
   )
@@ -605,7 +796,7 @@ function ProductCard({
  * product row). Birth choreography: `flow-node-born` keyframe staggered by
  * `bornIndex` (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, onOutputAction, onExpandMedia } = data
+  const { node, bornIndex, selected, onOutputAction, onExpandMedia, onAssetAction } = data
   // The product card is a composite (caption + card + action band) — its
   // selected ring hugs the CARD, not the node box; every other skin is a
   // single box and takes the ring on the root.
@@ -639,9 +830,14 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           selected={selected}
           onOutputAction={onOutputAction}
           onExpandMedia={onExpandMedia}
+          onAssetAction={onAssetAction}
         />
       ) : (
-        <ThumbCard node={node} onExpandMedia={onExpandMedia} />
+        <ThumbCard
+          node={node}
+          onExpandMedia={onExpandMedia}
+          onAssetAction={onAssetAction}
+        />
       )}
       <Handle
         type="source"

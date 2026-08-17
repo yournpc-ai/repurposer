@@ -92,6 +92,7 @@ export function FlowView({
   selectedId = null,
   onSelect,
   onOutputAction,
+  onAssetAction,
   onExpandMedia,
   onPaneClick,
   navigation = "fit",
@@ -119,6 +120,7 @@ export function FlowView({
         bornIndex: choreograph ? layout.revealOrder.get(n.id) : undefined,
         selected: n.id === selectedId,
         onOutputAction,
+        onAssetAction,
         onExpandMedia,
       },
       draggable: false,
@@ -145,7 +147,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges }
-  }, [nodes, edges, selectedId, choreograph, onOutputAction, onExpandMedia])
+  }, [nodes, edges, selectedId, choreograph, onOutputAction, onAssetAction, onExpandMedia])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

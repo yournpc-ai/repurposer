@@ -15,22 +15,22 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   artifact: { width: 224, height: 168 },
 }
 
-/** The results canvas's product card (ADR-041 D5 大卡, 2026-08-15 anatomy):
- * a corner-info band above the card (type left / language right), the media
- * flush full-bleed inside the card, a padded interaction area under it (the
- * run's prompt), and the always-on action bar in a reserved band under the
- * card. The thumb keeps the clip's own frame — three aspect sizes, never a
- * forced crop (2026-08-14 ruling). The media fills the card edge to edge
+/** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
+ * 放大): a corner-info band above the card (type left / language right), the
+ * media flush full-bleed inside the card, a padded interaction area under it
+ * (the run's prompt), and the always-on action bar in a reserved band under
+ * the card. The thumb keeps the clip's own frame — three aspect sizes, never
+ * a forced crop (2026-08-14 ruling). The media fills the card edge to edge
  * (no inner padding), so the aspect heights are computed at the full lane
- * width (208). */
+ * width (280 — the 208 lane read too narrow next to its toolbar). */
 export const PRODUCT_THUMB_PX: Record<string, number> = {
-  "9:16": 370,
-  "1:1": 208,
-  "16:9": 117,
+  "9:16": 498,
+  "1:1": 280,
+  "16:9": 158,
 }
 
 /** Non-clip products (no aspect) get the 16:9 strip. */
-export const PRODUCT_THUMB_DEFAULT_PX = 117
+export const PRODUCT_THUMB_DEFAULT_PX = 158
 
 /** Node-box bands around the product card: corner info above, the action
  * bar below (reserved even while a render leaves it empty — geometry never
@@ -46,15 +46,21 @@ const PRODUCT_BODY_PX = 64
 export function productNodeSize(aspect?: string | null): { width: number; height: number } {
   const thumb = (aspect && PRODUCT_THUMB_PX[aspect]) || PRODUCT_THUMB_DEFAULT_PX
   return {
-    width: 208,
+    width: 280,
     height: PRODUCT_LABEL_PX + thumb + PRODUCT_BODY_PX + PRODUCT_TOOLBAR_PX,
   }
 }
 
 /** Source video asset node (results canvas): the media plays inline, so the
- * frame is landscape and wide enough to watch; the caption band rides above
- * (included in the height). */
-export const VIDEO_ASSET_NODE_SIZE = { width: 232, height: 152 }
+ * frame is landscape and wide enough to watch (280 = the product lane);
+ * the caption band rides above and the toolbar band below (both included in
+ * the height — 2026-08-17 走查拍板: every media node carries a frosted
+ * toolbar). */
+export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 240 }
+
+/** The reserved toolbar band under every media node (results canvas,
+ * 2026-08-17): 12px gap + the 44px frosted bar. */
+export const ASSET_TOOLBAR_PX = 56
 
 /** A node's resolved size — the per-kind default unless the adapter pinned
  * an override (product cards on the results canvas). */
