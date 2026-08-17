@@ -71,6 +71,15 @@ TRACKS: dict[str, TrackDef] = {
         # + "crop_track" on the 08-19 line — the boot partition check forces it
         fields=("crop",),
     ),
+    "layers": TrackDef(
+        family="layer", timeline="derived",  # anchor → output position, projected at the bake seam
+        owner=(),  # insert_broll lands on the 08-19+ line; nothing writes yet
+        mutex=(), pairs=(),
+        provenance="real",  # item-level: every layer declares its own (必填)
+        url_fields=("layers[*].media.url",),
+        checks=(),  # 08-19+ residents: broll min-dwell / callout contrast …
+        fields=("layers",),
+    ),
     "title": TrackDef(
         family="block", timeline="output",
         owner=("select_clips", "materialize_source"),
@@ -183,6 +192,9 @@ def spec_provenance(
     """
     for segment in spec.get("segments") or []:
         if isinstance(segment, dict) and segment.get("provenance") == "generated":
+            return "generated"
+    for layer in spec.get("layers") or []:
+        if isinstance(layer, dict) and layer.get("provenance") == "generated":
             return "generated"
     for track in (TRACKS if tracks is None else tracks).values():
         if track.provenance != "generated":

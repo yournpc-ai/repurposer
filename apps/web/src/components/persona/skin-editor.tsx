@@ -194,7 +194,7 @@ function buildPreviewSpec(skin: SkinBlock): ClipSpec {
   return {
     source: { asset_id: "preview", kind: "stills", url: "", image_urls: [], fps: 30 },
     aspect: "9:16",
-    segments: [{ id: "preview", start: 0, end, hidden: false }],
+    segments: [{ id: "preview", start: 0, end, hidden: false, transition: "none" }],
     crop: { x: 0.5, y: 0.5, scale: 1 },
     caption_track,
     caption_style_preset: skin.captionStylePreset,
@@ -219,6 +219,7 @@ function buildPreviewSpec(skin: SkinBlock): ClipSpec {
       : { music_id: null, url: null, enabled: false, gain_db: skin.musicGainDb },
     brand: skinToBrand(skin),
     brand_ref: null,
+    layers: [],
     target_language: "en",
   }
 }

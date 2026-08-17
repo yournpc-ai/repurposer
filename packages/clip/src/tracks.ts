@@ -94,6 +94,19 @@ export const TRACK_REGISTRY = {
     // + "crop_track" on the 08-19 line — the boot partition check forces the registration
     fields: ["crop"],
   },
+  layers: {
+    family: "layer",
+    timeline: "derived", // anchor → output position, projected at the bake seam
+    // insert_broll lands on the 08-19+ line; nothing writes yet
+    owner: [],
+    mutex: [],
+    pairs: [],
+    provenance: "real", // item-level: every layer declares its own (必填)
+    url_fields: ["layers[*].media.url"],
+    // 08-19+ residents: broll min-dwell / callout contrast …
+    checks: [],
+    fields: ["layers"],
+  },
   title: {
     family: "block",
     timeline: "output",

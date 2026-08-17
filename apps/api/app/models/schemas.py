@@ -1214,6 +1214,11 @@ class ClipSegment(BaseModel):
     main-track splice (切 op) carries its donor's asset id + storage-seam
     ``url`` resolved at write. ``provenance`` marks a generated segment
     (None = real).
+
+    ``transition`` is the ENTRY-edge dissolve into this segment (枚举可、画廊
+    不可, ADR-016 L3 修订): ``none`` hard cut, ``fade`` through black,
+    ``dip`` white flash. Cap: at most 3 non-none transitions per clip —
+    enforced where the op is registered, not here.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1225,6 +1230,86 @@ class ClipSegment(BaseModel):
     end: float = Field(ge=0)
     hidden: bool = False
     provenance: Literal["real", "generated"] | None = None
+    transition: Literal["none", "fade", "dip"] = "none"
+
+
+class ClipAnchor(BaseModel):
+    """Where a layer pins — the storage truth (存法 C: 锚是真相, ADR-044).
+
+    Three forms (绝对时间永不入库 — lane positions are a compile artifact):
+    - ``segment``: 段锚 — ``segment_id`` + ``offset_seconds`` into that
+      segment's kept span (source-clock offset).
+    - ``edge``: 边锚 — ``head``/``tail`` of the kept-video portion +
+      ``offset_seconds`` (tail resolves to video_end − offset). The brand
+      intro/outro blocks are edge-anchored by construction.
+    - ``ratio``: 比例锚 — ``ratio`` ∈ [0,1] of the kept-video duration.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["segment", "edge", "ratio"]
+    segment_id: str | None = None
+    edge: Literal["head", "tail"] | None = None
+    ratio: float | None = Field(default=None, ge=0, le=1)
+    offset_seconds: float = 0.0
+
+    @model_validator(mode="after")
+    def _coherent(self) -> "ClipAnchor":
+        if self.kind == "segment" and not self.segment_id:
+            raise ValueError("segment anchor requires segment_id")
+        if self.kind == "edge" and self.edge is None:
+            raise ValueError("edge anchor requires edge")
+        if self.kind == "ratio" and self.ratio is None:
+            raise ValueError("ratio anchor requires ratio")
+        return self
+
+
+class ClipRect(BaseModel):
+    """Normalized rectangle of the composition (CSS ∩ libass expressible)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    w: float = Field(gt=0, le=1)
+    h: float = Field(gt=0, le=1)
+
+
+class LayerMedia(BaseModel):
+    """A layer's content: one branch by media type (video/image/text)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video", "image", "text"]
+    url: str | None = None  # video/image: storage-seam URL
+    text: str | None = None  # text: the callout content
+
+
+LAYER_KINDS = ("broll", "text_callout", "pip", "motion_graphic")
+
+
+class ClipLayer(BaseModel):
+    """An overlay item on the layer track (ADR-044; "overlay" 词禁用于视频层,
+    NAMING §2).
+
+    Position = ``anchor`` (storage truth) + ``duration_seconds``; the output
+    timeline window is projected at the bake seam, never persisted.
+    ``provenance`` is REQUIRED — every layer item declares its ADR-026 class
+    at write. ``source_ref`` carries the entity reference the LLM proposed
+    from (never an absolute timecode).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    kind: Literal["broll", "text_callout", "pip", "motion_graphic"]
+    anchor: ClipAnchor
+    duration_seconds: float = Field(gt=0)
+    rect: ClipRect
+    z: int = 0
+    source_ref: dict | None = None
+    media: LayerMedia | None = None
+    provenance: Literal["real", "generated"]
 
 
 class ClipCrop(BaseModel):
@@ -1525,6 +1610,10 @@ class ClipSpec(BaseModel):
     title: ClipTitle = Field(default_factory=ClipTitle)
     music: ClipMusic = Field(default_factory=ClipMusic)
     dub: ClipDub | None = None  # cloned-voice dub; replaces source audio when enabled
+    # Layer track (ADR-044): anchor-pinned overlay items (broll / text_callout /
+    # pip / motion_graphic). Empty = no layers. No skill writes them yet —
+    # insert_broll lands on the 08-19+ line.
+    layers: list[ClipLayer] = Field(default_factory=list)
     brand: ClipBrand | None = None  # resolved brand values (None = default look)
     brand_ref: UUID | None = None
     target_language: str = "en"

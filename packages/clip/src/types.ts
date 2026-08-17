@@ -49,6 +49,11 @@ export interface ClipSource {
   duration?: number | null;
 }
 
+/** Entry-edge dissolve into a segment (枚举可、画廊不可, ADR-016 L3 修订):
+ * `none` hard cut, `fade` through black, `dip` white flash. Cap: at most 3
+ * non-none transitions per clip — enforced where the op is registered. */
+export type SegmentTransition = "none" | "fade" | "dip";
+
 export interface ClipSegment {
   /**
    * Stable entity identity — the anchor-addressable piece (ADR-044). Minted
@@ -69,11 +74,64 @@ export interface ClipSegment {
   hidden: boolean;
   /** "generated" marks a synthetic segment (None/absent = real). */
   provenance?: "real" | "generated" | null;
+  transition: SegmentTransition;
 }
 
 /** Segment id mint — opaque 12-hex, same shape as the Python default factory. */
 export const mintSegmentId = (): string =>
   crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+
+/**
+ * Where a layer pins — the storage truth (存法 C: 锚是真相, ADR-044). Absolute
+ * timecodes never persist; lane positions are a compile artifact. Three forms:
+ * `segment` (段锚: segment_id + source-clock offset), `edge` (边锚: head/tail
+ * of the kept-video portion + offset; tail resolves to video_end − offset),
+ * `ratio` (比例锚: fraction of the kept-video duration).
+ */
+export interface ClipAnchor {
+  kind: "segment" | "edge" | "ratio";
+  segment_id?: string | null;
+  edge?: "head" | "tail" | null;
+  ratio?: number | null;
+  offset_seconds: number;
+}
+
+/** Normalized rectangle of the composition (CSS ∩ libass expressible). */
+export interface ClipRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A layer's content: one branch by media type. */
+export interface LayerMedia {
+  kind: "video" | "image" | "text";
+  /** video/image: storage-seam URL */
+  url?: string | null;
+  /** text: the callout content */
+  text?: string | null;
+}
+
+export type LayerKind = "broll" | "text_callout" | "pip" | "motion_graphic";
+
+/**
+ * An overlay item on the layer track (ADR-044; "overlay" 词禁用于视频层).
+ * Position = anchor + duration_seconds; the output-timeline window is
+ * projected at the bake seam, never persisted. `provenance` is REQUIRED.
+ */
+export interface ClipLayer {
+  id: string;
+  kind: LayerKind;
+  anchor: ClipAnchor;
+  duration_seconds: number;
+  rect: ClipRect;
+  z: number;
+  /** The entity reference the LLM proposed from (never an absolute timecode). */
+  source_ref?: Record<string, unknown> | null;
+  media?: LayerMedia | null;
+  provenance: "real" | "generated";
+}
 
 export interface ClipCrop {
   /** Normalized center + scale; applied via CSS transform (not object-position). */
@@ -162,6 +220,8 @@ export interface ClipSpec {
   music: ClipMusic;
   /** Cloned-voice dub; when enabled, replaces the source's original audio. */
   dub?: ClipDub | null;
+  /** Layer track (ADR-044): anchor-pinned overlay items. Empty = no layers. */
+  layers: ClipLayer[];
   brand?: ClipBrand | null;
   brand_ref: string | null;
   target_language: string;
@@ -236,12 +296,16 @@ export const removeRange = (spec: ClipSpec, start: number, end: number): ClipSpe
       continue;
     }
     const donor = { asset_id: s.asset_id ?? null, url: s.url ?? null, provenance: s.provenance ?? null };
+    // The transition lives on the ENTRY edge: only the piece that still
+    // starts at s.start inherits it; cut-born pieces hard-cut in.
+    const entry = { transition: s.transition };
+    const cut = { transition: "none" as const };
     const pieces: ClipSegment[] = [];
     if (s.start < a)
-      pieces.push({ id: mintSegmentId(), start: s.start, end: a, hidden: false, ...donor });
-    pieces.push({ id: mintSegmentId(), start: a, end: b, hidden: true, ...donor });
+      pieces.push({ id: mintSegmentId(), start: s.start, end: a, hidden: false, ...donor, ...entry });
+    pieces.push({ id: mintSegmentId(), start: a, end: b, hidden: true, ...donor, ...cut });
     if (b < s.end)
-      pieces.push({ id: mintSegmentId(), start: b, end: s.end, hidden: false, ...donor });
+      pieces.push({ id: mintSegmentId(), start: b, end: s.end, hidden: false, ...donor, ...cut });
     // First kept piece keeps the parent id; the rest ride minted ids.
     const firstKept = pieces.find((p) => !p.hidden);
     if (firstKept && s.id) firstKept.id = s.id;

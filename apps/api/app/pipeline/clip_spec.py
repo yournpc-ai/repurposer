@@ -282,9 +282,13 @@ def remove_range(spec: ClipSpec, start: float, end: float) -> ClipSpec:
             segments.append(s)
             continue
         donor = {"asset_id": s.asset_id, "url": s.url, "provenance": s.provenance}
+        # The transition lives on the ENTRY edge: only the piece that still
+        # starts at s.start inherits it; cut-born pieces hard-cut in.
         pieces: list[ClipSegment] = []
         if s.start < a:
-            pieces.append(ClipSegment(start=s.start, end=a, hidden=False, **donor))
+            pieces.append(
+                ClipSegment(start=s.start, end=a, hidden=False, transition=s.transition, **donor)
+            )
         pieces.append(ClipSegment(start=a, end=b, hidden=True, **donor))
         if b < s.end:
             pieces.append(ClipSegment(start=b, end=s.end, hidden=False, **donor))
