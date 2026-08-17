@@ -31,12 +31,12 @@ clip-spec 是系统里最后一个"走一步加一步"的架构面：图内核�
 - **注册表先例已跑通**：`captions.ts` CAPTION_PRESETS（catalog 住 packages/clip、TS 类型由此推导、Python 只校验成员）——轨道注册表的双端形态照此办理（漂移教训在案：`operations/registry.py` 的 set_caption_style Literal 曾缺 `stacking`——轨道表带对账脚本，不裸奔）。
 - **写纪律已就位**：render_spec 一切修改经 operations 表 + 快照 undo（ADR-032）；ops 双注册表分层（ADR-033）。
 - **规格纪律已在**：样式枚举 + CSS ∩ libass 子集（保 FFmpeg 后路）。
-- **排期已在**：第三周 08-17~18 = 本升级；08-19 起 = crop/追踪能力线（speaker_map / reframe_clip）。
+- **排期已在**：第三周 08-17~18 = 本升级（纯地基）；08-19 起 = crop/追踪能力线（crop_track 契约 / speaker_map / reframe_clip）。
 
 ### 不在
 
 - 轨道注册表（TRACK_REGISTRY）与两条启动自检（本批）。
-- 关键帧数据轨的 schema 形态（crop_track 是第一个，本批）。
+- 关键帧数据轨的 schema 形态（crop_track 是第一个；**08-19 线随能力同批**——注册表 + 分区自检落地后，它 = 一条登记 + 一个采样器，忘登记则启动自检直接红）。
 - segments 的异源能力（`asset_id` 缺省主源）与段 id（本批）。
 - 层轨（layers）、锚（anchor）、过渡枚举（transition）——契约 + 渲染件本批；技能化入口随功能排期（§7）。
 - 每轨确定性工艺检查项（checks）的家（本批建家；首批真实住户随 reframe 技能包，§7.2）。
@@ -48,7 +48,7 @@ clip-spec 是系统里最后一个"走一步加一步"的架构面：图内核�
 2. **TRACK_REGISTRY 骨架**：catalog 住 `packages/clip`（TS 类型由 catalog 推导 + 类型级分区断言），Python 镜像只校验成员 + 消费声明（双端对账脚本守门漂移）。`TrackDef` = `family`（sequence|data|layer|block）/ `timeline`（source|output|derived——只声明不实现，remap 全库一个函数）/ `owner`（唯一写者技能）/ `mutex`（dub⇄原声）/ `pairs`（translation⇄caption，既有耦合入档）/ `provenance` / `url_fields` / `checks` / `fields`（spec 顶层字段分区——自检①的承重墙）。现有 8 轨平移登记 + `layers` 轨（layer 家族首条）。
 3. **两条启动自检**（挂 `assert_runners_registered`，API/worker 双进程 + harness 同跑）：① spec 顶层字段 ⊆ 注册表，每字段恰好一条轨；② **phantom track**——注册一条假轨，烘焙缝 / 寻址 / 合规 / 计价自动接管、消费方零改动（作 fixture 留存；"渲染"腿的本批语义 = 烘焙缝 `_absolutize` 接管；渲染件注册随真实住户进场）。
 4. **消费方 fold**：`_absolutize` 读 `url_fields`；provenance 写点（C2PA 分类路径，ADR-026）读轨声明；estimate 的 `output_seconds` 走注册表驱动的时长镜像。
-5. **crop_track 契约（双端）**：`family=data, timeline=source`；`{t, x, y, scale}` 关键帧，Python schema + types.ts 镜像 + `Clip.tsx` 按 sourceTime 采样（preview=render 同一采样函数）；空轨 = 静态 `crop` 缺省。remap 单函数化（TS 一家 + Python 同名镜像）。
+5. **remap 单函数化**：源↔输出时间换算全库只有一处（TS `sourceTimeAtOutputTime` / `outputTimeAtSourceTime` + Python 同名镜像）——泳道投影与（08-19 的）crop_track 采样器共用。crop_track 契约本体（schema + 采样器 + Clip.tsx 接入）归 08-19 能力线（§7.2）。
 6. **segments widen**：段 = `{id, asset_id?（缺省=主源）, url?（异源段随写解析，source 同款先例）, start, end, hidden}`；异源插入 = 带 asset_id 的段（ADR-029 虚拟产物段同源入座）；段可带 provenance（混合时间轴 C2PA 免费）。段 id 新写必带，存量行读容忍（首个时间轴 op 落地时整体回填——旧行无层无锚，回填无损）。
 7. **锚 + layers + 过渡枚举**：锚三形态（段锚 `{segment_id + 源偏移}` / 边锚 `{head|tail + 偏移}`——intro/outro 本质即边锚块 / 比例锚 `{ratio}`）；`layers` 条目 `{id, kind, anchor, rect, z, source_ref?, media?, provenance(必填)}`，kind 枚举注册守门（broll / text_callout / pip / motion_graphic）；`transition` 挂段进场边（none/fade/dip，2-3 封顶），换序随段走。ADR-016 L3 注记修订为"枚举可、画廊不可"。
 8. **泳道投影 fold + 渲染件**：投影单函数（TS 单家 + Python 镜像）——sequence + layer 家族 → 扁平泳道（绝对输出时间 + z 序）；data 家族不投影（按 sourceTime 采样）；块轨本就输出时间轴。渲染器只吃投影/采样，永不读锚；投影永不落库、永不进快照。`Clip.tsx` 按 family 分派渲染件：层渲染件一支按媒体类型分派（video / image / text，四 kind 共用）、段进场边过渡渲染、多源段渲染（per-segment src）。
@@ -68,8 +68,8 @@ clip-spec 是系统里最后一个"走一步加一步"的架构面：图内核�
 ## 5. 验收
 
 1. 两条启动自检绿：spec 字段 ⊆ 注册表对账；phantom track 全链接管（烘焙缝 / 寻址 / 合规 / 计价零消费方改动，fixture 留存）。
-2. crop_track 双端 parity：`<Player>` 与渲染服务同一采样函数，抽帧对比一致（parity 回归同款测法）。
-3. remap 单函数：grep 证明源↔输出时间换算全库只有一处（TS）+ 镜像（Python）。
+2. remap 单函数：grep 证明源↔输出时间换算全库只有一处（TS）+ 镜像（Python）。
+3.（归 08-19 线验收）crop_track 双端 parity：`<Player>` 与渲染服务同一采样函数，抽帧对比一致（parity 回归同款测法）。
 4. **十二操作走查表（附录 §8）全项 ✅**——结构级：每操作可表示（契约座位）/ 可渲染（渲染件 fixture 实证）/ 可继续改（op 注册 + 快照 undo）；技能化入口随 §7 排期，不在本批验收面。
 5. 剧本 harness（S1–S45）零回归；改 pipeline 代码必重启常驻 worker。
 6. ADR-044 落档，RENDERING §8 转正式契约。
@@ -79,7 +79,7 @@ clip-spec 是系统里最后一个"走一步加一步"的架构面：图内核�
 | 期 | 内容 | 挂点 |
 |---|---|---|
 | 本批 | 本简报 §3 全部（契约层 + ops + 渲染件 + 两条自检） | 第三周 08-17~18 |
-| P1 | checks 首批住户（crop 不出人脸框 / 最短驻留 / 防跳切缓动，写进技能 procedure 不等 Phase 3）+ `speaker_map` 节点与上游登记 + 素材形态归类 | 08-19 起 reframe 线（spike 双验证前置闸，未过则静态中裁回退） |
+| P1 | **`crop_track` 契约双端落地**（schema + `crops.ts` 采样器 + Clip.tsx 接入 + parity 抽帧验收）+ checks 首批住户（crop 不出人脸框 / 最短驻留 / 防跳切缓动，写进技能 procedure 不等 Phase 3）+ `speaker_map` 节点与上游登记 + 素材形态归类 | 08-19 起 reframe 线（spike 双验证前置闸，未过则静态中裁回退） |
 | 功能批 | insert/B-roll 技能化 + LLM op 词汇开放 + 层的画布标记卡呈现 | 随功能排期（§7.3 登记，PROGRESS 需求池待排） |
 
 排期纪律：本迭代是 crop_track / reframe / 分镜双子卡三条已排期线的**随行文书**——契约层 08-17~18 一次做完；能力层随 08-19 起的排期。
@@ -89,7 +89,7 @@ clip-spec 是系统里最后一个"走一步加一步"的架构面：图内核�
 **边界先行：总 agent 不变。** chat loop / PlanAgent / ChatIntentAgent 零改动；单次调用 + 预装配上下文、禁 ReAct 的纪律辩护到底（成本、可评审、确定性全在这）。**skill 按用户语言命名和切分，不按轨道切分**——「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系，永不上用户话术面。
 
 1. **tools 层：本批零新增**。泳道投影 / remap 是 pipeline 镜像函数（NAMING §1 双端同名纪律），不进 tools/。
-2. **08-19 线（reframe 能力批）**：`speaker_map` 内部分析节点（素材级、asset-hash 复用、`NodeBase.internal` 声明、不进 SKILL_REGISTRY）——**顺手把素材形态归类（访谈 / 独白 / 多人）升为素材级事实**，喂计划层与工艺分发（语录评审裁决①的"缺语义归类"在此补上）；视觉判定 agent 声明随节点（AGENT_ARCH 先例）。`reframe_clip` 过 NAMING §7 评审登记；checks 首批住户（crop 不出人脸框 / 最短驻留 / 防跳切缓动）写进技能 procedure，不等 Phase 3 verify 框架（裁决⑤——reframe 是第一个"失败 mode 肉眼才看得出"的技能，工序自检必须同批出生）。spike 双验证（说话人识别 + 中景追踪）是前置闸，未过按 PROGRESS 回退口径走静态中裁版。
+2. **08-19 线（reframe 能力批）**：`crop_track` 契约双端落地（`family=data, timeline=source`，`{t, x, y, scale}` 关键帧按 sourceTime 采样，空轨 = 静态 `crop` 缺省——本批地基交付后此项 = 一条登记 + 一个采样器）。`speaker_map` 内部分析节点（素材级、asset-hash 复用、`NodeBase.internal` 声明、不进 SKILL_REGISTRY）——**顺手把素材形态归类（访谈 / 独白 / 多人）升为素材级事实**，喂计划层与工艺分发（语录评审裁决①的"缺语义归类"在此补上）；视觉判定 agent 声明随节点（AGENT_ARCH 先例）。`reframe_clip` 过 NAMING §7 评审登记；checks 首批住户（crop 不出人脸框 / 最短驻留 / 防跳切缓动）写进技能 procedure，不等 Phase 3 verify 框架（裁决⑤——reframe 是第一个"失败 mode 肉眼才看得出"的技能，工序自检必须同批出生）。spike 双验证（说话人识别 + 中景追踪）是前置闸，未过按 PROGRESS 回退口径走静态中裁版。
 3. **insert_broll 技能线（layers 家族第一个技能住户）**：语录④「我讲到增长数据那块，画面切到我的幻灯片」——知识专家最强的 B-roll 场景（自己的幻灯片/截图，`slide_pages` 已存在）；原缓议理由（"talking-head B-roll 价值低"）只覆盖 stock B-roll，**排期理由修订在案，排在 reframe spike 之后**（PROGRESS 需求池待排）。全链拆解（语录评审已锁定）：(a) spec `layers` 座位（本批已落）；(b) 技能 = LLM 只做语义定位（"哪句讲了增长数据"），机械工序取该 cue 的输出时间窗 + 从 SLIDES 素材 slide_pages 选页 → layer 条目；(c) 渲染件（本批已落）。
 4. **计划层对素材盲**（语录评审①，"该修"项）：正解 = 素材理解前移（director_understand 挪上传时跑——素材级 + hash 复用天然支持；代价 = 每次上传烧一次 LLM，哪怕素材从没被用）；折中 = 上下文装配层塞 transcript 首段摘录（机械、零 LLM）。**本简报收折中版**（挂第三周 08-21 缓冲行），正解进 PROGRESS 需求池。
 5. **SSE 收官散文回合**（语录评审⑥）：run 收官时在打勾流 recap 之外追加一个 assistant 收官回合（"做好了 3 条短片，第 2 条最强因为……；下一步建议：……"）——一次调用、成本极小，是"到来即彷徨"用户的闭环接住点（STRATEGY §5）；不是进度（不违 ADR-041 打勾流唯一进度面），是收尾。进 PROGRESS 需求池。
