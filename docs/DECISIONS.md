@@ -848,3 +848,37 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 第九周报价系统协同：卡 derive 与估价 fold 共享同一次干跑编译。
 
 **Related**: ADR-039（技能注册表——本条的语法家）、ADR-028/029（RunPlan / plan 级 dispatch——mode② 先例）、ADR-040（配方=提示词——载荷单一通道同款哲学）、ADR-041（结果画布——派生预览的消费面）、STRATEGY §5（反打包）；简报 `docs/tasks/done/outputs-derive.md`
+
+## ADR-044: clip-spec 轨道模型——锚定存储 + 泳道编译产物 + TRACK_REGISTRY（12 操作闭包）
+
+**Status**: Decided (2026-08-17)
+
+**Context**: 图内核（NodeBase/compile_graph）、能力层（OP ∪ SKILL 双注册表）、产物层（outputs 派生）已完成各自的"注册表时刻"（ADR-039/043）；clip-spec 是最后一个未注册表化的面——每条轨一个手写字段 + N 处消费方特判（08-14 translation_track 落地实测摸约 7 处：双端 schema / Clip.tsx 分支 / `_absolutize` / 尺寸规则 / C2PA / ops 寻址，全靠人记——"每加功能前后打架"的力学来源：每个消费方各自重新推导一遍 spec 的结构知识，推导不齐就打架）。同时三股需求朝这个面涌来：crop_track 关键帧轨 / reframe_clip 分镜 / layers（B-roll、双机位 PiP）。验收判据 = **操作集闭包**（2026-08-17 用户以真实剪辑顺序 12 项操作走查立据，全表见简报附录）：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改。走查结论：7 项今天已通、1 项缺登记（reorder_segments）、4 项（异源插入 / 过渡 / 文字层 / 贴图层）挂在同一次采购上。同日用户拍板两条：① **允许破坏性更新**——旧数据与旧规划不构成约束，以目标（闭包）为主；② **P2 契约提前至本批**——segments widen / layers / 锚 / 过渡枚举 / ops 寻址 / 泳道投影不再等第一条 insert/B-roll 技能进排期，由 12 操作闭包判据直接驱动。
+
+**Decision**:
+
+1. **形态 = 存法 C：锚定是存储格式，泳道是编译产物**。位置不落库——层条目挂语义锚，输出时间窗由烘焙缝一次 fold 派生；泳道投影永不落库、永不进快照、永不可写（不是缓存，是编译产物，双写不一致在结构上不存在）。**双真相禁令**：锚与绝对坐标不得平级共存于同一行数据。消去法：存法 A（泳道为真相 + 锚作附加元数据）= 两病——锚沦为缓存则漂移原样存在，锚若用于重算则已是 C；平级双真相 = 双主写必然分歧，不存在。锚三形态：**段锚**（`{segment_id + 源偏移}`，内容跟随）/ **边锚**（`{head|tail + 偏移}`；intro/outro 本质即边锚块）/ **比例锚**（`{ratio}`）。非破坏模型红利：段从不真删（hidden），层条目锚点时间落入被剪区间即失去投影窗口、自然不渲染——"级联删除"是纯派生，"并告知"归 op 响应。
+2. **词汇四分 + 八词入宪法**：主轨（sequence）/ 数据轨（data，`*_track`）/ 层（layer）/ 块轨（block）四家分完整个 spec；段 segment / 锚 anchor / 过渡 transition 等八词登记 NAMING §2；**裸 track 违规、必须带家族限定**（判例 N-38，N-11 同型）。`layer` 避让 `overlay`（UI 浮层已占名：GenerationOverlay / overlay-surface——N-27 同型一词两义预防）；lane / blocks / junctions / placements 讨论期占位词草稿阶段死亡，不进任何文档。
+3. **TRACK_REGISTRY**：catalog 住 `packages/clip`（TS 类型由它推导），Python 镜像只校验成员 + 消费声明（CAPTION_PRESETS 同款双端纪律；漂移由对账脚本守门——preset 无对账已实证漂移一例，轨道表不裸奔）。`TrackDef` = `family` / `timeline`（source|output|derived——只声明不实现，remap 全库一个函数）/ `owner`（唯一写者技能，表归属契约的 spec 转置）/ `mutex`（dub⇄原声）/ `pairs`（translation⇄caption——既有耦合入档）/ `provenance`（ADR-026 分类器 fold）/ `url_fields`（烘焙缝 fold）/ `checks`（确定性工艺检查的家，随技能包出生不等 Phase 3）/ `fields`（spec 顶层字段分区——自检①的承重墙）。现有 8 轨平移登记 + layers 轨（layer 家族首条）。渲染器按 family 分派渲染件（sequence→段序列 / data→cue 渲染或关键帧采样 / block→块件 / layer→层件），新增轨 = 注册渲染件不动旧分支；renderer-agnostic 不动（声明只说 WHAT，Remotion 概念不进注册表，FFmpeg 后路保住）。
+4. **两条启动自检**（挂 `assert_runners_registered`，API/worker 双进程 + harness 同跑）：① spec 顶层字段 ⊆ 注册表，每字段恰好一条轨；② **phantom track**——注册一条假轨，烘焙缝 / 寻址 / 合规 / 计价自动接管、消费方零改动，作 fixture 留存（"渲染"腿的本批语义 = 烘焙缝 `_absolutize` 接管；渲染件注册随真实住户进场）。
+5. **spec 进化三件**（12 操作断点的收敛处）：
+   - **segments widen**：段 = `{id, asset_id?（缺省=主源）, url?（异源段随写解析，source 同款先例）, start, end, hidden}`——异源插入 = 带 asset_id 的段（ADR-029 虚拟产物段同源入座）；段可带 provenance，混合时间轴 C2PA 判定免费获得。
+   - **layers 轨**：锚定放置物列表 `{id, kind, anchor, rect, z, source_ref?, media?, provenance(必填)}`；kind 枚举注册守门（broll / text_callout / pip / motion_graphic）；PiP 经 `source_ref` 自带一路源回放——"两条视频同时可见"的唯一合法形态，三条以上全帧视频叠放 = 真 NLE territory，永久不进。
+   - **transition 枚举**：挂段的进场边（none/fade/dip，2-3 封顶），换序随段走；进场边语义与 FFmpeg xfade / Remotion 插值天然对齐。**ADR-016 L3 注记修订为"枚举可、画廊不可"**（转场挑选面板永拒不变）。
+6. **泳道投影 = 位置 fold 单函数**：sequence + layer 家族 → 扁平泳道（绝对输出时间 + z 序），TS 单家（packages/clip）+ Python 同名镜像（NAMING §1）；data 家族不投影——按 sourceTime 采样（crop_track 采样器 = keyframes 族第一个渲染件）；块轨本就输出时间轴。渲染器只吃投影/采样，永不读锚；投影函数同时是 FFmpeg 后路的 filtergraph 供料口。
+7. **ops 闭包**：`reorder_segments` / `insert_segment` / `set_transition` / `add_layer` / `remove_layer` / `move_layer` 登记入 OP_REGISTRY；**op 载荷 = 实体引用（段 id / 锚 / 枚举），LLM 永不提议绝对时间码**（坐标计算永归代码——"LLM 提议、代码裁决"的编辑侧延伸）；寻址 = （轨, item_id, op) 对注册表校验，不靠 LLM 猜字段路径。**一轨一写者**：撞轨 = 编译期 422（fork 豁免——派生行各有其 spec），不做运行时合并。**派生轨失效声明**：对主时间轴派生的轨（dub）在注册表声明依赖，时间轴 op 落地时经注册表枚举失效轨并告知（重配一句话；不产生"合法的谎"）。
+8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `tasks/track-model.md` §7。
+9. **tracks:{} 容器禁令保留、理由换血**：旧理由"破坏性格式迁移"随破坏性授权作废；保留理由 = 收益已证伪——快照 undo + LLM 不写 spec 的地基上全量常驻空轨无收益，扁平 spec + 注册表索引已提供全部归属能力。本禁令与兼容性无关，是纯目标判断。
+
+**Alternatives（翻案条件随附）**:
+- **泳道全量（泳道=真相）**：承认三条真实好处（裸时间操作原生支持 / 渲染映射直接 / 拖拽时间线 UI 期权），但账单是三笔——现有每个 op 重写成 ripple 维护算法（且漏维护不报错：spec 合法、照常渲染、B-roll 静静盖在错误的句子上——"合法的谎"）；LLM 被迫基于过期快照做时间算术（校验拦得住越界、拦不住界内语义错）；合法形态空间无界（同道重叠谁赢 / 道间空隙补什么 / 多音道怎么混——每个问题 NLE 用交互惯例回答，我们只能长代码分支）。拖拽 UI 期权的前提门已被 ADR-035 永拒。**翻案条件**：(a) 开任何直接拖拽的时间线 UI；(b) 出现锚定真实表达不了的操作——最近候选 = 任意区间音频增益自动化，届时其家是一条 `gain_track` 数据轨，仍非泳道。
+- **tracks:{} 容器重构**：见 Decision 9。
+- **FCP 操作力学照搬**：ripple 手势（"剪两段、尾段后移"）在声明式模型里不存在——插入一段，输出轴派生，尾部自动正确。从 FCP 带来的是能力闭包（哪些事必须可表达），不是操作力学（怎么做这些手势——执行者是 agent 不是人，整个换了一组答案）。
+
+**Consequences**:
+- 此后加一条轨 = 一条注册项（+ 新 family 时一个渲染件）；phantom 自检把"触点可数"变成机械事实——第 N 条轨比第 N-1 条便宜且便宜得可证明。
+- 12 操作走查表全项翻 ✅（结构级：可表示 / 可渲染 / 可继续改，fixture 实证；技能化入口随排期）。
+- 存量 spec：段 `id` 新写必带、旧行读容忍（无 id 行在首个时间轴 op 落地时整体回填——旧行无层无锚，回填无损）；dev 数据可经 reset_db 清场，不构成约束（破坏性授权）。
+- 禁令入档：禁 NLE 自由轨语义进 spec（任意增删道 / 同道重叠 / 转场画廊 / 关键帧自由编辑）；UI 永不见轨（层条目呈现为"这段配了画面"标记卡，随技能批）；kind 全枚举注册表守门；消费方禁逐字段特判；每轨唯一写者。
+
+**Related**: ADR-016（契约锁定；L3 注记本条修订）/ ADR-020（stills Ken-Burns 拒绝与本条 transition 的边界：枚举进场边可、动效画廊不可）/ ADR-026（C2PA fold——layers provenance 必填）/ ADR-029（虚拟产物段进主时间轴）/ ADR-032（快照 undo——锚定面是其存储面）/ ADR-033（能力层双海拔）/ ADR-035（可操作画布永拒——泳道期权的前提门）/ ADR-039（注册表时刻同款迭代）/ ADR-043（派生投影同款哲学）；母文档 `docs/RENDERING.md`（§8 本条转正）；简报 `docs/tasks/track-model.md`（§7 配套层 / §8 附录 12 操作走查全表）

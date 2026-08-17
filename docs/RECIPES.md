@@ -212,7 +212,7 @@ Recipe = {
 2. **每期一份 `docs/tasks/` 简报**，模板对齐既有简报（Context / 已核实事实 / 设计论证 / 改动点 / 命名审计 / 分期验收 / Prohibited Behaviors），依据行引用本文档章节号（如 "RECIPES §3.2"）；上游文档清单见 §11。
 3. **开工前重核 §0 事实**（代码可能已漂移），事实以读码为准。
 4. **运维坑**（已踩过）：改 pipeline 代码必须重启常驻 worker；本机服务调用用 `127.0.0.1` 不用 `localhost`；验证用的手工 run 会被常驻 worker 抢跑，验后清数据。
-5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`speaker_map`、`crop_track`、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）、`multilingual-subs`（多语言字幕卡）、`highlight-clips`（高光切片卡，2026-08-15 自 talk-clips 更名——名字说你得到什么，"演讲"窄化输入）、`materialize_source`（整条源材料化内部节点，ADR-043）/ `derived`（派生预览）、`aspect`（画幅，select_clips 任务参数，9:16/1:1/16:9 三档）、`bilingual`（双语对照，translate_clip 任务参数）/`translation_track`（对照轨）、`fork`（派生新版本 vs 就地改写标记）、`promptHint`（示例提示词引导句，按卡 i18n 键）。
+5. **命名登记清单**（随实施进 NAMING.md 词汇表）：`recipe`（配方卡）、caption preset catalog 及原语词 `layout`/`entrance`/`word-highlight`、`stacking`、`stock voice`（系统音色）、`voice_gen`（synth 简报已登记）、`align_stills`（阅读节奏时间轴）、`reframe_clip`（评审后）、`MENTION_REGISTRY`（提及注册表）/`RECIPE_REGISTRY`（配方注册表）/`input_slots`（输入槽位）、`multilingual-subs`（多语言字幕卡）、`highlight-clips`（高光切片卡，2026-08-15 自 talk-clips 更名——名字说你得到什么，"演讲"窄化输入）、`materialize_source`（整条源材料化内部节点，ADR-043）/ `derived`（派生预览）、`aspect`（画幅，select_clips 任务参数，9:16/1:1/16:9 三档）、`bilingual`（双语对照，translate_clip 任务参数）/`translation_track`（对照轨）、`fork`（派生新版本 vs 就地改写标记）、`promptHint`（示例提示词引导句，按卡 i18n 键）。
 
 ## 10. Prohibited Behaviors
 

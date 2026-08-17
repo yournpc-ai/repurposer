@@ -12,7 +12,7 @@ truth for recipe cards.
 Every consumer reads the same package: the card face, the inspect overlay
 (= the package's renderer, docs/tasks/results-workspace.md D6), and the
 composer prefill. Static registry deployed with code — SKILL_REGISTRY 同款
-纪律 (NAMING §5, N-25): NOT a plugin system, NOT a table.
+纪律 (NAMING §5, N-39): NOT a plugin system, NOT a table.
 
 **发射 = 提示词** (2026-08-11 ruling): a recipe launch's ENTIRE behavioral
 payload is the prefilled prompt template — the card's identity never crosses

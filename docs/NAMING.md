@@ -91,6 +91,17 @@
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |
 | 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037/038，N-27）：身份卡 + 风格 + 策略 + 声音 + 皮肤块（`brand`），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族。【已拍板重构（ADR-042 / `POSITIONING.md`，未实施）：根升格为「定位 `positioning`」，人设收窄为表达分区（风格 + 声纹 + 皮肤）；落地时本行改写并登记 `positioning` / `topics`】 | 不是 speaker——`speaker` 只指素材里说话的人（`speaker_map` 合法居民）；不是 IP（承诺层词，禁入英文文案） |
+| 轨道 | `track` | clip-spec 的命名分区 = 轨道注册表一条声明（ADR-044）；**裸用违规，必须带家族限定**（主轨/数据轨/层/块轨，N-38） | 不是 NLE 自由轨；用户永不见轨 |
+| 主轨 | main track | `source` + `segments`，输出 = 数组序连接；唯一持剪辑语义（hidden/trim/reorder）的轨 | — |
+| 段 | `segment` | 主轨一行：`{id, asset_id?（缺省=主源）, start, end, hidden}`；异源插入 = 带 asset_id 的段 | 不是 block（讨论期占位词，草稿阶段死亡） |
+| 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption（词级）/ translation（单元级）/ crop（关键帧采样）；按 sourceTime 采样 | 不是层；不参与叠放 |
+| 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举注册（broll / text_callout / pip / motion_graphic），z 序渲染；条目可带 `source_ref` 回放（PiP）与 `provenance`（必填，ADR-026） | 不是自由轨；不叫 overlay（UI 浮层词，N-27 同型避让） |
+| 锚 | `anchor` | 层条目的语义挂接：段锚（`{segment_id + 源偏移}`）/ 边锚（`{head\|tail + 偏移}`，intro/outro 本质即边锚块）/ 比例锚（`{ratio}`）；输出时间由泳道投影派生，不落库 | 不是时间码 |
+| 过渡 | `transition` | 段的进场边效果枚举（none/fade/dip，2-3 封顶），挂段随换序走 | 不是转场画廊 |
+| 块轨 | block track | 单值轨，输出时间轴：music / dub / title / 头尾卡；dub⇄原声互斥在注册表声明，不写死渲染器 | — |
+| 轨道注册表 | `TRACK_REGISTRY` | 轨的唯一家（ADR-044）：catalog 住 `packages/clip`，TS 类型由它推导，Python 镜像只校验成员 + 消费声明；消费方（烘焙缝 / C2PA / 计价 / 寻址）全部 fold | 不是 spec 容器（`tracks:{}` 永拒，收益证伪非兼容妥协） |
+| 裁切轨 | `crop_track` | 第一个关键帧数据轨（family=data, timeline=source）：`{t, x, y, scale}` 按 sourceTime 采样；空轨 = 静态 `crop` 缺省（缺省语义，非兼容包袱） | 不是逐帧密轨；用户永不见 |
+| 说话人时间轴 | `speaker_map` | 素材级内部分析产物（谁在何时说话、在画面哪侧 + 素材形态归类），asset-hash 复用；crop_track 的上游（08-19 线，reframe 技能包同批） | 不进 SKILL_REGISTRY；用户永不见 |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 
@@ -117,7 +128,6 @@
 | N-23 | 品类词 = agent，空间词 = studio，两层分离 | 品类自称永远是 agent（PRD one-liner "An AI agent for knowledge experts"、hero "We do the rest"）；**studio 只做应用区空间名**（"你的工作室"），永不出现在品类陈述句（"Repurposer is a …"）——避免触发 CapCut/Descript 式工具功能数量对标（外部评审 Kimi 同判：叫 studio 就被拉进工具军备竞赛，叫 agent 比的是交付与省心）。空间名成立前提：房间内永不出现工具货架（多轨/特效/素材库），UI 保持 composer + 卡片、editor 薄化；中文"工作室"双关运营团队（明星工作室 = 替名人运营自媒体的班子），与 agent 定位咬合 | §1 |
 | N-24 | 品类词只用 `agent`，角色隐喻（运营官/操盘手/班子）全库退役 | 角色包装是话术 dressing：landing heroSubtitle 自称 "an AI agent"，PRD 曾写 "content-operations officer"——一份产品两个自称，朴素品类词胜出（2026-08-01 用户裁决）。PRD one-liner / CLAUDE.md 定位条 / N-22·N-23 引述同步清洗；"运营官"承载的洞察（用户不懂自媒体、产品指导并孵化其 IP）保留在 CLAUDE.md 定位条，仅标签退役 | §1 |
 | N-25 | 自称双轨：对内技术 = agent，对外文案 = assistant/助手（细化 N-24 适用范围） | "agent" 对非技术用户是行话（欧洲用户甚至会读成"经纪人/特工"）；技术实体不变——架构/PRD/CLAUDE.md/代码全用 agent，N-24 的隐喻禁令不变；hero/showcase 等对外文案一律 assistant（EN）/ 助手或代词"它"（zh，zh 优先代词）（2026-08-01 用户裁决）。对外文案中出现 "agent" 字样即违规 | §1、§6 |
-| N-25 | mention 系统双端注册表化；配方发射 = 预填模板原文 | 配方不是 mention（MENTIONS §3）——发射的全部行为载荷 = 配方卡的预填 prompt 模板（模板点名产出与语言），无 transport 字段、无服务端播种，plan path 与 composer 完全同径（2026-08-11 裁定：配方 = 提示词，ADR-040）；客户端 prior 构造路径禁建，服务端永不见配方身份。提及类型与效果各自注册表化（asset 为成员；recipe 类型成员保留供历史消息 chip 渲染），后续 @ 类型只填注册项，禁类型分支补丁；"硬编码"表述禁——正确表述是"静态注册表，随代码部署"（SKILL_REGISTRY 同款纪律） | §1、§5 |
 | N-26 | chat 流式词族：delta = 散文预览增量，envelope = 终帧信封 | 流式三层各一词：LLM 原始片 = fragment（`on_delta(fragment)` 入提取器）；解码后散文增量 = **delta**（SSE 帧 `assistant.delta`，纯预览，非事实源）；终帧 = **envelope**（`turn.completed`/`turn.failed`，完整 ChatResponse，永远权威）。机制名：`ProseDeltaExtractor`（唯一散文提取入口）、`MiniMaxClient.generate_stream`、service 拆分 `prepare_chat_turn`/`execute_chat_turn`、前端 `streamChat`。禁 chunk/token 混用（chunk 是 HTTP/LLM 传输单位，token 是计费单位，delta 才是渲染单位）（ADR-034） | §1、§5 |
 | N-27 | 身份模块正名：Speaker → 人设 / `Persona`；`speaker` 让位素材说话人 | 定位升级后"演讲者"前提崩塌（素材 = 会议/报告/播客，不只是演讲）+ 一词三义（用户身份画像 / `speaker_map` 素材里说话的人 / landing 普通词 speakers）。用户面 zh「人设」/ en「Persona」、代码 `persona`，三层同词族；`speaker` 此后只指素材里说话的人（`speaker_map` 合法居民）；**IP = 承诺层词，禁入英文文案**（en 叙事 = personal brand / thought leadership），不进产品内导航（ADR-037） | §1、§6 |
 | N-28 | 人设吸收 Brand：`brand_templates` 退役，皮肤 = `persona.brand` | 多人设拍板反转拆分理由（一人多号 = 多人设各带皮肤）；`config` 杂物抽屉三分流——皮肤→`brand` 块、工艺开关（removeFiller/captionEnabled/aspect/fillMode）→配方/任务书默认、CTA 唯一家 = `persona.cta`；**`brand` 全栈一词**（人设块 / 烘焙 / clip-spec 段同名）——模块退役词不退役，不引入 `look` 字段名（避免撞 RECIPES §4.4 look 层组合概念）；composer 单身份控件；失去独立表归属即失去模块资格（§7 逆用）（ADR-038） | §1、§7 |
@@ -130,6 +140,8 @@
 | N-35 | kind 与技能同名 | 技能包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
 | N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
 | N-37 | 产物请求语法 = 技能链；`IntentSlot` / 簿级修饰符 / 三方合并退役 | outputs 槽位语法诞生于提取族时代（请求层 schema = 产物清单），「给我的视频加字幕」被迫表达为高光提取（任务卡「视频片段 ×2」病灶）。收敛（ADR-043）：意图面唯一语法 = task list（plan path 与 chat loop 同一词汇）；产物 = 编译图的派生投影（`derived` 预览行），类型词汇仍由节点 `output_type` 派生（N-32 不变）；面板编辑 = task list 直接结构编辑，整链 ride prior_intent，chat 恒胜——merge 机械无对象自然死亡；悬空变换编译期 422 指名拒绝（禁静默丢弃）；存量 pending_intent / run.context 行读容忍升级，只读不写 | §1、§5 |
+| N-38 | `track` 必须带家族限定，裸用违规 | 轨道四家分（主轨/数据轨/层/块轨，ADR-044）后，"加条轨"在散文与代码里必须说清是哪一家；N-11（裸 plan）同型判例 | §1 |
+| N-39 | mention 系统双端注册表化；配方发射 = 预填模板原文 | 配方不是 mention（MENTIONS §3）——发射的全部行为载荷 = 配方卡的预填 prompt 模板（模板点名产出与语言），无 transport 字段、无服务端播种，plan path 与 composer 完全同径（2026-08-11 裁定：配方 = 提示词，ADR-040）；客户端 prior 构造路径禁建，服务端永不见配方身份。提及类型与效果各自注册表化（asset 为成员；recipe 类型成员保留供历史消息 chip 渲染），后续 @ 类型只填注册项，禁类型分支补丁；"硬编码"表述禁——正确表述是"静态注册表，随代码部署"（SKILL_REGISTRY 同款纪律）。（原编号 N-25，与自称双轨判例重号，2026-08-17 改号） | §1、§5 |
 
 ## 4. API 命名
 

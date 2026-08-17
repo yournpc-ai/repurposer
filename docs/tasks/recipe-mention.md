@@ -1,6 +1,6 @@
 # recipe-mention 实施简报——提及注册表架构 + 配方卡 chip 形态（Remix 复亮）
 
-> Status: 🗄 部分退役（2026-08-11）：**mention 注册表架构保留**（`asset` 等成员照旧，双端纪律不变），**recipe 成员退役**——配方不是 mention，是发射上下文（`recipe_id` 载荷），原因与判定归 `docs/MENTIONS.md` §3，落地归 `docs/tasks/recipe-launch-context.md`；本文余下章节中 recipe chip / `resolve_recipe_mentions` 的表述均为历史记录。（原状态：2026-08-01 设计定稿；期 1 已落地 2026-08-02：双端注册表 + GET /recipes + chip/picker + composer 接线 + /intent 解析 + parked 机械删除 + dub 卡复亮；e2e 已验：pin→pending_intent→compile_graph 三 dub fork、422 拒收矩阵、无钉回归；同日完全体提前：文本内联 chip（MentionEditor）落地；2026-08-04 pin 时机随意图层单面化自 /intent 迁入 chat plan path；2026-08-05 语义修订：配方=预设，不是钉——播种改存在性填充，NAMING N-25 已加注）
+> Status: 🗄 部分退役（2026-08-11）：**mention 注册表架构保留**（`asset` 等成员照旧，双端纪律不变），**recipe 成员退役**——配方不是 mention，是发射上下文（`recipe_id` 载荷），原因与判定归 `docs/MENTIONS.md` §3，落地归 `docs/tasks/recipe-launch-context.md`；本文余下章节中 recipe chip / `resolve_recipe_mentions` 的表述均为历史记录。（原状态：2026-08-01 设计定稿；期 1 已落地 2026-08-02：双端注册表 + GET /recipes + chip/picker + composer 接线 + /intent 解析 + parked 机械删除 + dub 卡复亮；e2e 已验：pin→pending_intent→compile_graph 三 dub fork、422 拒收矩阵、无钉回归；同日完全体提前：文本内联 chip（MentionEditor）落地；2026-08-04 pin 时机随意图层单面化自 /intent 迁入 chat plan path；2026-08-05 语义修订：配方=预设，不是钉——播种改存在性填充，NAMING N-39 已加注）
 > 依据：`docs/RECIPES.md` §7（卡片层，2026-08-01 修订）/§10（禁令）；`CHAT_ARCHITECTURE.md` §7（mentions）/§1（单一入口）；`NAMING.md`（宪法 §1/§5 + §5 审计触发）
 > 迁移：**零表迁移**——提及住既有 `messages.mentions` JSONB 列；配方注册表是代码层静态注册表（SKILL_REGISTRY 同款纪律），随代码部署
 > 用户裁决（2026-08-01，RECIPES 头部⑤）：① 配方交互形态 = Opus 式 composer mention（否全屏模态框）；② mention 系统做成**可扩展注册表架构**，功能只开放 recipe，后续 @ 类型 = 填注册项，**禁技巧性补丁**；③ DAG 永不外显，"编辑流程"的等价物 = chat（plan 级 ops + 子图词汇，闭环链线）
@@ -135,7 +135,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 
 ## 4. 命名审计
 
-- `MENTION_REGISTRY`（提及注册表，前端）/ `RECIPE_REGISTRY`（配方注册表，服务端）/ `input_slots`（输入槽位）/ mention type `"recipe"`——全部进 NAMING §2 词汇表；判例 N-25（任务书钉死归服务端注册表解析）。
+- `MENTION_REGISTRY`（提及注册表，前端）/ `RECIPE_REGISTRY`（配方注册表，服务端）/ `input_slots`（输入槽位）/ mention type `"recipe"`——全部进 NAMING §2 词汇表；判例 N-39（任务书钉死归服务端注册表解析）。
 - 注册表纪律沿用 NAMING §5（枚举 = String 列 + 应用层注册表校验）：mention type 的 Literal 校验 + 注册表双守门。
 - 无黑名单后缀（§3）；无新包（§7：recipes.py 住 pipeline，routes 入住模块先例 N-06）。
 - "硬编码"一词随本次重构从配方线文档/注释清除——正确表述是**静态注册表，随代码部署**（SKILL_REGISTRY 同款）。
