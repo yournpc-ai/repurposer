@@ -216,24 +216,19 @@ def total_output_seconds(
 
     Per-family contribution logic lives here once; the registry declares the
     field homes: the sequence family's kept segments + the intro_outro
-    block's card seconds. Unknown tracks contribute nothing (and never crash
-    the fold).
+    block's card seconds (arithmetic shared with the lane-projection mirrors
+    in app/pipeline/clip_spec.py). Unknown tracks contribute nothing (and
+    never crash the fold).
     """
+    from app.pipeline.clip_spec import intro_seconds, outro_seconds, video_duration_seconds
+
     reg = TRACKS if tracks is None else tracks
     total = 0.0
-    segments = spec.get("segments", []) if "segments" in reg["main"].fields else []
-    total += sum(
-        max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
-        for s in segments
-        if not s.get("hidden")
-    )
-    brand = spec.get("brand") if "brand" in reg["intro_outro"].fields else None
-    if isinstance(brand, dict):
-        for card_key, default in (("intro", 2.0), ("outro", 2.0)):
-            card = brand.get(card_key)
-            if isinstance(card, dict):
-                total += float(card.get("duration_seconds") or default)
-    return total if total > 0 else 1 / 30.0
+    if "segments" in reg["main"].fields:
+        total += video_duration_seconds(spec)
+    if "brand" in reg["intro_outro"].fields:
+        total += intro_seconds(spec) + outro_seconds(spec)
+    return total if total > 0 else 1 / 30.0  # >= a frame (COMPOSITION_FPS=30)
 
 
 def track_of_field(field: str, *, tracks: dict[str, TrackDef] | None = None) -> str | None:

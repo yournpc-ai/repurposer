@@ -319,3 +319,125 @@ def set_trim(spec: ClipSpec, start: float, end: float) -> ClipSpec:
     segments[kept_idx[0]] = segments[kept_idx[0]].model_copy(update={"start": start})
     segments[kept_idx[-1]] = segments[kept_idx[-1]].model_copy(update={"end": end})
     return spec.model_copy(update={"segments": segments})
+
+
+# ---------------------------------------------------------------------------
+# Lane projection mirrors (存法 C, ADR-044) — Python twins of the TS lane
+# projection (packages/clip/src/types.ts; snake_case per NAMING §1). Dict-based:
+# the seams carry render_spec JSONB, not models. The output clock computed here
+# is a compile artifact — never persisted.
+# ---------------------------------------------------------------------------
+
+# Mirror TS INTRO_SECONDS / OUTRO_SECONDS (brand card default durations).
+INTRO_SECONDS = 2.0
+OUTRO_SECONDS = 2.0
+
+
+def intro_seconds(spec: dict) -> float:
+    """Intro card duration (0 when no brand intro card). TS: introSeconds."""
+    brand = spec.get("brand")
+    card = brand.get("intro") if isinstance(brand, dict) else None
+    if not isinstance(card, dict):
+        return 0.0
+    return float(card.get("duration_seconds") or INTRO_SECONDS)
+
+
+def outro_seconds(spec: dict) -> float:
+    """Outro card duration (0 when no brand outro card). TS: outroSeconds."""
+    brand = spec.get("brand")
+    card = brand.get("outro") if isinstance(brand, dict) else None
+    if not isinstance(card, dict):
+        return 0.0
+    return float(card.get("duration_seconds") or OUTRO_SECONDS)
+
+
+def video_duration_seconds(spec: dict) -> float:
+    """Kept video duration (cards excluded). TS: videoDurationSeconds."""
+    return sum(
+        max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
+        for s in spec.get("segments") or []
+        if isinstance(s, dict) and not s.get("hidden")
+    )
+
+
+def video_timeline(spec: dict) -> list[dict]:
+    """Kept segments on the video-local output clock. TS: videoTimeline.
+
+    Each entry: ``{"segment": <the spec dict>, "out_start": float, "dur": float}``.
+    """
+    entries: list[dict] = []
+    acc = 0.0
+    for s in spec.get("segments") or []:
+        if not isinstance(s, dict) or s.get("hidden"):
+            continue
+        dur = max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
+        entries.append({"segment": s, "out_start": acc, "dur": dur})
+        acc += dur
+    return entries
+
+
+def source_time_at_output_time(spec: dict, output_seconds: float) -> float | None:
+    """Output → source remap. TS: sourceTimeAtOutputTime.
+
+    Which SOURCE second shows at this FULL-CLOCK output second (intro card
+    included). None outside the video portion. Transition veils are visual
+    overlays — they never shift the mapping (single-sided, no time eat).
+    """
+    local = output_seconds - intro_seconds(spec)
+    if local < 0 or local >= video_duration_seconds(spec):
+        return None
+    for entry in video_timeline(spec):
+        if entry["out_start"] <= local < entry["out_start"] + entry["dur"]:
+            seg = entry["segment"]
+            return float(seg["start"]) + (local - entry["out_start"])
+    return None
+
+
+def output_time_at_source_time(spec: dict, source_seconds: float) -> float | None:
+    """Source → output remap. TS: outputTimeAtSourceTime.
+
+    The FULL-CLOCK output second at which this source second appears. None
+    when the source second is cut (hidden) or uncovered.
+    """
+    for entry in video_timeline(spec):
+        seg = entry["segment"]
+        if float(seg["start"]) <= source_seconds < float(seg["end"]):
+            return intro_seconds(spec) + entry["out_start"] + (source_seconds - float(seg["start"]))
+    return None
+
+
+def project_layer_windows(spec: dict) -> dict:
+    """Layer lane projection. TS: projectLayers.
+
+    Resolve every layer's anchor to a full-clock output window clamped to the
+    video portion. Unresolvable anchors (segment deleted/hidden) land in
+    ``unresolved`` — the stored anchor is never rewritten (non-destructive).
+    """
+    intro = intro_seconds(spec)
+    video_dur = video_duration_seconds(spec)
+    timeline = video_timeline(spec)
+    resolved: list[dict] = []
+    unresolved: list[dict] = []
+    for layer in spec.get("layers") or []:
+        anchor = layer.get("anchor") or {}
+        offset = float(anchor.get("offset_seconds") or 0.0)
+        anchor_out: float | None = None
+        kind = anchor.get("kind")
+        if kind == "segment":
+            entry = next(
+                (t for t in timeline if t["segment"].get("id") == anchor.get("segment_id")),
+                None,
+            )
+            if entry is not None:
+                anchor_out = intro + entry["out_start"] + min(max(0.0, offset), entry["dur"])
+        elif kind == "edge":
+            anchor_out = intro + video_dur - offset if anchor.get("edge") == "tail" else intro + offset
+        elif kind == "ratio":
+            anchor_out = intro + float(anchor.get("ratio") or 0.0) * video_dur
+        if anchor_out is None:
+            unresolved.append(layer)
+            continue
+        start = min(max(anchor_out, intro), intro + video_dur)
+        end = min(start + float(layer.get("duration_seconds") or 0.0), intro + video_dur)
+        resolved.append({"layer": layer, "window": {"start": start, "end": end}})
+    return {"resolved": resolved, "unresolved": unresolved}

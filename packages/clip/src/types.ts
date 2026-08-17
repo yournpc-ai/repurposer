@@ -271,6 +271,99 @@ export const totalDurationSeconds = (spec: ClipSpec): number => {
   return total > 0 ? total : 1 / COMPOSITION_FPS;
 };
 
+// ---------------------------------------------------------------------------
+// Lane projection (存法 C, ADR-044): the storage truth is anchors + per-segment
+// source spans; the OUTPUT clock below is a compile artifact — computed here,
+// never persisted. Python mirror: app/pipeline/clip_spec.py (snake_case twins).
+// ---------------------------------------------------------------------------
+
+/** One kept segment laid out on the VIDEO-LOCAL output clock. */
+export interface TimelineEntry {
+  seg: ClipSegment;
+  /** Output seconds (video-local, intro excluded) where this segment starts. */
+  outStart: number;
+  dur: number;
+}
+
+/** Kept segments concatenated onto the video-local output clock, in order. */
+export const videoTimeline = (spec: ClipSpec): TimelineEntry[] => {
+  let acc = 0;
+  return keptSegments(spec).map((seg) => {
+    const dur = Math.max(0, seg.end - seg.start);
+    const entry = { seg, outStart: acc, dur };
+    acc += dur;
+    return entry;
+  });
+};
+
+/**
+ * Output → source remap (single home): which SOURCE second shows at this
+ * FULL-CLOCK output second (intro card included in the clock). Null when the
+ * output second sits outside the video portion — a transition veil is a
+ * visual overlay and does not shift the mapping (single-sided, no time eat).
+ */
+export const sourceTimeAtOutputTime = (spec: ClipSpec, outputSeconds: number): number | null => {
+  const local = outputSeconds - introSeconds(spec);
+  if (local < 0 || local >= videoDurationSeconds(spec)) return null;
+  const entry = videoTimeline(spec).find((t) => local >= t.outStart && local < t.outStart + t.dur);
+  return entry ? entry.seg.start + (local - entry.outStart) : null;
+};
+
+/**
+ * Source → output remap: the FULL-CLOCK output second at which this source
+ * second appears. Null when the source second is cut (hidden) or uncovered.
+ */
+export const outputTimeAtSourceTime = (spec: ClipSpec, sourceSeconds: number): number | null => {
+  const entry = videoTimeline(spec).find(
+    (t) => sourceSeconds >= t.seg.start && sourceSeconds < t.seg.end,
+  );
+  return entry ? introSeconds(spec) + entry.outStart + (sourceSeconds - entry.seg.start) : null;
+};
+
+/** A layer with its anchor resolved to a full-clock output window. */
+export interface ProjectedLayer {
+  layer: ClipLayer;
+  /** Full-clock output seconds [start, end]; clamped to the video portion. */
+  window: { start: number; end: number };
+}
+
+/**
+ * Layer lane projection: resolve every layer's anchor to its output window.
+ * Unresolvable anchors (segment deleted/hidden, malformed form) come back in
+ * `unresolved` — the stored anchor is never rewritten, the item is simply not
+ * rendered (non-destructive, like a hidden segment).
+ */
+export const projectLayers = (
+  spec: ClipSpec,
+): { resolved: ProjectedLayer[]; unresolved: ClipLayer[] } => {
+  const intro = introSeconds(spec);
+  const videoDur = videoDurationSeconds(spec);
+  const timeline = videoTimeline(spec);
+  const resolved: ProjectedLayer[] = [];
+  const unresolved: ClipLayer[] = [];
+  for (const layer of spec.layers ?? []) {
+    const a = layer.anchor;
+    let anchorOut: number | null = null;
+    if (a.kind === "segment") {
+      const entry = timeline.find((t) => t.seg.id === a.segment_id);
+      if (entry) anchorOut = intro + entry.outStart + Math.min(Math.max(0, a.offset_seconds), entry.dur);
+    } else if (a.kind === "edge") {
+      anchorOut = a.edge === "tail" ? intro + videoDur - a.offset_seconds : intro + a.offset_seconds;
+    } else if (a.kind === "ratio") {
+      anchorOut = intro + (a.ratio ?? 0) * videoDur;
+    }
+    if (anchorOut === null) {
+      unresolved.push(layer);
+      continue;
+    }
+    // Clamp to the video portion — a layer never bleeds into the brand cards.
+    const start = Math.min(Math.max(anchorOut, intro), intro + videoDur);
+    const end = Math.min(start + layer.duration_seconds, intro + videoDur);
+    resolved.push({ layer, window: { start, end } });
+  }
+  return { resolved, unresolved };
+};
+
 /**
  * Non-destructively remove a source time range [start, end] (transcript "delete
  * sentence" = cut): the overlapped part of each kept segment becomes a `hidden`

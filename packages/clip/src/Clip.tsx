@@ -11,13 +11,16 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import type { CaptionCue, ClipSpec, IntroOutroCard, Point } from "./types";
+import type { CaptionCue, ClipLayer, ClipSpec, IntroOutroCard, Point, SegmentTransition } from "./types";
 import {
   COMPOSITION_FPS,
   introSeconds,
-  keptSegments,
+  outputTimeAtSourceTime,
   outroSeconds,
+  projectLayers,
+  sourceTimeAtOutputTime,
   videoDurationSeconds,
+  videoTimeline,
 } from "./types";
 import { captionPreset, type CaptionEntrance } from "./captions";
 import { fontFamilyFor } from "./fonts";
@@ -166,6 +169,76 @@ function IntroOutroCardView({
   );
 }
 
+/**
+ * A layer-track item (ADR-044): one render branch by MEDIA type
+ * (video/image/text) — the layer `kind` is authoring/check metadata, the
+ * renderer never branches on it. Position comes from the layer's rect;
+ * the output window was projected from its anchor (projectLayers).
+ */
+function LayerView({ layer, fontFamily }: { layer: ClipLayer; fontFamily: string }) {
+  const { height } = useVideoConfig();
+  const media = layer.media;
+  const style: React.CSSProperties = {
+    position: "absolute",
+    left: `${layer.rect.x * 100}%`,
+    top: `${layer.rect.y * 100}%`,
+    width: `${layer.rect.w * 100}%`,
+    height: `${layer.rect.h * 100}%`,
+  };
+  if (media?.kind === "video" && media.url) {
+    return <OffthreadVideo src={media.url} style={{ ...style, objectFit: "cover" }} />;
+  }
+  if (media?.kind === "image" && media.url) {
+    return <Img src={media.url} style={{ ...style, objectFit: "cover" }} />;
+  }
+  if (media?.kind === "text" && media.text) {
+    return (
+      <div
+        style={{
+          ...style,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          textAlign: "center",
+          color: "#ffffff",
+          fontFamily,
+          fontSize: Math.round(52 * (height / 1920)),
+          fontWeight: 700,
+          lineHeight: 1.25,
+          WebkitTextStroke: "2px rgba(0,0,0,0.55)",
+          textShadow: "0 2px 10px rgba(0,0,0,0.6)",
+        }}
+      >
+        {media.text}
+      </div>
+    );
+  }
+  return null;
+}
+
+/**
+ * Entry-edge transition veil (fade = from black, dip = white flash): a
+ * single-sided overlay on the incoming segment's first frames — no timeline
+ * time is consumed (two-sided xfade mechanics are the L3 gallery, banned).
+ * Sits above the main media, below layers/title/captions.
+ */
+const TRANSITION_FRAMES: Record<Exclude<SegmentTransition, "none">, number> = {
+  fade: 12, // ~0.4s @30fps
+  dip: 8, // ~0.27s white flash
+};
+
+function TransitionVeil({ kind }: { kind: Exclude<SegmentTransition, "none"> }) {
+  const local = useCurrentFrame(); // Sequence-relative
+  const frames = TRANSITION_FRAMES[kind];
+  const opacity = interpolate(local, [0, frames], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <AbsoluteFill style={{ backgroundColor: kind === "dip" ? "#ffffff" : "#000000", opacity }} />
+  );
+}
+
 export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
@@ -199,26 +272,26 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const localOutput = outputTime - introDur; // time within the video portion
   const inVideo = localOutput >= 0 && localOutput < videoTotal;
 
-  // Concatenated video timeline of kept segments (local time; gaps for cuts).
-  const kept = keptSegments(spec);
-  let acc = 0;
-  const timeline = kept.map((seg) => {
-    const dur = Math.max(0, seg.end - seg.start);
-    const entry = { seg, outStart: acc, dur };
-    acc += dur;
-    return entry;
-  });
+  // Concatenated video timeline of kept segments (video-local output clock) —
+  // the lane projection is a compile artifact (存法 C), computed by the single
+  // home in types.ts, never persisted.
+  const timeline = videoTimeline(spec);
 
   const current =
     timeline.find((t) => localOutput >= t.outStart && localOutput < t.outStart + t.dur) ??
     timeline[timeline.length - 1];
-  const sourceTime = current ? current.seg.start + (localOutput - current.outStart) : 0;
+  const mappedSource = sourceTimeAtOutputTime(spec, outputTime);
+  const sourceTime =
+    mappedSource ??
+    (current
+      ? current.seg.start + Math.min(Math.max(0, localOutput - current.outStart), current.dur)
+      : 0);
   // Hetero main-track splice (切 op, ADR-044): a segment carrying its own
   // asset_id/url plays from its donor source — its [start,end] offsets live in
   // the DONOR's timeline, so the main source's captions must not match it.
   const onMainSource = Boolean(current && !current.seg.asset_id && !current.seg.url);
   const hasSource = Boolean(
-    timeline.length > 0 && (spec.source.url || kept.some((s) => s.url)),
+    timeline.length > 0 && (spec.source.url || timeline.some((t) => t.seg.url)),
   );
 
   // "stills" audiogram: image[s] backing + optional speech audio. The visual is
@@ -252,16 +325,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
 
   const captionsEnabled = spec.caption_enabled !== false;
   // Frame at which a line's first cue becomes visible in OUTPUT time — the
-  // inverse of the sourceTime mapping above. Per-line so both layouts can
-  // drive entrance animations: `single` animates the active line, `stack`
-  // animates each revealed line by its own reveal frame.
+  // inverse remap's single home (types.ts outputTimeAtSourceTime). Per-line so
+  // both layouts can drive entrance animations: `single` animates the active
+  // line, `stack` animates each revealed line by its own reveal frame.
   const lineRevealFrame = (line: CaptionCue[]): number => {
     if (line.length === 0) return 0;
-    const cueStart = line[0].start;
-    const seg = timeline.find((t) => cueStart >= t.seg.start && cueStart <= t.seg.end) ?? current;
-    if (!seg) return 0;
-    const revealLocalOutput = seg.outStart + Math.max(0, cueStart - seg.seg.start);
-    return Math.round((introDur + revealLocalOutput) * fpsv);
+    const out = outputTimeAtSourceTime(spec, line[0].start);
+    return out === null ? 0 : Math.round(out * fpsv);
   };
   const revealFrame = lineRevealFrame(activeLine);
 
@@ -398,6 +468,33 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
           </AbsoluteFill>
         </Sequence>
       ) : null}
+
+      {/* Entry-edge transition veils: above the main media, below layers/text. */}
+      {timeline
+        .filter((t) => t.seg.transition !== "none")
+        .map((t) => (
+          <Sequence
+            key={t.seg.id}
+            from={introFrames + Math.round(t.outStart * fpsv)}
+            durationInFrames={TRANSITION_FRAMES[t.seg.transition as Exclude<SegmentTransition, "none">]}
+            layout="none"
+          >
+            <TransitionVeil kind={t.seg.transition as Exclude<SegmentTransition, "none">} />
+          </Sequence>
+        ))}
+
+      {/* Layer track: anchor-projected windows (compile artifact), one render
+          branch by media type inside LayerView. */}
+      {projectLayers(spec).resolved.map(({ layer, window }) => (
+        <Sequence
+          key={layer.id}
+          from={Math.round(window.start * fpsv)}
+          durationInFrames={Math.max(1, Math.round((window.end - window.start) * fpsv))}
+          style={{ zIndex: layer.z }}
+        >
+          <LayerView layer={layer} fontFamily={captionFont} />
+        </Sequence>
+      ))}
 
       {brand?.intro ? (
         <Sequence from={0} durationInFrames={introFrames} layout="none">
