@@ -492,7 +492,7 @@ const zh: Resources = {
     },
     "highlight-clips": {
       title: "高光切片",
-      promise: "长视频里最好的那几段剪成竖屏短片——镜头自动跟人，哪段最值得先发也标出来。",
+      promise: "长视频里最好的几段剪成竖屏短片——镜头自动跟人，最值得先发的也标出来。",
       inputTitle: "原始视频",
       inputHint: "演讲、会议、访谈录像都行——中景画面效果最好。",
       promptTemplate: "帮我把这个视频里最好的几段剪出来，做成竖屏短片，镜头跟着人走。",

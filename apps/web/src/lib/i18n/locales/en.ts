@@ -483,7 +483,7 @@ const en = {
     "multilingual-subs": {
       title: "Multilingual subtitles",
       promise:
-        "Multilingual single-line or bilingual subtitles for your video — or dub it in your own voice.",
+        "Single-line or bilingual subtitles — or a dub in your own voice.",
       inputTitle: "Source video",
       inputHint: "Upload your original video here.",
       promptTemplate:
@@ -493,7 +493,7 @@ const en = {
     },
     "image-video": {
       title: "Photos to video",
-      promise: "No footage — photos plus your script become a captioned video with music.",
+      promise: "No footage — photos plus your script, with captions and music.",
       inputTitle: "Script and photos",
       inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
@@ -504,7 +504,7 @@ const en = {
     "highlight-clips": {
       title: "Highlight clips",
       promise:
-        "The best moments of your long video, cut into vertical clips — the frame tracks the speaker, and the one to post first is flagged.",
+        "Your long video's best moments as vertical clips — top pick flagged.",
       inputTitle: "Source video",
       inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
@@ -514,7 +514,7 @@ const en = {
     },
     reframe: {
       title: "Interview reframe",
-      promise: "Landscape two-person talk, recut vertical — camera follows the speaker.",
+      promise: "Two-person talk recut vertical — the camera follows the speaker.",
       inputTitle: "Input video",
       inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
