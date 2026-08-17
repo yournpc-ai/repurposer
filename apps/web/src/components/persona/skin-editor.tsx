@@ -194,7 +194,7 @@ function buildPreviewSpec(skin: SkinBlock): ClipSpec {
   return {
     source: { asset_id: "preview", kind: "stills", url: "", image_urls: [], fps: 30 },
     aspect: "9:16",
-    segments: [{ start: 0, end, hidden: false }],
+    segments: [{ id: "preview", start: 0, end, hidden: false }],
     crop: { x: 0.5, y: 0.5, scale: 1 },
     caption_track,
     caption_style_preset: skin.captionStylePreset,

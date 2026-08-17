@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import (
     AliasChoices,
@@ -1204,13 +1204,27 @@ class ClipSource(BaseModel):
 
 
 class ClipSegment(BaseModel):
-    """A kept span of the source. ``hidden=True`` is a non-destructive delete."""
+    """A kept span of a source. ``hidden=True`` is a non-destructive delete.
+
+    Widened (2026-08-17, ADR-044 操作集闭包): every segment carries a stable
+    ``id`` — the anchor-addressable entity identity — minted at birth and on
+    split (old persisted specs gain ids on the first validating read; the op
+    that persists them backfills the row). ``asset_id`` / ``url`` stay None
+    for the homogeneous default (the spec's own ``source``); a hetero
+    main-track splice (切 op) carries its donor's asset id + storage-seam
+    ``url`` resolved at write. ``provenance`` marks a generated segment
+    (None = real).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    asset_id: UUID | None = None
+    url: str | None = None
     start: float = Field(ge=0)
     end: float = Field(ge=0)
     hidden: bool = False
+    provenance: Literal["real", "generated"] | None = None
 
 
 class ClipCrop(BaseModel):

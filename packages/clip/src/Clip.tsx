@@ -213,7 +213,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     timeline.find((t) => localOutput >= t.outStart && localOutput < t.outStart + t.dur) ??
     timeline[timeline.length - 1];
   const sourceTime = current ? current.seg.start + (localOutput - current.outStart) : 0;
-  const hasSource = Boolean(spec.source.url && timeline.length > 0);
+  // Hetero main-track splice (切 op, ADR-044): a segment carrying its own
+  // asset_id/url plays from its donor source — its [start,end] offsets live in
+  // the DONOR's timeline, so the main source's captions must not match it.
+  const onMainSource = Boolean(current && !current.seg.asset_id && !current.seg.url);
+  const hasSource = Boolean(
+    timeline.length > 0 && (spec.source.url || kept.some((s) => s.url)),
+  );
 
   // "stills" audiogram: image[s] backing + optional speech audio. The visual is
   // an even hard-cut slideshow of the images (1 -> full-frame); empty -> the
@@ -225,10 +231,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const imageDurs = images.length > 0 ? splitFrames(images.length, videoFrames) : [];
 
   const lines = groupLines(spec.caption_track);
-  const activeLine =
-    lines.find((line) => sourceTime >= line[0].start && sourceTime <= line[line.length - 1].end) ??
-    lines.find((line) => sourceTime < line[0].start) ??
-    [];
+  const activeLine = !onMainSource
+    ? []
+    : (lines.find(
+          (line) => sourceTime >= line[0].start && sourceTime <= line[line.length - 1].end,
+        ) ??
+      lines.find((line) => sourceTime < line[0].start) ??
+      []);
 
   // 双语对照轨 (translation_track): unit-level translation cues paired with
   // the active original line by time overlap. Rendered as the PRIMARY line
@@ -237,9 +246,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   // a stacked bilingual wall doubles every line and reads as noise, so the
   // stack layout keeps the original track alone.
   const translationTrack = spec.translation_track ?? [];
-  const activeTranslation =
-    translationTrack.find((c) => sourceTime >= c.start && sourceTime <= c.end) ??
-    null;
+  const activeTranslation = !onMainSource
+    ? null
+    : (translationTrack.find((c) => sourceTime >= c.start && sourceTime <= c.end) ?? null);
 
   const captionsEnabled = spec.caption_enabled !== false;
   // Frame at which a line's first cue becomes visible in OUTPUT time — the
@@ -345,17 +354,21 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
               </Series>
             </AbsoluteFill>
           ) : null}
-          {!dubUrl && audioUrl && timeline.length > 0 ? (
+          {!dubUrl && timeline.length > 0 ? (
             <Series>
-              {timeline.map((t, i) => (
-                <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
-                  <Audio
-                    src={audioUrl}
-                    startFrom={Math.round(t.seg.start * fpsv)}
-                    endAt={Math.round(t.seg.end * fpsv)}
-                  />
-                </Series.Sequence>
-              ))}
+              {timeline.map((t, i) => {
+                // Hetero splice: the segment's own url is its donor's audio.
+                const segAudio = t.seg.url ?? audioUrl;
+                return segAudio ? (
+                  <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
+                    <Audio
+                      src={segAudio}
+                      startFrom={Math.round(t.seg.start * fpsv)}
+                      endAt={Math.round(t.seg.end * fpsv)}
+                    />
+                  </Series.Sequence>
+                ) : null;
+              })}
             </Series>
           ) : null}
         </Sequence>
@@ -372,7 +385,8 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
               {timeline.map((t, i) => (
                 <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                   <OffthreadVideo
-                    src={spec.source.url}
+                    // Hetero splice: the segment's own url is its donor's video.
+                    src={t.seg.url ?? spec.source.url}
                     muted={Boolean(dubUrl)}
                     startFrom={Math.round(t.seg.start * fpsv)}
                     endAt={Math.round(t.seg.end * fpsv)}

@@ -263,6 +263,11 @@ def remove_range(spec: ClipSpec, start: float, end: float) -> ClipSpec:
     part of each kept segment becomes a ``hidden`` segment (recoverable), and
     caption cues fully inside the range are dropped. Compromise (same as TS):
     cues are word/line-level, so a cue that straddles the boundary is kept.
+
+    Segment ids (ADR-044): the FIRST kept piece of a split segment inherits
+    the parent's id (anchors ride the surviving kept content); hidden pieces
+    and later kept pieces mint fresh ids. Hetero splices (asset_id/url) carry
+    their donor identity onto every piece.
     """
     if end <= start:
         return spec
@@ -276,11 +281,18 @@ def remove_range(spec: ClipSpec, start: float, end: float) -> ClipSpec:
         if a >= b:
             segments.append(s)
             continue
+        donor = {"asset_id": s.asset_id, "url": s.url, "provenance": s.provenance}
+        pieces: list[ClipSegment] = []
         if s.start < a:
-            segments.append(ClipSegment(start=s.start, end=a, hidden=False))
-        segments.append(ClipSegment(start=a, end=b, hidden=True))
+            pieces.append(ClipSegment(start=s.start, end=a, hidden=False, **donor))
+        pieces.append(ClipSegment(start=a, end=b, hidden=True, **donor))
         if b < s.end:
-            segments.append(ClipSegment(start=b, end=s.end, hidden=False))
+            pieces.append(ClipSegment(start=b, end=s.end, hidden=False, **donor))
+        # First kept piece keeps the parent id; the rest ride minted ids.
+        first_kept = next((p for p in pieces if not p.hidden), None)
+        if first_kept is not None:
+            first_kept.id = s.id
+        segments.extend(pieces)
     eps = 1e-6
     caption_track = [
         c for c in spec.caption_track if not (c.start >= start - eps and c.end <= end + eps)

@@ -31,7 +31,7 @@ class TrackDef:
     mutex: tuple[str, ...]  # mutually-exclusive slot labels
     pairs: tuple[str, ...]  # declared pairings (translation ⇄ caption)
     provenance: str  # real | generated (ADR-026)
-    url_fields: tuple[str, ...]  # dotted paths; "[*]" on the LEAF = every list item
+    url_fields: tuple[str, ...]  # dotted paths; "[*]" expands a list at that part
     checks: tuple[str, ...]  # deterministic craft checks (residents with skill packages)
     fields: tuple[str, ...]  # ClipSpec top-level keys this track owns (the partition)
 
@@ -41,7 +41,8 @@ TRACKS: dict[str, TrackDef] = {
         family="sequence", timeline="source",
         owner=("select_clips", "materialize_source"),
         mutex=(), pairs=(), provenance="real",
-        url_fields=("source.url", "source.image_urls[*]"),
+        # segments[*].url: hetero splice donor URLs (切 op) ride the same seam
+        url_fields=("source.url", "source.image_urls[*]", "segments[*].url"),
         checks=(),
         fields=("source", "segments", "aspect", "target_language"),
     ),
@@ -111,19 +112,28 @@ TRACKS: dict[str, TrackDef] = {
 def _iter_url_slots(spec: Any, path: str) -> Iterable[tuple[dict, str, bool]]:
     """Yield ``(dict_node, key, is_list)`` slots a dotted url path resolves to.
 
-    ``[*]`` is supported on the LEAF only (e.g. ``source.image_urls[*]``).
-    Missing/None intermediates yield nothing — an absent track has nothing to
-    resolve.
+    ``[*]`` expands a list at that path part (e.g. ``segments[*].url`` walks
+    every segment); on the LEAF (e.g. ``source.image_urls[*]``) the yielded
+    slot is the list itself. Missing/None intermediates yield nothing — an
+    absent track has nothing to resolve.
     """
     parts = path.split(".")
     frontier: list[Any] = [spec]
     for part in parts[:-1]:
+        is_list = part.endswith("[*]")
+        key = part[:-3] if is_list else part
         nxt: list[Any] = []
         for node in frontier:
-            if isinstance(node, dict):
-                value = node.get(part)
-                if value is not None:
-                    nxt.append(value)
+            if not isinstance(node, dict):
+                continue
+            value = node.get(key)
+            if value is None:
+                continue
+            if is_list:
+                if isinstance(value, list):
+                    nxt.extend(v for v in value if isinstance(v, dict))
+            else:
+                nxt.append(value)
         frontier = nxt
     leaf = parts[-1]
     if leaf.endswith("[*]"):
@@ -167,8 +177,13 @@ def spec_provenance(
 ) -> str:
     """ADR-026 classification fold: ``"generated"`` iff a track DECLARED
     generated is present-and-enabled in this spec (presence = a truthy field
-    value; a block carrying ``enabled: false`` is off and doesn't count).
+    value; a block carrying ``enabled: false`` is off and doesn't count) — or
+    any main-track segment is marked generated (a synthetic splice makes the
+    product synthetic media even though the main track's default is "real").
     """
+    for segment in spec.get("segments") or []:
+        if isinstance(segment, dict) and segment.get("provenance") == "generated":
+            return "generated"
     for track in (TRACKS if tracks is None else tracks).values():
         if track.provenance != "generated":
             continue

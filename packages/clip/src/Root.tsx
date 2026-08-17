@@ -14,7 +14,7 @@ import {
 export const DEFAULT_SPEC: ClipSpec = {
   source: { asset_id: "", kind: "video", url: "", fps: 30, image_urls: [] },
   aspect: "9:16",
-  segments: [{ start: 0, end: 1, hidden: false }],
+  segments: [{ id: "default", start: 0, end: 1, hidden: false }],
   crop: { x: 0.5, y: 0.5, scale: 1 },
   caption_track: [],
   caption_style_preset: "clean-bottom",

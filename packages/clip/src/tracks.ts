@@ -37,7 +37,7 @@ export interface TrackDef {
   /** Declared pairings (translation ⇄ caption — an existing coupling on record). */
   readonly pairs: readonly string[];
   readonly provenance: TrackProvenance;
-  /** Dotted spec paths the bake seam absolutizes; `[*]` on the LEAF = every list item. */
+  /** Dotted spec paths the bake seam absolutizes; `[*]` expands a list at that part. */
   readonly url_fields: readonly string[];
   /** Deterministic craft checks — residents arrive with their skill package. */
   readonly checks: readonly string[];
@@ -53,7 +53,8 @@ export const TRACK_REGISTRY = {
     mutex: [],
     pairs: [],
     provenance: "real",
-    url_fields: ["source.url", "source.image_urls[*]"],
+    // segments[*].url: hetero splice donor URLs (切 op) ride the same seam
+    url_fields: ["source.url", "source.image_urls[*]", "segments[*].url"],
     checks: [],
     fields: ["source", "segments", "aspect", "target_language"],
   },

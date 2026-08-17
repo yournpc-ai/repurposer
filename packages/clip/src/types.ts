@@ -50,11 +50,30 @@ export interface ClipSource {
 }
 
 export interface ClipSegment {
+  /**
+   * Stable entity identity — the anchor-addressable piece (ADR-044). Minted
+   * at birth / on split (server-side default factory backfills old specs on
+   * the first validating read).
+   */
+  id: string;
+  /**
+   * Hetero main-track splice (切 op): the donor asset + its storage-seam URL
+   * resolved at write. Both null = the homogeneous default (the spec's own
+   * `source`).
+   */
+  asset_id?: string | null;
+  url?: string | null;
   start: number;
   end: number;
   /** Non-destructive delete (transcript "delete sentence"). Skipped on render. */
   hidden: boolean;
+  /** "generated" marks a synthetic segment (None/absent = real). */
+  provenance?: "real" | "generated" | null;
 }
+
+/** Segment id mint — opaque 12-hex, same shape as the Python default factory. */
+export const mintSegmentId = (): string =>
+  crypto.randomUUID().replace(/-/g, "").slice(0, 12);
 
 export interface ClipCrop {
   /** Normalized center + scale; applied via CSS transform (not object-position). */
@@ -196,6 +215,11 @@ export const totalDurationSeconds = (spec: ClipSpec): number => {
  * Non-destructively remove a source time range [start, end] (transcript "delete
  * sentence" = cut): the overlapped part of each kept segment becomes a `hidden`
  * segment (recoverable), and caption cues inside the range are dropped.
+ *
+ * Segment ids (ADR-044): the FIRST kept piece of a split segment inherits the
+ * parent's id (anchors ride the surviving kept content); hidden pieces and
+ * later kept pieces mint fresh ids. Hetero splices (asset_id/url) carry their
+ * donor identity onto every piece. Mirror: app/pipeline/clip_spec.py.
  */
 export const removeRange = (spec: ClipSpec, start: number, end: number): ClipSpec => {
   if (end <= start) return spec;
@@ -211,9 +235,17 @@ export const removeRange = (spec: ClipSpec, start: number, end: number): ClipSpe
       segments.push(s);
       continue;
     }
-    if (s.start < a) segments.push({ start: s.start, end: a, hidden: false });
-    segments.push({ start: a, end: b, hidden: true });
-    if (b < s.end) segments.push({ start: b, end: s.end, hidden: false });
+    const donor = { asset_id: s.asset_id ?? null, url: s.url ?? null, provenance: s.provenance ?? null };
+    const pieces: ClipSegment[] = [];
+    if (s.start < a)
+      pieces.push({ id: mintSegmentId(), start: s.start, end: a, hidden: false, ...donor });
+    pieces.push({ id: mintSegmentId(), start: a, end: b, hidden: true, ...donor });
+    if (b < s.end)
+      pieces.push({ id: mintSegmentId(), start: b, end: s.end, hidden: false, ...donor });
+    // First kept piece keeps the parent id; the rest ride minted ids.
+    const firstKept = pieces.find((p) => !p.hidden);
+    if (firstKept && s.id) firstKept.id = s.id;
+    segments.push(...pieces);
   }
   const eps = 1e-6;
   const caption_track = spec.caption_track.filter(
