@@ -46,6 +46,7 @@ from app.pipeline.graph import (
 )
 from app.pipeline.recipes import RECIPE_REGISTRY
 from app.pipeline.step_context import _estimate_facts
+from app.pipeline.tracks import assert_single_writer_per_track
 from app.skills import SKILL_REGISTRY, SkillEntry, validate_task_list
 
 logger = structlog.get_logger()
@@ -682,6 +683,13 @@ async def create_run(
         target_type,
         add_stills_align=await _needs_stills_alignment(db, project, task),
         materialize_profile=await _materialize_profile(db, project, task),
+    )
+    # 一轨一写者 (ADR-044): within one run a clip-spec track takes at most one
+    # non-fork morph writer; a collision rejects HERE (ValueError → 422 at the
+    # entry points), never a runtime merge.
+    assert_single_writer_per_track(
+        ((ns.kind, ns.spec) for ns in node_specs),
+        lambda kind: bool(NODE_KINDS[kind].produces_outputs),
     )
     # 报价 = 图 fold 的存储侧 (P4, N-34): each compile-time node quotes
     # itself from the shared facts; an unquotable node keeps NULL (未估价).

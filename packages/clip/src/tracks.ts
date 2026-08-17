@@ -43,13 +43,19 @@ export interface TrackDef {
   readonly checks: readonly string[];
   /** The ClipSpec top-level keys this track owns (the partition). */
   readonly fields: readonly (keyof ClipSpec)[];
+  /**
+   * Tracks this one DERIVES from (ADR-044 派生轨失效声明): an op writing a
+   * dependency's fields makes this track stale (dub ⟵ main timeline).
+   */
+  readonly depends: readonly string[];
 }
 
 export const TRACK_REGISTRY = {
   main: {
     family: "sequence",
     timeline: "source",
-    owner: ["select_clips", "materialize_source"],
+    // births write it; remove_filler is the timeline's morph writer
+    owner: ["select_clips", "materialize_source", "remove_filler"],
     mutex: [],
     pairs: [],
     provenance: "real",
@@ -57,17 +63,21 @@ export const TRACK_REGISTRY = {
     url_fields: ["source.url", "source.image_urls[*]", "segments[*].url"],
     checks: [],
     fields: ["source", "segments", "aspect", "target_language"],
+    depends: [],
   },
   caption: {
     family: "data",
     timeline: "source",
-    owner: ["preprocess", "remove_filler"],
+    // preprocess writes the ASSET's words (birth input), never the spec
+    // post-birth — the spec track's sole morph writer is remove_filler
+    owner: ["remove_filler"],
     mutex: [],
     pairs: [],
     provenance: "real",
     url_fields: [],
     checks: [],
     fields: ["caption_track", "caption_style_preset", "caption_position", "caption_enabled"],
+    depends: [],
   },
   translation: {
     family: "data",
@@ -79,6 +89,7 @@ export const TRACK_REGISTRY = {
     url_fields: [],
     checks: [],
     fields: ["translation_track"],
+    depends: [],
   },
   crop: {
     family: "data",
@@ -93,6 +104,7 @@ export const TRACK_REGISTRY = {
     checks: [],
     // + "crop_track" on the 08-19 line — the boot partition check forces the registration
     fields: ["crop"],
+    depends: [],
   },
   layers: {
     family: "layer",
@@ -106,6 +118,7 @@ export const TRACK_REGISTRY = {
     // 08-19+ residents: broll min-dwell / callout contrast …
     checks: [],
     fields: ["layers"],
+    depends: [],
   },
   title: {
     family: "block",
@@ -117,6 +130,7 @@ export const TRACK_REGISTRY = {
     url_fields: [],
     checks: [],
     fields: ["title"],
+    depends: [],
   },
   music: {
     family: "block",
@@ -128,6 +142,7 @@ export const TRACK_REGISTRY = {
     url_fields: ["music.url"],
     checks: [],
     fields: ["music"],
+    depends: [],
   },
   dub: {
     family: "block",
@@ -139,6 +154,9 @@ export const TRACK_REGISTRY = {
     url_fields: ["dub.url"],
     checks: [],
     fields: ["dub"],
+    // The dub audio is one continuous file locked to the OUTPUT timeline —
+    // a main-timeline op (trim/cut/reorder/insert) desyncs it (ADR-044).
+    depends: ["main"],
   },
   intro_outro: {
     family: "block",
@@ -150,6 +168,7 @@ export const TRACK_REGISTRY = {
     url_fields: ["brand.intro.media_url", "brand.outro.media_url"],
     checks: [],
     fields: ["brand", "brand_ref"],
+    depends: [],
   },
 } as const satisfies Record<string, TrackDef>;
 

@@ -252,7 +252,7 @@ def _chat_intent_system() -> str:
     op_lines = "\n".join(
         f"- {name}: {opdef.description} (params: {list(opdef.params_model.model_fields)})"
         for name, opdef in OP_REGISTRY.items()
-        if opdef.client_allowed and not opdef.precomputed
+        if opdef.client_allowed and not opdef.precomputed and opdef.llm_visible
     )
     return (
         "You are the intent proposer of an AI content repurposing tool. "

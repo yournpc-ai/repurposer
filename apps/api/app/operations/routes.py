@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import DBDep, get_current_user_required
 from app.models.tables import Output, Project, User
 from app.operations import service
+from app.operations.registry import OP_REGISTRY
 from app.operations.service import OpConflict, OpRejected
+from app.pipeline.tracks import stale_tracks
 
 router = APIRouter()
 
@@ -109,9 +111,15 @@ async def apply_output_operations(
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
     except OpRejected as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    # 派生轨失效声明 (ADR-044): if the batch touched a track another present
+    # track derives from (a timeline op on a dubbed spec), name the stale
+    # tracks — the client surfaces the one-line notice (重配一句话), the
+    # spec is never a silent "legal lie".
+    written = [f for item in data.ops for f in OP_REGISTRY[item.op].writes]
     return {
         "output": _output_json(output),
         "operations": [_op_json(r) for r in rows],
+        "stale_tracks": stale_tracks(output.render_spec, written),
     }
 
 

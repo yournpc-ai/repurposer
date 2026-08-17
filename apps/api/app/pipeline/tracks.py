@@ -27,19 +27,23 @@ from typing import Any, Callable, Iterable
 class TrackDef:
     family: str  # sequence | data | layer | block
     timeline: str  # source | output | derived — declared, never implemented per-track
-    owner: tuple[str, ...]  # sole writer skill(s) post-birth
+    owner: tuple[str, ...]  # writer skill(s) post-birth (birth producers write any track)
     mutex: tuple[str, ...]  # mutually-exclusive slot labels
     pairs: tuple[str, ...]  # declared pairings (translation ⇄ caption)
     provenance: str  # real | generated (ADR-026)
     url_fields: tuple[str, ...]  # dotted paths; "[*]" expands a list at that part
     checks: tuple[str, ...]  # deterministic craft checks (residents with skill packages)
     fields: tuple[str, ...]  # ClipSpec top-level keys this track owns (the partition)
+    # Tracks this one DERIVES from (ADR-044 派生轨失效声明): an op writing a
+    # dependency's fields makes this track stale (dub ⟵ main timeline).
+    depends: tuple[str, ...] = ()
 
 
 TRACKS: dict[str, TrackDef] = {
     "main": TrackDef(
         family="sequence", timeline="source",
-        owner=("select_clips", "materialize_source"),
+        # births write it; remove_filler is the timeline's morph writer
+        owner=("select_clips", "materialize_source", "remove_filler"),
         mutex=(), pairs=(), provenance="real",
         # segments[*].url: hetero splice donor URLs (切 op) ride the same seam
         url_fields=("source.url", "source.image_urls[*]", "segments[*].url"),
@@ -48,7 +52,9 @@ TRACKS: dict[str, TrackDef] = {
     ),
     "caption": TrackDef(
         family="data", timeline="source",
-        owner=("preprocess", "remove_filler"),
+        # preprocess writes the ASSET's words (birth input), never the spec
+        # post-birth — the spec track's sole morph writer is remove_filler
+        owner=("remove_filler",),
         mutex=(), pairs=(), provenance="real",
         url_fields=(), checks=(),
         fields=("caption_track", "caption_style_preset", "caption_position", "caption_enabled"),
@@ -103,6 +109,9 @@ TRACKS: dict[str, TrackDef] = {
         url_fields=("dub.url",),
         checks=(),
         fields=("dub",),
+        # The dub audio is one continuous file locked to the OUTPUT timeline —
+        # a main-timeline op (trim/cut/reorder/insert) desyncs it (ADR-044).
+        depends=("main",),
     ),
     "intro_outro": TrackDef(
         family="block", timeline="output",
@@ -237,6 +246,87 @@ def track_of_field(field: str, *, tracks: dict[str, TrackDef] | None = None) -> 
         if field in track.fields:
             return name
     return None
+
+
+# ---- ops-closure helpers (ADR-044 D7) --------------------------------------
+
+
+def skill_written_tracks(kind: str, *, tracks: dict[str, TrackDef] | None = None) -> set[str]:
+    """The clip-spec tracks a skill writes post-birth: its owned tracks plus
+    their declared pairs (translate_clip → translation + caption)."""
+    written: set[str] = set()
+    for name, track in (TRACKS if tracks is None else tracks).items():
+        if kind in track.owner:
+            written.add(name)
+            written.update(track.pairs)
+    return written
+
+
+def track_present(spec: dict[str, Any], track: TrackDef) -> bool:
+    """The track has live content in this spec (a truthy field value; a block
+    carrying ``enabled: false`` is off and doesn't count)."""
+    for field in track.fields:
+        value = spec.get(field)
+        if not value:
+            continue
+        if isinstance(value, dict) and value.get("enabled") is False:
+            continue
+        return True
+    return False
+
+
+def stale_tracks(
+    spec: dict[str, Any],
+    written_fields: Iterable[str],
+    *,
+    tracks: dict[str, TrackDef] | None = None,
+) -> list[str]:
+    """派生轨失效声明 (ADR-044): given the spec fields an op batch just wrote,
+    the present-and-enabled tracks whose declared dependencies were touched —
+    e.g. a main-timeline op on a dubbed spec stales the dub. The caller
+    surfaces the list (重配一句话); the spec is never silently "legal".
+    """
+    written = {
+        track
+        for field in written_fields
+        if field != "*" and (track := track_of_field(field, tracks=tracks)) is not None
+    }
+    if not written:
+        return []
+    return [
+        name
+        for name, track in (TRACKS if tracks is None else tracks).items()
+        if track.depends and set(track.depends) & written and track_present(spec, track)
+    ]
+
+
+def assert_single_writer_per_track(
+    steps: Iterable[tuple[str, dict | None]],
+    is_producer: Callable[[str], bool],
+) -> None:
+    """一轨一写者 (ADR-044): within one run, a clip-spec track takes at most
+    ONE non-fork morph writer. Birth producers create the row (they write
+    every track by construction) and fork steps derive their own rows — both
+    exempt. A collision is a compile-time error (422 at create_run), never a
+    runtime merge.
+
+    ``steps`` are (kind, spec) pairs of the compiled run; ``is_producer``
+    marks row-creating kinds (NODE_KINDS[…].produces_outputs).
+    """
+    claims: dict[str, str] = {}
+    for kind, spec in steps:
+        if is_producer(kind):
+            continue
+        if (spec or {}).get("fork"):
+            continue
+        for track in sorted(skill_written_tracks(kind)):
+            prior = claims.get(track)
+            if prior is not None:
+                raise ValueError(
+                    f"track collision: '{prior}' and '{kind}' both write track "
+                    f"'{track}' in one run — fork one of them or split the runs"
+                )
+            claims[track] = kind
 
 
 # ---- boot-time self-checks (mounted in orchestrator.assert_runners_registered)
