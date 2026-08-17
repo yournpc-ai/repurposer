@@ -228,7 +228,11 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         # The demo set is the WFT keynote's own material: a talk write-up
         # (markdown — the card parses articles: PDF/Word/md/txt) + three
         # on-site photos; the baked slideshow shows exactly these.
-        aspect="1:1",
+        # aspect = the SOURCE frame (2026-08-17 ruling: a chain with no clip
+        # skill never changes the frame, so the demo follows the material —
+        # the photos are landscape 16:9). Baked by
+        # scripts/bake_image_video_demo.py.
+        aspect="16:9",
         tags=["no-footage"],
         flow=[
             FlowStep(key="director_understand"),
@@ -262,8 +266,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         example_outputs=[
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/image-video-preview-818e015e.mp4",
-                poster_url=f"{_DEMO}/outputs/image-video-poster-b715a075.jpg",
+                url=f"{_DEMO}/outputs/image-video-preview-18833859.mp4",
+                poster_url=f"{_DEMO}/outputs/image-video-poster-2b1a8f81.jpg",
                 label_key="image_video_preview",
             ),
         ],

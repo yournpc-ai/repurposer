@@ -446,7 +446,7 @@ function ExampleCard({
           ref={videoRef}
           src={url}
           poster={poster ?? undefined}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           autoPlay
           muted
           loop
@@ -466,12 +466,21 @@ function ExampleCard({
           <span className="max-w-[85%] truncate text-xs">{url.split("/").pop()}</span>
         </a>
       ) : (
-        <img src={url} alt={label} className="h-full w-full object-cover" />
+        <img src={url} alt={label} className="h-full w-full object-contain" />
       )}
 
-      <span className="absolute bottom-2 left-2 rounded-md bg-white/15 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
-        {label}
-      </span>
+      {/* The label pill's white veil only works over media (dark imagery);
+          on the document tile's light muted fill it washes out — there the
+          label is plain meta text directly on the tile (fill-first). */}
+      {kind === "transcript" || kind === "slides" || kind === "audio" ? (
+        <span className="absolute bottom-2 left-2 px-2 py-0.5 text-xs text-muted-foreground">
+          {label}
+        </span>
+      ) : (
+        <span className="absolute bottom-2 left-2 rounded-md bg-white/15 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
+          {label}
+        </span>
+      )}
 
       {kind === "video" && (
         <button

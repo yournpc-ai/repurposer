@@ -93,7 +93,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 
 ### 4.2 图文视频卡（image-video，已 Live，扩 slides 槽）
 
-R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。
+R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。**画幅跟源**（2026-08-17 拍板）：本卡链无 clip 类技能 = 画面没倒手，输出比例跟素材原画幅（横版照片/课件 → 16:9）——示例片按源烘焙 16:9（照片满幅零裁剪），promptTemplate 点名「保持原画幅」（真实 run 经 PlanAgent 考纲映射源形固定档兑现）；任意源形的 renderer original 档归需求池（PROGRESS §2 末）。
 
 ### 4.3 高光切片（highlight-clips）与访谈分镜（reframe）——一个能力，两道菜
 

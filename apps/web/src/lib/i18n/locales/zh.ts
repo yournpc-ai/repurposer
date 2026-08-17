@@ -487,7 +487,7 @@ const zh: Resources = {
       promise: "没有录像——照片加文字稿，变成带字幕和音乐的轮播短片。",
       inputTitle: "文字稿和照片",
       inputHint: "你的演讲文字稿，加一组照片或直接给课件（PDF/PPT）——现场图、幻灯片、人像都可以。",
-      promptTemplate: "把我的文字稿和照片做成带字幕和音乐的短片。",
+      promptTemplate: "把我的文字稿和照片做成带字幕和音乐的短片，保持照片的原画幅。",
       promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
     "highlight-clips": {
@@ -866,6 +866,12 @@ const zh: Resources = {
     canvas: {
       download: "下载",
       publish: "发布",
+      // ⋯ 菜单（节点自己的事，2026-08-17 走查拍板）：打开大屏 / 在对话里指认；
+      // 素材另有重新处理。
+      open: "打开",
+      focusNode: "在对话中指认",
+      reprocess: "重新处理",
+      more: "更多操作",
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
       spine: "处理过程",
       spineSteps: "{{count}} 个步骤",

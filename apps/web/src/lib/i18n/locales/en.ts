@@ -497,7 +497,7 @@ const en = {
       inputTitle: "Script and photos",
       inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
-        "Turn my script and photos into short clips with captions and music.",
+        "Turn my script and photos into short clips with captions and music, keeping my photos' original frame.",
       promptHint:
         "Use the example to tell Repurposer what you need — feel free to edit it.",
     },
@@ -885,6 +885,12 @@ const en = {
     canvas: {
       download: "Download",
       publish: "Publish",
+      // The ⋯ menu (node business, 2026-08-17 走查拍板): open the big view /
+      // point the chat dock at this node; assets also offer reprocess.
+      open: "Open",
+      focusNode: "Point it out in chat",
+      reprocess: "Reprocess",
+      more: "More actions",
       // 过程脊 group node (D6): the folded middle steps as one container.
       spine: "Process",
       spineSteps: "{{count}} steps",
