@@ -12,7 +12,7 @@ Read these before touching a subsystem (check each doc's own status line — som
 - `docs/POSITIONING.md` — **定位根概念架构（运营层母文档，ADR-042，已拍板未实施）**：身份根 = 定位（positioning），人设收窄为表达分区，渠道/选题/素材挂根；施工排期 = PROGRESS 第六~八周。动身份模块/渠道/选题/home 前先读它。
 - `docs/AGENT_ARCHITECTURE.md` — 四层工程地图（Model / Harness / Graph / Loop，ADR-039）：技能包 `app/skills/`（能力唯一家）+ agent 花名册 `app/agents/`（一个 Agent 类 + 声明实例）+ `NodeBase` 图内核（报价=fold / 执行=topo / 校验=∀ / 对账=⊆）+ chat 治理环。agent 架构唯一事实源；outputs 可扩展（产物 = 技能的属性，注册表派生）。
 - `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table. Implemented (Layer-4 music verification still future).
-- `docs/VIDEO_EDITOR.md` + ADR-016 — clip-spec is the **sole render contract**; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec.
+- `docs/RENDERING.md` + ADR-016 — clip-spec is the **sole render contract**（字段级契约与渲染链架构的唯一事实源）; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec. 编辑器交互与范围纪律在 `docs/VIDEO_EDITOR.md`。
 - `docs/DECISIONS.md` — ADRs，**只保留现行决策**：过时 / 被翻案的内容直接删除（历史在 git，不留痕）；新决策追加新编号，编号不连续属正常。
 - `docs/COMPETITIVE_ANALYSIS.md` + `docs/DECISION_MATRIX.md` + `docs/research/` — 竞品综合 / 采纳矩阵 / 原始证据三层，评估竞品功能时按此顺序查。
 - `docs/DATABASE_MIGRATIONS.md` — Alembic workflow; `migrations/versions/*.py` is part of the codebase and must be committed.
@@ -242,7 +242,7 @@ Overall style: restrained, lightweight, unified. Key reference points:
 
 ## Video Editor & Rendering (Vertical Shorts)
 
-> Detailed plan in `docs/VIDEO_EDITOR.md` and ADR-016. The following are constraints that collaborators must observe.
+> Render-chain architecture + field-level clip-spec contract in `docs/RENDERING.md`; editor interaction & scope discipline in `docs/VIDEO_EDITOR.md`; decision record ADR-016. The following are constraints that collaborators must observe.
 
 - **clip-spec (JSON) is the sole contract**; the renderer is a **replaceable black box** behind it. **Do not leak Remotion / React concepts into clip-spec** — it only describes "what" (segment / crop / subtitle track / style preset / title / soundtrack / brand), remaining renderer-agnostic.
 - **The first renderer is Remotion** (server-side, headless Chrome + internal FFmpeg), launched as an independent Node rendering service with **pnpm**, acting as a `spec → MP4 + SRT` black box triggered by the Python queue. **Do not stuff Remotion logic into the Python backend**.

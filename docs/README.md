@@ -26,7 +26,8 @@
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程重写 + 实施切分 | 已拍板方向（2026-08-13，ADR-042），未实施——排期 PROGRESS 第六~八周 | 动身份模块/渠道/选题/home 前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 技能包/花名册/NodeBase/估价 | 活跃（2026-08-09 重画；架构迭代 08-10~08-14 施工中） | 动 generation/agents/skills 前 |
-| `VIDEO_EDITOR.md` | clip-spec 契约 + 编辑器范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器/渲染前 |
+| `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
+| `RENDERING.md` | **clip-spec 字段级契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ 轨道模型演进方向（§8，待 ADR） | 活跃（2026-08-17 建；契约自 VIDEO_EDITOR §4 迁入） | 动渲染链/clip-spec/轨道/渲染服务前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
 | `DECISIONS.md` | 现行架构决策集（ADR；编号不连续——过时条目直接删除，历史在 git） | 活跃 | 新决策 / 架构约束变化时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
