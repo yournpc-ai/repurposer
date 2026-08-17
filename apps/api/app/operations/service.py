@@ -147,8 +147,13 @@ async def apply_operations(
     user_id: UUID | None = None,
     message_id: UUID | None = None,
     base_hash: str | None = None,
+    commit: bool = True,
 ) -> tuple[Output, list[Operation]]:
-    """Apply a batch of client ops atomically. Returns (output, new op rows)."""
+    """Apply a batch of client ops atomically. Returns (output, new op rows).
+
+    ``commit=False`` keeps the caller's transaction open (run-dispatched
+    morphs journal through this same pure-apply path — the executor commits
+    at the step boundary, never mid-run)."""
     if source not in SOURCE_REGISTRY:
         raise OpRejected(f"unknown source '{source}'")
     if not ops:
@@ -209,7 +214,10 @@ async def apply_operations(
 
     output.render_spec = spec
     output.updated_at = datetime.now(UTC)
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     for row in rows:
         await db.refresh(row)
     await db.refresh(output)

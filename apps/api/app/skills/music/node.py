@@ -10,9 +10,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.brand import resolve_music_ref
-from app.models.schemas import ClipMusic, ClipSpec, RenderStatus
+from app.models.schemas import RenderStatus
 from app.models.tables import WorkflowStep, Project, WorkflowRun
-from app.operations.service import apply_precomputed
+from app.operations.service import apply_operations
 from app.pipeline.graph import MEDIA, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
@@ -23,7 +23,6 @@ from app.pipeline.morph import (
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
 from app.platform.project_context import resolve_persona
-from app.tools.storage import public_url
 
 
 class AddMusic(NodeBase):
@@ -86,24 +85,30 @@ class AddMusic(NodeBase):
             await _pend_suppressed_base_renders(db, run, node, clips)
             raise ValueError(f"No music track found for mood '{mood}'")
 
-        music = ClipMusic(
-            music_id=str(track.id),
-            url=public_url(track.file_path),
-            enabled=True,
-            gain_db=float(gain_db) if gain_db is not None else -18.0,
-        )
         origin = await _run_origin(db, run)
         touched: list[UUID] = []
         for output in clips:
-            spec = ClipSpec.model_validate(output.render_spec)
-            await apply_precomputed(
+            # Journal through the SHARED pure-apply path (the editor's batch
+            # route): set_music carries a pure apply, so apply_precomputed
+            # rejects it — the 2026-08-17 add_music breakage. commit=False
+            # keeps the runner's flush discipline (the executor commits at
+            # the step boundary).
+            await apply_operations(
                 db,
-                output,
-                "set_music",
-                {"music_id": music.music_id, "enabled": True, "gain_db": music.gain_db},
-                spec.model_copy(update={"music": music}).model_dump(mode="json"),
+                output.id,
+                [
+                    {
+                        "op": "set_music",
+                        "params": {
+                            "music_id": str(track.id),
+                            "enabled": True,
+                            "gain_db": float(gain_db) if gain_db is not None else -18.0,
+                        },
+                    }
+                ],
                 source=origin,
                 user_id=project.user_id,
+                commit=False,
             )
             output.render_status = RenderStatus.PENDING
             output.render_error = None

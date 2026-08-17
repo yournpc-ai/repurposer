@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.schemas import ClipSpec
 from app.pipeline.clip_spec import remove_range, set_trim
+from app.tools.music import music_file_path
+from app.tools.storage import public_url
 
 
 # ---- params schemas ----------------------------------------------------
@@ -175,8 +177,12 @@ def _apply_set_music(spec: dict, params: dict) -> dict:
     p = SetMusicParams.model_validate(params)
     cs = _roundtrip(spec)
     cs.music.music_id = p.music_id
-    # URL is derivable from music_id (stream endpoint); no table lookup needed.
-    cs.music.url = f"/api/v1/music/{p.music_id}/stream" if p.music_id else None
+    # Absolute object-storage URL, derived from the id via the uniform key
+    # pattern (no table lookup): the renderer fetches spec.music.url
+    # server-side, where a root-relative stream endpoint has no host — and
+    # the run-time add_music morph journals through this same apply, so both
+    # write paths must agree (2026-08-17: they didn't, add_music was broken).
+    cs.music.url = public_url(music_file_path(p.music_id)) if p.music_id else None
     cs.music.enabled = p.enabled
     if p.gain_db is not None:
         cs.music.gain_db = p.gain_db
