@@ -32,6 +32,7 @@ from app.pipeline.morph import (
     _run_origin,
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
+from app.pipeline.tracks import spec_provenance
 from app.skills.dub.procedure import synthesize_dub
 
 logger = structlog.get_logger()
@@ -118,8 +119,10 @@ class DubClip(NodeBase):
                 logger.info("dub_clip skip output %s: %s", output.id, e.detail)
                 continue
             if fork:
-                # Derived row: language + provenance="generated" (cloned-voice
-                # synthetic audio — honest disclosure metadata); source_ref
+                # Derived row: language + provenance via the track-declaration
+                # fold (ADR-044; the fork's spec carries the generated dub
+                # track → "generated", cloned-voice synthetic audio — honest
+                # disclosure metadata); source_ref
                 # carries the lineage pointer (derived_from_output_id, JSONB —
                 # no column); score/publishing/payload inherit the source row's
                 # content metadata (copied — sharing one dict object between two
@@ -130,7 +133,7 @@ class DubClip(NodeBase):
                     workflow_step_id=node.id,
                     type="clip",
                     language=lang,
-                    provenance="generated",
+                    provenance=spec_provenance(new_spec),
                     payload=dict(output.payload or {}),
                     source_ref={
                         **(output.source_ref or {}),

@@ -46,6 +46,7 @@ from app.pipeline.step_display import (
     slot_tag,
     ui_lang_of,
 )
+from app.pipeline.tracks import spec_provenance
 from app.platform.project_context import collect_asset_texts, resolve_run_persona
 from app.skills.clips.agents import clip_writer
 from app.tools.transcript import build_anchored_transcript
@@ -301,12 +302,15 @@ class SelectClips(NodeBase):
                 if render_source is not None
                 else None
             )
+            spec_dict = spec.model_dump(mode="json") if spec else None
             output = Output(
                 project_id=project.id,
                 workflow_step_id=node.id,
                 type="clip",
                 language=target_language,
-                provenance="real",
+                # ADR-026 classification reads track declarations (ADR-044) —
+                # at birth no generated track rides, so this is "real".
+                provenance=spec_provenance(spec_dict) if spec_dict else "real",
                 payload=ClipPayload(
                     hook=plan.hook,
                     title_options=plan.title_options or ([plan.title] if plan.title else []),
@@ -319,8 +323,8 @@ class SelectClips(NodeBase):
                     "end_seconds": plan.end_seconds,
                     "asset_id": str(render_source.id) if render_source is not None else None,
                 },
-                render_spec=spec.model_dump(mode="json") if spec else None,
-                render_status=(RenderStatus.PENDING if not suppressed else None) if spec else None,
+                render_spec=spec_dict,
+                render_status=(RenderStatus.PENDING if not suppressed else None) if spec_dict else None,
                 score={
                     "value": plan.recommendation_score,
                     "reason": plan.score_reason or None,

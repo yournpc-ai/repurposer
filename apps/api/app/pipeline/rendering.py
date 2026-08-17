@@ -30,6 +30,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, Project, WorkflowRun
 from app.pipeline.errors import user_line
+from app.pipeline.tracks import resolve_spec_urls
 from app.tools.storage import (
     delete,
     get_output_path,
@@ -62,32 +63,10 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
             return f"{settings.api_public_url.rstrip('/')}{value}"
         return public_url(value) or value
 
-    src = spec.get("source", {})
-    url = src.get("url", "")
-    if url:
-        src["url"] = _resolve(url)
-    images = src.get("image_urls")
-    if isinstance(images, list):
-        src["image_urls"] = [_resolve(u) if isinstance(u, str) and u else u for u in images]
-    brand = spec.get("brand")
-    if isinstance(brand, dict):
-        for card_key in ("intro", "outro"):
-            card = brand.get(card_key)
-            if isinstance(card, dict):
-                media_url = card.get("media_url") or ""
-                if media_url:
-                    card["media_url"] = _resolve(media_url)
-    music = spec.get("music")
-    if isinstance(music, dict):
-        track = music.get("url") or ""
-        if track:
-            music["url"] = _resolve(track)
-    dub = spec.get("dub")
-    if isinstance(dub, dict):
-        dub_url = dub.get("url") or ""
-        if dub_url:
-            dub["url"] = _resolve(dub_url)
-    return spec
+    # Registry fold (ADR-044): the slots to resolve are each track's declared
+    # url_fields — a newly registered track's URLs absolutize with zero changes
+    # here.
+    return resolve_spec_urls(spec, _resolve)
 
 
 async def _mirror_render_node(

@@ -21,6 +21,7 @@ from app.models.schemas import (
     MediaInput,
 )
 from app.models.tables import Asset, Output, Persona, Project
+from app.pipeline.tracks import total_output_seconds
 from app.tools.storage import download_to_temp, file_to_data_url
 
 # Media snippets above these thresholds are not sent directly to the multimodal
@@ -230,7 +231,13 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
     clips: list[dict] = []
     output_seconds: dict[str, float] = {}
     for row in clip_rows:
-        seconds = float((row.payload or {}).get("duration") or 30)
+        # Registry-driven duration mirror (ADR-044): the rendered output's
+        # true seconds — kept segments + card blocks — not the payload's
+        # planned duration. Payload stays the fallback for a spec-less row.
+        if row.render_spec:
+            seconds = total_output_seconds(row.render_spec)
+        else:
+            seconds = float((row.payload or {}).get("duration") or 30)
         caption_chars = sum(
             len(str(cue.get("text") or ""))
             for cue in ((row.render_spec or {}).get("caption_track") or [])
