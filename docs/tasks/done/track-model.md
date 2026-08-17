@@ -1,6 +1,6 @@
 # Task: 轨道模型——clip-spec 轨道化（锚定存储 + 泳道编译产物 + TRACK_REGISTRY）
 
-> **Status**: 施工（2026-08-17 设计收敛 + 用户拍板两条：破坏性更新授权、P2 契约提前——ADR-044 同批落档；crop/追踪能力归 08-19 线）
+> **Status**: 已完成（2026-08-18 落地收口——架构批六项改动全落 + harness 复核；crop_track/speaker_map/insert_broll 等能力线按 PROGRESS 第三周表推进）
 > **Base branch**: `main`
 > **Architecture reference**: `docs/RENDERING.md`（§3 契约 / §4 隐式轨道解剖 / §8 轨道模型——本简报的母文档，随 ADR-044 转正）；ADR-016（契约锁定）；ADR-032（Operation Model）；ADR-044（轨道模型）
 > **Naming reference**: `docs/NAMING.md`（§5 枚举注册表 / §6 行话黑名单 / §8 准入即登记；N-38 裸 track 判例）
