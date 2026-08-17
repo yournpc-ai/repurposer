@@ -1484,7 +1484,11 @@ class ClipSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: ClipSource
-    aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
+    # "original" (2026-08-17, 整条材料化跟源画幅): no fixed tier — the
+    # renderer resolves the SOURCE's own dimensions at render time
+    # (calculateMetadata). Only materialize_source writes it; excerpt clips
+    # always carry a fixed tier.
+    aspect: Literal["9:16", "1:1", "16:9", "original"] = "9:16"
     segments: list[ClipSegment] = Field(default_factory=list)
     crop: ClipCrop = Field(default_factory=ClipCrop)
     caption_track: list[CaptionCue] = Field(default_factory=list)

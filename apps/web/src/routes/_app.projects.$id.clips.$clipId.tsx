@@ -4,9 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { Player } from '@remotion/player'
 import {
   Clip as ClipComposition,
-  ASPECT_DIMENSIONS,
   CAPTION_PRESETS,
   COMPOSITION_FPS,
+  fixedAspectDimensions,
   removeRange,
   setTrim,
   sourceDuration,
@@ -405,9 +405,9 @@ function ClipEditorPage() {
                 inputProps={{ spec: previewSpec }}
                 durationInFrames={Math.max(1, Math.round(totalDurationSeconds(previewSpec) * COMPOSITION_FPS))}
                 fps={COMPOSITION_FPS}
-                compositionWidth={ASPECT_DIMENSIONS[previewSpec.aspect].width}
-                compositionHeight={ASPECT_DIMENSIONS[previewSpec.aspect].height}
-                style={{ width: '100%', aspectRatio: previewSpec.aspect === '1:1' ? '1 / 1' : '9 / 16' }}
+                compositionWidth={fixedAspectDimensions(previewSpec.aspect).width}
+                compositionHeight={fixedAspectDimensions(previewSpec.aspect).height}
+                style={{ width: '100%', aspectRatio: previewSpec.aspect === '1:1' ? '1 / 1' : previewSpec.aspect === '16:9' || previewSpec.aspect === 'original' ? '16 / 9' : '9 / 16' }}
                 controls
               />
             ) : (

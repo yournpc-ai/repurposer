@@ -36,6 +36,7 @@ from app.pipeline.errors import TransientNodeError, propagate_key
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import (
     _fan_out_renders,
+    _guard_target_differs_from_source,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
@@ -106,6 +107,12 @@ class TranslateClip(NodeBase):
             return []
 
         origin = await _run_origin(db, run)
+        # Same-language guard (2026-08-17 走查实修) — translating zh into zh
+        # renders a 繁体+简体 "bilingual" pair with no English; fail loud with
+        # the fix named, never a silent same-language rewrite.
+        await _guard_target_differs_from_source(
+            db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
+        )
         touched: list[UUID] = []
         for output in clips:
             spec = output.render_spec

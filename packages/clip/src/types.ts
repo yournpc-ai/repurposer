@@ -7,7 +7,16 @@
  * stays swappable.
  */
 
-export type Aspect = "9:16" | "1:1" | "16:9";
+/** The fixed render tiers. */
+export type FixedAspect = "9:16" | "1:1" | "16:9";
+
+/**
+ * "original" (2026-08-17, whole-source materialization follows the source):
+ * no fixed tier — the renderer resolves the source's own dimensions in
+ * calculateMetadata. Only whole-source materializations carry it; excerpt
+ * clips are always a fixed tier.
+ */
+export type Aspect = FixedAspect | "original";
 
 // The preset id type is DERIVED from the catalog (captions.ts) — adding a
 // style there updates this type automatically. Re-exported here so the
@@ -139,11 +148,20 @@ export interface ClipSpec {
   target_language: string;
 }
 
-export const ASPECT_DIMENSIONS: Record<Aspect, { width: number; height: number }> = {
+export const ASPECT_DIMENSIONS: Record<FixedAspect, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "1:1": { width: 1080, height: 1080 },
   "16:9": { width: 1920, height: 1080 },
 };
+
+/** H.264 wants even dimensions — round down to the nearest even pixel. */
+export const evenDim = (n: number): number => Math.max(2, Math.floor(n / 2) * 2);
+
+/** A synchronous frame for chrome that must know dims without loading media
+ * (the clip editor's preview Player). "original" resolves to the landscape
+ * tier — only the renderer learns the source's real dims. */
+export const fixedAspectDimensions = (aspect: Aspect): { width: number; height: number } =>
+  aspect === "original" ? ASPECT_DIMENSIONS["16:9"] : ASPECT_DIMENSIONS[aspect];
 
 /** Composition timeline fps (independent of the source's fps). */
 export const COMPOSITION_FPS = 30;

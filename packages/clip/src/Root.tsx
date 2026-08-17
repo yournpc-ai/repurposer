@@ -1,9 +1,11 @@
 import React from "react";
 import { Composition } from "remotion";
+import { getImageDimensions, getVideoMetadata } from "@remotion/media-utils";
 import { Clip } from "./Clip";
 import {
   ASPECT_DIMENSIONS,
   COMPOSITION_FPS,
+  evenDim,
   type ClipSpec,
   totalDurationSeconds,
 } from "./types";
@@ -33,9 +35,26 @@ export const RemotionRoot: React.FC = () => (
     durationInFrames={COMPOSITION_FPS}
     defaultProps={{ spec: DEFAULT_SPEC }}
     // Dimensions + duration come from the spec at render time.
-    calculateMetadata={({ props }) => {
+    calculateMetadata={async ({ props }) => {
       const spec = props.spec;
-      const dim = ASPECT_DIMENSIONS[spec.aspect] ?? ASPECT_DIMENSIONS["9:16"];
+      let dim: { width: number; height: number } | undefined;
+      if (spec.aspect === "original") {
+        // Whole-source materialization (2026-08-17): the composition takes
+        // the SOURCE's own dimensions — video metadata, else the first
+        // backing image; failure falls back to the landscape tier below.
+        try {
+          if (spec.source.kind !== "stills" && spec.source.url) {
+            const meta = await getVideoMetadata(spec.source.url);
+            dim = { width: evenDim(meta.width), height: evenDim(meta.height) };
+          } else if (spec.source.image_urls && spec.source.image_urls.length > 0) {
+            const meta = await getImageDimensions(spec.source.image_urls[0]);
+            dim = { width: evenDim(meta.width), height: evenDim(meta.height) };
+          }
+        } catch {
+          dim = undefined;
+        }
+      }
+      dim ??= spec.aspect === "original" ? ASPECT_DIMENSIONS["16:9"] : ASPECT_DIMENSIONS[spec.aspect];
       return {
         width: dim.width,
         height: dim.height,

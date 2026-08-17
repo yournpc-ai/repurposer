@@ -146,7 +146,7 @@ def build_clip_spec(
     (or None for the renderer default); pydantic coerces the dicts into ``Point``.
     """
     images = image_urls or []
-    aspect = aspect if aspect in ("9:16", "1:1", "16:9") else "9:16"
+    aspect = aspect if aspect in ("9:16", "1:1", "16:9", "original") else "9:16"
     caption_style_preset = (
         caption_style_preset if caption_style_preset in _CAPTION_STYLE_PRESETS else "clean-bottom"
     )

@@ -25,6 +25,7 @@ from app.pipeline.errors import TransientNodeError
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
     _fan_out_renders,
+    _guard_target_differs_from_source,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
@@ -97,6 +98,12 @@ class DubClip(NodeBase):
             return []
 
         origin = await _run_origin(db, run)
+        # Same-language guard (2026-08-17, translate 同款): dubbing zh into
+        # zh clones the voice over the same words — pointless spend, fail
+        # loud with the fix named.
+        await _guard_target_differs_from_source(
+            db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
+        )
         touched: list[UUID] = []
         for output in clips:
             try:

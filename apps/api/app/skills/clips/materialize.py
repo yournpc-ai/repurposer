@@ -79,13 +79,18 @@ class MaterializeSource(NodeBase):
         brand_cfg, _brand_music_id = await resolve_brand_block(db, persona)
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None
-        cfg = brand_cfg
-        # Same fallback chain as select_clips: spec → run.context → skin.
+        # Whole-source aspect (2026-08-17 拍板: 链无 clip 技能 = 比例跟源):
+        # explicit intent (spec / run.context) wins; otherwise "original" —
+        # the renderer resolves the source's own dimensions at render time.
+        # The persona skin's aspect is a SHORTS craft default and never
+        # applies to a whole-video materialization (a landscape talk must
+        # not come out cropped to 9:16).
         aspect = str(
             (node.spec or {}).get("aspect")
             or ctx.get("aspect")
-            or cfg.get("aspect", "9:16")
+            or "original"
         )
+        cfg = brand_cfg
         cap_pos = cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")
         cap_style = cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"

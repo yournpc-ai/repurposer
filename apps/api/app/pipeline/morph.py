@@ -165,6 +165,45 @@ async def _run_origin(db: AsyncSession, run: WorkflowRun) -> str:
     return "chat" if linked else "system"
 
 
+async def _guard_target_differs_from_source(
+    db: AsyncSession,
+    clips: list[Output],
+    lang: str,
+    *,
+    zh: bool,
+) -> None:
+    """Same-language guard (2026-08-17 走查实修): a translate/dub whose target
+    IS the source's language produces a same-language "translation" — the
+    中英双语 farce where the bilingual pair came out 繁体+简体 with no English
+    anywhere (the PlanAgent had defaulted target_language to the prompt's own
+    language). Fail loud and name the fix — a silent same-language rewrite is
+    the banned posture. Source-language truth: the asset's ASR-detected
+    ``meta.language``, then the caption cues' lang. Raises plain ``ValueError``
+    — errors.py passes an exact ValueError's authored message through to the
+    step's user-facing line.
+    """
+    from app.models.tables import Asset  # local: tables already imported piecemeal
+
+    for output in clips:
+        src_lang: str | None = None
+        asset_id = (output.source_ref or {}).get("asset_id")
+        if asset_id:
+            asset = await db.get(Asset, UUID(str(asset_id)))
+            if asset is not None:
+                raw = (asset.meta or {}).get("language")
+                src_lang = str(raw) if raw else None
+        if not src_lang:
+            track0 = (output.render_spec or {}).get("caption_track") or []
+            if track0 and track0[0].get("lang"):
+                src_lang = str(track0[0]["lang"])
+        if src_lang and src_lang.lower() == str(lang).lower():
+            raise ValueError(
+                f"源素材已经是{src_lang}——目标语言必须换一种（中英双语的目标应为 en）。"
+                if zh
+                else f"The source is already {src_lang} — the target must be a different language (for Chinese-English bilingual, target en)."
+            )
+
+
 async def _fan_out_renders(
     db: AsyncSession,
     run: WorkflowRun,

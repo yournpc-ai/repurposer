@@ -116,7 +116,13 @@ async def _build_context(
     if assets:
         lines.append("Assets:")
         for a in assets:
-            lines.append(f"- {a.type} id={a.id} status={a.processing_status}")
+            # The ASR-detected language rides the line — transform language
+            # decisions (translate/dub target ≠ source language) stand on it.
+            lang = (a.meta or {}).get("language")
+            lines.append(
+                f"- {a.type} id={a.id} status={a.processing_status}"
+                + (f" language={lang}" if lang else "")
+            )
 
     outputs = await list_visible_outputs(db, project.id)
     if outputs:
