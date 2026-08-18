@@ -1,6 +1,6 @@
 # API Specification
 
-> Status: Draft, updated iteratively as development progresses. Last updated: 2026-07-18.
+> Status: Draft, updated iteratively as development progresses. Last updated: 2026-08-18.
 
 ## 1. Basics
 
@@ -68,7 +68,7 @@ GET /api/v1/projects/{project_id}/runs
 When rendering a video, call:
 
 ```
-POST /api/v1/clips/{clip_id}/render
+POST /api/v1/outputs/{output_id}/render
 ```
 
 ## 3. File Streaming
@@ -80,8 +80,11 @@ GET /api/v1/files/{file_path}            # 307 → public object URL (source upl
 GET /api/v1/files/{file_path}?proxy=1    # stream bytes through the API (no redirect)
 GET /api/v1/outputs/{file_path}          # 307 → public object URL (rendered MP4/SRT)
 GET /api/v1/outputs/{file_path}?download=1   # 307 → presigned GET with Content-Disposition: attachment
-GET /api/v1/music/{mood}                     # Built-in mood library, e.g. calm / uplifting / corporate
+GET /api/v1/music/{music_id}/stream      # 307 → public audio URL (no auth)
+GET /api/v1/music/{music_id}             # public piece metadata (no auth)
 ```
+
+`mood` (calm / uplifting / corporate / …) is a metadata field on each `Music` row, not a path — see §8.
 
 - Use `?proxy=1` when fetching a file **programmatically** (`fetch()` → blob): the cross-origin redirect is subject to CORS, and the bucket does not send `Vary: Origin`, so a no-cors `<video>` copy of the same object can poison the browser cache for later CORS fetches. `<video>/<audio>/<img>` tags can use the redirect form directly.
 
@@ -166,6 +169,14 @@ GET /api/v1/personas/{persona_id}
 PUT /api/v1/personas/{persona_id}
 ```
 
+### Delete Persona
+
+```http
+DELETE /api/v1/personas/{persona_id}
+```
+
+204; deletes the persona and all its source assets (storage files + rows).
+
 ### Upload Persona Past Material
 
 ```http
@@ -177,6 +188,25 @@ Fields:
 
 - `file`: File
 - `type`: `video` | `audio` | `transcript` | `slides` | `image` | `voice_sample` | `past_material`
+
+### List / Rename / Delete Persona Assets
+
+```http
+GET /api/v1/personas/{persona_id}/assets?type=past_material
+PUT /api/v1/personas/{persona_id}/assets/{asset_id}     { "title": "..." }
+DELETE /api/v1/personas/{persona_id}/assets/{asset_id}
+```
+
+The list reads one kind of persona asset (default `past_material`; the voice section reads samples with `type=voice_sample`). `PUT` renames (the storage key is untouched).
+
+### Skin Intro/Outro Media
+
+```http
+POST /api/v1/personas/{persona_id}/media/upload-url   { "filename", "content_type" } → { "key", "upload_url" }
+POST /api/v1/personas/{persona_id}/media              { "key" } → { "url" }
+```
+
+Two-step direct-to-storage upload for the skin block's intro/outro media (image/video); the confirm call validates the server-issued key and returns the stream URL.
 
 ### Generate / Update Persona Style Profile
 
@@ -245,6 +275,15 @@ Response now includes a representative clip thumbnail for each project:
 GET /api/v1/projects/{project_id}
 ```
 
+### Update / Delete Project
+
+```http
+PUT /api/v1/projects/{project_id}
+DELETE /api/v1/projects/{project_id}
+```
+
+`PUT` applies a partial field update; `DELETE` removes the project with its outputs, runs and assets (204).
+
 ## 5. Asset Upload
 
 The primary flow is **direct-to-storage** via a presigned PUT URL; the multipart endpoint below remains as a fallback:
@@ -283,6 +322,13 @@ Fields:
 GET /api/v1/projects/{project_id}/assets
 ```
 
+### Get Asset / Reprocess
+
+```http
+GET /api/v1/projects/{project_id}/assets/{asset_id}              → single asset (poll processing status)
+POST /api/v1/projects/{project_id}/assets/{asset_id}/reprocess   → re-queue processing (e.g. after a failure)
+```
+
 ### Delete Asset
 
 ```http
@@ -301,11 +347,11 @@ Request:
 
 ```json
 {
-  "slots": [
-    { "type": "clips", "count": 5 },
-    { "type": "post", "language": "de" },
-    { "type": "quotes" },
-    { "type": "article" }
+  "tasks": [
+    { "skill": "select_clips", "params": { "count": 5 } },
+    { "skill": "write_post", "params": { "language": "de" } },
+    { "skill": "write_quotes", "params": {} },
+    { "skill": "write_article", "params": {} }
   ],
   "target_language": "en",
   "instruction": "聚焦实体机器人角度，hook 要狠",
@@ -315,20 +361,21 @@ Request:
     "concise_vs_detailed": 0.5,
     "audience": "industry"
   },
+  "autonomy": "auto",
   "scope": "full",
   "target_id": null,
   "operation": "regenerate"
 }
 ```
 
-- `slots`: the task book — one `IntentSlot` per requested output (`clips | post | quotes | article | carousel`, with optional `count` / `focus` / `language` / `tone_override`; same-type multi slots express multi-language versions). **Required for `full`-scope requests** — the task book is built and confirmed in the chat plan path (§10); a full-scope call without explicit `slots` is rejected with `422`. Non-full scopes (retries, targeted runs) may omit them and fall back to the default slot set.
-- `target_language`: optional (fallback `en`).
-- `clip_count`: number of clips to generate when `"clips"` is in `outputs` (default `5`).
-- `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "derivative" | "render"` for targeted revisions.
+- `tasks`: the confirmed task book (ADR-043 — the plan path's only grammar): one `TaskItem` per requested task, `{ "skill", "params" }` where `skill` names a registry skill (`select_clips | write_post | write_quotes | write_carousel | write_article | …`) and `params` carries its parameters (`count` / `language` / `focus` / …; same-skill multi tasks express multi-language versions). **Required for `full`-scope requests** — the task book is built and confirmed in the chat plan path (§10); a full-scope call without explicit `tasks` is rejected with `422`. Non-full scopes (retries, targeted runs) may omit them and re-run one node family off `target_id`.
+- `target_language`: optional spec-level fallback — `null` derives from the first task that carries a language (fallback `en`).
+- `autonomy`: `auto | review` (default `auto`) — `review` pauses full runs at the direction checkpoint; stored verbatim on `run.context`.
+- `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "post" | "quotes" | "derivative" | "translation" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
 - `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
 
-Validation: for a full-scope request whose resolved `outputs` include `"clips"`, the project must have at least one renderable media asset (`video` / `audio` / `image` / `slides` with a file URL); otherwise the endpoint returns `422`. A text-only project cannot produce clips (the intent step already excludes `clips` for text-only input).
+Validation: for a full-scope request whose task book produces clips, the project must have at least one renderable media asset (`video` / `audio` / `image` / `slides` with a file URL); otherwise the endpoint returns `422`. A text-only project cannot produce clips (the intent step already excludes clip tasks for text-only input).
 
 Queueing note: the created run stays `pending` until every project asset has finished processing (ASR / extraction) — the worker skips runs whose assets are not ready yet. It is therefore safe to call `/generate` immediately after uploading; there is no need to wait for asset processing first.
 
@@ -357,22 +404,28 @@ GET /api/v1/runs/{run_id}/events
 
 Server-Sent Events stream of a run's state (CHAT_ARCHITECTURE §8 — a pushed read of DB state, not an event bus). On connect the server sends a full `run.snapshot` frame (`{run, steps}`, idempotent on reconnect); while the run is active it tails `workflow_steps` once per second and pushes `step.updated` (`{id, kind, seq, status, stage, summary, error}`) and `run.updated` (`{id, status, progress, error}`, terminal frame adds the derived aggregate `summary`) only on change. A `: heartbeat` comment frame is sent every 15s; the stream closes after the terminal state. There is no event store, replay, or delivery guarantee. Use `@microsoft/fetch-event-source` on the frontend — native `EventSource` cannot send the `Authorization` header.
 
-`WorkflowRun` includes `context` with per-output progress:
+`WorkflowRun.context` is the confirmed task book (the `TaskSpec` dump):
 
 ```json
 {
   "context": {
-    "outputs": ["clips", "post", "quotes", "article"],
-    "clip_count": 5,
-    "output_status": {
-      "clips": {"status": "completed", "progress": 100, "error": null},
-      "post": {"status": "failed", "progress": 0, "error": "..."}
-    }
+    "tasks": [{ "skill": "select_clips", "params": { "count": 5 } }],
+    "target_language": "en",
+    "instruction": "...",
+    "tone_settings": null,
+    "autonomy": "auto",
+    "scope": "full",
+    "operation": "regenerate",
+    "target_id": null
   }
 }
 ```
 
-## 7. Clip Management
+Per-node progress lives on `workflow_steps` — the run response and the SSE stream carry them as the `steps` array.
+
+## 7. Output Management
+
+Clips and derivatives are both `Output` rows (`type` = `clip | post | quotes | carousel | article`); item-level endpoints live under `/outputs/{output_id}`. Clip-only actions return 400 on other output types.
 
 ### List Clips
 
@@ -380,31 +433,51 @@ Server-Sent Events stream of a run's state (CHAT_ARCHITECTURE §8 — a pushed r
 GET /api/v1/projects/{project_id}/clips
 ```
 
-### Get Clip Detail
+### List Derivatives
 
 ```http
-GET /api/v1/clips/{clip_id}
+GET /api/v1/projects/{project_id}/derivatives
 ```
 
-### Edit / Revise Clip
-
-Clips are not edited via a single `PUT`. Instead, use the action-specific endpoints below.
-
-### Regenerate Clip
+### Get Output
 
 ```http
-POST /api/v1/clips/{clip_id}/regenerate
+GET /api/v1/outputs/{output_id}
 ```
 
-Request: `{ "instruction": "make the hook shorter" }`. Response: updated `Clip`.
+Editor load + render-status polling.
 
-### Revise Based on Feedback
+### Update Output
 
 ```http
-POST /api/v1/clips/{clip_id}/revise
+PUT /api/v1/outputs/{output_id}
 ```
 
-Request:
+Partial update of the editable fields — `{ "payload": {...}, "status": "...", "publishing": {...} }` (`publishing` merges). `render_spec` edits do NOT come through here; they go through the operations API below (ADR-032: every render_spec write journals an operation).
+
+### Delete Output
+
+```http
+DELETE /api/v1/outputs/{output_id}
+```
+
+204; removes the row plus its produced storage objects (video/srt/image keys + the cover).
+
+### Regenerate Output
+
+```http
+POST /api/v1/outputs/{output_id}/regenerate
+```
+
+Request: `{ "instruction": "make the hook shorter", "target_language": "en" }` (both optional). Queues regeneration through the generic chat layer — response: `{ "run_id", "message_id", "conversation_id" }`.
+
+### Revise Clip Based on Feedback
+
+```http
+POST /api/v1/outputs/{output_id}/revise
+```
+
+Clip outputs only. Request:
 
 ```json
 {
@@ -414,43 +487,88 @@ Request:
 }
 ```
 
-Response: revised `Clip`.
+`scope` ∈ `hook | full_script | tone | translation`. Response: the revised output.
 
 ### Trigger Render
 
 ```http
-POST /api/v1/clips/{clip_id}/render
+POST /api/v1/outputs/{output_id}/render
 ```
 
-Queued render: returns 202, worker claims `render_status=PENDING` → calls Remotion → writes back `video_url`/`srt_url`.
+Clip outputs only. Queued render: returns 202, worker claims `render_status=PENDING` → calls Remotion → writes back `video_url`/`srt_url`. 400 when the clip has no `render_spec` (text-only project — no source video).
+
+### Generate Cover
+
+```http
+POST /api/v1/outputs/{output_id}/cover
+```
+
+Clip outputs only. Generates a cover image on demand and stores it on `publishing.cover_image_url` (created only when requested by the UI, to avoid paying image-generation costs for every clip).
 
 ### Translate Captions
 
 ```http
-POST /api/v1/clips/{clip_id}/translate-captions
+POST /api/v1/outputs/{output_id}/translate-captions
 ```
 
-Request: `{ "target_language": "fr" }`. Response: updated `Clip` (`caption_track` and `target_language` rewritten).
+Clip outputs only. Request: `{ "target_language": "fr" }`. Re-translates the persisted `render_spec`'s `caption_track` in place (word-level) and updates the spec's `target_language`; the write is journaled as an operation. Response: the updated output.
 
 ### Voice Clone Dubbing (dub)
 
 ```http
-POST /api/v1/clips/{clip_id}/dub
+POST /api/v1/outputs/{output_id}/dub
 ```
 
-Request: `{ "target_language": "fr" }`. Uses the persona's voice (from the persona's VOICE_SAMPLE / this session's AUDIO / VIDEO extracted track) via MiniMax voice_clone + T2A to dub the (translated) captions into the target language. Response: updated `Clip`, `render_spec.dub` written (original audio is muted during render, dubbed audio plays).
+Clip outputs only. Request: `{ "target_language": "fr" }`. Uses the persona's voice (from the persona's VOICE_SAMPLE / this session's AUDIO / VIDEO extracted track) via MiniMax voice_clone + T2A to dub the (translated) captions into the target language; the write is journaled as an operation. Response: the updated output, `render_spec.dub` written (original audio is muted during render, dubbed audio plays).
 
-### List Derivatives
+### Operations (edit journal, ADR-032)
+
+Every `render_spec` write is journaled as an operation — batch apply is the editor's save model, undo/redo are journal state transitions (append-only):
 
 ```http
-GET /api/v1/projects/{project_id}/derivatives
+GET  /api/v1/outputs/{output_id}/operations           → operation history (editor timeline)
+POST /api/v1/outputs/{output_id}/operations           → 201; apply a batch atomically
+POST /api/v1/outputs/{output_id}/operations/undo      → undo the latest op
+POST /api/v1/outputs/{output_id}/operations/redo      → redo the latest undone op
 ```
 
-### Edit Derivative
+Batch request: `{ "ops": [{ "op": "...", "params": {...} }], "base_hash": "<hash | null>" }` — op names and params are validated against the server-side registry (400 on a rejected op, 409 on a `base_hash` conflict). Response: `{ "output", "operations", "stale_tracks" }` — `stale_tracks` names derived tracks the batch invalidated (ADR-044; the client surfaces the one-line notice). Undo/redo return `{ "output" }`.
+
+## 8. Music Library
+
+AI-generated + platform-seeded music pieces (`docs/MUSIC_ARCHITECTURE.md`).
+
+### List Pieces
 
 ```http
-PUT /api/v1/derivatives/{derivative_id}
+GET /api/v1/music
 ```
+
+Public pieces + the caller's own.
+
+### Generate a Piece
+
+```http
+POST /api/v1/music/generate
+```
+
+201; `{ "prompt": "...", "mood": "calm", "title": "...", "is_instrumental": true }` — generates via MiniMax inline in the request and persists the piece (502 on provider failure).
+
+### Stream / Metadata
+
+```http
+GET /api/v1/music/{music_id}/stream   → 307 → public audio URL (no auth)
+GET /api/v1/music/{music_id}          → public piece metadata (no auth)
+```
+
+### Update / Delete (creator only)
+
+```http
+PUT /api/v1/music/{music_id}
+DELETE /api/v1/music/{music_id}
+```
+
+`PUT` edits metadata (`title` / `license` / `source_url` / `attribution` / `is_public`); platform/default pieces are immutable to regular users. `DELETE` returns 204, or 409 while any clip still references the piece.
 
 ## 9. Export
 
@@ -504,21 +622,47 @@ Request:
 }
 ```
 
-`mentions` pins @ entity references to definite ids (`[{type, id, label}]`, `type` ∈ `asset | output | transcript_segment | workflow_step | recipe`); a `recipe` mention is resolved server-side into pinned task-book slots (fail-fast 422 on unknown / reserved / multiple recipes). Messages echo `mentions` back.
+`mentions` pins @ entity references to definite ids (`[{type, id, label}]`); the live registry types are `asset | output | workflow_step` (MENTIONS §4). `recipe` is retired — a recipe is just a prompt (ADR-040: the card's prefilled template is the entire launch payload), the type member stays only so historical messages still render their chips; `transcript_segment` is filed but unimplemented. Messages echo `mentions` back.
 
-**Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). 15s heartbeat comment frames. Plan-card turns emit zero deltas (structured JSON must arrive whole); the streaming benefit is prose turns. Clients must not auto-reconnect — a retried POST persists the user message again.
+**Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). Non-prose fragments (think prefixes, verdict-JSON tails, reasoning) stream as `assistant.thinking` keepalive frames. 15s heartbeat comment frames. A `start` turn (`answer=null`) emits zero deltas; plan-card (`generate`) turns stream the plan echo (`intent.answer` prose) as deltas while the structured book arrives whole in the terminal frame. Clients must not auto-reconnect — a retried POST persists the user message again.
 
-`prior_intent` and `persona_id` are plan-path transports (never persisted on the message): `prior_intent` is the review panel's current task book — its `explicit` slots pin through re-inference; `persona_id` is the composer's persona choice riding the first message — it is written into the pending intent only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`. `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
+`prior_intent` and `persona_id` are plan-path transports (never persisted on the message): `prior_intent` is the review panel's current task chain — panel edits are direct structural edits to the task list (ADR-043), the edited chain rides `prior_intent` into the next inference, and the PlanAgent re-proposes the full chain with chat revisions always winning; `persona_id` is the composer's persona choice riding the first message — it is written into the pending intent only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`. `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
 
 **Plan path** (project scope, before the first run or while a task book is pending): the PlanAgent builds / refines the task book. Response shapes by verdict — `generate`: `assistant_message` is the docked `task_book` question (the book itself is on `GET /projects/{id}/results` → `pending_intent`); `answer`: a plain informational reply; `start` (prose confirmation): the run starts — `run_id` is set and `answered_question` carries the settled task book.
 
-**Chat loop** (projects with runs, and all asset scopes): the assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
+**Chat loop** (projects with runs): the assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
 
 ### List Conversation Messages
 
 ```http
 GET /api/v1/chat/conversations/{id}/messages
 ```
+
+### Answer a Pending Question
+
+```http
+POST /api/v1/chat/messages/{id}/answer
+```
+
+Answers a docked question (ask primitive) — writing the answer is what unblocks the pending decision: a task-book start begins the run, a choice answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the autonomy tier and the review panel's edited book), `option` / `freeform` (choice answers), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
+
+## 11. Notifications
+
+### List Notifications
+
+```http
+GET /api/v1/notifications?limit=30
+```
+
+Returns `{ "items": [...], "unread_count": n }` for the caller.
+
+### Mark All Read
+
+```http
+POST /api/v1/notifications/read-all
+```
+
+204.
 
 ## 12. Persona Skin Block (brand)
 
@@ -560,17 +704,53 @@ Core models:
 - `Persona` (= user profile: style memory + voiceprint block + skin block; ADR-037/038)
 - `Project` (includes `content_plan: JSON` for persisted ContentPlan)
 - `Asset`
-- `Clip`
-- `Derivative`
-- `WorkflowRun` (includes `context` with `outputs`, `clip_count`, `output_status`)
+- `Output` (one table for every product output — `type` = `clip | post | quotes | carousel | article`; render state on `render_status` / `render_spec` / `files`, publish state on `publishing`)
+- `WorkflowRun` (run-level state machine only; `context` = the confirmed task book, `progress` aggregates node states)
+- `WorkflowStep` (RunPlan node: one step of a run's execution plan, materialized at run creation — `inputs` edge list, `spec` params, `output_refs`, per-node `cost` metering ledger)
 - `Conversation` (project-scoped or asset-scoped chat container)
 - `Message` (chat messages, referenced by `conversation_id`)
 
 Removed / not yet implemented:
 
 - `BrandTemplate` (table dropped, ADR-038 — skin absorbed into `personas.brand`)
-- `HumanFeedback` (feedback is now handled by the `/clips/{id}/revise` endpoint and stored on the revised `Clip`)
-- `WorkflowStep` (dropped; `WorkflowRun.current_step` tracks progress as a string)
+- `HumanFeedback` (feedback is now handled by the `/outputs/{id}/revise` endpoint and stored on the revised `Output`)
+- `WorkflowRun.current_step` (retired — per-step state lives in `workflow_steps`; query running nodes instead)
 
 Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(intro/outro) / `IntroOutroCard`(kind/text/media_url) / `Point`.
 Requests/derivatives: `GenerateRequest`(carousel/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.
+
+## 14. Distribution (Channels & Publications)
+
+Channel OAuth + publish orders (`docs/DISTRIBUTION.md`). URLs name the resource, not the module: `/channels/*` and `/publications/*` hang directly off the API root. Domain errors surface as `detail` codes: 404 `output_not_found` / `channel_not_found` / `channel_not_configured` / `publication_not_found`, 400 `invalid_state`, 409 `illegal_transition` / `already_published` / `channel_not_active`.
+
+### Channels
+
+```http
+GET /api/v1/channels/platforms                  → [{ "platform", "configured" }] — per-platform presence gating for the UI
+GET /api/v1/channels/{platform}/oauth-url       → { "url" } — start the OAuth flow
+GET /api/v1/channels/{platform}/callback        → provider redirect target (no auth header; identity rides the HMAC-signed state nonce); always 302s back to the web app
+GET /api/v1/channels                            → the caller's connected channel accounts
+DELETE /api/v1/channels/{account_id}            → 204; disconnect
+```
+
+### Publications
+
+```http
+POST /api/v1/projects/{project_id}/publications
+GET /api/v1/publications?state=&project_id=&limit=
+GET /api/v1/publications/{pub_id}
+POST /api/v1/publications/{pub_id}/cancel
+POST /api/v1/publications/{pub_id}/retry
+```
+
+Create body: `{ "output_id", "channel_account_id", "overrides": {...} | null, "client_key": "..." | null }` — one publication per channel; `overrides` merge the dialog's edits over the prefilled snapshot (title / caption / hashtags / cover_image_url), and `client_key` dedupes a publish intent (retries reuse the same row). A new publication is born `scheduled` (publish now); the worker picks it up on the next tick.
+
+## 15. Recipes
+
+### List Recipe Cards
+
+```http
+GET /api/v1/recipes
+```
+
+The public card catalogue: each recipe's public projection (base structure / flow / example_* / input_slots, RECIPES §7.1). No auth — the landing audience is anonymous and reads the same cards. Pin substance (the `tasks` compile shape) never leaves the server.
