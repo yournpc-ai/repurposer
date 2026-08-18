@@ -1,6 +1,6 @@
 # Rendering — 渲染链架构（clip-spec 契约 · 烘焙缝 · 渲染服务 · 共享包）
 
-> Status: 活跃（2026-08-17 建）。本文是 **clip-spec 字段级契约与渲染链的唯一事实源**（2026-08-17 自 VIDEO_EDITOR.md §4/§6/§9 迁入）；轨道模型（§8）= **现行契约（ADR-044，2026-08-17 过会，08-17~18 落地）**。
+> Status: 活跃（2026-08-17 建；2026-08-18 对齐现状）。本文是 **clip-spec 字段级契约与渲染链的唯一事实源**（2026-08-17 自 VIDEO_EDITOR.md §4/§6/§9 迁入）；轨道模型（§8）= **现行契约（ADR-044，2026-08-17 过会，08-17~18 落地）**。
 > 上游决策：ADR-016（契约锁定 / 渲染器黑盒）/ ADR-018（服务拆分 + 共享包）/ ADR-020（stills 第二源）/ ADR-023（音乐入库烘焙）/ ADR-024（存储缝）/ ADR-026（C2PA 读 spec）/ ADR-032（Operation Model 快照）/ ADR-044（轨道模型 + 操作集闭包）。
 > 分工：本文 = 契约 + 渲染链架构 + 函数地图 + 概念命名。编辑器交互形态与 L2/L3 分工线归 VIDEO_EDITOR.md；竞品渲染技术调研归 `research/RENDERING_TECH.md`（原始素材层）。
 
@@ -39,7 +39,7 @@ preview == 成片 是结构性的，不是测试出来的。
 | `packages/clip`（@repurposer/clip） | **单一画笔**：`<Clip>` 组件 + spec TS 镜像 + 字幕样式目录；web `<Player>` 与 render 服务共用——parity 之根（ADR-018） |
 | `apps/render` | Remotion 渲染服务（express + @remotion/bundler + @remotion/renderer + 内置 ffmpeg，pnpm 独立于 uv），`POST /render` 黑盒：渲染到临时目录 → 预签名 PUT 上传，无共享卷 |
 | `apps/web` | 编辑器预览（`<Player>` 包 `<Clip>`），手势 → ops HTTP |
-| `apps/api/app/pipeline/` | spec 构建（`clip_spec.py`）+ 烘焙与驱动（`rendering.py`）+ 写纪律（`operations/`） |
+| `apps/api/app/pipeline/` | spec 构建（`clip_spec.py`）+ 烘焙与驱动（`rendering.py`）；写纪律在 `apps/api/app/operations/`（与 pipeline 平级） |
 
 ## 3. clip-spec 字段级契约
 
@@ -171,7 +171,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
   - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：条件 UPDATE（`render_status == RENDERING`）——渲染中途 morph 重排（re-pend）时本次产物为陈品，删孤键、镜像 superseded，永不覆盖新 spec。
   - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
   - `_mirror_render_node` — 渲染生命周期镜像到 run 的 render 步骤（可见性 + 成本的家；run-less 重渲染路径不受影响）。
-- `operations/registry.py` — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的六 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer）= 操作集闭包登记——客户端可调、LLM 词汇随技能批开放；载荷 = 实体引用（段 id / 锚 / 枚举），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
+- `app/operations/registry.py`（与 pipeline 平级） — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的六 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer）= 操作集闭包登记——客户端可调、LLM 词汇随技能批开放；载荷 = 实体引用（段 id / 锚 / 枚举），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
 - 认领谓词：`outputs.render_status`（NULL = 未请求 / PENDING 可认领），worker `FOR UPDATE SKIP LOCKED`（ADR-017）。
 
 ### 写纪律（Operation Model 联动）

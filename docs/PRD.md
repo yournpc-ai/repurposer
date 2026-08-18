@@ -1,5 +1,7 @@
 # PRD: Intelligent Talk Repurposing Platform
 
+> Status: Active（2026-08-18 对齐现状）
+
 ## 1. Document Information
 
 | Item | Content |
@@ -13,7 +15,7 @@
 
 ### 2.1 One-Liner
 
-An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the expert's own voice and style, and guides people with no editing or social-media background in growing their own IP.
+An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the expert's own voice and style, and guides people with no editing or social-media background in growing their personal brand.
 
 ### 2.2 Vision
 
@@ -123,7 +125,7 @@ Talk ends (policy summit / government event / webinar)
       Native-language long article ×1 (paste-ready export for the
         destination editor — WeChat has no API, export IS distribution)
       Vertical clips ×2–3 (original audio + bilingual subtitles)
-      Quote cards (his brand template)
+      Quote cards (his persona skin)
       Newsletter paragraph (society / institute circular)
   → He reads everything: edits two sentences, kills one, keeps three
   → One-click publish / export
@@ -225,7 +227,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | ID | Requirement |
 |:---|:---|
 | FR-007 | Create project (Persona optional; auto-created if unselected) |
-| FR-008 | Project list with Speaker/status/date filters |
+| FR-008 | Project list with Persona filter (`persona_id`) |
 | FR-009 | Soft-delete project |
 | FR-010 | Project status tracking (uploading/processing/review/completed) |
 | FR-011 | Optional EU data residency at project creation (future differentiator, not implemented) |
@@ -262,7 +264,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 | FR-019 | Manual edit of Persona memory (modify/supplement/disable expressions) |
 | FR-020 | Content segmentation & scoring: first-post recommendation score (1-100) + visible reason — answers "which clip is most worth posting first", never predicts reach |
 | FR-021 | Keyframe/slide-page recommendation from uploaded materials |
-| FR-022 | Quote extraction (5-10 most viral quotes) |
+| FR-022 | Quote extraction (5-10 most share-worthy quotes) |
 
 ### 6.5 Voice Settings
 
@@ -305,7 +307,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > | This one doesn't work, give me another version | One-click "regenerate" (triggers Reviser) | No — button is faster |
 > | Make it shorter / more formal / more casual | Quick actions (shorten / formal / casual…) | No — preset actions are faster |
 > | Vague broad direction adjustment ("less jargon, more storytelling") | Natural language sentence | Yes — this is where dialogue adds value |
-> | Change quote card template / subtitle style | Change Brand template settings | No |
+> | Change quote card template / subtitle style | Edit the persona skin (`/personas` skin tab; skin = `persona.brand`) | No |
 >
 > **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
 > When dialogue fallback is used, agent context = talk materials + Persona memory + current output + necessary history.
@@ -422,22 +424,25 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 ### 10.2 Home Page Task Creation & Content Generation
 
 ```
-1. User enters home page, sees input box
+1. User enters home page, sees the composer (input box + Assets / Persona blocks)
 2. Provide input (choose one or multiple combinations)
    ├── Drag/drop or select files: video/audio/transcript/slides/images
-   └── Paste text or enter prompt in input box
-3. Configure (all optional)
-   ├── Persona: select existing Persona or leave unselected (auto-create)
-   └── Brand template: select existing template or leave unselected
-   (outputs / target language 由管线意图识别推导，见 CHAT_ARCHITECTURE.md；composer 无 outputs/tone 控件)
-4. Click generate button
-   ├── Frontend auto calls POST /projects to create Project
-   ├── Frontend auto calls POST /projects/{id}/assets to upload materials
-   └── Frontend auto calls POST /projects/{id}/generate to trigger async generation
-5. System processes asynchronously
+   └── Paste text or enter prompt in input box (prompt required; files optional)
+3. Configure (optional)
+   └── Persona: select existing Persona or leave unselected (auto-create)
+   (outputs / target language 由管线意图识别推导，见 CHAT_ARCHITECTURE.md；composer 无 outputs/tone 控件；
+    身份控件只有可选的 Persona 块，ADR-038)
+4. Click send
+   ├── Frontend calls POST /projects to create the Project (persona_id 随建项目)
+   ├── Frontend uploads materials（upload-url → 直传对象存储 → POST /projects/{id}/assets 登记）
+   └── Frontend navigates to /projects/{id}?overlay=chat，草稿经 router state 交接
+5. Overlay chat 把草稿作为首条 POST /chat 消息发出（mentions + persona_id 随行）
+   ├── Plan path 从消息推断任务书（技能链），计划确认 dock 呈现
+   └── 用户确认任务书后才创建 run（/generate 对无确认任务书的 full-scope 请求直接 422）
+6. System processes asynchronously
    ├── Worker processes Asset: ASR transcription / text extraction / visual image reading
-   └── Worker runs Generation: director (understand → plan) → executors (clips / post / quotes / article / carousel)
-6. User auto-redirects to project detail page to view generation results
+   └── Worker runs Generation: 技能链逐节点执行（clips / post / quotes / article / carousel / dub …）
+7. 产物随 run 完成落在项目详情页的结果画布
 ```
 
 ### 10.3 Review & Export

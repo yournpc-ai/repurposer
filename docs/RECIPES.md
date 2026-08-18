@@ -1,6 +1,6 @@
 # RECIPES — 配方架构（Home 能力卡 + 兑现管线）
 
-> Status: 📐 设计定稿（Remix = overlay 内发射，**配方 = 提示词**——预填模板原文即全部发射载荷，方针 `docs/MENTIONS.md` §3；R1–R4 分期见 §8）
+> Status: 📐 设计定稿（Remix = overlay 内发射，**配方 = 提示词**——预填模板原文即全部发射载荷，方针 `docs/MENTIONS.md` §3；R1–R6 分期见 §8）
 > **架构迭代叠加（ADR-039）**：技能叙事接管——配方 = 技能组合的预设数据包（配方背后是技能，技能内部 = agent 调 LLM 用 tools）；flow key = node kind，启动自检机械对账（§7.1）；配方卡估价贴（报价 = 图 fold）随第九周报价系统落地。
 > 上游定位：`STRATEGY.md` §5（配方库 = 品味的陈列窗，不做内容流）；排期唯一事实源 `PROGRESS.md`（架构迭代 + 闭环链 + 人设模块同周 08-10~08-14 三线并行收口）
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
@@ -14,13 +14,13 @@
 
 ## 0. 已核实的现状事实（读码确认）
 
-- **dub 全链路已在跑**：`tools/dubbing.py`（翻译字幕轨 → 声纹合成 → 替换原音轨）+ `ClipDub` 进 clip-spec + `Clip.tsx` dub 音轨渲染 + `run_dub_clip` 节点 + `dub_clip` skill 已登记可派发。多语言 = 同族节点按语言扇出，**零新代码**。
-- **stills audiogram 全链路已在跑**：`ClipSource.kind="stills"`（图片轮播 + 可选语音轨 + 字幕映射不变 + 音乐循环）；slides→images（`asset_processing.py`）、audio→stills（`node_runners.py:1069`）均在跑；loudnorm 已处理静音渲染。
-- **字幕现状**：`caption_style_preset` 枚举 5 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`），`Clip.tsx` 只渲染当前 active 行——**堆叠字幕（前行驻留、向下累积）不在枚举内**。
+- **dub 全链路已在跑**：`tools/dubbing.py`（翻译字幕轨 → 声纹合成 → 替换原音轨）+ `ClipDub` 进 clip-spec + `Clip.tsx` dub 音轨渲染 + dub 技能节点（`skills/dub/node.py`，`DubClip`，kind=`dub_clip`，技能已对象化，`node_runners.py` 无 dub runner）已登记可派发。多语言 = 同族节点按语言扇出，**零新代码**。
+- **stills audiogram 全链路已在跑**：`ClipSource.kind="stills"`（图片轮播 + 可选语音轨 + 字幕映射不变 + 音乐循环）；slides→images（`asset_processing.py`）、audio→stills（`skills/clips/node.py`）均在跑；loudnorm 已处理静音渲染。
+- **字幕现状**：`caption_style_preset` 枚举 6 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`/`stacking`）——堆叠字幕已收编落地：`stacking = {layout:"stack", entrance:"fade-in", maxLines:5}`（前行驻留、向下累积），`Clip.tsx` 已渲染 stack 布局（preview=render 双端生效）。
 - **crop 是 clip 级静态值** `ClipCrop{x,y,scale}`，无时序；ASR = faster-whisper（词级时间戳，**无 diarization**）。
 - **`packages/clip` 是 editor preview 与 render service 的同源组件**——渲染分支加一处，preview=render 双端自动生效。
 - **任务书 = 技能链（ADR-043）**：请求层唯一语法 = task list（`tasks[{skill, params}]`），产物 = 编译图的派生投影（`derived` 预览行）；chat plan path 接受 `prior_intent`（整链 JSON 随行，chat 修订永远赢——无合并机器）；`pending_intent` + `?overlay=chat` 恢复管道在。
-- **composer = prompt-only**（instruction + persona_id + brand_template_id），意图识别全在管线。
+- **composer = prompt-only**（instruction + persona_id），意图识别全在管线。
 - **文字稿+照片场景已有 Ready 简报**：`docs/tasks/synthetic-talk-video.md`（`voice_gen`/`synth_visual` 节点设计，声纹 TTS 回配 ASR 时间戳，下游零感知）。
 - **demo talk 素材**：`demo/` 前缀是 reset_db 保护区（永不擦除）；配方演示资产内容寻址入桶（哈希 URL 固化在 `apps/web/src/lib/recipes.assets.ts`）。
 
@@ -43,7 +43,7 @@
 video（实拍）               clean-bottom                    原声音轨 + ASR 词级时间戳
 stills（照片轮播）          karaoke-highlight               TTS 声纹 + ASR 回配时间戳
 slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读节奏估算（✅ align_stills）
-                            stacking（新增，§3.2）          + music 槽（独立开关，已有）
+                            stacking                        + music 槽（独立开关，已有）
 ```
 
 "图片轮播 + 堆叠字幕 + 音乐 + 声纹配音" = 三层各取一项的组合。新增字幕效果只动 catalog；新增视觉底只扩 `source.kind`；新增声音形态只加时间源。
@@ -76,7 +76,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 | 序 | 卡 | 承诺 | 输入槽 | 能力依赖 | 点亮 |
 |---|---|---|---|---|---|
 | 1 | 多语言字幕 `multilingual-subs` | 原声不动，字幕上法语/德语/西语（可双语对照） | video | caption 翻译 + 重渲染（零克隆零 TTS） | 第二周 |
-| 2 | 图文视频 `image-video` | 文字稿 + 照片或 PPT → 带字幕配乐短片（可用你的声音） | images / slides + transcript | ✅ 全在跑（§0）；slides 槽接入 | ✅ Live |
+| 2 | 图文视频 `image-video` | 文字稿 + 照片或 PPT → 带字幕配乐短片 | images / slides + transcript | ✅ 全在跑（§0）；slides 槽接入 | ✅ Live |
 | 3 | 高光切片 `highlight-clips` | 长视频里最好的那几段 → 竖屏短片，镜头跟人，带推荐分 | video | `crop_track` 动态单人中景追踪（第三周 spike） | 第八周（定位根落地后，ADR-042 联动） |
 | 4 | 访谈分镜 `reframe` | 双人访谈 → 谁在说话镜头给谁 | video | `crop_track` 静态双人分镜（第三周 spike） | 第八周（同上） |
 | 5 | 虚拟视频 `ai-visuals` | 只有稿子 → 你的虚拟形象讲出来（趣味/实验向） | transcript / audio | R5 生成管线（第四~五周） | R5 就绪后 |
@@ -86,14 +86,14 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 - **定位**：多语言旗舰从 dub 换成字幕卡（2026-08-13 拍板）。依据：主渠道 LinkedIn 视频默认静音自动播放，**字幕就是主消费层**；原声 = 真实性的指纹（反 slop 战略，STRATEGY 牌 4）——AI 做翻译字幕，真实人声当主角，比"AI 声音当主角"更对得起定位。
 - **承诺**（2026-08-14 二次修订，用户拍板原文）：为你的视频带来多语言单行或双语字幕，或原声多语言配音。——主语从"演讲"放开到"视频"（核心用户早已不只是演讲）；双语对照与配音并入承诺（能力同日落地，承诺不先于能力）。**卡不含剪辑**（2026-08-14 三次修订，用户拍板）：只展示多语言与字幕能力——流程图摘掉剪辑规划步骤（理解素材 → 翻译字幕×2 → 配音 → 渲染），示例提示词只点名多语言诉求（烘焙示例碰巧是高光片段，但卡不卖剪辑）。
 - **能力现状**：caption 翻译链（translator agent + `translate_caption_track`）在跑；重渲染零缺口。**双语对照已落地**（2026-08-14）：`ClipSpec.translation_track` 单元级对照轨 + `translate_clip` 任务参数 `bilingual`（ADR-043 后住任务参数，原任务书字段退役）——fork 保留原文 word 轨、译文入对照轨，渲染端译文主行 + 原文小行在下（stack 布局只画原文轨——双语堆叠墙不可读）；标题 overlay 随字幕同译（`translate_text`，dub 2026-08-09 同款教训）。配音变体同图编译（`dub_clip` fork，声纹克隆原声）。
-- **画幅**（2026-08-14 三档画幅）：clip-spec `aspect` 全链放行 `"9:16" | "1:1" | "16:9"`（schema / clip_spec clamp / 渲染端 ASPECT_DIMENSIONS 1920×1080 / `set_aspect` op / 编辑器下拉）；画幅请求 = `select_clips` 任务参数 `aspect`（ADR-043 参数化——PlanAgent 从"横版/保持原画幅"等点名识别，省略 = 皮肤默认 9:16），编译进节点 `spec.aspect` 覆盖品牌默认（run.context 的 `aspect` 仅为存量读容忍）。本卡 demo 源是方幅 → 卡烘焙 1:1。卡面/teaser 展示横、方幅时**上下留黑保原比例**（object-contain，抖音横屏竖放惯例），永不裁剪。
+- **画幅**：clip-spec `aspect` 四档全链放行 `"9:16" | "1:1" | "16:9" | "original"`（`original` = 整条材料化跟源画幅，渲染端 calculateMetadata 探源尺寸，仅 materialize_source 写入；schema / clip_spec clamp / 渲染端 ASPECT_DIMENSIONS 1920×1080 / `set_aspect` op / 编辑器下拉）；画幅请求 = `select_clips` 任务参数 `aspect`（ADR-043 参数化——PlanAgent 从"横版/保持原画幅"等点名识别，省略 = 皮肤默认 9:16），编译进节点 `spec.aspect` 覆盖品牌默认（run.context 的 `aspect` 仅为存量读容忍）。本卡 demo 源是方幅 → 卡烘焙 1:1。卡面/teaser 展示横、方幅时**上下留黑保原比例**（object-contain，抖音横屏竖放惯例），永不裁剪。
 - **字幕尺寸按画面推导**（2026-08-14，用户拍板）：不做固定像素——皮肤 `captionSize` 是 1080×1920 竖屏基准值，渲染端按帧高等比缩放（默认 68 → 9:16 保持 68，1:1/16:9 得 38，≈3.5% 帧高 = TikTok/CapCut/YouTube 跨画幅通用比例）；左右边距 8% 随帧宽自适应；标题 overlay 同规则缩放。**双语对照两行打折**：译文主行 ×0.82、原文小行 ×0.55（两行需要空气）。
 - **示例提示词教学位**（2026-08-14 二次修订，取代 variants desc）：左区「示例提示词」标题 + 按卡 `recipes.<id>.promptHint` 引导句（字幕卡点名「双语字幕」「中文字幕」「西语配音」示例）——变体教学从承诺句下的 desc 行移入提示词区，引导句不是控件的纪律不变（§7.2）。
 - **素材账单**：`demo/uploads/xy_2_15s.mp4`（WFT 登台演讲 530–545s 截取，960×960 方幅，"We Focus on Industries" 内容页稳定窗，已策展 2026-08-13）；预览 = 同选段 1:1 四案例对照包——EN 原声 + 中英双语对照 + FR 单行字幕 + ES 声纹配音——真管线跑出后由 `scripts/bake_subs_contrast.py` 收获（harvest 模式：run 产物 Output id 或本地 mp4 + 每案例独立 poster 帧，内容寻址入 demo/ 树；FR 单行版脚本侧产——run 级双语开关下管线 fork 出来都是双行）。
 
 ### 4.2 图文视频卡（image-video，已 Live，扩 slides 槽）
 
-R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。**画幅跟源**（2026-08-17 拍板）：本卡链无 clip 类技能 = 画面没倒手，输出比例跟素材原画幅（横版照片/课件 → 16:9）——示例片按源烘焙 16:9（照片满幅零裁剪），promptTemplate 点名「保持原画幅」（真实 run 经 PlanAgent 考纲映射源形固定档兑现）；任意源形的 renderer original 档归需求池（PROGRESS §2 末）。
+R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。**画幅跟源**（2026-08-17 拍板）：本卡链无 clip 类技能 = 画面没倒手，输出比例跟素材原画幅（横版照片/课件 → 16:9）——示例片按源烘焙 16:9（照片满幅零裁剪），promptTemplate 点名「保持原画幅」（真实 run 经 PlanAgent 考纲映射源形固定档兑现；任意源形由 renderer `original` 档兜底——整条材料化默认跟源）。
 
 ### 4.3 高光切片（highlight-clips）与访谈分镜（reframe）——一个能力，两道菜
 

@@ -25,9 +25,9 @@
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程重写 + 实施切分 | 已拍板方向（2026-08-13，ADR-042），未实施——排期 PROGRESS 第六~八周 | 动身份模块/渠道/选题/home 前 |
-| `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 技能包/花名册/NodeBase/估价 | 活跃（2026-08-09 重画；架构迭代 08-10~08-14 施工中） | 动 generation/agents/skills 前 |
+| `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 技能包/花名册/NodeBase/估价 | 活跃（2026-08-09 重画；2026-08-18 随 ADR-043 收口请求层语法） | 动 generation/agents/skills 前 |
 | `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
-| `RENDERING.md` | **clip-spec 字段级契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ 轨道模型演进方向（§8，待 ADR） | 活跃（2026-08-17 建；契约自 VIDEO_EDITOR §4 迁入） | 动渲染链/clip-spec/轨道/渲染服务前 |
+| `RENDERING.md` | **clip-spec 字段级契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ 轨道模型（§8 = 现行契约，ADR-044） | 活跃（2026-08-17 建；契约自 VIDEO_EDITOR §4 迁入；轨道模型 ADR-044 08-17 过会、08-17~18 落地） | 动渲染链/clip-spec/轨道/渲染服务前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
 | `DECISIONS.md` | 现行架构决策集（ADR；编号不连续——过时条目直接删除，历史在 git） | 活跃 | 新决策 / 架构约束变化时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
@@ -36,9 +36,9 @@
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：task list 契约 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现（2026-07-26：chat UI + RunCard + edit ops 接线；plan 级节点重跑 📋） | 动 chat / registry / 进度推送前 |
 | `INTENT_COVERAGE.md` | 意图层覆盖全景：单一表面（/chat）× 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建；**2026-08-04 意图层单面化**——/intent 退役、任务书并入 plan path，简报 `tasks/intent-surface-unification.md`） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
-| `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R4 分期 | 🚧 R1/R2 已落地（caption catalog + stacking + dub 接线 + 卡片层 + align_stills 无声图片视频；R3–R4 待施工）；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
+| `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R6 分期 | 🚧 R1/R2/R6 已落地（caption catalog + stacking + dub 接线 + 卡片层 + align_stills 无声图片视频 + 多语言字幕卡——multilingual-subs 与 image-video 两卡 live；R3–R5 待施工）；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
-| `API.md` | API 参考 | 活跃 | 对接口前 |
+| `API.md` | API 参考 | 活跃（2026-08-18 全面对齐路由） | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + 渲染技术调研 | 原始素材层 | 引用证据时 |
 | `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `tasks/done/`（历史记录，不再维护） | 活跃 | 开工对应功能前必读 |

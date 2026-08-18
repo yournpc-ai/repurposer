@@ -6,7 +6,7 @@
 > It is the conclusion of multiple rounds of technical reviews (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
 > See also: ADR-016 (decision record), ADR-017 (queue foundation, implemented).
 > **clip-spec 字段级契约、渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）、渲染器替换路径 → `RENDERING.md`（本文原 §4/§6/§9 已迁入，本文只留编辑器交互形态与范围纪律）。**
-> Last updated: 2026-07-20.
+> Last updated: 2026-08-18.
 
 ## 1. Background & Category Positioning
 
@@ -43,7 +43,7 @@ Without these two, the editor cannot be built:
 
 | Prerequisite | Choice | Why it is a hard blocker |
 |:---|:---|:---|
-| **Streamable / seekable video URL** | 对象存储（Volcengine TOS）+ API 307 重定向 / `?proxy=1` 流式（ADR-024），Range 由对象存储与 API 双侧支撑 | Trimming / preview requires the browser to **play + seek** the source video |
+| **Streamable / seekable video URL** | 对象存储（Volcengine TOS）+ API 307 重定向 / `?proxy=1` 流式（ADR-024），Range 完全由对象存储承担（API 不做 Range；`?proxy=1` 分支整文件落临时盘后 FileResponse） | Trimming / preview requires the browser to **play + seek** the source video |
 | **Multilingual ASR (word-level timestamps)** | Self-hosted WhisperX / faster-whisper (EU/GDPR, not cloud API) | Foundation for real-time subtitle overlay + subtitle editing (= Descript "forced alignment" equivalent) |
 
 Standard MP4/H.264 uploads are **directly playable in the browser** (via the storage-served URL), no transcoding needed. Proxy transcoding (H.264/AAC) is only needed when the upload is a **non-browser-playable format** (.mov/.mkv/strange codec) — this step is **deferrable**, not an MVP prerequisite. Note: **Remotion rendering bundles its own ffmpeg, faster-whisper uses PyAV (wheel bundles ffmpeg)**, neither requires system ffmpeg; system ffmpeg is only potentially needed for the proxy transcoding step.
@@ -105,10 +105,10 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 
 ## 12. Current Implementation Notes
 
-- The backend generates `carousel` and `blog` output types alongside clips, LinkedIn posts, quote cards, and summaries. As of the current build, the project results page (`/projects/$id`) only renders tabs for **clips, LinkedIn, quote cards, and summaries**; carousel and blog outputs exist in the API but are not yet surfaced in the UI or the library endpoint.
+- The backend generates derivative output types `post`, `quotes`, `carousel`, and `article` alongside clips (there are no `summaries` or `blog` types). The project results page (`/projects/$id`) renders one tab per type: **clips, post, quotes, carousel, article**.
 - The clip editor route (`/projects/$id/clips/$clipId`) uses the shared `@repurposer/clip` component inside a Remotion `<Player>` and supports caption editing, language switching, render triggering, and export. The full Descript-style single-track trim strip described in §7 is partially wired through `trimBounds`/`removeRange` helpers but not yet fully exposed in the UI.
 - **Clip card rendering state**: on the project results page, a clip with `render_status` of `pending` or `rendering` shows a spinner overlay, hides the action bar, and disables hover playback / detail open until rendering completes or fails.
-- **Clip download**: the frontend requests rendered outputs with `?download=1` so the API returns `Content-Disposition: attachment`, prompting the browser to save the MP4/SRT instead of playing it inline.
+- **Clip download**: the frontend downloads via `downloadFile` — fetch the URL → blob → `<a download>` on a same-origin object URL (honored cross-origin; API-relative URLs carry the bearer token via apiFetch). The API also has `/outputs/?download=true` (307 to a presigned GET with `Content-Disposition: attachment`), but the frontend does not use it.
 - **Project thumbnails**: the home page project cards display the earliest rendered clip as a video thumbnail with a duration / aspect badge; the API left-joins the first rendered clip per project in `GET /api/v1/projects`.
 - **Image visual understanding**: IMAGE assets are consumed directly by the generation agents as raw media — M3 multimodal reads the original image (`pipeline/asset_processing.py` registers a no-op processor for IMAGE).
 

@@ -1,6 +1,6 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/done/publish-dialog-notifications.md`；待办 = 平台应用凭据联调）
+> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `tasks/done/publish-dialog-notifications.md`；待办 = 平台应用凭据联调；2026-08-18 对齐代码现状：§3.2 索引谓词/删除语义、§4.1 token 加密定案（ADR-031）、§10.2 路由表补全、§14 开放问题收尾）
 >
 > 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第十一周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 
@@ -45,7 +45,7 @@ avatar_url: str | None
 scopes: JSON                     # list[str]，授权时快照
 credentials_enc: JSONB           # 加密存储：{access_token, refresh_token, ...}
                                  # 形状随平台（P2 的 ESP 渠道是 API-key 而非 OAuth，
-                                 # 同一 JSONB 兼容）；加密方案见 §14 开放问题
+                                 # 同一 JSONB 兼容）；加密 = ADR-031：Fernet + env key（§4.1）
 token_expires_at: datetime | None
 status: Enum("active", "expired", "revoked")
 last_refreshed_at: datetime | None
@@ -72,8 +72,9 @@ channel_account_id: UUID FK channel_accounts ON DELETE SET NULL
                              # 渠道断连只删 token，发布历史留存（配合 payload.channel 快照）
 payload: JSONB                   # 发布快照：title / caption / hashtags / cover / 媒体引用
                                  # + channel 快照（platform + 账号显示名，断连后历史可读）
-                                 # 建单时从 target 预填（clips 表已有发布套件字段：
-                                 # title/description/hashtags/cover_image_url）；
+                                 # 建单时从 target 预填（outputs 表发布套件字段：
+                                 # publishing.title/description/hashtags/cover_image_url
+                                 # + files 媒体键）；
                                  # 快照后 clip 再编辑不同步（见 §14）
 ai_disclosure: bool              # ADR-026：clip-spec 分类器推导，非用户勾选；
                                  # 提交审核时（draft→pending_review）重新推导——
@@ -95,9 +96,9 @@ metrics: JSONB | None            # 回流字段（P2）：{t1h: {...}, t24h: {..
 created_at / updated_at
 ```
 
-索引：`(state, due_at)` 部分索引（`WHERE state='scheduled'`，认领扫描）；`(user_id, state)`（队列页）；`idempotency_key` 唯一；`(channel_account_id)`。
+索引：`(state, due_at)` 部分索引（`WHERE state IN ('SCHEDULED','PUBLISHING')`，认领扫描）；`(user_id, state)`（队列页）；`idempotency_key` 唯一；`(channel_account_id)`。
 
-删除语义：删除 clip/derivative 前，服务层先取消其非终态 publication（FK `ON DELETE RESTRICT` 兜底）。
+删除语义：`output_id` FK 为 `ON DELETE RESTRICT`——删除带非终态 publication 的产物会撞 FK 报错；服务层"先取消其非终态 publication 再删产物"的优雅路径未实施。
 
 ### 3.3 状态机
 
@@ -149,7 +150,7 @@ created_at
 |---|---|
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn 应用凭证 |
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | TikTok 应用凭证（官方字段就叫 client_key，不是 client_id） |
-| `CHANNEL_CREDENTIALS_KEY` | `credentials_enc` 的加密 key（方案定案走 ADR，§14 开放问题 2） |
+| `CHANNEL_CREDENTIALS_KEY` | `credentials_enc` 的加密 key（ADR-031：Fernet；空 = 明文存储带告警，仅限本地 dev） |
 
 三个"刻意不加"：
 
@@ -225,6 +226,7 @@ class PlatformAdapter(Protocol):
 
 | 端点 | 作用 | 状态迁移 |
 |---|---|---|
+| `GET /channels/platforms` | 平台 presence-gating 列表（各平台配置与否，"即将上线"态，§4.1） | — |
 | `GET /channels/{platform}/oauth-url` | 生成授权链接 | — |
 | `GET /channels/{platform}/callback` | OAuth 回跳，落 channel_account | — |
 | `GET /channels` / `DELETE /channels/{id}` | 渠道列表 / 断开（删 token，历史留存） | — |
@@ -233,6 +235,7 @@ class PlatformAdapter(Protocol):
 | `POST /publications/{id}/approve` / `reject` | 审核【机构模式 P2；reject 必填 reason】 | → approved / → draft |
 | `POST /publications/{id}/schedule` | 定时或立即（写 scheduled_at + due_at） | approved → scheduled |
 | `POST /publications/{id}/cancel` | 取消（published 前任意态） | → cancelled |
+| `POST /publications/{id}/retry` | 失败后手动重试（重置 attempt_count，due 立即；有 platform_job_id 时 worker 走对账轮询而非重发，§7） | failed → scheduled |
 | `GET /publications?state=&project_id=` | 列表（审核队列页 = `state=pending_review`） | — |
 | `GET /publications/{id}` | 详情 + publication_events 时间线 | — |
 
@@ -327,6 +330,5 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 ## 14. 开放问题
 
 1. **TikTok AI 标识 API 字段**：Content Posting API 是否暴露披露字段（2026-07 未见官方确认）——跟踪官方文档，出现后 adapter 接入；此前靠审核队列人工确认。
-2. **Token 加密方案**：应用级加密的 key 管理（env key + Fernet vs KMS）——随表结构落地时定，写 ADR。
-3. **payload 快照 vs 同步**：建单后 clip 再编辑，publication 不同步（快照语义）；是否需要"重新预填"按钮，看 P1 使用反馈。
-4. **LinkedIn 大视频上传**：多步流程的分片大小与超时策略，联调时定。
+2. **payload 快照 vs 同步**：建单后 clip 再编辑，publication 不同步（快照语义）；是否需要"重新预填"按钮，看 P1 使用反馈。
+3. **LinkedIn 大视频上传**：多步流程的分片大小与超时策略，联调时定。

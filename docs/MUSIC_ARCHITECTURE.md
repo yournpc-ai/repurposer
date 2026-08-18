@@ -1,6 +1,6 @@
 # Repurposer Music Architecture
 
-> Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现）
+> Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现；2026-08-18 对齐现状：音乐默认住人设皮肤块、自定义生成端点 inline）
 > Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/tasks/done/music-asset-library.md`
 
 ---
@@ -38,7 +38,8 @@
 Music Library（Music 表 + 对象存储 music/ 前缀，预生成 + 用户触发生成）
         │
         ▼
-默认曲（musicEnabled / musicId / musicGainDb；归配方注册表 / 任务书默认，ADR-038 三分流——音乐属工艺配置，不进人设）
+默认曲（musicEnabled / musicId / musicGainDb；住人设皮肤块 persona.brand——
+DEFAULT_BRAND_CONFIG 含音乐默认，persona.brand 合并覆盖，app/memory/brand.py）
         │
         ▼
 Clip Agent 生成时选曲（看到库清单 + 品牌默认，输出 music_id / enabled / gain_db）
@@ -62,7 +63,7 @@ Remotion <Audio url>（loop + gain_db 混音）
 |---|---|---|
 | **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | 与 uploads/outputs 同约定（ADR-024） |
 | **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 persona） |
-| **默认曲目** | 配方注册表 / 任务书默认 `musicId`（ADR-038） | 用户侧 = "default music" |
+| **默认曲目** | 人设皮肤块 `persona.brand` 的 `musicId`（`musicMood` 为兜底键；系统默认皮肤 `DEFAULT_BRAND_CONFIG` 垫底，`app/memory/brand.py`） | 用户侧 = "default music" |
 | **Per-clip music choice** | `outputs[type=clip].render_spec.music` | 渲染契约是运行时事实源 |
 
 ---
@@ -77,7 +78,7 @@ Remotion <Audio url>（loop + gain_db 混音）
 - **User-generated pieces (MiniMax)**: `generated_by_user_id = <user_id>`, `is_public = TRUE` 默认。用户触发生成，但进入共享库。
 - **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` 默认。私有，显式分享 + 审核后才公开。
 
-**默认曲配置**：`musicEnabled: bool`、`musicId: str | null`、`musicGainDb: float = -18.0`——归配方注册表 / 任务书默认（ADR-038 三分流）。
+**默认曲配置**：`musicEnabled: bool`、`musicId: str | null`、`musicGainDb: float = -18.0`——住人设皮肤块（`DEFAULT_BRAND_CONFIG` 含此三键 + `musicMood` 兜底，`persona.brand` 合并覆盖，`app/memory/brand.py`）。
 
 **Render spec contract（不变）**：
 
@@ -116,7 +117,7 @@ Users who want custom music can trigger generation later via chat/editor.
 
 ### 7.3 Seeding
 
-Default music pieces are created at application startup if they do not exist（按 `mood` 唯一键查重，`scripts/seed_default_music.py`；reset_db 会清空包括平台音乐，需重新 seed，花费 MiniMax 配额）。Audio files live at `music/{music_id}.{ext}` in object storage.
+Default music pieces are created at application startup if they do not exist（启动对账 = `app/pipeline/music.py:seed_default_music`，由 `main.py` lifespan 调用：按 `mood` 查重，行不存在但对象在库则建行指过去，对象也不在则跳过——**全程不调 MiniMax**；一次性生成+上传脚本 = `apps/api/scripts/seed_default_music.py`，幂等）。reset_db 保护 `music/` 前缀（对象永不清），清库后重启 API 即对账建行、零 MiniMax 配额花费。Audio files live at `music/{music_id}.{ext}` in object storage.
 
 ### 7.4 Artist-Generated Music Pieces (Future)
 
@@ -131,16 +132,16 @@ When the platform has artists or power users, their generated music pieces can a
 
 ## 8. Generation Flow
 
-1. **默认曲**：配方 / 任务书默认 `musicId` → `GenerationContext.brand_music_id`。
+1. **默认曲**：人设皮肤块 `musicId`（`persona.brand` 合并系统默认皮肤后解析）→ `GenerationContext.brand_music_id`。
 2. **Clip Agent 选曲**：prompt 收到库清单（mood + 一句话描述）与品牌默认曲，为每条 clip 输出 `music_id` / `music_enabled` / `music_gain_db`。选择逻辑：① 品牌默认契合即用；② 按 clip 内容调性推断。
-3. **烘焙**：`build_clip_spec` 解析 `Music` 行 → `render_spec.music`（`url` = 公开对象 URL）。**生成时零 MiniMax 调用**。
+3. **烘焙**：`app/memory/brand.py` 的 `music_from_plan` / `music_from_block` 解析 `Music` 行并把公开对象 URL 烘成 `ClipMusic`；`build_clip_spec` 只收现成 `ClipMusic` 入参 → `render_spec.music`。**生成时零 MiniMax 调用**。
 
 ---
 
 ## 9. Refinement: Edit Ops + Custom Generation
 
 - **换曲 / 开关 / 调增益** = `set_music` edit op（CHAT_ARCH §9，operations 表，editor 与 chat 两前端共用）→ `outputs.render_status=PENDING` → worker 重渲染。
-- **自定义新曲** = `POST /api/v1/music` 触发 MiniMax 生成（重活走 worker，ADR-017）→ 新 `Music` 行入库（默认 `is_public=True`，进共享库）→ `set_music` 应用到 clip → 重渲染。
+- **自定义新曲** = `POST /api/v1/music/generate` 触发 MiniMax 生成——**请求处理器内 inline 完成**（直接 await 生成，无 worker 无排队）→ 新 `Music` 行入库（默认 `is_public=True`，进共享库）→ `set_music` 应用到 clip → 重渲染。
 - **chat 词汇**：`add_music` skill（registry 已登记，配乐殿后的 `after` 约束）。
 
 ### 9.1 Cost Control
@@ -154,7 +155,7 @@ Music generation is more expensive than selection. To avoid runaway costs:
 
 ## 10. Music Library UI
 
-- **默认曲不设独立设置页**：音乐默认属工艺配置（ADR-038），由配方 / 任务书携带，不进人设皮肤分区。
+- **默认曲设置 = 人设皮肤分区的 Music 分组**：人设页皮肤编辑器内的 Music 面板（`components/persona/music-panel.tsx`）列出可选曲目（公开 + 自己的）、试听、选默认、从 prompt 生成新曲；`musicEnabled` 是皮肤级总开关。
 - **In Result Editor**：clip 编辑器可换曲、开关、增益滑杆、"Generate new"。
 - **Future: Standalone Music Library** (`/library/music`)：浏览/搜索/管理全库，Phase 2+ 后置。
 
@@ -236,7 +237,7 @@ When user-generated music becomes public:
 ## 13. Integration
 
 - **Agent 编排**：`GenerationContext.brand_music_id`；clip 技能选曲；音乐质检归 verify 节点（Phase 3，未实现——AGENT_ARCH §9）。
-- **队列**：自定义生成是重活，走 worker（ADR-017），禁 FastAPI BackgroundTasks。
+- **队列**：自定义生成在请求处理器内 inline 完成（`POST /api/v1/music/generate` 直接 await MiniMax），不进 worker 队列。
 - **存储缝**（ADR-024）：`music/` 前缀、DB 只存 key、渲染取公开对象 URL。
 - **渲染服务零改动**：`packages/clip` 与 `apps/render` 只播 `spec.music.url`。
 
