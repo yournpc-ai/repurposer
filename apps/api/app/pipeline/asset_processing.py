@@ -1,12 +1,20 @@
 """Asset processing dispatch.
 
 A worker hands a claimed asset to :func:`process_asset`, which runs the
-processor registered for the asset's type and writes the terminal state
+processor chain registered for the asset's type and writes the terminal state
 (``COMPLETED`` with its outputs, or ``FAILED`` with an error). This module is
 the single seam where heavier processors plug in:
 
-- VIDEO / AUDIO  -> ASR (faster-whisper), producing transcript + word timestamps
-- SLIDES         -> per-page render + OCR (future; today plain PDF text)
+- VIDEO -> ASR (faster-whisper: transcript + word timestamps) -> speaker_map
+  (ADR-045: form gate + mouth-energy attribution, the asset-level
+  who-speaks-when fact)
+- AUDIO -> ASR (speaker_map stays video-only: its signal is visual)
+- SLIDES -> per-page render + OCR (future; today plain PDF text)
+
+A type maps to an ORDERED chain of processors (ADR-045 D4's "第二处理器"
+shape): each processor receives the asset and the accumulated prior result
+and returns its own delta; deltas merge shallowly (``meta`` dicts combine,
+scalar fields take the last non-None value).
 """
 
 import asyncio
@@ -23,6 +31,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
 from app.pipeline.graph import media_missing
+from app.pipeline.speaker_map import speaker_map_processor
 from app.tools.extraction import extract_text, render_pdf_pages_and_upload
 from app.tools.storage import download_to_temp, get_project_output_dir
 
@@ -39,10 +48,24 @@ class ProcessResult:
     slide_pages: list[str] | None = None  # object storage keys to rendered PDF pages
     meta: dict[str, Any] = field(default_factory=dict)
 
+    def merge(self, delta: "ProcessResult") -> "ProcessResult":
+        """Fold a processor's delta into the accumulated result."""
+        if delta.extracted_text is not None:
+            self.extracted_text = delta.extracted_text
+        if delta.transcript is not None:
+            self.transcript = delta.transcript
+        if delta.duration_seconds is not None:
+            self.duration_seconds = delta.duration_seconds
+        if delta.slide_pages is not None:
+            self.slide_pages = delta.slide_pages
+        self.meta.update(delta.meta)
+        return self
 
-# A processor turns an asset into a ProcessResult (or an empty one for media
-# types with no processor yet).
-Processor = Callable[[Asset], Awaitable[ProcessResult]]
+
+# A processor turns an asset into a ProcessResult delta (or an empty one for
+# media types with no processor yet). ``prior`` is the accumulated result of
+# the processors before it in the chain (empty for the first).
+Processor = Callable[[Asset, ProcessResult], Awaitable[ProcessResult]]
 
 
 async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
@@ -55,14 +78,14 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     return not await media_missing(db, project_id)
 
 
-async def _extract_text_processor(asset: Asset) -> ProcessResult:
+async def _extract_text_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     """Extract text from a document-like asset (txt/md/pdf)."""
     if not asset.file_url:
         return ProcessResult()
     return ProcessResult(extracted_text=await extract_text(asset.file_url))
 
 
-async def _slides_processor(asset: Asset) -> ProcessResult:
+async def _slides_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     """Slides: render PDF pages to images for stills backing.
 
     The generation agents (content director / clip agent) read slide images
@@ -79,7 +102,7 @@ async def _slides_processor(asset: Asset) -> ProcessResult:
     return ProcessResult(slide_pages=slide_pages)
 
 
-async def _asr_processor(asset: Asset) -> ProcessResult:
+async def _asr_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     """Transcribe a video/audio asset to text + word-level timestamps."""
     path = await download_to_temp(asset.file_url)
     if path is None:
@@ -101,7 +124,7 @@ async def _asr_processor(asset: Asset) -> ProcessResult:
         path.unlink(missing_ok=True)
 
 
-async def _noop_processor(asset: Asset) -> ProcessResult:
+async def _noop_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     """Placeholder for types with no text/transcript processor.
 
     IMAGE assets are consumed directly by the generation agents as raw media,
@@ -111,14 +134,16 @@ async def _noop_processor(asset: Asset) -> ProcessResult:
     return ProcessResult()
 
 
-PROCESSORS: dict[AssetType, Processor] = {
-    AssetType.TRANSCRIPT: _extract_text_processor,
-    AssetType.PAST_MATERIAL: _extract_text_processor,
-    AssetType.SLIDES: _slides_processor,  # PDF page renders only
-    AssetType.VIDEO: _asr_processor,
-    AssetType.AUDIO: _asr_processor,
-    AssetType.VOICE_SAMPLE: _noop_processor,
-    AssetType.IMAGE: _noop_processor,  # agents consume the original image
+PROCESSORS: dict[AssetType, list[Processor]] = {
+    AssetType.TRANSCRIPT: [_extract_text_processor],
+    AssetType.PAST_MATERIAL: [_extract_text_processor],
+    AssetType.SLIDES: [_slides_processor],  # PDF page renders only
+    # speaker_map is VIDEO's second processor (ADR-045 D4); AUDIO stays
+    # ASR-only — the attribution signal is visual.
+    AssetType.VIDEO: [_asr_processor, speaker_map_processor],
+    AssetType.AUDIO: [_asr_processor],
+    AssetType.VOICE_SAMPLE: [_noop_processor],
+    AssetType.IMAGE: [_noop_processor],  # agents consume the original image
 }
 
 
@@ -136,8 +161,10 @@ async def process_asset(asset_id: UUID) -> None:
             return
 
         try:
-            processor = PROCESSORS.get(asset.type, _noop_processor)
-            result = await processor(asset)
+            chain = PROCESSORS.get(asset.type, [_noop_processor])
+            result = ProcessResult()
+            for processor in chain:
+                result.merge(await processor(asset, result))
             if result.extracted_text is not None:
                 asset.extracted_text = result.extracted_text
             if result.transcript is not None:

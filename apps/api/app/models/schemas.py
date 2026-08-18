@@ -1319,6 +1319,23 @@ class ClipCrop(BaseModel):
     scale: float = Field(default=1.0, gt=0.0)
 
 
+class CropKeyframe(BaseModel):
+    """One framing decision on the SOURCE timeline (ADR-045 D5): from source
+    second ``t``, hold this normalized center + scale. The crop data track is
+    a sparse list of these — a keyframe is a decision ("switch to A here"),
+    never per-frame data. Anti-dizzy parameters (dwell / deadzone / slew) are
+    write-side constraints of the skill, never serialized; the renderer eases
+    into each keyframe over a fixed ~8-frame smoothstep (a render constant).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    t: float = Field(ge=0.0)
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
+    scale: float = Field(gt=0.0)
+
+
 class CaptionCue(BaseModel):
     """One caption cue (word/line) from ASR word-level timestamps; text editable."""
 
@@ -1587,6 +1604,10 @@ class ClipSpec(BaseModel):
     aspect: Literal["9:16", "1:1", "16:9", "original"] = "9:16"
     segments: list[ClipSegment] = Field(default_factory=list)
     crop: ClipCrop = Field(default_factory=ClipCrop)
+    # Crop data track (ADR-045): sparse framing decisions on the source
+    # timeline, sampled per frame by the renderer's sampleCrop. Empty/absent
+    # = the static `crop` above (degenerate form, 语义不变).
+    crop_track: list[CropKeyframe] | None = None
     caption_track: list[CaptionCue] = Field(default_factory=list)
     # 双语对照轨 (translation_track, 2026-08-14 双语字幕): the translated half
     # of a bilingual caption pair — UNIT-level cues (one per ~10 words, no
@@ -1626,6 +1647,17 @@ class ClipSpec(BaseModel):
         layer_ids = [layer.id for layer in self.layers]
         if len(set(layer_ids)) != len(layer_ids):
             raise ValueError("layers: duplicate ids — anchor addressing requires uniqueness")
+        return self
+
+    @model_validator(mode="after")
+    def _crop_track_ordered(self) -> "ClipSpec":
+        """Crop keyframes ride strictly ascending source seconds — the
+        sampler's hold-then-ease semantics need an unambiguous 'latest
+        decision' per instant."""
+        track = self.crop_track or []
+        ts = [k.t for k in track]
+        if any(b <= a for a, b in zip(ts, ts[1:])):
+            raise ValueError("crop_track: keyframe t must be strictly ascending")
         return self
 
 
@@ -1732,6 +1764,34 @@ class CaptionTranslation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     lines: list[str] = Field(default_factory=list)
+
+
+class SpeakerFormGate(BaseModel):
+    """M3 form-gate verdict for a video asset's frame grid (ADR-045 D4).
+
+    ``people`` = distinct people visible across the grid; ``scene`` classifies
+    the setup (a two-person face-to-face ``interview``, a one-speaker
+    ``presentation``/stage talk, or ``other``); low ``confidence`` sends the
+    gate to its one confirmation grid (2 calls cap).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    people: int = Field(ge=0)
+    scene: Literal["interview", "presentation", "other"]
+    confidence: Literal["high", "low"] = "high"
+
+
+class SpeakerArbitration(BaseModel):
+    """M3 arbitration verdict for one ambiguous interview turn (ADR-045 D3):
+    a short mid-turn video clip (audio included) → which side is speaking
+    (screen ``left`` / ``right``), or ``unclear`` (caller falls back to the
+    energy argmax).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speaker: Literal["left", "right", "unclear"]
 
 
 class ExtractedPersonaMemory(BaseModel):

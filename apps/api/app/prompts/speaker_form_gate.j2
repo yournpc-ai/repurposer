@@ -1,0 +1,23 @@
+You are analyzing a 3x3 grid of frames sampled evenly across a video.
+
+## Task
+
+Decide two things about the video's visible setup:
+
+1. `people`: how many DISTINCT people are visibly present on camera across the frames — `0`, `1`, `2`, or `3` (use `3` for three or more). Count only real people physically on camera. Never count faces on slides, screens, photos, posters, or logos.
+2. `scene`: the setup —
+   - `"interview"`: two people in conversation, typically seated facing each other in one static wide shot;
+   - `"presentation"`: one speaker presenting — a stage, a podium, or a single talking head;
+   - `"other"`: anything else (no people, montage, screen recording, b-roll only).
+
+## Output format
+
+Output only valid JSON:
+
+{
+  "people": <int>,
+  "scene": "interview" | "presentation" | "other",
+  "confidence": "high" | "low"
+}
+
+Set `confidence` to `"low"` when the grid is genuinely ambiguous (people partly out of frame, heavy occlusion, unclear count). Output JSON only — no markdown, no commentary.

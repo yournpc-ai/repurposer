@@ -22,6 +22,7 @@ dependencies = [
     "faster-whisper>=1.2.1",
     "numpy>=1.26",
     "opencv-python-headless>=5.0,<6",
+    "av>=13",  # PyAV: direct dep for speaker_map arbitration clip cuts
     "pymupdf>=1.27.2.3",
     "pyjwt>=2.8",
     "boto3>=1.34",
