@@ -1,39 +1,40 @@
 # Repurposer
 
-Automatically transform raw speech materials (video, audio, transcripts, slides, photos) into short-form videos, social media copy, quote cards, and multilingual versions for multi-platform distribution.
+An AI agent for knowledge experts: it turns existing material — talks, meetings, podcasts, transcripts, slides, photos — into the content the user names: LinkedIn posts, articles, quote cards, carousels, vertical clips, and multi-language versions, in the expert's own voice and style.
+
+Core channels are LinkedIn, institutional websites, and email newsletters; multi-language output (EN / FR / DE / ES / IT / ZH) is the entry ticket.
 
 ## Core Capabilities
 
-- **Vertical Videos**: Speaker footage → cropped segments with burned-in subtitles; **works even without footage** — pure audio / images / slides can be turned into audiograms or still-frame videos.
-- **Multiple Outputs**: Highlight clips, eye-catching hooks / headlines, LinkedIn long-form posts, quote cards, **carousel long images**, multilingual summaries, blog posts.
-- **Multilingual**: Subtitle translation + **voice-cloned dubbing** (using the speaker's own voice via MiniMax voice_clone + T2A).
-- **Brand Templates**: Multiple CRUD templates + default seeds; logo / CTA / subtitle style / intro-outro / music / layout and **text drag-and-drop positioning** baked into the final video; brand page uses a real `<Player>` for WYSIWYG preview.
-- **AI Understanding**: M3 vision reads images (slides / charts → key points); ASR word-level subtitles; homepage prompt acts as **intent** driving all outputs.
-- **Speaker = Persisted Memory**: User-selectable / auto-created profile records, extracting tone, style, and preferences from task inputs for cross-task reuse; user-isolated, supports multiple Speakers (see ADR-021).
+- **Named outputs, not a fixed bundle** — the plan is built per request from a skill registry: vertical clips, LinkedIn posts, articles, quote cards, carousels, multi-language versions. The user names it, the agent makes it.
+- **Vertical clips with or without footage** — speaker footage → cropped, subtitled segments; pure audio / images / slides → still-frame videos.
+- **Multilingual** — subtitle translation plus voice-cloned dubbing (the speaker's own voice via MiniMax voice_clone + T2A).
+- **Persona = persisted identity memory** — tone, style, taboos, voice binding, and visual skin (caption style / title / intro-outro / music) in one object; user-isolated, multi-instance, auto-created from task material when not explicitly selected (ADR-037/038). The persona page edits the skin with a live Remotion `<Player>` preview, pixel-identical to the rendered output.
+- **AI understanding** — M3 vision reads slides and charts; self-hosted ASR produces word-level timestamps.
+- **Chat is the single intent surface** — every request (generation, refinement, revision) goes through the project chat: the plan agent builds the task book, the user confirms, the skill DAG runs.
 
 ## Core Usage Flow
 
-The main entry point is the homepage input box, not the project list:
+The main entry point is the home composer, not the project list:
 
-1. The user drops files (video / audio / transcript / slides / images) or pastes text on the homepage, and enters the desired output intent.
-2. One-click creation of Project, upload of Asset, and trigger of Generation from the homepage.
-3. Worker processes asynchronously: ASR transcription / text extraction / vision reading.
-4. Generation runs: Analyzer splits content → Script / LinkedIn / Quote Card / Carousel / Summary / Blog and other agents generate results.
-5. The user enters the project detail page to review generated clips and derivative content.
-6. The user triggers rendering, and the Worker calls Remotion to generate MP4.
-7. The user exports copy, images, or videos.
+1. The user drops files (video / audio / transcript / slides / images) or pastes text into the home composer, and writes what they want. Optional Assets / Persona blocks ride the composer's top edge; neither is mandatory.
+2. Send creates the project, uploads the assets, and hands the draft to the project chat (`/projects/$id?overlay=chat`) as the first `POST /chat` message.
+3. The plan agent proposes a task book (outputs, languages, clip count); the user refines it in chat and confirms — confirmation creates the run.
+4. The worker processes assets asynchronously (ASR / text extraction / vision reading), then executes the skill DAG: `select_clips`, `write_post`, `write_quotes`, `write_carousel`, `write_article`, `dub_clip`, `translate_clip`, `add_music`, and friends.
+5. Clips render automatically on generation — the worker claims pending `Clip` rows and calls the Remotion service; there is no manual "Render" button.
+6. Outputs land on the results canvas; the user refines them through the chat dock and exports copy, images, or videos.
 
-Speaker and Brand template are selected from the toolbar below the homepage input box; neither is mandatory.
+## Tech Stack
 
-- **Backend**: FastAPI + Python (includes queue worker)
+- **Backend**: FastAPI + Python, plus a standalone queue worker process
 - **Core Model**: MiniMax M3 (multimodal: text + vision reading + voice clone / T2A)
 - **Frontend**: TanStack Start + TypeScript
 - **Video Rendering**: Remotion (`apps/render`, Node service, clip-spec → MP4+SRT)
 - **Speech Recognition**: faster-whisper (self-hosted, word-level timestamps)
 - **Task Queue**: Postgres (`FOR UPDATE SKIP LOCKED`) + standalone worker, no Redis
-- **Package Management**: Backend uses `uv`; frontend / render / shared components use `pnpm` workspace (`web` / `render` / `clip`)
+- **Package Management**: backend uses `uv`; frontend / render / shared components use a `pnpm` workspace (`web` / `render` / `clip`)
 - **Database**: PostgreSQL
-- **File Storage**: Local filesystem under `assets/`; user-scoped layout (`assets/{user_id}/uploads/projects/{id}/...` and `assets/{user_id}/outputs/projects/{id}/...`). Demo assets live under `assets/demo/`. Object storage deferred until scale.
+- **File Storage**: S3-compatible object storage (Volcengine TOS) for all persistent files — uploads and rendered outputs are object keys; reads are public, uploads use backend-issued presigned PUT URLs (ADR-024). No local media directories.
 - **Local Orchestration**: `scripts/dev.sh`
 - **Deployment**: Docker Compose
 
@@ -42,22 +43,22 @@ Speaker and Brand template are selected from the toolbar below the homepage inpu
 ```
 repurposer/
 ├── apps/
-│   ├── api/                 # FastAPI backend (queue worker / ASR)
+│   ├── api/                 # FastAPI backend (agents / skills / chat / pipeline / queue worker / ASR)
 │   │   └── migrations/      # Alembic database migrations
 │   ├── web/                 # TanStack Start frontend (includes vertical video editor)
 │   └── render/              # Remotion rendering service (clip-spec → MP4+SRT, Node)
 ├── packages/
 │   └── clip/                # Shared Remotion <Clip> component (web preview + render output, parity guaranteed)
-├── docs/                    # Project documentation
-│   ├── PRD.md              # Product Requirements Document
-│   ├── ARCHITECTURE.md     # Architecture Design
-│   ├── VIDEO_EDITOR.md     # Vertical Video Editor Design
-│   ├── DECISIONS.md        # Architecture Decision Records
-│   ├── DATABASE_MIGRATIONS.md  # Database Migration Guide
-│   └── tasks/              # Deliverable task cards (e.g. voice-sample-input.md)
+├── docs/                    # Project documentation — governed index in docs/README.md
+│   ├── PRD.md               # Product positioning & requirements
+│   ├── PROGRESS.md          # Progress snapshot + schedule + backlog (sole source of truth for priorities)
+│   ├── MODULE_ARCHITECTURE.md  # Module map, table ownership, current architecture
+│   ├── DECISIONS.md         # Current ADRs
+│   ├── RENDERING.md         # clip-spec field contract + render chain
+│   └── tasks/               # Per-feature implementation briefs
 ├── scripts/
-│   └── dev.sh              # One-command local startup
-├── pnpm-workspace.yaml     # web/render/clip workspace (api uses uv independently, not in workspace)
+│   └── dev.sh               # One-command local startup
+├── pnpm-workspace.yaml      # web/render/clip workspace (api uses uv independently, not in workspace)
 ├── docker-compose.yml
 └── README.md
 ```
@@ -69,8 +70,9 @@ repurposer/
 This project uses [`uv`](https://github.com/astral-sh/uv) for Python dependency management and [`pnpm`](https://pnpm.io/) for Node dependency management.
 
 **Why these two:**
-- **uv**: A Rust-based Python package manager, 10–100× faster than `pip`/`venv`, automatically manages virtual environments and Python versions; `uv sync` reproduces dependencies exactly from the lockfile.
-- **pnpm**: Uses hard links to share a global cache, installs faster, uses less disk space, and provides stricter dependency isolation, avoiding npm's "phantom dependency" problem.
+
+- **uv**: a Rust-based Python package manager, 10–100× faster than `pip`/`venv`; automatically manages virtual environments and Python versions; `uv sync` reproduces dependencies exactly from the lockfile.
+- **pnpm**: hard-links a global cache, installs faster, uses less disk space, and provides stricter dependency isolation, avoiding npm's "phantom dependency" problem.
 
 **If not yet installed:**
 
@@ -106,8 +108,12 @@ pnpm install
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in MINIMAX_API_KEY, etc.
 ```
+
+Fill in the two required groups in `.env`:
+
+- `MINIMAX_API_KEY` — the multimodal model key.
+- `S3_*` — object-storage credentials (`S3_ENDPOINT_URL` / `S3_BUCKET_NAME` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_PUBLIC_URL`). All user uploads and rendered outputs live here; there is no local-disk fallback.
 
 ### 3. Start the Database with Docker
 
@@ -162,7 +168,7 @@ uv run alembic downgrade -1
 ```
 
 The script will simultaneously start the **backend (:8000)**, **queue worker**, **render service (:3001)**, and **frontend (:3000)**, and automatically start the database when needed.
-Once started, open 👉 **http://localhost:3000** in your browser.
+Once started, open **http://localhost:3000** in your browser.
 
 | Service | URL |
 |---------|-----|
@@ -173,12 +179,13 @@ Once started, open 👉 **http://localhost:3000** in your browser.
 
 > The render service (`apps/render`) is a black box called by the API worker (clip-spec → MP4+SRT); pure text output flows do not need it.
 
-### 5. (Optional) Full-Stack Docker One-Command Run
+### 6. (Optional) Full-Stack Docker One-Command Run
 
 No need to install Node / Python locally; run the full stack **db + api + worker + render + web** directly with Docker:
 
 ```bash
-MINIMAX_API_KEY=sk-xxx docker compose up --build
+# The compose file reads .env (or shell env) — MINIMAX_API_KEY and the S3_* keys are required
+docker compose up --build
 # Then visit http://localhost:3000
 ```
 
@@ -193,12 +200,13 @@ Service orchestration details:
 | `web` | `apps/web/Dockerfile` (build context = repo root) | TanStack Start SSR, :3000 |
 
 Notes:
+
 - Both `render` and `web` depend on the workspace package `@repurposer/clip`; the build context is the **repo root** (not their individual subdirectories).
-- Inter-container hostnames: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render` (render pulls source video via HTTP, writes rendered output to shared volume `./assets`).
+- Inter-container hostnames: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render`. All media flows through object storage: render pulls source video over HTTP and uploads MP4/SRT results via presigned PUT URLs — there are no shared file volumes between containers.
 - The `render` image includes system libraries for headless Chromium; the Chromium binary (~90MB) is downloaded **lazily on first render** (no external network dependency at build time, better for CI / restricted networks).
 - `web` currently uses `vite preview` for SSR, suitable for MVP / staging; for high-traffic deployments, switch to a lightweight Node adapter around the exported fetch handler (see ADR-018).
 
-### 6. Production Reverse Proxy (nginx)
+### 7. Production Reverse Proxy (nginx)
 
 In production the web container and api container sit behind nginx. **The `/api` prefix is owned by FastAPI alone** — nginx must forward transparently, and the web bundle must not add its own `/api`:
 
@@ -214,39 +222,21 @@ location /api/ {
 - Rebuild `api`/`worker`/`web` together (`docker compose up -d --build api worker web`) so new frontend bundles never call routes an old api image doesn't have.
 - The api logs every request as `http_request` (method, path as received post-proxy, query, status, duration, client IP from `X-Forwarded-For`, plus redacted JSON request/response bodies) and every error with its reason (`http_error` / `http_validation_error` / `http_unhandled_error`) — the first place to check when a request behaves differently between environments.
 
-## Demo Project
-
-The app seeds a demo project on startup so first-time visitors can see a fully populated results page without uploading their own media.
-
-- **Demo project id**: `11111111-1111-1111-1111-111111111111`
-- **Demo user**: the seeded default user (`DEFAULT_USER_ID`)
-- **Demo video**: the object `demo/uploads/demo_talk.mp4` in the configured object-storage bucket (TOS). The seed runs ASR on it and generates **5 clips only** (no derivatives).
-- The demo project is idempotent — startups are no-ops once clips exist.
-
-To swap the demo video on an environment:
-
-1. Replace the object `demo/uploads/demo_talk.mp4` in the bucket (e.g. via `scripts/migrate_to_tos.py --force`).
-2. Run `python scripts/seed_demo.py --force` — it deletes the existing demo clips, workflow runs, **and the demo Asset row**, so ASR re-runs on the new video and 5 fresh clips are generated.
-
 ## Tests
 
-```bash
-# Backend tests (inside apps/api)
-cd apps/api
-uv run pytest tests/ -q
-
-# Frontend tests (inside apps/web)
-cd apps/web
-pnpm test
-```
+- **Frontend**: `cd apps/web && pnpm test` (vitest).
+- **Backend**: the API test suite was removed after it drifted from the rapidly changing implementation — verify backend changes by running the relevant flow end-to-end. A few pure unit tests remain under `apps/api/tests/` (`uv run pytest tests/ -q`).
 
 ## Documentation
 
-- [Product Requirements Document](./docs/PRD.md)
-- [Architecture Design](./docs/ARCHITECTURE.md)
+The governed doc index — which doc owns which truth — lives in [docs/README.md](./docs/README.md). Key docs:
+
+- [Product Requirements](./docs/PRD.md)
+- [Progress & Schedule](./docs/PROGRESS.md) — sole source of truth for priorities and the backlog
+- [Module Architecture](./docs/MODULE_ARCHITECTURE.md) — module map, table ownership, current system architecture
+- [Architecture Decision Records](./docs/DECISIONS.md) — current ADRs only
+- [Rendering & clip-spec](./docs/RENDERING.md) — the sole render contract
 - [API Specification](./docs/API.md)
-- [Architecture Decision Records](./docs/DECISIONS.md)
-- [Development Schedule & Roadmap](./docs/SCHEDULE.md)
 
 ## Development Conventions
 
