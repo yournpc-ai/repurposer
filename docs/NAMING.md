@@ -1,6 +1,6 @@
 # NAMING — 命名宪法与判例库
 
-> Status: Active（2026-07-25 建立）
+> Status: Active（2026-07-25 建立，2026-08-18 校订）
 > 适用范围：模块 / 包 / 表 / 字段 / API / skill / 事件——一切会被别人读到的名字。
 > 用法：命名争议不复述本文论证，引用条目号（`NAMING §3`）或判例号（`N-29`）。判例只保留现行裁决——过时 / 被翻案的判例直接删除（历史在 git，不留痕）；新判例追加新编号。
 
@@ -46,7 +46,7 @@
 | 结果卡 | `RunCard` | assistant 消息内嵌的 run 线性投影（步骤清单 + 产物卡片 + 聚合行） | 不是 DAG 画布 |
 | 操作卡 | `OpsCard` | assistant 消息内嵌的 edit ops 应用结果（op 清单 + 撤销） | — |
 | 提问 | `ask` | 提议态：IntentProposal 第三态（结构化提问，N-18；期 3 已落代码） | 不是 question——question 是落库态 |
-| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/choice/confirm + options/allow_freeform/cost_hint）；待决只在 dock，已决 QA 入档 | 不进消息流渲染 |
+| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/choice/confirm + options/allow_freeform/estimate）；待决只在 dock，已决 QA 入档 | 不进消息流渲染 |
 | 回答 | `answer` | 一词两态同域：① 落库态 messages.answer JSONB（kind: option/freeform/bail/start + answered_at）——**用户**答复待决问题，NULL = 待决，answer 端点即恢复；② 提议态 `AnswerProposal`（IntentProposal 第四态，N-21）——**系统**对信息类提问的直答，落库为普通 assistant 消息 content（B1 同款），**不进 messages.answer** | — |
 | 弃做 | `bail` | 优雅退出一等公民：入口回 draft / checkpoint 下游级联 skipped；永不标 failed | 不是 cancel（cancel 是 UI 按钮词） |
 | 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
@@ -63,12 +63,12 @@
 | 堆叠 | `stacking` | catalog 成员：新行淡入、旧行驻留、超 maxLines 滑动窗口 | — |
 | 工作室 | `studio` | 登录后应用区（landing 之外的 sidebar 世界）的统称：home composer、projects、editor；用户文案（`openStudio`、"欢迎来到你的工作室"）与内部文档同词。**只是空间名**，品类自称永远是 agent（N-23） | 不是 workbench/工作台（已退役，N-22）；不是品类词 |
 | 助手 | `assistant` | 对外文案的自称（N-25 双轨：对内技术 = agent）；zh 优先用代词"它" | 不是 agent（agent 只对内）；不是运营官（已退役，N-24） |
-| 任务书构建 agent | `PlanAgent` | chat plan path 的推理者：free-form 文本 → 任务书推断（三动作 generate/answer/start） | 不是第二意图入口——入口只有 `/chat` |
+| 任务书构建 agent | `plan_agent` | chat plan path 的推理者：free-form 文本 → 任务书推断（三动作 generate/answer/start） | 不是第二意图入口——入口只有 `/chat` |
 | plan 路径 | `plan path` | chat service 内分派分支：首次 / 待决任务书的项目级回合 → 任务书构建/修订/确认（`chat()` 状态分派，asset scope 永不进） | 不是相位（confirm 相位已降为"有 pending task_book"的普通 chat 状态） |
-| 剧本验收 | `chat_scenarios.py` | 意图层验收 harness：预设多轮剧本对活 API 跑形态级断言（S1–S8），真实 LLM 不锁文案 | 不是测试套件（无测试套件纪律不变） |
+| 剧本验收 | `chat_scenarios.py` | 意图层验收 harness：预设多轮剧本对活 API 跑形态级断言（S1–S45，S22 退役留空），真实 LLM 不锁文案 | 不是测试套件（无测试套件纪律不变） |
 | 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `SKILL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
-| 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按 `SkillEntry.retries` 预算复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
+| 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按节点类声明的 `retries` 预算（`NodeBase.retries`）复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
 | 去口头禅 | `remove_filler` | skill 与 op 同名同义（跨注册表对齐 §1，agent-loop-upgrade W4）：skill = 确定性 modifier（task_list 派发）；op = precomputed 记账参数（`filler_count`/`repeat_count`，runner 计算后记账） | 不是客户端 edit ops 可提议 op（precomputed 归 task_list） |
 | 风格 | `style` | 文风（写作风格），对外文案统一用词（hero/showcase/FAQ/identityEcho 已全扫）；voice 仅保留音频本义（声纹克隆/配音 dub） | 不是"口吻"（已退役，2026-08-01）；不是 voice |
 | 声纹块 | `personas.voice`（JSONB） | 人设的声音绑定（音频本义，N-28 归还）：`{"kind":"cloned","voice_id","sample_asset_id"}` \| `{"kind":"stock","stock_id"}` \| NULL=Auto；旧 voice 文本（文风）已并入 `guidelines`，不再单列 | 不是文风（文风 = `style` + guidelines） |
@@ -90,17 +90,17 @@
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |
-| 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037/038，N-27）：身份卡 + 风格 + 策略 + 声音 + 皮肤块（`brand`），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族。【已拍板重构（ADR-042 / `POSITIONING.md`，未实施）：根升格为「定位 `positioning`」，人设收窄为表达分区（风格 + 声纹 + 皮肤）；落地时本行改写并登记 `positioning` / `topics`】 | 不是 speaker——`speaker` 只指素材里说话的人（`speaker_map` 合法居民）；不是 IP（承诺层词，禁入英文文案） |
+| 人设 | `Persona` / `personas` 表 / `/api/v1/personas` | 身份模块唯一对象（ADR-037/038，N-27）：身份卡 + 风格 + 策略 + 声音 + 皮肤块（`brand`），多实例扁平（工作号/生活号）；用户面 zh「人设」/ en「Persona」，三层同词族。【已拍板重构（ADR-042 / `POSITIONING.md`，未实施）：根升格为「定位 `positioning`」，人设收窄为表达分区（风格 + 声纹 + 皮肤）；落地时本行改写并登记 `positioning` / `topics`】 | 不是 speaker——`speaker` 只指素材里说话的人（其分析产物座位 `speaker_map` 排期 08-19 线，未落地）；不是 IP（承诺层词，禁入英文文案） |
 | 轨道 | `track` | clip-spec 的命名分区 = 轨道注册表一条声明（ADR-044）；**裸用违规，必须带家族限定**（主轨/数据轨/层/块轨，N-38） | 不是 NLE 自由轨；用户永不见轨 |
 | 主轨 | main track | `source` + `segments`，输出 = 数组序连接；唯一持剪辑语义（hidden/trim/reorder）的轨 | — |
 | 段 | `segment` | 主轨一行：`{id, asset_id?（缺省=主源）, start, end, hidden}`；异源插入 = 带 asset_id 的段 | 不是 block（讨论期占位词，草稿阶段死亡） |
-| 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption（词级）/ translation（单元级）/ crop（关键帧采样）；按 sourceTime 采样 | 不是层；不参与叠放 |
+| 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption（词级）/ translation（单元级）/ crop（关键帧采样，08-19 线未实施）；按 sourceTime 采样 | 不是层；不参与叠放 |
 | 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举注册（broll / text_callout / pip / motion_graphic），z 序渲染；条目可带 `source_ref` 回放（PiP）与 `provenance`（必填，ADR-026） | 不是自由轨；不叫 overlay（UI 浮层词，N-27 同型避让） |
 | 锚 | `anchor` | 层条目的语义挂接：段锚（`{segment_id + 源偏移}`）/ 边锚（`{head\|tail + 偏移}`，intro/outro 本质即边锚块）/ 比例锚（`{ratio}`）；输出时间由泳道投影派生，不落库 | 不是时间码 |
 | 过渡 | `transition` | 段的进场边效果枚举（none/fade/dip，2-3 封顶），挂段随换序走 | 不是转场画廊 |
 | 块轨 | block track | 单值轨，输出时间轴：music / dub / title / 头尾卡；dub⇄原声互斥在注册表声明，不写死渲染器 | — |
-| 轨道注册表 | `TRACK_REGISTRY` | 轨的唯一家（ADR-044）：catalog 住 `packages/clip`，TS 类型由它推导，Python 镜像只校验成员 + 消费声明；消费方（烘焙缝 / C2PA / 计价 / 寻址）全部 fold | 不是 spec 容器（`tracks:{}` 永拒，收益证伪非兼容妥协） |
-| 裁切轨 | `crop_track` | 第一个关键帧数据轨（family=data, timeline=source）：`{t, x, y, scale}` 按 sourceTime 采样；空轨 = 静态 `crop` 缺省（缺省语义，非兼容包袱） | 不是逐帧密轨；用户永不见 |
+| 轨道注册表 | `TRACK_REGISTRY` | 轨的唯一家（ADR-044）：可执行 catalog 住 `app/pipeline/tracks.py`（owner / provenance / url_fields / depends——烘焙缝 / C2PA / ops 寻址 / 一轨一写者 422 全从它 fold）；`packages/clip` 只声明字段分区 `TRACK_FIELDS` + `TrackId`，tsc 类型断言强制每个 spec 键入一轨 | 不是 spec 容器（`tracks:{}` 永拒，收益证伪非兼容妥协） |
+| 裁切轨 | `crop_track`（08-19 线，未实施） | 第一个关键帧数据轨（family=data, timeline=source）：`{t, x, y, scale}` 按 sourceTime 采样；空轨 = 静态 `crop` 缺省（缺省语义，非兼容包袱） | 不是逐帧密轨；用户永不见 |
 | 说话人时间轴 | `speaker_map` | 素材级内部分析产物（谁在何时说话、在画面哪侧 + 素材形态归类），asset-hash 复用；crop_track 的上游（08-19 线，reframe 技能包同批） | 不进 SKILL_REGISTRY；用户永不见 |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）是唯一在用的 plan；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
@@ -129,13 +129,13 @@
 | N-24 | 品类词只用 `agent`，角色隐喻（运营官/操盘手/班子）全库退役 | 角色包装是话术 dressing：landing heroSubtitle 自称 "an AI agent"，PRD 曾写 "content-operations officer"——一份产品两个自称，朴素品类词胜出（2026-08-01 用户裁决）。PRD one-liner / CLAUDE.md 定位条 / N-22·N-23 引述同步清洗；"运营官"承载的洞察（用户不懂自媒体、产品指导并孵化其 IP）保留在 CLAUDE.md 定位条，仅标签退役 | §1 |
 | N-25 | 自称双轨：对内技术 = agent，对外文案 = assistant/助手（细化 N-24 适用范围） | "agent" 对非技术用户是行话（欧洲用户甚至会读成"经纪人/特工"）；技术实体不变——架构/PRD/CLAUDE.md/代码全用 agent，N-24 的隐喻禁令不变；hero/showcase 等对外文案一律 assistant（EN）/ 助手或代词"它"（zh，zh 优先代词）（2026-08-01 用户裁决）。对外文案中出现 "agent" 字样即违规 | §1、§6 |
 | N-26 | chat 流式词族：delta = 散文预览增量，envelope = 终帧信封 | 流式三层各一词：LLM 原始片 = fragment（`on_delta(fragment)` 入提取器）；解码后散文增量 = **delta**（SSE 帧 `assistant.delta`，纯预览，非事实源）；终帧 = **envelope**（`turn.completed`/`turn.failed`，完整 ChatResponse，永远权威）。机制名：`ProseDeltaExtractor`（唯一散文提取入口）、`MiniMaxClient.generate_stream`、service 拆分 `prepare_chat_turn`/`execute_chat_turn`、前端 `streamChat`。禁 chunk/token 混用（chunk 是 HTTP/LLM 传输单位，token 是计费单位，delta 才是渲染单位）（ADR-034） | §1、§5 |
-| N-27 | 身份模块正名：Speaker → 人设 / `Persona`；`speaker` 让位素材说话人 | 定位升级后"演讲者"前提崩塌（素材 = 会议/报告/播客，不只是演讲）+ 一词三义（用户身份画像 / `speaker_map` 素材里说话的人 / landing 普通词 speakers）。用户面 zh「人设」/ en「Persona」、代码 `persona`，三层同词族；`speaker` 此后只指素材里说话的人（`speaker_map` 合法居民）；**IP = 承诺层词，禁入英文文案**（en 叙事 = personal brand / thought leadership），不进产品内导航（ADR-037） | §1、§6 |
+| N-27 | 身份模块正名：Speaker → 人设 / `Persona`；`speaker` 让位素材说话人 | 定位升级后"演讲者"前提崩塌（素材 = 会议/报告/播客，不只是演讲）+ 一词三义（用户身份画像 / `speaker_map` 素材里说话的人 / landing 普通词 speakers）。用户面 zh「人设」/ en「Persona」、代码 `persona`，三层同词族；`speaker` 此后只指素材里说话的人（其分析产物 `speaker_map` 排期 08-19 线，未落地）；**IP = 承诺层词，禁入英文文案**（en 叙事 = personal brand / thought leadership），不进产品内导航（ADR-037） | §1、§6 |
 | N-28 | 人设吸收 Brand：`brand_templates` 退役，皮肤 = `persona.brand` | 多人设拍板反转拆分理由（一人多号 = 多人设各带皮肤）；`config` 杂物抽屉三分流——皮肤→`brand` 块、工艺开关（removeFiller/captionEnabled/aspect/fillMode）→配方/任务书默认、CTA 唯一家 = `persona.cta`；**`brand` 全栈一词**（人设块 / 烘焙 / clip-spec 段同名）——模块退役词不退役，不引入 `look` 字段名（避免撞 RECIPES §4.4 look 层组合概念）；composer 单身份控件；失去独立表归属即失去模块资格（§7 逆用）（ADR-038） | §1、§7 |
 | N-29 | "班组/班底"式自造词禁令 + agent 正名；**技能一词一义** | 需要解释才能懂的自造词违反 §6；LLM 决策单元直接叫 agent（Mastra/Agno/Anthropic 行业标准词）；旧 `app/skills/`（决策单元目录）解散——决策体共享层归 `app/agents/`，能力归 `app/skills/`（技能包，ADR-039 四分）。**技能（skill）= 能力层注册项**——用户语言与代码词天然一致（"我们的 agent 拥有多语言字幕技能"），不问执行者；`SkillEntry.kind`（skill/tool 值）字段退役。tools/ 铁律同立：禁 import agents/、禁 import LLM client（grep 门禁；`tools/caption_translate`、`tools/dubbing` 违规工序归位技能包）（ADR-039） | §1、§6 |
 | N-30 | Agent 归一：一个 Agent 类 + 声明实例 | 10 个 `xxx_agent` 类的真实差异只有 prompt 模板 / 输出 schema / 调用配置——**多样性是数据不是代码**。`agents/base.py` 一个 Agent 类（harness 漏斗：装配→渲染→调用→校验→修复一轮→计量→声明兜底）；技能私有声明住技能包，共享 crew（director/persona/translator）住 `agents/roster.py`；特殊子类仅流式。领域逻辑归 schema 校验 / 技能包工序（ClipPlans 时长钳制本已在 schema） | §1 |
 | N-31 | actor 概念提出后退役不采用 | actor 非世界级框架标准词（Mastra/Agno/LangGraph 词表 = Agent/Tool/Workflow/Node/Step；actor 属 actor-model 谱系）。技能包构成即"谁执行"的答案，不建分类字段；checkpoint 的"等人答"由节点自声明展示词，不立 taxonomy | §6 |
-| N-32 | outputs = 技能属性，注册表派生 | 产物类型 = 产出型技能的 `output_type` 属性：`IntentSlot.type` Literal 退役改 str + 注册表校验（§5 延伸到请求层）；`_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `KNOWN_OUTPUTS` / `SLOT_DEFAULT_COUNT` / `SLOT_COUNT_LIMITS` 五处散点全部注册表派生。**新增产物 = 一条注册项，agent 当轮即知**（PlanAgent prompt 产出类型清单同源注入） | §1、§5 |
-| N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S40）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
+| N-32 | outputs = 技能属性，注册表派生 | 产物类型 = 产出型技能的 `output_type` 属性：`IntentSlot.type` Literal 退役改 str + 注册表校验（§5 延伸到请求层）；`_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `KNOWN_OUTPUTS` / `SLOT_DEFAULT_COUNT` / `SLOT_COUNT_LIMITS` 五处散点全部注册表派生。**新增产物 = 一条注册项，agent 当轮即知**（plan_agent prompt 产出类型清单同源注入） | §1、§5 |
+| N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S45）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与技能同名 | 技能包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
 | N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
@@ -147,7 +147,7 @@
 
 - REST，复数资源，动作用子路径：`POST /outputs/{id}/render`、`POST /outputs/{id}/dub`。
 - 不为单个动作造 RPC 式端点（`/api/sendChat` 此类永不出现）。
-- 内部类型（如 `material_understanding` / `storyboard`）不得从任何公开响应漏出——统一经 `visible_outputs()` 过滤（ADR-030 D1）。
+- 内部类型（如 `material_understanding` / `storyboard`）不得从任何公开响应漏出——统一经 `visible_outputs_stmt()` 过滤（ADR-030 D1）。
 
 ## 5. 命名审计触发点
 

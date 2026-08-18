@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 技能包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-35）；loop 层行为规格见 CHAT_ARCHITECTURE.md。
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法）
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 技能包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-39）；loop 层行为规格见 CHAT_ARCHITECTURE.md。
 
 ## 1. 叙事
 
@@ -49,7 +49,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 | 概念 | 一句话 |
 |---|---|
-| **任务书** `TaskSpec` | 意图归一：outputs × 语言 × 数量 × instruction；loop → graph 的交接物 |
+| **任务书** `TaskSpec` | 意图归一：唯一请求语法 = 技能链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
 | **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
 | **导演** `director` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
@@ -57,7 +57,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | **技能包** `skills/` | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
 | **质检** `verify`（节点 kind） | 单产物/全片质量校验（Phase 3，未实现）；可寻址、可计价、可单独重跑 |
 | **施工图** `workflow_steps` | 计划+账簿一体的 DAG 内核：`inputs` 边表 / `spec` 参数 / `output_refs` 产物 / `estimate` 计划侧成本 / `cost` 账簿侧成本 |
-| **产物** `outputs` | 统一产物表；产物类型 = 技能的属性（N-32），注册表派生可扩展 |
+| **产物** `outputs` | 统一产物表；产物类型 = 技能的属性（N-32），注册表派生可扩展；用户可见的产物预告 = 干跑编译的派生预览 `derived`（ADR-043） |
 
 分发（Distribution）与 Pipeline 平级，缝 = 产物表，见 MODULE_ARCHITECTURE。
 
@@ -87,13 +87,13 @@ class NodeBase:
 |---|---|
 | **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
 | **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
-| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——任务书槽位经 `node_for_output` 派生产出节点的 requires，与技能清单路径同一个驱动器（clips 需媒体 = SelectClips 自己的声明） |
+| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——链上技能直接携带其节点的 `requires` 声明，驱动器唯一（clips 需媒体 = SelectClips 自己的声明） |
 | **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），人肉评审退役 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
 ### 4.3 拓扑铁律（不变）
 
-- **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（任务槽 / task list），`compile_graph` 纯函数裁决与物化。
+- **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（task list = 意图面唯一语法，ADR-043），`compile_graph` 纯函数裁决与物化。
 - `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
 - "全败或无事"：run 只在全部生成节点 failed/skipped 时标 FAILED；render 节点镜像渲染链，永不 hold run。
@@ -101,7 +101,7 @@ class NodeBase:
 ### 4.4 导演两步走（两次 LLM 调用，契约不变）
 
 - **看懂素材**（`director_understand`）：产出素材理解（论点带位置/金句/主题/受众），素材级，`source_ref.asset_hash` 命中即复用（节点 `reuse()` 钩子的本例）；**自足契约**——产物必须足以支撑分任务。
-- **分任务**（`director_plan`）：吃素材理解 + 任务书 → 分镜表（论点→槽位 + 覆盖报告），请求级，每 run 必重排。
+- **分任务**（`director_plan`）：吃素材理解 + 任务书 → 分镜表（论点→分镜槽位 + 覆盖报告），请求级，每 run 必重排。
 - **纯度纪律（签名化，见 §5.3）**：understand 不接收 persona/tone/instruction；plan 不读原稿。
 
 ### 4.5 节点分两类
@@ -165,7 +165,7 @@ skills/dub/          配音技能
 
 - **SKILL_REGISTRY 收编**：`skills/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
 - **新增技能 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
-- **产出型技能**声明 `output_type`：产物类型注册表派生，`IntentSlot.type` 经注册表校验；**新增产物 = 一条注册项，PlanAgent 当轮即知**（产出类型清单同源注入 prompt）。
+- **产出型技能**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，PlanAgent 当轮即知**（技能清单同源注入 prompt）。
 - 注册项准入过 NAMING §7/§8 评审。
 
 ## 8. 估价与计量
@@ -198,5 +198,5 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
 - `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — plan / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
 - `app/clients/minimax.py` — Model 单边界；`app/metering.py` — 计量
-- `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot / 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
+- `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot（编译期投影 `spec.slot`，非请求层语法）/ 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）
