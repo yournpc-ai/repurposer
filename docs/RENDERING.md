@@ -62,7 +62,10 @@ preview == 成片 是结构性的，不是测试出来的。
       "transition": "none"                  // 进场边过渡枚举：none 硬切 | fade 黑场淡入 | dip 白闪（每片 ≤3）
     }
   ],
-  "crop": { "x": 0.5, "y": 0.5, "scale": 1.0 }, // 归一化中心 + 缩放；transform 实现，非 object-position
+  "crop": { "x": 0.5, "y": 0.5, "scale": 1.0 }, // 归一化窗口中心 + 缩放；空轨时走 transform 实现，非 object-position
+  "crop_track": [                            // 裁切关键帧轨（ADR-045）：稀疏取景决策，源时间轴，t 严格递增
+    { "t": 49.56, "x": 0.70, "y": 0.39, "scale": 1.27 } // 一次取景决策一行；相邻帧间固定 ~8 帧 smoothstep（渲染常量，不进契约）
+  ],                                          // 空轨/缺省 = 静态 crop 退化形态（语义不变）
   "layers": [                                // 层轨：锚定放置物（当前无写者技能，契约先行）
     {
       "id": "f6e5d4c3b2a1",
@@ -124,7 +127,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 | `main` 主轨 | `source` + `segments` + `aspect` + `target_language` | sequence / 源时间轴 | `<Series>` 逐段 `<OffthreadVideo>`/`Audio`（stills 走 `<Img>` 均分）；**逐段取 src**（`seg.url ?? source.url`） | select_clips / materialize_source（出生）；remove_filler（形态写者） |
 | `caption` 字幕 | `caption_track` + style/position/enabled | data / 源时间轴 | `groupLines` → single/stack 两布局，按 sourceTime 反查 | remove_filler |
 | `translation` 对照字幕 | `translation_track` | data / 源时间轴（`pairs: [caption]`） | 译文主行 ×0.82 + 原文小行 ×0.55 | translate_clip |
-| `crop` 裁切 | `crop`（静态单值） | data / 源（整条常量） | 主轨外层 `transform: scale+translate` | 出生默认（crop_track 关键帧轨 = 一条登记 + 一个采样器） |
+| `crop` 裁切 | `crop`（静态单值）+ `crop_track`（稀疏关键帧） | data / 源时间轴 | 关键帧在场 = 源窗口显式定位（`sampleCrop` 按 sourceTime 采样，固定 smoothstep）；空轨 = 主轨外层 `transform: scale+translate` 静态路 | 出生默认 + reframe_clip（形态写者） |
 | `layers` 层轨 | `layers`（锚定放置物） | layer / derived（锚 → 输出窗投影） | `projectLayers` 求窗 → `LayerView` 按 `media.kind` 单分支（video/image/text），z 经 Sequence style | 暂无（insert_broll 随能力批） |
 | `title` 标题 | `title` | block / 输出时间轴（片头区淡入；stack 布局 ~3s 自动退场） | 绝对定位 div | 出生 |
 | `music` 音乐 | `music` | block / 输出时间轴，循环铺满 | `<Audio loop>` | add_music |
@@ -226,7 +229,7 @@ transition（挂段进场边）
 | 轨道 | `track` | spec 命名分区 = 注册表一条声明；**裸用违规，必须带家族限定**（N-38，N-11 同款判例） | 不是 NLE 自由轨；用户永不见 |
 | 主轨 | main track | `source` + `segments`，输出 = 数组序连接；唯一持剪辑语义（hidden/trim/reorder） | — |
 | 段 | `segment` | 主轨一行：`{id, asset_id?, url?, start, end, hidden, provenance?, transition}`；异源插入 = 带 asset_id 的段 | 不是 block（讨论期占位词，退役） |
-| 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption / translation / crop（关键帧采样随能力批） | 不参与叠放 |
+| 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption / translation / crop（关键帧采样器 = `sampleCrop` 双端逐值 parity） | 不参与叠放 |
 | 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举（`broll` / `text_callout` / `pip` / `motion_graphic`），z 序渲染，条目可带 `source_ref` 回放（PiP）与 `provenance`（ADR-026 必填） | 不是自由轨；不撞 UI 浮层（overlay 一词归 GenerationOverlay/overlay-surface，避让 N-27 同型撞车） |
 | 锚 | `anchor` | 层条目的语义挂接；输出时间派生不落库 | 不是时间码 |
 | 过渡 | `transition` | 段的进场边效果枚举（none/fade/dip），挂在段上随换序走 | 不是转场画廊（≤3 枚举封顶） |
@@ -249,6 +252,6 @@ TrackDef(
 )
 ```
 
-family / timeline 分类是文档（§4 表），不进 schema；确定性工艺检查（crop 不出人脸框 / 驻留达标 / 字幕不溢出）随首个住户与其消费方同批回归（08-19 能力批评估）。
+family / timeline 分类是文档（§4 表），不进 schema；确定性工艺检查（crop 不出人脸框 / 驻留达标 / 字幕不溢出）随首个住户与其消费方同批回归，禁先注册空座位。
 
-**加一条轨的成本** = TS 分区一项（tsc 强制）+ Python TrackDef 一条（启动对账强制）+ 一个渲染件（新 family 才有）。`crop_track` 随 08-19 能力批以此形态进场。
+**加一条轨的成本** = TS 分区一项（tsc 强制）+ Python TrackDef 一条（启动对账强制）+ 一个渲染件（新 family 才有）。`crop_track` 是第一条按此成本进场的轨（reframe 能力批，ADR-045）。
