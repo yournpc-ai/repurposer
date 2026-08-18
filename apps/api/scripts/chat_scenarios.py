@@ -1389,6 +1389,26 @@ async def s35_focus_output_injection(ctx: Ctx) -> None:
           legacy.status_code)
 
 
+async def s46_reframe_skill_dispatch(ctx: Ctx) -> None:
+    """S46 reframe 技能实分派（ADR-045）：'镜头跟着说话人' → 新 run 的 task_list
+    含 reframe_clip（chat 可调用 = 走 task_list 契约）。"""
+    pid = await ctx.new_project("S46 reframe dispatch")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "interview.mp4",
+                     meta={"language": "en"})
+    await seed_clip_output(pid)
+    await seed_completed_run(pid)
+
+    turn1 = await ctx.chat(
+        pid,
+        "Make this interview vertical — the camera should sit on whoever is talking",
+    )
+    check(no_task_book_dock(turn1["assistant_message"]),
+          "never a task book on a run project", turn1["assistant_message"])
+    check(turn1["run_id"] is not None, "a task_list run was dispatched", turn1)
+    kinds = [s["kind"] for s in await step_rows(turn1["run_id"])]
+    check("reframe_clip" in kinds, "the booked run includes reframe_clip", kinds)
+
+
 # ---- Scenarios: checkpoint（seed parked run，零 LLM） ---------------------------
 
 
@@ -2091,6 +2111,7 @@ SCENARIOS = {
     "S33": s33_progress_question_answer,
     "S34": s34_meta_info_navigation_answer,
     "S35": s35_focus_output_injection,
+    "S46": s46_reframe_skill_dispatch,
     # checkpoint
     "S36": s36_checkpoint_three_answer_paths,
     "S37": s37_checkpoint_bail_cascade,

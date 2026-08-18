@@ -911,6 +911,7 @@ const zh: Resources = {
       generating_image: "正在生成金句卡图片…",
       ready_to_render: "即将开始渲染…",
       removing_fillers: "正在去除口头禅…",
+      reframing_clips: "正在智能分镜…",
       adding_music: "正在为片段配乐…",
       translating_captions: "正在翻译字幕…",
       dubbing: "正在为你的声音配音…",

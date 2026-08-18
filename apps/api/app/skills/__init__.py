@@ -49,6 +49,8 @@ from app.skills.captions.params import TranslateClipParams
 from app.skills.filler.node import RemoveFiller  # noqa: F401
 from app.skills.music.node import AddMusic  # noqa: F401
 from app.skills.music.params import AddMusicParams
+from app.skills.reframe.node import ReframeClip  # noqa: F401
+from app.skills.reframe.params import ReframeClipParams
 from app.skills.stills.node import AlignStills  # noqa: F401
 
 from app.pipeline.graph import NODE_KINDS
@@ -205,6 +207,17 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
             summary_templates={
                 "en": "Scored · {mood} bed",
                 "zh": "配乐完成 · {mood} 风格",
+            },
+        ),
+        SkillEntry(
+            name="reframe_clip",
+            description="Reframe existing clips for the output aspect — the camera sits on "
+            "whoever is talking, or follows a moving speaker — then re-render",
+            behavior="deterministic",
+            params_model=ReframeClipParams,
+            summary_templates={
+                "en": "Reframed {n} clip{n_s}",
+                "zh": "分镜完成 · {n} 个片段",
             },
         ),
         SkillEntry(

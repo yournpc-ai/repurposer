@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   AbsoluteFill,
   Audio,
+  continueRender,
+  delayRender,
   Easing,
   Img,
   interpolate,
@@ -11,6 +13,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { getVideoMetadata } from "@remotion/media-utils";
 import type { CaptionCue, ClipLayer, ClipSpec, IntroOutroCard, Point, SegmentTransition } from "./types";
 import {
   COMPOSITION_FPS,
@@ -242,8 +245,31 @@ function TransitionVeil({ kind }: { kind: Exclude<SegmentTransition, "none"> }) 
 
 export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const frame = useCurrentFrame();
-  const { fps, height } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const fpsv = fps || COMPOSITION_FPS;
+
+  // Crop data track rendering needs the SOURCE pixel dims (the window math
+  // positions the video explicitly). Resolved once per mount, gated on a
+  // crop_track actually being present — the static-crop path never pays.
+  const hasCropTrack = Boolean(spec.crop_track?.length);
+  const [srcDims, setSrcDims] = useState<{ width: number; height: number } | null>(null);
+  const [dimsHandle] = useState(() =>
+    hasCropTrack ? delayRender("crop_track: resolving source dims") : null,
+  );
+  useEffect(() => {
+    if (dimsHandle === null) return;
+    let cancelled = false;
+    getVideoMetadata(spec.source.url)
+      .then((m) => {
+        if (!cancelled) setSrcDims({ width: m.width, height: m.height });
+      })
+      .catch(() => undefined) // fall through to the static-crop path
+      .finally(() => continueRender(dimsHandle));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Brand (baked into the spec by the API; absent -> default look).
   const brand = spec.brand ?? undefined;
@@ -448,30 +474,67 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </Sequence>
       ) : hasSource ? (
         <Sequence from={introFrames} durationInFrames={videoFrames} layout="none">
-          <AbsoluteFill
-            style={{
-              // Reframe via transform (object-position is unsupported on the
-              // future client-render path — keep to the CSS ∩ libass subset).
-              // Per-frame value: the crop data track sampled at the current
-              // source second (empty track = the static crop, 语义不变).
-              transform: `scale(${cropNow.scale}) translate(${(0.5 - cropNow.x) * 100}%, ${(0.5 - cropNow.y) * 100}%)`,
-            }}
-          >
-            <Series>
-              {timeline.map((t, i) => (
-                <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
-                  <OffthreadVideo
-                    // Hetero splice: the segment's own url is its donor's video.
-                    src={t.seg.url ?? spec.source.url}
-                    muted={Boolean(dubUrl)}
-                    startFrom={Math.round(t.seg.start * fpsv)}
-                    endAt={Math.round(t.seg.end * fpsv)}
-                    style={{ width: "100%", height: "100%", objectFit }}
-                  />
-                </Series.Sequence>
-              ))}
-            </Series>
-          </AbsoluteFill>
+          {srcDims ? (
+            // Source-window crop (crop_track present): the video is sized to
+            // the scaled source and positioned so the sampled window center
+            // sits at the composition center — this is what lets a 16:9
+            // interview reframe into per-speaker 9:16 shots (objectFit's
+            // pre-crop would have destroyed the sides before any transform).
+            // Empty-track specs never reach here (hasCropTrack gate above).
+            <AbsoluteFill style={{ overflow: "hidden" }}>
+              <Series>
+                {timeline.map((t, i) => {
+                  const zoom =
+                    (objectFit === "cover"
+                      ? Math.max(width / srcDims.width, height / srcDims.height)
+                      : Math.min(width / srcDims.width, height / srcDims.height)) * cropNow.scale;
+                  return (
+                    <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
+                      <OffthreadVideo
+                        // Hetero splice: the segment's own url is its donor's video.
+                        src={t.seg.url ?? spec.source.url}
+                        muted={Boolean(dubUrl)}
+                        startFrom={Math.round(t.seg.start * fpsv)}
+                        endAt={Math.round(t.seg.end * fpsv)}
+                        style={{
+                          position: "absolute",
+                          width: srcDims.width * zoom,
+                          height: srcDims.height * zoom,
+                          left: width / 2 - cropNow.x * srcDims.width * zoom,
+                          top: height / 2 - cropNow.y * srcDims.height * zoom,
+                        }}
+                      />
+                    </Series.Sequence>
+                  );
+                })}
+              </Series>
+            </AbsoluteFill>
+          ) : (
+            <AbsoluteFill
+              style={{
+                // Reframe via transform (object-position is unsupported on the
+                // future client-render path — keep to the CSS ∩ libass subset).
+                // Per-frame value: the crop data track sampled at the current
+                // source second (empty track = the static crop, 语义不变).
+                transform: `scale(${cropNow.scale}) translate(${(0.5 - cropNow.x) * 100}%, ${(0.5 - cropNow.y) * 100}%)`,
+              }}
+            >
+              <Series>
+                {timeline.map((t, i) => (
+                  <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
+                    <OffthreadVideo
+                      // Hetero splice: the segment's own url is its donor's video.
+                      src={t.seg.url ?? spec.source.url}
+                      muted={Boolean(dubUrl)}
+                      startFrom={Math.round(t.seg.start * fpsv)}
+                      endAt={Math.round(t.seg.end * fpsv)}
+                      style={{ width: "100%", height: "100%", objectFit }}
+                    />
+                  </Series.Sequence>
+                ))}
+              </Series>
+            </AbsoluteFill>
+          )}
         </Sequence>
       ) : null}
 

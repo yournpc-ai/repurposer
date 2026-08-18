@@ -935,6 +935,7 @@ const en = {
       generating_image: "Generating quote card images…",
       ready_to_render: "About to start rendering…",
       removing_fillers: "Removing filler words…",
+      reframing_clips: "Reframing your clips…",
       adding_music: "Scoring your clips…",
       translating_captions: "Translating captions…",
       dubbing: "Dubbing your voice…",

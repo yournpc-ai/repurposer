@@ -127,6 +127,17 @@ class RemoveFillerOpParams(BaseModel):
     repeat_count: int | None = None
 
 
+class ReframeClipOpParams(BaseModel):
+    """Journaled by the reframe_clip runner (ADR-045) — the resolved mode and
+    keyframe count are runner-computed, kept as the semantic signal for
+    calibration reflux; not chat-proposable (precomputed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str | None = None
+    keyframe_count: int | None = None
+
+
 class SnapshotParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -489,6 +500,10 @@ OP_REGISTRY: dict[str, OpDef] = {
     "remove_filler": OpDef(
         RemoveFillerOpParams, None, precomputed=True,
         writes=("segments", "caption_track"),
+    ),
+    "reframe_clip": OpDef(
+        ReframeClipOpParams, None, precomputed=True,
+        writes=("crop", "crop_track"),
     ),
     # 操作集闭包 (ADR-044 D7): registered + client-callable, deliberately NOT
     # in the LLM vocabulary this batch (llm_visible=False — they ride the

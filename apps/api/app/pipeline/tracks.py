@@ -63,8 +63,7 @@ TRACKS: dict[str, TrackDef] = {
         fields=("translation_track",),
     ),
     "crop": TrackDef(
-        # birth default today; reframe_clip becomes the writer on the 08-19 line
-        owner=("select_clips", "materialize_source"),
+        owner=("select_clips", "materialize_source", "reframe_clip"),
         pairs=(), provenance="real",
         url_fields=(),
         fields=("crop", "crop_track"),
