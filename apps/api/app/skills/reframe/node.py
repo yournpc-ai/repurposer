@@ -145,27 +145,39 @@ class ReframeClip(NodeBase):
             prepared.append((output, mode, [CropKeyframe(**kf) for kf in keyframes]))
 
         # Phase 2 — journal + re-pend in one short tail: the FOR UPDATE locks
-        # are held for milliseconds, not for the detection pass.
+        # are held for milliseconds, not for the detection pass. Per-clip
+        # isolation here too: a clip deleted mid-detection (editor delete /
+        # a concurrent select_clips re-run) skips — it must not abort the
+        # tail and roll back the clips already journaled.
         touched: list[UUID] = []
         for output, mode, keyframes in prepared:
-            # Re-read fresh and re-apply the delta onto it: the detection pass
-            # took minutes, and a concurrent editor save on this clip must
-            # survive the morph — only crop_track is this morph's to write.
-            await db.refresh(output)
-            new_spec = ClipSpec.model_validate(output.render_spec).model_copy(
-                update={"crop_track": keyframes}
-            )
-            # Journal the morph (agent-loop-upgrade W4): every render_spec write
-            # goes through the operations service — undoable, hash chain intact.
-            await apply_precomputed(
-                db,
-                output,
-                "reframe_clip",
-                {"mode": mode, "keyframe_count": len(new_spec.crop_track or [])},
-                new_spec.model_dump(mode="json"),
-                source=origin,
-                user_id=project.user_id,
-            )
+            try:
+                # Re-read fresh and re-apply the delta onto it: the detection
+                # pass took minutes, and a concurrent editor save on this clip
+                # must survive the morph — only crop_track is this morph's to
+                # write.
+                await db.refresh(output)
+                new_spec = ClipSpec.model_validate(output.render_spec).model_copy(
+                    update={"crop_track": keyframes}
+                )
+                # Journal the morph (agent-loop-upgrade W4): every render_spec
+                # write goes through the operations service — undoable, hash
+                # chain intact.
+                await apply_precomputed(
+                    db,
+                    output,
+                    "reframe_clip",
+                    {"mode": mode, "keyframe_count": len(new_spec.crop_track or [])},
+                    new_spec.model_dump(mode="json"),
+                    source=origin,
+                    user_id=project.user_id,
+                )
+            except Exception:
+                logger.warning(
+                    "reframe_clip_journal_failed", output_id=str(output.id), exc_info=True
+                )
+                skipped += 1
+                continue
             output.render_status = RenderStatus.PENDING
             output.render_error = None
             await db.flush()

@@ -263,8 +263,9 @@ export interface ClipSpec {
   crop: ClipCrop;
   /** Crop data track (ADR-045): sparse framing decisions on the source
    * timeline, sampled per frame via `sampleCrop`. Absent/empty = the static
-   * `crop` above (degenerate form, 语义不变). */
-  crop_track?: CropKeyframe[];
+   * `crop` above (degenerate form, 语义不变). Nullable on the wire — the
+   * Python side serializes None. */
+  crop_track?: CropKeyframe[] | null;
   caption_track: CaptionCue[];
   /** 双语对照轨: the translated half of a bilingual caption pair — unit-level
    * cues (no karaoke word timing), paired with caption_track's original lines

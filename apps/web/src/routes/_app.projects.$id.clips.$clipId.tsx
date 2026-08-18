@@ -228,7 +228,10 @@ function ClipEditorPage() {
   const patchCrop = (patch: Partial<ClipSpec['crop']>) => {
     if (!spec) return
     const crop = { ...spec.crop, ...patch }
-    patchSpec({ crop })
+    // Mirror the server apply (set_crop clears crop_track): while a track
+    // exists the renderer samples it and never reads crop — without the
+    // local clear the sliders would move nothing until save.
+    patchSpec({ crop, crop_track: null })
     pushOp({ op: 'set_crop', params: { x: crop.x, y: crop.y, scale: crop.scale } })
   }
 

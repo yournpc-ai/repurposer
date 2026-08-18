@@ -34,6 +34,11 @@ from app.models.tables import Asset, Message, Output, WorkflowStep, Project, Wor
 from app.metering import bind_workflow_step
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
+from app.pipeline.morph import (
+    INPLACE_MORPH_KINDS,
+    _modifier_target_clips,
+    _pend_suppressed_base_renders,
+)
 from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
     MEDIA,
@@ -837,6 +842,31 @@ async def execute_step(node_id: UUID) -> None:
                 )
                 node.finished_at = datetime.now(UTC)
                 await db.commit()
+                # Morph-failure rescue: a failed in-place morph leaves its
+                # producer-suppressed targets at render_status NULL — the
+                # executor session's rollback also undid any per-clip
+                # re-pends the morph managed before raising. The cascade
+                # below skips every downstream morph, so nothing later owns
+                # their render; re-pend them here (base specs intact — the
+                # morph's writes rolled back too). Rides this fresh session
+                # and is best-effort: the rescue must never mask the failure.
+                if (
+                    node.kind in INPLACE_MORPH_KINDS
+                    and run is not None
+                    and project is not None
+                ):
+                    try:
+                        rescued = await _modifier_target_clips(db, node, project)
+                        await _pend_suppressed_base_renders(
+                            db, run, node, rescued, defer_to_later_morph=False
+                        )
+                        await db.commit()
+                    except Exception:
+                        logger.warning(
+                            "morph_failure_rescue_failed",
+                            node_id=str(node_id),
+                            exc_info=True,
+                        )
                 await _cascade_skip(db, node)
                 await db.commit()
     finally:
