@@ -311,6 +311,19 @@ def compute_crop_track(
     # Windows are generated source-ordered (_kept_windows); this sort is the
     # strictly-ascending contract's safety net, not the ordering mechanism.
     kfs.sort(key=lambda k: k["t"])
+    # Equal-t collisions stay possible at exactly-touching window boundaries
+    # (a contiguous-clamped backdate meeting a led turn on the same second) —
+    # keep the LATER decision, matching the sampler's latest-wins semantics.
+    # The contract validator never runs on the write path (model_copy), so
+    # this is the only place a duplicate t can be stopped from poisoning the
+    # spec (a duplicate fails every later ClipSpec validation → uneditable).
+    deduped: list[dict[str, float]] = []
+    for kf in kfs:
+        if deduped and kf["t"] <= deduped[-1]["t"]:
+            deduped[-1] = kf
+        else:
+            deduped.append(kf)
+    kfs = deduped
     logger.info(
         "reframe_crop_track", mode=mode, windows=len(windows), keyframes=len(kfs)
     )

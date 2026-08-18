@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.brand import resolve_music_ref
+from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_operations
@@ -81,8 +82,16 @@ class AddMusic(NodeBase):
                 break
         if track is None:
             # Unresolvable chain — rescue the suppressed base renders first
-            # so the clips still come out, then fail the step.
-            await _pend_suppressed_base_renders(db, run, node, clips)
+            # so the clips still come out, then fail the step. Own session +
+            # commit: the executor session rolls back when the raise below
+            # propagates, and a plain call here would never persist. Never
+            # defer — the failure cascade-skips every downstream morph, so
+            # no later morph exists to own these renders.
+            async with AsyncSessionLocal() as s:
+                await _pend_suppressed_base_renders(
+                    s, run, node, clips, defer_to_later_morph=False
+                )
+                await s.commit()
             raise ValueError(f"No music track found for mood '{mood}'")
 
         origin = await _run_origin(db, run)

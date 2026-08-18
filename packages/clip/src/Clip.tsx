@@ -263,6 +263,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   if (hasCropTrack && dims === null && dimsHandle === null) {
     setDimsHandle(delayRender("crop_track: resolving source dims"));
   }
+  if (!hasCropTrack && dimsHandle !== null) {
+    // Track removed in place: disarm. A stale handle would otherwise
+    // suppress re-arming when a track is re-added later (and a fetch that
+    // failed leaves dims null — the re-add must re-fetch, not stay on the
+    // static fallback).
+    setDimsHandle(null);
+  }
   useEffect(() => {
     if (dimsHandle === null || dims !== null) return;
     let cancelled = false;

@@ -27,6 +27,9 @@ INPLACE_MORPH_KINDS = (
     "reframe_clip",
 )
 
+# Clip producers (their fan-out a later in-place morph suppresses).
+_PRODUCER_KINDS = ("select_clips", "materialize_source")
+
 
 async def _render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
     """The runtime-born render step's builder-written task name (same label()
@@ -50,7 +53,9 @@ async def _later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: 
     render's completion can clobber the morph's re-pend). Producers and
     earlier morphs use this to leave the render to the last morph in the
     chain; ``fork`` siblings don't count (they derive new rows and never
-    touch the base clip).
+    touch the base clip). A ``target_output_id``-scoped morph doesn't count
+    either: it rewrites one PRE-EXISTING output — its scope never covers
+    this run's newborn clips, so it must not suppress their base renders.
     """
     count = await db.scalar(
         select(func.count())
@@ -60,6 +65,27 @@ async def _later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: 
             WorkflowStep.kind.in_(INPLACE_MORPH_KINDS),
             WorkflowStep.seq > node.seq,
             func.coalesce(WorkflowStep.spec["fork"].astext, "false") != "true",
+            func.coalesce(WorkflowStep.spec["target_output_id"].astext, "") == "",
+        )
+    )
+    return bool(count)
+
+
+async def _has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
+    """True when a clip producer feeds this modifier. The compiler wires the
+    producer edge into EVERY modifier of the run, so a later morph's target
+    set always unions the producer's full output_refs — this morph's skipped
+    clips stay visible downstream (a rescue may safely defer to the later
+    morph). Without a producer edge the later morph sees only this step's
+    own output_refs (the touched set)."""
+    if not node.inputs:
+        return False
+    count = await db.scalar(
+        select(func.count())
+        .select_from(WorkflowStep)
+        .where(
+            WorkflowStep.id.in_([UUID(str(i)) for i in node.inputs]),
+            WorkflowStep.kind.in_(_PRODUCER_KINDS),
         )
     )
     return bool(count)
@@ -285,12 +311,14 @@ async def _pend_suppressed_base_renders(
     (render_status NULL = render not requested) the morph owes them the
     render they would otherwise never get. Goes through _fan_out_renders so
     a later in-place morph defers the same way — but only when that morph
-    can actually SEE the rescued clips: a later morph's targets come from
-    this step's output_refs (the touched set), so a non-fork morph that DID
-    touch part of its scope must pass ``defer_to_later_morph=False`` —
-    deferring then would orphan the rescued clips (no render ever runs).
-    The all-skipped case keeps the defer: empty output_refs make the later
-    morph fall back to the project-wide target set, rescued clips included.
+    can actually SEE the rescued clips. Callers pass
+    ``defer_to_later_morph = (not touched) or await _has_producer_upstream(...)``:
+    a producer edge means every later morph unions the producer's full
+    output_refs (skips stay visible); an all-skipped morph leaves empty
+    output_refs, so the later morph's project-wide fallback sees them. A
+    partial touch with no producer edge must NOT defer — the later morph's
+    targets come from this step's output_refs (the touched set), so the
+    skipped clips are invisible to it and would never render.
     """
     stale_ids = [
         o.id

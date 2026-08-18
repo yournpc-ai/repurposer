@@ -16,6 +16,7 @@ from app.operations.service import apply_precomputed
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
     _fan_out_renders,
+    _has_producer_upstream,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
@@ -74,10 +75,17 @@ class ReframeClip(NodeBase):
         # interleave with computing. Per-clip isolation matches the
         # speaker_map processor's posture: one corrupt/unreadable source
         # skips that clip, never fails the run.
-        prepared: list[tuple[Output, str, ClipSpec]] = []
+        prepared: list[tuple[Output, str, list[CropKeyframe] | None]] = []
         skipped = 0
         for output in clips:
-            spec = ClipSpec.model_validate(output.render_spec)
+            try:
+                spec = ClipSpec.model_validate(output.render_spec)
+            except Exception:
+                logger.warning(
+                    "reframe_clip_spec_invalid", output_id=str(output.id), exc_info=True
+                )
+                skipped += 1
+                continue
             if spec.source.kind != "video":
                 # stills/audiogram sources have no video frames to reframe.
                 skipped += 1
@@ -104,41 +112,49 @@ class ReframeClip(NodeBase):
                 # set_crop (non-destructive doctrine).
                 if spec.crop_track is None:
                     continue  # no reframe on this clip — nothing to undo
-                prepared.append((output, mode, spec.model_copy(update={"crop_track": None})))
+                prepared.append((output, mode, None))
                 continue
 
-            path = await download_to_temp(asset.file_url)
-            if path is None:
-                skipped += 1
-                continue
             try:
-                keyframes, _resolved = compute_crop_track(
-                    path, spec.model_dump(mode="json"), speaker_map, mode
-                )
+                path = await download_to_temp(asset.file_url)
+                if path is None:
+                    skipped += 1
+                    continue
+                try:
+                    keyframes, _resolved = compute_crop_track(
+                        path, spec.model_dump(mode="json"), speaker_map, mode
+                    )
+                finally:
+                    path.unlink(missing_ok=True)
             except Exception:
                 logger.warning(
                     "reframe_clip_compute_failed", output_id=str(output.id), exc_info=True
                 )
                 skipped += 1
                 continue
-            finally:
-                path.unlink(missing_ok=True)
+            if keyframes is None:
+                # No kept main-source windows — a static_center degrade:
+                # clear a stale track when one exists, else nothing to undo.
+                if spec.crop_track is not None:
+                    prepared.append((output, "static_center", None))
+                continue
             if not keyframes:
                 # No trackable face in the kept windows — skip honestly.
                 skipped += 1
                 continue
-            prepared.append((
-                output,
-                mode,
-                spec.model_copy(
-                    update={"crop_track": [CropKeyframe(**kf) for kf in keyframes]}
-                ),
-            ))
+            prepared.append((output, mode, [CropKeyframe(**kf) for kf in keyframes]))
 
         # Phase 2 — journal + re-pend in one short tail: the FOR UPDATE locks
         # are held for milliseconds, not for the detection pass.
         touched: list[UUID] = []
-        for output, mode, new_spec in prepared:
+        for output, mode, keyframes in prepared:
+            # Re-read fresh and re-apply the delta onto it: the detection pass
+            # took minutes, and a concurrent editor save on this clip must
+            # survive the morph — only crop_track is this morph's to write.
+            await db.refresh(output)
+            new_spec = ClipSpec.model_validate(output.render_spec).model_copy(
+                update={"crop_track": keyframes}
+            )
             # Journal the morph (agent-loop-upgrade W4): every render_spec write
             # goes through the operations service — undoable, hash chain intact.
             await apply_precomputed(
@@ -163,12 +179,14 @@ class ReframeClip(NodeBase):
             )
         # Skip-rescue: clips left on their base spec (no faces / not an
         # interview) still owe a render when the producer's fan-out was
-        # suppressed for this chain. A partial touch must NOT defer to a
-        # later morph — its targets come from this step's output_refs (the
-        # touched set), so the skipped clips are invisible to it.
+        # suppressed for this chain. Defer to a later morph only when it can
+        # see them: a producer edge unions the full output_refs downstream;
+        # an all-skip leaves empty refs so the later morph falls back to the
+        # project-wide set. A partial touch without a producer edge renders
+        # the skips now — the later morph would never see them.
         await _pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched,
+            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
         )
         if not touched:
             return []

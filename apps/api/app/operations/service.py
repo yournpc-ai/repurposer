@@ -13,7 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import canonical_json_hash
+from app.models.schemas import RenderStatus, canonical_json_hash
 from app.models.tables import Operation, Output
 from app.operations.registry import OP_REGISTRY, SOURCE_REGISTRY, validate_op
 
@@ -36,7 +36,14 @@ def spec_hash(spec: dict) -> str:
 async def _lock_output(db: AsyncSession, output_id: UUID) -> Output:
     row = (
         await db.execute(
-            select(Output).where(Output.id == output_id).with_for_update()
+            select(Output)
+            .where(Output.id == output_id)
+            .with_for_update()
+            # Refresh the identity-mapped object with the LOCKED row: a morph
+            # node's caller may have loaded this output minutes ago (its
+            # compute pass), and journaling/applying off the stale snapshot
+            # would record a never-live drift row and lose a concurrent edit.
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
     if row is None:
@@ -271,6 +278,7 @@ async def undo(db: AsyncSession, output_id: UUID) -> Output:
     # prev is the baseline at worst — its spec_after is always valid.
     output.render_spec = prev.spec_after
     output.updated_at = datetime.now(UTC)
+    _repend_after_restore(output, head.op)
     await db.commit()
     await db.refresh(output)
     return output
@@ -290,9 +298,26 @@ async def redo(db: AsyncSession, output_id: UUID) -> Output:
     target.undone_at = None
     output.render_spec = target.spec_after
     output.updated_at = datetime.now(UTC)
+    _repend_after_restore(output, target.op)
     await db.commit()
     await db.refresh(output)
     return output
+
+
+def _repend_after_restore(output: Output, op_name: str) -> None:
+    """Undo/redo of a run-dispatched morph (precomputed ops auto-render on
+    apply) re-pends the render so the served video tracks the restored spec;
+    editor ops keep the explicit-Export doctrine (their saves never re-pend
+    either). The render claim is output-driven — no step row needed."""
+    opdef = OP_REGISTRY.get(op_name)
+    if (
+        opdef is not None
+        and opdef.precomputed
+        and output.type == "clip"
+        and output.render_spec is not None
+    ):
+        output.render_status = RenderStatus.PENDING
+        output.render_error = None
 
 
 async def list_operations(db: AsyncSession, output_id: UUID) -> list[Operation]:

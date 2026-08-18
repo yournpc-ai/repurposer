@@ -37,6 +37,7 @@ from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bound
 from app.pipeline.morph import (
     _fan_out_renders,
     _guard_target_differs_from_source,
+    _has_producer_upstream,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
@@ -209,14 +210,14 @@ class TranslateClip(NodeBase):
             )
         # Skip-rescue: targets left on their base spec (no caption track)
         # still owe a render when the producer's fan-out was suppressed for
-        # this chain; a fork's derived rows defer to nothing (exclusively
-        # this node's), an in-place morph defers to a later non-fork morph —
-        # but only when it touched nothing: a later morph's targets come
-        # from this step's output_refs (the touched set), so a partial
-        # touch's skipped clips are invisible to it and render right away.
+        # this chain. Defer to a later morph only when it can see the skips:
+        # a producer edge unions the full output_refs downstream; an
+        # all-skip leaves empty refs so the later morph falls back to the
+        # project-wide set; a partial touch without a producer edge renders
+        # the skips now — the later morph would never see them.
         await _pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=fork or not touched,
+            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
         )
         if not touched:
             return []

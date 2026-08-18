@@ -16,6 +16,7 @@ from app.pipeline.clip_spec import remove_range
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.morph import (
     _fan_out_renders,
+    _has_producer_upstream,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
     _run_origin,
@@ -111,12 +112,14 @@ class RemoveFiller(NodeBase):
             )
         # Skip-rescue: clips left on their base spec (no fillers found in
         # them) still owe a render when the producer's fan-out was suppressed
-        # for this chain. A partial touch must NOT defer to a later morph —
-        # its targets come from this step's output_refs (the touched set),
-        # so the skipped clips are invisible to it and would never render.
+        # for this chain. Defer to a later morph only when it can see the
+        # skips: a producer edge unions the full output_refs downstream; an
+        # all-skip leaves empty refs so the later morph falls back to the
+        # project-wide set; a partial touch without a producer edge renders
+        # the skips now — the later morph would never see them.
         await _pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched,
+            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
         )
         if not touched:
             return []

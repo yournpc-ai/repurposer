@@ -288,6 +288,11 @@ def _apply_set_crop(spec: dict, params: dict) -> dict:
     cs.crop.x = p.x
     cs.crop.y = p.y
     cs.crop.scale = p.scale
+    # A manual static crop is an explicit framing decision — the dynamic
+    # track would silently override it at render (the window path samples
+    # the track, never spec.crop), so the track goes. Journaled = undoable,
+    # same doctrine as the reframe static_center undo.
+    cs.crop_track = None
     return cs.model_dump(mode="json")
 
 
@@ -475,7 +480,7 @@ OP_REGISTRY: dict[str, OpDef] = {
     "set_crop": OpDef(
         SetCropParams, _apply_set_crop,
         description="Reframe: normalized center (x, y) + zoom scale",
-        writes=("crop",),
+        writes=("crop", "crop_track"),
     ),
     "set_aspect": OpDef(
         SetAspectParams, _apply_set_aspect,

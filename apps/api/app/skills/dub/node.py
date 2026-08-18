@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.roster import translator
+from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
@@ -26,6 +27,7 @@ from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
     _fan_out_renders,
     _guard_target_differs_from_source,
+    _has_producer_upstream,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
     _record_target_output_ids,
@@ -168,18 +170,24 @@ class DubClip(NodeBase):
         if not touched:
             # Whole batch unresolvable — rescue the suppressed base renders
             # first so the clips still come out (pre-suppression behavior),
-            # then fail the step.
-            await _pend_suppressed_base_renders(db, run, node, clips)
+            # then fail the step. Own session + commit: the executor session
+            # rolls back when the raise propagates, so a plain call here
+            # would never persist. Never defer — the failure cascade-skips
+            # every downstream morph; no later morph exists to own these.
+            async with AsyncSessionLocal() as s:
+                await _pend_suppressed_base_renders(
+                    s, run, node, clips, defer_to_later_morph=False
+                )
+                await s.commit()
             raise ValueError("No clips could be dubbed (missing captions or voice sample)")
         # Skip-rescue: per-clip skips keep their base spec — they still owe
         # a render when the producer's fan-out was suppressed for this chain.
-        # The defer to a later morph holds only for forks (later morphs reach
-        # the base clips via the chain's base edge) and the all-skipped case
-        # (empty output_refs → the later morph's project-wide fallback sees
-        # them); a partial in-place touch's skips are invisible downstream.
+        # Defer only when a later morph can see the skips: a producer edge
+        # unions the full output_refs downstream; an all-skip leaves empty
+        # refs so the later morph falls back to the project-wide set.
         await _pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=fork or not touched,
+            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
         )
         await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
         await _record_target_output_ids(node.id, touched)
