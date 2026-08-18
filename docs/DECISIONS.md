@@ -869,7 +869,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    - **transition 枚举**：挂段的进场边（none/fade/dip，2-3 封顶——`insert_segment` 与 `set_transition` 两 op 同查），换序随段走；进场边语义与 FFmpeg xfade / Remotion 插值天然对齐。**ADR-016 L3 注记修订为"枚举可、画廊不可"**（转场挑选面板永拒不变）。
 6. **泳道投影 = 位置 fold 单函数**：sequence + layer 家族 → 扁平泳道（绝对输出时间 + z 序），TS 单家（packages/clip）+ Python 同名镜像（NAMING §1）；data 家族不投影——按 sourceTime 采样（crop_track 采样器 = keyframes 族第一个渲染件）；块轨本就输出时间轴。渲染器只吃投影/采样，永不读锚；投影函数同时是 FFmpeg 后路的 filtergraph 供料口。
 7. **ops 闭包**：`reorder_segments` / `insert_segment` / `set_transition` / `add_layer` / `remove_layer` / `move_layer` 登记入 OP_REGISTRY；**op 载荷 = 实体引用（段 id / 锚 / 枚举），LLM 永不提议绝对时间码**（坐标计算永归代码——"LLM 提议、代码裁决"的编辑侧延伸）；寻址 = （轨, item_id, op) 对注册表校验，不靠 LLM 猜字段路径；段/层 id 唯一性由 ClipSpec 契约断言（锚寻址 first-match 的前提）。**一轨一写者**：撞轨 = 编译期 422（fork 豁免——派生行各有其 spec），不做运行时合并。**派生轨失效声明**：对主时间轴派生的轨（dub）在注册表声明依赖，时间轴 op 落地时经注册表枚举失效轨并告知（重配一句话；不产生"合法的谎"）。
-8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `tasks/done/track-model.md` §7。
+8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/；边界精确化见 ADR-045——工序零新增，引擎缝按 asr.py 先例豁免）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `tasks/done/track-model.md` §7。
 9. **tracks:{} 容器禁令保留、理由换血**：旧理由"破坏性格式迁移"随破坏性授权作废；保留理由 = 收益已证伪——快照 undo + LLM 不写 spec 的地基上全量常驻空轨无收益，扁平 spec + 注册表索引已提供全部归属能力。本禁令与兼容性无关，是纯目标判断。
 
 **Alternatives（翻案条件随附）**:
@@ -884,3 +884,28 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 禁令入档：禁 NLE 自由轨语义进 spec（任意增删道 / 同道重叠 / 转场画廊 / 关键帧自由编辑）；UI 永不见轨（层条目呈现为"这段配了画面"标记卡，随技能批）；kind 全枚举注册表守门；消费方禁逐字段特判；每轨唯一写者。
 
 **Related**: ADR-016（契约锁定；L3 注记本条修订）/ ADR-020（stills Ken-Burns 拒绝与本条 transition 的边界：枚举进场边可、动效画廊不可）/ ADR-026（C2PA fold——layers provenance 必填）/ ADR-029（虚拟产物段进主时间轴）/ ADR-032（快照 undo——锚定面是其存储面）/ ADR-033（能力层双海拔）/ ADR-035（可操作画布永拒——泳道期权的前提门）/ ADR-039（注册表时刻同款迭代）/ ADR-043（派生投影同款哲学）；母文档 `docs/RENDERING.md`（§8 本条转正）；简报 `docs/tasks/done/track-model.md`（§7 配套层 / §8 附录 12 操作走查全表）
+
+## ADR-045: 智能分镜能力线——YuNet 视觉引擎 + speaker_map 素材级事实 + crop_track 稀疏关键帧
+
+**Context**: 08-19 能力线（PROGRESS 第三周）要把「双人同屏静态访谈 → 竖屏单人切换」与「单人中景动态追踪」落成 reframe 能力。轨道模型地基已交付（ADR-044 + 08-18 冷审修复批），crop_track 进场还差三块：检测引擎（人在哪）、话轮归属（谁在说话）、crop_track 数据形态（取景决策怎么存）。模型选型经许可证排查（用户以官方定价页实证）：InsightFace/SCRFD 预训练权重**仅限非商业学术研究**，商用需购买授权——SCRFD 及一切 HF repack 不可用于本产品。真实场景 = 静态访谈机位（用户确认）。
+
+**Decision**:
+
+1. **视觉引擎 = YuNet（MIT）**：opencv_zoo 官方 `face_detection_yunet_2023mar.onnx`（232KB，bbox + 5 点关键点含嘴角），**权重 vendor 入仓库**（MIT 允许再分发；232KB 消除一切下载/代理失败面，dev 与服务器零网络依赖）+ MIT LICENSE 文件并置；运行时 = `opencv-python-headless`（`cv2.FaceDetectorYN` 原生 API，NMS 内置）。引擎缝住 `tools/vision.py`（asr.py 同款懒加载进程缓存）；工序（帧网格拼装 / 词轴切段 / 选页取窗）住技能包，不进 tools/。**tools 边界精确化**（ADR-044 第 8 条注记）：工序零新增进 tools/；**引擎缝按 asr.py 先例豁免**——vision.py 是第一个住户。
+2. **隐私边界**：全程不做人脸识别（不知"是谁"）——只有位置与嘴部运动，全程不出网（faster-whisper 同款 EU 姿势）；密集计算全部本地化，云调用只剩稀疏语义判定。
+3. **话轮归属 = 嘴部 ROI 运动能量主 + M3 仲裁辅**：whisper 词轴切话轮（间隙 ≥0.6s 断轮）；静态机位下逐话轮对比各说话人嘴部 ROI 帧差能量，能量比 ≥ 阈值（初值 1.6×，以真实片校准）确定归属；模糊轮（双人同动 / 能量比不足）M3 网格仲裁（每片 1~5 次云调用封顶）。M3 从"主力判定"降级为"模糊仲裁"——静帧猜"谁张嘴"恰是其最弱形态。
+4. **speaker_map = 素材级事实**：VIDEO/AUDIO 第二 PROCESSOR（接 ASR 后，`asset_processing.py` 先例——素材级 / 可重跑 / hash 复用），**形态闸门先行**（whisper 话轮密度 + 1~2 次 M3 网格判多人/访谈才跑全量归属；单人素材零增量成本）。数据形态：`Asset.meta.speaker_map = {form, speakers:[{id, screen_hint}], turns:[{start, end, speaker}]}`（meta 先例：language）。消费方地图：reframe_clip（08-19）→ 本人含量门禁 v2（08-31，只从用户本人话轮学风格）→ 访谈选段偏好（后续）。
+5. **crop_track = 稀疏决策关键帧**（data 家族轨，源时间轴）：`[{t, x, y, scale}]`——关键帧 = 一次取景决策（"这里切到 A"），非稠密逐帧；渲染采样器在相邻关键帧间固定 smoothstep（~8 帧，渲染常量不进契约——transition 枚举同哲学：枚举可、参数画廊不可）。**防眩晕分工**：最短驻留 / 死区 / 最大转速 = 写侧约束（技能工序，参数以真实访谈片看调）+ checks 住户校验（随 reframe 包同批回归，禁先注册空座位）；采样器只做平滑插值，永远简单。空轨 = 静态 `crop` 退化形态（语义不变）。
+6. **reframe_clip 技能包**（名候选，过 NAMING §7）：三模式 `interview_split`（双人访谈分镜，静态机位按说话人切换）/ `speaker_track`（单人中景动态追踪）/ `static_center`（静态中裁，回退档）+ `auto`（按 speaker_map.form 选模）。形态写者写 `crop_track`（+静态 `crop`），`TrackDef.owner` 登记即得撞轨 422；对话可调用走 task_list（六 op 继续 `llm_visible=False`，本批不开放 LLM op 词汇）；估价按素材时长报（检测 CPU + M3 调用数）。
+7. **一引擎两模式**：同一 YuNet 在访谈素材稀疏采样（1~2s 间隔刷新位置）+ 登台素材稠密采样（3~5 帧一检出轨迹）——复杂选型收敛为**一个引擎两种采样密度**；`speaker_track` 不需要第二套选型。
+
+**Alternatives（翻案条件随附）**:
+
+- **SCRFD（InsightFace，侧脸精度轻量最强）**：预训练权重非商用（官方定价页实证）。**翻案阶梯**：YuNet 侧脸检出实测不达标 → MediaPipe（Apache-2.0）→ 仍不足则购买 InsightFace 商用授权（产品化路径）。
+- **pyannote 音频话轮分离**（纯音频 SOTA）：torch 重依赖 + HF 门控模型。**翻案条件**：嘴部运动能量在真实访谈归属准确率不达标（双人小动作多 / 一方说话几乎不动嘴）。
+- **自训检测器**：架构 MIT 自由，但标准训练集（WIDER FACE）同样仅限非商业研究 + 1–2 周 ML 工程；蒸馏 SCRFD 权重产伪标签仍属非商用权重派生。**翻案条件**：人脸分析成为产品核心差异点且有常驻 ML 人力。
+- **M3 全程判定**（零新依赖）：静帧网格猜"谁张嘴"是其最弱形态；逐帧追踪贵且抖（60s 素材 0.5s 间隔 = 120 次调用）。只任形态归类与模糊仲裁。
+- **稠密平滑关键帧 + 线性插值**：契约肥大、防眩晕参数散落数据。**翻案条件**：sparse + smoothstep 在真实素材出现可见跳变且写侧平滑无法吸收。
+
+**Related**: ADR-044（轨道地基；crop_track 进场路径与 tools 注记本条落地）/ ADR-016（渲染器黑盒——采样器只进 packages/clip）/ ADR-020（Ken-Burns 拒绝的边界：crop_track 是 video 源取景决策轨，非 stills 动效）/ ADR-026（speaker_map 不涉 C2PA——分析事实非生成内容）；简报 `docs/tasks/reframe-line.md`；双验证 spike 与排期见 `docs/PROGRESS.md` 第三周
+
