@@ -1285,9 +1285,6 @@ class LayerMedia(BaseModel):
     text: str | None = None  # text: the callout content
 
 
-LAYER_KINDS = ("broll", "text_callout", "pip", "motion_graphic")
-
-
 class ClipLayer(BaseModel):
     """An overlay item on the layer track (ADR-044; "overlay" 词禁用于视频层,
     NAMING §2).
@@ -1617,6 +1614,19 @@ class ClipSpec(BaseModel):
     brand: ClipBrand | None = None  # resolved brand values (None = default look)
     brand_ref: UUID | None = None
     target_language: str = "en"
+
+    @model_validator(mode="after")
+    def _unique_item_ids(self) -> "ClipSpec":
+        """Anchor addressing is by item id — duplicates would silently
+        misresolve (first-match). Enforced at the contract so every write
+        path (ops applies round-trip through model_validate) inherits it."""
+        seg_ids = [s.id for s in self.segments]
+        if len(set(seg_ids)) != len(seg_ids):
+            raise ValueError("segments: duplicate ids — anchor addressing requires uniqueness")
+        layer_ids = [layer.id for layer in self.layers]
+        if len(set(layer_ids)) != len(layer_ids):
+            raise ValueError("layers: duplicate ids — anchor addressing requires uniqueness")
+        return self
 
 
 class StepResponse(BaseModel):

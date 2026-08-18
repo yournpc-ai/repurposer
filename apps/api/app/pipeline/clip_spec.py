@@ -360,6 +360,18 @@ def video_duration_seconds(spec: dict) -> float:
     )
 
 
+def total_output_seconds(spec: dict) -> float:
+    """Seconds of rendered output — pricing's duration mirror (TS twin
+    ``totalDurationSeconds``). Kept video + brand card seconds.
+
+    Known boundary (ADR-044): the registry does NOT auto-adopt duration —
+    a future duration-bearing track extends the arithmetic right here,
+    alongside its renderer piece.
+    """
+    total = video_duration_seconds(spec) + intro_seconds(spec) + outro_seconds(spec)
+    return total if total > 0 else 1 / 30.0  # >= a frame (COMPOSITION_FPS=30)
+
+
 def video_timeline(spec: dict) -> list[dict]:
     """Kept segments on the video-local output clock. TS: videoTimeline.
 

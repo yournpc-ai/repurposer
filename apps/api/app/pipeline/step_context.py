@@ -21,7 +21,7 @@ from app.models.schemas import (
     MediaInput,
 )
 from app.models.tables import Asset, Output, Persona, Project
-from app.pipeline.tracks import total_output_seconds
+from app.pipeline.clip_spec import total_output_seconds
 from app.tools.storage import download_to_temp, file_to_data_url
 
 # Media snippets above these thresholds are not sent directly to the multimodal

@@ -336,11 +336,19 @@ def _apply_reorder_segments(spec: dict, params: dict) -> dict:
     return cs.model_dump(mode="json")
 
 
+def _transition_count(cs: ClipSpec) -> int:
+    return sum(1 for s in cs.segments if not s.hidden and s.transition != "none")
+
+
 def _apply_insert_segment(spec: dict, params: dict) -> dict:
     p = InsertSegmentParams.model_validate(params)
     if p.end <= p.start:
         raise ValueError("insert_segment: end must be after start")
     cs = _roundtrip(spec)
+    if p.transition != "none" and _transition_count(cs) >= MAX_TRANSITIONS_PER_CLIP:
+        raise ValueError(
+            f"insert_segment: at most {MAX_TRANSITIONS_PER_CLIP} transitions per clip"
+        )
     seg = ClipSegment(
         asset_id=p.asset_id,
         url=p.url,
@@ -363,8 +371,7 @@ def _apply_set_transition(spec: dict, params: dict) -> dict:
     cs = _roundtrip(spec)
     seg = _kept_segment(cs, p.segment_id, op="set_transition")
     if p.transition != "none" and seg.transition == "none":
-        used = sum(1 for s in cs.segments if not s.hidden and s.transition != "none")
-        if used >= MAX_TRANSITIONS_PER_CLIP:
+        if _transition_count(cs) >= MAX_TRANSITIONS_PER_CLIP:
             raise ValueError(
                 f"set_transition: at most {MAX_TRANSITIONS_PER_CLIP} transitions per clip"
             )
