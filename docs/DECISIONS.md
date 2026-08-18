@@ -891,7 +891,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 
-1. **视觉引擎 = YuNet（MIT）**：opencv_zoo 官方 `face_detection_yunet_2023mar.onnx`（232KB，bbox + 5 点关键点含嘴角），**权重 vendor 入仓库**（MIT 允许再分发；232KB 消除一切下载/代理失败面，dev 与服务器零网络依赖）+ MIT LICENSE 文件并置；运行时 = `opencv-python-headless`（`cv2.FaceDetectorYN` 原生 API，NMS 内置）。引擎缝住 `tools/vision.py`（asr.py 同款懒加载进程缓存）；工序（帧网格拼装 / 词轴切段 / 选页取窗）住技能包，不进 tools/。**tools 边界精确化**（ADR-044 第 8 条注记）：工序零新增进 tools/；**引擎缝按 asr.py 先例豁免**——vision.py 是第一个住户。
+1. **视觉引擎 = YuNet（MIT）**：opencv_zoo 官方权重（bbox + 5 点关键点含嘴角），**权重 vendor 入仓库**（MIT 允许再分发；~230KB 消除一切下载/代理失败面，dev 与服务器零网络依赖）+ MIT LICENSE 文件并置；运行时 = `opencv-python-headless` 5.x（`cv2.FaceDetectorYN` 原生 API，NMS 内置），配 5.x 的动态输入封装 `face_detection_yunet_2026may.onnx`（2023mar 系同权重，WIDER Hard 0.7503 最强线；int8 变体全禁——精度降且 5.x 有全漏检 bug）。引擎缝住 `tools/vision.py`（asr.py 同款懒加载进程缓存）；工序（帧网格拼装 / 词轴切段 / 选页取窗）住技能包，不进 tools/。**tools 边界精确化**（ADR-044 第 8 条注记）：工序零新增进 tools/；**引擎缝按 asr.py 先例豁免**——vision.py 是第一个住户。
 2. **隐私边界**：全程不做人脸识别（不知"是谁"）——只有位置与嘴部运动，全程不出网（faster-whisper 同款 EU 姿势）；密集计算全部本地化，云调用只剩稀疏语义判定。
 3. **话轮归属 = 嘴部 ROI 运动能量主 + M3 仲裁辅**：whisper 词轴切话轮（间隙 ≥0.6s 断轮）；静态机位下逐话轮对比各说话人嘴部 ROI 帧差能量，能量比 ≥ 阈值（初值 1.6×，以真实片校准）确定归属；模糊轮（双人同动 / 能量比不足）M3 网格仲裁（每片 1~5 次云调用封顶）。M3 从"主力判定"降级为"模糊仲裁"——静帧猜"谁张嘴"恰是其最弱形态。
 4. **speaker_map = 素材级事实**：VIDEO/AUDIO 第二 PROCESSOR（接 ASR 后，`asset_processing.py` 先例——素材级 / 可重跑 / hash 复用），**形态闸门先行**（whisper 话轮密度 + 1~2 次 M3 网格判多人/访谈才跑全量归属；单人素材零增量成本）。数据形态：`Asset.meta.speaker_map = {form, speakers:[{id, screen_hint}], turns:[{start, end, speaker}]}`（meta 先例：language）。消费方地图：reframe_clip（08-19）→ 本人含量门禁 v2（08-31，只从用户本人话轮学风格）→ 访谈选段偏好（后续）。
