@@ -21,8 +21,7 @@ export const TRACK_FIELDS = {
   main: ["source", "segments", "aspect", "target_language"],
   caption: ["caption_track", "caption_style_preset", "caption_position", "caption_enabled"],
   translation: ["translation_track"],
-  // + "crop_track" on the 08-19 line — the assertion below forces the registration
-  crop: ["crop"],
+  crop: ["crop", "crop_track"],
   layers: ["layers"],
   title: ["title"],
   music: ["music"],

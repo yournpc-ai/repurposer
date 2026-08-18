@@ -372,6 +372,44 @@ def total_output_seconds(spec: dict) -> float:
     return total if total > 0 else 1 / 30.0  # >= a frame (COMPOSITION_FPS=30)
 
 
+# Fixed render-side ease after each crop keyframe: ~8 composition frames of
+# smoothstep. A render constant, not contract data (ADR-045 D5). TS twin:
+# CROP_EASE_SECONDS in packages/clip/src/types.ts.
+CROP_EASE_SECONDS = 8 / 30.0
+
+
+def sample_crop(spec: dict, source_time: float) -> dict:
+    """Sample the crop data track at a SOURCE second. TS twin: ``sampleCrop``.
+
+    Hold the latest keyframe's framing, easing into it over
+    CROP_EASE_SECONDS after its ``t``. Empty/absent track = the static
+    ``crop`` (语义不变). Parity with the TS twin is exact-value
+    (scripts/crop_track_parity.py).
+    """
+    track = spec.get("crop_track") or []
+    if not track:
+        return spec.get("crop") or {"x": 0.5, "y": 0.5, "scale": 1.0}
+    if source_time <= track[0]["t"]:
+        f = track[0]
+        return {"x": f["x"], "y": f["y"], "scale": f["scale"]}
+    i = len(track) - 1
+    for k in range(1, len(track)):
+        if track[k]["t"] > source_time:
+            i = k - 1
+            break
+    cur = track[i]
+    if i == 0 or source_time - cur["t"] >= CROP_EASE_SECONDS:
+        return {"x": cur["x"], "y": cur["y"], "scale": cur["scale"]}
+    prev = track[i - 1]
+    u = (source_time - cur["t"]) / CROP_EASE_SECONDS
+    s = u * u * (3 - 2 * u)  # smoothstep; u in [0,1) here
+    return {
+        "x": prev["x"] + (cur["x"] - prev["x"]) * s,
+        "y": prev["y"] + (cur["y"] - prev["y"]) * s,
+        "scale": prev["scale"] + (cur["scale"] - prev["scale"]) * s,
+    }
+
+
 def video_timeline(spec: dict) -> list[dict]:
     """Kept segments on the video-local output clock. TS: videoTimeline.
 

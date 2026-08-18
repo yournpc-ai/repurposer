@@ -67,8 +67,7 @@ TRACKS: dict[str, TrackDef] = {
         owner=("select_clips", "materialize_source"),
         pairs=(), provenance="real",
         url_fields=(),
-        # + "crop_track" on the 08-19 line — the boot partition check forces it
-        fields=("crop",),
+        fields=("crop", "crop_track"),
     ),
     "layers": TrackDef(
         owner=(),  # insert_broll lands on the 08-19+ line; nothing writes yet

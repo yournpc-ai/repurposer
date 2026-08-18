@@ -18,6 +18,7 @@ import {
   outputTimeAtSourceTime,
   outroSeconds,
   projectLayers,
+  sampleCrop,
   sourceTimeAtOutputTime,
   videoDurationSeconds,
   videoTimeline,
@@ -286,6 +287,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     (current
       ? current.seg.start + Math.min(Math.max(0, localOutput - current.outStart), current.dur)
       : 0);
+  // Crop data track (ADR-045): the framing sampled at this source second.
+  // Outside the video portion the video is hidden anyway — hold the static crop.
+  const cropNow = mappedSource === null ? spec.crop : sampleCrop(spec, mappedSource);
   // Hetero main-track splice (切 op, ADR-044): a segment carrying its own
   // asset_id/url plays from its donor source — its [start,end] offsets live in
   // the DONOR's timeline, so the main source's captions must not match it.
@@ -448,7 +452,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             style={{
               // Reframe via transform (object-position is unsupported on the
               // future client-render path — keep to the CSS ∩ libass subset).
-              transform: `scale(${spec.crop.scale}) translate(${(0.5 - spec.crop.x) * 100}%, ${(0.5 - spec.crop.y) * 100}%)`,
+              // Per-frame value: the crop data track sampled at the current
+              // source second (empty track = the static crop, 语义不变).
+              transform: `scale(${cropNow.scale}) translate(${(0.5 - cropNow.x) * 100}%, ${(0.5 - cropNow.y) * 100}%)`,
             }}
           >
             <Series>

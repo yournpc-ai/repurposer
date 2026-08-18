@@ -140,6 +140,61 @@ export interface ClipCrop {
   scale: number;
 }
 
+/**
+ * One framing decision on the SOURCE timeline (ADR-045): from source second
+ * `t`, hold this normalized center + scale. The crop data track is a sparse
+ * list of these — a keyframe is a decision ("switch to A here"), never
+ * per-frame data. Writer guarantees strictly ascending `t`. Anti-dizzy
+ * parameters (dwell / deadzone / slew) are WRITE-side constraints of the
+ * skill, never serialized here.
+ */
+export interface CropKeyframe {
+  t: number;
+  x: number;
+  y: number;
+  scale: number;
+}
+
+const _smoothstep = (u: number): number => {
+  const s = Math.min(1, Math.max(0, u));
+  return s * s * (3 - 2 * s);
+};
+
+/**
+ * Sample the crop data track at a SOURCE second (data tracks don't project —
+ * they sample, ADR-044 §8.6): hold the latest keyframe's framing, easing into
+ * it over CROP_EASE_SECONDS after its `t`. An empty/absent track degrades to
+ * the static `crop` (语义不变). Python twin: clip_spec.sample_crop — parity
+ * must be exact (scripts/crop_track_parity.py).
+ */
+export const sampleCrop = (spec: ClipSpec, sourceTime: number): ClipCrop => {
+  const track = spec.crop_track;
+  if (!track || track.length === 0) return spec.crop;
+  if (sourceTime <= track[0].t) {
+    const f = track[0];
+    return { x: f.x, y: f.y, scale: f.scale };
+  }
+  // Last keyframe with t <= sourceTime (the active framing decision).
+  let i = track.length - 1;
+  for (let k = 1; k < track.length; k += 1) {
+    if (track[k].t > sourceTime) {
+      i = k - 1;
+      break;
+    }
+  }
+  const cur = track[i];
+  if (i === 0 || sourceTime - cur.t >= CROP_EASE_SECONDS) {
+    return { x: cur.x, y: cur.y, scale: cur.scale };
+  }
+  const prev = track[i - 1];
+  const s = _smoothstep((sourceTime - cur.t) / CROP_EASE_SECONDS);
+  return {
+    x: prev.x + (cur.x - prev.x) * s,
+    y: prev.y + (cur.y - prev.y) * s,
+    scale: prev.scale + (cur.scale - prev.scale) * s,
+  };
+};
+
 export interface CaptionCue {
   start: number;
   end: number;
@@ -206,6 +261,10 @@ export interface ClipSpec {
   aspect: Aspect;
   segments: ClipSegment[];
   crop: ClipCrop;
+  /** Crop data track (ADR-045): sparse framing decisions on the source
+   * timeline, sampled per frame via `sampleCrop`. Absent/empty = the static
+   * `crop` above (degenerate form, 语义不变). */
+  crop_track?: CropKeyframe[];
   caption_track: CaptionCue[];
   /** 双语对照轨: the translated half of a bilingual caption pair — unit-level
    * cues (no karaoke word timing), paired with caption_track's original lines
@@ -244,6 +303,11 @@ export const fixedAspectDimensions = (aspect: Aspect): { width: number; height: 
 
 /** Composition timeline fps (independent of the source's fps). */
 export const COMPOSITION_FPS = 30;
+
+/** Fixed render-side ease after each crop keyframe: ~8 composition frames of
+ * smoothstep. A render constant, not contract data (transition-enum 哲学:
+ * 枚举可、参数画廊不可). */
+export const CROP_EASE_SECONDS = 8 / COMPOSITION_FPS;
 
 /** Default duration (seconds) for a brand intro/outro card with no explicit duration_seconds. */
 export const INTRO_SECONDS = 2;
