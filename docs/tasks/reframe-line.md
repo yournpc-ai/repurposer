@@ -64,7 +64,7 @@
 
 | 角色 | 选型 | 许可 | 形态 |
 |---|---|---|---|
-| 人脸检测引擎 | **YuNet** `face_detection_yunet_2023mar.onnx` | MIT | vendor 入仓（232KB），`tools/vision.py` + `opencv-python-headless` |
+| 人脸检测引擎 | **YuNet** `face_detection_yunet_2023mar.onnx`（FP32，2023mar 系为最强权重线——WIDER Hard 0.7503；OpenCV 5.x 则用同权重动态封装 `2026may`；**禁 int8 变体**：int8 精度降且 5.x 有全漏检 bug，int8bq 无必要——抽帧用法 CPU 余量充足） | MIT | vendor 入仓（232KB），`tools/vision.py` + `opencv-python-headless` |
 | 话轮切分 | whisper 词轴（存量） | MIT（faster-whisper） | 间隙 ≥0.6s 断轮 |
 | 话轮归属 | 嘴部 ROI 帧差能量（主） | 自研工序 | 静态机位专用 |
 | 模糊仲裁 / 形态归类 | MiniMax M3（存量 client） | 云服务（既有姿势） | 每片 1~5 次封顶 |
