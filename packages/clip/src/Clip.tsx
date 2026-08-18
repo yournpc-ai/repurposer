@@ -249,15 +249,18 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const fpsv = fps || COMPOSITION_FPS;
 
   // Crop data track rendering needs the SOURCE pixel dims (the window math
-  // positions the video explicitly). Resolved once per mount, gated on a
-  // crop_track actually being present — the static-crop path never pays.
+  // positions the video explicitly). The track can ARRIVE without a remount
+  // (a reframe morph updates the Player's inputProps in place), so the delay
+  // handle is armed at render time the moment a track is present and dims
+  // are unresolved — never frozen in an initial useState.
   const hasCropTrack = Boolean(spec.crop_track?.length);
   const [srcDims, setSrcDims] = useState<{ width: number; height: number } | null>(null);
-  const [dimsHandle] = useState(() =>
-    hasCropTrack ? delayRender("crop_track: resolving source dims") : null,
-  );
+  const [dimsHandle, setDimsHandle] = useState<number | null>(null);
+  if (hasCropTrack && srcDims === null && dimsHandle === null) {
+    setDimsHandle(delayRender("crop_track: resolving source dims"));
+  }
   useEffect(() => {
-    if (dimsHandle === null) return;
+    if (dimsHandle === null || srcDims !== null) return;
     let cancelled = false;
     getVideoMetadata(spec.source.url)
       .then((m) => {
@@ -268,8 +271,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dimsHandle, srcDims, spec.source.url]);
 
   // Brand (baked into the spec by the API; absent -> default look).
   const brand = spec.brand ?? undefined;
@@ -484,6 +486,22 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
             <AbsoluteFill style={{ overflow: "hidden" }}>
               <Series>
                 {timeline.map((t, i) => {
+                  if (t.seg.url) {
+                    // Hetero donor segment: crop keyframes are MAIN-SOURCE
+                    // coordinates — never reframe donor pixels with the main
+                    // source's dims. Plain cover, the pre-reframe behavior.
+                    return (
+                      <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
+                        <OffthreadVideo
+                          src={t.seg.url}
+                          muted={Boolean(dubUrl)}
+                          startFrom={Math.round(t.seg.start * fpsv)}
+                          endAt={Math.round(t.seg.end * fpsv)}
+                          style={{ width: "100%", height: "100%", objectFit }}
+                        />
+                      </Series.Sequence>
+                    );
+                  }
                   const zoom =
                     (objectFit === "cover"
                       ? Math.max(width / srcDims.width, height / srcDims.height)
@@ -491,8 +509,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                   return (
                     <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                       <OffthreadVideo
-                        // Hetero splice: the segment's own url is its donor's video.
-                        src={t.seg.url ?? spec.source.url}
+                        src={spec.source.url}
                         muted={Boolean(dubUrl)}
                         startFrom={Math.round(t.seg.start * fpsv)}
                         endAt={Math.round(t.seg.end * fpsv)}

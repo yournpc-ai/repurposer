@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 import structlog
 
+from app.pipeline.clip_spec import CROP_EASE_SECONDS
 from app.pipeline.speaker_map import (
     _bootstrap_slots,
     _detect_tiled,
@@ -35,9 +36,6 @@ from app.tools.vision import FaceDetection, detect_faces
 logger = structlog.get_logger()
 
 # ---- mode resolution -------------------------------------------------------
-
-MODES = ("auto", "interview_switch", "speaker_follow", "static_center")
-
 
 def resolve_mode(speaker_map: dict | None, requested: str) -> str:
     """auto picks by the asset's speaker_map form; an explicit mode is
@@ -113,14 +111,18 @@ class _Window:
 
 
 def _kept_windows(spec: dict) -> list[_Window]:
-    """Kept MAIN-SOURCE segment windows. Hetero donor segments are skipped:
-    their seconds live in the donor's timeline — a main-source crop keyframe
-    would sample wrong there (the last keyframe simply holds through them)."""
+    """Kept MAIN-SOURCE segment windows, SOURCE-ORDERED: crop decisions are
+    source-timeline facts — an output-side reorder must not change them
+    (dedupe / window-head backdate / the final sort all walk source time).
+    Hetero donor segments are skipped: their seconds live in the donor's
+    timeline — a main-source crop keyframe would sample wrong there (the
+    last keyframe simply holds through them)."""
     out = []
     for s in spec.get("segments") or []:
         if s.get("hidden") or s.get("asset_id") or s.get("url"):
             continue
         out.append(_Window(start=float(s["start"]), end=float(s["end"])))
+    out.sort(key=lambda w: w.start)
     return out
 
 
@@ -139,7 +141,9 @@ def _interview_keyframes(
     SWITCH_LEAD), framing that speaker's anchor. Dwell-filtered."""
     out: list[dict[str, float]] = []
     last_speaker: str | None = None
+    prev_end = 0.0
     for w in windows:
+        first_in_window = True
         for turn in turns:
             t0, t1 = max(turn["start"], w.start), min(turn["end"], w.end)
             if t1 - t0 < MIN_DWELL_SECONDS:
@@ -155,12 +159,22 @@ def _interview_keyframes(
             # (no lead room before a window edge).
             if not out and t > w.start:
                 t = w.start
+            if first_in_window and out and t <= w.start + 1e-9:
+                # A cut must LAND framed: the sampler eases into a keyframe
+                # over CROP_EASE_SECONDS, so a keyframe sitting exactly at a
+                # window head would open the new segment with 8 frames of the
+                # previous speaker's framing. Backdate into the source gap
+                # (free — nothing shows it); source-contiguous windows keep
+                # the cut-point ease (clamped at the previous window's end).
+                t = max(w.start - CROP_EASE_SECONDS, prev_end)
             kf = frame_window(
                 anchor.cx, anchor.cy, anchor.w, src_w, src_h, ar,
                 FACE_FRACTION_INTERVIEW,
             )
             out.append({"t": round(t, 3), **kf})
             last_speaker = speaker
+            first_in_window = False
+        prev_end = w.end
     return out
 
 
@@ -184,11 +198,14 @@ def _follow_keyframes(
         return det if det else tiled(frame)
 
     out: list[dict[str, float]] = []
+    prev_end = 0.0
     for w in windows:
+        # [start, end) — an inclusive end would collide with the next
+        # window's first frame on the same t (strictly-ascending contract).
         f0, f1 = int(w.start * fps), int(w.end * fps)
         points: list[tuple[float, FaceDetection]] = []
         last_c: tuple[float, float] | None = None
-        for f_idx, frame in _frames_every(video_path, step=FOLLOW_EVERY_FRAMES, start_f=f0, end_f=f1 + 1):
+        for f_idx, frame in _frames_every(video_path, step=FOLLOW_EVERY_FRAMES, start_f=f0, end_f=f1):
             cands = candidates(frame)
             if not cands:
                 continue
@@ -204,6 +221,7 @@ def _follow_keyframes(
             last_c = d.center
             points.append((f_idx / fps, d))
         if len(points) < 2:
+            prev_end = w.end
             continue
         face_w = float(np.median([d.bbox[2] for _, d in points]))
         win_w = min(
@@ -218,6 +236,10 @@ def _follow_keyframes(
         for t, d in points:
             cx, cy = d.center
             if last_kf is None:
+                if out:
+                    # Window head after a source gap: land the cut already
+                    # framed (interview_switch 同款回退).
+                    t = max(w.start - CROP_EASE_SECONDS, prev_end)
                 target = (cx, cy)
             else:
                 dx, dy = cx - last_kf[0], cy - last_kf[1]
@@ -232,6 +254,7 @@ def _follow_keyframes(
             out.append({"t": round(t, 3), **kf})
             last_kf = target
             last_emit_t = t
+        prev_end = w.end
     return out
 
 
@@ -257,6 +280,7 @@ def compute_crop_track(
     if mode == "static_center":
         return None, mode
 
+    kfs: list[dict[str, float]]
     if mode == "interview_switch":
         turns = (speaker_map or {}).get("turns") or []
         if (speaker_map or {}).get("form") != "interview" or not turns:
@@ -264,10 +288,15 @@ def compute_crop_track(
         slots, _detect, _rate = _bootstrap_slots(video_path)
         anchors = {"left": slots[0], "right": slots[1]}
         kfs = _interview_keyframes(turns, windows, anchors, src_w, src_h, ar)
-        return (kfs if kfs else []), mode
-
-    if mode == "speaker_follow":
+    elif mode == "speaker_follow":
         kfs = _follow_keyframes(video_path, windows, src_w, src_h, fps, ar)
-        return (kfs if kfs else []), mode
+    else:
+        raise ValueError(f"unknown reframe mode: {mode}")
 
-    raise ValueError(f"unknown reframe mode: {mode}")
+    # Windows are generated source-ordered (_kept_windows); this sort is the
+    # strictly-ascending contract's safety net, not the ordering mechanism.
+    kfs.sort(key=lambda k: k["t"])
+    logger.info(
+        "reframe_crop_track", mode=mode, windows=len(windows), keyframes=len(kfs)
+    )
+    return kfs, mode

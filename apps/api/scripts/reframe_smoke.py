@@ -111,9 +111,13 @@ async def main() -> None:
         print("uploaded", XY1_KEY)
 
     # interview_switch — two kept windows spanning real speaker switches
-    # (L monologue ends 48.92 → R turn 49.76; R block → L turn 90.38).
+    # (L monologue ends 48.92 → R turn 49.76; R block → L turn 90.38), plus
+    # a hetero donor segment between them (crop_track must NOT reframe donor
+    # pixels — it renders plain cover).
     xy1_segments = [
         {"id": "w1", "start": 46.0, "end": 66.0, "hidden": False, "transition": "none"},
+        {"id": "donor", "asset_id": "1fa85f64-5717-4562-b3fc-2c963f66afa7", "url": XY1_KEY,
+         "start": 120.0, "end": 124.0, "hidden": False, "transition": "none"},
         {"id": "w2", "start": 88.0, "end": 105.0, "hidden": False, "transition": "none"},
     ]
     xy1_spec_probe = {"aspect": "9:16", "segments": xy1_segments}

@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import ClipCrop, ClipSpec, CropKeyframe, RenderStatus
+from app.models.schemas import ClipSpec, CropKeyframe, RenderStatus
 from app.models.tables import Asset, Project, WorkflowRun, WorkflowStep
 from app.operations.service import apply_precomputed
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
@@ -68,6 +68,10 @@ class ReframeClip(NodeBase):
         skipped = 0
         for output in clips:
             spec = ClipSpec.model_validate(output.render_spec)
+            if spec.source.kind != "video":
+                # stills/audiogram sources have no video frames to reframe.
+                skipped += 1
+                continue
             asset_id = spec.source.asset_id or (output.source_ref or {}).get("asset_id")
             asset = await db.get(Asset, UUID(str(asset_id))) if asset_id else None
             if asset is None or not asset.file_url:
@@ -81,9 +85,12 @@ class ReframeClip(NodeBase):
                 continue
 
             if mode == "static_center":
-                if spec.crop_track is None and spec.crop == ClipCrop():
-                    continue  # already the plain center crop — nothing to do
-                new_spec = spec.model_copy(update={"crop_track": None, "crop": ClipCrop()})
+                # Undo semantics only: clear the dynamic track and let the
+                # clip's static crop speak again — never clobber a manual
+                # set_crop (non-destructive doctrine).
+                if spec.crop_track is None:
+                    continue  # no reframe on this clip — nothing to undo
+                new_spec = spec.model_copy(update={"crop_track": None})
             else:
                 path = await download_to_temp(asset.file_url)
                 if path is None:
