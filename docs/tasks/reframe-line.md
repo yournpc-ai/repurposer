@@ -26,7 +26,7 @@
 
 ## 3. 改动点（本批 = 08-19 ~ 08-20）
 
-1. **双验证 spike 结论（前置闸）**——双路对照：`xy_1` 上 YuNet 检出率 + 嘴部能量归属准确率；`xy_2` 上 YuNet 追踪连续性。结论数据入 PROGRESS；未过按回退口径（演讲短片卡先出静态中裁版，go/no-go 最坏 10-30）。
+1. **双验证 spike 结论（前置闸）**——双路对照：`xy_1` 上 YuNet 检出率 + 嘴部能量归属准确率；`xy_2` 上 YuNet 追踪连续性。结论数据入 PROGRESS；未过按回退口径（演讲短片卡先出静态中裁版，go/no-go 最坏 10-30）。**输入尺寸策略同批校准**：按视频自适应设 `setInputSize`（目标：预期脸宽映射到检测空间 ≥30px——访谈 640 档、登台 720p~1080p 档）；远景小脸兜底 = 画面 2×2 tile 分块检测。检测分辨率只为找框，成片取景在全分辨率源帧上切，两者不混。
 2. **`tools/vision.py` 引擎缝**——YuNet 权重 vendor 入仓（`face_detection_yunet_2023mar.onnx` 232KB + MIT LICENSE 并置）+ `opencv-python-headless` + asr.py 同款懒加载进程缓存；输出 = bbox + 5 点关键点。
 3. **speaker_map PROCESSOR**（VIDEO/AUDIO 第二处理器，接 ASR 后）——形态闸门（whisper 话轮密度 + 1~2 次 M3 网格判多人/访谈）→ 全量归属（嘴部 ROI 帧差能量主，M3 模糊仲裁辅）；落 `Asset.meta.speaker_map = {form, speakers, turns}`。
 4. **crop_track 契约双端落地**——`TRACK_FIELDS` + `TrackDef` 各一项；schema（`[{t, x, y, scale}]` 稀疏决策关键帧，源时间轴）；渲染采样器（固定 smoothstep ~8 帧，keyframes 族第一个渲染件）；Python 孪生 + parity 抽帧逐值相等。空轨 = 静态 crop 语义不变。
