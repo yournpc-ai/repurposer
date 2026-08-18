@@ -806,6 +806,10 @@ const zh: Resources = {
     trim: "裁剪",
     reframePan: "水平构图",
     reframeZoom: "缩放",
+    staleTrack: {
+      dub: "配音",
+    },
+    staleTracks: "{{tracks}}已与本次剪辑不同步——可在方便时重新生成。",
   },
   languages: {
     zh: "中文",

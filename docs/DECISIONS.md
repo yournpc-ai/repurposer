@@ -1,5 +1,7 @@
 # Architecture Decision Records (ADR)
 
+> Status: Active（滚动维护——只留现行决策，过时 / 被翻案的内容直接删除，历史在 git；新决策追加新编号，编号不连续属正常）
+
 ## ADR-001: Single-repo, simple directory structure
 
 **Status**: Decided
@@ -377,7 +379,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 1. **Default music is AI-generated and stored in a dedicated `music` table**: three pre-generated music pieces (`calm`, `uplifting`, `corporate`) are seeded as `Music` rows at application startup. Audio objects live in S3-compatible object storage under `music/`; structured metadata lives in the `music` table.
-2. **Music defaults by music id, not mood strings**: 配方注册表 / 任务书默认携带默认曲目 id（ADR-038 后 `brand_templates` 退役，音乐默认属工艺配置，不进人设）。
+2. **Music defaults by music id, not mood strings**: 默认曲配置住人设皮肤块——系统默认皮肤（`DEFAULT_BRAND_CONFIG`）携带 `musicEnabled` / `musicId`（缺省回退 `musicMood`）/ `musicGainDb`，人设 `brand` 块按需覆盖，烘焙缝合并解析出默认曲目 id（`app/memory/brand.py`）。
 3. **Clip skill selects music per clip**: based on the configured default, the director's mood suggestion, and the clip's content tone, an existing music piece is picked. No music generation API is called during clip generation.
 4. **Chat/Editor can regenerate music**: explicit user requests trigger MiniMax music generation, creating a new `Music` and updating `outputs.render_spec.music`. The clip is then re-rendered.
 5. **Render contract unchanged**: Remotion still consumes `spec.music.url` and `spec.music.enabled`.
@@ -859,14 +861,14 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **形态 = 存法 C：锚定是存储格式，泳道是编译产物**。位置不落库——层条目挂语义锚，输出时间窗由烘焙缝一次 fold 派生；泳道投影永不落库、永不进快照、永不可写（不是缓存，是编译产物，双写不一致在结构上不存在）。**双真相禁令**：锚与绝对坐标不得平级共存于同一行数据。消去法：存法 A（泳道为真相 + 锚作附加元数据）= 两病——锚沦为缓存则漂移原样存在，锚若用于重算则已是 C；平级双真相 = 双主写必然分歧，不存在。锚三形态：**段锚**（`{segment_id + 源偏移}`，内容跟随）/ **边锚**（`{head|tail + 偏移}`；intro/outro 本质即边锚块）/ **比例锚**（`{ratio}`）。非破坏模型红利：段从不真删（hidden），层条目锚点时间落入被剪区间即失去投影窗口、自然不渲染——"级联删除"是纯派生，"并告知"归 op 响应。
 2. **词汇四分 + 八词入宪法**：主轨（sequence）/ 数据轨（data，`*_track`）/ 层（layer）/ 块轨（block）四家分完整个 spec；段 segment / 锚 anchor / 过渡 transition 等八词登记 NAMING §2；**裸 track 违规、必须带家族限定**（判例 N-38，N-11 同型）。`layer` 避让 `overlay`（UI 浮层已占名：GenerationOverlay / overlay-surface——N-27 同型一词两义预防）；lane / blocks / junctions / placements 讨论期占位词草稿阶段死亡，不进任何文档。
-3. **TRACK_REGISTRY**：catalog 住 `packages/clip`（TS 类型由它推导），Python 镜像只校验成员 + 消费声明（CAPTION_PRESETS 同款双端纪律；漂移由对账脚本守门——preset 无对账已实证漂移一例，轨道表不裸奔）。`TrackDef` = `family` / `timeline`（source|output|derived——只声明不实现，remap 全库一个函数）/ `owner`（唯一写者技能，表归属契约的 spec 转置）/ `mutex`（dub⇄原声）/ `pairs`（translation⇄caption——既有耦合入档）/ `provenance`（ADR-026 分类器 fold）/ `url_fields`（烘焙缝 fold）/ `checks`（确定性工艺检查的家，随技能包出生不等 Phase 3）/ `fields`（spec 顶层字段分区——自检①的承重墙）。现有 8 轨平移登记 + layers 轨（layer 家族首条）。渲染器按 family 分派渲染件（sequence→段序列 / data→cue 渲染或关键帧采样 / block→块件 / layer→层件），新增轨 = 注册渲染件不动旧分支；renderer-agnostic 不动（声明只说 WHAT，Remotion 概念不进注册表，FFmpeg 后路保住）。
-4. **两条启动自检**（挂 `assert_runners_registered`，API/worker 双进程 + harness 同跑）：① spec 顶层字段 ⊆ 注册表，每字段恰好一条轨；② **phantom track**——注册一条假轨，烘焙缝 / 寻址 / 合规 / 计价自动接管、消费方零改动，作 fixture 留存（"渲染"腿的本批语义 = 烘焙缝 `_absolutize` 接管；渲染件注册随真实住户进场）。
+3. **TRACK_REGISTRY**：**Python 持有可执行目录（`app/pipeline/tracks.py`，唯一运行时端）**；TS 端只声明 `fields` 分区 + `TrackId`（`packages/clip/src/tracks.ts`——类型级断言强制每个 spec 键入一轨，tsc 闸），分区在两端各自独立 pinning（Python 启动对账 + TS 类型断言），无镜像漂移面、无对账脚本。`TrackDef` = `owner`（唯一写者技能，表归属契约的 spec 转置）/ `pairs`（translation⇄caption——既有耦合入档）/ `provenance`（ADR-026 分类器 fold）/ `url_fields`（烘焙缝 fold）/ `fields`（spec 顶层字段分区——自检①的承重墙）/ `depends`（派生轨失效声明，dub⟵main）。family / timeline 分类是文档（RENDERING §4 表），不进 schema；确定性工艺检查随首个住户与其消费方同批回归（08-19 能力批评估）。现有 8 轨平移登记 + layers 轨（layer 家族首条）。渲染器按 family 分派渲染件（sequence→段序列 / data→cue 渲染或关键帧采样 / block→块件 / layer→层件），新增轨 = 注册渲染件不动旧分支；renderer-agnostic 不动（声明只说 WHAT，Remotion 概念不进注册表，FFmpeg 后路保住）。
+4. **两条启动自检**（挂 `assert_runners_registered`，API/worker 双进程 + harness 同跑）：① spec 顶层字段 ⊆ 注册表，每字段恰好一条轨；② **phantom track**——注册一条假轨（try/finally 直变异 TRACKS，移除是结构保证），烘焙缝 / 寻址 / 合规自动接管、消费方零改动（"渲染"腿的本批语义 = 烘焙缝 `_absolutize` 接管；渲染件注册随真实住户进场）。**计价不在自检面**：时长算术坐 `clip_spec.total_output_seconds`（kept video + 头尾卡秒）——时长贡献不随注册表自动收养，带时长的轨到来时与其渲染件同批扩展该函数。
 5. **spec 进化三件**（12 操作断点的收敛处）：
    - **segments widen**：段 = `{id, asset_id?（缺省=主源）, url?（异源段随写解析，source 同款先例）, start, end, hidden}`——异源插入 = 带 asset_id 的段（ADR-029 虚拟产物段同源入座）；段可带 provenance，混合时间轴 C2PA 判定免费获得。
    - **layers 轨**：锚定放置物列表 `{id, kind, anchor, rect, z, source_ref?, media?, provenance(必填)}`；kind 枚举注册守门（broll / text_callout / pip / motion_graphic）；PiP 经 `source_ref` 自带一路源回放——"两条视频同时可见"的唯一合法形态，三条以上全帧视频叠放 = 真 NLE territory，永久不进。
-   - **transition 枚举**：挂段的进场边（none/fade/dip，2-3 封顶），换序随段走；进场边语义与 FFmpeg xfade / Remotion 插值天然对齐。**ADR-016 L3 注记修订为"枚举可、画廊不可"**（转场挑选面板永拒不变）。
+   - **transition 枚举**：挂段的进场边（none/fade/dip，2-3 封顶——`insert_segment` 与 `set_transition` 两 op 同查），换序随段走；进场边语义与 FFmpeg xfade / Remotion 插值天然对齐。**ADR-016 L3 注记修订为"枚举可、画廊不可"**（转场挑选面板永拒不变）。
 6. **泳道投影 = 位置 fold 单函数**：sequence + layer 家族 → 扁平泳道（绝对输出时间 + z 序），TS 单家（packages/clip）+ Python 同名镜像（NAMING §1）；data 家族不投影——按 sourceTime 采样（crop_track 采样器 = keyframes 族第一个渲染件）；块轨本就输出时间轴。渲染器只吃投影/采样，永不读锚；投影函数同时是 FFmpeg 后路的 filtergraph 供料口。
-7. **ops 闭包**：`reorder_segments` / `insert_segment` / `set_transition` / `add_layer` / `remove_layer` / `move_layer` 登记入 OP_REGISTRY；**op 载荷 = 实体引用（段 id / 锚 / 枚举），LLM 永不提议绝对时间码**（坐标计算永归代码——"LLM 提议、代码裁决"的编辑侧延伸）；寻址 = （轨, item_id, op) 对注册表校验，不靠 LLM 猜字段路径。**一轨一写者**：撞轨 = 编译期 422（fork 豁免——派生行各有其 spec），不做运行时合并。**派生轨失效声明**：对主时间轴派生的轨（dub）在注册表声明依赖，时间轴 op 落地时经注册表枚举失效轨并告知（重配一句话；不产生"合法的谎"）。
+7. **ops 闭包**：`reorder_segments` / `insert_segment` / `set_transition` / `add_layer` / `remove_layer` / `move_layer` 登记入 OP_REGISTRY；**op 载荷 = 实体引用（段 id / 锚 / 枚举），LLM 永不提议绝对时间码**（坐标计算永归代码——"LLM 提议、代码裁决"的编辑侧延伸）；寻址 = （轨, item_id, op) 对注册表校验，不靠 LLM 猜字段路径；段/层 id 唯一性由 ClipSpec 契约断言（锚寻址 first-match 的前提）。**一轨一写者**：撞轨 = 编译期 422（fork 豁免——派生行各有其 spec），不做运行时合并。**派生轨失效声明**：对主时间轴派生的轨（dub）在注册表声明依赖，时间轴 op 落地时经注册表枚举失效轨并告知（重配一句话；不产生"合法的谎"）。
 8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `tasks/done/track-model.md` §7。
 9. **tracks:{} 容器禁令保留、理由换血**：旧理由"破坏性格式迁移"随破坏性授权作废；保留理由 = 收益已证伪——快照 undo + LLM 不写 spec 的地基上全量常驻空轨无收益，扁平 spec + 注册表索引已提供全部归属能力。本禁令与兼容性无关，是纯目标判断。
 

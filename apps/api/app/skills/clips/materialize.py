@@ -34,7 +34,6 @@ from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.pipeline.step_context import _list_assets
 from app.pipeline.step_display import _set_summary, ui_lang_of
-from app.pipeline.tracks import spec_provenance
 from app.platform.project_context import resolve_run_persona
 from app.skills.clips.node import resolve_render_source
 
@@ -150,9 +149,8 @@ class MaterializeSource(NodeBase):
             workflow_step_id=node.id,
             type="clip",
             language=target_language,
-            # ADR-026 classification reads track declarations (ADR-044) — at
-            # birth no generated track rides, so this resolves to "real".
-            provenance=spec_provenance(spec_dict),
+            # birth: no generated track rides yet (ADR-026)
+            provenance="real",
             payload=ClipPayload(
                 hook="",
                 title_options=[project.title] if project.title else [],

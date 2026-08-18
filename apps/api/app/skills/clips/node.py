@@ -46,7 +46,6 @@ from app.pipeline.step_display import (
     slot_tag,
     ui_lang_of,
 )
-from app.pipeline.tracks import spec_provenance
 from app.platform.project_context import collect_asset_texts, resolve_run_persona
 from app.skills.clips.agents import clip_writer
 from app.tools.transcript import build_anchored_transcript
@@ -308,9 +307,8 @@ class SelectClips(NodeBase):
                 workflow_step_id=node.id,
                 type="clip",
                 language=target_language,
-                # ADR-026 classification reads track declarations (ADR-044) —
-                # at birth no generated track rides, so this is "real".
-                provenance=spec_provenance(spec_dict) if spec_dict else "real",
+                # birth: no generated track rides yet (ADR-026)
+                provenance="real",
                 payload=ClipPayload(
                     hook=plan.hook,
                     title_options=plan.title_options or ([plan.title] if plan.title else []),

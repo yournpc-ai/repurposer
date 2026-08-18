@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select'
 import { apiFetch, downloadFile, toAbsoluteUrl } from '@/lib/api'
 import type { MusicPiece } from '@/components/persona/music-panel'
+import { toast } from 'sonner'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const WORDS_PER_LINE = 7
@@ -271,12 +272,24 @@ function ClipEditorPage() {
       const body = (await res.json()) as {
         output: ClipOutput
         operations: { spec_hash: string }[]
+        stale_tracks?: string[]
       }
       setClip(body.output)
       if (body.output.render_spec) setSpec(body.output.render_spec)
       const head = body.operations[body.operations.length - 1]
       setBaseHash(head ? head.spec_hash : body.output.spec_hash)
       setOpQueue([])
+      // 派生轨失效声明 (ADR-044): the server names tracks this edit desynced
+      // (e.g. dub after a main-timeline op) — surface the one-line notice.
+      if (body.stale_tracks?.length) {
+        toast.warning(
+          t('clipEditor.staleTracks', {
+            tracks: body.stale_tracks
+              .map((id) => t(`clipEditor.staleTrack.${id}`, { defaultValue: id }))
+              .join(' · '),
+          }),
+        )
+      }
       return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')

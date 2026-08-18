@@ -117,7 +117,7 @@ preview == 成片 是结构性的，不是测试出来的。
 
 ## 4. 轨道解剖（注册表实证）
 
-spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——每道的时间轴归属是注册表声明（`timeline` 只声明不实现，remap 全库一个函数家）：
+spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / timeline 是**文档分类**（非可执行 schema；remap 全库一个函数家，见 §5）：
 
 | 轨 | spec 字段（`fields` 分区） | family / timeline | Clip.tsx 渲染位置 | 写者（owner） |
 |---|---|---|---|---|
@@ -128,7 +128,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——每道的时间轴�
 | `layers` 层轨 | `layers`（锚定放置物） | layer / derived（锚 → 输出窗投影） | `projectLayers` 求窗 → `LayerView` 按 `media.kind` 单分支（video/image/text），z 经 Sequence style | 暂无（insert_broll 随能力批） |
 | `title` 标题 | `title` | block / 输出时间轴（片头区淡入；stack 布局 ~3s 自动退场） | 绝对定位 div | 出生 |
 | `music` 音乐 | `music` | block / 输出时间轴，循环铺满 | `<Audio loop>` | add_music |
-| `dub` 配音 | `dub`（`depends: [main]`；`mutex: [original_audio]`） | block / 输出时间轴整段（生成时已按 cue 拼接对齐）；enabled ⇒ 原声静音 | `<Sequence from=introFrames>` 内 `<Audio>` | dub_clip |
+| `dub` 配音 | `dub`（`depends: [main]`） | block / 输出时间轴整段（生成时已按 cue 拼接对齐）；enabled ⇒ 原声静音 | `<Sequence from=introFrames>` 内 `<Audio>` | dub_clip |
 | `intro_outro` 头尾卡 | `brand` + `brand_ref` | block / 输出时间轴两端（边锚语义） | 独立 `<Sequence>` + `IntroOutroCardView` | 人设皮肤烘焙 |
 
 时间轴换算的家：`types.ts` 的 `videoTimeline`（保留段 → 视频段内输出时刻累加）/ `sourceTimeAtOutputTime` / `outputTimeAtSourceTime` / `projectLayers`——**字幕按源时间存、按输出时间显示**，双向换算只在这家；Python 孪生在 `clip_spec.py`（同名 snake_case，dict 版吃 JSONB），双端逐值 parity。dub 反例：segments 映射发生在 dub 文件**生成时**（skills/dub/procedure.py 按 cue 起点拼接），spec 层它是输出时间轴整段文件——所以它 `depends: [main]`，时间轴 op 落地即失步（ops 响应 `stale_tracks` 告知）。
@@ -143,7 +143,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——每道的时间轴�
   - `removeRange(spec, start, end)` — 非破坏删段：相交部分切出 `hidden` 段（可恢复），区间内 caption cue 真删（N-16：恢复语义归快照层）。**段 id 规则**：第一保留块继承父 id（锚骑幸存内容），隐藏块与后续块铸新（`mintSegmentId`）；**过渡边规则**：仍以 s.start 起点的块继承入边过渡，切出的块硬切。**Python 同名镜像**（NAMING §1）。
   - `setTrim(spec, start, end)` — 移动首/末保留段边界（id/过渡随段走）。`trimBounds` / `sourceDuration` 为滑杆供数。
   - `ASPECT_DIMENSIONS`（9:16/1:1/16:9；original 由渲染端 calculateMetadata 解析源尺寸）/ `COMPOSITION_FPS=30`（合成 fps，与源 fps 无关）。
-- `tracks.ts` — **TRACK_REGISTRY 目录（双端真相源）**：9 轨 TrackDef（family/timeline/owner/mutex/pairs/provenance/url_fields/checks/fields/depends）；类型级分区断言（ClipSpec 键必须全登记）；`scripts/check_track_registry.py`  diff 双端。
+- `tracks.ts` — **轨道分区（TS 端）**：`TRACK_FIELDS` = 9 轨 × spec 顶层字段 + `TrackId` + 类型级分区断言（ClipSpec 键必须全登记，tsc 强制）。本端只声明分区——可执行目录在 Python（运行时唯一消费端）。
 - `Clip.tsx` — 唯一渲染组件。泳道投影消费 `types.ts` 单一家；`LayerView`（层渲染件，按 `media.kind` 单分支）；`TransitionVeil`（入边过渡单侧面纱：fade 12f 黑场 / dip 8f 白闪，媒体之上、层与文字之下）；`groupLines`（7 词一行）；`lineRevealFrame`（行级入场帧 = `outputTimeAtSourceTime`）；`captionEntrance`（entrance 原语 → opacity/transform，每值过 libass 映射闸）；stack 布局（锚点上下半场决定容器生长方向，滑窗 `maxLines`）；双语对照配对（闸在主源段——异源段不匹配主源字幕）；`pointStyle`（归一化中心点 → CSS translate，= libass `\pos`）；尺寸按画面推导（`size × height/1920` 参考系）。
 - `captions.ts` — `CAPTION_PRESETS` **字幕样式目录**（注册表先例）：样式 = 三原语（`layout` × `entrance` × `wordHighlight`）组合；**加样式 = 一行登记**（TS 类型由此推导，Python 只校验成员）；**加原语 = 过 libass 映射闸 + Clip.tsx 一分支**（CSS ∩ libass 子集纪律）。
 - `fonts.ts` — `fontFamilyFor`（品牌字体枚举 → 字体族）。
@@ -160,12 +160,13 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——每道的时间轴�
 
 ### apps/api/app/pipeline（Python 侧）
 
-- `tracks.py` — TRACK_REGISTRY Python 镜像 + fold 助手：`resolve_spec_urls`（烘焙缝，walker 支持路径中段 `[*]`）/ `spec_provenance`（轨级 + 段/层项级 generated 扫描）/ `total_output_seconds`（计价时长镜像，坐 clip_spec.py 的共享算术）/ `track_of_field` / `skill_written_tracks` / `stale_tracks`（派生轨失效声明）/ `assert_single_writer_per_track`（一轨一写者，create_run 编译期 422）+ 两条启动自检（分区对账 + phantom track fixture，挂 `orchestrator.assert_runners_registered`）。
+- `tracks.py` — **TRACK_REGISTRY 可执行目录（唯一运行时端）** + fold 助手：`resolve_spec_urls`（烘焙缝，walker 支持路径中段 `[*]`）/ `spec_provenance`（轨级 + 段/层项级 generated 扫描）/ `track_of_field` / `skill_written_tracks` / `stale_tracks`（派生轨失效声明）/ `assert_single_writer_per_track`（一轨一写者，create_run 编译期 422）+ 两条启动自检（分区对账 + phantom track fixture，挂 `orchestrator.assert_runners_registered`）。
 - `clip_spec.py`
   - `build_clip_spec(source, segment, …)` — spec 唯一构建处（段 id 出生即铸）。video / stills 两分支（stills：有声 → 词级字幕 + 语音轨；无声 → `SECS_PER_IMAGE` 定长幻灯 + 合成段）。
   - `locate_span(words, segment)` — 选段定位：agent 数值时间戳优先（**向最近词边界吸附**），否则 start/end marker 文本匹配（渐短探针容忍 LLM 改写），**永不 raise**，兜底全段。
   - `remove_range` / `set_trim` — TS 函数的 Python 镜像（同名同义；id 继承/过渡边规则双端一致）。
   - 泳道投影 Python 孪生（dict 版）：`intro_seconds` / `outro_seconds` / `video_duration_seconds` / `video_timeline` / `source_time_at_output_time` / `output_time_at_source_time` / `project_layer_windows`。
+  - `total_output_seconds` — 计价时长 = kept video + 头尾卡秒（坐上面的共享算术）。**已知边界**：时长贡献不随注册表自动收养——未来带时长的轨在此扩展算术（与其渲染件同批）。
 - `rendering.py`
   - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：条件 UPDATE（`render_status == RENDERING`）——渲染中途 morph 重排（re-pend）时本次产物为陈品，删孤键、镜像 superseded，永不覆盖新 spec。
   - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
@@ -201,7 +202,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——每道的时间轴�
 
 ## 8. 轨道模型（现行契约，ADR-044）
 
-> 2026-08-17 过会，08-17~18 落地：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `tasks/done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规/计价自动接管，消费方零改动）。
+> 2026-08-17 过会，08-17~18 落地：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（08-18 冷审修复批：过渡封顶补 insert_segment、段/层 id 契约级唯一、TrackDef 死字段清除、双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `tasks/done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
 
 ### 8.1 形态：锚定 = 存储格式，泳道 = 编译产物（存法 C）
 
@@ -235,22 +236,19 @@ transition（挂段进场边）
 
 ### 8.3 轨道注册表（TRACK_REGISTRY）
 
-每条轨一份声明（双端：`packages/clip/src/tracks.ts` = 真相源，`app/pipeline/tracks.py` = 镜像，`scripts/check_track_registry.py` diff 守门），消费方全部 fold 注册表（不再逐字段特判）：
+每条轨一份声明，**双端各守所执**：`app/pipeline/tracks.py` = 可执行目录（唯一运行时端，fold 助手消费），`packages/clip/src/tracks.ts` = 仅 `fields` 分区（类型级断言强制登记）——分区在两端各自独立 pinning（Python 启动对账 + TS 类型断言），无镜像漂移面。消费方全部 fold 注册表（不再逐字段特判）：
 
 ```python
 TrackDef(
-    family,        # sequence | data | layer | block
-    timeline,      # source | output | derived——只声明不实现，remap 全库一个函数家
     owner,         # 写者技能（出生写者豁免撞轨判；一轨至多一个非 fork 形态写者，撞轨 = 编译期 422）
-    mutex,         # 互斥槽位声明（dub ⇄ original）
     pairs,         # 声明耦合（translation ⇄ caption）
     provenance,    # C2PA 分类器 fold（ADR-026；段/层项级 generated 另有扫描）
     url_fields,    # 烘焙缝 fold（resolve_spec_urls；路径中段 [*] 展开列表）
-    checks,        # 确定性工艺检查（crop 不出人脸框 / 驻留达标 / 字幕不溢出——
-                   # verify 的第一批住户，随技能包出生）
     fields,        # 该轨持有的 spec 顶层字段（分区；启动自检强制完整且不交叠）
     depends,       # 派生轨依赖声明（dub ⟵ main；时间轴 op → stale_tracks 告知）
 )
 ```
 
-**加一条轨的成本** = 一条登记（忘登记则分区自检直接红：TS 类型级断言 + Python 启动对账双闸）+ 一个渲染件（新 family 才有）。`crop_track` 随 08-19 能力批以此形态进场。
+family / timeline 分类是文档（§4 表），不进 schema；确定性工艺检查（crop 不出人脸框 / 驻留达标 / 字幕不溢出）随首个住户与其消费方同批回归（08-19 能力批评估）。
+
+**加一条轨的成本** = TS 分区一项（tsc 强制）+ Python TrackDef 一条（启动对账强制）+ 一个渲染件（新 family 才有）。`crop_track` 随 08-19 能力批以此形态进场。

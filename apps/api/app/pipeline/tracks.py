@@ -1,16 +1,20 @@
-"""Python mirror of the TRACK_REGISTRY catalog (packages/clip/src/tracks.ts) — ADR-044.
+"""The TRACK_REGISTRY catalog — ADR-044.
 
-Double-end discipline (CAPTION_PRESETS 同款): the TS catalog is the source of
-truth; this mirror validates membership and consumes declarations only. Drift
-guard: ``scripts/check_track_registry.py`` diffs the two ends.
+Python owns the executable catalog (the folds below consume it at runtime);
+the TS end keeps only the fields partition (``packages/clip/src/tracks.ts``)
+— its type-level assertion forces every ClipSpec key into exactly one track
+at tsc time, the same discipline :func:`assert_track_registry` enforces here
+at boot. The family/timeline taxonomy is documentation (docs/RENDERING.md
+§4), not executable schema.
 
 Consumers fold through the helpers below — never special-case a spec field:
 
 - :func:`resolve_spec_urls` — the bake seam (``rendering._absolutize``) walks
   declared ``url_fields``.
 - :func:`spec_provenance` — ADR-026 classification reads track provenance.
-- :func:`total_output_seconds` — pricing's duration mirror (estimate fold).
 - :func:`track_of_field` — ops addressing reconciliation.
+- :func:`stale_tracks` — derived-track invalidation (dub ⟵ main).
+- :func:`assert_single_writer_per_track` — the one-writer-per-track 422.
 
 The two boot-time self-checks (:func:`assert_track_registry`,
 :func:`assert_phantom_track`) are mounted in
@@ -25,14 +29,10 @@ from typing import Any, Callable, Iterable
 
 @dataclass(frozen=True)
 class TrackDef:
-    family: str  # sequence | data | layer | block
-    timeline: str  # source | output | derived — declared, never implemented per-track
     owner: tuple[str, ...]  # writer skill(s) post-birth (birth producers write any track)
-    mutex: tuple[str, ...]  # mutually-exclusive slot labels
     pairs: tuple[str, ...]  # declared pairings (translation ⇄ caption)
     provenance: str  # real | generated (ADR-026)
     url_fields: tuple[str, ...]  # dotted paths; "[*]" expands a list at that part
-    checks: tuple[str, ...]  # deterministic craft checks (residents with skill packages)
     fields: tuple[str, ...]  # ClipSpec top-level keys this track owns (the partition)
     # Tracks this one DERIVES from (ADR-044 派生轨失效声明): an op writing a
     # dependency's fields makes this track stale (dub ⟵ main timeline).
@@ -41,84 +41,67 @@ class TrackDef:
 
 TRACKS: dict[str, TrackDef] = {
     "main": TrackDef(
-        family="sequence", timeline="source",
         # births write it; remove_filler is the timeline's morph writer
         owner=("select_clips", "materialize_source", "remove_filler"),
-        mutex=(), pairs=(), provenance="real",
+        pairs=(), provenance="real",
         # segments[*].url: hetero splice donor URLs (切 op) ride the same seam
         url_fields=("source.url", "source.image_urls[*]", "segments[*].url"),
-        checks=(),
         fields=("source", "segments", "aspect", "target_language"),
     ),
     "caption": TrackDef(
-        family="data", timeline="source",
         # preprocess writes the ASSET's words (birth input), never the spec
         # post-birth — the spec track's sole morph writer is remove_filler
         owner=("remove_filler",),
-        mutex=(), pairs=(), provenance="real",
-        url_fields=(), checks=(),
+        pairs=(), provenance="real",
+        url_fields=(),
         fields=("caption_track", "caption_style_preset", "caption_position", "caption_enabled"),
     ),
     "translation": TrackDef(
-        family="data", timeline="source",
         owner=("translate_clip",),
-        mutex=(), pairs=("caption",), provenance="real",
-        url_fields=(), checks=(),
+        pairs=("caption",), provenance="real",
+        url_fields=(),
         fields=("translation_track",),
     ),
     "crop": TrackDef(
-        family="data", timeline="source",
         # birth default today; reframe_clip becomes the writer on the 08-19 line
         owner=("select_clips", "materialize_source"),
-        mutex=(), pairs=(), provenance="real",
+        pairs=(), provenance="real",
         url_fields=(),
-        # 08-19 residents: crop-stays-on-face / min-dwell / anti-jump-cut easing
-        checks=(),
         # + "crop_track" on the 08-19 line — the boot partition check forces it
         fields=("crop",),
     ),
     "layers": TrackDef(
-        family="layer", timeline="derived",  # anchor → output position, projected at the bake seam
         owner=(),  # insert_broll lands on the 08-19+ line; nothing writes yet
-        mutex=(), pairs=(),
+        pairs=(),
         provenance="real",  # item-level: every layer declares its own (必填)
         url_fields=("layers[*].media.url",),
-        checks=(),  # 08-19+ residents: broll min-dwell / callout contrast …
         fields=("layers",),
     ),
     "title": TrackDef(
-        family="block", timeline="output",
         owner=("select_clips", "materialize_source"),
-        mutex=(), pairs=(), provenance="real",
-        url_fields=(), checks=(),
+        pairs=(), provenance="real",
+        url_fields=(),
         fields=("title",),
     ),
     "music": TrackDef(
-        family="block", timeline="output",
         owner=("add_music",),
-        mutex=(), pairs=(), provenance="real",
+        pairs=(), provenance="real",
         url_fields=("music.url",),
-        checks=(),
         fields=("music",),
     ),
     "dub": TrackDef(
-        family="block", timeline="output",
         owner=("dub_clip",),
-        mutex=("original_audio",),  # dub.enabled ⇒ the main track's original audio mutes
         pairs=(), provenance="generated",  # voice clone = synthetic track (ADR-026)
         url_fields=("dub.url",),
-        checks=(),
         fields=("dub",),
         # The dub audio is one continuous file locked to the OUTPUT timeline —
         # a main-timeline op (trim/cut/reorder/insert) desyncs it (ADR-044).
         depends=("main",),
     ),
     "intro_outro": TrackDef(
-        family="block", timeline="output",
         owner=(),  # persona-skin bake at generation; no skill writes post-birth
-        mutex=(), pairs=(), provenance="real",
+        pairs=(), provenance="real",
         url_fields=("brand.intro.media_url", "brand.outro.media_url"),
-        checks=(),
         fields=("brand", "brand_ref"),
     ),
 }
@@ -168,15 +151,13 @@ def _iter_url_slots(spec: Any, path: str) -> Iterable[tuple[dict, str, bool]]:
 def resolve_spec_urls(
     spec: dict[str, Any],
     resolve: Callable[[str], str],
-    *,
-    tracks: dict[str, TrackDef] | None = None,
 ) -> dict[str, Any]:
     """Bake-seam fold: run ``resolve`` over every declared ``url_fields`` slot.
 
     Registry-driven — a newly registered track's URLs are absolutized with
     zero changes here. Mutates and returns ``spec``.
     """
-    for track in (TRACKS if tracks is None else tracks).values():
+    for track in TRACKS.values():
         for path in track.url_fields:
             for node, key, is_list in _iter_url_slots(spec, path):
                 if is_list:
@@ -190,9 +171,7 @@ def resolve_spec_urls(
     return spec
 
 
-def spec_provenance(
-    spec: dict[str, Any], *, tracks: dict[str, TrackDef] | None = None
-) -> str:
+def spec_provenance(spec: dict[str, Any]) -> str:
     """ADR-026 classification fold: ``"generated"`` iff a track DECLARED
     generated is present-and-enabled in this spec (presence = a truthy field
     value; a block carrying ``enabled: false`` is off and doesn't count) — or
@@ -205,7 +184,7 @@ def spec_provenance(
     for layer in spec.get("layers") or []:
         if isinstance(layer, dict) and layer.get("provenance") == "generated":
             return "generated"
-    for track in (TRACKS if tracks is None else tracks).values():
+    for track in TRACKS.values():
         if track.provenance != "generated":
             continue
         for field in track.fields:
@@ -218,31 +197,9 @@ def spec_provenance(
     return "real"
 
 
-def total_output_seconds(
-    spec: dict[str, Any], *, tracks: dict[str, TrackDef] | None = None
-) -> float:
-    """Python mirror of ``totalDurationSeconds`` (packages/clip/src/types.ts).
-
-    Per-family contribution logic lives here once; the registry declares the
-    field homes: the sequence family's kept segments + the intro_outro
-    block's card seconds (arithmetic shared with the lane-projection mirrors
-    in app/pipeline/clip_spec.py). Unknown tracks contribute nothing (and
-    never crash the fold).
-    """
-    from app.pipeline.clip_spec import intro_seconds, outro_seconds, video_duration_seconds
-
-    reg = TRACKS if tracks is None else tracks
-    total = 0.0
-    if "segments" in reg["main"].fields:
-        total += video_duration_seconds(spec)
-    if "brand" in reg["intro_outro"].fields:
-        total += intro_seconds(spec) + outro_seconds(spec)
-    return total if total > 0 else 1 / 30.0  # >= a frame (COMPOSITION_FPS=30)
-
-
-def track_of_field(field: str, *, tracks: dict[str, TrackDef] | None = None) -> str | None:
+def track_of_field(field: str) -> str | None:
     """Which track owns this spec top-level field (None = unregistered)."""
-    for name, track in (TRACKS if tracks is None else tracks).items():
+    for name, track in TRACKS.items():
         if field in track.fields:
             return name
     return None
@@ -251,11 +208,11 @@ def track_of_field(field: str, *, tracks: dict[str, TrackDef] | None = None) -> 
 # ---- ops-closure helpers (ADR-044 D7) --------------------------------------
 
 
-def skill_written_tracks(kind: str, *, tracks: dict[str, TrackDef] | None = None) -> set[str]:
+def skill_written_tracks(kind: str) -> set[str]:
     """The clip-spec tracks a skill writes post-birth: its owned tracks plus
     their declared pairs (translate_clip → translation + caption)."""
     written: set[str] = set()
-    for name, track in (TRACKS if tracks is None else tracks).items():
+    for name, track in TRACKS.items():
         if kind in track.owner:
             written.add(name)
             written.update(track.pairs)
@@ -278,8 +235,6 @@ def track_present(spec: dict[str, Any], track: TrackDef) -> bool:
 def stale_tracks(
     spec: dict[str, Any],
     written_fields: Iterable[str],
-    *,
-    tracks: dict[str, TrackDef] | None = None,
 ) -> list[str]:
     """派生轨失效声明 (ADR-044): given the spec fields an op batch just wrote,
     the present-and-enabled tracks whose declared dependencies were touched —
@@ -289,13 +244,13 @@ def stale_tracks(
     written = {
         track
         for field in written_fields
-        if field != "*" and (track := track_of_field(field, tracks=tracks)) is not None
+        if field != "*" and (track := track_of_field(field)) is not None
     }
     if not written:
         return []
     return [
         name
-        for name, track in (TRACKS if tracks is None else tracks).items()
+        for name, track in TRACKS.items()
         if track.depends and set(track.depends) & written and track_present(spec, track)
     ]
 
@@ -372,34 +327,43 @@ def assert_track_registry() -> None:
                 )
 
 
+def _ok(cond: bool, msg: str) -> None:
+    if not cond:
+        raise RuntimeError(msg)
+
+
 def assert_phantom_track() -> None:
     """Check ② (elasticity fixture, ADR-044): register a PHANTOM track and
-    prove the consumers — bake seam / addressing / compliance / pricing —
-    take it over with zero consumer-side changes. The real registry never
-    sees it.
+    prove the consumers — bake seam / addressing / compliance — take it over
+    with zero consumer-side changes. The phantom rides the real registry
+    inside a try/finally, so removal is structural, never re-asserted.
+
+    (Pricing is deliberately NOT exercised: output-seconds arithmetic lives
+    in ``clip_spec.total_output_seconds`` and a future duration-bearing
+    track extends it there — the registry does not auto-adopt duration.)
     """
     phantom = TrackDef(
-        family="block", timeline="output",
-        owner=("phantom_skill",), mutex=(), pairs=(),
+        owner=("phantom_skill",), pairs=(),
         provenance="generated",
         url_fields=("phantom_badge.url",),
-        checks=(), fields=("phantom_badge",),
+        fields=("phantom_badge",),
     )
-    reg = {**TRACKS, "phantom": phantom}
-    spec: dict[str, Any] = {
-        "phantom_badge": {"url": "user/uploads/badge.png", "enabled": True}
-    }
-
-    # bake seam: the phantom's URL is absolutized by the fold, no branch added
-    out = resolve_spec_urls(spec, lambda v: f"https://cdn.test/{v}", tracks=reg)
-    assert out["phantom_badge"]["url"] == "https://cdn.test/user/uploads/badge.png"
-    # compliance: declared generated provenance classifies the spec
-    assert spec_provenance(spec, tracks=reg) == "generated"
-    off = {"phantom_badge": {"url": "user/uploads/badge.png", "enabled": False}}
-    assert spec_provenance(off, tracks=reg) == "real"
-    # addressing: the field resolves to its track
-    assert track_of_field("phantom_badge", tracks=reg) == "phantom"
-    # pricing: the duration fold tolerates the unknown track untouched
-    assert total_output_seconds({"segments": [], "phantom_badge": {}}, tracks=reg) > 0
-    # the real registry stays ignorant — the phantom never leaks in
-    assert track_of_field("phantom_badge") is None
+    TRACKS["phantom"] = phantom
+    try:
+        spec: dict[str, Any] = {
+            "phantom_badge": {"url": "user/uploads/badge.png", "enabled": True}
+        }
+        # bake seam: the phantom's URL is absolutized by the fold, no branch added
+        out = resolve_spec_urls(spec, lambda v: f"https://cdn.test/{v}")
+        _ok(
+            out["phantom_badge"]["url"] == "https://cdn.test/user/uploads/badge.png",
+            "phantom: bake seam did not absolutize the phantom url_field",
+        )
+        # compliance: declared generated provenance classifies the spec
+        _ok(spec_provenance(spec) == "generated", "phantom: provenance fold ignored it")
+        off = {"phantom_badge": {"url": "user/uploads/badge.png", "enabled": False}}
+        _ok(spec_provenance(off) == "real", "phantom: enabled:false still classified generated")
+        # addressing: the field resolves to its track
+        _ok(track_of_field("phantom_badge") == "phantom", "phantom: addressing missed it")
+    finally:
+        del TRACKS["phantom"]

@@ -824,6 +824,11 @@ const en = {
     trim: "Trim",
     reframePan: "Horizontal pan",
     reframeZoom: "Zoom",
+    staleTrack: {
+      dub: "voice dub",
+    },
+    staleTracks:
+      "The {{tracks}} no longer matches this edit — regenerate it when you're ready.",
   },
   languages: {
     zh: "Chinese",
