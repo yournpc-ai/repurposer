@@ -111,8 +111,13 @@ class RemoveFiller(NodeBase):
             )
         # Skip-rescue: clips left on their base spec (no fillers found in
         # them) still owe a render when the producer's fan-out was suppressed
-        # for this chain.
-        await _pend_suppressed_base_renders(db, run, node, clips, exclude=set(touched))
+        # for this chain. A partial touch must NOT defer to a later morph —
+        # its targets come from this step's output_refs (the touched set),
+        # so the skipped clips are invisible to it and would never render.
+        await _pend_suppressed_base_renders(
+            db, run, node, clips, exclude=set(touched),
+            defer_to_later_morph=not touched,
+        )
         if not touched:
             return []
 

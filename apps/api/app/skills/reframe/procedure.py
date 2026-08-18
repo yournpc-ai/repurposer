@@ -116,14 +116,24 @@ def _kept_windows(spec: dict) -> list[_Window]:
     (dedupe / window-head backdate / the final sort all walk source time).
     Hetero donor segments are skipped: their seconds live in the donor's
     timeline — a main-source crop keyframe would sample wrong there (the
-    last keyframe simply holds through them)."""
+    last keyframe simply holds through them). Overlapping windows merge into
+    their union: an overlap is one continuous shown range — keeping the
+    split would let the shared boundary emit duplicate-t keyframes (the
+    strictly-ascending contract rejects them) and detect the overlap twice.
+    """
     out = []
     for s in spec.get("segments") or []:
         if s.get("hidden") or s.get("asset_id") or s.get("url"):
             continue
         out.append(_Window(start=float(s["start"]), end=float(s["end"])))
-    out.sort(key=lambda w: w.start)
-    return out
+    out.sort(key=lambda w: (w.start, w.end))
+    merged: list[_Window] = []
+    for w in out:
+        if merged and w.start < merged[-1].end:
+            merged[-1].end = max(merged[-1].end, w.end)
+        else:
+            merged.append(w)
+    return merged
 
 
 # ---- interview_switch ------------------------------------------------------
@@ -268,17 +278,22 @@ def compute_crop_track(
     mode: str,
 ) -> tuple[list[dict[str, float]] | None, str]:
     """The skill's single entry: (keyframes, resolved_mode). ``None`` =
-    static_center (the caller clears the track and resets the static crop);
-    an empty list means the resolved mode found nothing to say and the
-    caller degrades to static_center."""
+    static_center — the caller clears any existing track and the clip's
+    static crop speaks again; an empty list = the resolved mode found
+    nothing honest to say (no interview turns, no trackable face, an
+    undecodable source) — the caller leaves the spec untouched."""
+    if mode == "static_center":
+        return None, mode
     fps, _n, src_w, src_h = _probe(video_path)
+    if fps <= 0 or src_w <= 0 or src_h <= 0:
+        # An undecodable source has no frames to frame on — skip honestly
+        # (also keeps a zero fps out of the frame-index math below).
+        logger.warning("reframe_probe_failed", path=str(video_path))
+        return [], mode
     ar = _aspect_ratio(str(spec.get("aspect") or "9:16"), src_w, src_h)
     windows = _kept_windows(spec)
     if not windows:
         return None, "static_center"
-
-    if mode == "static_center":
-        return None, mode
 
     kfs: list[dict[str, float]]
     if mode == "interview_switch":

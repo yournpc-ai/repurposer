@@ -173,7 +173,14 @@ class DubClip(NodeBase):
             raise ValueError("No clips could be dubbed (missing captions or voice sample)")
         # Skip-rescue: per-clip skips keep their base spec — they still owe
         # a render when the producer's fan-out was suppressed for this chain.
-        await _pend_suppressed_base_renders(db, run, node, clips, exclude=set(touched))
+        # The defer to a later morph holds only for forks (later morphs reach
+        # the base clips via the chain's base edge) and the all-skipped case
+        # (empty output_refs → the later morph's project-wide fallback sees
+        # them); a partial in-place touch's skips are invisible downstream.
+        await _pend_suppressed_base_renders(
+            db, run, node, clips, exclude=set(touched),
+            defer_to_later_morph=fork or not touched,
+        )
         await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
         await _record_target_output_ids(node.id, touched)
         await _fill_summary(

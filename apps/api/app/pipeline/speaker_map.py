@@ -105,9 +105,13 @@ def _frames_every(path: Path, step: int, start_f: int = 0, end_f: int | None = N
         if not ok:
             break
         yield f, frame
+        # A failed grab mid-skip = a corrupt packet: stop — resuming would
+        # label later frames with indices ahead of their real stream
+        # positions (keyframe times would drift late on damaged files).
         for _ in range(step - 1):
             if not cap.grab():
-                break
+                cap.release()
+                return
         f += step
     cap.release()
 

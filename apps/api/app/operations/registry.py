@@ -503,7 +503,7 @@ OP_REGISTRY: dict[str, OpDef] = {
     ),
     "reframe_clip": OpDef(
         ReframeClipOpParams, None, precomputed=True,
-        writes=("crop", "crop_track"),
+        writes=("crop_track",),
     ),
     # 操作集闭包 (ADR-044 D7): registered + client-callable, deliberately NOT
     # in the LLM vocabulary this batch (llm_visible=False — they ride the

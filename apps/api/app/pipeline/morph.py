@@ -19,7 +19,13 @@ from app.models.tables import Project, WorkflowRun
 # Morph kinds that rewrite a clip's render_spec IN PLACE and re-render (the
 # fork variants derive new rows and leave the base clip alone — they never
 # suppress anything).
-INPLACE_MORPH_KINDS = ("translate_clip", "dub_clip", "remove_filler", "add_music")
+INPLACE_MORPH_KINDS = (
+    "translate_clip",
+    "dub_clip",
+    "remove_filler",
+    "add_music",
+    "reframe_clip",
+)
 
 
 async def _render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
@@ -272,12 +278,20 @@ async def _pend_suppressed_base_renders(
     outputs: list[Output],
     *,
     exclude: set[UUID] | None = None,
+    defer_to_later_morph: bool = True,
 ) -> None:
     """Morph skip-rescue: targets the morph did NOT touch keep their base
     spec, so when the producer's render fan-out was suppressed for this run
     (render_status NULL = render not requested) the morph owes them the
     render they would otherwise never get. Goes through _fan_out_renders so
-    a later in-place morph defers the same way."""
+    a later in-place morph defers the same way — but only when that morph
+    can actually SEE the rescued clips: a later morph's targets come from
+    this step's output_refs (the touched set), so a non-fork morph that DID
+    touch part of its scope must pass ``defer_to_later_morph=False`` —
+    deferring then would orphan the rescued clips (no render ever runs).
+    The all-skipped case keeps the defer: empty output_refs make the later
+    morph fall back to the project-wide target set, rescued clips included.
+    """
     stale_ids = [
         o.id
         for o in outputs
@@ -293,7 +307,9 @@ async def _pend_suppressed_base_renders(
         .values(render_status=RenderStatus.PENDING)
     )
     await db.flush()
-    await _fan_out_renders(db, run, node, stale_ids)
+    await _fan_out_renders(
+        db, run, node, stale_ids, defer_to_later_morph=defer_to_later_morph
+    )
 
 
 async def _record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:

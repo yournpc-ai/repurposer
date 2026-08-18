@@ -5,6 +5,7 @@ import {
   continueRender,
   delayRender,
   Easing,
+  getRemotionEnvironment,
   Img,
   interpolate,
   OffthreadVideo,
@@ -252,26 +253,42 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   // positions the video explicitly). The track can ARRIVE without a remount
   // (a reframe morph updates the Player's inputProps in place), so the delay
   // handle is armed at render time the moment a track is present and dims
-  // are unresolved — never frozen in an initial useState.
+  // are unresolved — never frozen in an initial useState. Dims are tagged
+  // with the url they were resolved from: an in-place source swap must not
+  // reframe the new source with the old one's pixels.
   const hasCropTrack = Boolean(spec.crop_track?.length);
-  const [srcDims, setSrcDims] = useState<{ width: number; height: number } | null>(null);
+  const [srcDims, setSrcDims] = useState<{ url: string; width: number; height: number } | null>(null);
+  const dims = srcDims && srcDims.url === spec.source.url ? srcDims : null;
   const [dimsHandle, setDimsHandle] = useState<number | null>(null);
-  if (hasCropTrack && srcDims === null && dimsHandle === null) {
+  if (hasCropTrack && dims === null && dimsHandle === null) {
     setDimsHandle(delayRender("crop_track: resolving source dims"));
   }
   useEffect(() => {
-    if (dimsHandle === null || srcDims !== null) return;
+    if (dimsHandle === null || dims !== null) return;
     let cancelled = false;
-    getVideoMetadata(spec.source.url)
+    const url = spec.source.url;
+    // getVideoMetadata settles only on loadedmetadata/error — a stalled
+    // connection hangs forever. Render mode fails loud via delayRender's own
+    // timeout; the Player has no such guard, so race a timeout that rejects
+    // into the same static-crop fallback instead of freezing the preview.
+    const pending = getRemotionEnvironment().isRendering
+      ? getVideoMetadata(url)
+      : Promise.race([
+          getVideoMetadata(url),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("source dims timeout")), 15000);
+          }),
+        ]);
+    pending
       .then((m) => {
-        if (!cancelled) setSrcDims({ width: m.width, height: m.height });
+        if (!cancelled) setSrcDims({ url, width: m.width, height: m.height });
       })
       .catch(() => undefined) // fall through to the static-crop path
       .finally(() => continueRender(dimsHandle));
     return () => {
       cancelled = true;
     };
-  }, [dimsHandle, srcDims, spec.source.url]);
+  }, [dimsHandle, dims, spec.source.url]);
 
   // Brand (baked into the spec by the API; absent -> default look).
   const brand = spec.brand ?? undefined;
@@ -316,8 +333,14 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
       ? current.seg.start + Math.min(Math.max(0, localOutput - current.outStart), current.dur)
       : 0);
   // Crop data track (ADR-045): the framing sampled at this source second.
-  // Outside the video portion the video is hidden anyway — hold the static crop.
-  const cropNow = mappedSource === null ? spec.crop : sampleCrop(spec, mappedSource);
+  // The track only speaks once the source dims landed — without them the
+  // legacy transform path below would misread the keyframes' source-
+  // normalized units as composition fractions, so a missing/failed dims
+  // fetch (and everything outside the video portion) holds the static crop.
+  const cropNow =
+    mappedSource !== null && hasCropTrack && dims !== null
+      ? sampleCrop(spec, mappedSource)
+      : spec.crop;
   // Hetero main-track splice (切 op, ADR-044): a segment carrying its own
   // asset_id/url plays from its donor source — its [start,end] offsets live in
   // the DONOR's timeline, so the main source's captions must not match it.
@@ -476,20 +499,22 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         </Sequence>
       ) : hasSource ? (
         <Sequence from={introFrames} durationInFrames={videoFrames} layout="none">
-          {srcDims ? (
+          {hasCropTrack && dims ? (
             // Source-window crop (crop_track present): the video is sized to
             // the scaled source and positioned so the sampled window center
             // sits at the composition center — this is what lets a 16:9
             // interview reframe into per-speaker 9:16 shots (objectFit's
             // pre-crop would have destroyed the sides before any transform).
-            // Empty-track specs never reach here (hasCropTrack gate above).
+            // Both conditions are load-bearing: a spec whose track was just
+            // removed in place (static_center undo) must fall back to the
+            // transform path a fresh render of it would take.
             <AbsoluteFill style={{ overflow: "hidden" }}>
               <Series>
                 {timeline.map((t, i) => {
                   if (t.seg.url) {
-                    // Hetero donor segment: crop keyframes are MAIN-SOURCE
-                    // coordinates — never reframe donor pixels with the main
-                    // source's dims. Plain cover, the pre-reframe behavior.
+                    // Hetero donor segment: the crop keyframes AND the static
+                    // crop are main-source-tuned — donor pixels take no
+                    // reframe at all. Plain cover.
                     return (
                       <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                         <OffthreadVideo
@@ -504,8 +529,8 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                   }
                   const zoom =
                     (objectFit === "cover"
-                      ? Math.max(width / srcDims.width, height / srcDims.height)
-                      : Math.min(width / srcDims.width, height / srcDims.height)) * cropNow.scale;
+                      ? Math.max(width / dims.width, height / dims.height)
+                      : Math.min(width / dims.width, height / dims.height)) * cropNow.scale;
                   return (
                     <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                       <OffthreadVideo
@@ -515,10 +540,10 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                         endAt={Math.round(t.seg.end * fpsv)}
                         style={{
                           position: "absolute",
-                          width: srcDims.width * zoom,
-                          height: srcDims.height * zoom,
-                          left: width / 2 - cropNow.x * srcDims.width * zoom,
-                          top: height / 2 - cropNow.y * srcDims.height * zoom,
+                          width: dims.width * zoom,
+                          height: dims.height * zoom,
+                          left: width / 2 - cropNow.x * dims.width * zoom,
+                          top: height / 2 - cropNow.y * dims.height * zoom,
                         }}
                       />
                     </Series.Sequence>
@@ -531,8 +556,9 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
               style={{
                 // Reframe via transform (object-position is unsupported on the
                 // future client-render path — keep to the CSS ∩ libass subset).
-                // Per-frame value: the crop data track sampled at the current
-                // source second (empty track = the static crop, 语义不变).
+                // cropNow is always the static crop here (the track speaks only
+                // in the source-window path above) — an empty/absent track
+                // renders EXACTLY like the pre-crop_track code.
                 transform: `scale(${cropNow.scale}) translate(${(0.5 - cropNow.x) * 100}%, ${(0.5 - cropNow.y) * 100}%)`,
               }}
             >
