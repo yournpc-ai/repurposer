@@ -14,9 +14,10 @@ import type { RecipeCard } from "@/lib/recipes"
  * pre-localized here (FlowView stays text-agnostic).
  *
  * Region frame (2026-08-19 groups prop 首个 surface, the FLORA technique
- * form): the curated steps sit inside ONE rounded frame labeled with the
- * recipe's own title — the 大叙事 grouping; assets and outputs stay outside
- * (they are nouns, the frame groups the process). */
+ * form): the curated steps sit inside ONE rounded frame labeling ITSELF
+ * ("Curated steps" — the frame wraps only the steps, so it never borrows
+ * the recipe's name; the overlay header already carries that); assets and
+ * outputs stay outside (they are nouns, the frame groups the process). */
 
 const materialLabel = (t: TFunction, labelKey?: string | null) =>
   labelKey ? t(`recipes.materials.${labelKey}`) : null

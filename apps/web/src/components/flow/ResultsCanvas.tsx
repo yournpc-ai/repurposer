@@ -9,7 +9,7 @@
  * opens its detail modal), the action bar carries info + download / delete,
  * and node business (publish / open / focus) lives in the bar's ⋯ menu. */
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   Clapperboard,
@@ -111,7 +111,10 @@ export function ResultsCanvas({
   // model name, prohibition #12).
   const [lightbox, setLightbox] = useState<MediaLightboxData | null>(null)
 
-  const handleExpandMedia = (nodeId: string) => {
+  // Handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
+  // rfNodes/rfEdges memo keys on them — inline closures rebuilt the whole
+  // graph on every unrelated re-render (SSE ticks, polling, focus changes).
+  const handleExpandMedia = useCallback((nodeId: string) => {
     const node = nodeById.get(nodeId)
     if (!node) return
     const downloadName = (url: string, base: string) => {
@@ -210,7 +213,49 @@ export function ResultsCanvas({
         downloadName: node.detail ?? node.label,
       })
     }
-  }
+  }, [nodeById, assetByNodeId])
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      // The spine group node toggles in place; a step node points the
+      // dock at it (@workflow_step); a product node focuses / details.
+      if (id === SPINE_NODE_ID) {
+        setSpineExpanded((v) => !v)
+        return
+      }
+      const output = outputById.get(id)
+      if (output) {
+        onOutputClick?.(output)
+        return
+      }
+      if (id.startsWith("asset:")) {
+        // Source media nodes have no dock business — a click IS the
+        // expand gesture (the lightbox; non-media assets no-op inside).
+        handleExpandMedia(id)
+        return
+      }
+      if (id.startsWith("artifact:")) {
+        // 工件卡 = 可干预的产出物 (D6 修订): clicking points the dock at
+        // the group's representative step (@workflow_step, D8).
+        const node = nodeById.get(id)
+        if (node?.anchorStepId) onStepClick?.(node.anchorStepId, node.label)
+        return
+      }
+      if (id.startsWith("step:")) {
+        const node = nodeById.get(id)
+        if (node) onStepClick?.(id.slice(5), node.label)
+      }
+    },
+    [outputById, onOutputClick, onStepClick, nodeById, handleExpandMedia],
+  )
+
+  const handleOutputAction = useCallback(
+    (id: string, action: FlowOutputAction) => {
+      const output = outputById.get(`output:${id}`)
+      if (output) onOutputAction?.(output, action)
+    },
+    [outputById, onOutputAction],
+  )
 
   return (
     <div className={className}>
@@ -225,40 +270,8 @@ export function ResultsCanvas({
         selectedId={focusedOutputId ? `output:${focusedOutputId}` : null}
         onPaneClick={onPaneClick}
         onExpandMedia={handleExpandMedia}
-        onSelect={(id) => {
-          // The spine group node toggles in place; a step node points the
-          // dock at it (@workflow_step); a product node focuses / details.
-          if (id === SPINE_NODE_ID) {
-            setSpineExpanded((v) => !v)
-            return
-          }
-          const output = outputById.get(id)
-          if (output) {
-            onOutputClick?.(output)
-            return
-          }
-          if (id.startsWith("asset:")) {
-            // Source media nodes have no dock business — a click IS the
-            // expand gesture (the lightbox; non-media assets no-op inside).
-            handleExpandMedia(id)
-            return
-          }
-          if (id.startsWith("artifact:")) {
-            // 工件卡 = 可干预的产出物 (D6 修订): clicking points the dock at
-            // the group's representative step (@workflow_step, D8).
-            const node = nodeById.get(id)
-            if (node?.anchorStepId) onStepClick?.(node.anchorStepId, node.label)
-            return
-          }
-          if (id.startsWith("step:")) {
-            const node = nodeById.get(id)
-            if (node) onStepClick?.(id.slice(5), node.label)
-          }
-        }}
-        onOutputAction={(id, action) => {
-          const output = outputById.get(`output:${id}`)
-          if (output) onOutputAction?.(output, action)
-        }}
+        onSelect={handleSelect}
+        onOutputAction={handleOutputAction}
         onAssetAction={onAssetAction}
       />
       <MediaLightbox

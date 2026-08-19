@@ -1,7 +1,7 @@
 /* FlowView (ADR-036) — edge semantics, transition choreography, xyflow taming.
  * Loaded after @xyflow/react/dist/style.css so these win. */
 
-/* ── Edges: two visual semantics ─────────────────────────────────────── */
+/* ── Edges: one quiet stroke, semantics live in data ─────────────────── */
 
 /* React Flow's example edges read as an always-visible neutral gray at any
  * zoom; ours were 1.5px at 22–55% opacity, which a fit zoom of ~0.4 renders

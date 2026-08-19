@@ -86,6 +86,14 @@ class Preprocess(NodeBase):
     kind = "preprocess"
     task_name = "Analyze uploads"
     task_name_zh = "分析素材"
+    # canvas_hidden (2026-08-19 二轮评审 R1): the prelude is plan's UPSTREAM —
+    # folding it into the 过程脊 together with plan's DOWNSTREAM (select_clips)
+    # made the visible graph a 2-cycle (spine⇄artifact:plan): the 任务书
+    # landed at the bottom of the product column with a loop-back edge
+    # sweeping the canvas. Hiding the prelude restores the clean DAG
+    # (素材→任务书→脊→产物); its state still lives in the step rows and the
+    # chat stepper (canvas_hidden has exactly one consumer — runFlow).
+    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """Validation only — no LLM, no priced units."""
@@ -121,6 +129,9 @@ class PersonaBootstrap(NodeBase):
     task_name = "Prepare persona"
     task_name_zh = "准备人设"
     agents = (persona,)
+    # canvas_hidden — same prelude rule as Preprocess (2026-08-19 二轮评审
+    # R1: the spine must never hold steps from both sides of the 任务书).
+    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """The one extraction call — free when a persona is already mounted

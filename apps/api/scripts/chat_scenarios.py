@@ -23,6 +23,7 @@ birth-ordered and never recycled; position in this file = family.
     契约       S23 bail+reopen · S24 autonomy→run · S25 dup-409 · S26 rebuild
                S27 QA archive · S28 plain no-media · S29 count 422 · S30 attach-only
     四态分派   S31 task_list run · S32 edit_ops ops行 · S33 progress · S34 meta · S35 asset scope
+               S47 workflow_step mention 消费（F4 行为锁）
     checkpoint S36 三答法+空白不答 · S37 bail级联 · S38 supersede级联 · S39 过期扫描 · S40 task_book不参与autoResume
     流式       S9 SSE
     harness    S41 repair 只一轮（Agent 漏斗自检，进程内 stub，不打 API）
@@ -281,6 +282,27 @@ async def seed_completed_run(pid: str) -> None:
             )
         )
         await db.commit()
+
+
+async def seed_completed_run_with_dub_step(pid: str) -> str:
+    """A settled run carrying one done dub step — the S47 workflow_step
+    mention's anchor. Returns the step id."""
+    async with AsyncSessionLocal() as db:
+        run = WorkflowRun(
+            project_id=uuid.UUID(pid),
+            status=WorkflowStatus.COMPLETED,
+            context={"outputs": [{"type": "clips", "count": 1}], "target_language": "en"},
+        )
+        db.add(run)
+        await db.flush()
+        step = WorkflowStep(
+            run_id=run.id, kind="dub_clip", status="done", seq=0,
+            spec={"target_language": "zh", "summary": "Chinese dub"},
+        )
+        db.add(step)
+        await db.commit()
+        await db.refresh(step)
+        return str(step.id)
 
 
 async def seed_clip_output(pid: str) -> str:
@@ -1362,6 +1384,40 @@ async def s34_meta_info_navigation_answer(ctx: Ctx) -> None:
     check(await count_runs(pid) == 1, "run count unchanged", await count_runs(pid))
 
 
+async def s47_workflow_step_mention(ctx: Ctx) -> None:
+    """S47 workflow_step mention 消费（2026-08-19 二轮评审 F4 行为锁）：mention 随轮注入
+    （contexts 通用行 "- workflow_step id=… label=…"）后，"redo this step in German"
+    必须把 label 当确定目标——分派 dub_clip(de) task_list（新 run 恰一个 dub 步骤），
+    禁 422 / 裸反问 / edit_ops。LLM 判定波动按 S31 惯例人工判读，断言保持严格。
+    （mention 通道全族此前零覆盖——asset/output/segment 也没有剧本，本条先锁
+    收窄后权重最高的 workflow_step。）"""
+    pid = await ctx.new_project("S47 workflow_step mention")
+    # dub_clip requires=(MEDIA,) — the compile gate rejects a clips-only
+    # project ("Missing required input: media"); a video asset + the seeded
+    # clip output makes the "existing" profile (act on the project's clips).
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+    await seed_clip_output(pid)
+    step_id = await seed_completed_run_with_dub_step(pid)
+
+    turn1 = await ctx.chat(
+        pid,
+        "Redo this step in German",
+        mentions=[{"type": "workflow_step", "id": step_id, "label": "Chinese dub"}],
+    )
+    check(turn1["run_id"] is not None,
+          "the mention drives a task_list dispatch", turn1)
+    check(await count_runs(pid) == 2, "the new run joins the seeded one",
+          await count_runs(pid))
+    # The dispatched run's compiled steps prove the label was consumed as the
+    # definite target: exactly one dub step, targeting German — not an ask,
+    # not an edit op, not a re-run of everything.
+    steps = await step_rows(turn1["run_id"])
+    dub = [s for s in steps if s["kind"] == "dub_clip"]
+    check(len(dub) == 1, "exactly one dub step was compiled", steps)
+    check(dub[0]["spec"].get("target_language") == "de",
+          "the dub targets German", dub[0])
+
+
 async def s35_focus_output_injection(ctx: Ctx) -> None:
     """S35 焦点注入（ADR-041 D8）：focus_output 随轮且落库、不开新会话、不进 plan path；
     退役的 asset scope 参数被 422 拒绝（extra=forbid）。"""
@@ -2111,6 +2167,7 @@ SCENARIOS = {
     "S33": s33_progress_question_answer,
     "S34": s34_meta_info_navigation_answer,
     "S35": s35_focus_output_injection,
+    "S47": s47_workflow_step_mention,
     "S46": s46_reframe_skill_dispatch,
     # checkpoint
     "S36": s36_checkpoint_three_answer_paths,

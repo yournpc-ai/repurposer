@@ -134,7 +134,10 @@ function MediaHoverButton({
         onClick()
       }}
       className={cn(
-        "absolute z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover/media:opacity-100 hover:bg-black/80",
+        // Hover-revealed on pointer devices; always on under (hover: none)
+        // (2026-08-19 二轮 R4 — iPad 触摸拿得到画布，hover 揭示在触摸上
+        // 没有对应手势).
+        "absolute z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover/media:opacity-100 hover:bg-black/80 [@media(hover:none)]:opacity-100",
         className,
       )}
     >
@@ -599,9 +602,10 @@ function ProductCard({
   return (
     <div className="group/product relative flex h-full w-full flex-col">
       {/* Variant switcher (the reference canvas's hover group): fades in at
-          the node's top center on hover; each tile is one produced item. */}
+          the node's top center on hover; each tile is one produced item.
+          Always on under (hover: none) — touch has no reveal gesture. */}
       {variants.length > 1 && (
-        <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/product:opacity-100">
+        <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/product:opacity-100 [@media(hover:none)]:opacity-100">
           <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
             {variants.map((variant, vi) => (
               <button

@@ -1,5 +1,5 @@
 import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
@@ -227,7 +227,7 @@ function ProjectDetailPage() {
   const [publishOutput, setPublishOutput] = useState<Output | null>(null)
   const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null)
 
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`)
       if (!res.ok) throw new Error("Project not found")
@@ -237,12 +237,12 @@ function ProjectDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [projectId])
 
   // Canvas assets carry titles/file urls (the /results asset list is a
   // lightweight status view) — the full asset endpoint, fetched once per
   // project and after every asset action (delete / reprocess).
-  const fetchCanvasAssets = async () => {
+  const fetchCanvasAssets = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
         toast: false,
@@ -251,7 +251,7 @@ function ProjectDetailPage() {
     } catch {
       /* the canvas keeps the last asset set */
     }
-  }
+  }, [projectId])
 
   const latestRun = results?.latest_run
 
@@ -349,14 +349,17 @@ function ProjectDetailPage() {
     }
   }, [outputsList, focusedOutputId, t])
 
-  const handleOutputClick = (output: Output) => {
+  // Canvas handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
+  // rfNodes/rfEdges memo keys on them — plain closures rebuilt the whole
+  // graph on every unrelated re-render (SSE ticks, focus changes).
+  const handleOutputClick = useCallback((output: Output) => {
     setFocusedOutputId(output.id)
     // 单击 = detail modal 旧逻辑原样 (D5): clips with a render open the
     // detail view; every product click also becomes the dock's focus.
     if (output.type === "clip" && output.files.video) setDetailOutput(output)
-  }
+  }, [])
 
-  const handleOutputAction = async (output: Output, action: FlowOutputAction) => {
+  const handleOutputAction = useCallback(async (output: Output, action: FlowOutputAction) => {
     if (action === "open") {
       handleOutputClick(output)
       return
@@ -370,39 +373,38 @@ function ProjectDetailPage() {
     else if (action === "delete") {
       const res = await apiDelete(`/api/v1/outputs/${output.id}`)
       if (!res.ok) return
-      if (detailOutput?.id === output.id) setDetailOutput(null)
-      if (focusedOutputId === output.id) setFocusedOutputId(null)
+      setDetailOutput((prev) => (prev?.id === output.id ? null : prev))
+      setFocusedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
-  }
+  }, [handleOutputClick, fetchResults])
 
   // Asset-node toolbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
   // here: the card opens the lightbox directly).
-  const handleAssetAction = async (asset: FlowAssetInfo, action: FlowAssetAction) => {
+  const handleAssetAction = useCallback(async (asset: FlowAssetInfo, action: FlowAssetAction) => {
     if (action === "download") {
       const url = toAbsoluteUrl(asset.stream_url ?? asset.file_url)
       if (url) await downloadFile(url, asset.title ?? "asset")
       return
     }
-    if (!project) return
     if (action === "delete") {
-      const res = await apiDelete(`/api/v1/projects/${project.id}/assets/${asset.id}`)
+      const res = await apiDelete(`/api/v1/projects/${projectId}/assets/${asset.id}`)
       if (res.ok) await Promise.all([fetchResults(), fetchCanvasAssets()])
     } else if (action === "reprocess") {
       const res = await apiPost(
-        `/api/v1/projects/${project.id}/assets/${asset.id}/reprocess`,
+        `/api/v1/projects/${projectId}/assets/${asset.id}/reprocess`,
         {}
       )
       if (res.ok) await Promise.all([fetchResults(), fetchCanvasAssets()])
     }
-  }
+  }, [projectId, fetchResults, fetchCanvasAssets])
 
   // 点过程节点 = @workflow_step 指认 (D8): the chip lands in the dock's
   // input — the mention rides the next turn as a definite reference.
-  const handleStepClick = (stepId: string, label: string) => {
+  const handleStepClick = useCallback((stepId: string, label: string) => {
     overlayRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
-  }
+  }, [])
 
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun

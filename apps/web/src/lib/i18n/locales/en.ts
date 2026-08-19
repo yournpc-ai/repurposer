@@ -906,6 +906,7 @@ const en = {
       more: "More actions",
       // 过程脊 group node (D6): the folded middle steps as one container.
       spine: "Process",
+      spineSteps_one: "{{count}} step",
       spineSteps: "{{count}} steps",
       // The artifact node card (D6 修订; 2026-08-19 名词节点收窄): the only
       // live grant is "plan" — the 任务书 glass text node. canvas_key is

@@ -884,6 +884,7 @@ const zh: Resources = {
       more: "更多操作",
       // 过程脊组节点（D6）：折起的中间步骤为一个容器。
       spine: "处理过程",
+      spineSteps_one: "{{count}} 个步骤",
       spineSteps: "{{count}} 个步骤",
       // 工件节点卡（D6 修订；2026-08-19 名词节点收窄）：现行唯一授予 = plan
       // （任务书玻璃文本节点）。canvas_key 序列化时从节点类现算（从不入行），

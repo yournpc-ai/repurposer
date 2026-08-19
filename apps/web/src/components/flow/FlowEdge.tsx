@@ -8,7 +8,9 @@ export interface FlowEdgeData extends Record<string, unknown> {
   semantic: FlowEdgeSemantic
   /** Birth stagger delay (ms); null = render instantly (no choreography). */
   drawDelay: number | null
-  /** Live "work flowing through this edge" dashes (SSE status-driven). */
+  /** Live "work flowing through this edge" — one short bright packet
+   * riding the path (SSE status-driven, 2026-08-19; the all-edge ant march
+   * retired). */
   active: boolean
 }
 

@@ -34,8 +34,8 @@ const edgeTypes = { flow: FlowEdge }
  *    (2026-08-10 bug: right column cut off).
  * 2. maxZoom caps at 1 on fit surfaces — a small graph must not upscale
  *    into giant cards.
- * padding 0.2 ≈ 9% per side (xyflow's 1/(1+p) formula) — clears the
- * overlay's floating tab bar (top-5 + h-9 ≈ 56px). */
+ * padding 0.2 ≈ 8.3% per side (xyflow's parsePadding: (v − v/(1+p))/2) —
+ * clears the overlay's floating tab bar (top-5 + h-9 ≈ 56px). */
 const FIT_VIEW_OPTIONS = { minZoom: 0.15, maxZoom: 1, padding: 0.2 } as const
 
 /** Fit + center via the framework's own `fitView` (xyflow's recommended
@@ -68,6 +68,12 @@ function ViewportController({
   useEffect(() => {
     const first = prevCountRef.current === null
     prevCountRef.current = count
+    // Explore surfaces keep the user's own viewport on GROWTH (2026-08-19
+    // 二轮 R2): the spine toggle and refinement new-arrivals must not yank
+    // a hand-set pan/zoom — only the first mount frames the graph (and the
+    // pill offers a manual refit). Fit-locked surfaces refit on every
+    // count change as before.
+    if (!first && navigation === "explore") return
     // Double rAF (after paint + measurement); BOTH frames are tracked so a
     // mid-flight unmount never leaves a dangling callback.
     let inner = 0
@@ -78,7 +84,7 @@ function ViewportController({
       cancelAnimationFrame(outer)
       cancelAnimationFrame(inner)
     }
-  }, [count, fit])
+  }, [count, fit, navigation])
 
   useEffect(() => {
     if (navigation !== "fit") return

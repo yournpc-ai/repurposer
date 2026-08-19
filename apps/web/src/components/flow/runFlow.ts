@@ -18,10 +18,14 @@ import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
  * 过程脊 (intervention = click the product, or the expanded spine's step
  * pill via @workflow_step — the translate_clip 2026-08-15 precedent
  * generalized). Steps sharing a class-declared `canvas_key` still merge
- * into ONE node (the mechanism is untouched — the grants narrowed);
- * `canvas_hidden` steps (render) never appear — their state projects onto
- * the product card in place. All of it is VIEW behavior over the full step
- * rows.
+ * into ONE node (the mechanism is untouched — the grants narrowed).
+ * `canvas_hidden` covers TWO invisible classes: render steps (their state
+ * projects onto the product card in place) and the prelude (preprocess /
+ * persona_bootstrap — 二轮 R1: plan's upstream must not share the spine
+ * with plan's downstream, or the folded pair forms a 2-cycle that sinks
+ * the 任务书 into the product column; the 素材 feed walks DOWNSTREAM to
+ * the first rendered descendant instead). All of it is VIEW behavior over
+ * the full step rows.
  *
  * Edge discipline (prohibitions #9 / #11): dependency edges come from the
  * server's edge table (step `inputs`) plus the structural fact every recipe
@@ -196,6 +200,37 @@ export function runFlowGraph(
     return id
   }
 
+  // Children index for the asset-feed fallback below.
+  const childrenOf = new Map<string, string[]>()
+  for (const step of steps) {
+    for (const upstream of step.inputs ?? []) {
+      childrenOf.set(upstream, [...(childrenOf.get(upstream) ?? []), step.id])
+    }
+  }
+  /** Asset-feed target resolution (2026-08-19 二轮评审 R1): a canvas_hidden
+   * ROOT (the prelude — preprocess/persona_bootstrap) has no inputs to walk
+   * up, so a naive resolve drops the 素材 feed and parks the 任务书 in the
+   * assets' own column. The feed instead walks DOWNSTREAM (seq order, cycle
+   * guard) to the first rendered descendant — the edge lands on the 任务书
+   * and the visible graph stays a DAG (素材→任务书→脊→产物). */
+  const resolveAssetFeedTarget = (
+    stepId: string,
+    trail: Set<string> = new Set()
+  ): string | null => {
+    const direct = resolveStepNode(stepId)
+    if (direct) return direct
+    if (trail.has(stepId)) return null
+    trail.add(stepId)
+    const kids = [...(childrenOf.get(stepId) ?? [])].sort(
+      (a, b) => (byId.get(a)?.seq ?? 0) - (byId.get(b)?.seq ?? 0)
+    )
+    for (const kid of kids) {
+      const id = resolveAssetFeedTarget(kid, trail)
+      if (id) return id
+    }
+    return null
+  }
+
   // Artifact cards (D6 修订; 2026-08-19 名词节点收窄后只有 "plan"): body =
   // the group's own copy (the plan card shows the picked direction in full
   // via canvas_text); the mention anchors to the group's last step.
@@ -275,13 +310,17 @@ export function runFlowGraph(
   }
 
   // Source assets feed the root steps (the run's entry points) — process
-  // order, so the dependency semantic (recipe adapter precedent).
+  // order, so the dependency semantic (recipe adapter precedent). A hidden
+  // root (the prelude) resolves DOWNSTREAM to its first rendered descendant
+  // (R1) — resolved here because the final pass only walks up.
   const roots = steps.filter((s) => (s.inputs ?? []).length === 0)
   for (const asset of assets) {
     for (const root of roots) {
+      const target = resolveAssetFeedTarget(root.id)
+      if (!target) continue
       rawEdges.push({
         from: `asset:${asset.id}`,
-        to: `step:${root.id}`,
+        to: target,
         semantic: "dependency",
       })
     }
