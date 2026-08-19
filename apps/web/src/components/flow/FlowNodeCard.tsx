@@ -422,14 +422,17 @@ function SpineCard({ node }: { node: FlowNode }) {
 }
 
 /** The artifact node's card (D6 修订 — the render unit is the intervenable
- * artifact: plan / selection / dub / music). Three-section anatomy (the
- * Lovart anatomy, interaction NOT copied): the type + status up top, the
- * produced thing as the body copy, the spec line at the bottom — read-only;
- * changing it happens in chat via the @workflow_step mention, never on the
- * card. No toolbar (D5: process nodes never carry one). */
+ * artifact; 2026-08-19 名词节点收窄后 = the 任务书 glass text node, the
+ * FLORA text-node form). Parked on the same dot grid as the dock, so it
+ * takes the dock-surface frost (the canvas's dots read through) + the
+ * hairline, never a shadow. Three-section anatomy (the Lovart anatomy,
+ * interaction NOT copied): the type + status up top, the produced thing as
+ * the body copy, the spec line at the bottom — read-only; changing it
+ * happens in chat via the @workflow_step mention, never on the card. No
+ * toolbar (D5: process nodes never carry one). */
 function ArtifactCard({ node }: { node: FlowNode }) {
   return (
-    <div className="flex h-full w-full flex-col gap-1.5 rounded-lg bg-card p-3 ring-foreground/10 ring-1">
+    <div className="dock-surface flex h-full w-full flex-col gap-2 rounded-xl p-4 ring-foreground/10 ring-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-meta text-[11px]">{node.label}</p>
         {node.status && node.status !== "pending" && (
@@ -437,7 +440,7 @@ function ArtifactCard({ node }: { node: FlowNode }) {
         )}
       </div>
       {node.body && (
-        <p className="line-clamp-4 text-xs leading-snug">{node.body}</p>
+        <p className="line-clamp-6 text-xs leading-relaxed">{node.body}</p>
       )}
       {node.detail && (
         <p className="mt-auto truncate text-[11px] leading-tight text-muted-foreground">

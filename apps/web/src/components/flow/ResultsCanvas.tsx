@@ -218,6 +218,7 @@ export function ResultsCanvas({
         nodes={nodes}
         edges={edges}
         navigation="explore"
+        controls
         choreograph={choreograph}
         dots
         className="h-full"

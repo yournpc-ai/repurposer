@@ -380,6 +380,7 @@ export function RecipeInspectOverlay({
                     <FlowView
                       nodes={process.nodes}
                       edges={process.edges}
+                      groups={process.groups}
                       dots
                       className="h-full"
                     />

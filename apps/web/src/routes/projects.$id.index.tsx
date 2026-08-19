@@ -15,9 +15,6 @@ import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/compone
 import type { RunFlowAsset } from "@/components/flow/runFlow"
 import { PostCard } from "@/components/results/PostCard"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
-import { LanguageSwitcher } from "@/components/language-switcher"
-import { NotificationBell } from "@/components/notifications/NotificationBell"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { PublishDialog } from "@/components/publish/PublishDialog"
 import { QuotesCard } from "@/components/results/QuotesCard"
 import {
@@ -860,11 +857,10 @@ function ProjectDetailPage() {
           onDeleted={() => navigate({ to: "/projects" })}
         />
       </div>
-      <div className="dock-surface absolute right-3 top-3 z-30 flex items-center rounded-md ring-1 ring-foreground/10 md:right-4 md:top-4">
-        <ThemeToggle />
-        <LanguageSwitcher />
-        <NotificationBell />
-      </div>
+      {/* Top-right stays CANVAS chrome (2026-08-19 走查拍板): the zoom pill
+          rides FlowView's `controls` prop inside the canvas; the home-
+          inherited cluster (theme / language / notifications) left the
+          fullscreen world — app chrome lives in the studio shell. */}
 
       {resultsPhase && completedRun ? (
         /* Results phase (ADR-041 D1): the canvas is FULL-BLEED — the dock

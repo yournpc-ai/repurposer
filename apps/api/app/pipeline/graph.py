@@ -190,16 +190,19 @@ class NodeBase:
     # because the class lives in its skill package for cohesion).
     internal: bool = False
     # Canvas 渲染单元 (2026-08-12 ADR-041 D6 修订, 与 label() 同哲学——节点类
-    # 自描述): the results canvas renders ARTIFACT nodes, not steps — the unit
-    # is "something produced the user may point at in chat and say 'change
-    # this'". ``canvas_group`` returns the node's artifact key; steps sharing
-    # a key within one run merge into ONE canvas node (director's
-    # understand+checkpoint+plan = the single "plan" card). None = fold into
-    # the 过程脊 group node (plumbing nobody intervenes on). ``canvas_hidden``
-    # = never a node at all — the step's state projects onto the product card
-    # in place (render is 1:1 with its clip). Folding/projection is a VIEW
-    # behavior — the step rows stay full (cost / rerun / lineage rely on
-    # them).
+    # 自描述; 2026-08-19 名词节点收窄): the results canvas renders NOUN nodes
+    # only — 素材 / 文本 (任务书 = the "plan" key, the only live grant) / 产物.
+    # Process verbs never get a card: each is an ATTRIBUTE of its product
+    # (the translate_clip 2026-08-15 precedent generalized — select_clips /
+    # dub / add_music all folded). ``canvas_group`` returns the node's
+    # artifact key; steps sharing a key within one run merge into ONE canvas
+    # node (director's understand+checkpoint+plan = the single "plan" card).
+    # None = fold into the 过程脊 group node (intervention = click the
+    # product, or the expanded spine's step pill via @workflow_step).
+    # ``canvas_hidden`` = never a node at all — the step's state projects
+    # onto the product card in place (render is 1:1 with its clip).
+    # Folding/projection is a VIEW behavior — the step rows stay full (cost /
+    # rerun / lineage rely on them).
     canvas_hidden: bool = False
 
     def canvas_group(self, node: Any) -> str | None:

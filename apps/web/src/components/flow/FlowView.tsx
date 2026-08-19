@@ -1,11 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Maximize, Minus, Plus } from "lucide-react"
 import {
   Background,
   BackgroundVariant,
+  Panel,
   ReactFlow,
   useReactFlow,
+  useViewport,
+  ViewportPortal,
 } from "@xyflow/react"
 
 import { cn } from "@/lib/utils"
@@ -16,7 +21,7 @@ import "./flow.css"
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
 import { flowNodeSize, layoutFlow } from "./layout"
-import type { FlowViewProps } from "./types"
+import type { FlowGroup, FlowViewProps } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
@@ -83,6 +88,119 @@ function ViewportController({
   return null
 }
 
+/** Region frames (2026-08-19 预留, the FLORA technique-workflow form — the
+ * recipe surface uses it first): one large rounded frame behind each member
+ * cluster, labeled with the region's 大叙事. Bounds are pure layout math
+ * (positions + fixed sizes + padding); the frame renders inside the
+ * ViewportPortal at zIndex -1 — below edges and nodes (they sit later in
+ * the viewport's stacking context), above the dot background, and it never
+ * intercepts pointer events (the portal layer is pointer-events: none). */
+const GROUP_PAD = 28
+
+function GroupFrames({
+  groups,
+  layout,
+  sizes,
+  choreograph,
+}: {
+  groups: FlowGroup[]
+  layout: ReturnType<typeof layoutFlow>
+  sizes: Map<string, { width: number; height: number }>
+  choreograph: boolean
+}) {
+  return (
+    <ViewportPortal>
+      {groups.map((group) => {
+        const members = group.nodeIds.flatMap((id) => {
+          const pos = layout.positions.get(id)
+          const size = sizes.get(id)
+          return pos && size ? [{ pos, size, born: layout.revealOrder.get(id) ?? 0 }] : []
+        })
+        if (members.length === 0) return null
+        const minX = Math.min(...members.map((m) => m.pos.x)) - GROUP_PAD
+        const minY = Math.min(...members.map((m) => m.pos.y)) - GROUP_PAD
+        const maxX =
+          Math.max(...members.map((m) => m.pos.x + m.size.width)) + GROUP_PAD
+        const maxY =
+          Math.max(...members.map((m) => m.pos.y + m.size.height)) + GROUP_PAD
+        return (
+          <div
+            key={group.id}
+            aria-hidden
+            className={cn(
+              "absolute rounded-3xl ring-foreground/10 ring-1",
+              choreograph && "flow-node-born",
+            )}
+            style={{
+              left: minX,
+              top: minY,
+              width: maxX - minX,
+              height: maxY - minY,
+              zIndex: -1,
+              ...(choreograph
+                ? { animationDelay: `${Math.max(...members.map((m) => m.born)) * 120}ms` }
+                : {}),
+            }}
+          >
+            {group.label && (
+              <span className="text-meta absolute top-3 left-4 text-[11px]">
+                {group.label}
+              </span>
+            )}
+          </div>
+        )
+      })}
+    </ViewportPortal>
+  )
+}
+
+/** The canvas's own navigation chrome (2026-08-19 — replaces the project
+ * page's home-inherited top-right cluster): one frosted pill, zoom out /
+ * live % (click = fit to view) / zoom in. Rides the same dock-surface
+ * recipe as the dock and the 任务书 node — parked on the same dot grid.
+ * Explore surfaces only (the parent gates it). */
+function FlowControls() {
+  const { t } = useTranslation()
+  const rf = useReactFlow()
+  const { zoom } = useViewport()
+  const fit = () =>
+    void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.2, duration: 300 })
+  const btn =
+    "flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+  return (
+    <Panel position="top-right" className="!m-3 md:!m-4">
+      <div className="dock-surface flex items-center rounded-md ring-foreground/10 ring-1">
+        <button
+          type="button"
+          aria-label={t("results.canvas.zoomOut")}
+          className={btn}
+          onClick={() => void rf.zoomOut({ duration: 200 })}
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label={t("results.canvas.zoomFit")}
+          title={t("results.canvas.zoomFit")}
+          className="flex h-9 w-12 items-center justify-center gap-0.5 text-muted-foreground text-xs tabular-nums transition-colors hover:bg-accent hover:text-foreground"
+          onClick={fit}
+        >
+          <Maximize className="h-3 w-3" />
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          type="button"
+          aria-label={t("results.canvas.zoomIn")}
+          className={btn}
+          onClick={() => void rf.zoomIn({ duration: 200 })}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+    </Panel>
+  )
+}
+
 /** FlowView (ADR-036): the shared read-only graph substrate. Editing gestures
  * are structurally absent (nodesDraggable / nodesConnectable hard-locked);
  * zoom/pan are navigation, gated per surface (`navigation` prop). */
@@ -96,7 +214,9 @@ export function FlowView({
   onExpandMedia,
   onPaneClick,
   navigation = "fit",
+  controls = false,
   choreograph = false,
+  groups = [],
   dots = false,
   className,
 }: FlowViewProps) {
@@ -106,8 +226,9 @@ export function FlowView({
   useEffect(() => setMounted(true), [])
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  const { rfNodes, rfEdges } = useMemo(() => {
+  const { rfNodes, rfEdges, layout, sizes } = useMemo(() => {
     const layout = layoutFlow(nodes, edges)
+    const sizes = new Map(nodes.map((n) => [n.id, flowNodeSize(n)]))
     const rfNodes: FlowCardNode[] = nodes.map((n) => ({
       id: n.id,
       type: "flowCard",
@@ -146,7 +267,7 @@ export function FlowView({
         focusable: false,
       }
     })
-    return { rfNodes, rfEdges }
+    return { rfNodes, rfEdges, layout, sizes }
   }, [nodes, edges, selectedId, choreograph, onOutputAction, onAssetAction, onExpandMedia])
 
   if (!mounted) {
@@ -191,11 +312,22 @@ export function FlowView({
             className="opacity-30 dark:opacity-40"
           />
         )}
+        {groups.length > 0 && (
+          <GroupFrames
+            groups={groups}
+            layout={layout}
+            sizes={sizes}
+            choreograph={choreograph}
+          />
+        )}
         <ViewportController
           count={nodes.length}
           wrapperRef={wrapperRef}
           navigation={navigation}
         />
+        {/* The zoom pill is canvas chrome for explore surfaces only — a
+            fit-locked surface has no zoom business (the prop is ignored). */}
+        {explore && controls && <FlowControls />}
       </ReactFlow>
     </div>
   )

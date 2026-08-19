@@ -81,9 +81,10 @@ export interface FlowNode {
    * state — the card flips its chevron on it. */
   expanded?: boolean
   /** Artifact nodes only (results canvas, D6 修订 — the render unit is the
-   * intervenable artifact): the group's key ("plan" / "selection" /
-   * "dub:zh" / "music"), the card's body copy, and the representative
-   * step id the @workflow_step mention anchors to. */
+   * intervenable artifact; 2026-08-19 收窄后新 run 恒为 "plan" = 任务书玻璃
+   * 文本节点, 旧 run 行可能残留 selection/dub/music key): the group's key,
+   * the card's body copy, and the representative step id the @workflow_step
+   * mention anchors to. */
   artifact?: string
   body?: string
   anchorStepId?: string
@@ -97,6 +98,20 @@ export interface FlowEdge {
   from: string
   to: string
   semantic: FlowEdgeSemantic
+}
+
+/** A region frame (2026-08-19 预留, the FLORA technique-workflow form): a
+ * large rounded frame rendered BEHIND its member nodes, naming the region's
+ * 大叙事 (the recipe frame is labeled with the recipe's own title). Purely
+ * visual grouping — it never affects layout, edges, or interactions. */
+export interface FlowGroup {
+  id: string
+  /** Pre-localized frame label (the adapter owns copy; FlowView stays
+   * text-agnostic). Absent = a bare frame. */
+  label?: string
+  /** Member node ids — bounds derive from the layout (padding added);
+   * unknown ids are ignored, an empty frame renders nothing. */
+  nodeIds: string[]
 }
 
 /** Zoom/pan are NAVIGATION, not editing (ADR-036 补记) — held by the
@@ -125,10 +140,18 @@ export interface FlowViewProps {
   /** "fit" (default) = bounded surface, zoom locked; "explore" = lineage
    * board (zoom / pan / pinch unlocked). */
   navigation?: FlowNavigation
+  /** Canvas navigation controls (2026-08-19 — the project page's top-right
+   * swap: app chrome out, canvas controls in): a frosted zoom pill (− / %
+   * = fit / +) parked top-right. Explore surfaces only — a fit-locked
+   * surface has no zoom business, so the prop is ignored there. */
+  controls?: boolean
   /** Birth choreography — nodes enter in compile order + edges draw on.
    * Only for a run witnessed live in this session; rehydrated history
    * renders instantly (ADR-036 补记 3). */
   choreograph?: boolean
+  /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
+   * frames behind member node clusters, naming the region. */
+  groups?: FlowGroup[]
   /** Dot-grid canvas backdrop (the "流程" tab's drafting-table feel). */
   dots?: boolean
   className?: string

@@ -8,16 +8,20 @@ import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
  * run's real topology → the FlowView contract, consumed by the results
- * canvas. Composition: assets left, ARTIFACT nodes middle, product outputs
- * right.
+ * canvas. Composition: assets left, the 任务书 glass text node + 过程脊
+ * middle, product outputs right.
  *
- * 渲染单元 (D6 修订 2026-08-12): the canvas renders artifact nodes, not
- * steps — the unit is "something produced the user may point at in chat and
- * say 'change this'" (plan / selection / dub / music). Steps sharing the
- * class-declared `canvas_key` merge into ONE node; keyless steps fold into
- * the 过程脊; `canvas_hidden` steps (render) never appear — their state
- * projects onto the product card in place. All of it is VIEW behavior over
- * the full step rows.
+ * 渲染单元 (D6 修订 2026-08-12; 名词节点收窄 2026-08-19): the canvas renders
+ * NOUN nodes only — 素材 / 文本 (任务书, the "plan" canvas_key) / 产物.
+ * Process verbs (select_clips / translate / dub / add_music) never get a
+ * card: each is an ATTRIBUTE of its product, so their steps fold into the
+ * 过程脊 (intervention = click the product, or the expanded spine's step
+ * pill via @workflow_step — the translate_clip 2026-08-15 precedent
+ * generalized). Steps sharing a class-declared `canvas_key` still merge
+ * into ONE node (the mechanism is untouched — the grants narrowed);
+ * `canvas_hidden` steps (render) never appear — their state projects onto
+ * the product card in place. All of it is VIEW behavior over the full step
+ * rows.
  *
  * Edge discipline (prohibitions #9 / #11): dependency edges come from the
  * server's edge table (step `inputs`) plus the structural fact every recipe
@@ -192,9 +196,10 @@ export function runFlowGraph(
     return id
   }
 
-  // Artifact cards (D6 修订): body = the group's own copy (the plan card
-  // shows the picked direction in full via canvas_text; the others their
-  // summary line); the mention anchors to the group's last step.
+  // Artifact cards (D6 修订; 2026-08-19 收窄后新 run 只有 "plan" — 旧 run
+  // 行里残留的 selection/dub/music key 仍按同一通用路径渲染): body = the
+  // group's own copy (the plan card shows the picked direction in full via
+  // canvas_text); the mention anchors to the group's last step.
   for (const [key, members] of artifactGroups) {
     const sorted = [...members].sort((a, b) => a.seq - b.seq)
     const anchor = sorted[sorted.length - 1]

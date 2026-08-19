@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next"
 
 import { thumbNodeSize } from "@/components/flow/layout"
-import type { FlowEdge, FlowNode } from "@/components/flow/types"
+import type { FlowEdge, FlowGroup, FlowNode } from "@/components/flow/types"
 import type { RecipeCard } from "@/lib/recipes"
 
 /** Recipe adapter (D6 二次修订 2026-08-08, ADR-035/036): the Recipe data
@@ -11,7 +11,12 @@ import type { RecipeCard } from "@/lib/recipes"
  * expanded), whose terminus fans out into the baked outputs.
  * assets → steps = dependency edges (process order); final step → outputs =
  * lineage edges (the outputs derive from the process). Labels are
- * pre-localized here (FlowView stays text-agnostic). */
+ * pre-localized here (FlowView stays text-agnostic).
+ *
+ * Region frame (2026-08-19 groups prop 首个 surface, the FLORA technique
+ * form): the curated steps sit inside ONE rounded frame labeled with the
+ * recipe's own title — the 大叙事 grouping; assets and outputs stay outside
+ * (they are nouns, the frame groups the process). */
 
 const materialLabel = (t: TFunction, labelKey?: string | null) =>
   labelKey ? t(`recipes.materials.${labelKey}`) : null
@@ -19,9 +24,10 @@ const materialLabel = (t: TFunction, labelKey?: string | null) =>
 export function recipeProcessFlow(
   card: RecipeCard,
   t: TFunction,
-): { nodes: FlowNode[]; edges: FlowEdge[] } {
+): { nodes: FlowNode[]; edges: FlowEdge[]; groups: FlowGroup[] } {
   const nodes: FlowNode[] = []
   const edges: FlowEdge[] = []
+  const stepIds: string[] = []
 
   // The baked outputs share the source's content — its poster doubles as
   // the source thumb when the asset itself has none (demo talk video).
@@ -64,6 +70,7 @@ export function recipeProcessFlow(
       const branch =
         fanout > 1 ? materialLabel(t, branchOutputs[b]?.label_key) : null
       ids.push(id)
+      stepIds.push(id)
       nodes.push({
         id,
         kind: "step",
@@ -99,5 +106,12 @@ export function recipeProcessFlow(
     }
   })
 
-  return { nodes, edges }
+  // The region frame: all curated steps inside one rounded frame named by
+  // the recipe itself (no steps curated → no frame).
+  const groups: FlowGroup[] =
+    stepIds.length > 0
+      ? [{ id: "recipe", label: t(`recipes.${card.id}.title`), nodeIds: stepIds }]
+      : []
+
+  return { nodes, edges, groups }
 }

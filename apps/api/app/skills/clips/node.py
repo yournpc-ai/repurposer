@@ -131,11 +131,13 @@ class SelectClips(NodeBase):
     count_limits = (1, 10)
     agents = (clip_writer,)
 
-    def canvas_group(self, node):
-        # The selection is an intervention target of its own ("swap segment
-        # 3") and the lineage anchor for the clip cards' fan-out.
-        return "selection"
-
+    # No canvas_group (2026-08-19 名词节点收窄): the canvas renders nouns
+    # only (素材 / 文本 / 产物) — the selection is a process VERB. Its two old
+    # card roles demote cleanly: intervention ("swap segment 3") = chat on
+    # the clip product / the expanded spine's step pill (@workflow_step);
+    # the clip cards' fan-out lineage anchor = the 过程脊 (every keyless
+    # step's edges resolve there). Same precedent as translate_clip
+    # (2026-08-15).
     def estimate(self, ctx: dict) -> dict | None:
         """One clip_writer call (multimodal): anchored transcript + asset
         texts + media snippets, completion scaling with the clip count. The

@@ -901,15 +901,20 @@ const en = {
       spine: "Process",
       spineSteps: "{{count}} steps",
       // Artifact node cards (D6 修订 — the render unit is the intervenable
-      // artifact): plan / selection / dub / music. (The subs card retired
-      // 2026-08-15: a translation is an attribute of the derived video —
-      // the product card already says it; the step folds into the spine.)
+      // artifact; 2026-08-19 名词节点收窄: new runs only ever grant "plan" —
+      // the 任务书 glass text node. The selection/dub/music keys stay for
+      // historical run rows whose steps still carry the old canvas_keys.)
       artifact: {
         plan: "Plan",
         selection: "Selection",
         dub: "Dub",
         music: "Music",
       },
+      // Canvas navigation controls (explore surfaces, 2026-08-19 — the
+      // project page's top-right swap: app chrome out, canvas controls in).
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
+      zoomFit: "Fit to view",
       // Render failure projected onto the product card in place (never a
       // separate node); the retry channel is the chat dock (D8). An active
       // render speaks through the BrandLoader alone — no status line.

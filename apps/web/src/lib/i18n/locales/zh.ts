@@ -883,11 +883,15 @@ const zh: Resources = {
       // 工件节点卡（D6 修订——渲染单元 = 可干预的产出物）：计划/选段/配音/音乐。
       // （字幕卡 2026-08-15 退役：翻译是派生视频的属性，产物卡已承载——折过程脊。）
       artifact: {
-        plan: "计划",
+        plan: "任务书",
         selection: "选段",
         dub: "配音",
         music: "音乐",
       },
+      // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进）。
+      zoomIn: "放大",
+      zoomOut: "缩小",
+      zoomFit: "适应画布",
       // render 失败原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
       // 渲染中由 BrandLoader 独自表达，不落状态行。
       renderFailed: "渲染失败——在下方说一句重试。",
