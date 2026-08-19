@@ -884,6 +884,9 @@ const en = {
     dock: {
       history: "History",
       focus: "Working on: {{name}}",
+      // The dock's resident honesty line (2026-08-19, the FLORA FAUNA-line
+      // counterpart): one whisper line at the container's foot, always on.
+      honesty: "It can make mistakes — check important content.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens

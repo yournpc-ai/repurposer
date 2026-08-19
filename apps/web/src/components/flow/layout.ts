@@ -38,9 +38,10 @@ export const PRODUCT_THUMB_DEFAULT_PX = 158
  * shifts), and the card's own padded interaction area (the prompt — 2-line
  * clamp + padding; 2026-08-16 走查: the next-step line retired). Band
  * budgets mirror FlowNodeCard's real chrome: caption = 26px (4px inset +
- * 8px breath), toolbar = 56px (12px gap + 44px frosted bar). */
+ * 8px breath), toolbar = 44px (8px gap + the 36px frosted bar — 做薄
+ * 2026-08-19, was 56 = 12 + 44). */
 const PRODUCT_LABEL_PX = 26
-const PRODUCT_TOOLBAR_PX = 56
+const PRODUCT_TOOLBAR_PX = 44
 const PRODUCT_BODY_PX = 64
 
 /** Product node size by clip aspect. */
@@ -56,12 +57,12 @@ export function productNodeSize(aspect?: string | null): { width: number; height
  * frame is landscape and wide enough to watch (280 = the product lane);
  * the caption band rides above and the toolbar band below (both included in
  * the height — 2026-08-17 走查拍板: every media node carries a frosted
- * toolbar). */
-export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 240 }
+ * toolbar; 2026-08-19 做薄: 26 caption + 158 media + 44 band). */
+export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
 
 /** The reserved toolbar band under every media node (results canvas,
- * 2026-08-17): 12px gap + the 44px frosted bar. */
-export const ASSET_TOOLBAR_PX = 56
+ * 2026-08-17; 做薄 2026-08-19): 8px gap + the 36px frosted bar. */
+export const ASSET_TOOLBAR_PX = 44
 
 /** A node's resolved size — the per-kind default unless the adapter pinned
  * an override (product cards on the results canvas). */

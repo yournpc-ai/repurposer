@@ -143,15 +143,16 @@ function MediaHoverButton({
   )
 }
 
-/** The media node's toolbar (2026-08-17 走查拍板, Lovart 解剖): one frosted
- * bar (dock-surface + hairline, never bare icons) — media facts on the left
- * (filename / duration / resolution / language / aspect…), a hairline
- * divider, then the actions; node business (publish / open / focus /
- * reprocess) lives in the ⋯ menu at the right end (a floating layer,
- * frosted by the shared DropdownMenu chrome). The bar hugs its content —
- * width is NOT capped by the node and facts NEVER ellipsize (2026-08-17 二轮
- * 走查拍板): it centers under the card and overhangs symmetrically when the
- * facts are long. */
+/** The media node's toolbar (2026-08-17 走查拍板, Lovart 解剖; 2026-08-19
+ * 做薄): one frosted bar (dock-surface + hairline, never bare icons) —
+ * media facts on the left (filename / duration / resolution / language /
+ * aspect…), a hairline divider, then the actions; node business (publish /
+ * open / focus / reprocess) lives in the ⋯ menu at the right end (a
+ * floating layer, frosted by the shared DropdownMenu chrome). The bar hugs
+ * its content — width is NOT capped by the node and facts NEVER ellipsize
+ * (2026-08-17 二轮走查拍板): it centers under the card and overhangs
+ * symmetrically when the facts are long. Slimmed 08-19: 36px bar in a 44px
+ * band (was 44/56) — hover-化否决不变（小白可发现性优先），只做薄。 */
 function MediaToolbar({
   info,
   actions,
@@ -167,16 +168,16 @@ function MediaToolbar({
   onAction: (action: string) => void
 }) {
   return (
-    <div className="dock-surface flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
+    <div className="dock-surface flex items-center gap-1 rounded-lg p-1 ring-1 ring-foreground/10">
       {info.length > 0 && (
-        <span className="flex items-center gap-2 pl-1.5 pr-1 text-xs whitespace-nowrap text-muted-foreground">
+        <span className="flex items-center gap-2 pl-1.5 pr-1 text-[11px] whitespace-nowrap text-muted-foreground">
           {info.map((s, i) => (
             <span key={i}>{s}</span>
           ))}
         </span>
       )}
       {info.length > 0 && (actions.length > 0 || menuItems.length > 0) && (
-        <span className="h-4 w-px shrink-0 bg-foreground/15" />
+        <span className="h-3.5 w-px shrink-0 bg-foreground/15" />
       )}
       {actions.map(({ action, Icon, label }) => (
         <button
@@ -184,13 +185,13 @@ function MediaToolbar({
           type="button"
           title={label}
           aria-label={label}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
           onClick={(e) => {
             e.stopPropagation()
             onAction(action)
           }}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-3.5 w-3.5" />
         </button>
       ))}
       {menuItems.length > 0 && (
@@ -201,12 +202,12 @@ function MediaToolbar({
                 type="button"
                 aria-label={moreLabel}
                 title={moreLabel}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent"
                 onClick={(e) => e.stopPropagation()}
               />
             }
           >
-            <MoreHorizontal className="h-4 w-4" />
+            <MoreHorizontal className="h-3.5 w-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end">
             {menuItems.map(({ action, label }) => (
@@ -347,7 +348,7 @@ function ThumbCard({
         )}
       </div>
       {showBar && (
-        <div className="flex h-[56px] shrink-0 items-start justify-center pt-3">
+        <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
           <MediaToolbar
             info={info}
             actions={[
@@ -780,7 +781,7 @@ function ProductCard({
           never shifts. */}
       <div
         data-tour={node.tourTargets ? "results-menu" : undefined}
-        className="flex h-[56px] shrink-0 items-start justify-center pt-3"
+        className="flex h-[44px] shrink-0 items-start justify-center pt-2"
       >
         <MediaToolbar
           info={barInfo}

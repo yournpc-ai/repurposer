@@ -45,12 +45,13 @@ FLORA 首页九幕弧线（identity → 新模块 → 上限 → 过程 → 行�
   - 配方 flow 与结果画布同组件同契约（配方 surface 无 artifact 节点，过程步骤是说明书内容，合法保留）。
   - 结果画布顶栏换血：右上角 home 继承三控件（主题/语言/通知）撤出全屏世界，换画布语境控件 = FlowView `controls` prop（explore 面专属）：雾面缩放 pill（− / 实时 % 点击归位 / +）。
   - FlowView `groups` prop（区域框 = 大叙事分组框，FLORA technique workflow 形态；ViewportPortal 绘制、垫底于边与节点之下）：配方 surface 首用——策展步骤组包进以配方名标注的圆角框。
+- **画布/chat 小件包**（P2 同日落完）：
+  - "Jump to latest" 浮 pill 已存在于 `ui/message-scroller`（`MessageScrollerButton`：live 几何可见性跟踪 + 平滑滚底）——需求池条目为陈欠，核验即关。
+  - dock 常驻诚实说明行：一体容器底部常驻一行耳语（`results.dock.honesty`，en "It can make mistakes…" / zh「它可能出错……」），对应 FLORA 的 FAUNA 免责行。
+  - 节点工具栏做薄：磨砂条 44px 带（8px 缝 + 36px 条；原 56 = 12 + 44）——按钮 h-7 / 图标 h-3.5 / 信息 11px；hover 化否决不变（小白可发现性优先），只做薄。
 
 ### P2 — 候选小件
 
-- overlay chat 的 "Jump to latest" 浮 pill。
-- dock 常驻一行诚实说明（对应 FLORA 的 FAUNA 免责行）。
-- 节点工具栏 hover 化评估（当前常驻；hover 更干净但对小白可发现性弱——倾向保持常驻、做薄）。
 - chat dock 右侧面板化（dock/undock 改变布局）——缓，agent 叙事下 dock 是主角不收起。
 
 ### 不采纳（FLORA 对照）

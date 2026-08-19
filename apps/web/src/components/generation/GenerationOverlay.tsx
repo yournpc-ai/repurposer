@@ -3085,6 +3085,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               {taskBookDock}
               {choiceDock}
               <div className="p-2">{inputBody}</div>
+              {/* The resident honesty line (2026-08-19, the FLORA FAUNA-line
+                  counterpart): one whisper row at the container's foot —
+                  always on, a square child like every other (D4 一体容器). */}
+              <p className="px-3 pb-1.5 text-center text-[11px] leading-tight text-meta-foreground">
+                {t("results.dock.honesty")}
+              </p>
             </div>
           ) : (
             <>
