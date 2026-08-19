@@ -133,6 +133,9 @@ function GroupFrames({
             aria-hidden
             className={cn(
               "absolute rounded-3xl ring-foreground/10 ring-1",
+              // choreograph 同步入场（保留决定 2026-08-19 拍板）：尚未有
+              // surface 同时传 groups+choreograph——此路径未经验证，首个
+              // 双用 surface 上线时必须抽帧核对框与成员的入场同步。
               choreograph && "flow-node-born",
             )}
             style={{
