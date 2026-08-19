@@ -24,7 +24,9 @@ from app.models.tables import (
     Asset,
     Conversation,
     Message,
+    Operation,
     Output,
+    Publication,
     WorkflowStep,
     Persona,
     Project,
@@ -249,10 +251,15 @@ async def delete_project(
 
     # Delete child rows in FK-safe order, then the project. Asset files are
     # unlinked individually since we need each file_url before deletion.
+    # operations (journal, NO ACTION on both its FKs) and publications
+    # (RESTRICT on output) must go BEFORE outputs; workflow_steps cascade
+    # from runs, conversations/messages cascade from the project.
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     for asset in result.scalars().all():
         await delete_file(asset.file_url)
 
+    await db.execute(delete(Operation).where(Operation.project_id == project_id))
+    await db.execute(delete(Publication).where(Publication.project_id == project_id))
     await db.execute(delete(Output).where(Output.project_id == project_id))
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
     await db.execute(delete(Asset).where(Asset.project_id == project_id))
