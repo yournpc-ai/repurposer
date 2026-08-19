@@ -47,6 +47,7 @@ def _assemble_plan_turn(
     presented_plan: str | None = None,
     recent: list[str] | None = None,
     file_language: str | None = None,
+    material_excerpt: str | None = None,
 ):
     """Plan-turn inputs.
 
@@ -60,6 +61,9 @@ def _assemble_plan_turn(
     read the text in a vacuum (G-7).
     ``file_language``: the uploaded file's ASR-detected language — the
     transform-target rule's authoritative signal (2026-08-17 同源语言护栏).
+    ``material_excerpt``: the material's opening excerpt (track-model §7.4
+    折中版 — the plan layer is no longer blind to what the material SAYS;
+    mechanical slice, zero extra LLM).
     """
     return (
         {
@@ -68,6 +72,7 @@ def _assemble_plan_turn(
             "presented_plan": presented_plan,
             "recent": recent,
             "file_language": file_language,
+            "material_excerpt": material_excerpt,
         },
         [],
     )

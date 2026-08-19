@@ -6,6 +6,10 @@ Recent conversation:
 User prompt: {{ prompt }}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
+{%- if material_excerpt %}
+Material excerpt (the opening of the source content — judge what the material IS from this, never from the filename alone):
+{{ material_excerpt }}
+{%- endif %}
 {%- else %}
 No file uploaded (text-only input).
 {%- endif %}

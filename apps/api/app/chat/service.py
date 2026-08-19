@@ -816,6 +816,19 @@ async def _plan_turn(
     )
     first_file = next((a for a in assets if a.file_url), None)
     filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
+    # The plan layer reads the material's opening, not just its filename
+    # (track-model §7.4 折中版 — mechanical slice, zero extra LLM): the first
+    # asset carrying text (transcript beats extracted_text), capped.
+    material_excerpt = next(
+        (
+            text
+            for a in assets
+            if (text := (a.transcript or a.extracted_text or "").strip())
+        ),
+        None,
+    )
+    if material_excerpt:
+        material_excerpt = material_excerpt[:800]
 
     # plan_agent provider failures propagate as MiniMaxError — no fabricated
     # default book (2026-08-14 裁定: a wrong plan that looks real misleads,
@@ -859,6 +872,7 @@ async def _plan_turn(
         # The transform-target rule's authoritative signal (同源语言护栏 —
         # the plan surface's only other language hint is the filename).
         file_language=(first_file.meta or {}).get("language") if first_file else None,
+        material_excerpt=material_excerpt,
     )
     if on_delta is not None:
         intent = await plan_agent.call_stream(
