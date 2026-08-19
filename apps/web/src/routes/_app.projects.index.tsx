@@ -1,9 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FolderKanban, Search } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project/ProjectCard"
 
@@ -58,7 +60,7 @@ function ProjectsPage() {
 
   return (
     <div className="flex flex-1 flex-col p-6 md:p-8">
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("projects.title")}
@@ -78,8 +80,21 @@ function ProjectsPage() {
           <p className="py-12 text-center text-sm text-muted-foreground">
             {t("common.loading")}
           </p>
+        ) : filtered.length === 0 && query.trim() ? (
+          // A search that finds nothing is not the empty page: quiet line,
+          // no CTA (the CTA belongs to the true zero state only).
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            {t("projects.noSearchResults")}
+          </p>
         ) : filtered.length === 0 ? (
-          <EmptyState />
+          <EmptyState
+            icon={FolderKanban}
+            title={t("projects.emptyTitle")}
+            description={t("projects.emptyDesc")}
+            action={
+              <Button render={<Link to="/home" />}>{t("projects.new")}</Button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {filtered.map((project) => (
@@ -96,15 +111,3 @@ function ProjectsPage() {
   )
 }
 
-function EmptyState() {
-  const { t } = useTranslation()
-  return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-        <FolderKanban className="h-6 w-6 text-primary" />
-      </div>
-      <p className="text-muted-foreground">{t("projects.emptyTitle")}</p>
-      <p className="text-xs text-muted-foreground">{t("projects.emptyDesc")}</p>
-    </div>
-  )
-}

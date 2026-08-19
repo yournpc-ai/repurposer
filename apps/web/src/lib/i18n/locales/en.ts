@@ -567,6 +567,7 @@ const en = {
     langEn: "English",
     emptyTitle: "No projects yet",
     emptyDesc: "Create your first project and turn your material into social posts, quote cards, articles, and more.",
+    noSearchResults: "No projects match your search.",
     noEvent: "No event set",
     deleteConfirm: "Delete this project?",
     status: {

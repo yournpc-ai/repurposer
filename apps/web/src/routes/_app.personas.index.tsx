@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Mic2, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -72,7 +73,7 @@ function PersonasPage() {
 
   return (
     <div className="flex flex-1 flex-col p-6 md:p-8">
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
         <div className="mb-8 flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
@@ -133,19 +134,17 @@ function PersonasPage() {
         </div>
 
         {personas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg bg-muted py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <Mic2 className="h-6 w-6 text-primary" />
-            </div>
-            <p className="font-medium">{t("personas.emptyTitle")}</p>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              {t("personas.emptyDesc")}
-            </p>
-            <Button className="mt-6" onClick={() => setOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("personas.new")}
-            </Button>
-          </div>
+          <EmptyState
+            icon={Mic2}
+            title={t("personas.emptyTitle")}
+            description={t("personas.emptyDesc")}
+            action={
+              <Button onClick={() => setOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                {t("personas.new")}
+              </Button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {personas.map((persona) => (

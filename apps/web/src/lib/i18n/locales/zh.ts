@@ -549,6 +549,7 @@ const zh: Resources = {
     langEn: "英文",
     emptyTitle: "还没有 Project",
     emptyDesc: "创建第一个项目，把素材变成社交帖子、金句卡、长文章等内容。",
+    noSearchResults: "没有匹配的项目。",
     noEvent: "未设置活动",
     deleteConfirm: "删除此项目？",
     status: {
