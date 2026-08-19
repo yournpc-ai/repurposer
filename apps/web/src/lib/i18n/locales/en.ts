@@ -444,6 +444,7 @@ const en = {
       align_stills: "Align photos to the script",
       materialize_source: "Prepare the full video",
       select_clips: "Select highlight segments",
+      reframe_clip: "Reframe vertical, follow the speaker",
       translate_clip: "Translate the subtitles",
       dub_clip: "Dub it in your own voice",
       render: "Render",
@@ -452,11 +453,15 @@ const en = {
     tags: {
       multilingual: "Multilingual",
       "no-footage": "No footage needed",
+      "auto-framing": "Auto framing",
     },
     // Example material / output labels (overlay stack items).
     materials: {
       demo_talk: "Demo talk excerpt",
       demo_keynote: "Demo keynote excerpt",
+      demo_interview: "Demo interview excerpt",
+      reframe_output: "Vertical reframe",
+      follow_output: "Speaker follow",
       demo_photos: "Event photos",
       demo_transcript: "Talk transcript",
       demo_article: "Talk write-up",
@@ -513,7 +518,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
-        "Find the best moments of this video and cut them into vertical clips, keeping the speaker centered.",
+        "Find the best moments of this video and cut them into vertical clips — the camera follows the speaker.",
       promptHint:
         "Send it as is, or try “make them landscape”, “cut a few more”…",
     },

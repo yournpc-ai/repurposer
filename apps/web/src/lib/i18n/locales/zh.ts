@@ -441,6 +441,7 @@ const zh: Resources = {
       align_stills: "按文字稿对齐照片",
       materialize_source: "整条视频就位",
       select_clips: "选出高光片段",
+      reframe_clip: "竖屏重构图跟人",
       translate_clip: "翻译字幕",
       dub_clip: "用你的声音配音",
       render: "渲染",
@@ -449,11 +450,15 @@ const zh: Resources = {
     tags: {
       multilingual: "多语言",
       "no-footage": "无需录像",
+      "auto-framing": "自动取景",
     },
     // 示例素材 / 成片标签（overlay 堆叠项）。
     materials: {
       demo_talk: "示例演讲片段",
       demo_keynote: "示例登台演讲片段",
+      demo_interview: "示例访谈片段",
+      reframe_output: "竖屏分镜",
+      follow_output: "镜头跟人",
       demo_photos: "现场照片",
       demo_transcript: "演讲文字稿",
       demo_article: "演讲文稿",
@@ -506,7 +511,7 @@ const zh: Resources = {
       promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
       inputTitle: "输入视频",
       inputHint: "双人对话的横屏录像——访谈或对谈节目。",
-      promptTemplate: "把我的双人访谈重剪成跟着说话人切换的竖屏切片。",
+      promptTemplate: "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。",
       promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
     "ai-visuals": {

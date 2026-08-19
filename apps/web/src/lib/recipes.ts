@@ -83,9 +83,8 @@ const RECIPE_PREVIEWS: Record<string, RecipeCard["preview"]> = {
     videoUrl: asset("image-video-preview.mp4"),
   },
   "highlight-clips": {
-    // Poster only — the crop_track craft layer is the week-3 spike; card
-    // authoring lands with the positioning-root batch (RECIPES §4.3).
     posterUrl: asset("highlight-clips-poster.jpg"),
+    videoUrl: asset("highlight-clips-preview.mp4"),
   },
   reframe: {
     posterUrl: asset("reframe-poster.jpg"),

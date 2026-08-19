@@ -18,24 +18,22 @@ from chat_scenarios import Ctx, make_user, seed_asset, pending_book, book_tasks
 from app.models.schemas import AssetType
 
 CARDS = {
-    # NOTE (2026-08-19 review): these templates are STAND-INS, not the cards'
-    # real copy — the true promptTemplate strings live web-side in
-    # apps/web/src/lib/i18n/locales/{en,zh}.ts (配方 = 提示词, the API
-    # registry deliberately never carries them). When the twin cards are
-    # authored (week 8 batch), swap these for the real strings — a gate that
-    # tests a paraphrase proves a paraphrase, not the card.
+    # The twin cards' real promptTemplate strings （配方 = 提示词 — the
+    # template IS the launch payload; the API registry never carries them,
+    # so this gate mirrors the web locales by hand and must stay in sync
+    # with apps/web/src/lib/i18n/locales/{en,zh}.ts).
     "访谈分镜/reframe": {
         "asset": "xy_1-interview.mp4",
         "templates": [
-            ("zh", "把这条双人访谈剪成竖屏短片，镜头自动跟着说话人切换"),
-            ("en", "Cut this two-person interview into vertical clips — the camera should switch to whoever is speaking"),
+            ("zh", "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。"),
+            ("en", "Recut my two-person interview into vertical clips that follow whoever is speaking."),
         ],
     },
     "演讲短片/highlight-clips": {
         "asset": "xy_2-keynote.mp4",
         "templates": [
-            ("zh", "把这条登台演讲剪成竖屏短片，镜头自动跟踪台上的演讲者"),
-            ("en", "Cut this stage talk into vertical clips — the camera should track the speaker on stage"),
+            ("zh", "帮我把这个视频里最好的几段剪出来，做成竖屏短片，镜头跟着人走。"),
+            ("en", "Find the best moments of this video and cut them into vertical clips — the camera follows the speaker."),
         ],
     },
 }

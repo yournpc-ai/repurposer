@@ -272,24 +272,79 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
     ),
-    # 高光切片 seat (highlight-clips, RECIPES §4.3 — renamed from talk-clips
-    # 2026-08-15: the name says what you GET; "演讲" narrowed the input, the
-    # same bug class as the subs card's 演讲 copy). Long footage -> vertical
-    # highlight clips with dynamic speaker tracking (crop_track craft layer,
-    # shared with reframe). Card authoring lands with the positioning-root
-    # batch (PROGRESS 第八周).
+    # 高光切片 (highlight-clips, RECIPES §4.3): long footage -> vertical
+    # highlight clips with dynamic speaker tracking (the crop_track craft
+    # layer's follow dish, shared with reframe). The demo source is the subs
+    # card's curated 15s keynote excerpt — one source, many products is the
+    # product's own story. Baked by scripts/bake_reframe_demos.py.
     "highlight-clips": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="video")],
-        tasks=[TaskItem(skill="select_clips", params={})],
+        tasks=[
+            TaskItem(skill="select_clips", params={}),
+            TaskItem(skill="reframe_clip", params={"mode": "auto"}),
+        ],
+        aspect="9:16",
+        tags=["auto-framing"],
+        flow=[
+            FlowStep(key="director_understand"),
+            FlowStep(key="director_plan"),
+            FlowStep(key="select_clips"),
+            FlowStep(key="reframe_clip"),
+            FlowStep(key="render"),
+        ],
+        example_assets=[
+            ExampleAsset(
+                kind="video",
+                url=f"{_DEMO}/uploads/xy_2_15s.mp4",
+                label_key="demo_keynote",
+            ),
+        ],
+        example_outputs=[
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/highlight-clips-vertical-ae184e14.mp4",
+                poster_url=f"{_DEMO}/outputs/highlight-clips-vertical-poster-cfdaabed.jpg",
+                label_key="follow_output",
+            ),
+        ],
     ),
-    # 访谈分镜 seat (reframe, RECIPES §4.3): landscape two-person interview ->
-    # vertical speaker reframe — the static dish of the same crop_track
-    # craft layer. Card authoring lands with the positioning-root batch.
+    # 访谈分镜 (reframe, RECIPES §4.3): landscape two-person interview ->
+    # vertical speaker reframe — the crop_track craft layer's switch dish.
+    # The demo source is a 15s segment of xy_1 carrying exactly one clean
+    # speaker switch (~7.1s in), so the baked clip shows the cut the card
+    # sells. Baked by scripts/bake_reframe_demos.py.
     "reframe": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="video")],
-        tasks=[TaskItem(skill="select_clips", params={})],
+        tasks=[
+            TaskItem(skill="select_clips", params={}),
+            TaskItem(skill="reframe_clip", params={"mode": "auto"}),
+        ],
+        aspect="9:16",
+        tags=["auto-framing"],
+        flow=[
+            FlowStep(key="director_understand"),
+            FlowStep(key="director_plan"),
+            FlowStep(key="select_clips"),
+            FlowStep(key="reframe_clip"),
+            FlowStep(key="render"),
+        ],
+        example_assets=[
+            ExampleAsset(
+                kind="video",
+                url=f"{_DEMO}/uploads/xy_1_interview_15s.mp4",
+                label_key="demo_interview",
+            ),
+        ],
+        example_outputs=[
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/reframe-vertical-fe2e40e9.mp4",
+                poster_url=f"{_DEMO}/outputs/reframe-vertical-poster-7bd6b23a.jpg",
+                label_key="reframe_output",
+            ),
+        ],
     ),
     # R5 seat: nothing but a talk — every scene AI-generated, the zero-asset
     # end of the source-material spectrum. Positioned as 趣味/实验
