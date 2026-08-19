@@ -106,8 +106,19 @@ wait_for_url "http://localhost:8000/health" "API" 60
 # --- render service --------------------------------------------------------
 # Remotion render service (clip-spec -> MP4+SRT). Node/pnpm, headless Chrome +
 # bundled FFmpeg. Black box the api worker calls; not needed for text-only flows.
+#
+# Proxy: the direct link from a dev machine to TOS is throttled, and the
+# service's source staging + result upload are proxy-aware via HTTPS_PROXY
+# (loopback exempt). When the local proxy is listening, carry the env into
+# the render service so large-media transfers don't die on undici timeouts
+# (2026-08-19: a hand restart without the env reproduced exactly that — the
+# render SUCCEEDS and only the PUT upload times out).
 echo "Starting render service on http://localhost:3001 ..."
-( cd "$ROOT/apps/render" && pnpm dev ) &
+if nc -z 127.0.0.1 6152 2>/dev/null; then
+  ( cd "$ROOT/apps/render" && HTTPS_PROXY="http://127.0.0.1:6152" HTTP_PROXY="http://127.0.0.1:6152" pnpm dev ) &
+else
+  ( cd "$ROOT/apps/render" && pnpm dev ) &
+fi
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------
