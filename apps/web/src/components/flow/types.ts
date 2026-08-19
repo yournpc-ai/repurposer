@@ -81,10 +81,10 @@ export interface FlowNode {
    * state — the card flips its chevron on it. */
   expanded?: boolean
   /** Artifact nodes only (results canvas, D6 修订 — the render unit is the
-   * intervenable artifact; 2026-08-19 收窄后新 run 恒为 "plan" = 任务书玻璃
-   * 文本节点, 旧 run 行可能残留 selection/dub/music key): the group's key,
-   * the card's body copy, and the representative step id the @workflow_step
-   * mention anchors to. */
+   * intervenable artifact; 2026-08-19 收窄后恒为 "plan" = 任务书玻璃文本节点;
+   * canvas_key 序列化时从节点类现算、从不入行，旧 run 重序列化即同一收窄
+   * 画布，无残留 key 可兼容): the group's key, the card's body copy, and
+   * the representative step id the @workflow_step mention anchors to. */
   artifact?: string
   body?: string
   anchorStepId?: string

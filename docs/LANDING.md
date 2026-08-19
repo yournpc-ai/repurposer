@@ -39,7 +39,7 @@ FLORA 首页九幕弧线（identity → 新模块 → 上限 → 过程 → 行�
 - FlowView 边：lineage 品牌色去除（全边统一安静灰，语义仅存于数据）；active 边改单数据包动画（`flow-edge-packet`，整边蚂蚁线退役）。
 - 对比滑块 chrome（label/tags/静音钮）去滚动渐变，生长完成即常驻。
 - **FlowView 精致度包**（组件仍一个、差异走 props）：
-  - 名词节点收窄：画布只渲染 素材 / 文本 / 产物 三类节点；过程动词（select_clips / dub / add_music）的 `canvas_group` 授予全部移除、步骤折叠进过程脊（translate_clip 08-15 先例推广；干预通道 = 点产物卡注入 dock 焦点 / 展开脊点步骤 pill 走 @workflow_step）。新 run 唯一 artifact = 任务书；旧 run 行残留的 selection/dub/music key 仍按通用路径渲染。
+  - 名词节点收窄：画布只渲染 素材 / 文本 / 产物 三类节点；过程动词（select_clips / dub / add_music）的 `canvas_group` 授予全部移除、步骤折叠进过程脊（translate_clip 08-15 先例推广；干预通道 = 点产物卡注入 dock 焦点 / 展开脊点步骤 pill 走 @workflow_step）。新 run 唯一 artifact = 任务书；canvas_key 序列化时从节点类现算（从不入行），存量 run 重序列化即同一收窄画布，零迁移。
   - 任务书（plan）= 雾面玻璃文本节点（`dock-surface` 配方——与 dock 同停一片点阵，点格透霜；260×200，六行 relaxed 正文）——对应 FLORA 的 GPT-5 文本节点。
   - mention 锚点：folded 动词的指认改道脊内步骤 pill（锚定机制是步骤驱动的，零改码）。
   - 配方 flow 与结果画布同组件同契约（配方 surface 无 artifact 节点，过程步骤是说明书内容，合法保留）。

@@ -18,6 +18,12 @@ from chat_scenarios import Ctx, make_user, seed_asset, pending_book, book_tasks
 from app.models.schemas import AssetType
 
 CARDS = {
+    # NOTE (2026-08-19 review): these templates are STAND-INS, not the cards'
+    # real copy — the true promptTemplate strings live web-side in
+    # apps/web/src/lib/i18n/locales/{en,zh}.ts (配方 = 提示词, the API
+    # registry deliberately never carries them). When the twin cards are
+    # authored (week 8 batch), swap these for the real strings — a gate that
+    # tests a paraphrase proves a paraphrase, not the card.
     "访谈分镜/reframe": {
         "asset": "xy_1-interview.mp4",
         "templates": [

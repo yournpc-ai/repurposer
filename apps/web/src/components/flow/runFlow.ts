@@ -196,10 +196,12 @@ export function runFlowGraph(
     return id
   }
 
-  // Artifact cards (D6 修订; 2026-08-19 收窄后新 run 只有 "plan" — 旧 run
-  // 行里残留的 selection/dub/music key 仍按同一通用路径渲染): body = the
-  // group's own copy (the plan card shows the picked direction in full via
-  // canvas_text); the mention anchors to the group's last step.
+  // Artifact cards (D6 修订; 2026-08-19 名词节点收窄后只有 "plan"): body =
+  // the group's own copy (the plan card shows the picked direction in full
+  // via canvas_text); the mention anchors to the group's last step.
+  // canvas_key is derived live from the node class at serialization
+  // (outputs.py, "never the row") — old runs re-render with the same
+  // narrowed canvas, there are no persisted keys to migrate.
   for (const [key, members] of artifactGroups) {
     const sorted = [...members].sort((a, b) => a.seq - b.seq)
     const anchor = sorted[sorted.length - 1]

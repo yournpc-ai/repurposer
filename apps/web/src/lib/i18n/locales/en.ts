@@ -551,7 +551,6 @@ const en = {
   },
   projects: {
     title: "Projects",
-    subtitle: "Manage speech materials and AI-generated content",
     searchPlaceholder: "Search projects...",
     new: "New Project",
     dialogTitle: "New Project",

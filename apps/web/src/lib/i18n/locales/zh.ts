@@ -533,7 +533,6 @@ const zh: Resources = {
   },
   projects: {
     title: "项目",
-    subtitle: "管理演讲素材与 AI 生成的内容",
     searchPlaceholder: "搜索项目…",
     new: "新建项目",
     dialogTitle: "新建项目",
@@ -547,7 +546,7 @@ const zh: Resources = {
     labelLanguage: "源语言",
     langZh: "中文",
     langEn: "英文",
-    emptyTitle: "还没有 Project",
+    emptyTitle: "还没有项目",
     emptyDesc: "创建第一个项目，把素材变成社交帖子、金句卡、长文章等内容。",
     noSearchResults: "没有匹配的项目。",
     noEvent: "未设置活动",

@@ -48,8 +48,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-logger = structlog.get_logger()
-
 from app.clients.minimax import MiniMaxError
 from app.agents.contexts import _build_context
 from app.chat.intent import chat_intent_agent, plan_agent
@@ -85,6 +83,8 @@ from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.skills import SkillRejected, dispatchable_skills, validate_task_list
+
+logger = structlog.get_logger()
 
 _ASK_BACK_TEXT = (
     "I want to make sure I do the right thing — could you be more specific? "
