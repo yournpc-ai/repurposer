@@ -839,10 +839,12 @@ function ProjectDetailPage() {
   return (
     // Fullscreen canvas world (ADR-041 全屏化): this route lives OUTSIDE the
     // _app layout — no sidebar / header / title block. Floating chrome: the
-    // project menu (top-left) + the minimal tools pill (top-right), both
-    // frosted; the canvas fills the viewport, the chat dock parks at the
-    // bottom. The fullscreen planning overlay (z-50) naturally covers the
-    // chrome while it is open.
+    // project menu (top-left) + the canvas's own zoom pill (top-right,
+    // FlowView `controls`); the canvas fills the viewport, the chat dock
+    // parks at the bottom. The fullscreen planning overlay (z-50) naturally
+    // covers the chrome while it is open. App chrome (theme / language /
+    // notifications) lives in the studio shell — 2026-08-19 走查拍板,
+    // confirmed to cover MOBILE too (nearest entry = back to /projects).
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
       <div className="absolute left-3 top-3 z-30 md:left-4 md:top-4">
         <ProjectMenu

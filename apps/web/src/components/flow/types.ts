@@ -102,8 +102,9 @@ export interface FlowEdge {
 
 /** A region frame (2026-08-19 预留, the FLORA technique-workflow form): a
  * large rounded frame rendered BEHIND its member nodes, naming the region's
- * 大叙事 (the recipe frame is labeled with the recipe's own title). Purely
- * visual grouping — it never affects layout, edges, or interactions. */
+ * 大叙事 (the recipe frame labels itself "Curated steps" — it wraps only
+ * the steps, never borrowing the recipe's name). Purely visual grouping —
+ * it never affects layout, edges, or interactions. */
 export interface FlowGroup {
   id: string
   /** Pre-localized frame label (the adapter owns copy; FlowView stays

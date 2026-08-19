@@ -19,7 +19,7 @@
 
 | 中文（文档） | 英文（代码） | 定义 | 不是什么 |
 |---|---|---|---|
-| 任务书 | `TaskSpec` | 意图归一：技能链（`tasks`，唯一语法，N-37）× instruction | 不是 plan、不是 workflow |
+| 任务书 | `TaskSpec` | 意图归一：技能链（`tasks`，唯一语法，N-37）× instruction。**zh 界面词分工**（2026-08-19 拍板）：画布名词节点叫「任务书」，确认 dock / 计划界面等其余界面仍叫「计划」——两词并存有名分，不再互相改；en 恒 Plan | 不是 plan、不是 workflow（代码/文档词） |
 | 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（skill + params），compile_graph 模式②的输入；**plan path 的 dock 任务书也是它**（N-37——产物请求语法已统一为技能链） | 不是 plan、不是 node spec |
 | 施工图 | RunPlan / `workflow_steps` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
 | 步骤 | `WorkflowStep` | 施工图上的一个执行单位 | 不是 job、不是 task |
@@ -86,7 +86,7 @@
 | 焦点注入 | focus injection（`focus_output`） | 画布点选产物 → 下一轮 chat 携带焦点 `{id,label}`，context 加一行"当前焦点 output"（ADR-041 D8）；一次性消费（发完即清、点画布空白即清）+ **落库为用户消息焦点前缀**（`messages.focus_output`，历史回读渲染灰行） | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
 | 诞生回放 | birth choreography | 收官时画布按 `seq` 编译序逐节点入场 + 边描画（真实编译顺序的缓动回放，ADR-036 补记 3）；reduced-motion / 断线重连 / 历史打开直接终态 | 禁剧场（动画 = 真实事件投影） |
 | 过程脊 | process spine | 结果画布的无键步骤折叠组节点（ADR-041 D6）：渲染单元之外的管道步骤（preprocess / persona_bootstrap / 修饰 morphs）折为一个可就地展开的组节点（步骤计数 + 聚合状态，组节点 id 恒 `spine`）；失败不再破脊，聚合状态承载 | 折叠是视图行为不是数据行为——图数据永远全量（成本 / 重跑 / 血缘靠它） |
-| 渲染单元 | canvas render unit（`canvas_key` / `canvas_hidden` / `canvas_text`） | 结果画布的节点粒度（ADR-041 D6 修订 2026-08-12；名词节点收窄 2026-08-19）：画布只渲染名词节点——素材 / 文本 / 产物，过程动词永不上图（select_clips / dub / add_music 全部折叠，translate_clip 08-15 先例推广）。节点类自描述聚合键（与 `label()` 同哲学），同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书玻璃文本节点）；无键折"过程脊"（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step）；`canvas_hidden`（render）永不上图，状态原地投影到产物卡；`canvas_text` = 卡面主体文案（如 checkpoint 的方向全文） | 不是 step 一一对应；判定问句："它是名词吗？"——动词一律折脊 |
+| 渲染单元 | canvas render unit（`canvas_key` / `canvas_hidden` / `canvas_text`） | 结果画布的节点粒度（ADR-041 D6 修订 2026-08-12；名词节点收窄 2026-08-19）：画布只渲染名词节点——素材 / 文本（任务书）/ 产物，过程动词永不上图（select_clips / dub / add_music 全部折叠，translate_clip 08-15 先例推广）。节点类自描述聚合键（与 `label()` 同哲学），同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书玻璃文本节点）；无键折"过程脊"（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step）；`canvas_hidden`（render）永不上图，状态原地投影到产物卡；`canvas_text` = 卡面主体文案（如 checkpoint 的方向全文） | 不是 step 一一对应；判定问句："它是名词吗？"——动词一律折脊 |
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |

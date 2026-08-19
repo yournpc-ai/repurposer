@@ -33,7 +33,7 @@ import {
 import { toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-import { PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
 import type {
   FlowAssetAction,
   FlowAssetInfo,
@@ -815,7 +815,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         bornIndex !== undefined && "flow-node-born",
         selected && !isProduct && "rounded-md ring-2 ring-foreground/40",
       )}
-      style={bornIndex !== undefined ? { animationDelay: `${bornIndex * 120}ms` } : undefined}
+      style={bornIndex !== undefined ? { animationDelay: `${bornIndex * BIRTH_STAGGER_MS}ms` } : undefined}
     >
       <Handle
         type="target"

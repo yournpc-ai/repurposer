@@ -84,6 +84,12 @@ export function thumbNodeSize(aspect?: string | null): { width: number; height: 
 const GAP_MAIN = 96
 const GAP_CROSS = 24
 
+/** Birth-choreography stagger quantum (ADR-036 补记 3): the delay between
+ * consecutive nodes' entrances in compile-order replay — shared by the node
+ * card (FlowNodeCard), the edge draw-on (FlowView), and region frames
+ * (GroupFrames), so one retune never desyncs the replay. */
+export const BIRTH_STAGGER_MS = 120
+
 export interface FlowLayout {
   positions: Map<string, { x: number; y: number }>
   /** Reveal order for birth choreography: depth-major, then the stable

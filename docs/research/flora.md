@@ -1,6 +1,6 @@
 # FLORA (flora.ai) — 原始证据（官网首页 + 工作台走查）
 
-> Status: 原始证据（2026-08-19 截图走查，账号为免费层）。综合判断进 `DECISION_MATRIX.md`，我们侧的叙事应用进 `LANDING.md`。
+> Status: 原始证据（2026-08-19 截图走查，账号为免费层）。我们侧的综合与拍板进 `LANDING.md`，排期进 `PROGRESS.md`——本文件只记事实与观察。
 > 关联：`COMPETITIVE_ANALYSIS.md`（七家短视频竞品之外的品类：节点画布创作工具，对标 Lovart/Krea）。
 
 ## 1. 产品模型事实
@@ -36,5 +36,5 @@
 
 ## 4. 我们侧走查对照（2026-08-19）
 
-- 配方卡：单击 = 唯一弹窗（无 try/open 之分），全屏/非全屏两态；左列上传 + 预填 prompt + Generate；Examples/Flow tabs。区别是有意的：我们走 chat 首发（意图识别 + HITL 任务书确认），FLORA 走工具直跑。
-- 结果画布：左上项目菜单（Back to projects / Rename / Delete）；右上 home 继承控件（主题/语言/通知——走查判定"放这里不合适"）；底部居中沉底 input dock；节点工具栏常驻不 hover。
+- 配方卡：单击 = 唯一弹窗（无 try/open 之分），全屏/非全屏两态；左列上传 + 预填 prompt + Generate；Examples/Flow tabs。流程差异：我们 chat 首发（意图识别 + HITL 任务书确认），FLORA 工具直跑（拍板见 `LANDING.md` §4 不采纳清单）。
+- 结果画布：左上项目菜单（Back to projects / Rename / Delete）；右上 home 继承控件（主题/语言/通知）；底部居中沉底 input dock；节点工具栏常驻不 hover。（右上控件的处置拍板见 `LANDING.md` §4 顶栏换血条。）

@@ -106,11 +106,13 @@ export function recipeProcessFlow(
     }
   })
 
-  // The region frame: all curated steps inside one rounded frame named by
-  // the recipe itself (no steps curated → no frame).
+  // The region frame: all curated steps inside one rounded frame naming
+  // ITSELF ("Curated steps" — the frame wraps only the steps, so it never
+  // borrows the recipe's name, which the overlay header already carries);
+  // no steps curated → no frame.
   const groups: FlowGroup[] =
     stepIds.length > 0
-      ? [{ id: "recipe", label: t(`recipes.${card.id}.title`), nodeIds: stepIds }]
+      ? [{ id: "recipe", label: t("recipes.flow.frameLabel"), nodeIds: stepIds }]
       : []
 
   return { nodes, edges, groups }

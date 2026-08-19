@@ -9,7 +9,7 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
-  useViewport,
+  useStore,
   ViewportPortal,
 } from "@xyflow/react"
 
@@ -20,20 +20,26 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
-import { flowNodeSize, layoutFlow } from "./layout"
+import { BIRTH_STAGGER_MS, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowViewProps } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
 
-/** Fit + center via the framework's own `fitView` (xyflow's recommended
- * centered-with-padding viewport). Two hard-won parameter rules:
+/** The one fit recipe, shared by the ViewportController (auto-fit) and the
+ * FlowControls pill (manual fit) — two hard-won parameter rules:
  * 1. minZoom must go LOW (0.15) — a wide recipe graph needs ~0.36 on the
  *    overlay canvas; when the floor clamps above the needed zoom,
  *    getViewportForBounds still centers, so the graph overflows BOTH edges
  *    (2026-08-10 bug: right column cut off).
  * 2. maxZoom caps at 1 on fit surfaces — a small graph must not upscale
  *    into giant cards.
+ * padding 0.2 ≈ 9% per side (xyflow's 1/(1+p) formula) — clears the
+ * overlay's floating tab bar (top-5 + h-9 ≈ 56px). */
+const FIT_VIEW_OPTIONS = { minZoom: 0.15, maxZoom: 1, padding: 0.2 } as const
+
+/** Fit + center via the framework's own `fitView` (xyflow's recommended
+ * centered-with-padding viewport, FIT_VIEW_OPTIONS above).
  * Runs: on mount (double rAF, after paint + measurement), on growth
  * (animated), and on surface resize (ResizeObserver; fit-locked surfaces
  * only — explore surfaces keep the user's own viewport). */
@@ -54,9 +60,7 @@ function ViewportController({
       const el = wrapperRef.current
       if (!el || !el.clientWidth || !el.clientHeight) return
       if (rf.getNodes().length === 0) return
-      // padding 0.2 ≈ 9% per side (xyflow's 1/(1+p) formula) — clears the
-      // overlay's floating tab bar (top-5 + h-9 ≈ 56px).
-      void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.2, duration })
+      void rf.fitView({ ...FIT_VIEW_OPTIONS, duration })
     },
     [rf, wrapperRef],
   )
@@ -138,7 +142,7 @@ function GroupFrames({
               height: maxY - minY,
               zIndex: -1,
               ...(choreograph
-                ? { animationDelay: `${Math.max(...members.map((m) => m.born)) * 120}ms` }
+                ? { animationDelay: `${Math.max(...members.map((m) => m.born)) * BIRTH_STAGGER_MS}ms` }
                 : {}),
             }}
           >
@@ -158,13 +162,14 @@ function GroupFrames({
  * page's home-inherited top-right cluster): one frosted pill, zoom out /
  * live % (click = fit to view) / zoom in. Rides the same dock-surface
  * recipe as the dock and the 任务书 node — parked on the same dot grid.
- * Explore surfaces only (the parent gates it). */
+ * Explore surfaces only (the parent gates it). Subscribes to zoom ONLY
+ * (transform[2]) — useViewport's {x,y,zoom} shallow compare would re-render
+ * the pill on every pan frame. */
 function FlowControls() {
   const { t } = useTranslation()
   const rf = useReactFlow()
-  const { zoom } = useViewport()
-  const fit = () =>
-    void rf.fitView({ minZoom: 0.15, maxZoom: 1, padding: 0.2, duration: 300 })
+  const zoom = useStore((s) => s.transform[2])
+  const fit = () => void rf.fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })
   const btn =
     "flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
   return (
@@ -258,7 +263,7 @@ export function FlowView({
         data: {
           semantic: e.semantic,
           // An edge draws once both endpoints have appeared.
-          drawDelay: choreograph ? Math.max(from, to) * 120 + 240 : null,
+          drawDelay: choreograph ? Math.max(from, to) * BIRTH_STAGGER_MS + 240 : null,
           active:
             nodes.find((n) => n.id === e.to)?.status === "running" ||
             nodes.find((n) => n.id === e.from)?.status === "running",

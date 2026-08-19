@@ -434,6 +434,11 @@ const en = {
     // Static recipe flow steps (ADR-035) — shared namespace; a recipe's flow
     // is WHICH of these steps, in what order, with what fanout.
     flow: {
+      // The region frame's label on the 流程 canvas (2026-08-19 走查拍板):
+      // the frame wraps ONLY the curated steps (assets/outputs stay outside),
+      // so it names itself — never the recipe title (that duplicates the
+      // overlay header).
+      frameLabel: "Curated steps",
       director_understand: "Understand the material",
       director_plan: "Plan the edit",
       align_stills: "Align photos to the script",
@@ -902,15 +907,13 @@ const en = {
       // 过程脊 group node (D6): the folded middle steps as one container.
       spine: "Process",
       spineSteps: "{{count}} steps",
-      // Artifact node cards (D6 修订 — the render unit is the intervenable
-      // artifact; 2026-08-19 名词节点收窄: new runs only ever grant "plan" —
-      // the 任务书 glass text node. The selection/dub/music keys stay for
-      // historical run rows whose steps still carry the old canvas_keys.)
+      // The artifact node card (D6 修订; 2026-08-19 名词节点收窄): the only
+      // live grant is "plan" — the 任务书 glass text node. canvas_key is
+      // derived at serialization time from the node CLASS (never persisted),
+      // so every run — old or new — renders the same narrowed canvas with
+      // zero migration; no other label keys can ever appear.
       artifact: {
         plan: "Plan",
-        selection: "Selection",
-        dub: "Dub",
-        music: "Music",
       },
       // Canvas navigation controls (explore surfaces, 2026-08-19 — the
       // project page's top-right swap: app chrome out, canvas controls in).
