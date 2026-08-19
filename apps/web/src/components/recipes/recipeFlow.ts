@@ -38,7 +38,9 @@ export function recipeProcessFlow(
       id: `asset:${i}`,
       kind: "asset",
       label: materialLabel(t, a.label_key) ?? a.kind,
-      thumbUrl: a.kind === "video" ? sharedPoster : null,
+      // A video asset's own url isn't an <img> source — it takes the shared
+      // output poster; an image asset's demo url renders directly.
+      thumbUrl: a.kind === "video" ? sharedPoster : a.kind === "image" ? a.url : null,
       size: thumbSize,
       containThumb: true,
       order: i,

@@ -175,15 +175,13 @@ export function VideoShowcase(): ReactNode {
     [GROWTH_END, GROWTH_END + 0.1, 0.94, 1],
     [0, 1, 1, 0]
   )
-  // The "treatment" chrome (labels / title chip / caption / brand mark)
-  // materializes LATE and FAST: it starts only as the frame is about to
-  // finish growing and completes one beat after — grow first, then the
-  // dressing snaps in. (Was a long [0.35, 0.55] ramp that left everything
-  // semi-transparent through most of the growth.)
-  const chromeOpacity = useTransform(
-    scrollYProgress,
-    [GROWTH_END - 0.08, GROWTH_END + 0.02],
-    [0, 1]
+  // The "treatment" chrome (pane labels / tag stacks / sound toggle) is
+  // resident, not a scroll effect: it snaps in the moment the frame
+  // finishes growing and stays fully opaque until the section scrolls
+  // away — the same posture as the SCROLL DOWN pill, never a
+  // scroll-coupled fade.
+  const chromeOpacity = useTransform(scrollYProgress, (value) =>
+    value >= GROWTH_END ? 1 : 0
   )
 
   /** Re-assert playback + interactivity. Wired to scroll, visibility AND

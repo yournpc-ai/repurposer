@@ -45,7 +45,6 @@ const NAV_ITEMS: NavEntry[] = [
     menu: {
       items: [
         { key: "clips", href: "#features" },
-        { key: "posts", href: "#gallery" },
         { key: "languages", href: "#channels" },
       ],
       promo: { href: "#how-it-works" },

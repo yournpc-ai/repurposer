@@ -20,7 +20,6 @@ export function Footer(): ReactNode {
       links: [
         { labelKey: "landing.footer.columns.features.l1", href: "#features" },
         { labelKey: "landing.footer.columns.features.l2", href: "#how-it-works" },
-        { labelKey: "landing.footer.columns.features.l3", href: "#gallery" },
         { labelKey: "landing.footer.columns.features.l4", href: "#pricing" },
         { labelKey: "landing.footer.columns.features.l5", href: "#faq" },
       ],
