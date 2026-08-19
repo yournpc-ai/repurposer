@@ -12,13 +12,13 @@
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
-.flow-edge-dependency {
+/* One quiet stroke for every edge: lineage and dependency stay distinct in
+   DATA (the topology is real) but render identically — no accent path
+   calling out the products (2026-08-19 走查拍板). */
+.flow-edge-dependency,
+.flow-edge-lineage {
   stroke: var(--muted-foreground);
   stroke-opacity: 0.55;
-}
-.flow-edge-lineage {
-  stroke: var(--primary);
-  stroke-opacity: 0.9;
 }
 
 /* ── Birth choreography (ADR-036 补记 3) ─────────────────────────────── */
@@ -65,21 +65,28 @@
   animation: flow-edge-birth 640ms ease-out backwards;
 }
 
-/* ── Live status: work flowing (SSE-driven) ──────────────────────────── */
+/* ── Live status: a packet travels the edge (SSE-driven) ─────────────── */
 
-@keyframes flow-dash {
+/* The base stroke never changes for live work — the signal is ONE short
+   bright segment riding the path (pathLength-normalized dash), not an
+   all-edge ant march. */
+@keyframes flow-packet {
   to {
-    stroke-dashoffset: -12;
+    stroke-dashoffset: -100;
   }
 }
-.flow-edge-active {
-  stroke-dasharray: 6 6;
-  animation: flow-dash 0.8s linear infinite;
+.flow-edge-packet {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-opacity: 0.85;
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 10 90;
+  animation: flow-packet 1.1s linear infinite;
 }
-/* Born into an active edge: fade in, then keep marching — the solid settle
- * is only for edges whose work has already finished. The inline stagger
- * delay applies to both animations; the fade's backwards fill keeps the
- * edge invisible until its turn. */
+/* Born into an active edge: the packet fades in on the same stagger delay
+   as its base edge, then keeps traveling. */
 @keyframes flow-edge-in {
   from {
     opacity: 0;
@@ -88,11 +95,10 @@
     opacity: 1;
   }
 }
-.flow-edge-born.flow-edge-active {
-  stroke-dasharray: 6 6;
+.flow-edge-packet-born {
   animation:
     flow-edge-in 420ms ease-out backwards,
-    flow-dash 0.8s linear infinite;
+    flow-packet 1.1s linear infinite;
 }
 
 @keyframes flow-node-pulse {
@@ -125,9 +131,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .flow-node-born,
-  .flow-edge-active,
   .flow-edge-born,
-  .flow-edge-born.flow-edge-active,
+  .flow-edge-packet,
+  .flow-edge-packet-born,
   .flow-node-running {
     animation: none !important;
   }

@@ -14,9 +14,11 @@ export interface FlowEdgeData extends Record<string, unknown> {
 
 export type FlowEdgeType = Edge<FlowEdgeData>
 
-/** The one edge renderer — two visual semantics (lineage = the brand stroke,
- * dependency = the quiet foreground stroke) plus the dashed-flow birth
- * animation (`flow-edge-birth`: dashes march in, then settle solid). */
+/** The one edge renderer — a single quiet stroke for both semantics plus
+ * the dashed-flow birth animation (`flow-edge-birth`: dashes march in, then
+ * settle solid). Live work rides as a second path: one short packet
+ * traveling the same bezier (`flow-edge-packet`), so the base stroke never
+ * flashes. */
 export function FlowEdge({
   id,
   sourceX,
@@ -37,16 +39,25 @@ export function FlowEdge({
   })
   const draw = data?.drawDelay != null
   return (
-    <BaseEdge
-      id={id}
-      path={path}
-      className={cn(
-        "flow-edge",
-        data?.semantic === "lineage" ? "flow-edge-lineage" : "flow-edge-dependency",
-        draw && "flow-edge-born",
-        data?.active && "flow-edge-active",
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        className={cn(
+          "flow-edge",
+          data?.semantic === "lineage" ? "flow-edge-lineage" : "flow-edge-dependency",
+          draw && "flow-edge-born",
+        )}
+        style={draw ? { animationDelay: `${data?.drawDelay ?? 0}ms` } : undefined}
+      />
+      {data?.active && (
+        <path
+          d={path}
+          pathLength={100}
+          className={cn("flow-edge-packet", draw && "flow-edge-packet-born")}
+          style={draw ? { animationDelay: `${data?.drawDelay ?? 0}ms` } : undefined}
+        />
       )}
-      style={draw ? { animationDelay: `${data?.drawDelay ?? 0}ms` } : undefined}
-    />
+    </>
   )
 }
