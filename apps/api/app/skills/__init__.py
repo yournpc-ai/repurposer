@@ -259,6 +259,16 @@ def dispatchable_skills() -> list[SkillEntry]:
     ]
 
 
+def strip_null_params(params: dict | None) -> dict:
+    """The proposal convention is "null = take the default" (the params field
+    descriptions say so) — drop explicit nulls before schema validation so an
+    optional-in-spirit field never dies on a strict-typed schema (2026-08-19:
+    a bare `count: null` sank ~half of recipe-template plan turns after the
+    repair round repeated it; the STORED book then 500'd the same way at
+    compile time — every params-validation site goes through here)."""
+    return {k: v for k, v in (params or {}).items() if v is not None}
+
+
 def validate_task_list(tasks: list[Any]) -> list[SkillEntry]:
     """Adjudicate a proposed task list. Returns the resolved entries in order;
     raises SkillRejected (with close-match suggestions) on the first offense."""
@@ -282,7 +292,7 @@ def validate_task_list(tasks: list[Any]) -> list[SkillEntry]:
             )
         if entry.params_model is not None:
             try:
-                params = entry.params_model.model_validate(task.params or {})
+                params = entry.params_model.model_validate(strip_null_params(task.params))
             except Exception as e:
                 raise SkillRejected(
                     f"Skill '{task.skill}' rejected its params: {e}",

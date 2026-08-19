@@ -52,7 +52,7 @@ from app.pipeline.graph import (
 from app.pipeline.recipes import RECIPE_REGISTRY
 from app.pipeline.step_context import _estimate_facts
 from app.pipeline.tracks import assert_single_writer_per_track
-from app.skills import SKILL_REGISTRY, SkillEntry, validate_task_list
+from app.skills import SKILL_REGISTRY, SkillEntry, strip_null_params, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -312,7 +312,7 @@ def _compile_task_list(
     type_ordinals: dict[str, int] = {}
     for item, entry in zip(task.tasks or [], entries, strict=True):
         node_cls = NODE_KINDS[entry.name]
-        params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
+        params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
         if entry.name == "align_stills":
             # Handled by the input-profile injection below — the LLM naming
             # it explicitly changes nothing (idempotent runner).
@@ -409,7 +409,7 @@ def _compile_task_list(
     prev_modifier_idx: int | None = None
     for item, entry in modifiers:
         node_cls = NODE_KINDS[entry.name]
-        params = entry.params_model.model_validate(item.params or {}) if entry.params_model else None
+        params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
         inputs = [skill_node_idx[name] for name in node_cls.after if name in skill_node_idx]
         if prev_modifier_idx is not None:
             inputs.append(prev_modifier_idx)

@@ -46,6 +46,9 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
+
+logger = structlog.get_logger()
 
 from app.clients.minimax import MiniMaxError
 from app.agents.contexts import _build_context
@@ -915,6 +918,15 @@ async def _plan_turn(
             if repaired_intent is not None:
                 intent = repaired_intent
             else:
+                # The degrade says "can't do that" — log what was actually
+                # proposed and why it was rejected, or the refusal class is
+                # invisible (2026-08-19: recipe-template launches died here).
+                logger.info(
+                    "plan_chain_rejected",
+                    error=str(first_error),
+                    proposed=[t.skill for t in intent.tasks],
+                    repair="failed",
+                )
                 intent.action = "answer"
                 intent.answer = _cannot_do_text()
 
