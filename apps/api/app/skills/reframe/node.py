@@ -7,6 +7,7 @@ changes, the segments stay put.
 
 from uuid import UUID
 
+import asyncio
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,7 +112,8 @@ class ReframeClip(NodeBase):
                 # clip's static crop speak again — never clobber a manual
                 # set_crop (non-destructive doctrine).
                 if spec.crop_track is None:
-                    continue  # no reframe on this clip — nothing to undo
+                    skipped += 1  # no reframe on this clip — nothing to undo
+                    continue
                 prepared.append((output, mode, None))
                 continue
 
@@ -121,8 +123,16 @@ class ReframeClip(NodeBase):
                     skipped += 1
                     continue
                 try:
-                    keyframes, _resolved = compute_crop_track(
-                        path, spec.model_dump(mode="json"), speaker_map, mode
+                    # CPU-bound (decode + detection, minutes on long sources)
+                    # — ride a thread like every other heavy call (ASR /
+                    # speaker_map precedent); a bare call freezes the
+                    # worker's single loop for the whole pass.
+                    keyframes, _resolved = await asyncio.to_thread(
+                        compute_crop_track,
+                        path,
+                        spec.model_dump(mode="json"),
+                        speaker_map,
+                        mode,
                     )
                 finally:
                     path.unlink(missing_ok=True)

@@ -534,10 +534,14 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
                       </Series.Sequence>
                     );
                   }
+                  // crop_track is an explicit framing decision — the window
+                  // math is cover-geometry by construction (the procedure's
+                  // frame_window), so fit mode must NOT shrink the base zoom
+                  // here (2026-08-20 cold review: fit made the window ~3x
+                  // too wide, the face landing off-fraction). fit still
+                  // governs the transform path and donor segments.
                   const zoom =
-                    (objectFit === "cover"
-                      ? Math.max(width / dims.width, height / dims.height)
-                      : Math.min(width / dims.width, height / dims.height)) * cropNow.scale;
+                    Math.max(width / dims.width, height / dims.height) * cropNow.scale;
                   return (
                     <Series.Sequence key={i} durationInFrames={Math.max(1, Math.round(t.dur * fpsv))}>
                       <OffthreadVideo

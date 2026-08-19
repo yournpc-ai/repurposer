@@ -82,7 +82,7 @@ from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.graph import MEDIA, NODE_KINDS
-from app.skills import SkillRejected, dispatchable_skills, validate_task_list
+from app.skills import SkillRejected, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -100,7 +100,7 @@ def _ask_for_material_text(prompt: str) -> str:
     when it misfiles a material-less generate verdict. Language follows the
     prompt — the plan path's answer prose always speaks the user's language.
     """
-    if any("一" <= ch <= "鿿" for ch in prompt):  # CJK Unified Ideographs
+    if _prefers_zh(prompt):
         return (
             "我还没有可以处理的素材。点输入框左侧的回形针上传视频、音频或图片，"
             "或者直接把文稿贴在对话里发给我——贴来的内容我会当作素材，"
@@ -228,9 +228,26 @@ async def _create_run_from_tasks(
     return run.id
 
 
-def _cannot_do_text() -> str:
-    available = ", ".join(entry.name for entry in dispatchable_skills())
-    return f"I can't do that yet. What I can do: {available}."
+def _prefers_zh(text: str) -> bool:
+    """Language heuristic for server-composed reply lines — the CJK check
+    rides the user's own words (the turn's text), not a stored setting."""
+    return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
+
+
+def _cannot_do_text(text: str) -> str:
+    """The refusal line (both intent surfaces). Human capability words only —
+    registry skill names are internal vocabulary, never user-facing
+    (2026-08-20 review: the null-params incident had ~50% of recipe launches
+    reading this line in English with skill slugs in it)."""
+    if _prefers_zh(text):
+        return (
+            "这个我现在还做不了。可以点名想要什么——"
+            "比如竖屏短片、帖子、金句卡，或者另一个语言的版本。"
+        )
+    return (
+        "I can't do that yet. Try naming what you want — like vertical "
+        "clips, a post, quote cards, or a version in another language."
+    )
 
 
 # ---- Ask primitive: question / answer ------------------------------------
@@ -805,10 +822,14 @@ async def _plan_turn(
     assets = list(
         (
             await db.execute(
-                select(Asset).where(
+                select(Asset)
+                .where(
                     Asset.project_id == project.id,
                     Asset.file_url.isnot(None),
                 )
+                # Deterministic "first asset" for filename/excerpt picks —
+                # the repo convention (jobs.py / projects.py).
+                .order_by(Asset.created_at)
             )
         )
         .scalars()
@@ -942,7 +963,7 @@ async def _plan_turn(
                     repair="failed",
                 )
                 intent.action = "answer"
-                intent.answer = _cannot_do_text()
+                intent.answer = _cannot_do_text(prompt)
 
     has_media = await has_renderable_media(db, UUID(str(project.id)))
 
@@ -974,7 +995,7 @@ async def _plan_turn(
         if intent.tasks:
             intent.action = "generate"
         else:
-            intent.answer = _cannot_do_text()
+            intent.answer = _cannot_do_text(prompt)
 
     if intent.action == "start":
         # G-1: a prose confirmation ("looks good, start it") is not a
@@ -1163,7 +1184,7 @@ async def _propose_turn(
                 pass
             if not repaired:
                 proposal = None
-                assistant_content = _cannot_do_text()
+                assistant_content = _cannot_do_text(text)
         if isinstance(proposal, EditOpsProposal):
             # Create the assistant message first (flush for the id), then
             # apply with message_id lineage — one commit at the tail.
@@ -1185,7 +1206,7 @@ async def _propose_turn(
                 )
                 assistant_content = proposal.summary
             except (OpRejected, OpConflict) as e:
-                assistant_message.content = _cannot_do_text()
+                assistant_message.content = _cannot_do_text(text)
                 assistant_content = assistant_message.content
                 proposal = None
             except HTTPException as e:
@@ -1211,8 +1232,16 @@ async def _propose_turn(
             assistant_content = proposal.summary
         except ValueError as e:
             # Missing required input (media/transcript/…) — no repair round
-            # can fix that; tell the user what's missing.
-            assistant_content = f"I'm missing an input for that: {e}"
+            # can fix that. The raw exception carries registry vocabulary;
+            # it goes to the log, the user gets a plain line in their
+            # language (same posture as _cannot_do_text, 2026-08-20).
+            logger.info("run_birth_missing_input", error=str(e))
+            assistant_content = (
+                "还缺素材——先发我视频、音频或文字稿，我再开工。"
+                if _prefers_zh(text)
+                else "I'm missing the material for that — attach a video, "
+                "audio, or transcript first, then I'll get to work."
+            )
         except SkillRejected as first_error:
             # One bounded repair round with the rejection as feedback (the
             # funnel's reserved kwarg — the echo lives in Agent.call).
@@ -1239,7 +1268,7 @@ async def _propose_turn(
                 pass
             if not repaired:
                 proposal = None
-                assistant_content = _cannot_do_text()
+                assistant_content = _cannot_do_text(text)
 
     if assistant_message is None:
         assistant_message = await _create_message(

@@ -109,7 +109,13 @@ async def _build_context(
     ]
 
     assets = list(
-        (await db.execute(select(Asset).where(Asset.project_id == project.id)))
+        (
+            await db.execute(
+                select(Asset)
+                .where(Asset.project_id == project.id)
+                .order_by(Asset.created_at)  # stable list order across turns
+            )
+        )
         .scalars()
         .all()
     )
