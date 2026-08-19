@@ -117,7 +117,7 @@ export function FinalCta(): ReactNode {
     <section
       ref={sectionRef}
       id="sign-up"
-      className="mx-auto max-w-[1440px] scroll-mt-24 px-5 pb-24 sm:px-8 sm:pb-32 lg:px-10"
+      className="mx-auto flex min-h-svh w-full max-w-[1440px] scroll-mt-24 flex-col justify-center px-5 pb-24 sm:px-8 sm:pb-32 lg:px-10"
     >
       <motion.div
         style={reduce ? undefined : { scale, y: panelY }}

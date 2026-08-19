@@ -118,7 +118,7 @@ export function Channels(): ReactNode {
     <section
       ref={sectionRef}
       id="channels"
-      className="scroll-mt-24 pb-24 sm:pb-32"
+      className="flex min-h-svh scroll-mt-24 flex-col justify-center pb-24 sm:pb-32"
     >
       <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
         <SectionHeading
