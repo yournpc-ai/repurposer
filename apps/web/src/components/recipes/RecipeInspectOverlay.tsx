@@ -19,7 +19,7 @@ import { toast } from "sonner"
 import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { slotCoversFile, type RecipeCard } from "@/lib/recipes"
-import { ASSETS_ACCEPT } from "@/components/home/AssetsModal"
+import { ASSETS_ACCEPT } from "@/lib/stagedFiles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,7 +46,7 @@ import { recipeProcessFlow } from "./recipeFlow"
  * popup is composed by hand (`inset-0 m-auto` centering) because the
  * split-pane size (max-w-7xl, full-height flex) doesn't fit DialogContent's
  * defaults — and a hand-composed popup must mirror DialogContent chrome
- * exactly (the CLAUDE.md rule): overlay-surface + hairline + shadow-xl +
+ * exactly (the CLAUDE.md rule): overlay-surface (whisper shadow baked in) + hairline +
  * rounded-xl.
  *
  * Right = read-only views of the Recipe data pack in ONE screen, with the
@@ -156,11 +156,11 @@ export function RecipeInspectOverlay({
         <DialogOverlay />
         {/* Hand-composed popup (custom split-pane size, `inset-0 m-auto`
             centering) — the chrome MIRRORS DialogContent exactly:
-            overlay-surface + the ring-foreground/10 hairline + shadow-xl +
+            overlay-surface (whisper shadow baked in) + the ring-foreground/10 hairline +
             rounded-xl. Without the hairline the light-theme glass dissolves
             into the white backdrop wash. */}
         <DialogPrimitive.Popup
-          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl shadow-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
+          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
         >
           <DialogClose
             aria-label={t("common.close")}

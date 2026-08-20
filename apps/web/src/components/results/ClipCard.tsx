@@ -125,7 +125,7 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col gap-0 overflow-hidden shadow-lg">
+      <Card className="group flex flex-col gap-0 overflow-hidden">
         {/* Thumbnail / player */}
         <div
           data-tour={tourTargets ? "results-video" : undefined}
@@ -210,7 +210,7 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
                 disabled={isRendering}
                 className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 transition-opacity group-hover:opacity-100">
                   <Play className="h-5 w-5 fill-current" />
                 </span>
               </button>

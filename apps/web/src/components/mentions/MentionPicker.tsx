@@ -128,7 +128,7 @@ export function MentionPicker({
             }
           : { left: position.left, top: position.bottom + 4 }
       }
-      className="overlay-surface fixed z-50 flex w-64 flex-col gap-0.5 rounded-lg p-1.5 text-xs text-popover-foreground shadow-md ring-1 ring-foreground/10"
+      className="overlay-surface fixed z-50 flex w-64 flex-col gap-0.5 rounded-lg p-1.5 text-xs text-popover-foreground ring-1 ring-foreground/10"
     >
       {filtered.length === 0 ? (
         <span className="px-2 py-1.5 text-muted-foreground">

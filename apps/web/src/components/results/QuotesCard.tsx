@@ -43,7 +43,7 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden shadow-lg">
+    <Card className="overflow-hidden">
       {imageUrl ? (
         <div className="relative aspect-square bg-muted">
           <img

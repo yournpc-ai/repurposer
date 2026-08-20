@@ -37,8 +37,14 @@ export interface RecipePublic {
 
 export interface RecipeCard extends RecipePublic {
   /** Public-readable assets on the TOS demo tree (demo/outputs/) — the landing
-   * audience is anonymous, so signed/login-gated asset endpoints are banned. */
-  preview: { posterUrl: string; videoUrl?: string }
+   * audience is anonymous, so signed/login-gated asset endpoints are banned.
+   * w/h are the poster's real pixel dims: the masonry flow derives each
+   * tile's row-span from them (size lives in data, never in an enum — an
+   * asset swap reflows the gallery on its own, ADR-046 D4). */
+  preview: { posterUrl: string; videoUrl?: string; w: number; h: number }
+  /** Featured card: spans two columns in the dense flow (registry-assigned,
+   * never user-editable). */
+  span?: 2
 }
 
 /** Does a staged file cover a required input slot? The launch gate reads
@@ -73,7 +79,8 @@ export function slotCoversFile(slotType: string, file: File): boolean {
  * impossible by construction. */
 const asset = (name: keyof typeof RECIPE_ASSETS) => RECIPE_ASSETS[name]
 
-/** Card id → teaser assets (display layer only — never enters the pipeline). */
+/** Card id → teaser assets (display layer only — never enters the pipeline).
+ * w/h = the poster's real pixels (measured 2026-08-21). */
 const RECIPE_PREVIEWS: Record<string, RecipeCard["preview"]> = {
   "multilingual-subs": {
     posterUrl: asset("multilingual-subs-poster.jpg"),
@@ -81,23 +88,39 @@ const RECIPE_PREVIEWS: Record<string, RecipeCard["preview"]> = {
     // translated captions on the card face state the capability before a
     // word is read.
     videoUrl: asset("multilingual-subs-preview.mp4"),
+    w: 1080,
+    h: 1080,
   },
   "image-video": {
     posterUrl: asset("image-video-poster.jpg"),
     videoUrl: asset("image-video-preview.mp4"),
+    w: 1920,
+    h: 1080,
   },
   "highlight-clips": {
     posterUrl: asset("highlight-clips-poster.jpg"),
     videoUrl: asset("highlight-clips-preview.mp4"),
+    w: 1080,
+    h: 1920,
   },
   reframe: {
     posterUrl: asset("reframe-poster.jpg"),
     videoUrl: asset("reframe-preview.mp4"),
+    w: 1080,
+    h: 1920,
   },
   "ai-visuals": {
     posterUrl: asset("ai-visuals-poster.jpg"),
     // No preview video until the capability itself exists — poster only.
+    w: 720,
+    h: 1280,
   },
+}
+
+/** Featured cards span two columns in the gallery's dense flow (the wide
+ * tiles — landscape teasers are the natural cross-column shape). */
+const RECIPE_FEATURED: Record<string, 2> = {
+  "image-video": 2,
 }
 
 /** The gallery's card list: the public registry joined with preview assets.
@@ -108,6 +131,7 @@ export async function fetchRecipeCards(): Promise<RecipeCard[]> {
   const recipes = (await res.json()) as RecipePublic[]
   return recipes.flatMap((r) => {
     const preview = RECIPE_PREVIEWS[r.id]
-    return preview ? [{ ...r, preview }] : []
+    const span = RECIPE_FEATURED[r.id]
+    return preview ? [{ ...r, preview, ...(span ? { span } : {}) }] : []
   })
 }

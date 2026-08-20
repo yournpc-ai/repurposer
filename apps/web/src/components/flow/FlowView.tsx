@@ -320,10 +320,10 @@ export function FlowView({
         {dots && (
           <Background
             variant={BackgroundVariant.Dots}
-            gap={28}
-            size={1.5}
+            gap={26}
+            size={1}
             color="var(--muted-foreground)"
-            className="opacity-30 dark:opacity-40"
+            className="opacity-20 dark:opacity-[0.18]"
           />
         )}
         {groups.length > 0 && (

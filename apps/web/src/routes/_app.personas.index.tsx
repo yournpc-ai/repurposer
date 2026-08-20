@@ -152,7 +152,7 @@ function PersonasPage() {
                 key={persona.id}
                 to="/personas/$id"
                 params={{ id: persona.id }}
-                className="group rounded-xl bg-card p-5 shadow-sm transition-all hover:shadow-md dark:hover:bg-muted"
+                className="group rounded-xl bg-card p-5 transition-colors hover:bg-accent"
               >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-11 w-11">

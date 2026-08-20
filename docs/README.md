@@ -38,10 +38,10 @@
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R6 分期 | 🚧 R1/R2/R6 已落地（caption catalog + stacking + dub 接线 + 卡片层 + align_stills 无声图片视频 + 多语言字幕卡——multilingual-subs 与 image-video 两卡 live；R3–R5 待施工）；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
-| `LANDING.md` | 落地页叙事工作文档：现状结构 + 叙事立场（单助手）+ 讨论中待拍板（hero 四方向 / 九幕骨架缓做）+ 迭代清单 | 活跃（2026-08-19 建） | 动落地页结构/hero/叙事前 |
+| `LANDING.md` | 落地页叙事工作文档：现状结构 + 叙事立场（单助手）+ 待拍板（hero 四方向）+ 迭代清单（含六幕叙事骨架，缓做） | 活跃（2026-08-19 建） | 动落地页结构/hero/叙事前 |
 | `API.md` | API 参考 | 活跃（2026-08-18 全面对齐路由） | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
-| `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + 渲染技术调研 | 原始素材层 | 引用证据时 |
+| `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + MiniMax Design 走查（界面工艺清单 + Skills 仓库解剖）+ Agent Skills 规范生态（Mastra/Agno 文档证据，`agent-skills-spec.md`）+ 渲染技术调研 + dsh 架构调研（agent harness 对照，采纳项已分流 PROGRESS/NAMING/AGENT_ARCH） | 原始素材层 | 引用证据时 |
 | `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `tasks/done/`（历史记录，不再维护） | 活跃 | 开工对应功能前必读 |
 
 ## 已规划的文档（尚未撰写）

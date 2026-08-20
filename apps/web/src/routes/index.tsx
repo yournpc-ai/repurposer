@@ -83,7 +83,14 @@ function LandingPage() {
   return (
     <ReducedMotionProvider>
       <SmoothScroll>
-        <div id="top" className="flex min-h-svh flex-1 flex-col">
+        {/* Marketing register opts out of the studio gray underlay (ADR-046):
+            the landing keeps its pure-white canvas + the softer legacy hover
+            step, scoped via CSS-var overrides so every bg-background /
+            bg-accent inside resolves exactly as before. */}
+        <div
+          id="top"
+          className="flex min-h-svh flex-1 flex-col bg-background [--accent:oklch(0.95_0_0)] [--background:oklch(1_0_0)] dark:[--accent:oklch(1_0_0/8%)] dark:[--background:oklch(0.12_0_0)]"
+        >
           <SkipToContent />
           <LandingHeader />
           <main id="main-content" className="flex-1 overflow-x-clip">

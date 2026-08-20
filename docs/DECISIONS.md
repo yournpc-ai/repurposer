@@ -910,3 +910,29 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Related**: ADR-044（轨道地基；crop_track 进场路径与 tools 注记本条落地）/ ADR-016（渲染器黑盒——采样器只进 packages/clip）/ ADR-020（Ken-Burns 拒绝的边界：crop_track 是 video 源取景决策轨，非 stills 动效）/ ADR-026（speaker_map 不涉 C2PA——分析事实非生成内容）；简报 `docs/tasks/done/reframe-line.md`；双验证 spike 与排期见 `docs/PROGRESS.md` 第三周
 
+
+## ADR-046: Studio 视觉骨架重塑——灰底填充阶 / 影子只属浮层 / 实体丸化 / 海报优先画廊 / 去全局 header
+
+**Context**: 2026-08-20 MiniMax Design 发布日走查（九屏）+ Agent Opus / FLORA / ElevenLabs 对照（证据层 `research/minimax-design.md` §8–§11），暴露五处存量病：① 浅色 composer 白上白读作 wireframe（dark 反而成立——0.12 底 vs 0.21 卡自带阶）；② 配方画廊五根 9:16 强制竖槽 + 横源 letterbox = "黑色墓碑"，且 `posterUrl` 字段存在却被 autoplay 永远跳过、全站无封面概念；③ entity blocks 骑缝设计在截图里读作渲染瑕疵，灰底假设下必然融合；④ 账户区是 Opus 式平铺 list，信息层级缺位；⑤ AppHeader 只装 theme/lang/bell 三个工具却占一条常驻通顶 band。色役粒度盘点（§10）进一步显示：精致感的来源是**角色粒度细**（~20 个可见色役各有阶位），不是品牌色。
+
+**Decision**:
+
+1. **浅色底色定律翻案**：studio（`_app`）`--background` light 纯白 1.0 → **0.96 中性灰**（#f5f5f5 族；暖色调否决——与暗色中性族同宗，用户审美样本全中性）。白卡升格为"最亮一层"，靠填充阶浮起。**双主题高度定律统一为一条：浮层 = 更亮的填充落在更暗的底上**（light 0.96→1.0 / dark 0.12→0.21）。landing（`/`）不动，营销音域分离（Scope 条款已有）。hover `--accent` light 随底重推导 0.95 → 0.92。
+2. **影子只属浮层**：文档流表面（卡 / composer / 媒体 tile）双主题一律无影——"产品卡 hairline+shadow-lg"条款与 hero-flat 特例一并退役；浮层（overlay-surface 雾面家族）浅色标配耳语级 `shadow-xl`（把玻璃从内容上揭起），暗色保持无影传统（雾面透光自分离）。
+3. **实体丸化 + chips 顶置**：composer 骑缝 blocks 退役（自我批判四条：信息密度倒挂 / 剪影打断 / 跨双表面必坏 / 底排失衡之源）。实体 = 底排左簇 ghost pills（Assets 📎 / Persona 16px avatar），**值状态律 = meta→foreground 一步变色**（无填充无彩色）；pills 开雾面 Popover 面板（`side="top"`，浮层影首个正当场景），AssetsModal / PersonaPickerModal 退役（深度管理归未来资产中心页）。暂存文件 = **卡顶类型化 chips 带**（视频缩略图+时长 / 音频波形+时长 / 文档图标+页数 / 上传中转圈百分比，× 即删）——摘要归 pill、清单归 chips、富展示归面板行。
+4. **画廊 = 海报优先 + 数据驱动瀑布流**：卡面状态机 静止 = 封面（类目 chip 左上 + 时长/比例 badge 左下）→ hover = 播放 + 底部 scrim 动作行 → click = 检视 overlay（**唯一发射路径**——hover 填充二次否决：我们的卡面是多产物组合的 teaser + 配方素材依赖，检视是认知步骤不是摩擦；MiniMax 敢 hover-fill 因其卡面 = 完整产物 + 零输入）。布局 = grid + `grid-auto-flow: dense` + w/h 元数据驱动 span（**尺寸进数据不进枚举**，资产改尺寸流自动重排；featured 大卡注册表标 `span: 2`——跨列需求使纯 CSS columns 出局）。
+5. **去全局 AppHeader**：工具（主题/语言）迁账户 console；**通知 = 内容区右上角唯一浮动芯片**（圆角方块 + 未读点，右上槽位全 `_app` 保留，页面级控件永不占此角——Agent Opus 证据）；移动端留浮动 trigger。账户区两层架构：rail footer popover = 高频 console（身份头 / inset 账户组 / 行内 segmented 偏好 / 帮助段），深度偏好归设置页（FLORA modal 先例）。
+6. **色役表治理**："角色 → token × 双主题"对照表为组件唯一取色来源（禁直引色值），缺位角色补 token（send-disabled、group-title、icon-chip-bg、toggle-track）；角色全住中性阶梯，多角色 ≠ 多颜色。表随简报 `tasks/home-skeleton-revamp.md` 落地并当验收清单。
+
+**Rationale**: 层级来自阶不来自色（Tailwind 哲学 + MiniMax 黑白多层实证）；影子物理（白底困境的止痛是灰底，不是更软的影）；形态跟信息密度走（pill 36px 说一个词的值为足）；发射深度取决于卡面代表度（卡面越完整代表产物，快捷发射越浅）；交互基准线被大厂产品持续抬高，骨架一次到位比逐面补丁省返工。
+
+**Alternatives（翻案条件随附）**:
+
+- **浅色恢复 shadow（hero 开影）**：白底困境的治标版，被灰底方案整体替代。**翻案条件**：灰底在真实内容密度下被读作"脏/灰扑扑"（landing 对照组失真）。
+- **CSS columns 纯样式瀑布流**：零 JS 但元素无法跨列，featured 大卡出局。**翻案条件**：grid+dense+span 的 JS 重排在低端机实测掉帧。
+- **hover Use Prompt 双动作**（FLORA/MiniMax 先例）：二次否决维持 08-08 清洗判例，理由见 Decision 4。**翻案条件**：配方简化为单产物 + 零素材依赖的那类（若存在）可个案重议。
+- **bell 降 rail 导航项**：通知的时效性（"你的片子好了"）需要全页一瞥可达，埋进 rail 伤可发现性；浮芯片方案兼得"无 header"与"一瞥可达"。
+
+**Related**: ADR-035/036（只读图与配方 overlay 纪律不变）/ ADR-040（配方=提示词——hover-fill 否决的教义同源）/ ADR-041（结果画布 dock 体系不受影响）/ ADR-016（clip-spec 契约零关联）；证据 `research/minimax-design.md`（§8–§11 二轮证据 + 色役盘点）+ `research/flora.md`（EU AI Act 偏好项）；简报 `docs/tasks/home-skeleton-revamp.md`（施工与验收）；需求池登记 EU AI Act 水印偏好一条后续
+
+**附（2026-08-21 拍板）**：点阵采纳——home + 结果画布两个工作台面专用（"making surface"信号 + 平移感知）；配方 = muted-foreground 30%（light）/ 40%（dark）、1.5px 点、28px 网格（`dot-grid` utility 与 FlowView `dots` prop 同源）；第三处点阵面即违规。demo 封面维持现烘焙帧（重烘取消）。同日走查修订（用户逐帧对照 MiniMax Design）：① 滚动编排采纳——home 改固定 app-shell（路由根 `h-svh` 不滚、点阵固定视口、画廊唯一滚动口 `no-scrollbar` + 顶 fade），hero 文案级 fade 折叠，composer 常驻顶 chrome 并 compact 变形（pill 隐藏 / 输入带收缩，send 常驻，迟滞阈值）；② 点阵配方细化——1px 点、26px 网格、muted-foreground 20%（light）/ 18%（dark）（原 30%/40% 夜间过重）；③ 滚动条治理——`:root` / `.dark` 挂 `color-scheme`（原生滚动条随主题），home 滚动口无滚动条。同日二轮走查修订（MiniMax 逐帧对照）：④ composer rest **居中停驻**（hero 时刻，`pt-[20vh]`）→ 滚动滑上钉顶成**单行 half-radius（stadium）探索条**——rounded-full 禁令**第三例外**（用户拍板）；⑤ 单行条布局对齐 MiniMax 标准件（左 attach 带计数 + 单行输入 + 右 send），chips 带/控制行折叠，send 改绝对锚点跨形态常驻；⑥ hero 改纯 fade（撤高度折叠，行程耦合）；⑦ sticky chrome `::before` 点阵背板防宽卡露头。同日位置对批（用户双屏对照）：⑧ rest 集群下移居中（spacer 20vh→28vh）；⑨ **核心 hero（标题）常驻**——钉顶收缩悬于单行条之上（MiniMax docked 态 parity：logo+标题永驻、subtitle 消失），subtitle 改 chrome 内部折叠（钉点零位移）。⑩ **设置 = 共享弹窗组件，不设页面**（MiniMax/FLORA 对照拍板）——SettingsDialog 左 nav + 右内容，`useSettingsDialog()` 随处召唤（memory 等未来深面同构入列）；`/settings` 路由退役为 channels OAuth 回调 shim（toast + 开 dialog + 弹回 home）。⑪ **console 分组律**（MiniMax 对照拍板）——inset 账户块只装价值面（plan/credits/订阅），系统面（设置）降级入偏好组；偏好组改 MiniMax 行解剖：行标签 + **尾置** segmented（theme 图标三态 / 语言 EN·中，inset 轨 + card 滑块），深面行带 chevron。⑫ **滚动编排的形变一律滚动链接，禁时钟过渡**（三轮走查拍板）——位置是滚动驱动的即时位移，形变若走 300ms 时钟，快滚必现半途态；`dockP` = 距钉点末 140px 的 scrollTop 插值，全部形变属性随动，阈值/迟滞废除（纯函数无振颤）。⑬ **home hero = 品牌锁up + 品类句**（MiniMax 解剖，用户拍板原话）——`LogoMark`+"Repurposer" 常驻钉顶（em 尺寸 mark 随字号缩放），品类句「你的自媒体Agent团队」折叠；welcome 接待式退役，旧 `welcomeTitle/welcomeSubtitle` 键清尸。⑭ composer pill 面板**一律向下开**（`side="bottom"`——向上开盖输入区）+ 面板滚动列表 `no-scrollbar`；docked 条下方留白加大（`pb-14` + 32px 溶解带），卡片不贴条底消失。⑮ **列表一处律**——面板是其暂存列表的展开形态：Assets 面板开则 composer chips 带收起，同一列表永不同帧双呈（计数 pill 留锚）。⑯ **面板行解剖 + 画廊带声**（同日四轮走查拍板）：面板行 = mock 转正解剖——方形类型 tile + 名称/类型化 meta 两行 + × 居中，**列律：文件列方、身份列圆**（assets 方、persona/Auto 圆）；配方卡 hover 播放**默认带声**——unmuted play 先行，手势策略拒绝回落 muted 且开关如实反映有效态，任意点击授予激活后恒有声。⑰ **半径简化 + padding 非对称**（同日五轮走查拍板，MiniMax 对照）：composer 半径撤出 dockP 插值——常量 40px（展开态大圆角），坍缩成 56px 一行条时 CSS 半径帽自动裁至 28px = stadium 从盒模型自然涌现（「只有坍缩才 full」零代码）；padding 改非对称 `px-5 pt-5 pb-3`——底 chin 收紧 12px，控制行贴底（原 p-5 底 chin 过厚）。⑱ **hover 动作三件套**（同日六轮走查，MiniMax 逐帧对照）：hover 浮出动作行——声音开关居左下（占位 badge 槽位变形，badge 为 rest-only chrome）、白色 stadium Remix 丸居中、expand 钮居右下；Remix/expand 均只开检视 overlay（ADR-040 唯一发射路径不破——hover 增加发现性 affordance，不产生第二发射路径）。

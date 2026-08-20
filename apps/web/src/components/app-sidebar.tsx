@@ -2,19 +2,13 @@ import {
   Home,
   Mic2,
   FolderKanban,
-  Crown,
-  BookOpen,
-  HelpCircle,
   ArrowLeftToLine,
   ArrowRightToLine,
   ChevronDown,
   User,
-  Settings,
-  LogOut,
-  LogIn,
 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
+import { Link, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -30,18 +24,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { AccountConsole } from "@/components/account-console"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-import { clearAuth, getUser } from "@/lib/auth"
+import { getUser } from "@/lib/auth"
 import { useAuth } from "@/components/AuthProvider"
 import { LogoMark } from "@/components/LogoMark"
 
@@ -49,12 +41,6 @@ const navItems = [
   { key: "home", url: "/home", icon: Home },
   { key: "myProjects", url: "/projects", icon: FolderKanban },
   { key: "personas", url: "/personas", icon: Mic2 },
-]
-
-const accountItems = [
-  { key: "subscription", url: "#", icon: Crown, disabled: true },
-  { key: "learningCenter", url: "#", icon: BookOpen, disabled: true },
-  { key: "helpCenter", url: "#", icon: HelpCircle, disabled: true },
 ]
 
 function isActive(path: string, itemUrl: string) {
@@ -68,26 +54,20 @@ export function AppSidebar() {
   const { t } = useTranslation()
   const { toggleSidebar, state } = useSidebar()
   const collapsed = state === "collapsed"
-  const navigate = useNavigate()
-  const { isAuthenticated, setLoginOpen, refreshAuth } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   // Re-read on every render; auth-state changes re-render via context.
   // Gated on mounted: getUser() reads localStorage, which the server cannot
   // see — rendering it pre-hydration mismatches SSR (访客 vs real name).
   const [mounted, setMounted] = useState(false)
+  const [consoleOpen, setConsoleOpen] = useState(false)
   useEffect(() => setMounted(true), [])
   const user = mounted ? getUser() : null
   const displayName = user?.name || user?.email || t("common.guest")
   const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase()
 
-  const handleLogout = () => {
-    clearAuth()
-    refreshAuth()
-    navigate({ to: "/" })
-  }
-
   const avatarTrigger = (
-    <DropdownMenuTrigger
+    <PopoverTrigger
       render={
         <Button
           variant="ghost"
@@ -110,9 +90,9 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
-      {/* Vertical padding mirrors AppHeader's `py-4` exactly: the rail's
-          LogoMark and the top bar's controls share one 60px strip and one
-          center line (the old `pt-5` parked the logo 4px low). */}
+      {/* The rail's 60px logo strip (py-4) — there is no global top bar
+          (ADR-046 D5); utilities live in the account console, and the
+          notification bell floats at the content area's top-right. */}
       <SidebarHeader className="gap-3 p-3 py-4 group-data-[state=collapsed]:items-center">
         <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
@@ -164,7 +144,10 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="gap-3 p-2 group-data-[state=collapsed]:items-center">
-        <DropdownMenu>
+        {/* Account console (ADR-046 D5): the avatar opens a Popover carrying
+            inline controls (theme / language segmented, replay tour,
+            logout) — never a DropdownMenu of links. */}
+        <Popover open={consoleOpen} onOpenChange={setConsoleOpen}>
           {/* Collapsed: hovering the avatar shows who is signed in (the name
               row is hidden then); expanded it stays a plain click target. */}
           {collapsed ? (
@@ -180,77 +163,15 @@ export function AppSidebar() {
           ) : (
             avatarTrigger
           )}
-          <DropdownMenuContent
-            className="w-56 rounded-xl"
+          <PopoverContent
+            className="w-64 rounded-xl p-2"
             side="top"
             align="start"
             sideOffset={8}
           >
-            {isAuthenticated ? (
-              <>
-                <DropdownMenuGroup>
-                  <div className="flex items-center gap-2 px-2 py-1.5">
-                    <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                      {t("common.freePlan")}
-                    </span>
-                  </div>
-                </DropdownMenuGroup>
-                <DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    {t("common.profile")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    render={
-                      <Link
-                        to="/settings"
-                        search={{ connected: undefined, error: undefined }}
-                      />
-                    }
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    {t("common.settings")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    {t("common.logout")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </>
-            ) : (
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => setLoginOpen(true)}>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  {t("common.login")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <SidebarGroup className="px-0 py-0">
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {accountItems.map((item) => (
-                <SidebarMenuItem key={item.key}>
-                  <SidebarMenuButton
-                    disabled={item.disabled}
-                    tooltip={t(`nav.${item.key}`)}
-                    className="h-10 text-sm text-sidebar-foreground/70"
-                    render={<Link to={item.url} />}
-                  >
-                    <item.icon className="h-4.5 w-4.5 shrink-0" />
-                    <span>{t(`nav.${item.key}`)}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            <AccountConsole onClose={() => setConsoleOpen(false)} />
+          </PopoverContent>
+        </Popover>
       </SidebarFooter>
     </Sidebar>
   )

@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export function ClipCardSkeleton() {
   return (
-    <Card className="flex flex-col gap-0 overflow-hidden shadow-lg">
+    <Card className="flex flex-col gap-0 overflow-hidden">
       <div className="relative aspect-square bg-muted">
         <Skeleton className="absolute inset-0 rounded-none" />
       </div>

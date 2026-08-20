@@ -414,7 +414,7 @@ function ClipEditorPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
         {/* Left: preview + rendered result */}
         <div className="space-y-4 self-start">
-          <div className="overflow-hidden rounded-xl bg-black shadow-xl">
+          <div className="overflow-hidden rounded-xl bg-black">
             {mounted && previewSpec ? (
               <Player
                 component={ClipComposition}

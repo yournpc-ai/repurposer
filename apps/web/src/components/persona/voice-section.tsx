@@ -127,7 +127,7 @@ export function VoiceSection({
     s.title || s.file_url?.split("/").pop() || t("common.untitled")
 
   return (
-    <Card className="shadow-lg">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Mic className="h-4 w-4" />

@@ -20,16 +20,26 @@
  * — at 85% the dark hero type behind bled through and tinted the panel dirty
  * gray; dark drops to 68% + blur(28px) — over the near-black canvas an 85%+
  * fill reads as a solid box and the blur has nothing to show.
+ *
+ * Shadow law (ADR-046, 2026-08-21): shadows belong to floating layers ONLY —
+ * this utility carries the whisper shadow-xl in light (it lifts the glass off
+ * the content beneath); dark casts nothing (translucency + the hairline do
+ * the separating). In-flow surfaces never carry shadow-*; consumers of this
+ * utility therefore take NO shadow-* class of their own.
  */
 @utility overlay-surface {
   background-color: color-mix(in oklch, var(--popover) 92%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    0 20px 25px -5px oklch(0 0 0 / 0.1),
+    0 8px 10px -6px oklch(0 0 0 / 0.1);
 
   @variant dark {
     background-color: color-mix(in oklch, var(--popover) 68%, transparent);
     -webkit-backdrop-filter: blur(28px) saturate(1.4);
     backdrop-filter: blur(28px) saturate(1.4);
+    box-shadow: none;
   }
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -83,6 +93,39 @@
 }
 @utility scroll-fade-x {
   mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+/* No scrollbar — app-shell scrollports that must not show chrome at all
+ * (the home gallery scroller: the dot grid is the frame, MiniMax parity).
+ * Position sense comes from content motion, not a track. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Dot grid — the workshop texture (ADR-046 附, 2026-08-21 拍板): TWO making
+ * surfaces only — the home page (this utility on the route root, which never
+ * scrolls: content scrolls INSIDE it, so the grid stays fixed to the
+ * viewport) and the results canvas (FlowView's own `dots` prop — same
+ * recipe: muted-foreground 20% light / 18% dark, 1px dot, 26px gap). A
+ * dotted third surface is a violation. */
+@utility dot-grid {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--muted-foreground) 20%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 26px 26px;
+
+  @variant dark {
+    background-image: radial-gradient(
+      circle,
+      color-mix(in oklch, var(--muted-foreground) 18%, transparent) 1px,
+      transparent 1px
+    );
+  }
 }
 
 /*
@@ -302,6 +345,9 @@ body {
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-icon-chip: var(--icon-chip);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -330,14 +376,20 @@ body {
 }
 
 :root {
-  /* Gray ladder (2026-08-05 reference pass): the canvas is PURE WHITE — cards
-   * float via the built-in ring-foreground/10 hairline + soft shadow, not via
-   * a gray underlay. Surface hierarchy comes from these steps, never from
+  /* Native chrome (scrollbars, form controls) follows the theme — without
+   * this the dark studio keeps light-theme scrollbars. */
+  color-scheme: light;
+  /* Gray ladder (ADR-046, 2026-08-21): the studio canvas is 0.96 NEUTRAL GRAY
+   * — white cards are the raised layer and float via the fill step alone
+   * (elevation law, both themes: the raised surface is the lighter fill on
+   * the darker ground — light 0.96→1.0, dark 0.12→0.21). In-flow surfaces
+   * cast NO shadow; shadows belong to floating layers (see overlay-surface).
+   * The landing page opts out at its route root (marketing register stays
+   * pure white). Surface hierarchy comes from these steps, never from
    * one-off alpha fills (bg-muted/50 & co. are retired). Three text tiers:
    * foreground → muted-foreground (subtitles) → meta-foreground (caps meta).
-   * --subtle (0.975) is the faintest step — fills that only need to whisper
-   * off pure white (the composer entity blocks). */
-  --background: oklch(1 0 0);
+   * --subtle (0.975) is the faintest step on white cards. */
+  --background: oklch(0.96 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -352,23 +404,29 @@ body {
   --inset: oklch(0.92 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --meta-foreground: oklch(0.68 0 0);
-  --accent: oklch(0.95 0 0);
+  --accent: oklch(0.92 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.708 0 0);
+  /* Disabled is its own color role (ADR-046): an inset-fill well + meta
+   * glyph — never an opacity knockdown of the enabled state. */
+  --disabled: var(--inset);
+  --disabled-foreground: var(--meta-foreground);
+  /* Icon chip: the small tile behind type glyphs in chips / file rows. */
+  --icon-chip: oklch(1 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(1 0 0);
+  --sidebar: oklch(0.96 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.24 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent: oklch(0.92 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: oklch(0.708 0 0);
@@ -379,6 +437,7 @@ body {
 }
 
 .dark {
+  color-scheme: dark;
   /* Dark system (2026-08-05 reference pass): the canvas is NEAR-BLACK and
    * elevation speaks glass, not ladder — floating layers are translucent
    * (overlay-surface 68% + blur 28px), hover is a white veil (--accent, NOT a
@@ -407,6 +466,11 @@ body {
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  /* Same roles as light — the references resolve against the dark ladder
+   * (inset 0.15 well, meta 0.52 glyph); the icon chip speaks glass. */
+  --disabled: var(--inset);
+  --disabled-foreground: var(--meta-foreground);
+  --icon-chip: oklch(1 0 0 / 10%);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

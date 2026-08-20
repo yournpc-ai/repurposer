@@ -1,43 +1,74 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Volume2, VolumeX } from "lucide-react"
+import { Maximize2, Volume2, VolumeX, Wand2 } from "lucide-react"
 
 import type { RecipeCard as RecipeCardData } from "@/lib/recipes"
 
 /**
- * One recipe card (RECIPES §7.3, 2026-08-10 caption form): a full-bleed
- * vertical (9:16) auto-playing teaser with an inverse sound toggle circle at
- * the top-right (one card sounds at a time — the parent owns `soundingId`),
- * and a caption UNDER the video — title + promise (the ElevenCreative card
- * anatomy: the dish explains itself beneath the teaser, no hover action).
- * Reserved cards carry a Soon pill in the caption — a promise is never
- * clickable before its capability is real.
+ * One recipe card — poster-first state machine (ADR-046 D4):
+ *   rest  = the poster (capability chip top-left, aspect badge bottom-left,
+ *           NO autoplay — the gallery is still until asked);
+ *   hover = the teaser plays WITH SOUND (2026-08-21 ruling — sound is the
+ *           default, not a toggle away). The browser gesture policy is the
+ *           only gate: an unmuted play() that rejects (no prior user
+ *           activation) falls back to muted and the toggle reflects it —
+ *           any click on the page (the toggle itself included) grants
+ *           activation, so sound works from the next hover on. Hover also
+ *           raises the ACTION TRIO (MiniMax anatomy): sound toggle takes
+ *           the aspect badge's bottom-left slot, a white stadium Remix pill
+ *           centers, an expand button sits bottom-right — Remix and expand
+ *           open the same inspect overlay (no quick-launch, ADR-040);
+ *   click = the RecipeInspectOverlay (the ONLY launch path — the launch
+ *           zone lives inside; hover never launches anything).
+ * The tile's aspect comes from the poster's real pixels (registry w/h), so
+ * any-shaped asset fills exactly — no letterboxing, no forced 9:16 slot.
+ * Reserved cards carry a Soon pill in the caption and never play.
  *
- * Every live-card click opens the RecipeInspectOverlay (the launch zone
- * lives inside; the composer keeps only the manual @-mention path).
+ * The caption stays UNDER the tile (title + promise — the dish explains
+ * itself at rest, no hover needed to read it).
  */
 export function RecipeCard({
   card,
-  sounding,
-  onToggleSound,
   onInspect,
 }: {
   card: RecipeCardData
-  sounding: boolean
-  onToggleSound: (id: string) => void
   onInspect: (card: RecipeCardData) => void
 }) {
   const { t } = useTranslation()
   const videoRef = useRef<HTMLVideoElement>(null)
   const live = card.status === "live"
+  const playable = Boolean(card.preview.videoUrl)
+  const [hovering, setHovering] = useState(false)
+  // Sound: user intent (default ON) vs the EFFECTIVE audible state (the
+  // policy fallback flips it until the first click anywhere).
+  const [muteIntent, setMuteIntent] = useState(false)
+  const [muted, setMuted] = useState(false)
 
-  // React's `muted` prop is unreliable after mount (attribute vs property) —
-  // drive it imperatively so the sound toggle always lands.
+  // Hover play: nothing loads at rest (preload="none"); the teaser loads on
+  // first hover, pauses and hides on leave (the poster returns). Sound first,
+  // muted fallback — React's `muted` prop is unreliable after mount
+  // (attribute vs property), so drive it imperatively.
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = !sounding
-  }, [sounding])
+    const video = videoRef.current
+    if (!video) return
+    if (hovering && playable) {
+      video.muted = muteIntent
+      setMuted(muteIntent)
+      video.play().catch(() => {
+        // Autoplay policy (no activation yet) — retry muted; the toggle
+        // shows the fallback. A later click unlocks sound.
+        video.muted = true
+        setMuted(true)
+        video.play().catch(() => {
+          // Codec edge — the poster simply stays.
+        })
+      })
+    } else {
+      video.pause()
+    }
+  }, [hovering, playable, muteIntent])
 
   return (
     <div
@@ -50,41 +81,121 @@ export function RecipeCard({
           onInspect(card)
         }
       }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       className={`group flex flex-col gap-2.5 outline-none ${live ? "cursor-pointer" : ""}`}
     >
-      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-black">
-        {/* object-contain, never crop (2026-08-14 ruling): a square or
-            landscape teaser letterboxes with black bars — the Douyin/TikTok
-            landscape-in-vertical convention. Vertical teasers fill the frame
-            exactly as before (contain == cover when the ratios match). */}
-        <video
-          ref={videoRef}
-          src={card.preview.videoUrl}
-          poster={card.preview.posterUrl}
-          className="h-full w-full object-contain"
-          autoPlay
-          muted
-          loop
-          playsInline
+      <div
+        className="relative overflow-hidden rounded-lg bg-muted"
+        style={{ aspectRatio: `${card.preview.w} / ${card.preview.h}` }}
+      >
+        {/* Rest layer: the poster (media content is its own separation —
+            no ring, no shadow, no chrome). */}
+        <img
+          src={card.preview.posterUrl}
+          alt={t(`recipes.${card.id}.title`)}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
         />
 
-        {/* Top-right sound toggle: hover-revealed, one card sounds at a
-            time. Rides a 300ms ease-out entrance. */}
-        <button
-          type="button"
-          aria-label={sounding ? t("recipes.mute") : t("recipes.unmute")}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleSound(card.id)
-          }}
-          className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-300 ease-out hover:bg-white/25 ${
-            sounding
-              ? "translate-y-0 opacity-100"
-              : "pointer-events-none -translate-y-1 opacity-0 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100"
+        {/* Hover layer: the teaser (same ratio as the poster — exact fill).
+            Mounts only for cards that have a preview video. */}
+        {playable && (
+          <video
+            ref={videoRef}
+            src={card.preview.videoUrl}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+              hovering ? "opacity-100" : "opacity-0"
+            }`}
+            preload="none"
+            muted
+            loop
+            playsInline
+          />
+        )}
+
+        {/* Capability chip (top-left): the card's first tag is its capability
+            mark — the MiniMax ribbon role. On-media text is constant white
+            (it follows the media, not the theme). */}
+        {card.tags.length > 0 && (
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-black/35 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+            {t(`recipes.tags.${card.tags[0]}`)}
+          </span>
+        )}
+
+        {/* Aspect badge (bottom-left): the output's shape, stated on the
+            face (画幅跟源). Rest chrome — on hover its slot TRANSFORMS into
+            the sound toggle (MiniMax anatomy: the badge is rest-only). */}
+        <span
+          className={`absolute bottom-2.5 left-2.5 rounded-md bg-black/35 px-1.5 py-0.5 text-[10px] tabular-nums text-white backdrop-blur-sm transition-opacity duration-200 ${
+            hovering && playable ? "opacity-0" : "opacity-100"
           }`}
         >
-          {sounding ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-        </button>
+          {card.aspect}
+        </span>
+
+        {/* Hover chrome (MiniMax anatomy, 2026-08-21 walkthrough): the scrim
+            plus an action trio — sound toggle bottom-LEFT (takes the aspect
+            badge's slot), a white stadium Remix pill at CENTER, an expand
+            button bottom-RIGHT. Remix and expand both open the inspect
+            overlay — the ONLY launch path (ADR-040); hover never launches. */}
+        {playable && (
+          <>
+            <div
+              className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent transition-opacity duration-200 ${
+                hovering ? "opacity-100" : "opacity-0"
+              }`}
+            />
+            <button
+              type="button"
+              aria-label={muted ? t("recipes.unmute") : t("recipes.mute")}
+              tabIndex={hovering ? 0 : -1}
+              onClick={(e) => {
+                e.stopPropagation()
+                setMuteIntent((v) => !v)
+              }}
+              className={`absolute bottom-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/25 ${
+                hovering
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-1 opacity-0"
+              }`}
+            >
+              {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              tabIndex={hovering ? 0 : -1}
+              onClick={(e) => {
+                e.stopPropagation()
+                onInspect(card)
+              }}
+              className={`absolute left-1/2 top-1/2 flex h-10 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-medium text-black shadow-lg transition-all duration-200 hover:bg-white ${
+                hovering
+                  ? "scale-100 opacity-100"
+                  : "pointer-events-none scale-95 opacity-0"
+              }`}
+            >
+              <Wand2 className="h-4 w-4" />
+              {t("recipes.remix")}
+            </button>
+            <button
+              type="button"
+              aria-label={t("recipes.expand")}
+              tabIndex={hovering ? 0 : -1}
+              onClick={(e) => {
+                e.stopPropagation()
+                onInspect(card)
+              }}
+              className={`absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/25 ${
+                hovering
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-1 opacity-0"
+              }`}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Caption: the dish explains itself — title + promise; reserved cards

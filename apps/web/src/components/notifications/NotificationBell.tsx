@@ -168,7 +168,11 @@ export function NotificationBell() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon" className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-9 w-9 rounded-lg overlay-surface ring-1 ring-foreground/10"
+          >
             <Bell className="h-5 w-5" />
             {unread > 0 && (
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />

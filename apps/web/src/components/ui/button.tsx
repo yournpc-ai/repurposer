@@ -8,7 +8,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        /* Disabled is its own color role on the primary variant (ADR-046):
+         * an inset well + meta glyph, never an opacity knockdown — the send
+         * button's disabled state reads as a designed state, not a fade.
+         * Other variants keep the base veil (they speak through text/icon). */
+        default: "bg-primary text-primary-foreground hover:bg-primary/80 disabled:bg-disabled disabled:text-disabled-foreground disabled:opacity-100",
         outline:
           "border-border hover:bg-input/50 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-input/30 dark:hover:bg-accent",
         secondary:
