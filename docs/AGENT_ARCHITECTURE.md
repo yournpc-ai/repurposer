@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 技能包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-39）；loop 层行为规格见 CHAT_ARCHITECTURE.md。
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2，落地前代码仍读旧名）
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-42）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5。
 
 ## 1. 叙事
 
@@ -45,19 +45,46 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | Harness | 每一次 LLM 调用怎么调得好 | Agent 漏斗 + 花名册 + prompts | `app/agents/` |
 | Model | 用谁的模型 | client 单边界 + 计量捕获 | `app/clients/` |
 
+## 2.5 行业坐标（业务命名 → 行业座位）
+
+模块分工在行业内已收敛为常数（dsh / Mastra / Agno / LangGraph / Claude Code 五源核对 + Agent Skills 规范四厂商证据，证据 `research/deepseek-harness.md` / `research/agent-skills-spec.md`）。本节是唯一映射表：**我们的业务名 ↔ 传统 agent 架构里的座位 ↔ 差异注记**——业务名随 N-42 与行业对齐（更名随命名批 v2，落地前代码仍读旧名），差异注记说明座位；新模块准入时先在此表找座位。
+
+| 我们 | 行业座位（参照） | 差异注记 |
+|---|---|---|
+| Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop 只做意图治理，执行下沉 Graph；dsh loop 内含工具循环 |
+| Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 拓扑代码定（ADR-028）；dsh 反面 = 模型写编排脚本，永拒 |
+| Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | N-33 两义在案；我们漏斗固定，无插件拦截 |
+| Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`，批⑥前 `clients/`）；政策开关座位在 PROGRESS 池 |
+| agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
+| tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（禁 ReAct 不变，调用方 = 图） |
+| providers（N-42 新建） | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝，批⑥前 `clients/`）；LLM 禁 import 门禁迁址于此 |
+| skills 指令包（座位预留，未建） | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按节点条件注入（instructions 式消费），无 runtime discovery |
+| TaskSpec 任务书 | plan（Claude Code plan mode）/ goal（dsh） | 确认制；goal 的自治续跑不建 |
+| interrupt（N-40 前 checkpoint） | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
+| Conversation | thread（Mastra Thread）/ session（Agno） | 撞 auth session 避让在案 |
+| `app/memory/` 记忆层 | Agno Memory（语义记忆） | 现住户 = persona；积累式写入路径（≈ Agno Learnings）= persona 校准池条目 |
+| persona 人设 | 无行业标准词（≈ 语义记忆的身份区） | 我们的产品层概念，行业无对应 |
+| outputs 产物 | artifact（Claude） | N-01 统一产物表 |
+| worker 行级认领 | jobs（dsh `ctx.jobs` / Agno background runs） | `FOR UPDATE SKIP LOCKED`，N-13：API 层 job 词汇已清 |
+| 打勾流 / meta row | progress events（dsh `agent/*` 观察面） | 确定性进度，非 LLM 叙述（ADR-041 唯一进度面） |
+| RunCard / 结果画布 | transcript 投影（dsh `deriveMessages()` / session-projection） | 我们从行记录投影，非事件日志 |
+| agent 调用台账（池） | traces（Agno Traces）/ `assistant/message` 事实（dsh） | PROGRESS 需求池 P1 |
+| 闸门编目（池） | invariants（dsh）/ guardrails（OpenAI Agents SDK） | PROGRESS 需求池 P2 |
+| ——（不建） | compaction / subagent / steering / sandbox | 记录在案的拒绝（§5.4 + 调研文档 §3） |
+
 ## 3. RunPlan 概念表（九个，没有第十个）
 
 | 概念 | 一句话 |
 |---|---|
-| **任务书** `TaskSpec` | 意图归一：唯一请求语法 = 技能链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
+| **任务书** `TaskSpec` | 意图归一：唯一请求语法 = 工具链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
 | **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
 | **导演** `director` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
-| **机械** `tools` | 确定性执行单元：无 LLM 决策，禁 import agents/LLM client（N-29 铁律） |
-| **技能包** `skills/` | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
+| **机械** | "确定性工具"描述语（N-42 退役为子集属性）：无 LLM 决策的工具；providers/ 与确定性工具禁 import agents/LLM client（铁律迁址） |
+| **工具包** `tools/`（N-42 前 `skills/`） | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
 | **质检** `verify`（节点 kind） | 单产物/全片质量校验（Phase 3，未实现）；可寻址、可计价、可单独重跑 |
 | **施工图** `workflow_steps` | 计划+账簿一体的 DAG 内核：`inputs` 边表 / `spec` 参数 / `output_refs` 产物 / `estimate` 计划侧成本 / `cost` 账簿侧成本 |
-| **产物** `outputs` | 统一产物表；产物类型 = 技能的属性（N-32），注册表派生可扩展；用户可见的产物预告 = 干跑编译的派生预览 `derived`（ADR-043） |
+| **产物** `outputs` | 统一产物表；产物类型 = 工具的属性（N-32），注册表派生可扩展；用户可见的产物预告 = 干跑编译的派生预览 `derived`（ADR-043） |
 
 分发（Distribution）与 Pipeline 平级，缝 = 产物表，见 MODULE_ARCHITECTURE。
 
@@ -106,7 +133,7 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-- **技能节点**：技能包持有，LLM 可提议（dispatchable），kind = 技能名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`…）。
+- **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`director_understand`/`director_plan`/`checkpoint`/`render`），住 `pipeline/`。
 
 ## 5. Harness 层：模型调用面
@@ -134,7 +161,7 @@ class Agent[OutT]:
 
 ### 5.3 花名册与声明归属
 
-- `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**技能私有声明住技能包**（选段编剧、各 writer、reviser）。
+- `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
 - context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 任务书 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
@@ -151,28 +178,28 @@ class Agent[OutT]:
 - 多模态 / 图像 / 音乐生成同边界（`generate_image` / `generate_music`）。
 - **provider 政策开关**（未来）：第二 provider 的真实需求（EU 客户要求 EU-hosted）出现时，在 harness 漏斗按 policy 路由，用户-facing 形态 = 策略开关（"优先 EU 托管模型"），不是模型 SKU 货架；现在不预留接口（单边界已够）。
 
-## 7. 技能包（`app/skills/`）
+## 7. 工具包（`app/tools/`，N-42 前 `app/skills/`）
 
-技能 = 用户语言的能力单位（"多语言字幕是我们的技能"）；技能包 = 能力的唯一家：
+工具 = 能力层注册项（N-42 对齐行业 tool；营销文案里仍叫"技能"，§1 营销泛词豁免）；工具包 = 能力的唯一家：
 
 ```
-skills/dub/          配音技能
+tools/dub/           配音工具
 ├── node.py          节点类（NodeBase 实现：run/estimate/requires/label/retries=2）
 ├── params.py        DubClipParams（编译期裁决文档）
 ├── procedure.py     私有工序（逐翻译单元合成 → 测时长 → 窗口调速 → cue 起点拼接）
-└── （agent 声明）    技能私有决策单元（可选；dub 复用共享 translator）
+└── （agent 声明）    工具私有决策单元（可选；dub 复用共享 translator）
 ```
 
-- **SKILL_REGISTRY 收编**：`skills/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
-- **新增技能 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
-- **产出型技能**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，PlanAgent 当轮即知**（技能清单同源注入 prompt）。
+- **TOOL_REGISTRY 收编**（落地前仍读 SKILL_REGISTRY）：`tools/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
+- **新增工具 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
+- **产出型工具**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，PlanAgent 当轮即知**（工具清单同源注入 prompt）。
 - 注册项准入过 NAMING §7/§8 评审。
 
 ## 8. 估价与计量
 
 - **估价（计划侧）**：`node.estimate(ctx)`——机械节点精确价（TTS 按字符 / render 按秒 / 克隆按次），agent 节点 token 区间（按 prompt 规模 + 输出 schema 给上下界），checkpoint = 0。
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
-- **价目住 Model 层**：`clients/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
+- **价目住 Model 层**：`providers/llm/minimax.py`（批⑥前 `clients/`）的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
 - **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第九周。
 - 用户呈现（PROGRESS 第九周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
@@ -191,8 +218,8 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 - `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/roster.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
 - `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）；context 装配在 `agents/contexts.py`
-- `app/skills/` — 技能包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`skills/__init__.py` — SKILL_REGISTRY 收编
-- `app/tools/` — 机械库（asr / voice / storage / filler / transcript / music…）
+- `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…；N-42 前 `app/skills/`）；`tools/__init__.py` — TOOL_REGISTRY 收编（落地前仍读 SKILL_REGISTRY）
+- `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；N-42 前 `app/tools/`；通用件随消费方归位）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
