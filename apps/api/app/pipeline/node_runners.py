@@ -20,6 +20,7 @@ from app.agents.roster import director_plan, director_understand, persona
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
+    EMOTIONAL_TONES,
     AskOption,
     AskPayload,
     IntentSlot,
@@ -201,7 +202,13 @@ class PersonaBootstrap(NodeBase):
             core_values=memory.core_values or [],
             favorite_metaphors=memory.favorite_metaphors or [],
             sentence_style=_truncate(memory.sentence_style, 255) or "",
-            emotional_tone=memory.emotional_tone or "rational",
+            # Bare str from the LLM — normalize out-of-enum values, or the
+            # row poisons every PersonaContext serialization that reads it.
+            emotional_tone=(
+                memory.emotional_tone
+                if memory.emotional_tone in EMOTIONAL_TONES
+                else "rational"
+            ),
             typical_hooks=memory.typical_hooks or [],
             avoid_words=memory.avoid_words or [],
             audience=_truncate(memory.audience, 255),

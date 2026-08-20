@@ -74,6 +74,7 @@ from app.models.tables import (
     Asset,
     Conversation,
     Message,
+    Output,
     Project,
     WorkflowRun,
 )
@@ -567,7 +568,11 @@ async def answer_question(
         resume_waiting_checkpoint,
     )
 
-    message = await db.get(Message, message_id)
+    # Row lock to the request boundary: a double-clicked Start (or retry)
+    # otherwise passes the answer-is-None check concurrently and births two
+    # paid runs off one task book. The second waiter re-reads post-commit and
+    # hits the 409 below.
+    message = await db.get(Message, message_id, with_for_update=True)
     if message is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
     conversation = await db.get(Conversation, message.conversation_id)
@@ -1008,7 +1013,14 @@ async def _plan_turn(
         if is_pending_task_book(pending_question) and stored is not None:
             answered, _follow_up = await answer_question(
                 db, user_id, UUID(str(pending_question.id)),
-                StartAnswerRequest(kind="start", autonomy=request.autonomy),
+                # The review panel's edited book rides along (typed Start
+                # parity): dropping prior_intent here would execute the
+                # stored chain and silently discard the user's panel edits.
+                StartAnswerRequest(
+                    kind="start",
+                    autonomy=request.autonomy,
+                    intent=request.prior_intent,
+                ),
             )
             # answer_question commits — the run, the answer and the cleared
             # pending intent land in one transaction.
@@ -1186,6 +1198,20 @@ async def _propose_turn(
                 proposal = None
                 assistant_content = _cannot_do_text(text)
         if isinstance(proposal, EditOpsProposal):
+            # Mentions forward client-pinned ids verbatim (MENTIONS §35) —
+            # authorize before any write: the target must be an output of
+            # THIS project. Every other write path (editor routes / revise /
+            # render / derivative targets) re-checks ownership at execution;
+            # the chat surface's only write had none (cross-tenant IDOR).
+            target = await db.get(Output, proposal.target_output_id)
+            if (
+                project is None
+                or target is None
+                or UUID(str(target.project_id)) != UUID(str(project.id))
+            ):
+                proposal = None
+                assistant_content = _cannot_do_text(text)
+        if isinstance(proposal, EditOpsProposal):
             # Create the assistant message first (flush for the id), then
             # apply with message_id lineage — one commit at the tail.
             assistant_message = await _create_message(
@@ -1231,17 +1257,30 @@ async def _propose_turn(
             )
             assistant_content = proposal.summary
         except ValueError as e:
-            # Missing required input (media/transcript/…) — no repair round
-            # can fix that. The raw exception carries registry vocabulary;
-            # it goes to the log, the user gets a plain line in their
-            # language (same posture as _cannot_do_text, 2026-08-20).
-            logger.info("run_birth_missing_input", error=str(e))
-            assistant_content = (
-                "还缺素材——先发我视频、音频或文字稿，我再开工。"
-                if _prefers_zh(text)
-                else "I'm missing the material for that — attach a video, "
-                "audio, or transcript first, then I'll get to work."
+            from app.pipeline.orchestrator import (  # deferred: import cycle
+                RunAlreadyActiveError,
             )
+
+            if isinstance(e, RunAlreadyActiveError):
+                # Active-run guard fired — say THAT, not the missing-material
+                # line (the guard's own 422 copy rides the typed endpoints).
+                assistant_content = (
+                    "上一批还在生成中——完成后再安排新的。"
+                    if _prefers_zh(text)
+                    else "A batch is still generating — once it finishes, send the next one."
+                )
+            else:
+                # Missing required input (media/transcript/…) — no repair round
+                # can fix that. The raw exception carries registry vocabulary;
+                # it goes to the log, the user gets a plain line in their
+                # language (same posture as _cannot_do_text, 2026-08-20).
+                logger.info("run_birth_missing_input", error=str(e))
+                assistant_content = (
+                    "还缺素材——先发我视频、音频或文字稿，我再开工。"
+                    if _prefers_zh(text)
+                    else "I'm missing the material for that — attach a video, "
+                    "audio, or transcript first, then I'll get to work."
+                )
         except SkillRejected as first_error:
             # One bounded repair round with the rejection as feedback (the
             # funnel's reserved kwarg — the echo lives in Agent.call).

@@ -263,6 +263,16 @@ async def main() -> None:
             project = await db.get(Project, harvest_pid)
             if project is None:
                 raise SystemExit(f"project {harvest_pid} not found")
+            # Ownership guard: _cleanup deletes the project's outputs, runs,
+            # assets and mounted persona. On a typo'd / real-user pid that is
+            # someone else's data. Refuse anything but our own bake user.
+            owner = await db.get(User, project.user_id)
+            if owner is None or owner.email != BAKE_EMAIL:
+                raise SystemExit(
+                    f"project {harvest_pid} does not belong to the bake user "
+                    f"({BAKE_EMAIL}) — refusing to harvest/cleanup a real "
+                    "user's project"
+                )
             await _harvest(db, project, card, keep)
             return
 

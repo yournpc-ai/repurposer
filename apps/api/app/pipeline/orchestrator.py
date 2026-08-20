@@ -527,6 +527,19 @@ CLIPS_NEED_MEDIA = (
     "Clips need a video, audio, or image source. Upload one or deselect clips."
 )
 
+# Birthplace rejection copy for the active-run guard (create_run).
+RUN_ALREADY_ACTIVE = (
+    "This project already has a run in progress — wait for it to finish."
+)
+
+
+class RunAlreadyActiveError(ValueError):
+    """Birthplace rejection: the project already has a PENDING/RUNNING run.
+
+    Subclasses ValueError so every existing birthplace translation (request
+    handlers' 422, chat dispatch's degrade) keeps working untouched; the
+    chat surface catches it first for its own plain-language line."""
+
 
 async def _needs_stills_alignment(db: AsyncSession, project: Project, task: TaskSpec) -> bool:
     """Input profile for the no-recording path (RECIPES §4.2).
@@ -660,6 +673,36 @@ async def create_run(
         from app.ui_locale import current_ui_language  # deferred: import cycle
 
         task.ui_language = current_ui_language()
+    # Active-run guard, serialized by the project row lock: two concurrent
+    # births (double-clicked Start, /generate retry, chat dispatch) serialize
+    # here — the second sees the first's committed PENDING row and rejects.
+    # Without it, concurrent runs reap each other's clip rows (select_clips
+    # deletes by project_id) and cancel each other's renders. WAITING_HUMAN
+    # is not "executing": a parked run is the user's to abandon by starting
+    # fresh, so only PENDING/RUNNING block.
+    await db.execute(
+        select(Project).where(Project.id == project.id).with_for_update()
+    )
+    active = (
+        await db.execute(
+            select(WorkflowRun.id)
+            .where(
+                WorkflowRun.project_id == project.id,
+                WorkflowRun.status.in_(
+                    [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    if active is not None:
+        # ui_language is pinned above from the requesting browser's locale —
+        # the typed endpoints surface this as the 422 toast detail.
+        raise RunAlreadyActiveError(
+            "这个项目已有生成在进行中——等它结束再开始新的。"
+            if (task.ui_language or "").startswith("zh")
+            else RUN_ALREADY_ACTIVE
+        )
     target_type: str | None = None
     if task.scope in _TARGETED_DERIVATIVE_SCOPES and task.target_id is not None:
         target = await db.get(Output, task.target_id)

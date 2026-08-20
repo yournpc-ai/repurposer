@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class DubClipParams(BaseModel):
-    voice: str | None = Field(default=None, description="Voice-clone id; null = the persona's own cloned voice")
+    voice: str | None = Field(default=None, description="Reserved — currently unwired: the dub chain voices from the project's own material (persona.voice binding is a deferred item, PROGRESS 需求池). Do not rely on it in proposals")
     target_output_id: str | None = Field(default=None, description="Dub only this one output (uuid); null = all clips in scope")
     target_language: str = Field(default="en", description="ISO code of the language to dub into")
     # agent-loop-upgrade W5: mode② spec = params.model_dump() carries this

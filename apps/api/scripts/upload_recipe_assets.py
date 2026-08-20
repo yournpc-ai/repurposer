@@ -58,6 +58,8 @@ def _write_manifest(entries: dict[str, str]) -> None:
 
 
 async def main() -> None:
+    if len(sys.argv) < 2:
+        raise SystemExit(f"usage: {Path(__file__).name} <dir-of-mp4/jpg-assets>")
     src_dir = Path(sys.argv[1])
     files = sorted(p for p in src_dir.iterdir() if p.suffix in CONTENT_TYPES)
     if not files:

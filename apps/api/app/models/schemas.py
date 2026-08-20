@@ -493,6 +493,11 @@ class ChatResponse(BaseModel):
     answered_question: ChatMessageResponse | None = None
 
 
+# Runtime validation set for the tone enum below (LLM extraction writes are
+# normalized against this — keep in sync with the Literal).
+EMOTIONAL_TONES = ("rational", "passionate", "gentle", "sharp", "humorous")
+
+
 class PersonaContext(BaseModel):
     """Persona business object returned by the API and passed to agents.
 

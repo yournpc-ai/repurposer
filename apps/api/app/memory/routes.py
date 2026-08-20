@@ -12,6 +12,7 @@ from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.models.schemas import (
+    EMOTIONAL_TONES,
     AssetType,
     PersonaContext,
     PersonaCreate,
@@ -34,7 +35,24 @@ async def create_persona(
     current_user: User = Depends(get_current_user_required),
 ) -> Persona:
     """Create a new persona."""
-    persona = Persona(**data.model_dump(), user_id=current_user.id)
+    # Bare creation (the frontend sends {name, title, language}) must not
+    # write explicit NULLs into the strict fields: PersonaContext requires
+    # the style-six/list fields non-None (present-but-None fails validation —
+    # defaults don't cover it), and one NULL row poisons every list/response
+    # serialization plus any generation that resolves it as the default.
+    payload = {k: v for k, v in data.model_dump().items() if v is not None}
+    persona = Persona(
+        **{
+            "core_values": [],
+            "favorite_metaphors": [],
+            "sentence_style": "",
+            "emotional_tone": "rational",
+            "typical_hooks": [],
+            "avoid_words": [],
+            **payload,
+        },
+        user_id=current_user.id,
+    )
     db.add(persona)
     try:
         await db.commit()
@@ -74,12 +92,17 @@ async def list_personas(
 
 
 async def _get_user_persona(
-    persona_id: UUID, user_id: UUID | None, db: DBDep
+    persona_id: UUID, user_id: UUID | None, db: DBDep, *, write: bool = False
 ) -> Persona:
-    """Fetch a persona and ensure it belongs to the given user or defaults."""
+    """Fetch a persona and check access. Legacy default-user (shared)
+    personas stay READABLE to any caller; writes are owner-only — a shared
+    row must never be mutated, deleted, or regenerated through another
+    user's session."""
     query = select(Persona).where(Persona.id == persona_id)
     if user_id is None:
         query = query.where(Persona.user_id == DEFAULT_USER_ID)
+    elif write:
+        query = query.where(Persona.user_id == user_id)
     else:
         query = query.where(Persona.user_id.in_([user_id, DEFAULT_USER_ID]))
     result = await db.execute(query)
@@ -112,7 +135,7 @@ async def update_persona(
     current_user: User = Depends(get_current_user_required),
 ) -> Persona:
     """Update persona."""
-    persona = await _get_user_persona(persona_id, current_user.id, db)
+    persona = await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -130,7 +153,7 @@ async def delete_persona(
     current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete persona and all associated source assets."""
-    persona = await _get_user_persona(persona_id, current_user.id, db)
+    persona = await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     # Delete associated assets (files + DB rows)
     result = await db.execute(select(Asset).where(Asset.persona_id == persona_id))
@@ -140,7 +163,15 @@ async def delete_persona(
         await db.delete(asset)
 
     await db.delete(persona)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        # Mounted on a project (projects.persona_id FK) — say so, don't 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Persona is in use by a project — detach it first",
+        ) from e
 
     # Remove persona upload directory after DB commit
     delete_persona_files(persona_id, current_user.id)
@@ -153,7 +184,7 @@ async def generate_persona(
     current_user: User = Depends(get_current_user_required),
 ) -> PersonaContext:
     """Generate persona style and content memory from uploaded source assets."""
-    persona = await _get_user_persona(persona_id, current_user.id, db)
+    persona = await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     # Find persona's past material assets
     result = await db.execute(
@@ -203,7 +234,13 @@ async def generate_persona(
     persona.core_values = memory.core_values or []
     persona.favorite_metaphors = memory.favorite_metaphors or []
     persona.sentence_style = memory.sentence_style or ""
-    persona.emotional_tone = memory.emotional_tone or "rational"
+    # LLM extraction is a bare str — out-of-enum values ("calm", "冷静")
+    # would poison every PersonaContext serialization off this row.
+    persona.emotional_tone = (
+        memory.emotional_tone
+        if memory.emotional_tone in EMOTIONAL_TONES
+        else "rational"
+    )
     persona.typical_hooks = memory.typical_hooks or []
     persona.avoid_words = memory.avoid_words or []
     persona.audience = memory.audience

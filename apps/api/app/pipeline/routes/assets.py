@@ -52,8 +52,11 @@ async def _get_user_project(project_id: UUID, user_id: UUID | None, db: DBDep) -
     )
 
 
-async def _get_user_persona(persona_id: UUID, user_id: UUID | None, db: DBDep) -> Persona:
-    """Fetch a persona and ensure it belongs to the given user or defaults."""
+async def _get_user_persona(persona_id: UUID, user_id: UUID | None, db: DBDep, *, write: bool = False) -> Persona:
+    """Fetch a persona and check access. Legacy default-user (shared)
+    personas stay READABLE to any caller; writes are owner-only — a shared
+    row must never gain, change, or lose assets through another user's
+    session."""
     from app.dependencies.auth import DEFAULT_USER_ID
 
     result = await db.execute(select(Persona).where(Persona.id == persona_id))
@@ -65,7 +68,7 @@ async def _get_user_persona(persona_id: UUID, user_id: UUID | None, db: DBDep) -
         )
     if user_id is not None and persona.user_id == user_id:
         return persona
-    if persona.user_id == DEFAULT_USER_ID:
+    if persona.user_id == DEFAULT_USER_ID and not write:
         return persona
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -284,7 +287,7 @@ async def create_persona_asset_upload_url(
     current_user: User = Depends(get_current_user_required),
 ) -> AssetUploadUrlResponse:
     """Return a presigned PUT URL for direct upload of a persona asset."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     from app.tools.storage import get_persona_upload_path
 
@@ -310,7 +313,7 @@ async def create_persona_asset_from_key(
     current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Create a persona asset record after direct upload to storage."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     # Same trust rules as project assets: server-issued key + object present.
     expected_prefix = get_persona_upload_dir(persona_id, current_user.id)
@@ -351,7 +354,7 @@ async def upload_persona_asset(
     current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Upload a past material asset through the API (local/fallback)."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     filename = file.filename or "unnamed"
     relative_path = await save_persona_upload(file.file, persona_id, current_user.id, filename)
@@ -402,7 +405,7 @@ async def create_persona_media_upload_url(
     current_user: User = Depends(get_current_user_required),
 ) -> AssetUploadUrlResponse:
     """Return a presigned PUT URL for skin intro/outro media (image/video)."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     key = str(await get_persona_upload_path(persona_id, current_user.id, request.filename))
     upload_url = await presign_upload(key, content_type=request.content_type)
@@ -422,7 +425,7 @@ async def create_persona_media_from_key(
     current_user: User = Depends(get_current_user_required),
 ) -> dict[str, str | None]:
     """Confirm a directly-uploaded skin media file and return its stream URL."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     # Same trust rules as persona assets: server-issued key + object present.
     expected_prefix = get_persona_upload_dir(persona_id, current_user.id)
@@ -448,7 +451,7 @@ async def update_persona_asset(
     current_user: User = Depends(get_current_user_required),
 ) -> Asset:
     """Rename a persona asset (the storage key is untouched)."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.persona_id == persona_id)
     )
@@ -475,7 +478,7 @@ async def delete_persona_asset(
     current_user: User = Depends(get_current_user_required),
 ) -> None:
     """Delete a persona asset."""
-    await _get_user_persona(persona_id, current_user.id, db)
+    await _get_user_persona(persona_id, current_user.id, db, write=True)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.persona_id == persona_id)
     )
