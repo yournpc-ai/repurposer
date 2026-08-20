@@ -21,32 +21,32 @@ export const Route = createFileRoute("/")({
     meta: [
       {
         title:
-          "Repurposer — Turn one talk into posts, clips and newsletters",
+          "Repurposer — You focus on your craft; we handle the rest",
       },
       {
         name: "description",
         content:
-          "Repurposer is an AI agent that turns talks, podcasts and interviews into LinkedIn posts, short clips, articles and newsletters — in the languages your audience speaks. You review, it publishes. Hosted in the EU.",
+          "Repurposer is an AI assistant that turns your existing material — talks, reports, podcasts, transcripts — into the content you name: LinkedIn posts, short clips, articles, newsletters, in the languages your audience speaks. GDPR-ready.",
       },
       { property: "og:type", content: "website" },
       {
         property: "og:title",
-        content: "Repurposer — Turn one talk into posts, clips and newsletters",
+        content: "Repurposer — You focus on your craft; we handle the rest",
       },
       {
         property: "og:description",
         content:
-          "An AI agent that turns talks into LinkedIn posts, clips, articles and newsletters — in the languages your audience speaks. You review, it publishes.",
+          "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
       },
       { name: "twitter:card", content: "summary_large_image" },
       {
         name: "twitter:title",
-        content: "Repurposer — Turn one talk into posts, clips and newsletters",
+        content: "Repurposer — You focus on your craft; we handle the rest",
       },
       {
         name: "twitter:description",
         content:
-          "An AI agent that turns talks into LinkedIn posts, clips, articles and newsletters — in the languages your audience speaks.",
+          "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
       },
     ],
   }),

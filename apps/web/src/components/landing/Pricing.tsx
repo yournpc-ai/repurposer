@@ -29,7 +29,7 @@ const TIERS = [
     key: "institution",
     monthly: 79,
     yearly: 63,
-    featureKeys: ["f1", "f2", "f3", "f4", "f5"],
+    featureKeys: ["f1", "f2", "f3", "f4"],
   },
 ] as const
 

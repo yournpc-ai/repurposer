@@ -56,13 +56,15 @@ export function recipeProcessFlow(
 
   // Curated process steps, `fanout=N` expanded into N parallel branches that
   // re-join at the next level. Branch labels come from the baked outputs'
-  // language keys when they line up (dub: EN original + N dubs → branches
-  // are the N dubs). The first level hangs off the source material.
+  // language keys. Baked packs list the source-language original FIRST, so
+  // when there are more outputs than branches the first is the original and
+  // branches take the rest (subs: [EN, zh, fr, es-dub] + translate fanout 2
+  // → branches zh/fr; an exact count means no original, branches take all).
   let prevIds: string[] = card.example_assets.map((_, i) => `asset:${i}`)
   card.flow.forEach((step, i) => {
     const fanout = step.fanout && step.fanout > 1 ? step.fanout : 1
     const branchOutputs =
-      card.example_outputs.length === fanout + 1
+      card.example_outputs.length > fanout
         ? card.example_outputs.slice(1)
         : card.example_outputs
     const ids: string[] = []

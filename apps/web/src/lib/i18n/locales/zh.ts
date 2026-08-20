@@ -2,7 +2,7 @@ import type { Resources } from "./en"
 
 const zh: Resources = {
   common: {
-    upload: "Upload",
+    upload: "上传",
     googleDrive: "Google Drive",
     delete: "删除",
     create: "创建",
@@ -48,9 +48,7 @@ const zh: Resources = {
     welcomeSubtitle: "你的助手已就位——<b>告诉它，今天想做点什么</b>。",
     pastePlaceholder: "描述你想生成什么…",
     selectPersona: "人设",
-    promptSeedTool: "帮我把这场演讲整理成「{{label}}」……",
-    promptAppendTool: "（同时生成{{label}}）",
-    generating: "正在分析演讲并生成内容，可能需要一会儿…",
+    generating: "正在分析素材并生成内容，可能需要一会儿…",
     noPromptError: "请先描述想要生成的内容",
     personaCreateFailed: "创建人设失败",
   },
@@ -65,10 +63,6 @@ const zh: Resources = {
             clips: {
               label: "竖屏短片",
               description: "自动剪辑、配好字幕、带上品牌",
-            },
-            posts: {
-              label: "帖子与文章",
-              description: "LinkedIn 帖子与长文，用你的风格",
             },
             languages: {
               label: "多语言版本",
@@ -144,7 +138,7 @@ const zh: Resources = {
         },
         s4: {
           title: "一键发出去",
-          body: "做好的内容按渠道、按语言发出去。LinkedIn、newsletter、TikTok——一次搞定。",
+          body: "做好的内容按渠道、按语言发出去。LinkedIn、newsletter、机构官网——一次搞定。",
         },
       },
       screens: {
@@ -158,7 +152,7 @@ const zh: Resources = {
         },
         results: {
           chrome: "结果",
-          score: "92 保真度",
+          score: "92 推荐度",
           cardTitle: "为什么储能决定能源转型的成败",
           cardMeta: "LinkedIn · EN · 1,240 字",
           row2: "Newsletter — EN",
@@ -174,7 +168,7 @@ const zh: Resources = {
           note: "按渠道定时发出",
           row1: "LinkedIn — 已发布",
           row2: "Newsletter — 排队中",
-          row3: "TikTok — 草稿已发送",
+          row3: "机构官网 — 草稿已发送",
         },
       },
       asides: {
@@ -229,7 +223,6 @@ const zh: Resources = {
         newsletter: { name: "Newsletter", blurb: "邮件就绪" },
         website: { name: "机构官网", blurb: "官网文章" },
         youtube: { name: "YouTube", blurb: "竖屏视频" },
-        tiktok: { name: "TikTok", blurb: "竖屏短片" },
         x: { name: "X", blurb: "Thread" },
         podcast: { name: "播客", blurb: "Show notes" },
       },
@@ -320,9 +313,10 @@ const zh: Resources = {
           features: {
             f1: "包含 Pro 全部功能",
             f2: "不限席位",
-            f3: "共享品牌模板",
-            f4: "欧盟数据驻留",
-            f5: "SSO 与对公开票",
+            // 「共享品牌模板」卖的是已退役模块（ADR-038）；「欧盟数据驻留」
+            // 是硬性承诺——合规文案在落地前只保持就绪角度。
+            f3: "GDPR 就绪",
+            f4: "SSO 与对公开票",
           },
           cta: "联系我们",
         },
@@ -350,7 +344,7 @@ const zh: Resources = {
         },
         q5: {
           q: "生成的内容归谁所有？",
-          a: "完全归你。产出源自你的素材和你的画像，我们不主张任何权利。",
+          a: "完全归你。产出源自你的素材和你的人设，我们不主张任何权利。",
         },
         q6: {
           q: "可以随时取消吗？",
@@ -377,24 +371,7 @@ const zh: Resources = {
           l4: "定价",
           l5: "常见问题",
         },
-        company: {
-          title: "公司",
-          l1: "关于我们",
-          l2: "联系我们",
-          l3: "媒体资料",
-        },
-        legal: {
-          title: "法律",
-          l1: "隐私政策",
-          l2: "服务条款",
-          l3: "Cookie 政策",
-        },
-        social: {
-          title: "社交",
-          l1: "LinkedIn",
-          l2: "X",
-          l3: "YouTube",
-        },
+        // company/legal/social 三列文案随列一起退役（死锚，见 Footer.tsx）——页面上线时恢复。
       },
       copyright: "© {{year}} Repurposer。保留所有权利。",
       note: "为专家打造，GDPR 就绪。",
@@ -444,6 +421,7 @@ const zh: Resources = {
       reframe_clip: "竖屏重构图跟人",
       translate_clip: "翻译字幕",
       dub_clip: "用你的声音配音",
+      add_music: "加配乐",
       render: "渲染",
     },
     // 配方标签 chip（信息卡）——共享命名空间。
@@ -454,13 +432,11 @@ const zh: Resources = {
     },
     // 示例素材 / 成片标签（overlay 堆叠项）。
     materials: {
-      demo_talk: "示例演讲片段",
       demo_keynote: "示例登台演讲片段",
       demo_interview: "示例访谈片段",
       reframe_output: "竖屏分镜",
       follow_output: "镜头跟人",
       demo_photos: "现场照片",
-      demo_transcript: "演讲文字稿",
       demo_article: "演讲文稿",
       image_video_preview: "轮播预览",
       subs_en: "英语原声",
@@ -626,7 +602,7 @@ const zh: Resources = {
     },
     emptyPersona: "还没有风格画像，先在素材页上传材料，然后点击生成。",
     pastMaterials: "过往素材",
-    pastMaterialsDesc: "上传过往演讲稿、文章等帮助 AI 学习风格",
+    pastMaterialsDesc: "上传过往的发言、文章等材料，帮助 AI 学习你的风格",
     noMaterials: "尚未上传素材。",
     charsExtracted: "已提取 {{count}} 字符",
     noText: "无文本",
@@ -731,7 +707,7 @@ const zh: Resources = {
   projectDetail: {
     back: "返回",
     status: "状态",
-    persona: "风格画像",
+    persona: "人设",
     notGenerated: "未生成",
     unknown: "未知",
     sourceMaterials: "源材料",
@@ -1033,7 +1009,7 @@ const zh: Resources = {
     uploading: "上传中...",
     composerPlaceholder: "描述你想生成的内容...",
     composerFollowUpPlaceholder: "输入后续指令，例如“把 hook 改短”或“添加德语版本”...",
-    emptyStateSubtitle: "上传演讲、会议或访谈的视频或文字——我们记住你的内容与风格，为每个渠道生成你需要的内容。",
+    emptyStateSubtitle: "上传演讲、会议或访谈的视频或文字——我们记住你的内容与风格，你点名什么，就做什么。",
     noResultsYet: "结果将在这里显示...",
     quickActions: {
       regenerateHooks: "重新生成 hook",
@@ -1122,7 +1098,7 @@ const zh: Resources = {
       auto: "自动",
       review: "审阅",
     },
-    bail: "放弃生成",
+    bail: "停止生成",
   },
   clipMenu: {
     more: "更多操作",
@@ -1167,7 +1143,7 @@ const zh: Resources = {
         "当素材不够的时候用什么风格写和说。一般不用改，「自动」会根据你的素材自动生成。",
       promptTitle: "描述你的期望",
       promptDesc:
-        "想生成什么就写什么，可以用 @ 引用素材或模板指定处理和告诉我们素材信息。",
+        "想生成什么就写什么。用 @ 可以点名具体素材，告诉我们怎么处理它。",
       recipesTitle: "不知道写什么？看看模板",
       recipesDesc:
         "点开一张模板——上传你自己的素材，按需要微调提示词，就能生成预设效果的视频。",

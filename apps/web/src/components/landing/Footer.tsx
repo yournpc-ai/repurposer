@@ -24,30 +24,10 @@ export function Footer(): ReactNode {
         { labelKey: "landing.footer.columns.features.l5", href: "#faq" },
       ],
     },
-    {
-      titleKey: "landing.footer.columns.company.title",
-      links: [
-        { labelKey: "landing.footer.columns.company.l1", href: "#about" },
-        { labelKey: "landing.footer.columns.company.l2", href: "#contact" },
-        { labelKey: "landing.footer.columns.company.l3", href: "#press" },
-      ],
-    },
-    {
-      titleKey: "landing.footer.columns.legal.title",
-      links: [
-        { labelKey: "landing.footer.columns.legal.l1", href: "#privacy" },
-        { labelKey: "landing.footer.columns.legal.l2", href: "#terms" },
-        { labelKey: "landing.footer.columns.legal.l3", href: "#cookies" },
-      ],
-    },
-    {
-      titleKey: "landing.footer.columns.social.title",
-      links: [
-        { labelKey: "landing.footer.columns.social.l1", href: "#linkedin" },
-        { labelKey: "landing.footer.columns.social.l2", href: "#x" },
-        { labelKey: "landing.footer.columns.social.l3", href: "#youtube" },
-      ],
-    },
+    // Company / legal / social columns hidden until their pages exist —
+    // every href was a dead anchor, and dead legal links sit next to the
+    // page's GDPR-ready claims (legal pages land with the 法务 week).
+    // Restore from git history with the routes.
   ]
 
   return (

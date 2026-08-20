@@ -52,7 +52,11 @@ export function slotCoversFile(slotType: string, file: File): boolean {
     case "audio":
       return file.type.startsWith("audio/")
     case "images":
-      return file.type.startsWith("image/")
+      // Decks convert to page images in asset processing (the image-video
+      // card folds the 课件 scenario in), so a deck file covers the visual
+      // slot too — the card's inputHint ("photos or a slide deck") is the
+      // truth, and the server-side media gate already accepts deck-only.
+      return file.type.startsWith("image/") || slotCoversFile("slides", file)
     case "slides":
       return (
         file.type === "application/pdf" ||

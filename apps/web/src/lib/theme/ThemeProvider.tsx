@@ -59,7 +59,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null
     const initial: Theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system"
     setThemeState(initial)
-    setResolved(resolveTheme(initial))
+    const r = resolveTheme(initial)
+    setResolved(r)
+    // The anti-FOUC inline script paints `system` as dark unconditionally;
+    // reconcile the DOM with the real resolution — without this a
+    // light-system user stays dark and the first toggle is a visual no-op.
+    applyResolved(r)
   }, [])
 
   // Follow system changes while preference is `system`.

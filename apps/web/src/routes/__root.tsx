@@ -86,8 +86,11 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // SSR renders in the cookie language — the document element must say the
+  // same (search engines / screen readers read this, never the i18n state).
+  const { lang } = Route.useLoaderData()
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={lang ?? "en"} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

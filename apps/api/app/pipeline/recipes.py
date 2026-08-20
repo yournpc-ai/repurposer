@@ -224,7 +224,13 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             InputSlot(type="transcript"),
             InputSlot(type="slides", required=False),
         ],
-        tasks=[TaskItem(skill="select_clips", params={})],
+        tasks=[
+            TaskItem(skill="select_clips", params={}),
+            # The card sells "captions and music" (promise + template + the
+            # baked demo's add_music leg) — the declared chain names it, or
+            # the self-check's compile shape lies about the card.
+            TaskItem(skill="add_music", params={}),
+        ],
         # The demo set is the WFT keynote's own material: a talk write-up
         # (markdown — the card parses articles: PDF/Word/md/txt) + three
         # on-site photos; the baked slideshow shows exactly these.
@@ -239,6 +245,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             FlowStep(key="director_plan"),
             FlowStep(key="align_stills"),
             FlowStep(key="select_clips"),
+            FlowStep(key="add_music"),
             FlowStep(key="render"),
         ],
         example_assets=[

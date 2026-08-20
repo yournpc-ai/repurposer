@@ -46,9 +46,7 @@ const en = {
     welcomeSubtitle: "Your assistant is ready — <b>tell it what you'd like to make today</b>.",
     pastePlaceholder: "Describe what to make…",
     selectPersona: "Persona",
-    promptSeedTool: "Turn this talk into a {{label}}…",
-    promptAppendTool: "(also generate a {{label}})",
-    generating: "Analyzing the talk and generating content, this can take a moment…",
+    generating: "Analyzing your material and generating content, this can take a moment…",
     noPromptError: "Describe what you want to generate first",
     personaCreateFailed: "Failed to create persona",
   },
@@ -63,10 +61,6 @@ const en = {
             clips: {
               label: "Vertical clips",
               description: "Auto-cut, captioned, on-brand",
-            },
-            posts: {
-              label: "Posts & articles",
-              description: "LinkedIn posts and long-form, in your style",
             },
             languages: {
               label: "Multi-language versions",
@@ -105,7 +99,7 @@ const en = {
     heroTitle1: "You did the talking",
     heroTitle2: "We do the rest",
     heroSubtitle:
-      "Repurposer is an AI assistant for experts who have content but no time to manage social media. Just give it what you already have — <b>talk videos</b>, meeting recordings, photos, slides, or even just a transcript. Tell it roughly what you want, and it will offer suggestions, plan, and deliver finished pieces in your style. <b>select the version you like and publish with one click.</b>",
+      "Repurposer is an AI assistant for experts who have content but no time to manage social media. Just give it what you already have — <b>talk videos</b>, meeting recordings, photos, slides, or even just a transcript. Tell it roughly what you want, and it will offer suggestions, plan, and deliver finished pieces in your style. <b>Select the version you like and publish with one click.</b>",
     ctaTryBeta: "Try the free beta",
     ctaSeeHow: "See how it works",
     comparison: {
@@ -142,7 +136,7 @@ const en = {
         },
         s4: {
           title: "One click and it's out",
-          body: "Finished pieces go out per channel and language. LinkedIn, newsletter, TikTok — done.",
+          body: "Finished pieces go out per channel and language. LinkedIn, newsletter, your website — done.",
         },
       },
       screens: {
@@ -156,7 +150,7 @@ const en = {
         },
         results: {
           chrome: "Results",
-          score: "92 fidelity",
+          score: "92 Pick score",
           cardTitle: "Why grid storage decides the energy transition",
           cardMeta: "LinkedIn · EN · 1,240 chars",
           row2: "Newsletter — EN",
@@ -172,7 +166,7 @@ const en = {
           note: "Scheduled per channel",
           row1: "LinkedIn — published",
           row2: "Newsletter — queued",
-          row3: "TikTok — draft sent",
+          row3: "Website — draft sent",
         },
       },
       asides: {
@@ -227,7 +221,6 @@ const en = {
         newsletter: { name: "Newsletter", blurb: "Email-ready" },
         website: { name: "Website", blurb: "Articles for your site" },
         youtube: { name: "YouTube", blurb: "Vertical clips" },
-        tiktok: { name: "TikTok", blurb: "Short clips" },
         x: { name: "X", blurb: "Threads" },
         podcast: { name: "Podcast", blurb: "Show notes" },
       },
@@ -319,9 +312,11 @@ const en = {
           features: {
             f1: "Everything in Pro",
             f2: "Unlimited seats",
-            f3: "Shared brand templates",
-            f4: "EU data residency",
-            f5: "SSO & invoicing",
+            // "Shared brand templates" sold a retired module (ADR-038);
+            // "EU data residency" was a hard claim — compliance copy stays
+            // in the ready angle until it ships.
+            f3: "GDPR-ready",
+            f4: "SSO & invoicing",
           },
           cta: "Contact us",
         },
@@ -377,24 +372,8 @@ const en = {
           l4: "Pricing",
           l5: "FAQ",
         },
-        company: {
-          title: "Company",
-          l1: "About",
-          l2: "Contact",
-          l3: "Press",
-        },
-        legal: {
-          title: "Legal",
-          l1: "Privacy Policy",
-          l2: "Terms of Service",
-          l3: "Cookie Policy",
-        },
-        social: {
-          title: "Social",
-          l1: "LinkedIn",
-          l2: "X",
-          l3: "YouTube",
-        },
+        // company/legal/social column copy retired with the columns (dead
+        // anchors, Footer.tsx) — restore with the pages.
       },
       copyright: "© {{year}} Repurposer. All rights reserved.",
       note: "Made for experts, GDPR-ready.",
@@ -425,7 +404,7 @@ const en = {
     managePersonas: "Manage personas…",
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
-  // reserved cards keep their seats here but never render.
+  // reserved cards render disabled with the Soon pill, never launchable.
   recipes: {
     sectionTitle: "Get inspired. Then make it yours",
     soon: "Soon",
@@ -447,6 +426,7 @@ const en = {
       reframe_clip: "Reframe vertical, follow the speaker",
       translate_clip: "Translate the subtitles",
       dub_clip: "Dub it in your own voice",
+      add_music: "Add music",
       render: "Render",
     },
     // Recipe tag chips (info card) — shared namespace.
@@ -457,13 +437,11 @@ const en = {
     },
     // Example material / output labels (overlay stack items).
     materials: {
-      demo_talk: "Demo talk excerpt",
       demo_keynote: "Demo keynote excerpt",
       demo_interview: "Demo interview excerpt",
       reframe_output: "Vertical reframe",
       follow_output: "Speaker follow",
       demo_photos: "Event photos",
-      demo_transcript: "Talk transcript",
       demo_article: "Talk write-up",
       image_video_preview: "Slideshow preview",
       subs_en: "Original (EN)",
@@ -1059,7 +1037,7 @@ const en = {
     uploading: "Uploading...",
     composerPlaceholder: "Describe what you want to generate...",
     composerFollowUpPlaceholder: "Ask a follow-up, e.g. 'make the hook shorter' or 'add German version'...",
-    emptyStateSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and produce what every channel needs.",
+    emptyStateSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and make whatever you ask for.",
     noResultsYet: "Results will appear here...",
     quickActions: {
       regenerateHooks: "Regenerate hooks",
@@ -1194,10 +1172,10 @@ const en = {
         "A recording, audio, photos or a transcript — whatever you have. Or skip this and just write your idea below.",
       personaTitle: "Whose style and voice",
       personaDesc:
-        "When we don't have enough material, what style should we use for writing and speaking? Generally, there's no need to make changes; the “auto” feature will automatically generate content based on your material.",
+        "If the material doesn't say it already, whose style should we write and speak in? Usually you can leave this on Auto — we generate a style from your material.",
       promptTitle: "Say what you want",
       promptDesc:
-        "Just write whatever you want to generate. You can use the @ symbol to reference assets or templates to specify how they should be processed and provide us with information about the assets.",
+        "Write whatever you want made. Use @ to point at specific uploaded assets — that tells us what to do with them.",
       recipesTitle: "Stuck? Browse the templates",
       recipesDesc:
         "Click a template — upload your own material, tweak the prompt to fit your needs, and generate the preset video effect.",
