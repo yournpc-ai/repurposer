@@ -218,6 +218,7 @@ Do not use template strings:
 
 Overall style: restrained, lightweight, unified. Key reference points:
 
+- **Scope**: these rules govern the **studio** (`_app` routes + shared components). The landing page (`/` + `components/landing/`) is a marketing surface with its own visual language — its `rounded-full` / `border-border` / `font-medium` usages are template-native, not violations (2026-08-20 ruling).
 - **Border radius**: global small radius (`rounded-md` / `rounded-lg`), avoid `rounded-full` (except for circular icon buttons and red dots).
 - **Border & shadow**: cards take the base primitive's `ring-foreground/10` hairline + a soft `shadow-*` — **visible strokes** (`border-border` / `ring-border` / stronger `ring-foreground/*`) on cards are prohibited; avoid drawing dividers between sections whenever possible.
 - **Sidebar blending into main area**: `--sidebar` color equals `--background` (both themes aligned in `styles.css`), and no right border, allowing the sidebar and content area to blend seamlessly.

@@ -443,6 +443,10 @@ class Checkpoint(NodeBase):
         question_text = (
             "这次生成想聚焦哪个方向？" if zh else "Which direction should this run focus on?"
         )
+        # allow_freeform=true means ANY free text lands as the direction
+        # answer and wakes the run — even "how much longer?" small talk.
+        # Accepted tradeoff (2026-08-20 ruling): no intent screen on the
+        # answer path; a mis-fired direction is correctable in the next turn.
         payload = AskPayload(kind="choice", options=options, allow_freeform=True)
         async with AsyncSessionLocal() as s:
             message, bailed_run_ids = await dock_checkpoint_question(

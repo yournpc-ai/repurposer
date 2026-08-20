@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- TODO: replace the placeholder host with the production domain once confirmed. -->
+<!-- Public domain: repurposer.ai (2026-08-20 ruling — the .eu placeholder is retired). -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://repurposer.eu/</loc>
+    <loc>https://repurposer.ai/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
