@@ -303,17 +303,20 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         example_outputs=[
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/highlight-clips-vertical-ae184e14.mp4",
-                poster_url=f"{_DEMO}/outputs/highlight-clips-vertical-poster-cfdaabed.jpg",
+                url=f"{_DEMO}/outputs/highlight-clips-vertical-ec8e575b.mp4",
+                poster_url=f"{_DEMO}/outputs/highlight-clips-vertical-poster-11bc0ca3.jpg",
                 label_key="follow_output",
             ),
         ],
     ),
     # 访谈分镜 (reframe, RECIPES §4.3): landscape two-person interview ->
     # vertical speaker reframe — the crop_track craft layer's switch dish.
-    # The demo source is a 15s segment of xy_1 carrying exactly one clean
-    # speaker switch (~7.1s in), so the baked clip shows the cut the card
-    # sells. Baked by scripts/bake_reframe_demos.py.
+    # The demo source is a 14.5s segment of xy_1 ([172.5, 187.0] of the full
+    # interview — chosen against the full file's real speaker_map turns so it
+    # carries exactly one clean question→answer switch mid-clip), so the
+    # baked clip shows the cut the card sells. Never loudness-normalize a
+    # demo SOURCE: loudnorm fills the ≥0.6s silence gaps whisper's
+    # turn-segmentation depends on (bake_reframe_demos.py docstring).
     "reframe": RecipeEntry(
         status="live",
         input_slots=[InputSlot(type="video")],
@@ -340,8 +343,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         example_outputs=[
             ExampleOutput(
                 kind="video",
-                url=f"{_DEMO}/outputs/reframe-vertical-fe2e40e9.mp4",
-                poster_url=f"{_DEMO}/outputs/reframe-vertical-poster-7bd6b23a.jpg",
+                url=f"{_DEMO}/outputs/reframe-vertical-7bcbb54e.mp4",
+                poster_url=f"{_DEMO}/outputs/reframe-vertical-poster-c4eec0b0.jpg",
                 label_key="reframe_output",
             ),
         ],

@@ -15,9 +15,12 @@ Demo craft (TikTok 分镜 genre, all existing contract — zero renderer work):
   user-selectable);
 - no intro/outro cards (system default).
 
-Sources: demo/uploads/xy_1_interview_15s.mp4 (cut from xy_1 [171.5,186.5] —
-one clean speaker switch at ~7.1s, loudnorm -14 LUFS) and the already-
-curated demo/uploads/xy_2_15s.mp4 (the subs card's keynote excerpt —
+Sources: demo/uploads/xy_1_interview_15s.mp4 (cut from xy_1 [172.5,187.0] —
+one clean speaker switch ~6.6s in, chosen against the full file's real
+speaker_map turns; NEVER loudness-normalize a demo source: loudnorm fills
+the ≥0.6s silence gaps whisper's turn segmentation depends on, collapsing
+the interview to one turn and the reframe to one static keyframe) and the
+already-curated demo/uploads/xy_2_15s.mp4 (the subs card's keynote excerpt —
 one source, many products is the product's own story).
 
 Usage:
@@ -26,7 +29,11 @@ Usage:
     uv run python scripts/bake_reframe_demos.py reframe --harvest <project_id>
 
 Requires the worker + render service running (dev.sh). The bake project is
-deleted in FK order afterwards unless --keep.
+deleted in FK order afterwards unless --keep — on FAILURE the scaffolding
+leaks instead (the project id is printed before the waits; rescue or wipe
+via `--harvest <pid>`, which cleans up unless --keep). Cleanup deletes DB
+rows only; rendered objects under the project output prefix stay in the
+bucket (reset_db.py's storage purge is the wipe path).
 """
 
 import asyncio
@@ -170,16 +177,34 @@ def _keyframe_count(output: Output) -> int:
     return len(spec.get("crop_track") or [])
 
 
+def _segments_monotonic(output: Output) -> bool:
+    """Narrative-order gate: the kept segments' source windows must be
+    non-decreasing. A storyboard that micro-segments a short coherent input
+    and reorders by "highlight value" produces word-salad demos (observed on
+    the 14.5s Q&A cut — framing stayed perfect through 7 scrambled segments,
+    the narrative didn't survive). A demo is curated: refuse the take, re-run
+    the bake."""
+    segs = [
+        s
+        for s in (output.render_spec or {}).get("segments") or []
+        if not s.get("hidden")
+    ]
+    starts = [float(s["start"]) for s in segs]
+    return starts == sorted(starts)
+
+
 async def _harvest(db, project, card: str, keep: bool) -> None:
     """Reap the most reframe-active clip (max crop_track keyframes — the
     visible switch/follow story) + poster into demo/outputs, print the
     recipes.py ExampleOutput line."""
     # run COMPLETED ≠ renders landed: the render fan-out is claimed by the
-    # worker's render loop AFTER run_finalized, and multi-clip runs land one
-    # MP4 at a time. Poll until the with-video clip count stops growing for
-    # two consecutive rounds (a settle window — there is no count to await).
-    clips = []
-    prev_n, stable = -1, 0
+    # worker's render loop AFTER run_finalized — ONE render per tick, so a
+    # count=2 run's second MP4 lands tens of seconds after the first. Wait
+    # until EVERY clip output carries files.video (the rows exist from select
+    # time); a settle window would under-pick the first-rendered clip and the
+    # "most keyframes" criterion would never see the rest.
+    clips: list[Output] = []
+    n_all = 0
     for _ in range(120):  # up to 10 min
         async with AsyncSessionLocal() as s:  # fresh session per poll — no stale identity map
             outputs = (
@@ -187,21 +212,26 @@ async def _harvest(db, project, card: str, keep: bool) -> None:
                     select(Output).where(Output.project_id == project.id).order_by(Output.created_at)
                 )
             ).scalars().all()
-            clips = [o for o in outputs if (o.files or {}).get("video")]
-        if clips and len(clips) == prev_n:
-            stable += 1
-            if stable >= 2:
-                break
-        else:
-            stable = 0
-        prev_n = len(clips)
+            all_clips = [o for o in outputs if o.type == "clip"]
+            clips = [o for o in all_clips if (o.files or {}).get("video")]
+            n_all = len(all_clips)
+        if n_all and len(clips) == n_all:
+            break
         await asyncio.sleep(5)
-    if not clips:
-        raise SystemExit("no rendered clip output")
-    best = max(clips, key=lambda o: (_keyframe_count(o), len(str(o.files))))
+    if not clips or len(clips) < n_all:
+        raise SystemExit(f"renders incomplete: {len(clips)}/{n_all} clips rendered")
+    mono = [o for o in clips if _segments_monotonic(o)]
+    if not mono:
+        if not keep:
+            await _cleanup(db, project.id)
+        raise SystemExit(
+            "all clips have non-monotonic segment order (storyboard scrambled a "
+            "short input) — refusing the take; re-run the bake"
+        )
+    best = max(mono, key=lambda o: (_keyframe_count(o), len(str(o.files))))
     print(
-        f"harvest pick: output {best.id} — {_keyframe_count(best)} keyframes "
-        f"of {len(clips)} clips",
+        f"harvest pick: output {best.id} — {_keyframe_count(best)} keyframes, "
+        f"{len(mono)}/{len(clips)} monotonic",
         flush=True,
     )
     mp4 = await read(best.files["video"])
