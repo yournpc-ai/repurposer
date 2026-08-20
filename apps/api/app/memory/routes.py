@@ -11,6 +11,7 @@ from app.agents import roster
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
+from app.memory.brand import PERSONA_CRAFT_KEYS
 from app.models.schemas import (
     EMOTIONAL_TONES,
     AssetType,
@@ -138,6 +139,18 @@ async def update_persona(
     persona = await _get_user_persona(persona_id, current_user.id, db, write=True)
 
     update_data = data.model_dump(exclude_unset=True)
+    brand = update_data.get("brand")
+    if isinstance(brand, dict):
+        # Craft keys (aspect/fillMode/captionEnabled) are task-book / recipe
+        # defaults, never persona fields — reject by name so hand-rolled API
+        # callers learn the rule instead of silently getting their way.
+        leaked = sorted(k for k in brand if k in PERSONA_CRAFT_KEYS)
+        if leaked:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Craft keys do not belong on a persona: {', '.join(leaked)} "
+                "(they are task-book / recipe defaults)",
+            )
     for field, value in update_data.items():
         setattr(persona, field, value)
 

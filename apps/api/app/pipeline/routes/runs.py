@@ -88,7 +88,12 @@ async def run_events(
     current_user: User = Depends(get_current_user_required),
 ) -> StreamingResponse:
     """Stream a run's state: snapshot → step.updated / run.updated diffs →
-    close on terminal state. 15s heartbeat comment frames keep proxies alive."""
+    close on terminal state. 15s heartbeat comment frames keep proxies alive.
+
+    Disconnect cleanup is cancel-based, same posture as the chat SSE: the
+    ASGI server cancels the generator when the client goes away (any yield
+    after that raises) — no ``request.is_disconnected()`` polling, which the
+    middleware stack's receive-channel bookkeeping breaks."""
     run = await db.get(WorkflowRun, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -112,8 +117,6 @@ async def run_events(
 
         last_beat = time.monotonic()
         while True:
-            if await request.is_disconnected():
-                return
             await asyncio.sleep(_TAIL_INTERVAL)
 
             run, nodes = await _load(run_id)

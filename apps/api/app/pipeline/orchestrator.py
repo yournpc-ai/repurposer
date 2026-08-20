@@ -541,6 +541,26 @@ class RunAlreadyActiveError(ValueError):
     chat surface catches it first for its own plain-language line."""
 
 
+async def has_active_run(db: AsyncSession, project_id) -> bool:
+    """The active-run predicate (PENDING/RUNNING — WAITING_HUMAN is parked,
+    not executing). Shared by create_run's guard and the plan surface's
+    late-turn zombie-dock check; callers needing serialization take the
+    project row lock first."""
+    row = (
+        await db.execute(
+            select(WorkflowRun.id)
+            .where(
+                WorkflowRun.project_id == project_id,
+                WorkflowRun.status.in_(
+                    [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    return row is not None
+
+
 async def _needs_stills_alignment(db: AsyncSession, project: Project, task: TaskSpec) -> bool:
     """Input profile for the no-recording path (RECIPES §4.2).
 
@@ -683,19 +703,7 @@ async def create_run(
     await db.execute(
         select(Project).where(Project.id == project.id).with_for_update()
     )
-    active = (
-        await db.execute(
-            select(WorkflowRun.id)
-            .where(
-                WorkflowRun.project_id == project.id,
-                WorkflowRun.status.in_(
-                    [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
-                ),
-            )
-            .limit(1)
-        )
-    ).first()
-    if active is not None:
+    if await has_active_run(db, project.id):
         # ui_language is pinned above from the requesting browser's locale —
         # the typed endpoints surface this as the 422 toast detail.
         raise RunAlreadyActiveError(

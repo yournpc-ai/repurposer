@@ -17,6 +17,12 @@ from app.models.tables import Music, Persona
 from app.pipeline.music import get_music, get_music_by_mood
 from app.tools.storage import public_url
 
+# Craft/format keys: task-book defaults that live in DEFAULT_BRAND_CONFIG and
+# the recipe registry — NEVER inside a persona row (config 三分流, N-28).
+# The persona PUT rejects them, so a hand-rolled API call can't pin a craft
+# decision onto an identity.
+PERSONA_CRAFT_KEYS = ("aspect", "fillMode", "captionEnabled")
+
 # The system default skin — a persona whose brand block is NULL bakes with
 # these values (partial blocks merge over them). Craft/format defaults
 # (aspect / fillMode / captionEnabled / music toggle) live here too: they are

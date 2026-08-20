@@ -17,41 +17,67 @@ import { SmoothScroll } from "@/components/landing/SmoothScroll"
 import { VideoShowcase } from "@/components/landing/VideoShowcase"
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      {
-        title:
-          "Repurposer — You focus on your craft; we handle the rest",
-      },
-      {
-        name: "description",
-        content:
-          "Repurposer is an AI assistant that turns your existing material — talks, reports, podcasts, transcripts — into the content you name: LinkedIn posts, short clips, articles, newsletters, in the languages your audience speaks. GDPR-ready.",
-      },
-      { property: "og:type", content: "website" },
-      {
-        property: "og:title",
-        content: "Repurposer — You focus on your craft; we handle the rest",
-      },
-      {
-        property: "og:description",
-        content:
-          "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
-      },
-      { name: "twitter:card", content: "summary_large_image" },
-      {
-        name: "twitter:title",
-        content: "Repurposer — You focus on your craft; we handle the rest",
-      },
-      {
-        name: "twitter:description",
-        content:
-          "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
-      },
-    ],
-  }),
+  head: (ctx) => {
+    // Meta follows the SSR language (root loader's cookie read) so crawlers
+    // and share cards get the same language the user would see. Client-side
+    // re-runs fall back to EN — crawlers only ever read the SSR payload.
+    // ctx.matches is typed to this route alone; widen to reach the root match.
+    const matches = ctx.matches as ReadonlyArray<{
+      routeId: string
+      loaderData?: { lang?: string | null }
+    }>
+    const rootLoaderData = matches.find((m) => m.routeId === "__root__")
+      ?.loaderData
+    const zh = rootLoaderData?.lang === "zh"
+    const copy = zh ? LANDING_META.zh : LANDING_META.en
+    return {
+      meta: [
+        { title: copy.title },
+        { name: "description", content: copy.description },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: SITE_URL },
+        { property: "og:title", content: copy.title },
+        { property: "og:description", content: copy.ogDescription },
+        { property: "og:image", content: `${SITE_URL}/og.png` },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:locale", content: zh ? "zh_CN" : "en_US" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: copy.title },
+        { name: "twitter:description", content: copy.ogDescription },
+        { name: "twitter:image", content: `${SITE_URL}/og.png` },
+      ],
+      links: [
+        { rel: "canonical", href: SITE_URL },
+        // The locale rides a cookie, not the URL — alternates point at the
+        // same page so crawlers know both languages live here.
+        { rel: "alternate", hreflang: "en", href: SITE_URL },
+        { rel: "alternate", hreflang: "zh", href: SITE_URL },
+        { rel: "alternate", hreflang: "x-default", href: SITE_URL },
+      ],
+    }
+  },
   component: LandingPage,
 })
+
+const SITE_URL = "https://repurposer.ai"
+
+const LANDING_META = {
+  en: {
+    title: "Repurposer — You focus on your craft; we handle the rest",
+    description:
+      "Repurposer is an AI assistant that turns your existing material — talks, reports, podcasts, transcripts — into the content you name: LinkedIn posts, short clips, articles, newsletters, in the languages your audience speaks. GDPR-ready.",
+    ogDescription:
+      "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
+  },
+  zh: {
+    title: "Repurposer——你讲完了，剩下的交给我们",
+    description:
+      "Repurposer 是一个 AI 助手，把你现有的素材——演讲、报告、播客、文字稿——变成你点名的内容：LinkedIn 帖子、短片、文章、newsletter，用你受众的语言。GDPR 就绪。",
+    ogDescription:
+      "一个 AI 助手，把你现有的素材变成你点名的内容——LinkedIn 帖子、短片、文章、newsletter，用你受众的语言。",
+  },
+}
 
 function LandingPage() {
   return (

@@ -87,6 +87,15 @@ from app.skills import SkillRejected, validate_task_list
 
 logger = structlog.get_logger()
 
+# Chat entry caps (2026-08-20 ruling) — enforced in prepare_chat_turn.
+MAX_MESSAGE_CHARS = 20_000
+MAX_ATTACHMENTS_PER_TURN = 5
+MAX_MENTIONS_PER_TURN = 10
+# Plan-accumulation prompt: keep the original intent (head) and the newest
+# refinements (tail); middle prose yields — those revisions already live in
+# the task book's slots.
+MAX_ACCUM_PROMPT_CHARS = 4_000
+
 _ASK_BACK_TEXT = (
     "I want to make sure I do the right thing — could you be more specific? "
     "For example: re-cut highlights, remove filler words, add music, "
@@ -233,6 +242,33 @@ def _prefers_zh(text: str) -> bool:
     """Language heuristic for server-composed reply lines — the CJK check
     rides the user's own words (the turn's text), not a stored setting."""
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
+
+
+def _run_active_text(text: str) -> str:
+    """The active-run plain line (shared by the chat dispatch's degrade and
+    the plan surface's late-turn zombie-dock guard)."""
+    return (
+        "上一批还在生成中——完成后再安排新的。"
+        if _prefers_zh(text)
+        else "A batch is still generating — once it finishes, send the next one."
+    )
+
+
+async def _active_run_line(
+    db: AsyncSession, project: Project, text: str
+) -> str | None:
+    """Late-turn guard: return the active-run line when a concurrent Start
+    birthed a run while this turn was in flight — None means the coast is
+    clear. Deliberately lock-free: locking the project row here would invert
+    the Start path's Message→Project lock order (deadlock). The millisecond
+    check-then-dock window this leaves is backstopped by create_run's own
+    serialized guard — a zombie book confirmed later gets the clean
+    RunAlreadyActiveError 422, never a second run."""
+    from app.pipeline.orchestrator import has_active_run  # deferred: import cycle
+
+    if await has_active_run(db, project.id):
+        return _run_active_text(text)
+    return None
 
 
 def _cannot_do_text(text: str) -> str:
@@ -823,6 +859,16 @@ async def _plan_turn(
     # prompt + this turn's own words); the archive already holds each turn as
     # its own user message, so no dedup bookkeeping is needed here.
     prompt = f"{stored.prompt}\n{text}" if stored and stored.prompt else text
+    if len(prompt) > MAX_ACCUM_PROMPT_CHARS:
+        # Long refinement histories: keep the original intent (head) and the
+        # newest refinements (tail) — middle prose yields. Nothing is lost
+        # for planning: accepted revisions are merged into the book's slots
+        # (merge_prior_slots), the prompt is only the intent's narrative.
+        prompt = (
+            prompt[: MAX_ACCUM_PROMPT_CHARS // 2].rstrip()
+            + "\n…\n"
+            + prompt[-MAX_ACCUM_PROMPT_CHARS // 2 :].lstrip()
+        )
 
     assets = list(
         (
@@ -1028,7 +1074,14 @@ async def _plan_turn(
         if stored is not None:
             # Nothing startable right now. Never overwrite a stored task book
             # with a start-action misfire's fields: re-dock the stored book
-            # unchanged.
+            # unchanged. Unless a run started concurrently — then the plan is
+            # moot and re-docking would raise a book over an active run.
+            active_line = await _active_run_line(db, project, text)
+            if active_line is not None:
+                assistant_message = await _create_message(
+                    db, conversation_id, "assistant", active_line
+                )
+                return assistant_message, None, None, []
             bailed_run_ids = await sync_task_book_question(
                 db, user_id, project, stored.intent, stored.prompt,
                 reasons=stored.reasons, derived=stored.derived,
@@ -1067,6 +1120,15 @@ async def _plan_turn(
     # Persist the unconfirmed task book on the project: leaving the chat and
     # coming back (any device) restores this exact plan. Cleared once the run
     # starts. The dock above the input rebuilds from the task_book question.
+    # But first the late-turn guard: a concurrent Start committed while this
+    # refine was in flight — docking now would raise a task book over an
+    # active run (the zombie dock). Degrade to the active-run line.
+    active_line = await _active_run_line(db, project, text)
+    if active_line is not None:
+        assistant_message = await _create_message(
+            db, conversation_id, "assistant", active_line
+        )
+        return assistant_message, None, None, []
     project.pending_intent = PendingIntent(
         prompt=prompt,
         intent=intent,
@@ -1264,11 +1326,7 @@ async def _propose_turn(
             if isinstance(e, RunAlreadyActiveError):
                 # Active-run guard fired — say THAT, not the missing-material
                 # line (the guard's own 422 copy rides the typed endpoints).
-                assistant_content = (
-                    "上一批还在生成中——完成后再安排新的。"
-                    if _prefers_zh(text)
-                    else "A batch is still generating — once it finishes, send the next one."
-                )
+                assistant_content = _run_active_text(text)
             else:
                 # Missing required input (media/transcript/…) — no repair round
                 # can fix that. The raw exception carries registry vocabulary;
@@ -1351,6 +1409,33 @@ async def prepare_chat_turn(
     request: ChatRequest,
 ) -> PreparedTurn:
     """chat() phase 1: settle everything up to the dispatch decision."""
+    # Entry caps (2026-08-20 ruling): the chat box is for talk, not bulk
+    # payload — long documents belong in file uploads. Beyond the caps the
+    # turn would only fail deeper (LLM context, DB row size), so reject at
+    # the door with a friendly pointer. Language follows the turn's text.
+    zh = _prefers_zh(request.message)
+    if len(request.message) > MAX_MESSAGE_CHARS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "内容太长了——长文稿请作为文件上传，对话里放不下。"
+            if zh
+            else "That's too much for the chat box — upload long documents as files instead.",
+        )
+    if len(request.attachments) > MAX_ATTACHMENTS_PER_TURN:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"一次最多带 {MAX_ATTACHMENTS_PER_TURN} 个附件。"
+            if zh
+            else f"At most {MAX_ATTACHMENTS_PER_TURN} attachments per message.",
+        )
+    if len(request.mentions) > MAX_MENTIONS_PER_TURN:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"一条消息最多 @ {MAX_MENTIONS_PER_TURN} 个引用。"
+            if zh
+            else f"At most {MAX_MENTIONS_PER_TURN} @-mentions per message.",
+        )
+
     conversation = await _get_or_create_project_conversation(
         db, user_id, request.project_id
     )

@@ -249,6 +249,11 @@ SKILL_REGISTRY: dict[str, SkillEntry] = {
 # ---- consumers' views ------------------------------------------------------
 
 
+# Billing guardrail (2026-08-20 ruling): every task in a chain is paid work
+# (LLM / image / render) — an unbounded list is an unbounded bill.
+MAX_TASKS_PER_RUN = 10
+
+
 def dispatchable_skills() -> list[SkillEntry]:
     """Skills the intent agent may propose: a live node exists in
     ``NODE_KINDS``. Seats (synthesize) are excluded automatically."""
@@ -272,6 +277,14 @@ def strip_null_params(params: dict | None) -> dict:
 def validate_task_list(tasks: list[Any]) -> list[SkillEntry]:
     """Adjudicate a proposed task list. Returns the resolved entries in order;
     raises SkillRejected (with close-match suggestions) on the first offense."""
+    # Billing guardrail (2026-08-20 ruling): every task in the chain is paid
+    # work (LLM / image / render) — an unbounded list is an unbounded bill.
+    if len(tasks) > MAX_TASKS_PER_RUN:
+        raise SkillRejected(
+            f"Task book too large: {MAX_TASKS_PER_RUN} tasks max per run "
+            f"(got {len(tasks)})",
+            suggestions=[],
+        )
     dispatchable = {entry.name: entry for entry in dispatchable_skills()}
     entries: list[SkillEntry] = []
     for task in tasks:
