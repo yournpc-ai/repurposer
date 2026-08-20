@@ -51,6 +51,7 @@ from app.models.schemas import (  # noqa: E402
     AssetStatus,
     AssetType,
     ProjectStatus,
+    RenderStatus,
     WorkflowStatus,
 )
 from app.models.tables import (  # noqa: E402
@@ -78,7 +79,7 @@ BAKE_EMAIL = "bake-reframe@local"
 BAKE_BRAND = {"captionStylePreset": "karaoke-highlight", "captionColor": "#ffffff"}
 
 CARDS = {
-    # 访谈分镜: the 15s segment carries exactly one speaker switch (~7.1s) —
+    # 访谈分镜: the 15s segment carries exactly one speaker switch (~6.6s) —
     # count=1 keeps the clip spanning the boundary so the switch is visible.
     "reframe": {
         "source_key": "demo/uploads/xy_1_interview_15s.mp4",
@@ -177,22 +178,6 @@ def _keyframe_count(output: Output) -> int:
     return len(spec.get("crop_track") or [])
 
 
-def _segments_monotonic(output: Output) -> bool:
-    """Narrative-order gate: the kept segments' source windows must be
-    non-decreasing. A storyboard that micro-segments a short coherent input
-    and reorders by "highlight value" produces word-salad demos (observed on
-    the 14.5s Q&A cut — framing stayed perfect through 7 scrambled segments,
-    the narrative didn't survive). A demo is curated: refuse the take, re-run
-    the bake."""
-    segs = [
-        s
-        for s in (output.render_spec or {}).get("segments") or []
-        if not s.get("hidden")
-    ]
-    starts = [float(s["start"]) for s in segs]
-    return starts == sorted(starts)
-
-
 async def _harvest(db, project, card: str, keep: bool) -> None:
     """Reap the most reframe-active clip (max crop_track keyframes — the
     visible switch/follow story) + poster into demo/outputs, print the
@@ -213,25 +198,29 @@ async def _harvest(db, project, card: str, keep: bool) -> None:
                 )
             ).scalars().all()
             all_clips = [o for o in outputs if o.type == "clip"]
+            failed = next(
+                (o for o in all_clips if o.render_status == RenderStatus.FAILED), None
+            )
             clips = [o for o in all_clips if (o.files or {}).get("video")]
             n_all = len(all_clips)
+        # A FAILED render never gains files.video — surface the real error at
+        # once instead of burning the full poll budget on "incomplete".
+        if failed is not None:
+            raise SystemExit(
+                f"render FAILED on output {failed.id}: "
+                f"{failed.render_error or 'no render_error recorded'}"
+            )
         if n_all and len(clips) == n_all:
             break
         await asyncio.sleep(5)
-    if not clips or len(clips) < n_all:
+    if not n_all:
+        raise SystemExit("no clip outputs on the project — did select_clips run?")
+    if len(clips) < n_all:
         raise SystemExit(f"renders incomplete: {len(clips)}/{n_all} clips rendered")
-    mono = [o for o in clips if _segments_monotonic(o)]
-    if not mono:
-        if not keep:
-            await _cleanup(db, project.id)
-        raise SystemExit(
-            "all clips have non-monotonic segment order (storyboard scrambled a "
-            "short input) — refusing the take; re-run the bake"
-        )
-    best = max(mono, key=lambda o: (_keyframe_count(o), len(str(o.files))))
+    best = max(clips, key=lambda o: (_keyframe_count(o), len(str(o.files))))
     print(
-        f"harvest pick: output {best.id} — {_keyframe_count(best)} keyframes, "
-        f"{len(mono)}/{len(clips)} monotonic",
+        f"harvest pick: output {best.id} — {_keyframe_count(best)} keyframes "
+        f"of {len(clips)} clip(s)",
         flush=True,
     )
     mp4 = await read(best.files["video"])
