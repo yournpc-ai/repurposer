@@ -29,7 +29,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
                        ▼
 ┌─ Harness（模型调用面）─────────────────────────────────────┐
 │  Agent 漏斗：装配 → 渲染 → 调用 → 校验 → 修复一轮 → 计量 → 兜底 │
-│  agents/base.py 唯一类 · agents/roster.py 花名册 · prompts/    │
+│  agents/base.py 唯一类 · agents/registry.py 花名册 · prompts/    │
 └──────────────────────┬────────────────────────────────────┘
                        ▼
 ┌─ Model ──────────────────────────────────────────────────┐
@@ -58,7 +58,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
 | tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（禁 ReAct 不变，调用方 = 图） |
 | providers | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝）；LLM 禁 import 门禁迁址于此 |
-| skills 指令包（座位预留，未建） | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按节点条件注入（instructions 式消费），无 runtime discovery |
+| skills 指令包 | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按声明注入（instructions 式消费），无 runtime discovery；首包 `linkedin-longform` 在册 |
 | TaskSpec 任务书 | plan（Claude Code plan mode）/ goal（dsh） | 确认制；goal 的自治续跑不建 |
 | interrupt（N-40 前 checkpoint） | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
 | Conversation | thread（Mastra Thread）/ session（Agno） | 撞 auth session 避让在案 |
@@ -161,7 +161,7 @@ class Agent[OutT]:
 
 ### 5.3 花名册与声明归属
 
-- `agents/base.py` = 唯一 Agent 类；`agents/roster.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
+- `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
 - context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 任务书 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
@@ -178,7 +178,7 @@ class Agent[OutT]:
 - 多模态 / 图像 / 音乐生成同边界（`generate_image` / `generate_music`）。
 - **provider 政策开关**（未来）：第二 provider 的真实需求（EU 客户要求 EU-hosted）出现时，在 harness 漏斗按 policy 路由，用户-facing 形态 = 策略开关（"优先 EU 托管模型"），不是模型 SKU 货架；现在不预留接口（单边界已够）。
 
-## 7. 工具包（`app/tools/`，N-42 前 `app/skills/`）
+## 7. 工具包（`app/tools/`）
 
 工具 = 能力层注册项（N-42 对齐行业 tool；营销文案里仍叫"技能"，§1 营销泛词豁免）；工具包 = 能力的唯一家：
 
@@ -190,7 +190,7 @@ tools/dub/           配音工具
 └── （agent 声明）    工具私有决策单元（可选；dub 复用共享 translator）
 ```
 
-- **TOOL_REGISTRY 收编**（落地前仍读 SKILL_REGISTRY）：`tools/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
+- **TOOL_REGISTRY 收编**：`tools/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
 - **新增工具 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
 - **产出型工具**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，PlanAgent 当轮即知**（工具清单同源注入 prompt）。
 - 注册项准入过 NAMING §7/§8 评审。
@@ -216,9 +216,9 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 11. Critical files
 
-- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/roster.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
+- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/registry.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
 - `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）；context 装配在 `agents/contexts.py`
-- `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…；N-42 前 `app/skills/`）；`tools/__init__.py` — TOOL_REGISTRY 收编（落地前仍读 SKILL_REGISTRY）
+- `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`tools/__init__.py` — TOOL_REGISTRY 收编
 - `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；N-42 前 `app/tools/`；通用件随消费方归位）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）

@@ -1238,6 +1238,17 @@ def assert_runners_registered() -> None:
                     f"Node '{node.kind}': agent '{agent.name}' not in the AGENTS roster"
                 )
 
+    # Declared skill packs resolve (N-42 双表自检): an agent's packs are woven
+    # at assembly time — an unknown name would otherwise KeyError mid-run.
+    from app.skills import SKILL_REGISTRY  # deferred: packs loader leaf
+
+    for agent in AGENTS.values():
+        for pack in agent.packs:
+            if pack not in SKILL_REGISTRY:
+                raise RuntimeError(
+                    f"Agent '{agent.name}': pack '{pack}' not in SKILL_REGISTRY"
+                )
+
     for recipe_id, entry in RECIPE_REGISTRY.items():
         if not entry.flow:
             continue

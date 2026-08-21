@@ -1,4 +1,7 @@
-"""Post writer — the write_post tool's private agent declaration (N-30)."""
+"""Post writer — the write_post tool's private agent declaration (N-30).
+
+The LinkedIn long-form craft lives in the ``linkedin-longform`` skill pack
+(N-42 指令包) — woven in at assembly time, never loaded by the model."""
 
 from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
@@ -43,4 +46,5 @@ post_writer: Agent[Post] = Agent(
     ),
     temperature=0.5,
     assemble=_assemble,
+    packs=["linkedin-longform"],
 )

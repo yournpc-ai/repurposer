@@ -3,7 +3,7 @@
 A declaration is data, not a subclass: ``name`` / ``prompt`` (jinja template,
 versioned with the code) / ``schema`` (output contract) / ``system`` /
 ``temperature`` / ``assemble`` (+ optional ``postprocess`` /
-``media_text_fallback`` / ``fallback``). The call funnel: assemble → render →
+``media_text_fallback`` / ``fallback`` / ``packs``). The call funnel: assemble → render →
 ``client.generate`` (schema enforced at the Model boundary) → one bounded
 repair round on schema rejection → postprocess.
 
@@ -120,6 +120,7 @@ class Agent(Generic[OutT]):
         media_text_fallback: bool = False,
         fallback: Callable[..., OutT] | None = None,
         client: MiniMaxClient | None = None,
+        packs: list[str] | None = None,
     ) -> None:
         self.name = name
         self.prompt = prompt
@@ -139,6 +140,9 @@ class Agent(Generic[OutT]):
         # run on it: a fallback builds a final-shaped result). None = raise
         # (the default).
         self.fallback = fallback
+        # Declared skill packs (N-42 指令包): assembly-time prompt injection,
+        # never runtime discovery — the assembler weaves the bodies verbatim.
+        self.packs = packs or []
         self.client = client or minimax_client
         if name in AGENTS:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
@@ -163,6 +167,10 @@ class Agent(Generic[OutT]):
     ) -> OutT:
         repair_feedback = ctx.pop("repair_feedback", None)
         template_kwargs, media = self.assemble(**ctx)
+        if self.packs:
+            from app.agents.contexts import pack_instructions  # deferred: contexts pulls the chat/pipeline assembly layer
+
+            template_kwargs["packs"] = pack_instructions(self.packs)
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
         if repair_feedback is not None:
             user_prompt += _repair_echo(str(repair_feedback))
