@@ -48,7 +48,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.agents.contexts import _build_context
 from app.chat.intent import chat_intent_agent, plan_agent
 from app.models.schemas import (

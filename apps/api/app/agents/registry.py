@@ -14,7 +14,7 @@ from typing import Any
 
 import structlog
 
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
     CaptionTranslation,
     ExtractedPersonaMemory,

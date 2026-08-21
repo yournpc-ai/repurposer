@@ -28,7 +28,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import translator
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed

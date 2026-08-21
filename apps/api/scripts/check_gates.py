@@ -2,11 +2,12 @@
 
     uv run python scripts/check_gates.py
 
-Gate 1 (N-29 iron rule, naming batch v2 ④ seat): ``app/providers/`` and
-the deterministic tool packages declare no agents and import no LLM client —
-any ``app.agents`` / ``app.clients`` import there fails the build. The
-deterministic package set is registry-derived (TOOL_REGISTRY behavior), never
-a hand-maintained list.
+Gate 1 (N-29 iron rule, naming batch v2 ④/⑥ seat): ``app/providers/``
+never imports the decision layer (``app.agents``; the retired ``app.clients``
+stays banned as a reintroduction guard), and the deterministic tool packages
+additionally never touch the LLM seam (``app.providers.llm``) — deterministic
+means no LLM at all. The deterministic package set is registry-derived
+(TOOL_REGISTRY behavior), never a hand-maintained list.
 
 Gate 2 (P2 no-parallel-maps rule): every "type → X" fact derives from the
 node classes / the tool registry. The retired parallel-map identifiers
@@ -32,6 +33,7 @@ PROVIDERS_DIR = APP_DIR / "providers"
 
 # Module-level or deferred — an import is an import wherever it sits.
 BANNED_DECISION_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients)\b")
+BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|providers\.llm)\b")
 
 # P2 retired identifiers: the parallel maps these named now derive from
 # ``pipeline/graph.py`` (NODE_KINDS) or ``app/tools/__init__.py``
@@ -77,13 +79,17 @@ def _deterministic_package_dirs() -> list[Path]:
 
 
 def check_purity() -> list[str]:
-    targets = sorted(PROVIDERS_DIR.rglob("*.py"))
+    # (path, banned-pattern): providers/ never imports the decision layer;
+    # deterministic packages never import the decision layer NOR the LLM seam.
+    targets: list[tuple[Path, re.Pattern]] = [
+        (path, BANNED_DECISION_IMPORT) for path in sorted(PROVIDERS_DIR.rglob("*.py"))
+    ]
     for pkg in _deterministic_package_dirs():
-        targets.extend(sorted(pkg.rglob("*.py")))
+        targets.extend((path, BANNED_LLM_IMPORT) for path in sorted(pkg.rglob("*.py")))
     violations: list[str] = []
-    for path in targets:
+    for path, pattern in targets:
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            if BANNED_DECISION_IMPORT.match(line):
+            if pattern.match(line):
                 rel = path.relative_to(API_ROOT)
                 violations.append(f"{rel}:{lineno}: {line.strip()}")
     return violations
@@ -112,7 +118,7 @@ def check_blind_retries() -> list[str]:
 def main() -> int:
     failures = check_purity()
     if failures:
-        print("purity gate FAILED (N-29: no app.agents / app.clients imports in providers/ or deterministic packages):")
+        print("purity gate FAILED (N-29: providers/ never imports the decision layer; deterministic packages never touch the LLM seam):")
         for failure in failures:
             print(f"  {failure}")
     parallel = check_parallel_maps()

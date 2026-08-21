@@ -1,6 +1,6 @@
 """Per-node LLM usage metering (ADR-025, RunPlan Phase 1).
 
-The single LLM choke point (``clients/minimax.py``) reports API ``usage`` here;
+The single LLM choke point (``providers/llm/minimax.py``) reports API ``usage`` here;
 ``record_usage`` accumulates it onto the workflow step currently bound via
 ``bind_workflow_step``. Binding is a contextvar, so concurrent node executions
 (asyncio tasks) each meter their own node, and retries/fallbacks inside one
@@ -107,7 +107,7 @@ async def record_media_usage(units: dict[str, float]) -> None:
     node_id = _current_workflow_step_id.get()
     if node_id is None:
         return
-    from app.clients.minimax import price_units  # deferred: import cycle
+    from app.providers.llm.minimax import price_units  # deferred: import cycle
 
     money = price_units(units)
     try:

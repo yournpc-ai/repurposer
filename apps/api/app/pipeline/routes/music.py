@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import MusicGenerateRequest, MusicMetadataUpdate, MusicResponse
 from app.models.tables import Music, User

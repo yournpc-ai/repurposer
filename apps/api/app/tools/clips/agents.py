@@ -5,7 +5,7 @@ MaterialUnderstanding (step 1), and its aggregate Storyboard slot (step 2):
 segment selection plus clip scripts in one call.
 """
 
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
     ClipPlans,
     GenerationContext,

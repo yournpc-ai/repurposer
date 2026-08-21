@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import structlog  # noqa: E402
 
-from app.clients.minimax import MiniMaxError  # noqa: E402
+from app.providers.llm.minimax import MiniMaxError  # noqa: E402
 from app.pipeline.music import (  # noqa: E402
     DEFAULT_MUSIC_CATALOG,
     DEFAULTS_MODEL,

@@ -43,7 +43,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | Loop | 用户多轮怎么治理 | 状态分派 + 四态提议 + dock/checkpoint | `app/chat/` |
 | Graph | 多次调用怎么编排 | `NodeBase` + `compile_graph` + 图算法 | `app/pipeline/` |
 | Harness | 每一次 LLM 调用怎么调得好 | Agent 漏斗 + 花名册 + prompts | `app/agents/` |
-| Model | 用谁的模型 | client 单边界 + 计量捕获 | `app/clients/` |
+| Model | 用谁的模型 | client 单边界 + 计量捕获 | `app/providers/llm/` |
 
 ## 2.5 行业坐标（业务命名 → 行业座位）
 
@@ -54,10 +54,10 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop 只做意图治理，执行下沉 Graph；dsh loop 内含工具循环 |
 | Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 拓扑代码定（ADR-028）；dsh 反面 = 模型写编排脚本，永拒 |
 | Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | N-33 两义在案；我们漏斗固定，无插件拦截 |
-| Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`，批⑥前 `clients/`）；政策开关座位在 PROGRESS 池 |
+| Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`）；政策开关座位在 PROGRESS 池 |
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
 | tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（禁 ReAct 不变，调用方 = 图） |
-| providers（N-42 新建） | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝，批⑥前 `clients/`）；LLM 禁 import 门禁迁址于此 |
+| providers | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝）；LLM 禁 import 门禁迁址于此 |
 | skills 指令包（座位预留，未建） | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按节点条件注入（instructions 式消费），无 runtime discovery |
 | TaskSpec 任务书 | plan（Claude Code plan mode）/ goal（dsh） | 确认制；goal 的自治续跑不建 |
 | interrupt（N-40 前 checkpoint） | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
@@ -199,7 +199,7 @@ tools/dub/           配音工具
 
 - **估价（计划侧）**：`node.estimate(ctx)`——机械节点精确价（TTS 按字符 / render 按秒 / 克隆按次），agent 节点 token 区间（按 prompt 规模 + 输出 schema 给上下界），checkpoint = 0。
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
-- **价目住 Model 层**：`providers/llm/minimax.py`（批⑥前 `clients/`）的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
+- **价目住 Model 层**：`providers/llm/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
 - **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第九周。
 - 用户呈现（PROGRESS 第九周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
@@ -224,6 +224,6 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
 - `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — plan / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
-- `app/clients/minimax.py` — Model 单边界；`app/metering.py` — 计量
+- `app/providers/llm/minimax.py` — Model 单边界；`app/metering.py` — 计量
 - `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot（编译期投影 `spec.slot`，非请求层语法）/ 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）

@@ -71,7 +71,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
-from app.clients.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
+from app.providers.llm.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import MediaInput, TaskItem  # noqa: E402
 from app.pipeline.graph import NODE_KINDS, fold_estimates  # noqa: E402

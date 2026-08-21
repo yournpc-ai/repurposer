@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.tools.revise.agents import reviser
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     ChatRequest,

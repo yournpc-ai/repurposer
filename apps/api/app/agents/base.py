@@ -36,7 +36,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from app.clients.minimax import MiniMaxClient, MiniMaxError, MiniMaxSchemaError, minimax_client
+from app.providers.llm.minimax import MiniMaxClient, MiniMaxError, MiniMaxSchemaError, minimax_client
 from app.models.schemas import MediaInput, Storyboard
 
 logger = structlog.get_logger()

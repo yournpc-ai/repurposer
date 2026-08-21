@@ -42,7 +42,7 @@ from app.chat.service import (
     prepare_chat_turn,
 )
 from app.chat.stream_extract import ProseDeltaExtractor
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
 from app.ui_locale import current_ui_language

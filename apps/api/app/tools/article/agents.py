@@ -1,6 +1,6 @@
 """Article writer — the write_article tool's private agent declaration (N-30)."""
 
-from app.clients.minimax import MiniMaxError
+from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
     Article,
     GenerationContext,

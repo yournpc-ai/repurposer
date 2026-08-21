@@ -14,7 +14,7 @@ from uuid import UUID
 
 import structlog
 
-from app.clients.minimax import MiniMaxError, minimax_client
+from app.providers.llm.minimax import MiniMaxError, minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Project
 from app.providers.storage import output_url, save_output
