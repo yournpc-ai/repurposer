@@ -18,7 +18,7 @@ from app.models.schemas import (
     PersonaMediaCreateRequest,
 )
 from app.models.tables import Asset, Persona, Project, User
-from app.tools.storage import (
+from app.providers.storage import (
     delete_file,
     exists,
     get_project_upload_dir,
@@ -289,7 +289,7 @@ async def create_persona_asset_upload_url(
     """Return a presigned PUT URL for direct upload of a persona asset."""
     await _get_user_persona(persona_id, current_user.id, db, write=True)
 
-    from app.tools.storage import get_persona_upload_path
+    from app.providers.storage import get_persona_upload_path
 
     key = str(await get_persona_upload_path(persona_id, current_user.id, request.filename))
     upload_url = await presign_upload(key, content_type=request.content_type)

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
-from app.tools.storage import get_upload_path, save
+from app.providers.storage import get_upload_path, save
 
 
 def _material_title(text: str) -> str:

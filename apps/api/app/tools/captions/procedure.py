@@ -1,4 +1,4 @@
-"""Captions skill's private procedures: re-translate a clip's caption track
+"""Captions tool's private procedures: re-translate a clip's caption track
 while keeping it WORD-LEVEL (relocated from tools/caption_translate.py — the
 module imports the translator agent, so it was never a tool, N-29).
 

@@ -31,7 +31,7 @@ from app.platform.auth import (
     verify_code,
 )
 from app.platform.email import InvalidRecipientError, send_verification_email
-from app.tools.storage import (
+from app.providers.storage import (
     download_to_temp,
     owner_from_path,
     presign_download,

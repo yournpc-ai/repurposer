@@ -13,8 +13,8 @@ from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.pipeline.graph import NodeBase, estimate_agent
 from app.pipeline.step_display import _fill_summary, ui_lang_of
 from app.platform.project_context import persona_context_from_row, resolve_persona
-from app.skills.revise.agents import reviser
-from app.skills.revise.procedure import revise_by_instruction
+from app.tools.revise.agents import reviser
+from app.tools.revise.procedure import revise_by_instruction
 
 
 class ReviseScript(NodeBase):

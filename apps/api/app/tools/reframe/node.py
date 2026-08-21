@@ -1,6 +1,6 @@
 """reframe_clip node (ADR-045 D6): speaker_map / face track → crop_track, re-render.
 
-Deterministic (skills/reframe/procedure.py — YuNet anchors + the write-side
+Deterministic (tools/reframe/procedure.py — YuNet anchors + the write-side
 anti-dizzy constraints); never re-times the footage — only the crop track
 changes, the segments stay put.
 """
@@ -24,8 +24,8 @@ from app.pipeline.morph import (
     _run_origin,
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
-from app.skills.reframe.procedure import compute_crop_track, resolve_mode
-from app.tools.storage import download_to_temp
+from app.tools.reframe.procedure import compute_crop_track, resolve_mode
+from app.providers.storage import download_to_temp
 
 logger = structlog.get_logger()
 

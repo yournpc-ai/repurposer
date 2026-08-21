@@ -1,5 +1,5 @@
-"""Dub skill's private procedure — the voice-clone dub orchestration, shared
-by the sync endpoint and the run runner (relocated from tools/dubbing.py,
+"""Dub tool's private procedure — the voice-clone dub orchestration, shared
+by the sync endpoint and the run runner (relocated from tools/dub/dubbing.py,
 which now holds only the cue-aligned synthesis mechanics, N-29).
 
 Clones from the project's voice sample (VOICE_SAMPLE > AUDIO with words >
@@ -27,10 +27,10 @@ from app.models.schemas import AssetType
 from app.models.tables import Asset, Output, Persona, Project
 from app.metering import record_media_usage
 from app.pipeline.errors import TransientNodeError, propagate_key
-from app.skills.captions.procedure import translate_caption_track, translate_text
-from app.tools.dubbing import DubAssemblyError, group_units, synthesize_aligned_track
-from app.tools.storage import download_to_temp, get_output_path, output_url, save
-from app.tools.voice import VoiceError, clone_voice, extract_audio
+from app.tools.captions.procedure import translate_caption_track, translate_text
+from app.tools.dub.dubbing import DubAssemblyError, group_units, synthesize_aligned_track
+from app.providers.storage import download_to_temp, get_output_path, output_url, save
+from app.providers.voice import VoiceError, clone_voice, extract_audio
 
 logger = structlog.get_logger()
 

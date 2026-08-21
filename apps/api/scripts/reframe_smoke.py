@@ -24,7 +24,7 @@ import httpx  # noqa: E402
 from app.models.schemas import ClipSpec  # noqa: E402
 from app.pipeline.rendering import _absolutize  # noqa: E402
 from app.tools.reframe.procedure import compute_crop_track  # noqa: E402
-from app.tools.storage import (  # noqa: E402
+from app.providers.storage import (  # noqa: E402
     exists,
     get_output_path,
     presign_upload,

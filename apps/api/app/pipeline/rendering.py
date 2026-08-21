@@ -31,7 +31,7 @@ from app.models.schemas import RenderStatus
 from app.models.tables import Output, Project, WorkflowRun
 from app.pipeline.errors import user_line
 from app.pipeline.tracks import resolve_spec_urls
-from app.tools.storage import (
+from app.providers.storage import (
     delete,
     get_output_path,
     output_url,

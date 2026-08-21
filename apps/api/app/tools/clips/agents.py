@@ -1,4 +1,4 @@
-"""Clip writer — the clips skill's private agent declaration (N-30).
+"""Clip writer — the clips tool's private agent declaration (N-30).
 
 Plans vertical clips from the shared GenerationContext, the director's
 MaterialUnderstanding (step 1), and its aggregate Storyboard slot (step 2):
@@ -30,7 +30,7 @@ def _assemble(
     """Inputs for clip planning.
 
     ``anchored_transcript``: the full-talk transcript with ``[start-end]``
-    line anchors (``app.tools.transcript.build_anchored_transcript``) so the
+    line anchors (``app.tools.clips.transcript.build_anchored_transcript``) so the
     agent can output exact ``start_seconds`` / ``end_seconds``.
     ``music_pieces``: available music library pieces (``id``/``mood``/
     ``title``) the agent selects from per clip.

@@ -36,7 +36,7 @@ from app.platform.project_context import (
 )
 from app.tools.dub.procedure import synthesize_dub
 from app.pipeline.errors import TransientNodeError, user_error_line
-from app.tools.storage import delete_file
+from app.providers.storage import delete_file
 from app.ui_locale import current_ui_language
 
 router = APIRouter()

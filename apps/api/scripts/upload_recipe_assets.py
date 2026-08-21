@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import settings  # noqa: E402
-from app.tools.storage import _get_s3_client, public_url  # noqa: E402
+from app.providers.storage import _get_s3_client, public_url  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = REPO_ROOT / "apps/web/src/lib/recipes.assets.ts"

@@ -33,7 +33,7 @@ from app.distribution.adapters.base import (
 )
 from app.distribution.channels import refresh_if_needed, usable_credentials
 from app.distribution.core import _transition
-from app.tools.storage import resolve_stored_url
+from app.providers.storage import resolve_stored_url
 
 logger = structlog.get_logger()
 

@@ -29,7 +29,7 @@ from app.pipeline.music import (
     list_music,
     update_music_metadata,
 )
-from app.tools.storage import public_url
+from app.providers.storage import public_url
 
 router = APIRouter()
 

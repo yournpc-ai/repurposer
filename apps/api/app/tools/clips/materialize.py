@@ -1,6 +1,6 @@
 """materialize_source — the whole-source materialization node (ADR-043).
 
-An internal node (CHAT_ARCH §4.3: topology, never a registered skill — users
+An internal node (CHAT_ARCH §4.3: topology, never a registered tool — users
 never say "materialize"; the whole source is the transform's implied object).
 When a chain holds clip-spec consumers (translate / dub / music / filler) but
 no select_clips, compile injects this node to materialize the project's
@@ -35,7 +35,7 @@ from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.pipeline.step_context import _list_assets
 from app.pipeline.step_display import _set_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
-from app.skills.clips.node import resolve_render_source
+from app.tools.clips.node import resolve_render_source
 
 logger = structlog.get_logger()
 
@@ -79,7 +79,7 @@ class MaterializeSource(NodeBase):
         brand_cfg, _brand_music_id = await resolve_brand_block(db, persona)
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None
-        # Whole-source aspect (2026-08-17 拍板: 链无 clip 技能 = 比例跟源):
+        # Whole-source aspect (2026-08-17 拍板: 链无 clip 工具 = 比例跟源):
         # explicit intent (spec / run.context) wins; otherwise "original" —
         # the renderer resolves the source's own dimensions at render time.
         # The persona skin's aspect is a SHORTS craft default and never

@@ -1,6 +1,7 @@
 """Filler-word and repeated-take detection over ASR word timestamps.
 
-Deterministic mechanics (``tools/`` layer): no LLM, pure functions on the
+Deterministic mechanics (the filler tool package's private module): no
+LLM, pure functions on the
 word stream (``Asset.meta["words"]`` = [{start, end, word}]). Conservative
 lexicons on purpose — a false positive cuts real speech.
 """

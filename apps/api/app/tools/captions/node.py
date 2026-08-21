@@ -44,7 +44,7 @@ from app.pipeline.morph import (
     _run_origin,
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
-from app.skills.captions.procedure import (
+from app.tools.captions.procedure import (
     translate_caption_track,
     translate_caption_units,
     translate_text,

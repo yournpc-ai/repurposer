@@ -25,6 +25,7 @@ from app.models.schemas import (
     Segment,
 )
 from app.models.tables import Asset
+from app.providers.storage import stream_url
 
 # Seconds each backing image holds in a no-audio "stills" slideshow.
 SECS_PER_IMAGE = 4.0
@@ -162,8 +163,6 @@ def build_clip_spec(
         )
         # Only an AUDIO source's file is a playable speech track — a transcript
         # asset's file is the text document and must never become audio_url.
-        from app.tools.storage import stream_url  # deferred: the tools door is this package's __init__ (N-42); a top-level import re-enters this module mid-init
-
         audio_url = stream_url(source.file_url) if source.type == AssetType.AUDIO else None
         if words:
             # Word-timed: captions (+ speech track when a recording exists)
@@ -213,8 +212,6 @@ def build_clip_spec(
             music=music or ClipMusic(),
             brand_ref=brand_ref,
         )
-
-    from app.tools.storage import stream_url  # deferred: import cycle (see above)
 
     url = stream_url(source.file_url)
     if url is None:

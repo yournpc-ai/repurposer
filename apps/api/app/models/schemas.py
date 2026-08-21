@@ -901,7 +901,7 @@ class AssetResponse(BaseModel):
     @property
     def stream_url(self) -> str | None:
         """Browser-playable URL for this asset, resolved through the storage seam."""
-        from app.tools.storage import stream_url
+        from app.providers.storage import stream_url
 
         return stream_url(self.file_url)
 
@@ -1751,7 +1751,7 @@ class OutputResponse(BaseModel):
     @model_validator(mode="after")
     def _resolve_file_urls(self) -> OutputResponse:
         """Resolve stored object keys in files/publishing to public URLs."""
-        from app.tools.storage import resolve_stored_url
+        from app.providers.storage import resolve_stored_url
 
         for key in ("video", "srt", "image"):
             if self.files.get(key):

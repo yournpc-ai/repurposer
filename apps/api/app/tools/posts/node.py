@@ -3,7 +3,7 @@ one body — ``pipeline/derivative_dispatch.DerivativeWriterNode``; this package
 declares its own kind / output_type / writer agent."""
 
 from app.pipeline.derivative_dispatch import DerivativeWriterNode
-from app.skills.posts.agents import post_writer
+from app.tools.posts.agents import post_writer
 
 
 class WritePost(DerivativeWriterNode):

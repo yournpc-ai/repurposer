@@ -32,8 +32,8 @@ from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
 from app.pipeline.graph import media_missing
 from app.pipeline.speaker_map import speaker_map_processor
-from app.tools.extraction import extract_text, render_pdf_pages_and_upload
-from app.tools.storage import download_to_temp, get_project_output_dir
+from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
+from app.providers.storage import download_to_temp, get_project_output_dir
 
 logger = structlog.get_logger()
 
@@ -108,7 +108,7 @@ async def _asr_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     if path is None:
         return ProcessResult()
 
-    from app.tools.asr import transcribe  # lazy: heavy model deps
+    from app.providers.asr import transcribe  # lazy: heavy model deps
 
     try:
         # Transcription is CPU-bound; run it in a thread so the async event loop

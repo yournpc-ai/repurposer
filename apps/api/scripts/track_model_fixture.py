@@ -19,7 +19,7 @@ import httpx  # noqa: E402
 
 from app.models.schemas import ClipSpec  # noqa: E402
 from app.pipeline.rendering import _absolutize  # noqa: E402
-from app.tools.storage import get_output_path, presign_upload, public_url  # noqa: E402
+from app.providers.storage import get_output_path, presign_upload, public_url  # noqa: E402
 
 DEMO = "demo/uploads/xy_2.mp4"
 PROJECT = UUID("00000000-0000-0000-0000-000000000000")

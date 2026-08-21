@@ -1,4 +1,4 @@
-"""Reviser — the revise_script skill's private agent declaration (N-30).
+"""Reviser — the revise_script tool's private agent declaration (N-30).
 
 Revises clip metadata (hook / titles / music mood / duration) from human
 feedback, using the source segment and persona for grounding.

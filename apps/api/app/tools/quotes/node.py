@@ -2,7 +2,7 @@
 ``pipeline/derivative_dispatch.DerivativeWriterNode``."""
 
 from app.pipeline.derivative_dispatch import DerivativeWriterNode
-from app.skills.quotes.agents import quotes_writer
+from app.tools.quotes.agents import quotes_writer
 
 
 class WriteQuotes(DerivativeWriterNode):

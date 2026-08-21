@@ -31,7 +31,7 @@ from app.pipeline.speaker_map import (
     _probe,
     _Slot,
 )
-from app.tools.vision import FaceDetection, detect_faces
+from app.providers.vision import FaceDetection, detect_faces
 
 logger = structlog.get_logger()
 
@@ -277,7 +277,7 @@ def compute_crop_track(
     speaker_map: dict | None,
     mode: str,
 ) -> tuple[list[dict[str, float]] | None, str]:
-    """The skill's single entry: (keyframes, resolved_mode). ``None`` =
+    """The tool's single entry: (keyframes, resolved_mode). ``None`` =
     static_center — the caller clears any existing track and the clip's
     static crop speaks again; an empty list = the resolved mode found
     nothing honest to say (no interview turns, no trackable face, an

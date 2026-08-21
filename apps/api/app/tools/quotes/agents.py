@@ -1,4 +1,4 @@
-"""Quotes writer — the write_quotes skill's private agent declaration (N-30)."""
+"""Quotes writer — the write_quotes tool's private agent declaration (N-30)."""
 
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import (

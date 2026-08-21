@@ -2,10 +2,11 @@
 
     uv run python scripts/check_gates.py
 
-Gate 1 (N-29 iron rule): the pure-mechanical layer declares no agents and
-imports no LLM client. Transitional scope (naming batch v2 ③): ``app/tools/``
-top-level modules only — the capability packages moved in under N-42, and ④
-retargets this gate at ``app/providers/`` (+ deterministic tool packages).
+Gate 1 (N-29 iron rule, naming batch v2 ④ seat): ``app/providers/`` and
+the deterministic tool packages declare no agents and import no LLM client —
+any ``app.agents`` / ``app.clients`` import there fails the build. The
+deterministic package set is registry-derived (TOOL_REGISTRY behavior), never
+a hand-maintained list.
 
 Gate 2 (P2 no-parallel-maps rule): every "type → X" fact derives from the
 node classes / the tool registry. The retired parallel-map identifiers
@@ -25,11 +26,12 @@ import sys
 from pathlib import Path
 
 API_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(API_ROOT))  # the purity gate reads the registries
 APP_DIR = API_ROOT / "app"
-TOOLS_DIR = APP_DIR / "tools"
+PROVIDERS_DIR = APP_DIR / "providers"
 
 # Module-level or deferred — an import is an import wherever it sits.
-BANNED_TOOLS_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients)\b")
+BANNED_DECISION_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients)\b")
 
 # P2 retired identifiers: the parallel maps these named now derive from
 # ``pipeline/graph.py`` (NODE_KINDS) or ``app/tools/__init__.py``
@@ -53,11 +55,35 @@ BANNED_PARALLEL_MAPS = re.compile(
 BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
 
 
-def check_tools_purity() -> list[str]:
+def _deterministic_package_dirs() -> list[Path]:
+    """The deterministic tool packages' directories, registry-derived (N-29 ④):
+    TOOL_REGISTRY entries whose behavior is deterministic → their node class's
+    package. Importing the door is safe here (this script runs interpreter-side,
+    never inside the app import graph)."""
+    from app.pipeline.graph import NODE_KINDS
+    from app.tools import TOOL_REGISTRY
+
+    dirs = set()
+    for entry in TOOL_REGISTRY.values():
+        if entry.behavior != "deterministic":
+            continue
+        node = NODE_KINDS.get(entry.name)
+        if node is None:
+            continue
+        mod = sys.modules.get(node.__module__)
+        if mod is not None and mod.__file__:
+            dirs.add(Path(mod.__file__).parent)
+    return sorted(dirs)
+
+
+def check_purity() -> list[str]:
+    targets = sorted(PROVIDERS_DIR.rglob("*.py"))
+    for pkg in _deterministic_package_dirs():
+        targets.extend(sorted(pkg.rglob("*.py")))
     violations: list[str] = []
-    for path in sorted(TOOLS_DIR.glob("*.py")):  # top-level modules only until ④ retargets providers/
+    for path in targets:
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            if BANNED_TOOLS_IMPORT.match(line):
+            if BANNED_DECISION_IMPORT.match(line):
                 rel = path.relative_to(API_ROOT)
                 violations.append(f"{rel}:{lineno}: {line.strip()}")
     return violations
@@ -84,9 +110,9 @@ def check_blind_retries() -> list[str]:
 
 
 def main() -> int:
-    failures = check_tools_purity()
+    failures = check_purity()
     if failures:
-        print("mechanical-layer purity gate FAILED (N-29: no app.agents / app.clients imports):")
+        print("purity gate FAILED (N-29: no app.agents / app.clients imports in providers/ or deterministic packages):")
         for failure in failures:
             print(f"  {failure}")
     parallel = check_parallel_maps()
@@ -101,7 +127,7 @@ def main() -> int:
             print(f"  {failure}")
     if failures or parallel or blind:
         return 1
-    print("check_gates: OK (mechanical-layer purity, no parallel maps, no blind retries)")
+    print("check_gates: OK (providers/+deterministic purity, no parallel maps, no blind retries)")
     return 0
 
 

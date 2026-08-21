@@ -47,7 +47,7 @@ from app.pipeline.outputs import (
     visible_outputs_stmt,
 )
 from app.platform.project_context import get_project_for_user
-from app.tools.storage import delete_file, delete_project_files, resolve_stored_url
+from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
 
 router = APIRouter()
 

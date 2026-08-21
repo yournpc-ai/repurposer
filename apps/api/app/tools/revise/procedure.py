@@ -1,5 +1,5 @@
-"""Revise skill's private procedures (ADR-039: domain orchestration lives in
-the skill package, not in the agent declaration)."""
+"""Revise tool's private procedures (ADR-039: domain orchestration lives in
+the tool package, not in the agent declaration)."""
 
 from app.models.schemas import (
     ClipRevision,
@@ -10,7 +10,7 @@ from app.models.schemas import (
     PersonaContext,
 )
 
-from app.skills.revise.agents import reviser
+from app.tools.revise.agents import reviser
 
 
 async def revise_by_instruction(

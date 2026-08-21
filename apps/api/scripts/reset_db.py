@@ -70,7 +70,7 @@ from app.models.tables import (  # noqa: E402
     WorkflowRun,
 )
 from app.pipeline.music import seed_default_music  # noqa: E402
-from app.tools.storage import _get_s3_client  # noqa: E402
+from app.providers.storage import _get_s3_client  # noqa: E402
 
 # Prefixes the storage purge never touches (see module docstring).
 PROTECTED_PREFIXES = ("demo/", "music/")

@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import settings  # noqa: E402
 from app.pipeline.music import DEFAULT_MUSIC_CATALOG  # noqa: E402
-from app.tools.storage import exists, public_url, save  # noqa: E402
+from app.providers.storage import exists, public_url, save  # noqa: E402
 
 logger = structlog.get_logger()
 

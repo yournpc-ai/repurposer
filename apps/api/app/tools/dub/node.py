@@ -35,7 +35,7 @@ from app.pipeline.morph import (
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
 from app.pipeline.tracks import spec_provenance
-from app.skills.dub.procedure import synthesize_dub
+from app.tools.dub.procedure import synthesize_dub
 
 logger = structlog.get_logger()
 

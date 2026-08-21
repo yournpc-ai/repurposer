@@ -24,7 +24,7 @@ import structlog
 from starlette.concurrency import run_in_threadpool
 
 from app.metering import record_media_usage
-from app.tools.voice import synthesize
+from app.providers.voice import synthesize
 
 logger = structlog.get_logger()
 

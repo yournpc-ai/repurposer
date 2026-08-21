@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Music, Output
-from app.tools.storage import delete, exists, save, size
+from app.providers.storage import delete, exists, save, size
 
 logger = structlog.get_logger()
 

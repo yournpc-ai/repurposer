@@ -23,7 +23,7 @@ from app.pipeline.morph import (
     _target_clips,
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
-from app.tools.filler import detect
+from app.tools.filler.detect import detect
 
 
 class RemoveFiller(NodeBase):

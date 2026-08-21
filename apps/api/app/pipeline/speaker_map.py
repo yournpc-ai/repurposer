@@ -48,6 +48,7 @@ import structlog
 
 from app.agents.base import Agent
 from app.models.schemas import MediaInput, MediaInputType, SpeakerArbitration, SpeakerFormGate
+from app.providers.vision import FaceDetection, detect_faces
 
 if TYPE_CHECKING:
     from app.models.tables import Asset
@@ -65,7 +66,7 @@ TWO_FACE_GATE = 0.95  # bootstrap two-face rate that stops tier escalation
 ARBITRATION_CALL_CAP = 5  # ADR-045: 每片 1~5 次封顶
 
 # A frame → detections callable in full-resolution coordinates (plain or tiled).
-Detect = Callable[[np.ndarray], list["FaceDetection"]]  # string fwd-ref: the real import is deferred (import cycle — the tools door re-enters this closure)
+Detect = Callable[[np.ndarray], list[FaceDetection]]
 
 
 # ------------------------------------------------------------ frame access --
@@ -131,8 +132,6 @@ def _detect_tiled(tile_det_w: int = 640) -> Detect:
     """远景小脸兜底: 2x2 tiles, each detected at a >=2x zoom, coords mapped
     back to full-frame space. Escalation stage only — 4 detect calls a frame."""
 
-    from app.tools.vision import FaceDetection, detect_faces  # deferred: import cycle
-
     def detect(frame: np.ndarray) -> list[FaceDetection]:
         h, w = frame.shape[:2]
         out: list[FaceDetection] = []
@@ -157,9 +156,7 @@ def _detect_tiled(tile_det_w: int = 640) -> Detect:
 
 
 def _plain_detect(size: tuple[int, int]) -> Detect:
-    from app.tools.vision import detect_faces  # deferred: import cycle
-
-    def detect(frame: np.ndarray) -> list["FaceDetection"]:
+    def detect(frame: np.ndarray) -> list[FaceDetection]:
         return detect_faces(frame, size, score_threshold=0.6)
 
     return detect
@@ -567,7 +564,7 @@ async def speaker_map_processor(asset: Asset, prior: ProcessResult) -> ProcessRe
     prior result; a gate failure must never fail the asset — ASR's outputs
     are already in hand, so any speaker_map error degrades to no map."""
     from app.pipeline.asset_processing import ProcessResult
-    from app.tools.storage import download_to_temp
+    from app.providers.storage import download_to_temp
 
     words = (prior.meta or {}).get("words") or []
     if not asset.file_url:

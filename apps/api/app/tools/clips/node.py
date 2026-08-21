@@ -47,9 +47,9 @@ from app.pipeline.step_display import (
     ui_lang_of,
 )
 from app.platform.project_context import collect_asset_texts, resolve_run_persona
-from app.skills.clips.agents import clip_writer
-from app.tools.transcript import build_anchored_transcript
-from app.tools.storage import stream_url
+from app.tools.clips.agents import clip_writer
+from app.tools.clips.transcript import build_anchored_transcript
+from app.providers.storage import stream_url
 
 logger = structlog.get_logger()
 

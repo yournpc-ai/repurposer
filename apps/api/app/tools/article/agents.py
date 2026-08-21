@@ -1,4 +1,4 @@
-"""Article writer — the write_article skill's private agent declaration (N-30)."""
+"""Article writer — the write_article tool's private agent declaration (N-30)."""
 
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import (

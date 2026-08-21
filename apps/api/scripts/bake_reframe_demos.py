@@ -66,7 +66,7 @@ from app.models.tables import (  # noqa: E402
     WorkflowStep,
 )
 from app.pipeline.orchestrator import TaskSpec, create_run  # noqa: E402
-from app.tools.storage import read  # noqa: E402
+from app.providers.storage import read  # noqa: E402
 from bake_subs_contrast import _poster_frame, _put_demo  # noqa: E402
 
 BAKE_EMAIL = "bake-reframe@local"

@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.config import settings  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import Output  # noqa: E402
-from app.tools.storage import _get_s3_client, public_url, read  # noqa: E402
+from app.providers.storage import _get_s3_client, public_url, read  # noqa: E402
 
 # (stem, materials label_key) per case, in argv order.
 CASES = [

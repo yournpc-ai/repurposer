@@ -20,8 +20,8 @@ from app.models.schemas import (
     PersonaUpdate,
 )
 from app.models.tables import Asset, Persona, User
-from app.tools.extraction import extract_text
-from app.tools.storage import (
+from app.pipeline.extraction import extract_text
+from app.providers.storage import (
     delete_file,
     delete_persona_files,
 )

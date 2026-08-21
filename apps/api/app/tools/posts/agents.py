@@ -1,4 +1,4 @@
-"""Post writer — the write_post skill's private agent declaration (N-30)."""
+"""Post writer — the write_post tool's private agent declaration (N-30)."""
 
 from app.clients.minimax import MiniMaxError
 from app.models.schemas import (

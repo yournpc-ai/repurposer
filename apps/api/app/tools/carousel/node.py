@@ -2,7 +2,7 @@
 ``pipeline/derivative_dispatch.DerivativeWriterNode``."""
 
 from app.pipeline.derivative_dispatch import DerivativeWriterNode
-from app.skills.carousel.agents import carousel_writer
+from app.tools.carousel.agents import carousel_writer
 
 
 class WriteCarousel(DerivativeWriterNode):

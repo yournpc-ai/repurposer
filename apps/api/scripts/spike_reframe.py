@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import cv2
 import numpy as np
 
-from app.tools.vision import FaceDetection, detect_faces
+from app.providers.vision import FaceDetection, detect_faces
 
 XY1 = "/Users/sylas/xy_1.mp4"
 XY2 = "/Users/sylas/xy_2.mp4"
@@ -93,7 +93,7 @@ def frame_at(path: str, idx: int) -> np.ndarray:
 
 def asr_xy1() -> None:
     """Transcribe xy_1 with the production ASR seam and cache word timestamps."""
-    from app.tools.asr import transcribe
+    from app.providers.asr import transcribe
 
     result = transcribe(Path(XY1))
     WORDS_CACHE.write_text(json.dumps(result))

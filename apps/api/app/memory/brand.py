@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import ClipBrand, ClipMusic, IntroOutroCard
 from app.models.tables import Music, Persona
+from app.pipeline.music import get_music, get_music_by_mood
+from app.providers.storage import public_url
 
 # Craft/format keys: task-book defaults that live in DEFAULT_BRAND_CONFIG and
 # the recipe registry — NEVER inside a persona row (config 三分流, N-28).
@@ -147,8 +149,6 @@ async def music_from_block(
     )
     if piece is None:
         return ClipMusic(enabled=enabled, gain_db=gain)
-    from app.tools.storage import public_url  # deferred: import cycle (the tools door re-enters this closure)
-
     return ClipMusic(
         music_id=str(piece.id),
         # Bake the storage-resolved public URL (object key → public object URL)
@@ -215,16 +215,12 @@ async def resolve_music_ref(db: AsyncSession, ref: Any) -> Music | None:
     if ref.lower() == "none":
         return None
     try:
-        from app.pipeline.music import get_music  # deferred: import cycle (the tools door re-enters this closure)
-
         return await get_music(db, UUID(ref))
     except ValueError:
         pass
     key = normalize_mood(ref)
     if key is None:
         return None
-    from app.pipeline.music import get_music_by_mood  # deferred: import cycle
-
     return await get_music_by_mood(db, key)
 
 
@@ -237,9 +233,6 @@ async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
     key = normalize_mood(mood)
     if key is None:
         return ClipMusic()
-    from app.pipeline.music import get_music_by_mood  # deferred: import cycle
-    from app.tools.storage import public_url  # deferred: import cycle
-
     piece = await get_music_by_mood(db, key)
     if piece is None:
         return ClipMusic()
@@ -271,8 +264,6 @@ async def music_from_plan(
     if getattr(plan, "music_enabled", True) and getattr(plan, "music_id", None):
         piece = await resolve_music_ref(db, plan.music_id)
         if piece is not None:
-            from app.tools.storage import public_url  # deferred: import cycle
-
             return ClipMusic(
                 music_id=str(piece.id),
                 url=public_url(piece.file_path),
