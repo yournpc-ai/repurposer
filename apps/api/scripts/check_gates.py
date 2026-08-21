@@ -20,6 +20,14 @@ blind-retry identifiers (``auto_retry`` / ``_with_retry``) must never
 reappear under ``app/``. The client layer's tenacity (transport) and the
 graph's step retry budget (``NodeBase.retries``) are not retries in this
 sense.
+
+Gate 4 (naming batch v2 retired identifiers): the renames of N-40/N-41/N-42
+leave no shim — the retired identifiers (``SkillEntry`` / ``SkillRejected``
+/ ``dispatchable_skills`` / ``checkpoint``; imports of ``app.clients`` or
+``app.agents.roster``) must never reappear under ``app/``, and
+``agents/roster.py`` must never come back as a file. ``app.skills`` is NOT
+banned — it is the instruction-pack home (N-42 指令包, industry meaning);
+``roster`` as plain prose (the AGENTS roster) stays legitimate.
 """
 
 import re
@@ -41,6 +49,7 @@ BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|provid
 BANNED_PARALLEL_MAPS = re.compile(
     r"_OUTPUT_TO_NODE_KIND"
     r"|_SKILL_TO_OUTPUT"
+    r"|_TOOL_TO_OUTPUT"  # the new-vocabulary twin — same reintroduction
     r"|_SLOT_ORDER"
     r"|_SLOT_TYPE_LABEL"
     r"|\bKNOWN_OUTPUTS\b"
@@ -55,6 +64,20 @@ BANNED_PARALLEL_MAPS = re.compile(
 # Agent funnel's one bounded repair round (structured echo). A hit means
 # someone reintroduced a retry without feedback.
 BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
+
+# Naming batch v2 retired identifiers (N-40/N-41/N-42): the renames left no
+# shim, so a hit is always a reintroduction. ``checkpoint`` is matched
+# case-insensitively (kind string AND prose); ``app.skills`` is deliberately
+# absent — it is the live instruction-pack home.
+BANNED_RETIRED_IDENTIFIERS = re.compile(
+    r"\bSkillEntry\b"
+    r"|\bSkillRejected\b"
+    r"|\bdispatchable_skills\b"
+    r"|\bcheckpoint\b"
+    r"|^\s*(from|import)\s+app\.clients\b"
+    r"|^\s*(from|import)\s+app\.agents\.roster\b",
+    re.IGNORECASE,
+)
 
 
 def _deterministic_package_dirs() -> list[Path]:
@@ -115,6 +138,19 @@ def check_blind_retries() -> list[str]:
     return violations
 
 
+def check_retired_identifiers() -> list[str]:
+    violations: list[str] = []
+    roster_py = APP_DIR / "agents" / "roster.py"
+    if roster_py.exists():
+        violations.append("app/agents/roster.py: file resurrected (N-41: it is registry.py)")
+    for path in sorted(APP_DIR.rglob("*.py")):
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if BANNED_RETIRED_IDENTIFIERS.search(line):
+                rel = path.relative_to(API_ROOT)
+                violations.append(f"{rel}:{lineno}: {line.strip()}")
+    return violations
+
+
 def main() -> int:
     failures = check_purity()
     if failures:
@@ -131,9 +167,14 @@ def main() -> int:
         print("blind-retry gate FAILED (P3: one bounded repair round, with feedback):")
         for failure in blind:
             print(f"  {failure}")
-    if failures or parallel or blind:
+    retired = check_retired_identifiers()
+    if retired:
+        print("retired-identifier gate FAILED (naming batch v2: no shim, no reintroduction):")
+        for failure in retired:
+            print(f"  {failure}")
+    if failures or parallel or blind or retired:
         return 1
-    print("check_gates: OK (providers/+deterministic purity, no parallel maps, no blind retries)")
+    print("check_gates: OK (providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers)")
     return 0
 
 
