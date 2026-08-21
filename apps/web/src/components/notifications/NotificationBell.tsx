@@ -171,11 +171,11 @@ export function NotificationBell() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-9 w-9 rounded-lg overlay-surface ring-1 ring-foreground/10"
+            className="relative h-10 w-10 rounded-lg overlay-surface ring-1 ring-foreground/10"
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-5.5 w-5.5" />
             {unread > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
             )}
           </Button>
         }

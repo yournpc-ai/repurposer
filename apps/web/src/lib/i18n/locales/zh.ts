@@ -47,10 +47,10 @@ const zh: Resources = {
   home: {
     newChat: "新对话",
     brandTagline: "你的自媒体Agent团队",
-    pastePlaceholder: "描述你想生成什么…",
+    pastePlaceholder: "说说你想做什么…",
     selectPersona: "人设",
     generating: "正在分析素材并生成内容，可能需要一会儿…",
-    noPromptError: "请先描述想要生成的内容",
+    noPromptError: "先说说想做什么",
     personaCreateFailed: "创建人设失败",
   },
   landing: {

@@ -45,10 +45,10 @@ const en = {
   home: {
     newChat: "New chat",
     brandTagline: "Your social media agent team",
-    pastePlaceholder: "Describe what to make…",
+    pastePlaceholder: "What do you want to make?",
     selectPersona: "Persona",
     generating: "Analyzing your material and generating content, this can take a moment…",
-    noPromptError: "Describe what you want to generate first",
+    noPromptError: "Say what you want to make first",
     personaCreateFailed: "Failed to create persona",
   },
   landing: {
