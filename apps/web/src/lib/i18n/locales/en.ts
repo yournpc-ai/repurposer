@@ -995,7 +995,7 @@ const en = {
       preprocess: "Analyzing your uploads…",
       persona_bootstrap: "Preparing your persona…",
       director_understand: "Understanding your material…",
-      checkpoint: "Waiting for your direction…",
+      interrupt: "Waiting for your direction…",
       director_plan: "Planning the content…",
       select_clips: "Generating your clips…",
       revise_script: "Writing the script…",

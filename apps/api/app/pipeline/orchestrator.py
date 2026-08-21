@@ -70,9 +70,9 @@ _TARGETED_DERIVATIVE_SCOPES = {"derivative"} | derivative_output_types()
 
 
 class Suspend(Exception):
-    """挂起: a thin checkpoint node parks itself for a human answer (期 4).
+    """挂起: a thin interrupt node parks itself for a human answer (期 4).
 
-    The checkpoint runner raises it after docking the question; execute_step's
+    The interrupt runner raises it after docking the question; execute_step's
     catch branch parks the node in ``waiting`` (options ride in
     ``spec.suspend_payload``) and the run in WAITING_HUMAN. Re-entry is
     queue-based, not call-stack resumption: the answer endpoint writes
@@ -104,7 +104,7 @@ class TaskSpec(BaseModel):
     # intent chain). None = resolve per the default-persona chain.
     persona_id: str | None = None
     # Autonomy tier (intent-ask-primitive §2.7): stored verbatim on
-    # run.context; the review tier inserts a direction checkpoint between
+    # run.context; the review tier inserts a direction interrupt between
     # director_understand and director_plan on full runs (期 4).
     autonomy: str = "auto"
     scope: str = "full"
@@ -287,13 +287,13 @@ def _compile_task_list(
             ]
         )
         if task.autonomy == "review":
-            # Direction checkpoint (期 4, review tier only — the auto tier
+            # Direction interrupt (期 4, review tier only — the auto tier
             # never inserts one; targeted runs don't either). It parks the
             # run for the user's direction pick between understanding and
             # planning; persona and understanding ride its inputs so the
             # plan node's ordering constraint survives transitively.
             nodes.append(
-                _NodeSpec("checkpoint", 4, inputs=[1, 2], spec={"for": "direction"})
+                _NodeSpec("interrupt", 4, inputs=[1, 2], spec={"for": "direction"})
             )
             nodes.append(_NodeSpec("director_plan", 5, inputs=[3]))
         else:
@@ -841,7 +841,7 @@ async def execute_step(node_id: UUID) -> None:
                 await db.commit()
                 logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Suspend as s:
-            # Checkpoint park (期 4): node → waiting with the derived options
+            # Interrupt park (期 4): node → waiting with the derived options
             # in spec.suspend_payload, run → WAITING_HUMAN. The question was
             # already docked by the runner in its own session (committed
             # before raising), so nothing here rolls back. No cascade — the
@@ -930,7 +930,7 @@ async def _cascade_skip(
 ) -> None:
     """Transitively mark downstream pending nodes as skipped.
 
-    ``reason`` overrides the failure line — the checkpoint bail cascade is a
+    ``reason`` overrides the failure line — the interrupt bail cascade is a
     graceful exit (#5), so its skipped children read "user bailed", never
     "upstream failed".
     """
@@ -951,18 +951,18 @@ async def _cascade_skip(
             frontier.append(child.id)
 
 
-async def resume_waiting_checkpoint(
+async def resume_waiting_interrupt(
     db: AsyncSession, run: WorkflowRun, answer: dict
 ) -> WorkflowStep | None:
     """answer = resume: write the AnswerPayload dump into the waiting
-    checkpoint's spec, flip the node back to pending and the run back to
+    interrupt's spec, flip the node back to pending and the run back to
     RUNNING — the claim loop re-executes the thin node, whose spec.answer
-    branch goes straight to done. Idempotent: no waiting checkpoint → None
+    branch goes straight to done. Idempotent: no waiting interrupt → None
     (already resumed or bailed). Flush-only; the caller commits."""
     result = await db.execute(
         select(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
-            WorkflowStep.kind == "checkpoint",
+            WorkflowStep.kind == "interrupt",
             WorkflowStep.status == "waiting",
         )
     )
@@ -974,22 +974,22 @@ async def resume_waiting_checkpoint(
     node.started_at = None
     if run.status == WorkflowStatus.WAITING_HUMAN:
         run.status = WorkflowStatus.RUNNING
-    logger.info("checkpoint_resumed", run_id=str(run.id), node_id=str(node.id))
+    logger.info("interrupt_resumed", run_id=str(run.id), node_id=str(node.id))
     return node
 
 
-async def bail_waiting_checkpoint(
+async def bail_waiting_interrupt(
     db: AsyncSession, run: WorkflowRun
 ) -> WorkflowStep | None:
     """Bail path (期 4): node done with ``spec.bailed`` + downstream cascade-
     skipped with the non-failure reason (#5). The run itself settles
     COMPLETED via maybe_finalize_run once the caller commits — the bailed
-    checkpoint's summary line ("Bailed by user") is the user-abort note in
+    interrupt's summary line ("Bailed by user") is the user-abort note in
     the aggregated run summary. Idempotent like resume. Flush-only."""
     result = await db.execute(
         select(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
-            WorkflowStep.kind == "checkpoint",
+            WorkflowStep.kind == "interrupt",
             WorkflowStep.status == "waiting",
         )
     )
@@ -1000,7 +1000,7 @@ async def bail_waiting_checkpoint(
     node.status = "done"
     node.finished_at = datetime.now(UTC)
     await _cascade_skip(db, node, reason="user bailed")
-    logger.info("checkpoint_bailed", run_id=str(run.id), node_id=str(node.id))
+    logger.info("interrupt_bailed", run_id=str(run.id), node_id=str(node.id))
     return node
 
 
@@ -1033,7 +1033,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         active = [
             n
             for n in nodes
-            # waiting counts as active: a checkpoint parked for a human answer
+            # waiting counts as active: a interrupt parked for a human answer
             # must never let the run settle (期 4).
             if n.status in ("pending", "running", "waiting") and n.kind not in RUNTIME_FANOUT_KINDS
         ]
@@ -1066,8 +1066,8 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         )
 
 
-async def expire_stale_checkpoints(older_than: timedelta | None = None) -> int:
-    """Auto-answer long-parked checkpoints with their default option.
+async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
+    """Auto-answer long-parked interrupts with their default option.
 
     Expiry semantics = the review tier degrades to best-judgment completion
     after the TTL (the leave-note promise: 离开不中断) — never a bail, never
@@ -1076,13 +1076,13 @@ async def expire_stale_checkpoints(older_than: timedelta | None = None) -> int:
     option has no argument id, so director_plan injects no direction —
     exactly the auto-tier behavior. The message UPDATE is guarded by
     ``answer IS NULL``: a user answer racing the sweep always wins, and
-    ``resume_waiting_checkpoint`` is itself idempotent. Returns the number
-    of checkpoints expired (0 is the common, silent case).
+    ``resume_waiting_interrupt`` is itself idempotent. Returns the number
+    of interrupts expired (0 is the common, silent case).
     """
     ttl = (
         older_than
         if older_than is not None
-        else timedelta(seconds=settings.checkpoint_expiry_seconds)
+        else timedelta(seconds=settings.interrupt_expiry_seconds)
     )
     cutoff = datetime.now(UTC) - ttl
     expired = 0
@@ -1091,7 +1091,7 @@ async def expire_stale_checkpoints(older_than: timedelta | None = None) -> int:
             (
                 await db.execute(
                     select(WorkflowStep).where(
-                        WorkflowStep.kind == "checkpoint",
+                        WorkflowStep.kind == "interrupt",
                         WorkflowStep.status == "waiting",
                         WorkflowStep.started_at < cutoff,
                     )
@@ -1113,7 +1113,7 @@ async def expire_stale_checkpoints(older_than: timedelta | None = None) -> int:
             )
             if not message_id or default is None:
                 logger.warning(
-                    "checkpoint_expiry_skipped_corrupt_payload", node_id=str(node.id)
+                    "interrupt_expiry_skipped_corrupt_payload", node_id=str(node.id)
                 )
                 continue
             answer = AnswerPayload(
@@ -1132,11 +1132,11 @@ async def expire_stale_checkpoints(older_than: timedelta | None = None) -> int:
                 continue  # the user answered between the scan and this write
             run = await db.get(WorkflowRun, node.run_id)
             if run is not None:
-                await resume_waiting_checkpoint(db, run, answer)
+                await resume_waiting_interrupt(db, run, answer)
             await db.commit()
             expired += 1
             logger.info(
-                "checkpoint_expired", node_id=str(node.id), run_id=str(node.run_id)
+                "interrupt_expired", node_id=str(node.id), run_id=str(node.run_id)
             )
     return expired
 

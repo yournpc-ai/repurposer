@@ -196,7 +196,7 @@ class NodeBase:
     # (the translate_clip 2026-08-15 precedent generalized — select_clips /
     # dub / add_music all folded). ``canvas_group`` returns the node's
     # artifact key; steps sharing a key within one run merge into ONE canvas
-    # node (director's understand+checkpoint+plan = the single "plan" card).
+    # node (director's understand+interrupt+plan = the single "plan" card).
     # None = fold into the 过程脊 group node (intervention = click the
     # product, or the expanded spine's step pill via @workflow_step).
     # ``canvas_hidden`` = never a node at all — the step's state projects
@@ -326,7 +326,7 @@ def token_bounds(chars: int) -> list[int]:
 
 
 def estimate_free() -> dict:
-    """A zero quotation (checkpoint / deterministic nodes: no LLM, no
+    """A zero quotation (interrupt / deterministic nodes: no LLM, no
     provider-priced units)."""
     return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": {}}
 

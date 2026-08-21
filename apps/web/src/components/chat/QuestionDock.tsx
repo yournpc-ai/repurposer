@@ -73,7 +73,7 @@ interface ChoiceDockProps {
   estimate?: string | null
   onAnswer: (optionId: string) => void
   answering: boolean
-  /** Bail affordance — only passed for checkpoint questions (a run is
+  /** Bail affordance — only passed for interrupt questions (a run is
    * parked on the answer); plain chat asks get no bail (the next message
    * supersedes them anyway). A graceful exit, never an error path. */
   onBail?: () => void

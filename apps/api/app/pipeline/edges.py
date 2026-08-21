@@ -37,9 +37,9 @@ async def _load_understanding(
     """Load the MaterialUnderstanding from this node's upstream
     director_understand node (its output row may be a reused earlier one).
 
-    The direction checkpoint (期 4) sits transparently between plan/executor
+    The direction interrupt (期 4) sits transparently between plan/executor
     nodes and the understand node — upstreams are matched by kind, so the
-    search walks through checkpoint nodes' inputs one extra hop."""
+    search walks through interrupt nodes' inputs one extra hop."""
     frontier = [str(i) for i in (node.inputs or [])]
     visited: set[str] = set()
     understand: WorkflowStep | None = None
@@ -50,7 +50,7 @@ async def _load_understanding(
         visited.add(str(upstream.id))
         if upstream.kind == "director_understand":
             understand = upstream
-        elif upstream.kind == "checkpoint":
+        elif upstream.kind == "interrupt":
             frontier.extend(str(i) for i in (upstream.inputs or []))
     if understand is None:
         raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director_understand node")
@@ -105,20 +105,20 @@ def _align_storyboard_slots(
     return aligned
 
 
-async def _checkpoint_direction(
+async def _interrupt_direction(
     db: AsyncSession, node: WorkflowStep
 ) -> dict | None:
-    """The direction checkpoint's answer as task-book input (期 4).
+    """The direction interrupt's answer as task-book input (期 4).
 
-    Read off the plan node's checkpoint upstream (matched by kind, never by
+    Read off the plan node's interrupt upstream (matched by kind, never by
     position): option → the chosen argument as a priority; freeform → the
     guidance text verbatim; the default option (no argument id) → None, the
     current behavior. Explicit slot focus stays binding — the priority order
-    is slot.focus > checkpoint direction > director's own assignment (§2.5).
+    is slot.focus > interrupt direction > director's own assignment (§2.5).
     """
     for upstream_id in node.inputs or []:
         upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))
-        if upstream is None or upstream.kind != "checkpoint":
+        if upstream is None or upstream.kind != "interrupt":
             continue
         spec = upstream.spec or {}
         answer = spec.get("answer")

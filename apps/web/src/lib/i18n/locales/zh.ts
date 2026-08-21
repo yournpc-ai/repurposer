@@ -967,7 +967,7 @@ const zh: Resources = {
       preprocess: "正在分析上传的素材…",
       persona_bootstrap: "正在准备你的人设…",
       director_understand: "正在看懂你的素材…",
-      checkpoint: "等你选定方向…",
+      interrupt: "等你选定方向…",
       director_plan: "正在规划内容结构…",
       select_clips: "正在生成你的短片…",
       revise_script: "正在撰写脚本…",

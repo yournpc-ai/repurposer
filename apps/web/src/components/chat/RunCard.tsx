@@ -34,7 +34,7 @@ function StepRow({ step }: { step: WorkflowStep }) {
     ) : step.status === "failed" ? (
       <X className="text-destructive" />
     ) : step.status === "waiting" ? (
-      // Checkpoint parked for a human answer (期 4) — same glyph as the
+      // Interrupt parked for a human answer (期 4) — same glyph as the
       // generation overlay's StepMarker.
       <CircleHelp className="text-primary" />
     ) : (

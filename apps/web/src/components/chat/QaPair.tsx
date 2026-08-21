@@ -23,7 +23,7 @@ export interface QaAnswer {
 export function qaAnswerText(
   answer: QaAnswer,
   t: (key: string) => string,
-  /** The answered question carried a run (checkpoint): its bail stops the
+  /** The answered question carried a run (interrupt): its bail stops the
    * run, it doesn't send the project back to draft — different copy. */
   hasRun?: boolean,
 ): { text: string; muted: boolean } {
@@ -35,7 +35,7 @@ export function qaAnswerText(
       ? { text: t("chat.qa.stopped"), muted: true }
       : { text: t("chat.qa.cancelled"), muted: true }
   }
-  // The checkpoint expiry sweep's auto-answer (machine marker, same pattern
+  // The interrupt expiry sweep's auto-answer (machine marker, same pattern
   // as "superseded") — a system decision, rendered muted.
   if (answer.kind === "option" && answer.text === "expired") {
     return { text: t("chat.qa.expired"), muted: true }

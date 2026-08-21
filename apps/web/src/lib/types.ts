@@ -196,7 +196,7 @@ export interface WorkflowStep {
    * renders (render projects onto the product card in place). */
   canvas_key?: string | null
   canvas_hidden?: boolean
-  /** The artifact node's body copy (e.g. the checkpoint's full direction
+  /** The artifact node's body copy (e.g. the interrupt's full direction
    * answer); absent = the card falls back to the summary line. */
   canvas_text?: string | null
   started_at: string | null

@@ -59,7 +59,7 @@ const PRODUCT_TYPE_LABEL_KEY: Record<string, string> = {
   article: "results.tabs.article",
 }
 
-/** Step status → FlowView status. A parked checkpoint (`waiting`) reads as
+/** Step status → FlowView status. A parked interrupt (`waiting`) reads as
  * not-yet-done on the canvas — the ask lives in the chat dock, not the
  * graph (D2: progress never enters the graph). */
 function stepNodeStatus(status: string): FlowNodeStatus {

@@ -63,7 +63,7 @@ export function RunTaskList({
   const { t } = useTranslation()
   const now = useNow(!terminal)
   const running = steps.find((s) => s.status === "running") ?? null
-  // A parked checkpoint (review tier) has no running step — the narrative
+  // A parked interrupt (review tier) has no running step — the narrative
   // line must say "waiting for your direction", not the queued fallback.
   const waiting = steps.find((s) => s.status === "waiting") ?? null
   const narrativeStep = running ?? waiting
@@ -85,7 +85,7 @@ export function RunTaskList({
 
   /** The narrative line's progressive copy: the stage hint the runner last
    * wrote, else the kind's progressive form, else the preset task name. A
-   * waiting checkpoint reads through the same chain (no stage — the kind's
+   * waiting interrupt reads through the same chain (no stage — the kind's
    * "waiting for your direction" copy carries it). */
   const narrativeLabel = narrativeStep
     ? (narrativeStep.stage

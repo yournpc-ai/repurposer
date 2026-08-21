@@ -1,7 +1,7 @@
 """Internal node crew (ADR-039 P2 objectified): the non-skill kernel nodes.
 
 ``preprocess`` / ``persona_bootstrap`` / ``director_understand`` /
-``director_plan`` / ``checkpoint`` / ``render`` — these never enter the
+``director_plan`` / ``interrupt`` / ``render`` — these never enter the
 proposal space (CHAT_ARCH §4). Skill nodes live in their skill packages
 (``app/skills/<pkg>/node.py``); the full ``NODE_KINDS`` table self-populates
 as the registry door (``app/skills/__init__.py``) imports this module and the
@@ -37,7 +37,7 @@ from app.models.tables import (
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.edges import (
     _align_storyboard_slots,
-    _checkpoint_direction,
+    _interrupt_direction,
     _compute_coverage,
     _load_understanding,
 )
@@ -347,8 +347,8 @@ class DirectorUnderstand(NodeBase):
         return [row.id]
 
 
-class Checkpoint(NodeBase):
-    kind = "checkpoint"
+class Interrupt(NodeBase):
+    kind = "interrupt"
     task_name = "Pick a direction"
     task_name_zh = "选定方向"
 
@@ -369,12 +369,12 @@ class Checkpoint(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        """Direction checkpoint (期 4): the run's one HITL pause, review tier only.
+        """Direction interrupt (期 4): the run's one HITL pause, review tier only.
 
         Thin-node rule — no heavy work before asking, and zero LLM (prohibited-
         behavior #4): the options are code-derived from the understanding's key
         arguments. First entry derives options → docks the question (committed in
-        its own session; ``workflow_run_id`` marks the checkpoint dispatch) →
+        its own session; ``workflow_run_id`` marks the interrupt dispatch) →
         raises Suspend, and execute_step parks the node in ``waiting`` with the
         options in ``spec.suspend_payload`` and the run in WAITING_HUMAN.
 
@@ -382,10 +382,10 @@ class Checkpoint(NodeBase):
         flips the node back to pending; this runner then re-runs from the top,
         takes the answer branch below, and goes straight to done (its summary is
         the chosen direction). director_plan reads the answer off this node's
-        spec — see ``_checkpoint_direction``.
+        spec — see ``_interrupt_direction``.
         """
         from app.chat.service import (  # deferred: import cycle
-            dock_checkpoint_question,
+            dock_interrupt_question,
             finalize_bailed_runs,
         )
         from app.pipeline.orchestrator import Suspend  # deferred: import cycle
@@ -449,7 +449,7 @@ class Checkpoint(NodeBase):
         # answer path; a mis-fired direction is correctable in the next turn.
         payload = AskPayload(kind="choice", options=options, allow_freeform=True)
         async with AsyncSessionLocal() as s:
-            message, bailed_run_ids = await dock_checkpoint_question(
+            message, bailed_run_ids = await dock_interrupt_question(
                 s,
                 UUID(str(project.user_id)),
                 UUID(str(project.id)),
@@ -460,7 +460,7 @@ class Checkpoint(NodeBase):
             # Commit expires the ORM instance — capture the id first.
             question_message_id = str(message.id)
             await s.commit()
-        # Docking superseded an older parked checkpoint (single-pending
+        # Docking superseded an older parked interrupt (single-pending
         # invariant) — its run was cascade-bailed in the same stroke; settle it.
         await finalize_bailed_runs(bailed_run_ids)
         raise Suspend(
@@ -544,10 +544,10 @@ class DirectorPlan(NodeBase):
             ],
             "target_language": ctx.get("target_language", "en"),
         }
-        # Direction checkpoint (期 4): the user's pick steers the prompt — option
+        # Direction interrupt (期 4): the user's pick steers the prompt — option
         # → priority argument, freeform → guidance text, default → absent (the
         # current behavior). Explicit slot focus still wins (code-enforced below).
-        direction = await _checkpoint_direction(db, node)
+        direction = await _interrupt_direction(db, node)
         if direction:
             task_book["direction"] = direction
 

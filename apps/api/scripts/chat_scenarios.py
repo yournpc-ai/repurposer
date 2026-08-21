@@ -24,16 +24,16 @@ birth-ordered and never recycled; position in this file = family.
                S27 QA archive · S28 plain no-media · S29 count 422 · S30 attach-only
     四态分派   S31 task_list run · S32 edit_ops ops行 · S33 progress · S34 meta · S35 asset scope
                S47 workflow_step mention 消费（F4 行为锁）
-    checkpoint S36 三答法+空白不答 · S37 bail级联 · S38 supersede级联 · S39 过期扫描 · S40 task_book不参与autoResume
+    interrupt S36 三答法+空白不答 · S37 bail级联 · S38 supersede级联 · S39 过期扫描 · S40 task_book不参与autoResume
     流式       S9 SSE
     harness    S41 repair 只一轮（Agent 漏斗自检，进程内 stub，不打 API）
     估价       S42 对账自检 + 报价单调性 + NULL 语义（进程内编译，不打 API）
                S45 materialize 注入矩阵（media/stills/existing/none/with-clips）
 
-S31/S35 起的 run 是真的（worker 会执行）；checkpoint 族（S36–S39）seed parked
+S31/S35 起的 run 是真的（worker 会执行）；interrupt 族（S36–S39）seed parked
 run 手工行，答题/过期唤醒后由 worker 跑零 LLM 的 answer 分支收官——需要 dev
 worker 在跑。S36d 的空白 attachment-only 轮会落到 ChatIntentAgent（空文本），
-它若 dock 新题把 checkpoint supersede 掉是设计内行为（J5），断言只管
+它若 dock 新题把 interrupt supersede 掉是设计内行为（J5），断言只管
 answered_question 为 None。
 
 ``# W4 升级:`` comments mark assertions that tighten when the advisor
@@ -350,15 +350,15 @@ async def seed_running_run_with_steps(pid: str) -> str:
         return str(run.id)
 
 
-async def seed_parked_checkpoint(
+async def seed_parked_interrupt(
     pid: str,
     user_id: uuid.UUID,
     *,
     parked_hours_ago: float = 0,
     with_downstream: bool = False,
 ) -> dict:
-    """A direction checkpoint parked for a human answer (期 4 seed shape):
-    WAITING_HUMAN run + waiting ``checkpoint`` node (options in
+    """A direction interrupt parked for a human answer (期 4 seed shape):
+    WAITING_HUMAN run + waiting ``interrupt`` node (options in
     spec.suspend_payload) + the docked choice question row carrying the
     ``workflow_run_id`` dispatch marker. ``with_downstream`` adds a pending
     child node so the bail cascade has something to skip (S37)."""
@@ -407,7 +407,7 @@ async def seed_parked_checkpoint(
         await db.flush()
         node = WorkflowStep(
             run_id=run.id,
-            kind="checkpoint",
+            kind="interrupt",
             status="waiting",
             seq=1,
             started_at=started_at,
@@ -502,9 +502,9 @@ async def operations_for_output(output_id: str) -> list[dict]:
 
 async def wait_run_status(run_id: str, wanted: set[str], timeout: float = 45.0) -> dict:
     """Poll a run until it reaches one of ``wanted`` statuses. The wake half
-    of a checkpoint answer is synchronous, but settling (the thin node's
+    of a interrupt answer is synchronous, but settling (the thin node's
     answer branch → finalize) is worker-driven — hence the poll. Requires the
-    dev worker (the checkpoint answer branch is zero-LLM, so this is fast)."""
+    dev worker (the interrupt answer branch is zero-LLM, so this is fast)."""
     deadline = asyncio.get_event_loop().time() + timeout
     while True:
         row = await run_row(run_id)
@@ -1465,14 +1465,14 @@ async def s46_reframe_skill_dispatch(ctx: Ctx) -> None:
     check("reframe_clip" in kinds, "the booked run includes reframe_clip", kinds)
 
 
-# ---- Scenarios: checkpoint（seed parked run，零 LLM） ---------------------------
+# ---- Scenarios: interrupt（seed parked run，零 LLM） ---------------------------
 
 
-async def s36_checkpoint_three_answer_paths(ctx: Ctx) -> None:
-    """S36 checkpoint 三答法 + 空白不答题：option 按钮 / 打字母 autoResume / 自由文本 —— 答题即唤醒。"""
+async def s36_interrupt_three_answer_paths(ctx: Ctx) -> None:
+    """S36 interrupt 三答法 + 空白不答题：option 按钮 / 打字母 autoResume / 自由文本 —— 答题即唤醒。"""
     # a) 按钮：answer 端点 option。
     pid = await ctx.new_project("S36a option answer")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id)
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
     res = await ctx.answer(ck["question_id"], {"kind": "option", "option_id": "a"})
     check(res.status_code == 200, "the option answer lands", res.text)
     answered = res.json()["answered_question"]
@@ -1490,11 +1490,11 @@ async def s36_checkpoint_three_answer_paths(ctx: Ctx) -> None:
 
     # b) 打字母：/chat autoResume（零 LLM）。
     pid = await ctx.new_project("S36b typed letter")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id)
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
     turn = await ctx.chat(pid, "a")
     aq = turn.get("answered_question")
     check(aq is not None and aq["id"] == ck["question_id"],
-          "the typed letter auto-resumed the checkpoint", turn)
+          "the typed letter auto-resumed the interrupt", turn)
     check((aq.get("answer") or {}).get("kind") == "option", "the letter maps to an option",
           aq.get("answer"))
     await wait_run_status(ck["run_id"], {"completed"})
@@ -1502,7 +1502,7 @@ async def s36_checkpoint_three_answer_paths(ctx: Ctx) -> None:
 
     # c) 自由文本：allow_freeform → freeform。
     pid = await ctx.new_project("S36c freeform")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id)
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
     turn = await ctx.chat(pid, "focus on the pricing argument")
     aq = turn.get("answered_question")
     check(aq is not None and aq["id"] == ck["question_id"],
@@ -1514,29 +1514,29 @@ async def s36_checkpoint_three_answer_paths(ctx: Ctx) -> None:
 
     # d) 空白 attachment-only 永不 auto-answer（K6）。
     pid = await ctx.new_project("S36d blank never answers")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id)
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
     turn = await ctx.chat(
         pid, "", attachments=[{"id": "att-1", "name": "notes.txt", "type": "file"}]
     )
     check(turn.get("answered_question") is None,
-          "a blank attachment-only turn never answers a checkpoint", turn)
+          "a blank attachment-only turn never answers a interrupt", turn)
     q = await message_row(ck["question_id"])
     check(q.get("answer") is None or (q["answer"] or {}).get("text") == "superseded",
-          "the checkpoint was not auto-answered (a new docked question superseding "
+          "the interrupt was not auto-answered (a new docked question superseding "
           "it is the designed cascade)", q.get("answer"))
 
 
-async def s37_checkpoint_bail_cascade(ctx: Ctx) -> None:
-    """S37 checkpoint 弃跑：bail → 节点 done(bailed) + 下游级联 skipped + run COMPLETED（永不 failed）。"""
-    pid = await ctx.new_project("S37 checkpoint bail")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id, with_downstream=True)
+async def s37_interrupt_bail_cascade(ctx: Ctx) -> None:
+    """S37 interrupt 弃跑：bail → 节点 done(bailed) + 下游级联 skipped + run COMPLETED（永不 failed）。"""
+    pid = await ctx.new_project("S37 interrupt bail")
+    ck = await seed_parked_interrupt(pid, ctx.user_id, with_downstream=True)
 
     res = await ctx.answer(ck["question_id"], {"kind": "bail"})
     check(res.status_code == 200, "bail lands", res.text)
     steps = {s["id"]: s for s in await step_rows(ck["run_id"])}
     node = steps[ck["node_id"]]
     check(node["status"] == "done" and node["spec"].get("bailed") is True,
-          "the checkpoint settles done with spec.bailed", node)
+          "the interrupt settles done with spec.bailed", node)
     child = steps[ck["child_id"]]
     check(child["status"] == "skipped" and child["error"] == "user bailed",
           "the downstream cascade-skips with the non-failure reason", child)
@@ -1546,17 +1546,17 @@ async def s37_checkpoint_bail_cascade(ctx: Ctx) -> None:
 
 
 async def s38_new_question_cascade_bails_parked_run(ctx: Ctx) -> None:
-    """S38 多 run 不搁浅：新题 supersede 开口 checkpoint 题 → 同笔级联 bail 那个 run，收官 COMPLETED。"""
+    """S38 多 run 不搁浅：新题 supersede 开口 interrupt 题 → 同笔级联 bail 那个 run，收官 COMPLETED。"""
     from app.chat.service import (  # noqa: PLC0415 — scenario-local, like service.py
-        dock_checkpoint_question,
+        dock_interrupt_question,
         finalize_bailed_runs,
     )
 
     pid = await ctx.new_project("S38 supersede cascade")
-    ck1 = await seed_parked_checkpoint(pid, ctx.user_id)
+    ck1 = await seed_parked_interrupt(pid, ctx.user_id)
 
-    # 第二个 run 的 checkpoint 到题——走 run_checkpoint 的真实函数（runner 到题
-    # 就是调 dock_checkpoint_question），单待决不变量同笔级联 bail 第一个 run。
+    # 第二个 run 的 interrupt 到题——走 run_interrupt 的真实函数（runner 到题
+    # 就是调 dock_interrupt_question），单待决不变量同笔级联 bail 第一个 run。
     options = [
         {"id": "a", "label": "Focus: Pricing", "argument_id": "arg-1"},
         {"id": "b", "label": "Full-talk highlights", "argument_id": None},
@@ -1570,12 +1570,12 @@ async def s38_new_question_cascade_bails_parked_run(ctx: Ctx) -> None:
         db.add(run2)
         await db.flush()
         node2 = WorkflowStep(
-            run_id=run2.id, kind="checkpoint", status="waiting", seq=1,
+            run_id=run2.id, kind="interrupt", status="waiting", seq=1,
             started_at=datetime.now(UTC),
         )
         db.add(node2)
         await db.flush()
-        message, bailed = await dock_checkpoint_question(
+        message, bailed = await dock_interrupt_question(
             db, ctx.user_id, uuid.UUID(pid), run2.id,
             "Which direction should this run focus on?",
             AskPayload(
@@ -1601,22 +1601,22 @@ async def s38_new_question_cascade_bails_parked_run(ctx: Ctx) -> None:
           "the old question retires as superseded", q1.get("answer"))
     node1 = (await step_rows(ck1["run_id"]))[0]
     check(node1["status"] == "done" and node1["spec"].get("bailed") is True,
-          "run1's checkpoint cascade-bailed", node1)
+          "run1's interrupt cascade-bailed", node1)
     check((await run_row(ck1["run_id"]))["status"] == "completed",
           "run1 settles COMPLETED — never stranded")
     q2 = await message_row(q2_id)
     check(q2.get("answer") is None, "the new question is the live pending one", q2)
 
 
-async def s39_checkpoint_expiry_sweep(ctx: Ctx) -> None:
-    """S39 checkpoint 过期：park 超 TTL → 扫描以默认项 auto-answer（标 expired）+ 唤醒续跑收官。"""
-    from app.pipeline.orchestrator import expire_stale_checkpoints  # noqa: PLC0415
+async def s39_interrupt_expiry_sweep(ctx: Ctx) -> None:
+    """S39 interrupt 过期：park 超 TTL → 扫描以默认项 auto-answer（标 expired）+ 唤醒续跑收官。"""
+    from app.pipeline.orchestrator import expire_stale_interrupts  # noqa: PLC0415
 
-    pid = await ctx.new_project("S39 checkpoint expiry")
-    ck = await seed_parked_checkpoint(pid, ctx.user_id, parked_hours_ago=2)
+    pid = await ctx.new_project("S39 interrupt expiry")
+    ck = await seed_parked_interrupt(pid, ctx.user_id, parked_hours_ago=2)
 
-    expired = await expire_stale_checkpoints(older_than=timedelta(hours=1))
-    check(expired >= 1, "the sweep expired at least our checkpoint", expired)
+    expired = await expire_stale_interrupts(older_than=timedelta(hours=1))
+    check(expired >= 1, "the sweep expired at least our interrupt", expired)
     q = await message_row(ck["question_id"])
     check((q.get("answer") or {}).get("text") == "expired",
           "the auto-answer carries the machine marker", q.get("answer"))
@@ -2169,11 +2169,11 @@ SCENARIOS = {
     "S35": s35_focus_output_injection,
     "S47": s47_workflow_step_mention,
     "S46": s46_reframe_skill_dispatch,
-    # checkpoint
-    "S36": s36_checkpoint_three_answer_paths,
-    "S37": s37_checkpoint_bail_cascade,
+    # interrupt
+    "S36": s36_interrupt_three_answer_paths,
+    "S37": s37_interrupt_bail_cascade,
     "S38": s38_new_question_cascade_bails_parked_run,
-    "S39": s39_checkpoint_expiry_sweep,
+    "S39": s39_interrupt_expiry_sweep,
     "S40": s40_task_book_never_auto_resumes,
     # 流式
     "S9": s9_sse_turn_streaming,

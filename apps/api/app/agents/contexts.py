@@ -70,7 +70,7 @@ _RUN_STEP_PROGRESS_LIMIT = 12
 
 def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
     """One quantified line per step of a run (G-2): ``kind: status —
-    summary``. A waiting checkpoint's line reads as "waiting for you" on its
+    summary``. A waiting interrupt's line reads as "waiting for you" on its
     own; a slot label preset at materialization ("Post · DE") rides the
     summary the same way. Capped — when a run outgrows the budget the tail
     (current + upcoming work) is what a progress question is about."""

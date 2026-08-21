@@ -251,7 +251,7 @@ async def answer_message(
     The answer endpoint doubles as the resume mechanism — writing the answer
     is what unblocks the pending decision: a task book start begins the run,
     a choice answer continues the conversation (the follow-up reply rides
-    back in the response), checkpoint wake lands in phase 4. Bail is a
+    back in the response), interrupt wake lands in phase 4. Bail is a
     graceful exit, never an error.
     """
     message, follow_up = await answer_question(

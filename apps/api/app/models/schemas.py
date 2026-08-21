@@ -1422,7 +1422,7 @@ class KeyArgument(BaseModel):
 
     id: str = Field(description="Stable id within the understanding (a1, a2, …)")
     text: str
-    # Display alternates (checkpoint options render in the UI language,
+    # Display alternates (interrupt options render in the UI language,
     # never the material's): faithful English / Simplified-Chinese
     # renderings of the same argument. Empty on legacy cached payloads —
     # the display layer falls back to ``text``.
@@ -1694,12 +1694,12 @@ class StepResponse(BaseModel):
     # Canvas 渲染单元 (ADR-041 D6 修订 2026-08-12) — the node class's
     # self-described artifact identity, lifted by the serializer: steps
     # sharing a ``canvas_key`` within one run merge into ONE canvas node
-    # ("plan" = understand+checkpoint+plan); None folds into the 过程脊;
+    # ("plan" = understand+interrupt+plan); None folds into the 过程脊;
     # ``canvas_hidden`` never renders (render projects onto the product
     # card). View behavior only; the row set is always full.
     canvas_key: str | None = None
     canvas_hidden: bool = False
-    # The canvas node's body copy (e.g. the checkpoint's full direction
+    # The canvas node's body copy (e.g. the interrupt's full direction
     # answer) — None = the surface falls back to ``summary``.
     canvas_text: str | None = None
     started_at: datetime | None = None
@@ -1865,7 +1865,7 @@ class GenerateRequest(BaseModel):
         description=(
             "Autonomy tier for this run (intent-ask-primitive §2.7): auto = "
             "no optional interruptions (default); review = full runs pause at "
-            "the direction checkpoint (phase 4). Stored verbatim on run.context."
+            "the direction interrupt (phase 4). Stored verbatim on run.context."
         ),
     )
     instruction: str | None = Field(

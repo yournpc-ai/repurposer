@@ -605,7 +605,7 @@ function StepMarker({
     ) : status === "failed" ? (
       <X className="text-destructive" />
     ) : status === "waiting" ? (
-      // Checkpoint parked for a human answer (期 4) — a question, not work.
+      // Interrupt parked for a human answer (期 4) — a question, not work.
       <CircleHelp className="text-primary" />
     ) : (
       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
@@ -867,7 +867,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [answeredQuestion, setAnsweredQuestion] = useState<QuestionMessage | null>(null)
   // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
-  // so every run goes out at the review tier — the direction checkpoint
+  // so every run goes out at the review tier — the direction interrupt
   // parks mid-run for the user's pick. The state stays so re-exposing the
   // picker is a one-flag flip.
   const [autonomy, setAutonomy] = useState<Autonomy>("review")
@@ -1088,14 +1088,14 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Mid-run dock revival (期 4): the direction checkpoint docks its question
-  // while the run is already streaming — when a waiting checkpoint step
+  // Mid-run dock revival (期 4): the direction interrupt docks its question
+  // while the run is already streaming — when a waiting interrupt step
   // appears in the SSE flow, re-fetch the pending question so it docks
   // above the input. A null fetch result keeps the dock empty (already
   // answered elsewhere), and the step leaving waiting ends the watch.
   useEffect(() => {
     if (pendingQuestion) return
-    if (!steps.some((s) => s.kind === "checkpoint" && s.status === "waiting")) return
+    if (!steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
     let cancelled = false
     fetchPendingQuestion().then((q) => {
       if (!cancelled && q) setPendingQuestion(q)
@@ -1105,13 +1105,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }, [steps, pendingQuestion, fetchPendingQuestion])
 
-  // Stale-dock clear: the server can settle the docked checkpoint question
+  // Stale-dock clear: the server can settle the docked interrupt question
   // without a client action — the expiry sweep's auto-answer, or an answer
-  // from another device. When this run's checkpoint step leaves waiting,
+  // from another device. When this run's interrupt step leaves waiting,
   // re-fetch and drop the dock if nothing is pending anymore.
   useEffect(() => {
     if (!pendingQuestion || pendingQuestion.workflow_run_id !== runId) return
-    if (steps.some((s) => s.kind === "checkpoint" && s.status === "waiting")) return
+    if (steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
     let cancelled = false
     fetchPendingQuestion().then((q) => {
       if (!cancelled && !q) setPendingQuestion(null)
@@ -1926,10 +1926,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }
 
-  /** Checkpoint bail (期 4): stop the parked run — the endpoint settles the
+  /** Interrupt bail (期 4): stop the parked run — the endpoint settles the
    * node, skips the downstream and completes the run synchronously, so we
    * archive the QA and leave quietly (never an error toast, #5). */
-  const handleCheckpointBail = async () => {
+  const handleInterruptBail = async () => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
     try {
@@ -2562,7 +2562,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                     known everything sorts into ONE timeline — run header at
                     the run's birth, steps at started_at, messages at their
                     real time, terminal markers last. A mid-run QA lands
-                    right after its checkpoint step (before the render
+                    right after its interrupt step (before the render
                     steps) and the assistant's follow-up stays below the QA
                     — the Claude Code reference. Fallback (confirm phase /
                     pre-snapshot window): the legacy fixed block + flat
@@ -2812,10 +2812,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         onAnswer={handleChoiceAnswer}
         answering={answering}
         onBail={
-          // Checkpoint questions (a run parked on the answer) get the bail
+          // Interrupt questions (a run parked on the answer) get the bail
           // affordance; plain chat asks don't — their graceful exit is just
           // typing the next message.
-          pendingChoice.workflow_run_id ? handleCheckpointBail : undefined
+          pendingChoice.workflow_run_id ? handleInterruptBail : undefined
         }
       />
     ) : null

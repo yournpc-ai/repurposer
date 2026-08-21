@@ -34,7 +34,7 @@ from app.pipeline.jobs import (
 )
 from app.pipeline.orchestrator import (
     execute_step,
-    expire_stale_checkpoints,
+    expire_stale_interrupts,
     finalize_stuck_runs,
 )
 from app.pipeline.orchestrator import assert_runners_registered
@@ -78,9 +78,9 @@ async def _tick() -> bool:
         _running_node_tasks.add(task)
         task.add_done_callback(_running_node_tasks.discard)
 
-    # Expire checkpoints parked past their TTL: the auto-answer unblocks
+    # Expire interrupts parked past their TTL: the auto-answer unblocks
     # their runs (claimed on a later tick). Silent when nothing is parked.
-    if await expire_stale_checkpoints():
+    if await expire_stale_interrupts():
         did_work = True
 
     async with AsyncSessionLocal() as db:

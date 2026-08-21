@@ -332,13 +332,13 @@ async def _settle_open_questions(
 ) -> list[UUID]:
     """Answer every still-open question in one stroke (e.g. supersede).
 
-    A superseded checkpoint question (kind=choice carrying workflow_run_id)
+    A superseded interrupt question (kind=choice carrying workflow_run_id)
     can never be answered through the dock anymore — cascade-bail its parked
     run in the same stroke (node done, downstream skipped), so the single-
     pending invariant never strands a run. Returns the bailed run ids; the
     caller finalizes them after its commit. Flush-only.
     """
-    from app.pipeline.orchestrator import bail_waiting_checkpoint
+    from app.pipeline.orchestrator import bail_waiting_interrupt
 
     open_questions = list(
         (
@@ -363,7 +363,7 @@ async def _settle_open_questions(
         run = await db.get(WorkflowRun, message.workflow_run_id)
         if run is None:
             continue
-        if await bail_waiting_checkpoint(db, run) is not None:
+        if await bail_waiting_interrupt(db, run) is not None:
             bailed_run_ids.append(UUID(str(run.id)))
     return bailed_run_ids
 
@@ -400,7 +400,7 @@ async def _dock_question(
     The question's human text lives in ``content`` — it enters the LLM
     context history naturally and becomes the QA pair's Q line once
     answered. Returns the new message plus the run ids whose parked
-    checkpoint was cascade-bailed by the supersede (finalized by the caller
+    interrupt was cascade-bailed by the supersede (finalized by the caller
     after its commit)."""
     bailed_run_ids = await _settle_open_questions(
         db,
@@ -493,7 +493,7 @@ async def sync_task_book_question(
     new task book becomes the pending question. The needs_clarification
     ``reasons`` ride in the question's human text (data, localized at render)
     so the archive and the LLM context record WHY confirmation was asked.
-    Returns the run ids whose parked checkpoint was cascade-bailed by the
+    Returns the run ids whose parked interrupt was cascade-bailed by the
     supersede (finalized by the caller after its commit). Flush-only.
     """
     conversation = await _get_or_create_project_conversation(
@@ -523,7 +523,7 @@ async def sync_task_book_question(
     return bailed_run_ids
 
 
-async def dock_checkpoint_question(
+async def dock_interrupt_question(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
@@ -531,11 +531,11 @@ async def dock_checkpoint_question(
     content: str,
     payload: AskPayload,
 ) -> tuple[Message, list[UUID]]:
-    """Dock the direction checkpoint's question (期 4, raised by the node
+    """Dock the direction interrupt's question (期 4, raised by the node
     runner). ``workflow_run_id`` is the dispatch marker: the answer endpoint
-    recognizes a checkpoint question by it and resumes the parked run
+    recognizes a interrupt question by it and resumes the parked run
     (answer = resume). The single-pending invariant still applies — docking
-    supersedes any open question, and a superseded parked checkpoint is
+    supersedes any open question, and a superseded parked interrupt is
     cascade-bailed (its run ids come back for the caller to finalize after
     commit). Flush-only; the caller commits."""
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
@@ -591,17 +591,17 @@ async def answer_question(
                            rides into the next intent turn (the QA pair is
                            in context), the follow-up reply comes back here
     - choice + bail      → record only (a graceful exit, never a failure)
-    A choice question carrying ``workflow_run_id`` is a direction checkpoint
+    A choice question carrying ``workflow_run_id`` is a direction interrupt
     (期 4): the answer wakes the parked run (spec.answer → node back to
     pending → run back to RUNNING); bail settles the node done, cascade-
     skips the downstream, and the run completes — never failed.
     """
     from app.pipeline.orchestrator import (
         TaskSpec,
-        bail_waiting_checkpoint,
+        bail_waiting_interrupt,
         create_run,
         first_task_language,
-        resume_waiting_checkpoint,
+        resume_waiting_interrupt,
     )
 
     # Row lock to the request boundary: a double-clicked Start (or retry)
@@ -732,7 +732,7 @@ async def answer_question(
             message.workflow_run_id = run.id
 
     elif question.kind == "choice" and message.workflow_run_id is not None:
-        # Direction checkpoint (期 4): workflow_run_id is the dispatch
+        # Direction interrupt (期 4): workflow_run_id is the dispatch
         # marker. The answer resumes the parked run — spec.answer written,
         # node back to pending, run back to RUNNING, the worker re-executes
         # the thin node. Bail is a graceful exit: node done (spec.bailed),
@@ -740,10 +740,10 @@ async def answer_question(
         run = await db.get(WorkflowRun, message.workflow_run_id)
         if run is not None:
             if data.kind == "bail":
-                if await bail_waiting_checkpoint(db, run) is not None:
+                if await bail_waiting_interrupt(db, run) is not None:
                     bailed_run_ids.append(UUID(str(run.id)))
             else:
-                await resume_waiting_checkpoint(db, run, message.answer)
+                await resume_waiting_interrupt(db, run, message.answer)
 
     elif question.kind == "choice" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
@@ -757,8 +757,8 @@ async def answer_question(
 
     await db.commit()
     if bailed_run_ids:
-        # Bailed checkpoints settle COMPLETED (never FAILED, #5); each
-        # aggregated summary carries the checkpoint's "Bailed by user" line
+        # Bailed interrupts settle COMPLETED (never FAILED, #5); each
+        # aggregated summary carries the interrupt's "Bailed by user" line
         # as the user-abort note.
         await finalize_bailed_runs(bailed_run_ids)
     await db.refresh(message)
@@ -1162,7 +1162,7 @@ async def _propose_turn(
     Shared by ``chat()`` and the choice-answer continuation in
     ``answer_question`` (the answer endpoint doubles as resume). Returns the
     assistant message, the dispatched run id if any, and the run ids whose
-    parked checkpoint was cascade-bailed when a new docked question
+    parked interrupt was cascade-bailed when a new docked question
     superseded it (finalized by the caller after its commit). Flush-only —
     the caller commits.
     """
@@ -1385,7 +1385,7 @@ class PreparedTurn:
 
     Everything decided before the LLM call: conversation, the persisted user
     message, a deterministically answered question (autoResume), the canned
-    checkpoint-resume reply when the turn needs no LLM at all, and the
+    interrupt-resume reply when the turn needs no LLM at all, and the
     plan-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
     streaming route can raise plain HTTP errors before the SSE response
     starts; phase 2 (``execute_chat_turn``) only runs the agent turn, commits
@@ -1399,7 +1399,7 @@ class PreparedTurn:
     project: Project | None
     history: list[Message]
     answered_question: Message | None
-    checkpoint_reply: Message | None
+    interrupt_reply: Message | None
     plan_path: bool
 
 
@@ -1485,7 +1485,7 @@ async def prepare_chat_turn(
                 ).model_dump(mode="json")
                 answered_question = pending
             elif pending_payload.allow_freeform and request.message.strip():
-                # A blank attachment-only turn never answers a checkpoint —
+                # A blank attachment-only turn never answers a interrupt —
                 # the files ride the intent paths below instead.
                 pending.answer = AnswerPayload(
                     kind="freeform",
@@ -1495,19 +1495,19 @@ async def prepare_chat_turn(
                 answered_question = pending
             await db.flush()
 
-    checkpoint_reply: Message | None = None
+    interrupt_reply: Message | None = None
     plan_path = False
     if answered_question is not None and answered_question.workflow_run_id is not None:
-        # Checkpoint autoResume (期 4): a typed answer to the docked direction
+        # Interrupt autoResume (期 4): a typed answer to the docked direction
         # question takes the same dispatch as the answer endpoint — wake the
         # parked run. No LLM turn on top: the wake IS the continuation (the
         # step flow shows the run resuming), so the acknowledgment is a
         # deterministic line.
-        from app.pipeline.orchestrator import resume_waiting_checkpoint
+        from app.pipeline.orchestrator import resume_waiting_interrupt
 
         run = await db.get(WorkflowRun, answered_question.workflow_run_id)
         if run is not None:
-            await resume_waiting_checkpoint(db, run, answered_question.answer)
+            await resume_waiting_interrupt(db, run, answered_question.answer)
         decided = (answered_question.answer or {}).get("text") or (
             answered_question.answer or {}
         ).get("option_id") or ""
@@ -1515,7 +1515,7 @@ async def prepare_chat_turn(
         # request's UI locale (the option label is already localized).
         from app.ui_locale import current_ui_language
 
-        checkpoint_reply = await _create_message(
+        interrupt_reply = await _create_message(
             db,
             conversation_id,
             "assistant",
@@ -1551,7 +1551,7 @@ async def prepare_chat_turn(
         project=project,
         history=history,
         answered_question=answered_question,
-        checkpoint_reply=checkpoint_reply,
+        interrupt_reply=interrupt_reply,
         plan_path=plan_path,
     )
 
@@ -1570,8 +1570,8 @@ async def execute_chat_turn(
     liveness signal for the thinking indicator. None (the JSON path, repair
     rounds, answer_question's continuation) keeps today's one-shot calls.
     """
-    if prepared.checkpoint_reply is not None:
-        assistant_message = prepared.checkpoint_reply
+    if prepared.interrupt_reply is not None:
+        assistant_message = prepared.interrupt_reply
         run_id = None
         bailed_run_ids: list[UUID] = []
     elif prepared.plan_path:

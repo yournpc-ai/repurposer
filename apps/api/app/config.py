@@ -52,10 +52,10 @@ class Settings(BaseSettings):
 
     # Background worker
     worker_poll_interval: float = 2.0
-    # Direction checkpoint expiry (期 4): a parked checkpoint is auto-answered
+    # Direction interrupt expiry (期 4): a parked interrupt is auto-answered
     # with its default option after this long — the review tier degrades to
     # best-judgment completion, never a bail and never a permanent park.
-    checkpoint_expiry_seconds: int = 1800
+    interrupt_expiry_seconds: int = 1800
 
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3

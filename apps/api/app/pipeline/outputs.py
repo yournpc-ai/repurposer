@@ -151,8 +151,8 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
     "Wrote a LinkedIn post · 739 words" — the recap tells what the user GOT,
     so only **skill** summaries join (registry members; internal-crew lines —
     understand / plan / render bookkeeping — stay on their own step rows),
-    plus the bailed checkpoint's user-abort note (deliberate, see
-    ``bail_waiting_checkpoint``). Joined in seq order (CHAT_ARCH §8)."""
+    plus the bailed interrupt's user-abort note (deliberate, see
+    ``bail_waiting_interrupt``). Joined in seq order (CHAT_ARCH §8)."""
     from app.skills import SKILL_REGISTRY  # deferred: import cycle
 
     parts = [
@@ -162,7 +162,7 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
         and (summary := (node.spec or {}).get("summary"))
         and (
             node.kind in SKILL_REGISTRY
-            or (node.kind == "checkpoint" and (node.spec or {}).get("bailed"))
+            or (node.kind == "interrupt" and (node.spec or {}).get("bailed"))
         )
     ]
     return " · ".join(parts) if parts else None
