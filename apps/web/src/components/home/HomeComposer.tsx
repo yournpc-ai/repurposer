@@ -12,7 +12,7 @@ import {
 } from "@/components/mentions/MentionEditor"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AssetChips } from "@/components/home/AssetChips"
 import { AssetsPanel } from "@/components/home/AssetsPanel"
@@ -88,25 +88,37 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
 
 const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 
-// Morph endpoints (expanded ↔ docked one-line bar). The radius is NOT one of
-// them (2026-08-21 ruling, MiniMax parity): the card carries a CONSTANT 40px
-// radius — big and soft at rest — and the docked bar (BAR_PAD*2 +
-// BAR_EDITOR_H = 56px tall) lets the CSS radius cap do the stadium: adjacent
-// radii (40+40 > 56) are scaled to half the bar height automatically. Zero
-// interpolation, zero threshold — "full only when collapsed" falls out of the
-// box model.
-const CARD_RADIUS = 40 // constant; the browser caps it to 28px at dock height
-const CONTENT_PAD_X = 20 // px-5
-const CONTENT_PAD_T = 20 // pt-5
-const CONTENT_PAD_B = 12 // pb-3 — a tight bottom chin (MiniMax anatomy)
-const BAR_PAD = 8 // p-2
-const EDITOR_H = 96 // h-24
-const BAR_EDITOR_H = 40 // h-10
+// Morph endpoints (expanded ↔ docked one-line bar). The shell is the shadcn
+// InputGroup (2026-08-21 adoption — the layout converged to the canonical
+// AI-composer anatomy: chips block-start / control / actions block-end), so
+// the density recipe lives ON the addons and the editor band, never on the
+// container: 20px sides / 20px top / 12px chin (measured off the MiniMax
+// composer reference). The docked bar is 56px tall — 16px pad + one 24px
+// text-base line + 16px pad, so the single line self-centers by construction
+// and the h-9 send rides with 10px air (MiniMax bar proportions: the button
+// is ~2/3 of the bar height, never stuffed). The radius IS a morph property
+// after all (2026-08-21 reversal): a scroll-linked 16px (rest — MiniMax's
+// soft rectangle) → 40px (docked), where the CSS radius cap (≤ half the bar)
+// turns it into the stadium. Still a pure function of dockP — never a clock
+// transition. An inline style also sidesteps the stock
+// has-data-[align=*]:rounded-md pins (their :has() specificity outranks any
+// plain rounded-* class).
+const EDITOR_H = 96 // expanded band height
+const BAR_EDITOR_H = 56 // bar band height (= the whole bar): 16 + 24 line + 16
+const EDITOR_PAD_Y = 20 // pt-5
+const BAR_EDITOR_PAD_Y = 16 // (56 − 24 line) / 2 — the bar line self-centers
+const PAD_X = 20 // px-5 sides
+const RADIUS_REST = 16 // rounded-2xl
+const RADIUS_DOCK = 40 // ≥ half the 56px bar — the cap makes the stadium
 const CHIPS_MAX_H = 160 // ~4 chip rows
-const CONTROL_ROW_H = 44 // h-9 + mt-2
-const SEND_ANCHOR_X = 20 // right-5 (matches content padding)
+const CHIPS_PAD_TOP = 20 // pt-5 — interpolated, never a class (see chipsStyle)
+const CONTROL_ROW_H = 48 // h-9 content + pb-3 chin (the cap swallows the padding)
+const CONTROL_PAD_BOTTOM = 12 // pb-3 chin — interpolated, never a class
+const SEND_ANCHOR_X = 12 // right-3
 const SEND_ANCHOR_Y = 12 // bottom-3 (on the control row's line)
-const SEND_BAR_ANCHOR = 10 // right/bottom-2.5
+const SEND_BAR_ANCHOR = 10 // (56 − 36) / 2 — centered in the bar
+const BAR_SEND_RESERVE = 54 // 10 anchor + 36 send + 8 gap — bar input's right reserve
+const ATTACH_PAD_X = 12 // bar: the attach glyph's center mirrors the send's
 const ATTACH_MAX_W = 96
 
 export function HomeComposer({
@@ -225,40 +237,52 @@ export function HomeComposer({
   // scrollTop; SSR renders dockP=0 = the expanded card).
   const docked = dockP >= 1
   const rest = dockP <= 0
-  const cardStyle: CSSProperties = {
-    borderRadius: CARD_RADIUS,
-  }
-  // Asymmetric padding (MiniMax anatomy): generous top/sides, a tight bottom
-  // chin — the control row sits close to the card's bottom edge. All three
-  // axes converge on BAR_PAD at dock.
-  const contentStyle: CSSProperties = {
-    padding: `${CONTENT_PAD_T + dockP * (BAR_PAD - CONTENT_PAD_T)}px ${
-      CONTENT_PAD_X + dockP * (BAR_PAD - CONTENT_PAD_X)
-    }px ${CONTENT_PAD_B + dockP * (BAR_PAD - CONTENT_PAD_B)}px`,
+  // Click-to-focus (the input-group addon contract): clicks on a band's
+  // padding focus the editor; clicks on real buttons pass through.
+  const focusEditor = (e: React.MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest("button")) return
+    editorRef.current?.focus()
   }
   // One-place law: the Assets panel IS the chips band's expanded form —
   // while it's open the band folds away, so the file list lives in exactly
-  // one place (the pill's count stays as the anchor).
+  // one place (the pill's count stays as the anchor). The fold interpolates
+  // maxHeight AND the one-sided padding in the same style object: a flex
+  // item's padding SURVIVES max-height:0 (border-box does not clip it — the
+  // old "clips its padding for free" belief leaked pt-5/pb-3 into the docked
+  // bar, 2026-08-21 headless probe), so static padding classes on a fold
+  // addon are banned; the padding must ride the interpolation.
+  const chipsOpen = files.length > 0 && !assetsOpen
   const chipsStyle: CSSProperties = {
-    maxHeight: files.length && !assetsOpen ? (1 - dockP) * CHIPS_MAX_H : 0,
+    maxHeight: chipsOpen ? (1 - dockP) * CHIPS_MAX_H : 0,
+    paddingTop: chipsOpen ? (1 - dockP) * CHIPS_PAD_TOP : 0,
     opacity: assetsOpen ? 0 : 1 - dockP,
     visibility: docked || assetsOpen ? "hidden" : undefined,
   }
   const attachStyle: CSSProperties = {
     maxWidth: dockP * ATTACH_MAX_W,
+    paddingLeft: dockP * ATTACH_PAD_X,
     opacity: dockP,
     visibility: rest ? "hidden" : undefined,
   }
-  const editorRowStyle: CSSProperties = { paddingRight: dockP * 48 }
+  const editorRowStyle: CSSProperties = { paddingRight: dockP * BAR_SEND_RESERVE }
+  // The band owns the editor's padding (not the MentionEditor itself) so the
+  // vertical air can morph: py 20→16 leaves exactly one line in the bar.
   const editorBandStyle: CSSProperties = {
     height: EDITOR_H + dockP * (BAR_EDITOR_H - EDITOR_H),
+    padding: `${EDITOR_PAD_Y + dockP * (BAR_EDITOR_PAD_Y - EDITOR_PAD_Y)}px ${PAD_X}px`,
   }
   const controlRowStyle: CSSProperties = {
     maxHeight: (1 - dockP) * CONTROL_ROW_H,
+    paddingBottom: (1 - dockP) * CONTROL_PAD_BOTTOM,
     marginTop: (1 - dockP) * 8,
     opacity: 1 - dockP,
     visibility: docked ? "hidden" : undefined,
     pointerEvents: dockP > 0.5 ? "none" : undefined,
+  }
+  // The shell radius rides dockP (inline style — beats the stock
+  // has-data-[align=*]:rounded-md pins' :has() specificity for free).
+  const shellStyle: CSSProperties = {
+    borderRadius: RADIUS_REST + dockP * (RADIUS_DOCK - RADIUS_REST),
   }
   const sendStyle: CSSProperties = {
     right: SEND_ANCHOR_X + dockP * (SEND_BAR_ANCHOR - SEND_ANCHOR_X),
@@ -268,27 +292,39 @@ export function HomeComposer({
   return (
     <>
     {/* Two forms, ONE DOM (the MentionEditor never unmounts — the DOM owns
-        the draft): expanded = three bands (chips / input / control row) with
-        a CONSTANT 40px radius and asymmetric padding (px-5 pt-5 pb-3 — the
-        tight bottom chin, MiniMax anatomy); docked = the one-line explore
-        bar — the stadium emerges for free: the CSS radius cap scales 40px to
-        half the 56px bar height (the full-radius look at dock is the
-        user-ruled rounded-full exception, 2026-08-21). The morph between
-        them is SCROLL-LINKED (dockP), never a clock transition. Flat chrome:
-        the base primitive's ring-foreground/10 hairline only, NO shadow; NO
-        backdrop-filter (it would make the card the containing block for the
-        portaled MentionPicker). */}
-    <Card className="relative py-0" style={cardStyle}>
-      <CardContent className="text-left" style={contentStyle}>
-        {/* Band 1 — staged asset chips. Folds away into the bar; the attach
-            button's count carries the awareness there. */}
-        <div className="overflow-hidden" style={chipsStyle}>
+        the draft). The shell is the shadcn InputGroup, re-skinned to the
+        card law (2026-08-21 adoption): the stock `border-input` stroke and
+        `bg-input/20` fill give way to the base hairline + bg-card + NO
+        shadow; the focus-within ring machinery, cursor-text addons, and the
+        block-start/block-end anatomy are what we came for. expanded = chips
+        addon / editor band / control-row addon at a 16px radius (MiniMax's
+        soft rectangle); docked = the one-line explore bar — the stadium
+        emerges via the CSS radius cap as the inline-style radius rides dockP
+        to 40px against the 56px bar (the user-ruled rounded-full exception).
+        The morph between them is SCROLL-LINKED (dockP), never a clock
+        transition. NO backdrop-filter (it would make the card the containing
+        block for the portaled MentionPicker). */}
+    <InputGroup
+      className="border-0 bg-card shadow-none ring-1 ring-foreground/10 dark:bg-card"
+      style={shellStyle}
+    >
+        {/* Block-start — staged asset chips. Always rendered (keeps the
+            container h-auto), folds to zero when empty / docked / the Assets
+            panel is open; the attach button's count carries the awareness
+            into the bar. */}
+        <InputGroupAddon
+          align="block-start"
+          className="min-h-0 overflow-hidden px-5 py-0 font-normal"
+          style={chipsStyle}
+          onClick={focusEditor}
+        >
           <AssetChips files={files} onRemove={removeFile} />
-        </div>
+        </InputGroupAddon>
 
-        {/* Band 2 — the input row: the bar's attach button (zero width when
-            expanded) + the editor. */}
-        <div className="flex items-center" style={editorRowStyle}>
+        {/* The input row: the bar's attach button (zero width when expanded)
+            + the editor band. A plain row, not an addon — the inline-start
+            addon only fits single-line shells. */}
+        <div className="flex w-full items-center" style={editorRowStyle}>
           <div className="flex-none overflow-hidden" style={attachStyle}>
             {/* MiniMax-standard one-line layout: attach on the left. Opens
                 DOWNWARD here (side="bottom") — docked at the viewport's top,
@@ -316,15 +352,17 @@ export function HomeComposer({
             </Popover>
           </div>
           <div
-            className="relative flex min-w-0 flex-1 flex-col"
+            className="relative flex min-w-0 flex-1 cursor-text flex-col"
             style={editorBandStyle}
             data-tour="composer-prompt"
+            onClick={focusEditor}
           >
             <MentionEditor
               ref={editorRef}
               placeholder={t("home.pastePlaceholder")}
               disabled={isGenerating}
               mentionContext={mentionContext}
+              className="p-0"
               onChange={(text, ms) => {
                 onPromptChange(text)
                 onMentionsChange(ms)
@@ -334,13 +372,18 @@ export function HomeComposer({
           </div>
         </div>
 
-        {/* Band 3 — the control row (folds away into the bar; send is NOT
+        {/* Block-end — the control row (folds away into the bar; send is NOT
             here — it's the absolute anchor below so it survives the fold).
             Pill value state law: rest value in meta-foreground, set value in
             foreground — that single color step is the whole state change (no
-            fills, no accent color). The pr-12 reserves the send anchor's
+            fills, no accent color). The pr-11 reserves the send anchor's
             space. */}
-        <div className="flex items-center gap-2 overflow-hidden" style={controlRowStyle}>
+        <InputGroupAddon
+          align="block-end"
+          className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 font-normal"
+          style={controlRowStyle}
+          onClick={focusEditor}
+        >
           <div className="flex items-center gap-1">
             <Popover open={assetsOpen} onOpenChange={setAssetsOpen}>
               <PopoverTrigger
@@ -451,7 +494,7 @@ export function HomeComposer({
               </PopoverContent>
             </Popover>
           </div>
-        </div>
+        </InputGroupAddon>
 
         {/* Send — the absolute bottom-right anchor in BOTH forms (expanded:
             on the control row's line, its historical seat; docked: centered
@@ -470,8 +513,7 @@ export function HomeComposer({
             <ArrowUp className="h-4 w-4" />
           )}
         </Button>
-      </CardContent>
-    </Card>
+    </InputGroup>
 
     <Tour
       steps={tourSteps}

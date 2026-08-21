@@ -341,6 +341,7 @@ export function MentionEditor({
         suppressContentEditableWarning
         role="textbox"
         aria-multiline="true"
+        data-slot="input-group-control"
         data-placeholder={placeholder}
         data-tour={dataTour}
         onInput={syncNow}
