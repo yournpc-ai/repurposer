@@ -1,7 +1,7 @@
 # NAMING — 命名宪法与判例库
 
 > Status: Active（2026-07-25 建立，2026-08-18 校订）
-> 适用范围：模块 / 包 / 表 / 字段 / API / skill / 事件——一切会被别人读到的名字。
+> 适用范围：模块 / 包 / 表 / 字段 / API / tool / skill / 事件——一切会被别人读到的名字。
 > 用法：命名争议不复述本文论证，引用条目号（`NAMING §3`）或判例号（`N-29`）。判例只保留现行裁决——过时 / 被翻案的判例直接删除（历史在 git，不留痕）；新判例追加新编号。
 
 ## 1. 八条宪法
@@ -19,8 +19,8 @@
 
 | 中文（文档） | 英文（代码） | 定义 | 不是什么 |
 |---|---|---|---|
-| 任务书 | `TaskSpec` | 意图归一：技能链（`tasks`，唯一语法，N-37）× instruction。**zh 界面词分工**（2026-08-19 拍板）：画布名词节点叫「任务书」，确认 dock / 计划界面等其余界面仍叫「计划」——两词并存有名分，不再互相改；en 恒 Plan | 不是 plan、不是 workflow（代码/文档词） |
-| 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（skill + params），compile_graph 模式②的输入；**plan path 的 dock 任务书也是它**（N-37——产物请求语法已统一为技能链） | 不是 plan、不是 node spec |
+| 任务书 | `TaskSpec` | 意图归一：工具链（`tasks`，唯一语法，N-37）× instruction。**zh 界面词分工**（2026-08-19 拍板）：画布名词节点叫「任务书」，确认 dock / 计划界面等其余界面仍叫「计划」——两词并存有名分，不再互相改；en 恒 Plan | 不是 plan、不是 workflow（代码/文档词） |
+| 任务列表 | task list / `TaskItem` | intent agent 的轮内提议（tool + params），compile_graph 模式②的输入；**plan path 的 dock 任务书也是它**（N-37——产物请求语法已统一为工具链） | 不是 plan、不是 node spec |
 | 施工图 | RunPlan / `workflow_steps` | **执行计划**+账簿一体的 DAG 内核（谁干什么、什么顺序、花多少） | 不是 DAG 画布（用户不见图） |
 | 步骤 | `WorkflowStep` | 施工图上的一个执行单位 | 不是 job、不是 task |
 | 对话 | `Conversation` | chat 的会话容器 | 不是 thread、不是 session（撞 auth session） |
@@ -28,14 +28,14 @@
 | 分镜表 | `Storyboard` / type `storyboard` | 导演第二步产出：请求级派工（槽位+覆盖报告），每 run 重排 | 不是 task board（撞任务书词族）；不读原稿 |
 | 槽位 | `StoryboardSlot` | 分镜表一行：一个产物的 what（论点/角度/语言/格式） | how 归 executor |
 | 覆盖报告 | `CoverageReport` | 论点→槽位映射 + 未用/撞车，代码推导落库 | 不是门禁（门禁归 Phase 3 质检节点） |
-| agent | `Agent` / `app/agents/` | LLM 决策单元（N-29 正名，行业标准词）：**一个 Agent 类 + 声明实例**（N-30）——实例 = name/prompt/schema 声明，花名册 `AGENTS` 可枚举；工具私有声明住工具包，共享 crew 住 `agents/roster.py`；特殊子类仅流式（chat intent） | 不是 xxx_agent 子类群；领域逻辑归 schema 校验/工具包工序 |
-| 工具 | tool（`app/tools/`，N-42 前 `app/skills/`） | 能力层注册项（N-42 全量对齐行业 tool）：agent 会做的事（schema + execute；**调用方 = 图，模型永不直调**——禁 ReAct 不变）；执行者是 agent 还是机械 = 工具包的构成，不是分类字段（actor 概念退役，N-31）。【已拍板更名（N-42）：`app/skills/` 能力包迁入 + SKILL_REGISTRY → TOOL_REGISTRY + TaskItem.skill→tool（存量 JSON 容忍读），落地前代码仍读 skills】 | 不是 model-facing tool；不是营销词「技能」 |
-| 工具包 | tool package（`app/tools/<name>/`，N-42 前技能包） | 能力的唯一家：节点类 + params schema + 私有工序 + 估价 + 展示键（+ 私有 agent 声明）；新增能力 = 加一个包 + 一行 import | 不是共享资源层（agents/providers 是共享层） |
+| agent | `Agent` / `app/agents/` | LLM 决策单元（N-29 正名，行业标准词）：**一个 Agent 类 + 声明实例**（N-30）——实例 = name/prompt/schema 声明，花名册 `AGENTS` 可枚举；工具私有声明住工具包，共享 crew 住 `agents/registry.py`；特殊子类仅流式（chat intent） | 不是 xxx_agent 子类群；领域逻辑归 schema 校验/工具包工序 |
+| 工具 | tool（`app/tools/`） | 能力层注册项（N-42 全量对齐行业 tool）：agent 会做的事（schema + execute；**调用方 = 图，模型永不直调**——禁 ReAct 不变）；执行者是 agent 还是机械 = 工具包的构成，不是分类字段（actor 概念退役，N-31） | 不是 model-facing tool；不是营销词「技能」 |
+| 工具包 | tool package（`app/tools/<name>/`） | 能力的唯一家：节点类 + params schema + 私有工序 + 估价 + 展示键（+ 私有 agent 声明）；新增能力 = 加一个包 + 一行 import | 不是共享资源层（agents/providers 是共享层） |
 | 指令包 | skill / `app/skills/` + `SKILL_REGISTRY`（座位预留，未建） | 领域知识即数据（写作惯例 / 渠道约束 / 语种惯例），**行业 skill 包格式 + instructions 式装配消费**：SKILL.md + references/ 渐进披露 + 版本治理；装配器按节点条件注入，模型无感、永不进 loop；覆盖 = name-wins 整包替换（persona 级 > 平台级）；对标 Agent Skills 规范（四厂商同格式，证据 `research/agent-skills-spec.md`）；注册表名 = SKILL_REGISTRY（行业本义重生——能力侧已让位 TOOL_REGISTRY）。首包验证 = `linkedin-longform`（write_post 内嵌 prompt 逐字节平移，PROGRESS 池） | 不是技能（营销词）；不是工具（能力恒为代码，指令包参数化工具、不取代工具） |
-| providers | `app/providers/`（N-42 新建） | 外部服务包装的一统家：**`llm/` 子层 = Model 缝**（`clients/minimax.py` 迁入，含 PRICING 价目表；第二 provider 的家，ADR-025 薄接口落地处）+ asr / voice / vision / storage 等；**禁 import agents/、禁 import LLM 决策层**（N-29 铁律迁址，grep 门禁） | 不是能力（能力归工具包） |
+| providers | `app/providers/` | 外部服务包装的一统家：**`llm/` 子层 = Model 缝**（`clients/minimax.py` 迁入，含 PRICING 价目表；第二 provider 的家，ADR-025 薄接口落地处）+ asr / voice / vision / storage 等；**禁 import agents/、禁 import LLM 决策层**（N-29 铁律迁址，grep 门禁） | 不是能力（能力归工具包） |
 | 技能 | ——（营销泛词，无代码对应，N-42） | 用户文案里的泛能力修辞（"多语言字幕是我们的技能"✓）；**不是代码词**——UI 零命中证实非用户可操作对象；§1 同词纪律只约束用户可操作对象（配方/人设/任务书/产物/@mention），营销泛词豁免 | 代码里没有叫技能的模块（能力 = 工具；指令包 = `app/skills/`） |
 | 机械 | ——（退役为描述语，N-42） | "确定性工具"描述语：无 LLM 决策的工具子集（估价精确价的那个类）；不再是独立目录（原 `app/tools/` 拆 providers/ + 通用件随消费方） | 不再作独立座位词 |
-| 内部节点 | internal nodes | 非技能的内核 crew（住 `pipeline/`）：preprocess / persona_bootstrap / director_* / interrupt（N-40 前 checkpoint）/ render；例外：`materialize_source` 住 `skills/clips/`（复用 select_clips 的源决策函数，搬入 pipeline 会成 pipeline→skills 反向 import），以 `NodeBase.internal` 声明，自检豁免注册表席位（ADR-043） | 不进技能注册表（interrupt 先例不变） |
+| 内部节点 | internal nodes | 非工具的内核 crew（住 `pipeline/`）：preprocess / persona_bootstrap / director_* / interrupt / render；例外：`materialize_source` 住 `tools/clips/`（复用 select_clips 的源决策函数，搬入 pipeline 会成 pipeline→tools 反向 import），以 `NodeBase.internal` 声明，自检豁免注册表席位（ADR-043） | 不进 TOOL_REGISTRY（interrupt 先例不变） |
 | 调用面 harness | harness | 模型调用面脚手架（N-33 限定）：Agent 漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底）+ contexts 装配 + prompts 模板 | 验收语境叫剧本 harness（test harness，两义行业并存） |
 | 估价 | `estimate` | 节点级估价函数（N-34）：机械精确价 / agent token 区间；**报价 = 图 fold**（全图 = 生成前总价，子图 = 修改单价）；`workflow_steps.estimate` 计划侧列与 `cost` 账簿侧对称 | 不是 `cost_hint`（三档已退役） |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
@@ -55,11 +55,11 @@
 | 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
 | 任务槽 | `IntentSlot` | 任务链的**编译期投影**一行 = 一个产物的规格（type/count/focus/language/tone_override/explicit）：住生成节点 `spec.slot`（同类型兄弟区分 + 步骤标签 + 派工对账），请求层永不声明（N-37，ADR-043）；存量 run.context 行读容忍 | **不是分镜槽位** `StoryboardSlot`（派工层，N-20）；不是请求语法 |
 | 挂起 | `Suspend` | 挂起异常：checkpoint 瘦节点转 `waiting` 的机制（期 4 已落代码）；状态词从机制动词派生 | 不是 paused——启用已有 waiting 座位 |
-| 中断 | `interrupt` | 节点 kind：提问-等待-续跑的瘦节点（`spec.for` 住用途）。【已拍板更名（N-40）：旧词 `checkpoint` 退役，代码更名随命名对齐批（PROGRESS 需求池），落地前代码仍读 checkpoint】 | 不进 TOOL_REGISTRY（落地前 SKILL_REGISTRY）；不是 LangGraph checkpoint（状态快照供恢复）——语义近 LangGraph `interrupt()` / Mastra `tool_suspended` |
-| 配方卡 | `RecipeCard` | 首页能力演示卡：承诺 + 输入槽位 + 预设技能链 + preview（RECIPES §7） | 不是模板市场、不是内容流 |
+| 中断 | `interrupt` | 节点 kind：提问-等待-续跑的瘦节点（`spec.for` 住用途） | 不进 TOOL_REGISTRY；不是 LangGraph checkpoint（状态快照供恢复）——语义近 LangGraph `interrupt()` / Mastra `tool_suspended` |
+| 配方卡 | `RecipeCard` | 首页能力演示卡：承诺 + 输入槽位 + 预设工具链 + preview（RECIPES §7） | 不是模板市场、不是内容流 |
 | 派生预览 | `derived`（`pending_intent.derived`） | 计划卡的「你将得到」投影行：dock 时服务端干跑 compile_graph 产出（type / variant=subs\|dub / language / count / bilingual）；只读展示，编辑面是链行本身（ADR-043） | 不是产物声明（请求层无 outputs，N-37） |
-| 整条源材料化 | `materialize_source` | 编译期注入的内部节点：链含 clip-spec 消费者而无 select_clips 时，把项目主源落成一条全段 clip-spec（整条视频，无 LLM 选段）；画像分发 media / stills（先 align_stills）/ existing（不注入）/ 无（编译期 422 指名拒绝） | 不是注册技能（用户从不说"materialize"） |
-| 派生 | `fork` | 变换节点的用途标记（`spec.fork`，dub / translate 同款）：true = 新建派生产物行（原版共存）；false = 原地改写 render_spec | 机制词仍是原技能名（N-19 用途住 payload）；不是 git fork |
+| 整条源材料化 | `materialize_source` | 编译期注入的内部节点：链含 clip-spec 消费者而无 select_clips 时，把项目主源落成一条全段 clip-spec（整条视频，无 LLM 选段）；画像分发 media / stills（先 align_stills）/ existing（不注入）/ 无（编译期 422 指名拒绝） | 不是注册工具（用户从不说"materialize"） |
+| 派生 | `fork` | 变换节点的用途标记（`spec.fork`，dub / translate 同款）：true = 新建派生产物行（原版共存）；false = 原地改写 render_spec | 机制词仍是原工具名（N-19 用途住 payload）；不是 git fork |
 | 派生来源 | `derived_from_output_id` | 派生行 `source_ref` 内的溯源指针（住 JSONB） | 不新建表列 |
 | 字幕样式目录 | `CAPTION_PRESETS` | 字幕样式注册表（packages/clip）：preset id → 原语组合；TS 类型由它推导，Python 只校验成员 | 不是自由样式（preset 枚举纪律不变） |
 | 布局 / 进场 / 词级高亮 | `layout` / `entrance` / `wordHighlight` | 字幕样式三原语：single\|stack × none\|fade-in\|pop-in\|slide-up × bool | — |
@@ -69,16 +69,16 @@
 | 任务书构建 agent | `plan_agent` | chat plan path 的推理者：free-form 文本 → 任务书推断（三动作 generate/answer/start） | 不是第二意图入口——入口只有 `/chat` |
 | plan 路径 | `plan path` | chat service 内分派分支：首次 / 待决任务书的项目级回合 → 任务书构建/修订/确认（`chat()` 状态分派，asset scope 永不进） | 不是相位（confirm 相位已降为"有 pending task_book"的普通 chat 状态） |
 | 剧本验收 | `chat_scenarios.py` | 意图层验收 harness：预设多轮剧本对活 API 跑形态级断言（S1–S45，S22 退役留空），真实 LLM 不锁文案 | 不是测试套件（无测试套件纪律不变） |
-| 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `TOOL_REGISTRY`（任务级宏操作，落地前 SKILL_REGISTRY），双注册表双海拔 | 不适配器私设能力 |
+| 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `TOOL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
 | 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按节点类声明的 `retries` 预算（`NodeBase.retries`）复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
-| 去口头禅 | `remove_filler` | skill 与 op 同名同义（跨注册表对齐 §1，agent-loop-upgrade W4）：skill = 确定性 modifier（task_list 派发）；op = precomputed 记账参数（`filler_count`/`repeat_count`，runner 计算后记账） | 不是客户端 edit ops 可提议 op（precomputed 归 task_list） |
+| 去口头禅 | `remove_filler` | tool 与 op 同名同义（跨注册表对齐 §1，agent-loop-upgrade W4）：tool = 确定性 modifier（task_list 派发）；op = precomputed 记账参数（`filler_count`/`repeat_count`，runner 计算后记账） | 不是客户端 edit ops 可提议 op（precomputed 归 task_list） |
 | 风格 | `style` | 文风（写作风格），对外文案统一用词（hero/showcase/FAQ/identityEcho 已全扫）；voice 仅保留音频本义（声纹克隆/配音 dub） | 不是"口吻"（已退役，2026-08-01）；不是 voice |
 | 声纹块 | `personas.voice`（JSONB） | 人设的声音绑定（音频本义，N-28 归还）：`{"kind":"cloned","voice_id","sample_asset_id"}` \| `{"kind":"stock","stock_id"}` \| NULL=Auto；旧 voice 文本（文风）已并入 `guidelines`，不再单列 | 不是文风（文风 = `style` + guidelines） |
 | 皮肤块 | `personas.brand`（JSONB） | 人设的视觉皮肤（字幕字号色 / 标题 / intro/outro / logo / 音乐选择），烘焙时合并系统默认皮肤进 clip-spec `brand` 段；NULL = 系统默认皮肤。**`brand` 全栈一词**（人设块 / 烘焙 / clip-spec 段同名，N-28） | 不是 brand_templates（表已退役）；不引入 `look` |
 | 提及类型 | mention type（`ChatMention.type`） | @ 引用的实体类别：asset / output / transcript_segment / workflow_step；`recipe` 已退役（MENTIONS §3——配方 = 发射上下文，不是 mention），类型成员保留供历史消息 chip 渲染 | 不是自由文本、不是标签 |
 | 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |
-| 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：卡面数据（input_slots / status / tags）+ 示例素材/成片 + flow 图 + 预设技能链（`tasks`——启动对账自检的声明形态，不进请求路径，配方 = 提示词，ADR-040/043） | 不是前端数据文件、不是表 |
+| 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：卡面数据（input_slots / status / tags）+ 示例素材/成片 + flow 图 + 预设工具链（`tasks`——启动对账自检的声明形态，不进请求路径，配方 = 提示词，ADR-040/043） | 不是前端数据文件、不是表 |
 | 输入槽位 | `input_slots` | 配方的类型化素材要求（素材类型 + 是否必填）；发射区 Input 小节（前端）+ 启动自检输入画像（服务端）双消费者 | 不是上传组件 |
 | 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
@@ -105,8 +105,8 @@
 | 块轨 | block track | 单值轨，输出时间轴：music / dub / title / 头尾卡；dub⇄原声互斥在注册表声明，不写死渲染器 | — |
 | 轨道注册表 | `TRACK_REGISTRY` | 轨的唯一家（ADR-044）：可执行 catalog 住 `app/pipeline/tracks.py`（owner / provenance / url_fields / depends——烘焙缝 / C2PA / ops 寻址 / 一轨一写者 422 全从它 fold）；`packages/clip` 只声明字段分区 `TRACK_FIELDS` + `TrackId`，tsc 类型断言强制每个 spec 键入一轨 | 不是 spec 容器（`tracks:{}` 永拒，收益证伪非兼容妥协） |
 | 裁切轨 | `crop_track` | 第一个关键帧数据轨（family=data, timeline=source）：`{t, x, y, scale}` 按 sourceTime 采样（`sampleCrop` 双端逐值 parity）；空轨 = 静态 `crop` 缺省（缺省语义，非兼容包袱） | 不是逐帧密轨；用户永不见 |
-| 说话人时间轴 | `speaker_map` | 素材级内部分析产物（谁在何时说话、在画面哪侧 + 素材形态归类），asset-hash 复用；crop_track 的上游（reframe_clip 消费） | 不进 TOOL_REGISTRY（落地前 SKILL_REGISTRY）；用户永不见 |
-| 修饰 | `morph` | 原地变换节点形态（`pipeline/morph.py`）：`spec.fork=false` 改写既有 render_spec 的变换节点（reframe_clip 等）的统称；跳过 / 救援语义自描述 | 不是技能注册项（机制形态词；技能名仍是 reframe_clip 等本体） |
+| 说话人时间轴 | `speaker_map` | 素材级内部分析产物（谁在何时说话、在画面哪侧 + 素材形态归类），asset-hash 复用；crop_track 的上游（reframe_clip 消费） | 不进 TOOL_REGISTRY；用户永不见 |
+| 修饰 | `morph` | 原地变换节点形态（`pipeline/morph.py`）：`spec.fork=false` 改写既有 render_spec 的变换节点（reframe_clip 等）的统称；跳过 / 救援语义自描述 | 不是工具注册项（机制形态词；工具名仍是 reframe_clip 等本体） |
 | 救援 | `rescue` | morph 失败 / 跳过的保活机制：未触及目标保 base clip 下游可见；best-effort，永不掩盖失败本身 | 不是重跑（重跑归子图词汇） |
 | 撤段 | removed segment（`segment.hidden = true`） | 编辑域用户语言：主轨被撤下的段（非破坏 hidden 标记）；撤段序单调性闸 = 段 `seq`（per-output 单调，baseline=0）在编辑重放下不许倒置 | 不是删除（真删违规，非破坏铁律） |
 
@@ -141,17 +141,17 @@
 | N-29 | "班组/班底"式自造词禁令 + agent 正名 | 需要解释才能懂的自造词违反 §6；LLM 决策单元直接叫 agent（Mastra/Agno/Anthropic 行业标准词）；旧 `app/skills/`（决策单元目录）解散——决策体共享层归 `app/agents/`（ADR-039 四分）；`SkillEntry.kind`（skill/tool 值）字段退役。（能力层定词后被 N-42 翻案为工具/tool；LLM 禁 import 铁律迁址 `providers/`） | §1、§6 |
 | N-30 | Agent 归一：一个 Agent 类 + 声明实例 | 10 个 `xxx_agent` 类的真实差异只有 prompt 模板 / 输出 schema / 调用配置——**多样性是数据不是代码**。`agents/base.py` 一个 Agent 类（harness 漏斗：装配→渲染→调用→校验→修复一轮→计量→声明兜底）；工具私有声明住工具包，共享 crew（director/persona/translator）住 `agents/roster.py`；特殊子类仅流式。领域逻辑归 schema 校验 / 工具包工序（ClipPlans 时长钳制本已在 schema） | §1 |
 | N-31 | actor 概念提出后退役不采用 | actor 非世界级框架标准词（Mastra/Agno/LangGraph 词表 = Agent/Tool/Workflow/Node/Step；actor 属 actor-model 谱系）。工具包构成即"谁执行"的答案，不建分类字段；checkpoint 的"等人答"由节点自声明展示词，不立 taxonomy | §6 |
-| N-32 | outputs = 技能属性，注册表派生 | 产物类型 = 产出型技能的 `output_type` 属性：`IntentSlot.type` Literal 退役改 str + 注册表校验（§5 延伸到请求层）；`_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `KNOWN_OUTPUTS` / `SLOT_DEFAULT_COUNT` / `SLOT_COUNT_LIMITS` 五处散点全部注册表派生。**新增产物 = 一条注册项，agent 当轮即知**（plan_agent prompt 产出类型清单同源注入） | §1、§5 |
+| N-32 | outputs = 工具属性，注册表派生 | 产物类型 = 产出型工具的 `output_type` 属性：`IntentSlot.type` Literal 退役改 str + 注册表校验（§5 延伸到请求层）；`_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `KNOWN_OUTPUTS` / `SLOT_DEFAULT_COUNT` / `SLOT_COUNT_LIMITS` 五处散点全部注册表派生。**新增产物 = 一条注册项，agent 当轮即知**（plan_agent prompt 产出类型清单同源注入） | §1、§5 |
 | N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S45）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与工具同名（N-42 前技能） | 工具包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
 | N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
-| N-37 | 产物请求语法 = 技能链；`IntentSlot` / 簿级修饰符 / 三方合并退役 | outputs 槽位语法诞生于提取族时代（请求层 schema = 产物清单），「给我的视频加字幕」被迫表达为高光提取（任务卡「视频片段 ×2」病灶）。收敛（ADR-043）：意图面唯一语法 = task list（plan path 与 chat loop 同一词汇）；产物 = 编译图的派生投影（`derived` 预览行），类型词汇仍由节点 `output_type` 派生（N-32 不变）；面板编辑 = task list 直接结构编辑，整链 ride prior_intent，chat 恒胜——merge 机械无对象自然死亡；悬空变换编译期 422 指名拒绝（禁静默丢弃）；存量 pending_intent / run.context 行读容忍升级，只读不写 | §1、§5 |
+| N-37 | 产物请求语法 = 工具链；`IntentSlot` / 簿级修饰符 / 三方合并退役 | outputs 槽位语法诞生于提取族时代（请求层 schema = 产物清单），「给我的视频加字幕」被迫表达为高光提取（任务卡「视频片段 ×2」病灶）。收敛（ADR-043）：意图面唯一语法 = task list（plan path 与 chat loop 同一词汇）；产物 = 编译图的派生投影（`derived` 预览行），类型词汇仍由节点 `output_type` 派生（N-32 不变）；面板编辑 = task list 直接结构编辑，整链 ride prior_intent，chat 恒胜——merge 机械无对象自然死亡；悬空变换编译期 422 指名拒绝（禁静默丢弃）；存量 pending_intent / run.context 行读容忍升级，只读不写 | §1、§5 |
 | N-38 | `track` 必须带家族限定，裸用违规 | 轨道四家分（主轨/数据轨/层/块轨，ADR-044）后，"加条轨"在散文与代码里必须说清是哪一家；N-11（裸 plan）同型判例 | §1 |
 | N-39 | mention 系统双端注册表化；配方发射 = 预填模板原文 | 配方不是 mention（MENTIONS §3）——发射的全部行为载荷 = 配方卡的预填 prompt 模板（模板点名产出与语言），无 transport 字段、无服务端播种，plan path 与 composer 完全同径（2026-08-11 裁定：配方 = 提示词，ADR-040）；客户端 prior 构造路径禁建，服务端永不见配方身份。提及类型与效果各自注册表化（asset 为成员；recipe 类型成员保留供历史消息 chip 渲染），后续 @ 类型只填注册项，禁类型分支补丁；"硬编码"表述禁——正确表述是"静态注册表，随代码部署"（TOOL_REGISTRY 同款纪律）。（原编号 N-25，与自称双轨判例重号，2026-08-17 改号） | §1、§5 |
-| N-40 | 节点 kind `checkpoint` → `interrupt` 更名 | 行业 checkpoint（LangGraph 状态快照供恢复）≠ 我们的节点（提问-等待-续跑的人在环闸）；最近行业词 = LangGraph `interrupt()`（暂停图等人输入，语义全等）/ Mastra `tool_suspended` / Agno approval。更名 `interrupt`（zh 中断）；机制词 `Suspend` 异常 / `waiting` 状态 / `answer` 不动（N-19/N-54 不变）；代码更名（kind 字符串 + alembic 数据迁移 + `expire_stale_checkpoints` 函数族）随命名对齐批（PROGRESS 需求池）；五源词汇坐标见 `research/deepseek-harness.md` | §1、§6 |
-| N-41 | agents 花名册标识符 `roster` → `registry` | §1 同物同名：注册表一词全栈同源（SKILL_ / RECIPE_ / MENTION_ / TRACK_ / OP_ REGISTRY 五表），agents 独异；`agents/roster.py` → `agents/registry.py` 随命名对齐批；「花名册」作散文词可留，代码标识符恒 registry | §1 |
-| N-42 | 能力层与行业全量对齐（skill→tool 换位）；「技能」退役为营销泛词 | 证据：四厂商同构（Anthropic / MiniMax / Mastra / Agno——skill = SKILL.md 指令包、tool = 可调能力，`research/agent-skills-spec.md`）+ zh/en UI 零命中证实「技能」非用户可操作对象。更名（随命名对齐批 v2，落地前代码仍读旧名）：`app/skills/` 能力包 → `app/tools/`（TOOL_REGISTRY；TaskItem.skill→tool 全量换名，**存量数据全清、零容忍 shim**；plan/intent prompt 目录措辞同步换——对齐模型先验，先 stash 零假设测试）；原 `app/tools/` 拆 `app/providers/`（外部服务包装）+ 通用件随消费方；`clients/` → `providers/llm/`（Model 缝，含 PRICING；批⑥）；空出的 `app/skills/` = 指令包座位（**行业 skill 包格式 + instructions 式装配消费**：装配器按节点条件注入、模型无感，覆盖 = name-wins 整包替换，persona 级 > 平台级；注册表名 = SKILL_REGISTRY 行业本义重生）。zh：工具 = 能力、指令包 = skills 内容、技能 = 营销泛词——**§1 豁免条款立：同词纪律只约束用户可操作对象（配方/人设/任务书/产物/@mention），营销泛词豁免**；机械退役为"确定性工具"描述语，LLM 禁 import 铁律迁址 providers/。约束 = 先于指令包动工与内容技能扩展线。N-29 技能一词一义条款翻案 | §1、§6 |
+| N-40 | 节点 kind `checkpoint` → `interrupt` 更名 | 行业 checkpoint（LangGraph 状态快照供恢复）≠ 我们的节点（提问-等待-续跑的人在环闸）；最近行业词 = LangGraph `interrupt()`（暂停图等人输入，语义全等）/ Mastra `tool_suspended` / Agno approval。更名 `interrupt`（zh 中断）；机制词 `Suspend` 异常 / `waiting` 状态 / `answer` 不动（N-19/N-54 不变）；代码更名已落（命名批 v2 ①：kind 字符串 + `expire_stale_interrupts` 函数族全换；String 列无 schema 迁移，存量全清零数据迁移）；五源词汇坐标见 `research/deepseek-harness.md` | §1、§6 |
+| N-41 | agents 花名册标识符 `roster` → `registry` | §1 同物同名：注册表一词全栈同源（TOOL_ / RECIPE_ / MENTION_ / TRACK_ / OP_ REGISTRY 五表），agents 独异；`agents/roster.py` → `agents/registry.py` 已落（命名批 v2 ②）；「花名册」作散文词可留，代码标识符恒 registry | §1 |
+| N-42 | 能力层与行业全量对齐（skill→tool 换位）；「技能」退役为营销泛词 | 证据：四厂商同构（Anthropic / MiniMax / Mastra / Agno——skill = SKILL.md 指令包、tool = 可调能力，`research/agent-skills-spec.md`）+ zh/en UI 零命中证实「技能」非用户可操作对象。更名已落（命名批 v2 ③④，零假设 diff 取证过闸）：`app/skills/` 能力包 → `app/tools/`（TOOL_REGISTRY；TaskItem.skill→tool 全量换名，**存量数据全清、零容忍 shim**；plan/intent prompt 目录措辞同步换——对齐模型先验）；原 `app/tools/` 拆 `app/providers/`（外部服务包装）+ 通用件随消费方；`clients/` → `providers/llm/`（Model 缝，含 PRICING；批⑥）；空出的 `app/skills/` = 指令包座位（**行业 skill 包格式 + instructions 式装配消费**：装配器按节点条件注入、模型无感，覆盖 = name-wins 整包替换，persona 级 > 平台级；注册表名 = SKILL_REGISTRY 行业本义重生）。zh：工具 = 能力、指令包 = skills 内容、技能 = 营销泛词——**§1 豁免条款立：同词纪律只约束用户可操作对象（配方/人设/任务书/产物/@mention），营销泛词豁免**；机械退役为"确定性工具"描述语，LLM 禁 import 铁律迁址 providers/。约束 = 先于指令包动工与内容技能扩展线。N-29 技能一词一义条款翻案 | §1、§6 |
 
 ## 4. API 命名
 
@@ -163,6 +163,6 @@
 
 以下情况必须做命名审计并在任务简报中列出结论：
 
-- 新模块 / 新表 / 新 skill 准入（§7、§8）；
+- 新模块 / 新表 / 新工具 / 新指令包准入（§7、§8）；
 - 大规模重构（判例 N-06 的重构简报附带全库审计）；
 - 发现同名不同物（如 `routers/intent.py` vs `agents/intent.py`）或同物不同名（如 `music.py` / `music_generation.py` 的职责切分）。
