@@ -41,8 +41,10 @@ def pack_instructions(packs: list[str]) -> str:
     (N-42 指令包: assembly-time injection — the model never decides when a
     pack loads). Unknown names raise KeyError at weave time; the startup
     self-check resolves every declared pack first, so this never fires
-    mid-run."""
-    return "".join(SKILL_REGISTRY[name].body for name in packs)
+    mid-run. Bodies join on a blank line so stacked packs (persona-level
+    loaders, later batch) keep their markdown sections separated; a single
+    pack renders byte-identical to its bare body."""
+    return "\n".join(SKILL_REGISTRY[name].body for name in packs)
 
 
 def _generation_context(
