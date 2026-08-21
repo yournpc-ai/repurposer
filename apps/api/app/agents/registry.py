@@ -1,4 +1,4 @@
-"""Shared-crew roster (N-30): the agents every skill may draw on.
+"""Shared-crew registry (N-30/N-41): the agents every skill may draw on.
 
 ``director_understand`` / ``director_plan`` (the director's two steps),
 ``persona`` (style extraction), ``translator`` (caption-line translation —

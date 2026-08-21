@@ -16,7 +16,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.roster import director_plan, director_understand, persona
+from app.agents.registry import director_plan, director_understand, persona
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (

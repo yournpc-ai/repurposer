@@ -17,7 +17,7 @@ import structlog
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.roster import translator
+from app.agents.registry import translator
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun

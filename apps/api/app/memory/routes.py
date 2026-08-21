@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.agents import roster
+from app.agents import registry
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
@@ -232,7 +232,7 @@ async def generate_persona(
     await db.commit()
 
     try:
-        memory = await roster.persona.call(
+        memory = await registry.persona.call(
             persona_name=persona.name,
             persona_title=persona.title,
             language=persona.language,

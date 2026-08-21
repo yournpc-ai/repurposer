@@ -19,7 +19,7 @@ result (e.g. CJK) degrades gracefully to a single cue for the whole unit.
 
 from typing import Any
 
-from app.agents.roster import translator
+from app.agents.registry import translator
 
 UNIT_WORDS = 10  # words per translation unit (display re-chunks by 7 anyway)
 
