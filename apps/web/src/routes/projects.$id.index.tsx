@@ -132,7 +132,7 @@ interface ProjectResults {
   pending_intent?: PendingIntent | null
 }
 
-/** Skills (== node kinds, N-35) that own a results tab (ADR-028): the whole
+/** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
  * chain's clip-side work (selection, whole-source materialization, the
  * transforms) lands on the clips tab; preprocess/persona/director/revise/
  * render nodes drive the stepper, not a tab. */
@@ -151,7 +151,7 @@ const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
 
 /** The producing tool a tab's retry re-runs (a retry replays the producer
  * with its confirmed params — the chain's transforms don't ride it). */
-const TAB_TO_RETRY_SKILL: Record<ResultsTab, string> = {
+const TAB_TO_RETRY_TOOL: Record<ResultsTab, string> = {
   clips: "select_clips",
   post: "write_post",
   quotes: "write_quotes",
@@ -584,8 +584,8 @@ function ProjectDetailPage() {
       const family =
         tab === "clips"
           ? runTasks.filter((task) => NODE_KIND_TO_TAB[task.tool] === "clips")
-          : runTasks.filter((task) => task.tool === TAB_TO_RETRY_SKILL[tab])
-      const tasks = (family.length > 0 ? family : [{ tool: TAB_TO_RETRY_SKILL[tab], params: {} }]).map(
+          : runTasks.filter((task) => task.tool === TAB_TO_RETRY_TOOL[tab])
+      const tasks = (family.length > 0 ? family : [{ tool: TAB_TO_RETRY_TOOL[tab], params: {} }]).map(
         (task) => {
           const params = { ...(task.params ?? {}) }
           delete params.target_output_id

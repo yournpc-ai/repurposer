@@ -223,7 +223,7 @@ const TOOL_META: Record<
 }
 
 /** The add-row menu's order (generation tools first, then transforms). */
-const ADDABLE_SKILLS = [
+const ADDABLE_TOOLS = [
   "select_clips",
   "write_post",
   "write_quotes",
@@ -2376,7 +2376,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    {ADDABLE_SKILLS.map((tool) => {
+                    {ADDABLE_TOOLS.map((tool) => {
                       const meta = TOOL_META[tool]
                       return (
                         <DropdownMenuItem
