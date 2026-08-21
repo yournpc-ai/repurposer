@@ -11,8 +11,8 @@ following pause) it is re-synthesized at the provider's voice-level speed
 start times on a silent timeline; later units overwrite rare overlaps.
 
 The orchestration around these mechanics (voice-sample resolution, caption
-translation, spec assembly, error contract) is the dub skill's private
-procedure (``app/skills/dub/procedure.py``).
+translation, spec assembly, error contract) is the dub tool's private
+procedure (``app/tools/dub/procedure.py``).
 """
 
 import asyncio
@@ -38,7 +38,7 @@ _TTS_CONCURRENCY = 4  # bounded parallel unit synthesis
 
 class DubAssemblyError(Exception):
     """Mechanical dub-track assembly failure (decode/encode) — the dub
-    skill's procedure maps it onto its error contract."""
+    tool's procedure maps it onto its error contract."""
 
     # Assembly failures surface with the voice family line (pipeline/errors.py).
     user_key = "voice_unavailable"

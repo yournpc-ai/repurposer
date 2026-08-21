@@ -78,16 +78,16 @@ async def _fill_summary(
     Templates fill numbers, never LLM-polished prose (CHAT_ARCH §8). ``tag``
     appends the slot's distinguishing label (language/focus) so same-kind
     sibling steps stay distinguishable after completion. ``kind`` IS the
-    skill name (N-35) — the registry key directly. ``ui_language`` is the
+    tool name (N-35) — the registry key directly. ``ui_language`` is the
     run's pinned UI locale (NOT the material's); unknown locales fall back
     to the English template.
 
     Plural helper: every int param ``n`` auto-injects ``{n}_s`` ("" when the
     value is 1, else "s") so English templates inflect — ``clip{n_s}`` reads
     "1 clip" / "3 clips". zh templates leave the keys unused (no inflection)."""
-    from app.skills import SKILL_REGISTRY  # deferred: import cycle
+    from app.tools import TOOL_REGISTRY  # deferred: import cycle
 
-    entry = SKILL_REGISTRY.get(kind)
+    entry = TOOL_REGISTRY.get(kind)
     templates = entry.summary_templates if entry is not None else {}
     template = templates.get(ui_language) or templates.get("en")
     if not template:

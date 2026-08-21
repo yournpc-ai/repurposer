@@ -1,8 +1,8 @@
 """Graph kernel (ADR-039 P2): the NodeBase protocol + the NODE_KINDS table.
 
 Every plan-graph node is a declared ``NodeBase`` instance — the kernel's only
-vocabulary. A node self-describes: ``kind`` (unique key; a skill node's kind
-IS the skill name, N-35), the class attributes below, and ``run`` (the sole
+vocabulary. A node self-describes: ``kind`` (unique key; a tool node's kind
+IS the tool name, N-35), the class attributes below, and ``run`` (the sole
 required method). The kernel degrades to graph algorithms over these
 declarations (AGENT_ARCH §4.2): execution = topo walk, validation =
 ∀``requires``, reconciliation = recipe flow keys ⊆ compiled kind set,
@@ -10,8 +10,8 @@ quotation = fold (P4).
 
 ``NODE_KINDS`` self-populates: a concrete subclass (one that declares
 ``kind``) registers a singleton instance at class-creation time. The import
-that completes the table is the registry's door — ``app/skills/__init__.py``
-imports the internal crew (``pipeline/node_runners``) and every skill
+that completes the table is the registry's door — ``app/tools/__init__.py``
+imports the internal crew (``pipeline/node_runners``) and every tool
 package; this module itself imports no concrete node (no cycles).
 
 Derived views (``known_output_types`` / ``node_for_output`` /
@@ -162,7 +162,7 @@ class NodeBase:
     """
 
     # —— 类属性声明 ——
-    kind: str = ""  # unique key; a skill node's kind IS the skill name (N-35)
+    kind: str = ""  # unique key; a tool node's kind IS the tool name (N-35)
     output_type: str | None = None  # producer nodes only (outputs extensibility seat, N-32)
     slot_label: str | None = None  # the output type's display word ("Clips")
     slot_label_zh: str | None = None  # its Chinese form ("切片") — step lines follow the UI locale
@@ -183,11 +183,11 @@ class NodeBase:
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
     # Internal topology node (ADR-043): compile-injected, never a registered
-    # skill — users never say its name (materialize_source is the whole-
+    # tool — users never say its name (materialize_source is the whole-
     # source materialization, the transform chain's implied object). The
     # startup self-check exempts internal nodes from the registry-membership
     # requirement (same standing as the app.pipeline.* crew, declared here
-    # because the class lives in its skill package for cohesion).
+    # because the class lives in its tool package for cohesion).
     internal: bool = False
     # Canvas 渲染单元 (2026-08-12 ADR-041 D6 修订, 与 label() 同哲学——节点类
     # 自描述; 2026-08-19 名词节点收窄): the results canvas renders NOUN nodes
@@ -290,7 +290,7 @@ def known_output_types() -> frozenset[str]:
 
 
 def node_for_output(output_type: str) -> NodeBase | None:
-    """The producer node owning an output type (outputs = skill attribute, N-32)."""
+    """The producer node owning an output type (outputs = tool attribute, N-32)."""
     for n in NODE_KINDS.values():
         if n.output_type == output_type:
             return n

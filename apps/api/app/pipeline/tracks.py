@@ -29,7 +29,7 @@ from typing import Any, Callable, Iterable
 
 @dataclass(frozen=True)
 class TrackDef:
-    owner: tuple[str, ...]  # writer skill(s) post-birth (birth producers write any track)
+    owner: tuple[str, ...]  # writer tool(s) post-birth (birth producers write any track)
     pairs: tuple[str, ...]  # declared pairings (translation ⇄ caption)
     provenance: str  # real | generated (ADR-026)
     url_fields: tuple[str, ...]  # dotted paths; "[*]" expands a list at that part
@@ -97,7 +97,7 @@ TRACKS: dict[str, TrackDef] = {
         depends=("main",),
     ),
     "intro_outro": TrackDef(
-        owner=(),  # persona-skin bake at generation; no skill writes post-birth
+        owner=(),  # persona-skin bake at generation; no tool writes post-birth
         pairs=(), provenance="real",
         url_fields=("brand.intro.media_url", "brand.outro.media_url"),
         fields=("brand", "brand_ref"),
@@ -207,7 +207,7 @@ def track_of_field(field: str) -> str | None:
 
 
 def skill_written_tracks(kind: str) -> set[str]:
-    """The clip-spec tracks a skill writes post-birth: its owned tracks plus
+    """The clip-spec tracks a tool writes post-birth: its owned tracks plus
     their declared pairs (translate_clip → translation + caption)."""
     written: set[str] = set()
     for name, track in TRACKS.items():

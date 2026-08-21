@@ -82,7 +82,7 @@ async def one_trial(ctx: Ctx, card: str, lang: str, message: str) -> tuple[bool,
     turn = await ctx.chat(pid, message)
     book = await pending_book(ctx, pid)
     tasks = book_tasks(book)
-    kinds = [t.get("skill") for t in tasks]
+    kinds = [t.get("tool") for t in tasks]
     ok = "select_clips" in kinds and "reframe_clip" in kinds and (
         kinds.index("reframe_clip") > kinds.index("select_clips")
     )

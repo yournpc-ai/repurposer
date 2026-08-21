@@ -23,8 +23,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.schemas import ClipAnchor, ClipLayer, ClipRect, ClipSegment, ClipSpec, LayerMedia
 from app.pipeline.clip_spec import remove_range, set_trim
-from app.tools.music import music_file_path
-from app.tools.storage import public_url
 
 
 # ---- params schemas ----------------------------------------------------
@@ -275,6 +273,9 @@ def _apply_set_music(spec: dict, params: dict) -> dict:
     # server-side, where a root-relative stream endpoint has no host — and
     # the run-time add_music morph journals through this same apply, so both
     # write paths must agree (2026-08-17: they didn't, add_music was broken).
+    from app.pipeline.music import music_file_path  # deferred: import cycle (the tools door re-enters this closure)
+    from app.tools.storage import public_url  # deferred: import cycle
+
     cs.music.url = public_url(music_file_path(p.music_id)) if p.music_id else None
     cs.music.enabled = p.enabled
     if p.gain_db is not None:
@@ -443,7 +444,7 @@ class OpDef:
     description: str = ""
     # False keeps the op out of the LLM's proposable vocabulary (registered +
     # client-callable, but not chat-proposable yet — ADR-044 操作集闭包 ops
-    # ride the skill batch later).
+    # ride the tool batch later).
     llm_visible: bool = True
     # Spec top-level fields this op mutates — reconciled against the track
     # registry's fields partition at boot (ADR-044; "*" = whole-spec
@@ -512,7 +513,7 @@ OP_REGISTRY: dict[str, OpDef] = {
     ),
     # 操作集闭包 (ADR-044 D7): registered + client-callable, deliberately NOT
     # in the LLM vocabulary this batch (llm_visible=False — they ride the
-    # skill batch later).
+    # tool batch later).
     "reorder_segments": OpDef(
         ReorderSegmentsParams, _apply_reorder_segments,
         llm_visible=False,

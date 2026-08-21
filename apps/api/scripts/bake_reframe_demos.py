@@ -84,8 +84,8 @@ CARDS = {
     "reframe": {
         "source_key": "demo/uploads/xy_1_interview_15s.mp4",
         "tasks": [
-            {"skill": "select_clips", "params": {"count": 1}},
-            {"skill": "reframe_clip", "params": {"mode": "auto"}},
+            {"tool": "select_clips", "params": {"count": 1}},
+            {"tool": "reframe_clip", "params": {"mode": "auto"}},
         ],
         # The card's real promptTemplate (zh) — the demo IS the card launch.
         "instruction": "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。",
@@ -97,8 +97,8 @@ CARDS = {
     "highlight-clips": {
         "source_key": "demo/uploads/xy_2_15s.mp4",
         "tasks": [
-            {"skill": "select_clips", "params": {"count": 2}},
-            {"skill": "reframe_clip", "params": {"mode": "auto"}},
+            {"tool": "select_clips", "params": {"count": 2}},
+            {"tool": "reframe_clip", "params": {"mode": "auto"}},
         ],
         "instruction": "Find the best moments of this video and cut them into vertical clips — the camera follows the speaker.",
         "language": "en",

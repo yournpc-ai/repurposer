@@ -83,7 +83,7 @@ from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.graph import MEDIA, NODE_KINDS
-from app.skills import SkillRejected, validate_task_list
+from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -273,9 +273,9 @@ async def _active_run_line(
 
 def _cannot_do_text(text: str) -> str:
     """The refusal line (both intent surfaces). Human capability words only —
-    registry skill names are internal vocabulary, never user-facing
+    registry tool names are internal vocabulary, never user-facing
     (2026-08-20 review: the null-params incident had ~50% of recipe launches
-    reading this line in English with skill slugs in it)."""
+    reading this line in English with tool slugs in it)."""
     if _prefers_zh(text):
         return (
             "这个我现在还做不了。可以点名想要什么——"
@@ -438,7 +438,7 @@ def _task_chain_digest(tasks: list) -> str:
     labels = []
     for task in tasks:
         params = task.params if isinstance(task.params, dict) else {}
-        label = task.skill
+        label = task.tool
         chips = []
         lang = params.get("language") or params.get("target_language")
         if lang:
@@ -718,7 +718,7 @@ async def answer_question(
                         scope="full",
                     ),
                 )
-            except SkillRejected as exc:
+            except ToolRejected as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
                 ) from exc
@@ -985,8 +985,8 @@ async def _plan_turn(
         try:
             validate_task_list(intent.tasks)
             if not intent.tasks:
-                raise SkillRejected("empty task list")
-        except SkillRejected as first_error:
+                raise ToolRejected("empty task list")
+        except ToolRejected as first_error:
             repaired_intent: InferredIntent | None = None
             try:
                 retry = await plan_agent.call(
@@ -999,7 +999,7 @@ async def _plan_turn(
                 validate_task_list(retry.tasks)
                 if retry.tasks:
                     repaired_intent = retry
-            except (SkillRejected, MiniMaxError):
+            except (ToolRejected, MiniMaxError):
                 pass
             if repaired_intent is not None:
                 intent = repaired_intent
@@ -1010,7 +1010,7 @@ async def _plan_turn(
                 logger.info(
                     "plan_chain_rejected",
                     error=str(first_error),
-                    proposed=[t.skill for t in intent.tasks],
+                    proposed=[t.tool for t in intent.tasks],
                     repair="failed",
                 )
                 intent.action = "answer"
@@ -1021,21 +1021,21 @@ async def _plan_turn(
     reasons: list[str] = []
     if not intent.tasks_explicit:
         reasons.append("chain_default")
-    clips_task = next((t for t in intent.tasks if t.skill == "select_clips"), None)
+    clips_task = next((t for t in intent.tasks if t.tool == "select_clips"), None)
     if clips_task is not None and (clips_task.params or {}).get("count") is None:
         reasons.append("clip_count_default")
     # Media-needing work without media: the chain's own declarations answer —
-    # a skill whose node requires MEDIA, or a clip-spec consumer (its `after`
+    # a tool whose node requires MEDIA, or a clip-spec consumer (its `after`
     # names materialize_source). Registry-native; no parallel list.
-    def _needs_media(skill: str) -> bool:
-        node = NODE_KINDS.get(skill)
+    def _needs_media(tool: str) -> bool:
+        node = NODE_KINDS.get(tool)
         if node is None:
             return False
         return any(r.key == MEDIA.key for r in node.requires) or (
             "materialize_source" in (node.after or ())
         )
 
-    if not has_media and any(_needs_media(t.skill) for t in intent.tasks):
+    if not has_media and any(_needs_media(t.tool) for t in intent.tasks):
         reasons.append("clips_without_media")
 
     # An answer action without answer text is an LLM misfire — degrade to a
@@ -1114,7 +1114,7 @@ async def _plan_turn(
 
     try:
         derived = await derive_plan_preview(db, project, intent.tasks)
-    except (SkillRejected, ValueError):
+    except (ToolRejected, ValueError):
         derived = []
 
     # Persist the unconfirmed task book on the project: leaving the chat and
@@ -1254,7 +1254,7 @@ async def _propose_turn(
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
                     repaired = True
-            except (OpRejected, SkillRejected, ValueError, MiniMaxError):
+            except (OpRejected, ToolRejected, ValueError, MiniMaxError):
                 pass
             if not repaired:
                 proposal = None
@@ -1339,7 +1339,7 @@ async def _propose_turn(
                     else "I'm missing the material for that — attach a video, "
                     "audio, or transcript first, then I'll get to work."
                 )
-        except SkillRejected as first_error:
+        except ToolRejected as first_error:
             # One bounded repair round with the rejection as feedback (the
             # funnel's reserved kwarg — the echo lives in Agent.call).
             repaired = False
@@ -1361,7 +1361,7 @@ async def _propose_turn(
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
                     repaired = True
-            except (SkillRejected, ValueError, MiniMaxError):
+            except (ToolRejected, ValueError, MiniMaxError):
                 pass
             if not repaired:
                 proposal = None

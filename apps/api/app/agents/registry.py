@@ -1,12 +1,12 @@
-"""Shared-crew registry (N-30/N-41): the agents every skill may draw on.
+"""Shared-crew registry (N-30/N-41): the agents every tool may draw on.
 
 ``director_understand`` / ``director_plan`` (the director's two steps),
 ``persona`` (style extraction), ``translator`` (caption-line translation —
-the dub skill reuses it). Skill-private declarations live in each skill
+the dub tool reuses it). Tool-private declarations live in each tool
 package's ``agents.py`` (clip writer, the four copy writers, reviser).
 Every declaration self-registers into ``agents/base.py``'s ``AGENTS`` on
 construction (ADR-039 P2 full collection); the registry door
-(``app/skills/__init__.py``) imports every package, and the startup
+(``app/tools/__init__.py``) imports every package, and the startup
 self-check validates node→agent references against it.
 """
 

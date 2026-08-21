@@ -120,11 +120,11 @@ const LANGUAGE_OPTIONS = [
 type Phase = "confirm" | "running" | "chat"
 
 /** One task in the plan chain (ADR-043 — the request layer's only grammar:
- * a registry skill + its params, the same shape the PlanAgent proposes and
+ * a registry tool + its params, the same shape the PlanAgent proposes and
  * the chat loop adjudicates). Outputs are a derived projection of the
  * compiled chain, never a panel declaration. */
 export interface TaskItem {
-  skill: string
+  tool: string
   params: Record<string, unknown>
 }
 
@@ -146,10 +146,10 @@ export interface DerivedRow {
   bilingual?: boolean
 }
 
-/** Per-skill card anatomy (which controls a chain row gets). The label keys
- * reuse the results-tabs vocabulary for the five output skills; transforms
- * get their own words under generationOverlay.skills.*. */
-const SKILL_META: Record<
+/** Per-tool card anatomy (which controls a chain row gets). The label keys
+ * reuse the results-tabs vocabulary for the five output tools; transforms
+ * get their own words under generationOverlay.tools.*. */
+const TOOL_META: Record<
   string,
   {
     Icon: typeof Video
@@ -203,26 +203,26 @@ const SKILL_META: Record<
   },
   translate_clip: {
     Icon: Languages,
-    labelKey: "generationOverlay.skills.translate_clip",
+    labelKey: "generationOverlay.tools.translate_clip",
     langParam: "target_language",
     bilingual: true,
   },
   dub_clip: {
     Icon: Mic2,
-    labelKey: "generationOverlay.skills.dub_clip",
+    labelKey: "generationOverlay.tools.dub_clip",
     langParam: "target_language",
   },
   remove_filler: {
     Icon: Eraser,
-    labelKey: "generationOverlay.skills.remove_filler",
+    labelKey: "generationOverlay.tools.remove_filler",
   },
   add_music: {
     Icon: Music,
-    labelKey: "generationOverlay.skills.add_music",
+    labelKey: "generationOverlay.tools.add_music",
   },
 }
 
-/** The add-row menu's order (generation skills first, then transforms). */
+/** The add-row menu's order (generation tools first, then transforms). */
 const ADDABLE_SKILLS = [
   "select_clips",
   "write_post",
@@ -235,10 +235,10 @@ const ADDABLE_SKILLS = [
   "add_music",
 ] as const
 
-/** Legacy outputs-grammar slot type → its producing skill (read tolerance,
+/** Legacy outputs-grammar slot type → its producing tool (read tolerance,
  * mirrors the server-side `_legacy_slots_to_tasks` — stored run contexts
  * and old clients' payloads upgrade on read, never on write). */
-const LEGACY_SLOT_TO_SKILL: Record<string, string> = {
+const LEGACY_SLOT_TO_TOOL: Record<string, string> = {
   clips: "select_clips",
   post: "write_post",
   quotes: "write_quotes",
@@ -253,11 +253,11 @@ function normalizeTasks(raw: unknown): TaskItem[] {
     if (
       item &&
       typeof item === "object" &&
-      typeof (item as { skill?: unknown }).skill === "string"
+      typeof (item as { tool?: unknown }).tool === "string"
     ) {
       const params = (item as { params?: unknown }).params
       tasks.push({
-        skill: (item as { skill: string }).skill,
+        tool: (item as { tool: string }).tool,
         params:
           params && typeof params === "object" && !Array.isArray(params)
             ? (params as Record<string, unknown>)
@@ -275,29 +275,29 @@ function legacyOutputsToTasks(data: Record<string, unknown>): TaskItem[] {
   const tasks: TaskItem[] = []
   const aspect = typeof data.aspect === "string" ? data.aspect : null
   for (const slot of normalizeSlots(data.outputs, data.clip_count as number | null)) {
-    const skill = LEGACY_SLOT_TO_SKILL[slot.type]
-    if (!skill) continue
+    const tool = LEGACY_SLOT_TO_TOOL[slot.type]
+    if (!tool) continue
     const params: Record<string, unknown> = {}
     if (slot.count != null) params.count = slot.count
     if (slot.focus) params.focus = slot.focus
     if (slot.language) params.language = slot.language
     if (slot.tone_override) params.tone_override = slot.tone_override
-    if (skill === "select_clips" && aspect) params.aspect = aspect
-    tasks.push({ skill, params })
+    if (tool === "select_clips" && aspect) params.aspect = aspect
+    tasks.push({ tool, params })
   }
   for (const lang of Array.isArray(data.dub_languages) ? data.dub_languages : []) {
     if (typeof lang === "string" && lang) {
       // fork: pre-ADR-043 compiles produced dub/translate as fork nodes
       // (derived rows, source untouched) — the upgrade keeps that shape so a
       // panel re-submit / tab retry doesn't morph the originals in place.
-      tasks.push({ skill: "dub_clip", params: { target_language: lang, fork: true } })
+      tasks.push({ tool: "dub_clip", params: { target_language: lang, fork: true } })
     }
   }
   const bilingual = data.caption_bilingual === true
   for (const lang of Array.isArray(data.caption_languages) ? data.caption_languages : []) {
     if (typeof lang === "string" && lang) {
       tasks.push({
-        skill: "translate_clip",
+        tool: "translate_clip",
         params: { target_language: lang, bilingual, fork: true },
       })
     }
@@ -350,11 +350,11 @@ function normalizeSlots(
   const slots: IntentSlot[] = []
   for (const item of raw) {
     if (typeof item === "string") {
-      if (item in LEGACY_SLOT_TO_SKILL) {
+      if (item in LEGACY_SLOT_TO_TOOL) {
         slots.push(bare(item, item === "clips" ? (legacyClipCount ?? null) : null))
       }
     } else if (item && typeof item === "object" && typeof item.type === "string") {
-      if (item.type in LEGACY_SLOT_TO_SKILL) {
+      if (item.type in LEGACY_SLOT_TO_TOOL) {
         slots.push({
           ...bare(item.type),
           count: item.count ?? null,
@@ -757,7 +757,7 @@ function PlanVersionChip({
             <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted p-4">
               <div className="flex flex-col gap-1.5">
                 {book.tasks.map((task, i) => {
-                  const meta = SKILL_META[task.skill]
+                  const meta = TOOL_META[task.tool]
                   return (
                     <div key={i} className="flex items-center gap-1.5 text-xs">
                       {meta ? (
@@ -837,8 +837,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       : {
           action: "generate",
           answer: null,
-          tasks: ["write_post", "write_quotes", "write_article"].map((skill) => ({
-            skill,
+          tasks: ["write_post", "write_quotes", "write_article"].map((tool) => ({
+            tool,
             params: { language: "en" },
           })),
           specific_instruction: prompt,
@@ -1306,12 +1306,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       // settles the open question server-side the same way. The confirmed
       // chain rides `tasks` (ADR-043 — the only request grammar).
       const firstLangTask = intent.tasks.find((task) => {
-        const param = SKILL_META[task.skill]?.langParam
+        const param = TOOL_META[task.tool]?.langParam
         return param != null && typeof task.params[param] === "string"
       })
       const firstLang = firstLangTask
         ? (firstLangTask.params[
-            SKILL_META[firstLangTask.skill].langParam as string
+            TOOL_META[firstLangTask.tool].langParam as string
           ] as string)
         : null
       const res = await apiFetch(`/api/v1/projects/${projectId}/generate`, {
@@ -1365,19 +1365,19 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       ),
     }))
 
-  const addTask = (skill: string) =>
+  const addTask = (tool: string) =>
     setIntent((prev) => {
-      const meta = SKILL_META[skill]
+      const meta = TOOL_META[tool]
       const params: Record<string, unknown> = {}
       if (meta?.langParam) {
         // A hand-added row starts from the chain's prevailing language —
         // the dropdown always shows a concrete value (no sentinel).
         const prevailing = prev.tasks
-          .map((task) => task.params[SKILL_META[task.skill]?.langParam ?? "language"])
+          .map((task) => task.params[TOOL_META[task.tool]?.langParam ?? "language"])
           .find((v): v is string => typeof v === "string" && !!v)
         params[meta.langParam] = prevailing ?? "en"
       }
-      return { ...prev, tasks: [...prev.tasks, { skill, params }] }
+      return { ...prev, tasks: [...prev.tasks, { tool, params }] }
     })
 
   const removeTask = (index: number) =>
@@ -1388,8 +1388,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
 
   const taskLabel = useCallback(
     (task: TaskItem) => {
-      const meta = SKILL_META[task.skill]
-      let label = meta ? t(meta.labelKey) : task.skill
+      const meta = TOOL_META[task.tool]
+      let label = meta ? t(meta.labelKey) : task.tool
       const lang = meta?.langParam ? task.params[meta.langParam] : undefined
       if (typeof lang === "string" && lang) {
         label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
@@ -2200,7 +2200,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   order. Outputs are the chain's derived projection (the
                   preview below), never a panel declaration: edits mutate
                   the task list directly and ride the next refine turn as
-                  prior_intent. Same-skill siblings (e.g. an English and a
+                  prior_intent. Same-tool siblings (e.g. an English and a
                   German post) are separate rows. */}
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
@@ -2213,7 +2213,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 </div>
                 <div className="flex flex-col gap-2">
                   {intent.tasks.map((task, index) => {
-                    const meta = SKILL_META[task.skill]
+                    const meta = TOOL_META[task.tool]
                     if (!meta) return null
                     const { labelKey, Icon } = meta
                     const langParam = meta.langParam
@@ -2376,16 +2376,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    {ADDABLE_SKILLS.map((skill) => {
-                      const meta = SKILL_META[skill]
+                    {ADDABLE_SKILLS.map((tool) => {
+                      const meta = TOOL_META[tool]
                       return (
                         <DropdownMenuItem
-                          key={skill}
+                          key={tool}
                           disabled={
-                            skill === "select_clips" &&
-                            intent.tasks.some((task) => task.skill === "select_clips")
+                            tool === "select_clips" &&
+                            intent.tasks.some((task) => task.tool === "select_clips")
                           }
-                          onClick={() => addTask(skill)}
+                          onClick={() => addTask(tool)}
                         >
                           <meta.Icon className="h-3.5 w-3.5" />
                           {t(meta.labelKey)}
@@ -2416,9 +2416,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                         ) : (
                           (() => {
                             const Meta =
-                              Object.values(SKILL_META).find(
+                              Object.values(TOOL_META).find(
                                 (m) => m.labelKey === `results.tabs.${row.type}`
-                              ) ?? SKILL_META.select_clips
+                              ) ?? TOOL_META.select_clips
                             return (
                               <Meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
                             )

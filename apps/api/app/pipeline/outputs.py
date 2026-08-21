@@ -149,11 +149,11 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
     """Run-level rollup of step summaries, derived at read time (no column).
 
     "Wrote a LinkedIn post · 739 words" — the recap tells what the user GOT,
-    so only **skill** summaries join (registry members; internal-crew lines —
+    so only **tool** summaries join (registry members; internal-crew lines —
     understand / plan / render bookkeeping — stay on their own step rows),
     plus the bailed interrupt's user-abort note (deliberate, see
     ``bail_waiting_interrupt``). Joined in seq order (CHAT_ARCH §8)."""
-    from app.skills import SKILL_REGISTRY  # deferred: import cycle
+    from app.tools import TOOL_REGISTRY  # deferred: import cycle
 
     parts = [
         summary
@@ -161,7 +161,7 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
         if node.status == "done"
         and (summary := (node.spec or {}).get("summary"))
         and (
-            node.kind in SKILL_REGISTRY
+            node.kind in TOOL_REGISTRY
             or (node.kind == "interrupt" and (node.spec or {}).get("bailed"))
         )
     ]

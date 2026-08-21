@@ -551,7 +551,7 @@ def has_prose(msg: dict) -> bool:
 
 def book_tasks(book: dict) -> list[dict]:
     """The docked chain (ADR-043): pending_intent.intent.tasks — the plan
-    card's rows, one {skill, params} dict per task."""
+    card's rows, one {tool, params} dict per task."""
     return ((book or {}).get("intent") or {}).get("tasks") or []
 
 
@@ -595,8 +595,8 @@ async def s2_explicit_first_turn_then_dock_start(ctx: Ctx) -> None:
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     tasks = book_tasks(book)
-    clips = next((t for t in tasks if t["skill"] == "select_clips"), None)
-    posts = [t for t in tasks if t["skill"] == "write_post"]
+    clips = next((t for t in tasks if t["tool"] == "select_clips"), None)
+    posts = [t for t in tasks if t["tool"] == "write_post"]
     check(clips is not None and task_params(clips).get("count") == 5,
           "select_clips task with count 5", tasks)
     check(any(task_params(p).get("language") == "de" for p in posts),
@@ -609,7 +609,7 @@ async def s2_explicit_first_turn_then_dock_start(ctx: Ctx) -> None:
     runs = await ctx.client.get(f"/projects/{pid}/runs")
     run_ctx = runs.json()[0].get("context") or {}
     run_tasks = run_ctx.get("tasks") or []
-    check(any(t.get("skill") == "select_clips" for t in run_tasks if isinstance(t, dict)),
+    check(any(t.get("tool") == "select_clips" for t in run_tasks if isinstance(t, dict)),
           "run carries the select_clips task", run_ctx)
 
 
@@ -691,14 +691,14 @@ async def s3_refinement_loop(ctx: Ctx) -> None:
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks", turn2["assistant_message"])
     check(turn2["assistant_message"]["id"] != first_qid, "old book superseded by a new question row")
     tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
-    posts = [t for t in tasks if t["skill"] == "write_post"]
+    posts = [t for t in tasks if t["tool"] == "write_post"]
     check(any(task_params(p).get("language") == "fr" for p in posts) or len(posts) >= 2,
           "a French post version appeared", tasks)
 
     turn3 = await ctx.chat(pid, "focus on the Q&A section")
     check(is_task_book_dock(turn3["assistant_message"]), "turn3 re-docks", turn3["assistant_message"])
     tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
-    posts = [t for t in tasks if t["skill"] == "write_post"]
+    posts = [t for t in tasks if t["tool"] == "write_post"]
     check(any(task_params(p).get("language") == "fr" for p in posts) or len(posts) >= 2,
           "the French version survives refinement (accumulated prompt)", tasks)
 
@@ -744,7 +744,7 @@ async def s15_recipe_refine_count(ctx: Ctx) -> None:
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
           turn2["assistant_message"])
     tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
-    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    clips = [t for t in tasks if t["tool"] == "select_clips"]
     check(clips and task_params(clips[0]).get("count") == 2,
           "the chat revision lands on the select_clips task", tasks)
 
@@ -765,7 +765,7 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
         edited = dict(book["intent"])
         edited["tasks"] = [
             {**t, "params": {**task_params(t), "count": count}}
-            if t["skill"] == "select_clips" else t
+            if t["tool"] == "select_clips" else t
             for t in book_tasks(book)
         ]
         return edited
@@ -777,10 +777,10 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
     check(is_task_book_dock(turn2["assistant_message"]), "turn2 re-docks",
           turn2["assistant_message"])
     tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
-    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    clips = [t for t in tasks if t["tool"] == "select_clips"]
     check(clips and task_params(clips[0]).get("count") == 3,
           "the panel hand edit survives an unrelated refine", tasks)
-    check(any(t["skill"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
+    check(any(t["tool"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
           "the German post arrived", tasks)
 
     book2 = (await ctx.results(pid)).get("pending_intent")
@@ -790,7 +790,7 @@ async def s16_panel_edit_three_way(ctx: Ctx) -> None:
     check(is_task_book_dock(turn3["assistant_message"]), "turn3 re-docks",
           turn3["assistant_message"])
     tasks = book_tasks((await ctx.results(pid)).get("pending_intent"))
-    clips = [t for t in tasks if t["skill"] == "select_clips"]
+    clips = [t for t in tasks if t["tool"] == "select_clips"]
     check(clips and task_params(clips[0]).get("count") == 2,
           "the chat revision overrides the panel pin (chat always wins)", tasks)
 
@@ -876,15 +876,15 @@ async def s5_recipe_launch_template_prose(ctx: Ctx) -> None:
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     tasks = book_tasks(book)
-    check(any(t["skill"] == "select_clips" for t in tasks),
+    check(any(t["tool"] == "select_clips" for t in tasks),
           "the template's select_clips task lands in the book", tasks)
     subs = sorted(
         task_params(t).get("target_language")
-        for t in tasks if t["skill"] == "translate_clip"
+        for t in tasks if t["tool"] == "translate_clip"
     )
     check(subs == ["de", "es", "fr"],
           "all three template caption languages extracted as translate tasks", tasks)
-    check(not any(t["skill"] == "dub_clip" for t in tasks),
+    check(not any(t["tool"] == "dub_clip" for t in tasks),
           "a subtitle template never lands a dub task", tasks)
 
 
@@ -901,7 +901,7 @@ async def s10_dub_language_classification(ctx: Ctx) -> None:
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     dubs = [task_params(t).get("target_language")
-            for t in book_tasks(book) if t["skill"] == "dub_clip"]
+            for t in book_tasks(book) if t["tool"] == "dub_clip"]
     check(dubs == ["zh"],
           "voice-dub language lands as a dub_clip task",
           book_tasks(book))
@@ -922,11 +922,11 @@ async def s43_caption_language_classification(ctx: Ctx) -> None:
     book = (await ctx.results(pid)).get("pending_intent")
     tasks = book_tasks(book)
     subs = sorted(task_params(t).get("target_language")
-                  for t in tasks if t["skill"] == "translate_clip")
+                  for t in tasks if t["tool"] == "translate_clip")
     check(subs == ["de", "fr"],
           "subtitle languages land as translate_clip tasks",
           tasks)
-    check(not any(t["skill"] == "dub_clip" for t in tasks),
+    check(not any(t["tool"] == "dub_clip" for t in tasks),
           "a subtitle request never lands a dub task",
           tasks)
 
@@ -946,9 +946,9 @@ async def s44_whole_video_subs_materialize(ctx: Ctx) -> None:
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     tasks = book_tasks(book)
-    check(not any(t["skill"] == "select_clips" for t in tasks),
+    check(not any(t["tool"] == "select_clips" for t in tasks),
           "whole-source intent never routes through select_clips", tasks)
-    subs = [t for t in tasks if t["skill"] == "translate_clip"]
+    subs = [t for t in tasks if t["tool"] == "translate_clip"]
     check(len(subs) == 1 and task_params(subs[0]).get("target_language") == "zh",
           "one translate task into Chinese", tasks)
     check(task_params(subs[0]).get("bilingual") is True,
@@ -985,7 +985,7 @@ async def s11_clips_without_media_escape(ctx: Ctx) -> None:
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
     tasks = book_tasks(book)
-    check(not any(t["skill"] == "select_clips" for t in tasks),
+    check(not any(t["tool"] == "select_clips" for t in tasks),
           "the PlanAgent excludes clips on a text-only project", tasks)
     qid = turn1["assistant_message"]["id"]
 
@@ -994,8 +994,8 @@ async def s11_clips_without_media_escape(ctx: Ctx) -> None:
     edited = dict(book["intent"])
     edited["tasks"] = [
         *tasks,
-        {"skill": "select_clips", "params": {}},
-        {"skill": "dub_clip", "params": {"target_language": "zh"}},
+        {"tool": "select_clips", "params": {}},
+        {"tool": "dub_clip", "params": {"target_language": "zh"}},
     ]
     res = await ctx.answer(qid, {"kind": "start", "intent": edited})
     check(res.status_code == 422, "Start with clips but no media is rejected", res.status_code)
@@ -1008,7 +1008,7 @@ async def s11_clips_without_media_escape(ctx: Ctx) -> None:
     edited2 = dict(book["intent"])
     edited2["tasks"] = [
         *tasks,
-        {"skill": "dub_clip", "params": {"target_language": "zh"}},
+        {"tool": "dub_clip", "params": {"target_language": "zh"}},
     ]
     res2 = await ctx.answer(qid, {"kind": "start", "intent": edited2})
     check(res2.status_code == 422, "a dangling dub task is rejected too", res2.text[:200])
@@ -1022,7 +1022,7 @@ async def s11_clips_without_media_escape(ctx: Ctx) -> None:
 
     runs = await ctx.client.get(f"/projects/{pid}/runs")
     run_ctx = runs.json()[0].get("context") or {}
-    check(not any(t.get("skill") == "dub_clip" for t in (run_ctx.get("tasks") or [])),
+    check(not any(t.get("tool") == "dub_clip" for t in (run_ctx.get("tasks") or [])),
           "no dub task in the born run", run_ctx.get("tasks"))
 
 
@@ -1254,7 +1254,7 @@ async def s28_plain_clips_without_media(ctx: Ctx) -> None:
     msg = turn1["assistant_message"]
     if is_task_book_dock(msg):
         book = await pending_book(ctx, pid)
-        clips = [t for t in book_tasks(book) if t["skill"] == "select_clips"]
+        clips = [t for t in book_tasks(book) if t["tool"] == "select_clips"]
         check(
             not clips or "clips_without_media" in ((book or {}).get("reasons") or []),
             "clips excluded, or flagged clips_without_media when kept",
@@ -1278,9 +1278,9 @@ async def s29_count_boundary_422(ctx: Ctx) -> None:
 
     # 替换或注入 select_clips 任务——不依赖 LLM 一定出了它。
     edited = dict(book["intent"])
-    clips_task = next((t for t in book_tasks(book) if t["skill"] == "select_clips"), None)
+    clips_task = next((t for t in book_tasks(book) if t["tool"] == "select_clips"), None)
     edited["tasks"] = [
-        {**(clips_task or {"skill": "select_clips"}),
+        {**(clips_task or {"tool": "select_clips"}),
          "params": {**task_params(clips_task or {}), "count": 11}}
     ]
     res = await ctx.answer(qid, {"kind": "start", "intent": edited})
@@ -1446,7 +1446,7 @@ async def s35_focus_output_injection(ctx: Ctx) -> None:
 
 
 async def s46_reframe_skill_dispatch(ctx: Ctx) -> None:
-    """S46 reframe 技能实分派（ADR-045）：'镜头跟着说话人' → 新 run 的 task_list
+    """S46 reframe 工具实分派（ADR-045）：'镜头跟着说话人' → 新 run 的 task_list
     含 reframe_clip（chat 可调用 = 走 task_list 契约）。"""
     pid = await ctx.new_project("S46 reframe dispatch")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "interview.mp4",
@@ -1907,9 +1907,9 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
     full = compile_graph(
         TaskSpec(
             tasks=[
-                TaskItem(skill="select_clips", params={"language": "en"}),
-                TaskItem(skill="write_post", params={"language": "en"}),
-                TaskItem(skill="write_quotes", params={"language": "en"}),
+                TaskItem(tool="select_clips", params={"language": "en"}),
+                TaskItem(tool="write_post", params={"language": "en"}),
+                TaskItem(tool="write_quotes", params={"language": "en"}),
             ]
         )
     )
@@ -1947,9 +1947,9 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
     with_dub = compile_graph(
         TaskSpec(
             tasks=[
-                TaskItem(skill="select_clips", params={"language": "en"}),
+                TaskItem(tool="select_clips", params={"language": "en"}),
                 TaskItem(
-                    skill="dub_clip",
+                    tool="dub_clip",
                     params={"target_language": "de", "fork": True},
                 ),
             ]
@@ -1986,13 +1986,13 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
     with_caps = compile_graph(
         TaskSpec(
             tasks=[
-                TaskItem(skill="select_clips", params={"language": "en"}),
+                TaskItem(tool="select_clips", params={"language": "en"}),
                 TaskItem(
-                    skill="translate_clip",
+                    tool="translate_clip",
                     params={"target_language": "fr", "fork": True},
                 ),
                 TaskItem(
-                    skill="translate_clip",
+                    tool="translate_clip",
                     params={"target_language": "de", "fork": True},
                 ),
             ]
@@ -2034,9 +2034,9 @@ async def s42_quotation_foundation(ctx: Ctx) -> None:
         compile_graph(
             TaskSpec(
                 tasks=[
-                    TaskItem(skill="write_post", params={"language": "en"}),
+                    TaskItem(tool="write_post", params={"language": "en"}),
                     TaskItem(
-                        skill="translate_clip", params={"target_language": "fr"}
+                        tool="translate_clip", params={"target_language": "fr"}
                     ),
                 ]
             )
@@ -2056,7 +2056,7 @@ async def s45_materialize_injection_matrix(ctx: Ctx) -> None:
         return [ns.kind for ns in nodes]
 
     translate = TaskItem(
-        skill="translate_clip",
+        tool="translate_clip",
         params={"target_language": "zh", "bilingual": True},
     )
 
@@ -2109,7 +2109,7 @@ async def s45_materialize_injection_matrix(ctx: Ctx) -> None:
     with_clips = compile_graph(
         TaskSpec(
             tasks=[
-                TaskItem(skill="select_clips", params={"count": 3}),
+                TaskItem(tool="select_clips", params={"count": 3}),
                 translate,
             ]
         ),

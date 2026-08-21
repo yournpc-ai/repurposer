@@ -54,9 +54,9 @@ jinja_env = Environment(
 MAX_CHARS_PER_TEXT = 150_000
 
 # The roster dict (N-30): every declared instance self-registers on
-# construction — shared crew (``agents/registry.py``) and skill-private
-# declarations (``skills/<pkg>/agents.py``) alike, so ``AGENTS`` enumerates
-# the whole crew once the registry door (``app/skills/__init__.py``) has
+# construction — shared crew (``agents/registry.py``) and tool-private
+# declarations (``tools/<pkg>/agents.py``) alike, so ``AGENTS`` enumerates
+# the whole crew once the registry door (``app/tools/__init__.py``) has
 # imported every package. The startup self-check walks node→agent references
 # against it (ADR-039 P2).
 AGENTS: dict[str, "Agent"] = {}

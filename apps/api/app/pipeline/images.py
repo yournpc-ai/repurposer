@@ -17,7 +17,6 @@ import structlog
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Project
-from app.tools.storage import output_url, save_output
 
 logger = structlog.get_logger()
 
@@ -60,6 +59,8 @@ async def _save_minimax_image(
             return None
         await record_media_usage({"images": float(len(images))})
         image_bytes = base64.b64decode(images[0])
+        from app.tools.storage import output_url, save_output  # deferred: import cycle (the tools door re-enters this closure)
+
         relative_path = await save_output(
             project.id,
             project.user_id,

@@ -1,10 +1,10 @@
-"""Internal node crew (ADR-039 P2 objectified): the non-skill kernel nodes.
+"""Internal node crew (ADR-039 P2 objectified): the non-tool kernel nodes.
 
 ``preprocess`` / ``persona_bootstrap`` / ``director_understand`` /
 ``director_plan`` / ``interrupt`` / ``render`` — these never enter the
-proposal space (CHAT_ARCH §4). Skill nodes live in their skill packages
-(``app/skills/<pkg>/node.py``); the full ``NODE_KINDS`` table self-populates
-as the registry door (``app/skills/__init__.py``) imports this module and the
+proposal space (CHAT_ARCH §4). Tool nodes live in their tool packages
+(``app/tools/<pkg>/node.py``); the full ``NODE_KINDS`` table self-populates
+as the registry door (``app/tools/__init__.py``) imports this module and the
 packages. Every class is a ``NodeBase`` declaration whose ``run`` body moved
 here verbatim from the P1 runner functions.
 """

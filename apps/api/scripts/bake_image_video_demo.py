@@ -1,6 +1,6 @@
 """Bake the image-video recipe demo at 16:9 (2026-08-17 跟源画幅 ruling).
 
-The card's chain carries no clip skill — the frame never changes hands, so
+The card's chain carries no clip tool — the frame never changes hands, so
 the output follows the SOURCE frame (the demo photos are landscape 16:9).
 Runs the REAL pipeline in the dev DB (select_clips{aspect: 16:9} + add_music
 {calm}) over the demo inputs (demo/uploads/demo-article.md + the three
@@ -63,8 +63,8 @@ PHOTO_KEYS = [
 ]
 BAKE_EMAIL = "bake-image-video@local"
 TASKS = [
-    {"skill": "select_clips", "params": {"aspect": "16:9"}},
-    {"skill": "add_music", "params": {"mood": "calm"}},
+    {"tool": "select_clips", "params": {"aspect": "16:9"}},
+    {"tool": "add_music", "params": {"mood": "calm"}},
 ]
 
 

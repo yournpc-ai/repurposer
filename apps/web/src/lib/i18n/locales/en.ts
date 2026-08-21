@@ -1065,7 +1065,7 @@ const en = {
     chainHint:
       "The steps I'll run, in order — adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
     addTask: "Add task",
-    skills: {
+    tools: {
       translate_clip: "Subtitled version",
       dub_clip: "Voice-over version",
       remove_filler: "Remove filler words",

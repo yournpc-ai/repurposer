@@ -34,7 +34,7 @@ from app.pipeline.music import (  # noqa: E402
     default_music_id,
     generate_music,
 )
-from app.tools.music import (  # noqa: E402
+from app.pipeline.music import (  # noqa: E402
     music_disk_path,
     music_file_path,
     persist_music,

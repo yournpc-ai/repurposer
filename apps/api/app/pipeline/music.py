@@ -8,6 +8,7 @@ piece still referenced by any clip's ``render_spec.music`` (the 3 default
 pieces are also protected this way).
 """
 
+from dataclasses import dataclass
 from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
 import httpx
@@ -18,16 +19,52 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.minimax import MiniMaxError, minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Music, Output
-from app.tools.music import (
-    AUDIO_EXT,
-    GeneratedMusic,
-    music_disk_path,
-    music_file_path,
-    persist_music,
-)
-from app.tools.storage import delete, size
+from app.tools.storage import delete, exists, save, size
 
 logger = structlog.get_logger()
+
+# ---- object-storage mechanics ----------------------------------------------
+# The generated piece's bytes are persisted under ``music/{music_id}.{ext}``
+# in object storage; the ``Music`` row's ``file_path`` is that object key.
+# Bytes never live in the DB. (通用件随消费方，N-42 批④：音乐库消费侧即本层。)
+
+AUDIO_EXT = "mp3"
+
+
+@dataclass(frozen=True)
+class GeneratedMusic:
+    """A generated music piece ready to persist."""
+
+    audio_bytes: bytes
+    ext: str
+    duration_seconds: int | None
+    size_bytes: int
+    model: str
+    generation_id: str | None
+
+
+def music_file_path(music_id: UUID) -> str:
+    """Return the object storage key for a music piece's audio file."""
+    return f"music/{music_id}.{AUDIO_EXT}"
+
+
+async def persist_music(music_id: UUID, generated: GeneratedMusic) -> tuple[str, int]:
+    """Upload generated audio bytes to object storage.
+
+    Returns (object_key, size). The key is ``music/{music_id}.{ext}``.
+    """
+    key = music_file_path(music_id)
+    await save(key, generated.audio_bytes, content_type="audio/mpeg")
+    return key, len(generated.audio_bytes)
+
+
+async def music_disk_path(music_id: UUID) -> bool:
+    """Return whether the music object exists in storage.
+
+    Kept as an async compatibility shim for code that used ``music_disk_path``
+    to check file existence.
+    """
+    return await exists(music_file_path(music_id))
 
 # Quality model for committed platform defaults; free model for ad-hoc user
 # generation to control cost (see docs/MUSIC_ARCHITECTURE.md).

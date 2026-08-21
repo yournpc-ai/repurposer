@@ -1036,7 +1036,7 @@ const zh: Resources = {
     chainLabel: "任务链",
     chainHint: "我将按顺序执行这些步骤——每行的数量、语言、角度都可在行内调整；切片需要视频、音频或图片素材。",
     addTask: "添加任务",
-    skills: {
+    tools: {
       translate_clip: "字幕版",
       dub_clip: "配音版",
       remove_filler: "去口头禅",

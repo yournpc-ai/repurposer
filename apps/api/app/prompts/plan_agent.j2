@@ -15,5 +15,5 @@ No file uploaded (text-only input).
 {%- endif %}
 {%- if presented_plan %}
 A task book has already been presented to the user and is awaiting confirmation (a JSON task chain): {{ presented_plan }}
-This chain is the CURRENT book — it may include edits the user made directly in the plan panel, which never appear in the conversation. Emit the FULL revised chain: keep every task and param the user's message does not revise (skills, counts, languages, angles shown in the chain), and when the message revises one — 'clips only needs 2', 'make the post German', 'drop the quotes' — emit exactly that revision. The latest user message always wins.
+This chain is the CURRENT book — it may include edits the user made directly in the plan panel, which never appear in the conversation. Emit the FULL revised chain: keep every task and param the user's message does not revise (tools, counts, languages, angles shown in the chain), and when the message revises one — 'clips only needs 2', 'make the post German', 'drop the quotes' — emit exactly that revision. The latest user message always wins.
 {%- endif %}

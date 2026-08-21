@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.skills.revise.agents import reviser
+from app.tools.revise.agents import reviser
 from app.clients.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
@@ -25,7 +25,7 @@ from app.models.schemas import (
     validate_output_payload,
 )
 from app.models.tables import Output, Project, User
-from app.skills.captions.procedure import translate_caption_track
+from app.tools.captions.procedure import translate_caption_track
 from app.chat.service import chat
 from app.operations.service import apply_precomputed
 from app.pipeline.images import generate_clip_cover_image
@@ -34,7 +34,7 @@ from app.platform.project_context import (
     persona_context_from_row,
     resolve_persona,
 )
-from app.skills.dub.procedure import synthesize_dub
+from app.tools.dub.procedure import synthesize_dub
 from app.pipeline.errors import TransientNodeError, user_error_line
 from app.tools.storage import delete_file
 from app.ui_locale import current_ui_language
@@ -291,7 +291,7 @@ async def translate_captions(
     """Re-translate the clip's caption track into ``target_language``.
 
     Operates on the persisted ``render_spec``, so the editor saves pending edits
-    first. Stays word-level (the captions skill's translation procedure) and
+    first. Stays word-level (the captions tool's translation procedure) and
     updates the spec's ``target_language`` in place.
     """
     output = _require_clip(
@@ -349,7 +349,7 @@ async def dub_output(
 ) -> Output:
     """Voice-clone dub the clip into ``target_language`` (the persona's own voice).
 
-    Pipeline lives in ``skills/dub/procedure.py`` (shared with the dub_clip
+    Pipeline lives in ``tools/dub/procedure.py`` (shared with the dub_clip
     run runner); the endpoint additionally journals the operation (ADR-032).
     """
     output = _require_clip(

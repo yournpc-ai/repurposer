@@ -185,7 +185,7 @@ export function RecipeInspectOverlay({
                 <DialogDescription className="mt-1.5 text-sm">
                   {t(`recipes.${card.id}.promise`)}
                 </DialogDescription>
-                {/* Applied-skill annotation (2026-08-12 ruling): the registry's
+                {/* Applied-tool annotation (2026-08-12 ruling): the registry's
                     curated capability tags as chips — facts, not adjectives. */}
                 {card.tags.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">

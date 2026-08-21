@@ -1,4 +1,4 @@
-"""Writer skills' shared node base (ADR-039 P2).
+"""Writer tools' shared node base (ADR-039 P2).
 
 One body serves the four copy-writer nodes (post/quotes/carousel/article):
 resolve the node's slot + language, load the director artifacts, call the
@@ -55,7 +55,7 @@ def derivative_output_types() -> frozenset[str]:
 
 
 class CopyWriterParams(BaseModel):
-    """The four copy-writer skills' shared adjudication document (outputs-
+    """The four copy-writer tools' shared adjudication document (outputs-
     derive, ADR-043): the writers share one node body, so their params are
     one model — quotes/carousel subclass it to add ``count`` in their own
     packages. Field descriptions ARE the LLM's parameter documentation
@@ -84,7 +84,7 @@ class CopyWriterParams(BaseModel):
 
 class DerivativeWriterNode(NodeBase):
     """Shared body for the four copy-writer nodes; each package declares a
-    thin subclass with its own ``writer`` (the skill-private agent)."""
+    thin subclass with its own ``writer`` (the tool-private agent)."""
 
     writer: Agent
     needs_director = True

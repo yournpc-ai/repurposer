@@ -11,7 +11,7 @@ truth for recipe cards.
 
 Every consumer reads the same package: the card face, the inspect overlay
 (= the package's renderer, docs/tasks/results-workspace.md D6), and the
-composer prefill. Static registry deployed with code — SKILL_REGISTRY 同款
+composer prefill. Static registry deployed with code — TOOL_REGISTRY 同款
 纪律 (NAMING §5, N-39): NOT a plugin system, NOT a table.
 
 **发射 = 提示词** (2026-08-11 ruling): a recipe launch's ENTIRE behavioral
@@ -149,15 +149,15 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         input_slots=[InputSlot(type="video")],
         tasks=[
             TaskItem(
-                skill="translate_clip",
+                tool="translate_clip",
                 params={"target_language": "zh", "bilingual": True, "fork": True},
             ),
             TaskItem(
-                skill="translate_clip",
+                tool="translate_clip",
                 params={"target_language": "fr", "fork": True},
             ),
             TaskItem(
-                skill="dub_clip",
+                tool="dub_clip",
                 params={"target_language": "es", "fork": True},
             ),
         ],
@@ -225,17 +225,17 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             InputSlot(type="slides", required=False),
         ],
         tasks=[
-            TaskItem(skill="select_clips", params={}),
+            TaskItem(tool="select_clips", params={}),
             # The card sells "captions and music" (promise + template + the
             # baked demo's add_music leg) — the declared chain names it, or
             # the self-check's compile shape lies about the card.
-            TaskItem(skill="add_music", params={}),
+            TaskItem(tool="add_music", params={}),
         ],
         # The demo set is the WFT keynote's own material: a talk write-up
         # (markdown — the card parses articles: PDF/Word/md/txt) + three
         # on-site photos; the baked slideshow shows exactly these.
         # aspect = the SOURCE frame (2026-08-17 ruling: a chain with no clip
-        # skill never changes the frame, so the demo follows the material —
+        # tool never changes the frame, so the demo follows the material —
         # the photos are landscape 16:9). Baked by
         # scripts/bake_image_video_demo.py.
         aspect="16:9",
@@ -288,8 +288,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         status="live",
         input_slots=[InputSlot(type="video")],
         tasks=[
-            TaskItem(skill="select_clips", params={}),
-            TaskItem(skill="reframe_clip", params={"mode": "auto"}),
+            TaskItem(tool="select_clips", params={}),
+            TaskItem(tool="reframe_clip", params={"mode": "auto"}),
         ],
         aspect="9:16",
         tags=["auto-framing"],
@@ -328,8 +328,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         status="live",
         input_slots=[InputSlot(type="video")],
         tasks=[
-            TaskItem(skill="select_clips", params={}),
-            TaskItem(skill="reframe_clip", params={"mode": "auto"}),
+            TaskItem(tool="select_clips", params={}),
+            TaskItem(tool="reframe_clip", params={"mode": "auto"}),
         ],
         aspect="9:16",
         tags=["auto-framing"],
@@ -363,7 +363,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     "ai-visuals": RecipeEntry(
         status="reserved",
         input_slots=[InputSlot(type="audio")],
-        tasks=[TaskItem(skill="select_clips", params={})],
+        tasks=[TaskItem(tool="select_clips", params={})],
     ),
 }
 

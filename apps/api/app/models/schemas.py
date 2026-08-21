@@ -466,15 +466,15 @@ class ChatRequest(BaseModel):
 
 
 class TaskItem(BaseModel):
-    """One LLM-proposed task: a registry skill plus its params (CHAT_ARCH §3).
+    """One LLM-proposed task: a registry tool plus its params (CHAT_ARCH §3).
 
     The LLM proposes; ``compile_graph`` adjudicates existence, params and
-    topology against ``app/skills/__init__.py`` — the LLM never writes node specs.
+    topology against ``app/tools/__init__.py`` — the LLM never writes node specs.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    skill: str
+    tool: str
     params: dict = Field(default_factory=dict)
 
 
@@ -630,7 +630,7 @@ class IntentSlot(BaseModel):
         # Deferred: models is the leaf layer. Importing the registry door
         # (not bare graph) guarantees NODE_KINDS is populated regardless of
         # process entry order.
-        import app.skills  # noqa: F401
+        import app.tools  # noqa: F401
         from app.pipeline.graph import known_output_types
 
         if self.type not in known_output_types():
@@ -638,8 +638,8 @@ class IntentSlot(BaseModel):
         return self
 
 
-_SLOT_TO_SKILL = {
-    # Legacy outputs-grammar slot type → its producing skill (ADR-043 read
+_SLOT_TO_TOOL = {
+    # Legacy outputs-grammar slot type → its producing tool (ADR-043 read
     # tolerance for stored pending_intent rows — never written).
     "clips": "select_clips",
     "post": "write_post",
@@ -651,7 +651,7 @@ _SLOT_TO_SKILL = {
 
 def _legacy_slots_to_tasks(data: dict) -> list[dict]:
     """outputs-grammar book → task list (ADR-043): each slot becomes its
-    producing skill's task (slot fields sink to params — params models ignore
+    producing tool's task (slot fields sink to params — params models ignore
     stray keys at adjudication); the retired book-level modifiers fan out
     into per-language transform tasks; a book-level aspect rides the clips
     task. Read tolerance only — new writes are born as task lists."""
@@ -662,28 +662,28 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
             slot = {"type": slot}
         if not isinstance(slot, dict):
             continue
-        skill = _SLOT_TO_SKILL.get(slot.get("type"))
-        if skill is None:
+        tool = _SLOT_TO_TOOL.get(slot.get("type"))
+        if tool is None:
             continue
         params = {
             k: slot[k]
             for k in ("count", "focus", "language", "tone_override")
             if slot.get(k) is not None
         }
-        if skill == "select_clips" and aspect:
+        if tool == "select_clips" and aspect:
             params["aspect"] = aspect
-        tasks.append({"skill": skill, "params": params})
+        tasks.append({"tool": tool, "params": params})
     for lang in data.get("dub_languages") or []:
         # fork: the slots-era compile produced dub/translate as fork nodes
         # (derived rows, source untouched) — the upgrade keeps that shape.
         tasks.append(
-            {"skill": "dub_clip", "params": {"target_language": lang, "fork": True}}
+            {"tool": "dub_clip", "params": {"target_language": lang, "fork": True}}
         )
     bilingual = bool(data.get("caption_bilingual"))
     for lang in data.get("caption_languages") or []:
         tasks.append(
             {
-                "skill": "translate_clip",
+                "tool": "translate_clip",
                 "params": {
                     "target_language": lang,
                     "bilingual": bilingual,
@@ -695,10 +695,10 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
 
 
 class InferredIntent(BaseModel):
-    """The PlanAgent's verdict: three actions + the proposed skill chain.
+    """The PlanAgent's verdict: three actions + the proposed tool chain.
 
     ADR-043 (outputs → derive): the request layer carries NO output
-    declarations — ``tasks`` is the only grammar (a registry skill + its
+    declarations — ``tasks`` is the only grammar (a registry tool + its
     params, the same shape the chat loop's task_list proposals use). Outputs
     are a derived projection of the compiled graph, never a request field.
     """
@@ -782,7 +782,7 @@ class InferredIntent(BaseModel):
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description=(
-            "The proposed skill chain — one task per piece of work, in "
+            "The proposed tool chain — one task per piece of work, in "
             "execution order (e.g. an English and a German post = two "
             "write_post tasks; whole-video bilingual subtitles = one "
             "translate_clip task). Empty for start/answer verdicts."
@@ -1329,7 +1329,7 @@ class CropKeyframe(BaseModel):
     second ``t``, hold this normalized center + scale. The crop data track is
     a sparse list of these — a keyframe is a decision ("switch to A here"),
     never per-frame data. Anti-dizzy parameters (dwell / deadzone / slew) are
-    write-side constraints of the skill, never serialized; the renderer eases
+    write-side constraints of the tool, never serialized; the renderer eases
     into each keyframe over a fixed ~8-frame smoothstep (a render constant).
     """
 
@@ -1634,7 +1634,7 @@ class ClipSpec(BaseModel):
     music: ClipMusic = Field(default_factory=ClipMusic)
     dub: ClipDub | None = None  # cloned-voice dub; replaces source audio when enabled
     # Layer track (ADR-044): anchor-pinned overlay items (broll / text_callout /
-    # pip / motion_graphic). Empty = no layers. No skill writes them yet —
+    # pip / motion_graphic). Empty = no layers. No tool writes them yet —
     # insert_broll lands on the 08-19+ line.
     layers: list[ClipLayer] = Field(default_factory=list)
     brand: ClipBrand | None = None  # resolved brand values (None = default look)

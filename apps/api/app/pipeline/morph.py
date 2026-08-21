@@ -1,5 +1,5 @@
 """Modifier-step machinery (ADR-039 P1 split): the shared body of the morph
-skills (remove_filler / add_music / translate_clip / dub_clip) — resolve the
+tools (remove_filler / add_music / translate_clip / dub_clip) — resolve the
 clips a modifier acts on, journal the spec write, fan out one render step per
 touched output.
 """

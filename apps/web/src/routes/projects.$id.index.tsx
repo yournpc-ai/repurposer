@@ -84,7 +84,7 @@ interface WorkflowRun {
   context: {
     /** The confirmed task chain (ADR-043); legacy runs carry slot-shaped
      * outputs instead — `tasksFromRunContext` upgrades either at read time. */
-    tasks?: { skill: string; params: Record<string, unknown> }[]
+    tasks?: { tool: string; params: Record<string, unknown> }[]
     /** Slot-shaped on new runs; legacy flat runs carry string outputs +
      * `clip_count` — read tolerance only, upgraded by `tasksFromRunContext`. */
     outputs?: (string | IntentSlot)[]
@@ -149,7 +149,7 @@ const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
   write_article: "article",
 }
 
-/** The producing skill a tab's retry re-runs (a retry replays the producer
+/** The producing tool a tab's retry re-runs (a retry replays the producer
  * with its confirmed params — the chain's transforms don't ride it). */
 const TAB_TO_RETRY_SKILL: Record<ResultsTab, string> = {
   clips: "select_clips",
@@ -494,7 +494,7 @@ function ProjectDetailPage() {
   useEffect(() => {
     if (tabInitializedRef.current) return
     if (!runTasks.length) return
-    const tab = NODE_KIND_TO_TAB[runTasks[0].skill]
+    const tab = NODE_KIND_TO_TAB[runTasks[0].tool]
     if (tab) {
       setActiveTab(tab)
       tabInitializedRef.current = true
@@ -536,16 +536,16 @@ function ProjectDetailPage() {
   // whole-source clip); writers-only chains never render the pane. The bare
   // fallback mirrors the server's SelectClipsParams default (count unnamed
   // → 3) — legacy 5-default runs are all settled and never replay skeletons.
-  const clipsTask = runTasks.find((task) => task.skill === "select_clips")
+  const clipsTask = runTasks.find((task) => task.tool === "select_clips")
   const clipsTaskCount = clipsTask?.params?.count
   const wholeVideoChain =
-    !clipsTask && runTasks.some((task) => NODE_KIND_TO_TAB[task.skill] === "clips")
+    !clipsTask && runTasks.some((task) => NODE_KIND_TO_TAB[task.tool] === "clips")
   const clipCount =
     typeof clipsTaskCount === "number" ? clipsTaskCount : wholeVideoChain ? 1 : 3
 
   const requestedTabs = Array.from(
     new Set(
-      runTasks.map((task) => NODE_KIND_TO_TAB[task.skill]).filter(Boolean)
+      runTasks.map((task) => NODE_KIND_TO_TAB[task.tool]).filter(Boolean)
     )
   ) as ResultsTab[]
 
@@ -583,13 +583,13 @@ function ProjectDetailPage() {
       // are stripped — a full run deletes the rows they point at.
       const family =
         tab === "clips"
-          ? runTasks.filter((task) => NODE_KIND_TO_TAB[task.skill] === "clips")
-          : runTasks.filter((task) => task.skill === TAB_TO_RETRY_SKILL[tab])
-      const tasks = (family.length > 0 ? family : [{ skill: TAB_TO_RETRY_SKILL[tab], params: {} }]).map(
+          ? runTasks.filter((task) => NODE_KIND_TO_TAB[task.tool] === "clips")
+          : runTasks.filter((task) => task.tool === TAB_TO_RETRY_SKILL[tab])
+      const tasks = (family.length > 0 ? family : [{ tool: TAB_TO_RETRY_SKILL[tab], params: {} }]).map(
         (task) => {
           const params = { ...(task.params ?? {}) }
           delete params.target_output_id
-          return { skill: task.skill, params }
+          return { tool: task.tool, params }
         },
       )
       await apiPost(`/api/v1/projects/${projectId}/generate`, {
@@ -818,14 +818,14 @@ function ProjectDetailPage() {
     ? normalizeIntent({
         tasks: completedRunTasks.length
           ? completedRunTasks
-          : [{ skill: "select_clips", params: {} }],
+          : [{ tool: "select_clips", params: {} }],
         specific_instruction: completedRun.context?.instruction,
       })
     : undefined
 
   const overlayInitialIntent = attachOpen
     ? normalizeIntent({
-        tasks: runTasks.length ? runTasks : [{ skill: "select_clips", params: {} }],
+        tasks: runTasks.length ? runTasks : [{ tool: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
       })
     : pendingIntent

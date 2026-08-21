@@ -1,5 +1,5 @@
 """reframe_clip smoke (ADR-045): compute crop_track keyframes on real footage
-through the skill's procedure and render them through the REAL render service
+through the tool's procedure and render them through the REAL render service
 — watch the MP4s to tune the write-side anti-dizzy constraints (task 5).
 
 - interview_switch on xy_1 (two-person static interview; attribution turns
@@ -23,7 +23,7 @@ import httpx  # noqa: E402
 
 from app.models.schemas import ClipSpec  # noqa: E402
 from app.pipeline.rendering import _absolutize  # noqa: E402
-from app.skills.reframe.procedure import compute_crop_track  # noqa: E402
+from app.tools.reframe.procedure import compute_crop_track  # noqa: E402
 from app.tools.storage import (  # noqa: E402
     exists,
     get_output_path,

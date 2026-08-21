@@ -22,7 +22,6 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, Output, Persona, Project
 from app.pipeline.clip_spec import total_output_seconds
-from app.tools.storage import download_to_temp, file_to_data_url
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. These limits are
@@ -107,6 +106,8 @@ def _file_size_bytes(path: Path | None) -> int | None:
 
 async def _media_input_for_image(file_url: str, caption: str | None = None):
     """Build a MediaInput for an image file URL, or None if unreadable."""
+    from app.tools.storage import download_to_temp, file_to_data_url  # deferred: import cycle (the tools door re-enters this closure)
+
     path = await download_to_temp(file_url)
     if path is None:
         return None
@@ -135,6 +136,8 @@ async def _media_input_for_video(asset: Asset):
     duration = asset.duration_seconds or 0
     if duration > _MAX_DIRECT_VIDEO_SECONDS:
         return None
+
+    from app.tools.storage import download_to_temp, file_to_data_url  # deferred: import cycle
 
     path = await download_to_temp(asset.file_url)
     if path is None:

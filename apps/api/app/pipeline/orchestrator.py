@@ -52,7 +52,7 @@ from app.pipeline.graph import (
 from app.pipeline.recipes import RECIPE_REGISTRY
 from app.pipeline.step_context import _estimate_facts
 from app.pipeline.tracks import assert_single_writer_per_track
-from app.skills import SKILL_REGISTRY, SkillEntry, strip_null_params, validate_task_list
+from app.tools import TOOL_REGISTRY, ToolEntry, strip_null_params, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -90,7 +90,7 @@ class TaskSpec(BaseModel):
     """The task book: normalized generation intent (任务书).
 
     Mirrors GenerateRequest/chat dispatch; stored verbatim on run.context.
-    The only request grammar is the skill chain (``tasks``, ADR-043) —
+    The only request grammar is the tool chain (``tasks``, ADR-043) —
     outputs are the compiled graph's derived projection, never declared.
     Targeted scopes (hook/clip/derivative/render) carry no chain — they
     re-run one node family off ``target_id``.
@@ -172,8 +172,8 @@ def compile_graph(
 ) -> list[_NodeSpec]:
     """Lower a task book into a node topology (pure, code-determined).
 
-    Full scope: ``task.tasks`` (the skill chain, ADR-043) materializes via
-    ``_compile_task_list`` — generation skills share one deduped director
+    Full scope: ``task.tasks`` (the tool chain, ADR-043) materializes via
+    ``_compile_task_list`` — generation tools share one deduped director
     prelude (preprocess → persona_bootstrap ∥ director_understand →
     director_plan); clip-spec consumers without select_clips get the
     compile-injected ``materialize_source`` (whole-source, no LLM picking).
@@ -250,9 +250,9 @@ def _compile_task_list(
     """Mode②: materialize an LLM-proposed task list into a standard graph.
 
     Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
-    and params; topology is derived here — generation skills that need a
+    and params; topology is derived here — generation tools that need a
     director share one deduped prelude (preprocess → persona_bootstrap ∥
-    director_understand → director_plan); modifier skills (needs_director=
+    director_understand → director_plan); modifier tools (needs_director=
     False, e.g. remove_filler / add_music) hang off the clips node when one
     exists, else off the injected materialize_source (whole-source
     materialization, ADR-043), else get empty inputs (= act on the project's
@@ -270,7 +270,7 @@ def _compile_task_list(
     when modifiers exist without select_clips; "existing" leaves them acting
     on the project's clips; None with modifiers and no select_clips rejects.
     """
-    entries = validate_task_list(task.tasks or [])  # raises SkillRejected
+    entries = validate_task_list(task.tasks or [])  # raises ToolRejected
     if not entries:
         # An empty chain compiles to nothing — reject here, never a vacuous
         # run (the ``tasks is not None`` dispatch in compile_graph routes
@@ -302,7 +302,7 @@ def _compile_task_list(
 
     seq = 10
     skill_node_idx: dict[str, int] = {}
-    modifiers: list[tuple[TaskItem, SkillEntry]] = []
+    modifiers: list[tuple[TaskItem, ToolEntry]] = []
     # Per-type ordinals for same-type multi tasks (an English and a German
     # post = two write_post tasks): each generation node's spec carries its
     # task's params as a synthesized slot + its ordinal among its own type —
@@ -441,7 +441,7 @@ async def derive_plan_preview(
     "subs"|"dub"|None, "language"?, "count"?, "bilingual"?}. ``video`` is the
     whole-source materialization row (整条视频); transform rows take their
     base from the upstream they hang off (materialize → video, select_clips
-    or existing clips → clips). Raises SkillRejected / ValueError — the
+    or existing clips → clips). Raises ToolRejected / ValueError — the
     caller decides the degradation."""
     spec = TaskSpec(tasks=list(tasks))
     profile = await _materialize_profile(db, project, spec)
@@ -499,20 +499,20 @@ async def _check_birthplace_requires(
     db: AsyncSession, project: Project, task: "TaskSpec"
 ) -> None:
     """Birthplace ∀-check (AGENT_ARCH §4.2: 校验 = ∀requires) — the chain's
-    skills carry their nodes' ``requires`` declarations (the clips gate is
+    tools carry their nodes' ``requires`` declarations (the clips gate is
     SelectClips' own declaration, not a kernel special case).
     Raises ValueError; request handlers translate to 422."""
     needs: dict[str, tuple[Requirement, list[str]]] = {}
-    for entry in validate_task_list(task.tasks or []):  # raises SkillRejected
+    for entry in validate_task_list(task.tasks or []):  # raises ToolRejected
         for req in NODE_KINDS[entry.name].requires:
             owners = needs.setdefault(req.key, (req, []))[1]
             owners.append(entry.name.replace("_", " "))
-    has_clips_slot = any(t.skill == "select_clips" for t in (task.tasks or []))
+    has_clips_slot = any(t.tool == "select_clips" for t in (task.tasks or []))
     for key in sorted(needs):
         req, owners = needs[key]
         if await req.missing(db, project):
             # The clips-media 422 keeps its own copy: it names the way out
-            # ("deselect clips") in task-book terms, not skill terms.
+            # ("deselect clips") in task-book terms, not tool terms.
             if key == MEDIA.key and has_clips_slot:
                 raise ValueError(CLIPS_NEED_MEDIA)
             raise ValueError(
@@ -570,7 +570,7 @@ async def _needs_stills_alignment(db: AsyncSession, project: Project, task: Task
     images -> the clips-media gate already rejects. Computed once here and
     passed into compile_graph, which stays pure.
     """
-    clips_requested = any(t.skill == "select_clips" for t in (task.tasks or []))
+    clips_requested = any(t.tool == "select_clips" for t in (task.tasks or []))
     if not clips_requested:
         return False
     recording = await db.execute(
@@ -611,7 +611,7 @@ async def _materialize_profile(db: AsyncSession, project: Project, task: TaskSpe
     """Input profile for whole-source materialization (ADR-043).
 
     Only meaningful for a transform-only chain — clip-spec consumers present
-    (skills whose ``after`` names materialize_source, a node declaration, no
+    (tools whose ``after`` names materialize_source, a node declaration, no
     parallel map) and no select_clips: "existing" = the project already has
     clips for the modifiers to act on (no injection); "media" = a
     video/audio recording to materialize whole; "stills" = the no-recording
@@ -622,11 +622,11 @@ async def _materialize_profile(db: AsyncSession, project: Project, task: TaskSpe
     """
     tasks = task.tasks or []
     consumes_clips = any(
-        t.skill in NODE_KINDS
-        and "materialize_source" in (NODE_KINDS[t.skill].after or ())
+        t.tool in NODE_KINDS
+        and "materialize_source" in (NODE_KINDS[t.tool].after or ())
         for t in tasks
     )
-    if not consumes_clips or any(t.skill == "select_clips" for t in tasks):
+    if not consumes_clips or any(t.tool == "select_clips" for t in tasks):
         return None
     clips = await db.execute(
         select(Output.id)
@@ -677,7 +677,7 @@ async def create_run(
     """Create a run and materialize its plan graph. THE ONLY WorkflowRun birthplace.
 
     Every entry constraint rejects here, once — targeted-scope validity and
-    the birthplace ∀-check (the chain skills' requires, all node-declared) —
+    the birthplace ∀-check (the chain tools' requires, all node-declared) —
     so the entry points (/generate, the task_book start answer, chat
     dispatch) only assemble the TaskSpec. Raises ValueError; request handlers
     translate to 422, chat dispatch degrades to an ask-back.
@@ -721,7 +721,7 @@ async def create_run(
         target_type = target.type
 
     # One ∀-check for every birth constraint (AGENT_ARCH §4.2) — the chain's
-    # skills' requires, all node-declared. Unconditional: targeted re-renders
+    # tools' requires, all node-declared. Unconditional: targeted re-renders
     # read the same source media, so no scope is exempt.
     await _check_birthplace_requires(db, project, task)
 
@@ -1183,8 +1183,8 @@ def _recipe_adds_stills(input_types: set[str]) -> bool:
 def assert_runners_registered() -> None:
     """Startup self-check, three parts (AGENT_ARCH §10):
 
-    1. registry ↔ node consistency: every non-seat skill entry has a node in
-       ``NODE_KINDS`` under the same name (N-35), and every skill-package
+    1. registry ↔ node consistency: every non-seat tool entry has a node in
+       ``NODE_KINDS`` under the same name (N-35), and every tool-package
        node has an entry (internal crew — ``app.pipeline.*`` — never enters
        the proposal space by design). Output types are unique across nodes —
        ``node_for_output`` routing depends on it (N-32: one producer per type).
@@ -1200,19 +1200,19 @@ def assert_runners_registered() -> None:
        partition); a phantom track proves the consumers (bake seam /
        addressing / compliance / pricing) fold with zero consumer changes.
     """
-    for entry in SKILL_REGISTRY.values():
+    for entry in TOOL_REGISTRY.values():
         if not entry.seat and entry.name not in NODE_KINDS:
             raise RuntimeError(
-                f"Skill '{entry.name}': no node registered under that name"
+                f"Tool '{entry.name}': no node registered under that name"
             )
     for node in NODE_KINDS.values():
         if (
             not type(node).__module__.startswith("app.pipeline.")
             and not node.internal
-            and node.kind not in SKILL_REGISTRY
+            and node.kind not in TOOL_REGISTRY
         ):
             raise RuntimeError(
-                f"Node '{node.kind}' ({type(node).__module__}): no SKILL_REGISTRY entry"
+                f"Node '{node.kind}' ({type(node).__module__}): no TOOL_REGISTRY entry"
             )
     output_owners: dict[str, str] = {}
     for node in NODE_KINDS.values():
