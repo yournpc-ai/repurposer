@@ -1,0 +1,2851 @@
+{
+  "card": "highlight",
+  "project_id": "80339d87-a59e-43fb-9a6f-44cc6103bfea",
+  "run_id": "cf77e515-6fc1-4743-9311-18fc381be2cf",
+  "decision_layer": {
+    "understanding": {
+      "themes": [
+        "Controlling the technology fire rather than fueling it",
+        "Redefining human value in the age of AI (Human 3.0)",
+        "Money becoming irrelevant; measuring trust, knowledge, care and public value",
+        "UK's role in defining spirit, ethics and evaluation of technology",
+        "Global collaboration across UK, China, Asia and Europe",
+        "Evaluating technology alongside inventing it",
+        "Expanding recognition and governance for ethics, trust and social design",
+        "Work, dignity and the human agenda beyond productivity"
+      ],
+      "core_thesis": "As AI and other technologies accelerate unprecedented invention, humanity's most urgent task is no longer to add fuel to the technology fire but to control it — by redefining human value, building global collaboration mechanisms, and ensuring technology serves people, dignity, and wisdom rather than just profit, growth, and intelligence.",
+      "key_arguments": [
+        {
+          "id": "a1",
+          "text": "The technology fire is already lit, so the urgent question is no longer how to add more fuel but how to control the fire so it serves human purpose.",
+          "text_en": "The technology fire is already lit, so the urgent question is no longer how to add more fuel but how to control the fire so it serves human purpose.",
+          "text_zh": "技术的火已经点燃，当前最紧迫的问题不再是添柴加薪，而是如何控制这把火，让它服务于人类的目标。",
+          "position": "opening framing, returned to in the closing"
+        },
+        {
+          "id": "a2",
+          "text": "We are living in an unprecedented age in which AI, robotics, biotech and green energy are producing new inventions every week, with at least a million more technologies on the way.",
+          "text_en": "We are living in an unprecedented age in which AI, robotics, biotech and green energy are producing new inventions every week, with at least a million more technologies on the way.",
+          "text_zh": "我们正身处一个人类历史上前所未有的时代，AI、机器人、生物技术和绿色能源每周都在诞生新发明，今年或明年至少还会有一百万项新技术涌现。",
+          "position": "early in the talk, after welcoming remarks"
+        },
+        {
+          "id": "a3",
+          "text": "Human value must be redefined for each era — from survival in the agricultural age, to labor in the industrial age, to connections in the digital age — and in the AI age it must center on human freedom, creativity, judgment, and contribution.",
+          "text_en": "Human value must be redefined for each era — from survival in the agricultural age, to labor in the industrial age, to connections in the digital age — and in the AI age it must center on human freedom, creativity, judgment, and contribution.",
+          "text_zh": "人类的价值必须在每个时代重新定义——农业时代为生存、工业时代为劳动、数字时代为连接——而在AI时代，价值应聚焦于人的自由、创造力、判断力与贡献。",
+          "position": "first major pivot, about a quarter into the talk"
+        },
+        {
+          "id": "a4",
+          "text": "The 'Human 3.0' agenda requires shifting focus from whether humans should find a job to whether humans should work for someone else at all, and building a moral and human agenda alongside the technology agenda.",
+          "text_en": "The 'Human 3.0' agenda requires shifting focus from whether humans should find a job to whether humans should work for someone else at all, and building a moral and human agenda alongside the technology agenda.",
+          "text_zh": "「人类3.0」的议程要求将焦点从「人该不该找到一份工作」转向「人是否还应该为他人工作」，并在与技术议程并行之外，建立起属于人的道德议程。",
+          "position": "central pivot, after introducing Human 3.0"
+        },
+        {
+          "id": "a5",
+          "text": "AI will make money irrelevant; society should instead measure how much trust a person creates, how much knowledge they share, and how much beauty, care, connections, and public value they bring to the world.",
+          "text_en": "AI will make money irrelevant; society should instead measure how much trust a person creates, how much knowledge they share, and how much beauty, care, connections, and public value they bring to the world.",
+          "text_zh": "AI将使金钱变得不重要；社会应当转而衡量一个人创造了多少信任、分享了多少知识，以及给世界带来了多少美好、关怀、连接和公共价值。",
+          "position": "mid-talk, anchored by the China Daily article and the Musk echo"
+        },
+        {
+          "id": "a6",
+          "text": "The UK may not lead on every technology, but it should define spirit and value for the next stage of technology by leveraging its strengths in universities, law, public institutions, international trust, and creativity.",
+          "text_en": "The UK may not lead on every technology, but it should define spirit and value for the next stage of technology by leveraging its strengths in universities, law, public institutions, international trust, and creativity.",
+          "text_zh": "英国也许无法在每一项技术上领先，但它应凭借在大学、法律、公共机构、国际信任与创造力上的优势，去定义下一阶段技术所需要的精神与价值。",
+          "position": "just past the midpoint, framing the UK's role"
+        },
+        {
+          "id": "a7",
+          "text": "We must not only invent technology, we must evaluate it — weighing long-term welfare and building a new infrastructure of evaluation, not just measuring the money technology creates.",
+          "text_en": "We must not only invent technology, we must evaluate it — weighing long-term welfare and building a new infrastructure of evaluation, not just measuring the money technology creates.",
+          "text_zh": "我们不仅要发明技术，还要评估技术——权衡其长远福祉，并建立起一套新的评估基础设施，而不仅仅是衡量技术能创造多少金钱。",
+          "position": "mid-talk, when introducing the Oxford co-founder's initiative"
+        },
+        {
+          "id": "a8",
+          "text": "Innovation is geographically diversifying beyond a single region, so the world must understand what is happening in China, Hong Kong and other hubs, not just in the traditional centers.",
+          "text_en": "Innovation is geographically diversifying beyond a single region, so the world must understand what is happening in China, Hong Kong and other hubs, not just in the traditional centers.",
+          "text_zh": "创新正在地理上从单一区域向外分散，因此世界必须了解中国、香港以及其他枢纽正在发生的事，而不仅仅关注传统的创新中心。",
+          "position": "third quarter, when acknowledging Hong Kong's Web 3 AI platform"
+        },
+        {
+          "id": "a9",
+          "text": "Recognition systems such as the Nobel should be expanded to reward not only invention but also ethics, AI governance, social design, social trust, and digital trust.",
+          "text_en": "Recognition systems such as the Nobel should be expanded to reward not only invention but also ethics, AI governance, social design, social trust, and digital trust.",
+          "text_zh": "诺贝尔奖这样的表彰体系应当扩展，不仅奖励发明，还要奖励伦理、AI治理、社会设计、社会信任与数字信任。",
+          "position": "late talk, addressed to the Nobel Satellite Trust chairman"
+        },
+        {
+          "id": "a10",
+          "text": "The future must be built on a new global mechanism of collaboration, not just competition, connecting scientists, entrepreneurs, investors, public institutions, technology companies and social thinkers across Asia and Europe.",
+          "text_en": "The future must be built on a new global mechanism of collaboration, not just competition, connecting scientists, entrepreneurs, investors, public institutions, technology companies and social thinkers across Asia and Europe.",
+          "text_zh": "未来必须建立在一种全新的全球协作机制之上，而不仅仅是竞争——把科学家、企业家、投资人、公共机构、科技公司与社科思想者连接起来，跨越亚洲与欧洲。",
+          "position": "closing call to action"
+        },
+        {
+          "id": "a11",
+          "text": "We should build future technology for people not profit, future industries for dignity not growth, and a future society for wisdom not just intelligence.",
+          "text_en": "We should build future technology for people not profit, future industries for dignity not growth, and a future society for wisdom not just intelligence.",
+          "text_zh": "我们应打造为「人」而非「利润」服务的未来技术，为「尊严」而非「增长」服务的未来产业，以及为「智慧」而非仅仅「智能」服务的未来社会。",
+          "position": "closing peroration"
+        }
+      ],
+      "overall_summary": "A speech at the World Future Technology Development Summit in London during London Tech Week arguing that the technology 'fire' is already lit and society must shift its focus from fueling more invention to defining human value, ethics, and global collaboration in the age of AI. The speaker calls for a 'Human 3.0' agenda that prioritizes trust, creativity, and dignity over wealth accumulation and competition, and urges UK-China-Asia-Europe cooperation to evaluate technology alongside inventing it.",
+      "target_audience": "An international audience of technology leaders, investors, scientists, policymakers and social thinkers attending the World Future Technology Development Summit in London during London Tech Week — with explicit attention to UK, Chinese, Hong Kong and European participants.",
+      "quote_candidates": [
+        "the technology fire already there. It's already lit. Do we still should add more fuel to the fire?",
+        "AI will make money not important.",
+        "how much wealth has this person accumulated, but also how much trust has this person created. And also how much knowledge has this person shared. And how much beauty, care, connections, and the public value has this person brought to the world.",
+        "UK should define spirit and value.",
+        "we need to not only invent the technology, we need to evaluate the technology.",
+        "we need a new global mechanism not only for competition, but also for collaboration.",
+        "let's build a future technology together, not only for profit, but for people. Let's also build future industries, not only for growth, but also for dignity. So let's also build a future society, not only for intelligence, but also for wisdom.",
+        "I'm also sure that at least one million technology is on the way to come out this year or next.",
+        "in the age of AI, so what value we should have. So I think you should be more focused on human freedom, human creativity, and human judgment, and human contribution.",
+        "human beings were not born simply to serve a company, a boss, or organization."
+      ]
+    },
+    "storyboard": {
+      "slots": [
+        {
+          "cta": null,
+          "slot": "clips",
+          "count": 3,
+          "focus": "Three vertical short-form clips that follow the speaker on stage, each distilling the keynote's highest-impact pivot into a self-contained 30-60 second moment. Clip 1 is the opening 'technology fire' hook. Clip 2 is the Human 3.0 pivot on redefining human value in the AI age. Clip 3 is the closing peroration pairing the 'money becomes irrelevant' claim with the 'for people, not profit / for dignity, not growth / for wisdom, not intelligence' call to action. Each clip should be tightly framed on the speaker's face and hands, with the camera holding steady through the line for maximum shareability.",
+          "argument_ids": [
+            "a1",
+            "a3",
+            "a5",
+            "a11"
+          ],
+          "tone_override": "Punchy, cinematic, single-take on the speaker; lean into silence before and after the headline line so each quote lands cleanly on vertical video.",
+          "quote_candidates": [
+            "the technology fire already there. It's already lit. Do we still should add more fuel to the fire?",
+            "in the age of AI, so what value we should have. So I think you should be more focused on human freedom, human creativity, and human judgment, and human contribution.",
+            "AI will make money not important."
+          ]
+        }
+      ],
+      "coverage": {
+        "collisions": [],
+        "assignments": {
+          "a1": [
+            "clips"
+          ],
+          "a3": [
+            "clips"
+          ],
+          "a5": [
+            "clips"
+          ],
+          "a11": [
+            "clips"
+          ]
+        },
+        "unused_arguments": [
+          "a2",
+          "a4",
+          "a6",
+          "a7",
+          "a8",
+          "a9",
+          "a10"
+        ]
+      }
+    },
+    "clip_payloads": [
+      {
+        "output_id": "ff8b086f-1517-4791-9fe3-cdcab92ae6ca",
+        "language": "en",
+        "payload": {
+          "hook": "The technology fire is already lit.",
+          "duration": 32,
+          "music_mood": "uplifting",
+          "title_options": [
+            "The Technology Fire Is Already Lit",
+            "Stop Adding Fuel: It's Time to Control the AI Fire",
+            "AI Invents Every Week — So Who Controls the Fire?"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_001",
+            "hook": "The technology fire is already lit.",
+            "summary": "The keynote's central pivot: the technology fire is already lit, so the urgent question is no longer how to add fuel but how to control the fire so it serves human purpose.",
+            "end_marker": "ensure the fire serves its purpose",
+            "end_seconds": 184.7,
+            "source_text": "But today I may be here because of the meantime, I want to really talk about something slightly different. I think the technology fire already there. It's already lit. Do we still should add more fuel to the fire? Is that the most important skill to add more fuel? So if a fire becomes so big, once you go in big, should we focus on something else to control the fire, to ensure the fire serves its purpose?",
+            "golden_quote": "If the fire becomes so big, should we focus on something else to control the fire, to ensure the fire serves its purpose?",
+            "start_marker": "But today I may be here because of the meantime",
+            "start_seconds": 152.7,
+            "duration_seconds": 32,
+            "recommendation_score": 92
+          },
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "end_seconds": 184.7,
+          "start_seconds": 152.7
+        },
+        "score": {
+          "value": 92,
+          "reason": "Complete argument arc with a counter-intuitive opening pivot; delivers the talk's central thesis through a memorable, repeatable metaphor."
+        }
+      },
+      {
+        "output_id": "660d7531-1fea-4890-b93b-2576528c2231",
+        "language": "en",
+        "payload": {
+          "hook": "Let's build the future together.",
+          "duration": 30,
+          "music_mood": "uplifting",
+          "title_options": [
+            "For People, Not Profit. For Dignity, Not Growth. For Wisdom, Not Intelligence.",
+            "The Three Calls That Define a New Future",
+            "Build the Future: People Over Profit, Wisdom Over Intelligence"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_003",
+            "hook": "Let's build the future together.",
+            "summary": "Closing peroration distilling the keynote into three parallel calls: future technology for people not profit, future industries for dignity not growth, and a future society for wisdom not just intelligence.",
+            "end_marker": "but also for wisdom",
+            "end_seconds": 769.1,
+            "source_text": "So I do think that this, after the summit, after the summit, let's work on something together. Let's build a future technology together, not only for profit, but for people. Let's also build future industries, not only for growth, but also for dignity. So let's also build a future society, not only for intelligence, but also for wisdom.",
+            "golden_quote": "Let's build a future technology together, not only for profit, but for people. Let's also build future industries, not only for growth, but also for dignity. So let's also build a future society, not only for intelligence, but also for wisdom.",
+            "start_marker": "after the summit, after the summit, let's work on something together",
+            "start_seconds": 739.1,
+            "duration_seconds": 30,
+            "recommendation_score": 95
+          },
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "end_seconds": 769.1,
+          "start_seconds": 739.1
+        },
+        "score": {
+          "value": 95,
+          "reason": "Punchy closing peroration that distills the entire keynote thesis into three parallel calls; highly quotable and the single best representation of the talk's call to action."
+        }
+      },
+      {
+        "output_id": "de60d7e6-95b4-4edc-8754-d564fbe533b7",
+        "language": "en",
+        "payload": {
+          "hook": "What is human value in the age of AI?",
+          "duration": 50,
+          "music_mood": "calm",
+          "title_options": [
+            "Human 3.0: Redefining Value in the Age of AI",
+            "From Survival to Labor to Connections — Now What?",
+            "What Is Human Value When AI Can Do Everything?"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_002",
+            "hook": "What is human value in the age of AI?",
+            "summary": "The Human 3.0 reframe: a four-era arc redefining human value from survival (agriculture) to labor (industry) to connections (digital) and finally to freedom, creativity, judgment and contribution in the age of AI.",
+            "end_marker": "human freedom, human creativity, and human judgment, and human contribution",
+            "end_seconds": 275.8,
+            "source_text": "So we are worried about the job now, but whether human should find a job. So that's something we should really rethink, the value, how we should define the value, like in agriculture age. So human life was defined by survival because the productivity is very low. Then we go to the age of industry age, so human value was largely defined by labor. And then we come to the digital age, human identity was increasingly defined by connections, the data, the networks you have, but in the age of AI, so what value we should have. So I think you should be more focused on human freedom, human creativity, and human judgment, and human contribution.",
+            "golden_quote": "In the age of AI, human value should focus on human freedom, human creativity, and human judgment, and human contribution.",
+            "start_marker": "So we are worried about the job now, but whether human should find a job",
+            "start_seconds": 225.7,
+            "duration_seconds": 50,
+            "recommendation_score": 91
+          },
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "end_seconds": 275.8,
+          "start_seconds": 225.7
+        },
+        "score": {
+          "value": 91,
+          "reason": "Self-contained four-era argument arc with a clear redefinition; represents the talk's core Human 3.0 thesis with high quotability and a strong closing payoff."
+        }
+      }
+    ]
+  },
+  "clips": [
+    {
+      "label": "highlight-ff8b086f",
+      "family": "talking_head",
+      "content_md5": "3dc51e35b7c7c5ad928fb74d072c8829",
+      "frames_dir": "data/anatomy/frames/highlight-ff8b086f-3dc51e35",
+      "output_id": "ff8b086f-1517-4791-9fe3-cdcab92ae6ca",
+      "language": "en",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "The technology fire is already lit.",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_2.mp4",
+          "kind": "video",
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "duration": 780.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "3af0e9327532",
+            "end": 184.68,
+            "url": null,
+            "start": 152.72,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "4793a34e-6755-452b-a08f-74ff2127f2d6",
+        "crop_track": [
+          {
+            "t": 152.7,
+            "x": 0.893015,
+            "y": 0.60299,
+            "scale": 3.0
+          },
+          {
+            "t": 174.3,
+            "x": 0.90625,
+            "y": 0.599652,
+            "scale": 3.0
+          },
+          {
+            "t": 177.3,
+            "x": 0.892485,
+            "y": 0.598964,
+            "scale": 3.0
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 152.76,
+            "lang": "en",
+            "text": "But",
+            "start": 152.72
+          },
+          {
+            "end": 153.06,
+            "lang": "en",
+            "text": "today",
+            "start": 152.76
+          },
+          {
+            "end": 153.32,
+            "lang": "en",
+            "text": "I",
+            "start": 153.06
+          },
+          {
+            "end": 153.66,
+            "lang": "en",
+            "text": "may",
+            "start": 153.32
+          },
+          {
+            "end": 153.78,
+            "lang": "en",
+            "text": "be",
+            "start": 153.66
+          },
+          {
+            "end": 154.08,
+            "lang": "en",
+            "text": "here",
+            "start": 153.78
+          },
+          {
+            "end": 154.58,
+            "lang": "en",
+            "text": "because",
+            "start": 154.08
+          },
+          {
+            "end": 154.76,
+            "lang": "en",
+            "text": "of",
+            "start": 154.58
+          },
+          {
+            "end": 154.88,
+            "lang": "en",
+            "text": "the",
+            "start": 154.76
+          },
+          {
+            "end": 155.32,
+            "lang": "en",
+            "text": "meantime,",
+            "start": 154.88
+          },
+          {
+            "end": 155.54,
+            "lang": "en",
+            "text": "I",
+            "start": 155.54
+          },
+          {
+            "end": 155.7,
+            "lang": "en",
+            "text": "want",
+            "start": 155.54
+          },
+          {
+            "end": 155.84,
+            "lang": "en",
+            "text": "to",
+            "start": 155.7
+          },
+          {
+            "end": 156.18,
+            "lang": "en",
+            "text": "really",
+            "start": 155.84
+          },
+          {
+            "end": 157.42,
+            "lang": "en",
+            "text": "talk",
+            "start": 156.18
+          },
+          {
+            "end": 157.7,
+            "lang": "en",
+            "text": "about",
+            "start": 157.42
+          },
+          {
+            "end": 158.76,
+            "lang": "en",
+            "text": "something",
+            "start": 157.7
+          },
+          {
+            "end": 159.5,
+            "lang": "en",
+            "text": "slightly",
+            "start": 158.76
+          },
+          {
+            "end": 160.38,
+            "lang": "en",
+            "text": "different.",
+            "start": 159.5
+          },
+          {
+            "end": 161.24,
+            "lang": "en",
+            "text": "I",
+            "start": 160.94
+          },
+          {
+            "end": 161.46,
+            "lang": "en",
+            "text": "think",
+            "start": 161.24
+          },
+          {
+            "end": 161.62,
+            "lang": "en",
+            "text": "the",
+            "start": 161.46
+          },
+          {
+            "end": 161.92,
+            "lang": "en",
+            "text": "technology",
+            "start": 161.62
+          },
+          {
+            "end": 162.36,
+            "lang": "en",
+            "text": "fire",
+            "start": 161.92
+          },
+          {
+            "end": 163.0,
+            "lang": "en",
+            "text": "already",
+            "start": 162.36
+          },
+          {
+            "end": 163.3,
+            "lang": "en",
+            "text": "there.",
+            "start": 163.0
+          },
+          {
+            "end": 163.86,
+            "lang": "en",
+            "text": "It's",
+            "start": 163.62
+          },
+          {
+            "end": 164.36,
+            "lang": "en",
+            "text": "already",
+            "start": 163.86
+          },
+          {
+            "end": 165.08,
+            "lang": "en",
+            "text": "lit.",
+            "start": 164.36
+          },
+          {
+            "end": 166.26,
+            "lang": "en",
+            "text": "Do",
+            "start": 166.0
+          },
+          {
+            "end": 166.42,
+            "lang": "en",
+            "text": "we",
+            "start": 166.26
+          },
+          {
+            "end": 166.86,
+            "lang": "en",
+            "text": "still",
+            "start": 166.42
+          },
+          {
+            "end": 167.22,
+            "lang": "en",
+            "text": "should",
+            "start": 166.86
+          },
+          {
+            "end": 167.58,
+            "lang": "en",
+            "text": "add",
+            "start": 167.22
+          },
+          {
+            "end": 167.92,
+            "lang": "en",
+            "text": "more",
+            "start": 167.58
+          },
+          {
+            "end": 168.28,
+            "lang": "en",
+            "text": "fuel",
+            "start": 167.92
+          },
+          {
+            "end": 168.5,
+            "lang": "en",
+            "text": "to",
+            "start": 168.28
+          },
+          {
+            "end": 168.66,
+            "lang": "en",
+            "text": "the",
+            "start": 168.5
+          },
+          {
+            "end": 168.94,
+            "lang": "en",
+            "text": "fire?",
+            "start": 168.66
+          },
+          {
+            "end": 170.4,
+            "lang": "en",
+            "text": "Is",
+            "start": 169.76
+          },
+          {
+            "end": 170.6,
+            "lang": "en",
+            "text": "that",
+            "start": 170.4
+          },
+          {
+            "end": 170.86,
+            "lang": "en",
+            "text": "the",
+            "start": 170.6
+          },
+          {
+            "end": 171.06,
+            "lang": "en",
+            "text": "most",
+            "start": 170.86
+          },
+          {
+            "end": 171.36,
+            "lang": "en",
+            "text": "important",
+            "start": 171.06
+          },
+          {
+            "end": 171.82,
+            "lang": "en",
+            "text": "skill",
+            "start": 171.36
+          },
+          {
+            "end": 172.28,
+            "lang": "en",
+            "text": "to",
+            "start": 171.82
+          },
+          {
+            "end": 172.46,
+            "lang": "en",
+            "text": "add",
+            "start": 172.28
+          },
+          {
+            "end": 172.7,
+            "lang": "en",
+            "text": "more",
+            "start": 172.46
+          },
+          {
+            "end": 172.94,
+            "lang": "en",
+            "text": "fuel?",
+            "start": 172.7
+          },
+          {
+            "end": 173.66,
+            "lang": "en",
+            "text": "So",
+            "start": 173.66
+          },
+          {
+            "end": 174.36,
+            "lang": "en",
+            "text": "if",
+            "start": 173.66
+          },
+          {
+            "end": 174.54,
+            "lang": "en",
+            "text": "a",
+            "start": 174.36
+          },
+          {
+            "end": 174.82,
+            "lang": "en",
+            "text": "fire",
+            "start": 174.54
+          },
+          {
+            "end": 175.14,
+            "lang": "en",
+            "text": "becomes",
+            "start": 174.82
+          },
+          {
+            "end": 175.42,
+            "lang": "en",
+            "text": "so",
+            "start": 175.14
+          },
+          {
+            "end": 175.68,
+            "lang": "en",
+            "text": "big,",
+            "start": 175.42
+          },
+          {
+            "end": 177.42,
+            "lang": "en",
+            "text": "once",
+            "start": 176.2
+          },
+          {
+            "end": 177.6,
+            "lang": "en",
+            "text": "you",
+            "start": 177.42
+          },
+          {
+            "end": 177.72,
+            "lang": "en",
+            "text": "go",
+            "start": 177.6
+          },
+          {
+            "end": 177.88,
+            "lang": "en",
+            "text": "in",
+            "start": 177.72
+          },
+          {
+            "end": 178.36,
+            "lang": "en",
+            "text": "big,",
+            "start": 177.88
+          },
+          {
+            "end": 179.18,
+            "lang": "en",
+            "text": "should",
+            "start": 178.7
+          },
+          {
+            "end": 179.4,
+            "lang": "en",
+            "text": "we",
+            "start": 179.18
+          },
+          {
+            "end": 179.86,
+            "lang": "en",
+            "text": "focus",
+            "start": 179.4
+          },
+          {
+            "end": 180.24,
+            "lang": "en",
+            "text": "on",
+            "start": 179.86
+          },
+          {
+            "end": 180.56,
+            "lang": "en",
+            "text": "something",
+            "start": 180.24
+          },
+          {
+            "end": 180.98,
+            "lang": "en",
+            "text": "else",
+            "start": 180.56
+          },
+          {
+            "end": 181.34,
+            "lang": "en",
+            "text": "to",
+            "start": 180.98
+          },
+          {
+            "end": 181.7,
+            "lang": "en",
+            "text": "control",
+            "start": 181.34
+          },
+          {
+            "end": 181.88,
+            "lang": "en",
+            "text": "the",
+            "start": 181.7
+          },
+          {
+            "end": 182.12,
+            "lang": "en",
+            "text": "fire,",
+            "start": 181.88
+          },
+          {
+            "end": 182.62,
+            "lang": "en",
+            "text": "to",
+            "start": 182.4
+          },
+          {
+            "end": 183.08,
+            "lang": "en",
+            "text": "ensure",
+            "start": 182.62
+          },
+          {
+            "end": 183.26,
+            "lang": "en",
+            "text": "the",
+            "start": 183.08
+          },
+          {
+            "end": 183.5,
+            "lang": "en",
+            "text": "fire",
+            "start": 183.26
+          },
+          {
+            "end": 183.84,
+            "lang": "en",
+            "text": "serves",
+            "start": 183.5
+          },
+          {
+            "end": 184.18,
+            "lang": "en",
+            "text": "its",
+            "start": 183.84
+          },
+          {
+            "end": 184.68,
+            "lang": "en",
+            "text": "purpose?",
+            "start": 184.18
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "en",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 1653,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 32.021,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.01,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.53
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 12,
+            "total_s": 2.4
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              3.9,
+              4.0
+            ],
+            [
+              7.3,
+              7.4
+            ],
+            [
+              8.1,
+              8.4
+            ],
+            [
+              10.8,
+              10.9
+            ],
+            [
+              12.6,
+              13.0
+            ],
+            [
+              13.1,
+              13.4
+            ],
+            [
+              16.5,
+              16.8
+            ],
+            [
+              17.4,
+              17.6
+            ],
+            [
+              20.7,
+              20.8
+            ],
+            [
+              24.4,
+              24.5
+            ],
+            [
+              25.8,
+              26.1
+            ],
+            [
+              31.6,
+              31.7
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 0.46,
+              "pause_available_after_s": 0.8,
+              "in_nearest_boundary_s": 0.46,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 3,
+            "runs": [
+              {
+                "at": 165.08,
+                "gap_s": 0.92
+              },
+              {
+                "at": 168.94,
+                "gap_s": 0.82
+              },
+              {
+                "at": 172.94,
+                "gap_s": 0.72
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 6
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                1.35,
+                6.408707465740907
+              ],
+              [
+                5.15,
+                5.525903863902133
+              ],
+              [
+                10.05,
+                6.947790325502053
+              ],
+              [
+                14.05,
+                8.129630718460163
+              ],
+              [
+                19.150000000000002,
+                10.273267445939883
+              ],
+              [
+                26.75,
+                9.208071660671436
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.39,
+            "line_dur_max_s": 5.28,
+            "line_chars_median": 32.5,
+            "line_chars_p90": 46.1
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              21.58,
+              3.0,
+              7.38
+            ],
+            "max_static_s": 21.58,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.4034112373987834,
+            "p10": 0.39252079168955484,
+            "p90": 0.42584497610727945
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 32
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.1230155450326425,
+            "p10": 0.1145993600068269,
+            "p90": 0.1272164747450087
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "highlight-de60d7e6",
+      "family": "talking_head",
+      "content_md5": "6e220259a15286255ef961fa56a6108b",
+      "frames_dir": "data/anatomy/frames/highlight-de60d7e6-6e220259",
+      "output_id": "de60d7e6-95b4-4edc-8754-d564fbe533b7",
+      "language": "en",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "What is human value in the age of AI?",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_2.mp4",
+          "kind": "video",
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "duration": 780.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "d76bd0116754",
+            "end": 274.8,
+            "url": null,
+            "start": 226.28,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "4793a34e-6755-452b-a08f-74ff2127f2d6",
+        "crop_track": [
+          {
+            "t": 226.25,
+            "x": 0.90625,
+            "y": 0.596591,
+            "scale": 3.0
+          },
+          {
+            "t": 228.35,
+            "x": 0.891454,
+            "y": 0.59711,
+            "scale": 3.0
+          },
+          {
+            "t": 232.1,
+            "x": 0.90625,
+            "y": 0.603793,
+            "scale": 3.0
+          },
+          {
+            "t": 274.7,
+            "x": 0.894085,
+            "y": 0.603736,
+            "scale": 3.0
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 226.52,
+            "lang": "en",
+            "text": "we",
+            "start": 226.28
+          },
+          {
+            "end": 226.7,
+            "lang": "en",
+            "text": "are",
+            "start": 226.52
+          },
+          {
+            "end": 227.0,
+            "lang": "en",
+            "text": "worried",
+            "start": 226.7
+          },
+          {
+            "end": 227.18,
+            "lang": "en",
+            "text": "about",
+            "start": 227.0
+          },
+          {
+            "end": 227.32,
+            "lang": "en",
+            "text": "the",
+            "start": 227.18
+          },
+          {
+            "end": 227.48,
+            "lang": "en",
+            "text": "job",
+            "start": 227.32
+          },
+          {
+            "end": 227.84,
+            "lang": "en",
+            "text": "now,",
+            "start": 227.48
+          },
+          {
+            "end": 228.22,
+            "lang": "en",
+            "text": "but",
+            "start": 228.1
+          },
+          {
+            "end": 228.8,
+            "lang": "en",
+            "text": "whether",
+            "start": 228.22
+          },
+          {
+            "end": 229.7,
+            "lang": "en",
+            "text": "human",
+            "start": 228.8
+          },
+          {
+            "end": 230.14,
+            "lang": "en",
+            "text": "should",
+            "start": 229.7
+          },
+          {
+            "end": 230.44,
+            "lang": "en",
+            "text": "find",
+            "start": 230.14
+          },
+          {
+            "end": 230.6,
+            "lang": "en",
+            "text": "a",
+            "start": 230.44
+          },
+          {
+            "end": 230.88,
+            "lang": "en",
+            "text": "job.",
+            "start": 230.6
+          },
+          {
+            "end": 232.0,
+            "lang": "en",
+            "text": "So",
+            "start": 231.68
+          },
+          {
+            "end": 232.42,
+            "lang": "en",
+            "text": "that's",
+            "start": 232.0
+          },
+          {
+            "end": 232.86,
+            "lang": "en",
+            "text": "something",
+            "start": 232.42
+          },
+          {
+            "end": 233.16,
+            "lang": "en",
+            "text": "we",
+            "start": 232.86
+          },
+          {
+            "end": 233.38,
+            "lang": "en",
+            "text": "should",
+            "start": 233.16
+          },
+          {
+            "end": 234.56,
+            "lang": "en",
+            "text": "really",
+            "start": 233.38
+          },
+          {
+            "end": 235.24,
+            "lang": "en",
+            "text": "rethink,",
+            "start": 234.56
+          },
+          {
+            "end": 235.94,
+            "lang": "en",
+            "text": "the",
+            "start": 235.84
+          },
+          {
+            "end": 236.4,
+            "lang": "en",
+            "text": "value,",
+            "start": 235.94
+          },
+          {
+            "end": 236.82,
+            "lang": "en",
+            "text": "how",
+            "start": 236.68
+          },
+          {
+            "end": 237.0,
+            "lang": "en",
+            "text": "we",
+            "start": 236.82
+          },
+          {
+            "end": 237.2,
+            "lang": "en",
+            "text": "should",
+            "start": 237.0
+          },
+          {
+            "end": 237.98,
+            "lang": "en",
+            "text": "define",
+            "start": 237.2
+          },
+          {
+            "end": 238.38,
+            "lang": "en",
+            "text": "the",
+            "start": 237.98
+          },
+          {
+            "end": 238.68,
+            "lang": "en",
+            "text": "value,",
+            "start": 238.38
+          },
+          {
+            "end": 239.58,
+            "lang": "en",
+            "text": "like",
+            "start": 239.48
+          },
+          {
+            "end": 239.94,
+            "lang": "en",
+            "text": "in",
+            "start": 239.58
+          },
+          {
+            "end": 240.92,
+            "lang": "en",
+            "text": "agriculture",
+            "start": 239.94
+          },
+          {
+            "end": 241.52,
+            "lang": "en",
+            "text": "age.",
+            "start": 240.92
+          },
+          {
+            "end": 241.86,
+            "lang": "en",
+            "text": "So",
+            "start": 241.86
+          },
+          {
+            "end": 242.14,
+            "lang": "en",
+            "text": "human",
+            "start": 241.86
+          },
+          {
+            "end": 242.46,
+            "lang": "en",
+            "text": "life",
+            "start": 242.14
+          },
+          {
+            "end": 242.68,
+            "lang": "en",
+            "text": "was",
+            "start": 242.46
+          },
+          {
+            "end": 243.52,
+            "lang": "en",
+            "text": "defined",
+            "start": 242.68
+          },
+          {
+            "end": 243.94,
+            "lang": "en",
+            "text": "by",
+            "start": 243.52
+          },
+          {
+            "end": 244.72,
+            "lang": "en",
+            "text": "survival",
+            "start": 243.94
+          },
+          {
+            "end": 245.34,
+            "lang": "en",
+            "text": "because",
+            "start": 244.72
+          },
+          {
+            "end": 245.56,
+            "lang": "en",
+            "text": "the",
+            "start": 245.34
+          },
+          {
+            "end": 245.94,
+            "lang": "en",
+            "text": "productivity",
+            "start": 245.56
+          },
+          {
+            "end": 246.22,
+            "lang": "en",
+            "text": "is",
+            "start": 245.94
+          },
+          {
+            "end": 246.32,
+            "lang": "en",
+            "text": "very",
+            "start": 246.22
+          },
+          {
+            "end": 246.52,
+            "lang": "en",
+            "text": "low.",
+            "start": 246.32
+          },
+          {
+            "end": 247.44,
+            "lang": "en",
+            "text": "Then",
+            "start": 246.52
+          },
+          {
+            "end": 247.7,
+            "lang": "en",
+            "text": "we",
+            "start": 247.44
+          },
+          {
+            "end": 247.86,
+            "lang": "en",
+            "text": "go",
+            "start": 247.7
+          },
+          {
+            "end": 248.0,
+            "lang": "en",
+            "text": "to",
+            "start": 247.86
+          },
+          {
+            "end": 248.2,
+            "lang": "en",
+            "text": "the",
+            "start": 248.0
+          },
+          {
+            "end": 248.48,
+            "lang": "en",
+            "text": "age",
+            "start": 248.2
+          },
+          {
+            "end": 248.68,
+            "lang": "en",
+            "text": "of",
+            "start": 248.48
+          },
+          {
+            "end": 249.28,
+            "lang": "en",
+            "text": "industry",
+            "start": 248.68
+          },
+          {
+            "end": 249.7,
+            "lang": "en",
+            "text": "age,",
+            "start": 249.28
+          },
+          {
+            "end": 250.02,
+            "lang": "en",
+            "text": "so",
+            "start": 249.96
+          },
+          {
+            "end": 250.3,
+            "lang": "en",
+            "text": "human",
+            "start": 250.02
+          },
+          {
+            "end": 250.8,
+            "lang": "en",
+            "text": "value",
+            "start": 250.3
+          },
+          {
+            "end": 251.1,
+            "lang": "en",
+            "text": "was",
+            "start": 250.8
+          },
+          {
+            "end": 251.46,
+            "lang": "en",
+            "text": "largely",
+            "start": 251.1
+          },
+          {
+            "end": 251.84,
+            "lang": "en",
+            "text": "defined",
+            "start": 251.46
+          },
+          {
+            "end": 252.14,
+            "lang": "en",
+            "text": "by",
+            "start": 251.84
+          },
+          {
+            "end": 252.8,
+            "lang": "en",
+            "text": "labor.",
+            "start": 252.14
+          },
+          {
+            "end": 254.04,
+            "lang": "en",
+            "text": "And",
+            "start": 253.9
+          },
+          {
+            "end": 254.3,
+            "lang": "en",
+            "text": "then",
+            "start": 254.04
+          },
+          {
+            "end": 255.34,
+            "lang": "en",
+            "text": "we",
+            "start": 254.3
+          },
+          {
+            "end": 255.6,
+            "lang": "en",
+            "text": "come",
+            "start": 255.34
+          },
+          {
+            "end": 255.8,
+            "lang": "en",
+            "text": "to",
+            "start": 255.6
+          },
+          {
+            "end": 255.92,
+            "lang": "en",
+            "text": "the",
+            "start": 255.8
+          },
+          {
+            "end": 256.2,
+            "lang": "en",
+            "text": "digital",
+            "start": 255.92
+          },
+          {
+            "end": 256.58,
+            "lang": "en",
+            "text": "age,",
+            "start": 256.2
+          },
+          {
+            "end": 256.92,
+            "lang": "en",
+            "text": "human",
+            "start": 256.8
+          },
+          {
+            "end": 257.44,
+            "lang": "en",
+            "text": "identity",
+            "start": 256.92
+          },
+          {
+            "end": 257.7,
+            "lang": "en",
+            "text": "was",
+            "start": 257.44
+          },
+          {
+            "end": 258.42,
+            "lang": "en",
+            "text": "increasingly",
+            "start": 257.7
+          },
+          {
+            "end": 258.9,
+            "lang": "en",
+            "text": "defined",
+            "start": 258.42
+          },
+          {
+            "end": 259.18,
+            "lang": "en",
+            "text": "by",
+            "start": 258.9
+          },
+          {
+            "end": 259.68,
+            "lang": "en",
+            "text": "connections,",
+            "start": 259.18
+          },
+          {
+            "end": 260.16,
+            "lang": "en",
+            "text": "the",
+            "start": 260.1
+          },
+          {
+            "end": 260.52,
+            "lang": "en",
+            "text": "data,",
+            "start": 260.16
+          },
+          {
+            "end": 260.92,
+            "lang": "en",
+            "text": "the",
+            "start": 260.86
+          },
+          {
+            "end": 261.34,
+            "lang": "en",
+            "text": "networks",
+            "start": 260.92
+          },
+          {
+            "end": 261.72,
+            "lang": "en",
+            "text": "you",
+            "start": 261.34
+          },
+          {
+            "end": 262.0,
+            "lang": "en",
+            "text": "have,",
+            "start": 261.72
+          },
+          {
+            "end": 262.64,
+            "lang": "en",
+            "text": "but",
+            "start": 262.62
+          },
+          {
+            "end": 262.82,
+            "lang": "en",
+            "text": "in",
+            "start": 262.64
+          },
+          {
+            "end": 262.96,
+            "lang": "en",
+            "text": "the",
+            "start": 262.82
+          },
+          {
+            "end": 263.18,
+            "lang": "en",
+            "text": "age",
+            "start": 262.96
+          },
+          {
+            "end": 263.42,
+            "lang": "en",
+            "text": "of",
+            "start": 263.18
+          },
+          {
+            "end": 263.78,
+            "lang": "en",
+            "text": "AI,",
+            "start": 263.42
+          },
+          {
+            "end": 264.58,
+            "lang": "en",
+            "text": "so",
+            "start": 264.36
+          },
+          {
+            "end": 264.86,
+            "lang": "en",
+            "text": "what",
+            "start": 264.58
+          },
+          {
+            "end": 265.42,
+            "lang": "en",
+            "text": "value",
+            "start": 264.86
+          },
+          {
+            "end": 265.68,
+            "lang": "en",
+            "text": "we",
+            "start": 265.42
+          },
+          {
+            "end": 265.92,
+            "lang": "en",
+            "text": "should",
+            "start": 265.68
+          },
+          {
+            "end": 266.3,
+            "lang": "en",
+            "text": "have.",
+            "start": 265.92
+          },
+          {
+            "end": 267.08,
+            "lang": "en",
+            "text": "So",
+            "start": 267.08
+          },
+          {
+            "end": 267.98,
+            "lang": "en",
+            "text": "I",
+            "start": 267.08
+          },
+          {
+            "end": 268.26,
+            "lang": "en",
+            "text": "think",
+            "start": 267.98
+          },
+          {
+            "end": 268.48,
+            "lang": "en",
+            "text": "you",
+            "start": 268.26
+          },
+          {
+            "end": 268.74,
+            "lang": "en",
+            "text": "should",
+            "start": 268.48
+          },
+          {
+            "end": 269.06,
+            "lang": "en",
+            "text": "be",
+            "start": 268.74
+          },
+          {
+            "end": 269.36,
+            "lang": "en",
+            "text": "more",
+            "start": 269.06
+          },
+          {
+            "end": 269.7,
+            "lang": "en",
+            "text": "focused",
+            "start": 269.36
+          },
+          {
+            "end": 270.0,
+            "lang": "en",
+            "text": "on",
+            "start": 269.7
+          },
+          {
+            "end": 270.28,
+            "lang": "en",
+            "text": "human",
+            "start": 270.0
+          },
+          {
+            "end": 270.72,
+            "lang": "en",
+            "text": "freedom,",
+            "start": 270.28
+          },
+          {
+            "end": 271.44,
+            "lang": "en",
+            "text": "human",
+            "start": 271.04
+          },
+          {
+            "end": 272.22,
+            "lang": "en",
+            "text": "creativity,",
+            "start": 271.44
+          },
+          {
+            "end": 273.12,
+            "lang": "en",
+            "text": "and",
+            "start": 273.06
+          },
+          {
+            "end": 273.56,
+            "lang": "en",
+            "text": "human",
+            "start": 273.12
+          },
+          {
+            "end": 274.0,
+            "lang": "en",
+            "text": "judgment,",
+            "start": 273.56
+          },
+          {
+            "end": 274.4,
+            "lang": "en",
+            "text": "and",
+            "start": 274.34
+          },
+          {
+            "end": 274.8,
+            "lang": "en",
+            "text": "human",
+            "start": 274.4
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "en",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 1653,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 48.576,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.01,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.58
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 13,
+            "total_s": 1.5
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              1.8,
+              1.9
+            ],
+            [
+              3.1,
+              3.2
+            ],
+            [
+              4.8,
+              5.0
+            ],
+            [
+              7.7,
+              7.8
+            ],
+            [
+              9.5,
+              9.6
+            ],
+            [
+              14.1,
+              14.3
+            ],
+            [
+              18.0,
+              18.1
+            ],
+            [
+              18.7,
+              18.8
+            ],
+            [
+              26.8,
+              26.9
+            ],
+            [
+              27.6,
+              27.7
+            ],
+            [
+              28.5,
+              28.6
+            ],
+            [
+              38.1,
+              38.2
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 0.0,
+              "pause_available_after_s": 0.0,
+              "in_nearest_boundary_s": 1.46,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 6,
+            "runs": [
+              {
+                "at": 230.88,
+                "gap_s": 0.8
+              },
+              {
+                "at": 238.68,
+                "gap_s": 0.8
+              },
+              {
+                "at": 252.8,
+                "gap_s": 1.1
+              },
+              {
+                "at": 262.0,
+                "gap_s": 0.62
+              },
+              {
+                "at": 266.3,
+                "gap_s": 0.78
+              },
+              {
+                "at": 272.22,
+                "gap_s": 0.84
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 14
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                0.25,
+                4.625610027975085
+              ],
+              [
+                2.6500000000000004,
+                4.820771343548795
+              ],
+              [
+                8.25,
+                7.803632235557034
+              ],
+              [
+                13.65,
+                6.842317019631146
+              ],
+              [
+                15.850000000000001,
+                6.516095885492167
+              ],
+              [
+                18.35,
+                7.448420721358623
+              ],
+              [
+                24.05,
+                7.1180571465937295
+              ],
+              [
+                28.150000000000002,
+                7.278959400827148
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.78,
+            "line_dur_max_s": 4.0,
+            "line_chars_median": 36.0,
+            "line_chars_p90": 45.8
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              2.07,
+              3.75,
+              42.6,
+              0.1
+            ],
+            "max_static_s": 42.6,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.4124316692352295,
+            "p10": 0.3925329303741455,
+            "p90": 0.4250681209564209
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 49
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.12042490641276042,
+            "p10": 0.11459884502269603,
+            "p90": 0.12485246728967736
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "highlight-660d7531",
+      "family": "talking_head",
+      "content_md5": "490ba5c436415587db7b3ed4e6c4502e",
+      "frames_dir": "data/anatomy/frames/highlight-660d7531-490ba5c4",
+      "output_id": "660d7531-1fea-4890-b93b-2576528c2231",
+      "language": "en",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "Let's build the future together.",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_2.mp4",
+          "kind": "video",
+          "asset_id": "5a851534-c960-45ae-be0a-342c47551fc7",
+          "duration": 780.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "3c24f136b9c0",
+            "end": 769.1,
+            "url": null,
+            "start": 739.14,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "4793a34e-6755-452b-a08f-74ff2127f2d6",
+        "crop_track": [
+          {
+            "t": 739.1,
+            "x": 0.904931,
+            "y": 0.610263,
+            "scale": 3.0
+          },
+          {
+            "t": 762.8,
+            "x": 0.90625,
+            "y": 0.606961,
+            "scale": 3.0
+          },
+          {
+            "t": 763.4,
+            "x": 0.905009,
+            "y": 0.605316,
+            "scale": 3.0
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 739.26,
+            "lang": "en",
+            "text": "So",
+            "start": 739.14
+          },
+          {
+            "end": 740.58,
+            "lang": "en",
+            "text": "I",
+            "start": 739.26
+          },
+          {
+            "end": 740.84,
+            "lang": "en",
+            "text": "do",
+            "start": 740.58
+          },
+          {
+            "end": 741.12,
+            "lang": "en",
+            "text": "think",
+            "start": 740.84
+          },
+          {
+            "end": 741.34,
+            "lang": "en",
+            "text": "that",
+            "start": 741.12
+          },
+          {
+            "end": 742.78,
+            "lang": "en",
+            "text": "this,",
+            "start": 741.34
+          },
+          {
+            "end": 744.14,
+            "lang": "en",
+            "text": "after",
+            "start": 743.42
+          },
+          {
+            "end": 744.26,
+            "lang": "en",
+            "text": "the",
+            "start": 744.14
+          },
+          {
+            "end": 744.62,
+            "lang": "en",
+            "text": "summit,",
+            "start": 744.26
+          },
+          {
+            "end": 745.68,
+            "lang": "en",
+            "text": "after",
+            "start": 745.4
+          },
+          {
+            "end": 745.84,
+            "lang": "en",
+            "text": "the",
+            "start": 745.68
+          },
+          {
+            "end": 746.08,
+            "lang": "en",
+            "text": "summit,",
+            "start": 745.84
+          },
+          {
+            "end": 746.54,
+            "lang": "en",
+            "text": "let's",
+            "start": 746.18
+          },
+          {
+            "end": 746.94,
+            "lang": "en",
+            "text": "work",
+            "start": 746.54
+          },
+          {
+            "end": 747.1,
+            "lang": "en",
+            "text": "on",
+            "start": 746.94
+          },
+          {
+            "end": 747.32,
+            "lang": "en",
+            "text": "something",
+            "start": 747.1
+          },
+          {
+            "end": 747.7,
+            "lang": "en",
+            "text": "together.",
+            "start": 747.32
+          },
+          {
+            "end": 748.14,
+            "lang": "en",
+            "text": "Let's",
+            "start": 747.96
+          },
+          {
+            "end": 748.42,
+            "lang": "en",
+            "text": "build",
+            "start": 748.14
+          },
+          {
+            "end": 748.64,
+            "lang": "en",
+            "text": "a",
+            "start": 748.42
+          },
+          {
+            "end": 748.84,
+            "lang": "en",
+            "text": "future",
+            "start": 748.64
+          },
+          {
+            "end": 749.4,
+            "lang": "en",
+            "text": "technology",
+            "start": 748.84
+          },
+          {
+            "end": 750.88,
+            "lang": "en",
+            "text": "together,",
+            "start": 749.4
+          },
+          {
+            "end": 751.24,
+            "lang": "en",
+            "text": "not",
+            "start": 751.1
+          },
+          {
+            "end": 751.5,
+            "lang": "en",
+            "text": "only",
+            "start": 751.24
+          },
+          {
+            "end": 751.64,
+            "lang": "en",
+            "text": "for",
+            "start": 751.5
+          },
+          {
+            "end": 752.0,
+            "lang": "en",
+            "text": "profit,",
+            "start": 751.64
+          },
+          {
+            "end": 752.28,
+            "lang": "en",
+            "text": "but",
+            "start": 752.2
+          },
+          {
+            "end": 752.46,
+            "lang": "en",
+            "text": "for",
+            "start": 752.28
+          },
+          {
+            "end": 752.74,
+            "lang": "en",
+            "text": "people.",
+            "start": 752.46
+          },
+          {
+            "end": 753.7,
+            "lang": "en",
+            "text": "Let's",
+            "start": 752.74
+          },
+          {
+            "end": 754.12,
+            "lang": "en",
+            "text": "also",
+            "start": 753.7
+          },
+          {
+            "end": 754.96,
+            "lang": "en",
+            "text": "build",
+            "start": 754.12
+          },
+          {
+            "end": 756.1,
+            "lang": "en",
+            "text": "future",
+            "start": 754.96
+          },
+          {
+            "end": 757.24,
+            "lang": "en",
+            "text": "industries,",
+            "start": 756.1
+          },
+          {
+            "end": 758.04,
+            "lang": "en",
+            "text": "not",
+            "start": 757.66
+          },
+          {
+            "end": 758.36,
+            "lang": "en",
+            "text": "only",
+            "start": 758.04
+          },
+          {
+            "end": 758.5,
+            "lang": "en",
+            "text": "for",
+            "start": 758.36
+          },
+          {
+            "end": 758.76,
+            "lang": "en",
+            "text": "growth,",
+            "start": 758.5
+          },
+          {
+            "end": 759.62,
+            "lang": "en",
+            "text": "but",
+            "start": 759.4
+          },
+          {
+            "end": 760.06,
+            "lang": "en",
+            "text": "also",
+            "start": 759.62
+          },
+          {
+            "end": 760.5,
+            "lang": "en",
+            "text": "for",
+            "start": 760.06
+          },
+          {
+            "end": 761.24,
+            "lang": "en",
+            "text": "dignity.",
+            "start": 760.5
+          },
+          {
+            "end": 762.6,
+            "lang": "en",
+            "text": "So",
+            "start": 762.46
+          },
+          {
+            "end": 762.96,
+            "lang": "en",
+            "text": "let's",
+            "start": 762.6
+          },
+          {
+            "end": 763.24,
+            "lang": "en",
+            "text": "also",
+            "start": 762.96
+          },
+          {
+            "end": 763.5,
+            "lang": "en",
+            "text": "build",
+            "start": 763.24
+          },
+          {
+            "end": 763.7,
+            "lang": "en",
+            "text": "a",
+            "start": 763.5
+          },
+          {
+            "end": 763.94,
+            "lang": "en",
+            "text": "future",
+            "start": 763.7
+          },
+          {
+            "end": 764.48,
+            "lang": "en",
+            "text": "society,",
+            "start": 763.94
+          },
+          {
+            "end": 765.02,
+            "lang": "en",
+            "text": "not",
+            "start": 764.92
+          },
+          {
+            "end": 765.4,
+            "lang": "en",
+            "text": "only",
+            "start": 765.02
+          },
+          {
+            "end": 765.64,
+            "lang": "en",
+            "text": "for",
+            "start": 765.4
+          },
+          {
+            "end": 766.18,
+            "lang": "en",
+            "text": "intelligence,",
+            "start": 765.64
+          },
+          {
+            "end": 767.34,
+            "lang": "en",
+            "text": "but",
+            "start": 767.02
+          },
+          {
+            "end": 767.78,
+            "lang": "en",
+            "text": "also",
+            "start": 767.34
+          },
+          {
+            "end": 768.36,
+            "lang": "en",
+            "text": "for",
+            "start": 767.78
+          },
+          {
+            "end": 769.1,
+            "lang": "en",
+            "text": "wisdom.",
+            "start": 768.36
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "en",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 1653,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 30.016,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.0,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.53
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 19,
+            "total_s": 3.7
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              0.7,
+              0.8
+            ],
+            [
+              4.2,
+              4.3
+            ],
+            [
+              5.9,
+              6.0
+            ],
+            [
+              6.2,
+              6.3
+            ],
+            [
+              7.6,
+              7.7
+            ],
+            [
+              11.0,
+              11.1
+            ],
+            [
+              13.8,
+              13.9
+            ],
+            [
+              15.4,
+              15.7
+            ],
+            [
+              16.2,
+              16.5
+            ],
+            [
+              17.4,
+              17.6
+            ],
+            [
+              18.4,
+              18.8
+            ],
+            [
+              20.0,
+              20.2
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 0.96,
+              "pause_available_after_s": 0.9,
+              "in_nearest_boundary_s": 0.96,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 5,
+            "runs": [
+              {
+                "at": 742.78,
+                "gap_s": 0.64
+              },
+              {
+                "at": 744.62,
+                "gap_s": 0.78
+              },
+              {
+                "at": 758.76,
+                "gap_s": 0.64
+              },
+              {
+                "at": 761.24,
+                "gap_s": 1.22
+              },
+              {
+                "at": 766.18,
+                "gap_s": 0.84
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 8
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                1.9500000000000002,
+                6.465572431012916
+              ],
+              [
+                5.45,
+                9.673836849216116
+              ],
+              [
+                9.25,
+                9.413229635850307
+              ],
+              [
+                15.850000000000001,
+                16.7940957533405
+              ],
+              [
+                19.55,
+                9.930022371022414
+              ],
+              [
+                24.05,
+                11.340525067899305
+              ],
+              [
+                26.150000000000002,
+                7.864306340562603
+              ],
+              [
+                28.450000000000003,
+                12.782617493596248
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 3.44,
+            "line_dur_max_s": 5.0,
+            "line_chars_median": 40.0,
+            "line_chars_p90": 45.4
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              23.66,
+              0.6,
+              5.7
+            ],
+            "max_static_s": 23.66,
+            "sub_1s_switches": 1
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.40522581736246743,
+            "p10": 0.37975915749867756,
+            "p90": 0.41719698111216225
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 30
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.11334603627522787,
+            "p10": 0.10976817660861546,
+            "p90": 0.12134568956163194
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}

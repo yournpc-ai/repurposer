@@ -1,0 +1,954 @@
+{
+  "card": "subs",
+  "project_id": "407502c2-1189-4e32-8953-daf4ca23aae6",
+  "run_id": "284f4c72-b93f-47e0-b645-548a31a2f843",
+  "decision_layer": {
+    "clip_payloads": [
+      {
+        "output_id": "288a51a5-748e-4bf1-b3e9-d93a1bd4760a",
+        "language": "fr",
+        "payload": {
+          "hook": "",
+          "duration": 15,
+          "music_mood": "calm",
+          "title_options": [
+            "anatomy: multilingual-subs"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "full",
+            "hook": "",
+            "summary": "",
+            "end_marker": "",
+            "end_seconds": 15.0,
+            "source_text": "",
+            "golden_quote": "",
+            "start_marker": "",
+            "start_seconds": 0.0,
+            "duration_seconds": 15,
+            "recommendation_score": 50
+          },
+          "asset_id": "5673d1a6-8c88-4da3-8930-3d40fe8e8957",
+          "end_seconds": 15.0,
+          "start_seconds": 0.0,
+          "derived_from_output_id": "28e2c4f0-fb6f-4f91-8ef6-e30c2679fe23"
+        },
+        "score": null
+      },
+      {
+        "output_id": "a385f1e7-4d0b-4da7-a7cc-1bd07c44ac0c",
+        "language": "es",
+        "payload": {
+          "hook": "",
+          "duration": 15,
+          "music_mood": "calm",
+          "title_options": [
+            "anatomy: multilingual-subs"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "full",
+            "hook": "",
+            "summary": "",
+            "end_marker": "",
+            "end_seconds": 15.0,
+            "source_text": "",
+            "golden_quote": "",
+            "start_marker": "",
+            "start_seconds": 0.0,
+            "duration_seconds": 15,
+            "recommendation_score": 50
+          },
+          "asset_id": "5673d1a6-8c88-4da3-8930-3d40fe8e8957",
+          "end_seconds": 15.0,
+          "start_seconds": 0.0,
+          "derived_from_output_id": "28e2c4f0-fb6f-4f91-8ef6-e30c2679fe23"
+        },
+        "score": null
+      },
+      {
+        "output_id": "28e2c4f0-fb6f-4f91-8ef6-e30c2679fe23",
+        "language": "en",
+        "payload": {
+          "hook": "",
+          "duration": 15,
+          "music_mood": "calm",
+          "title_options": [
+            "anatomy: multilingual-subs"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "full",
+            "hook": "",
+            "summary": "",
+            "end_marker": "",
+            "end_seconds": 15.0,
+            "source_text": "",
+            "golden_quote": "",
+            "start_marker": "",
+            "start_seconds": 0.0,
+            "duration_seconds": 15,
+            "recommendation_score": 50
+          },
+          "asset_id": "5673d1a6-8c88-4da3-8930-3d40fe8e8957",
+          "end_seconds": 15.0,
+          "start_seconds": 0.0
+        },
+        "score": null
+      },
+      {
+        "output_id": "890e3000-c155-4b7b-b855-7e568907755f",
+        "language": "zh",
+        "payload": {
+          "hook": "",
+          "duration": 15,
+          "music_mood": "calm",
+          "title_options": [
+            "anatomy: multilingual-subs"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "full",
+            "hook": "",
+            "summary": "",
+            "end_marker": "",
+            "end_seconds": 15.0,
+            "source_text": "",
+            "golden_quote": "",
+            "start_marker": "",
+            "start_seconds": 0.0,
+            "duration_seconds": 15,
+            "recommendation_score": 50
+          },
+          "asset_id": "5673d1a6-8c88-4da3-8930-3d40fe8e8957",
+          "end_seconds": 15.0,
+          "start_seconds": 0.0,
+          "derived_from_output_id": "28e2c4f0-fb6f-4f91-8ef6-e30c2679fe23"
+        },
+        "score": null
+      }
+    ]
+  },
+  "clips": [
+    {
+      "label": "subs-28e2c4f0",
+      "family": "talking_head",
+      "content_md5": "c07d417a0390d27360b86386ebc6aaa1",
+      "frames_dir": "data/anatomy/frames/subs-28e2c4f0-c07d417a",
+      "output_id": "28e2c4f0-fb6f-4f91-8ef6-e30c2679fe23",
+      "language": "en",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 14.677,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.17,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.11
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 5,
+            "total_s": 0.7
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              0.5,
+              0.6
+            ],
+            [
+              4.7,
+              4.8
+            ],
+            [
+              9.2,
+              9.5
+            ],
+            [
+              10.8,
+              10.9
+            ],
+            [
+              11.2,
+              11.3
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "in_pad_s": null,
+              "out_pad_s": null,
+              "in_nearest_boundary_s": 2.38,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "±0.18s of a clause boundary; in-pad (0.1, 0.15), out-pad (0.15, 0.2)",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 1,
+            "runs": [
+              {
+                "at": 10.5,
+                "gap_s": 0.78
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 3
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                4.95,
+                6.626436143936864
+              ],
+              [
+                9.950000000000001,
+                9.189844158165604
+              ],
+              [
+                12.850000000000001,
+                6.267723183598429
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 3.08,
+            "line_dur_max_s": 3.56
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              14.64
+            ],
+            "max_static_s": 14.64,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.570227591196696,
+            "p10": 0.5681465784708659,
+            "p90": 0.5752104886372884
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "info",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 15,
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.022964668273925782,
+            "p10": 0.02187781810760498,
+            "p90": 0.024353221257527667
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "info",
+          "evidence": {
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        }
+      ]
+    },
+    {
+      "label": "subs-890e3000",
+      "family": "talking_head",
+      "content_md5": "5196b9b1a121e0c9ff10a45d283672c2",
+      "frames_dir": "data/anatomy/frames/subs-890e3000-5196b9b1",
+      "output_id": "890e3000-c155-4b7b-b855-7e568907755f",
+      "language": "zh",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 14.677,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.17,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.11
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 5,
+            "total_s": 0.7
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              0.5,
+              0.6
+            ],
+            [
+              4.7,
+              4.8
+            ],
+            [
+              9.2,
+              9.5
+            ],
+            [
+              10.8,
+              10.9
+            ],
+            [
+              11.2,
+              11.3
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "in_pad_s": null,
+              "out_pad_s": null,
+              "in_nearest_boundary_s": 2.38,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "±0.18s of a clause boundary; in-pad (0.1, 0.15), out-pad (0.15, 0.2)",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 1,
+            "runs": [
+              {
+                "at": 10.5,
+                "gap_s": 0.78
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 3
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                4.95,
+                6.626436143936864
+              ],
+              [
+                9.950000000000001,
+                9.189844158165604
+              ],
+              [
+                12.850000000000001,
+                6.267723183598429
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 3.08,
+            "line_dur_max_s": 3.56
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              14.64
+            ],
+            "max_static_s": 14.64,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.5702727635701498,
+            "p10": 0.5680418904622396,
+            "p90": 0.5751461855570476
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "info",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 15,
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.02280596693356832,
+            "p10": 0.021816397507985433,
+            "p90": 0.024351815382639565
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "info",
+          "evidence": {
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        }
+      ]
+    },
+    {
+      "label": "subs-288a51a5",
+      "family": "talking_head",
+      "content_md5": "67684ba9f4f6915fe91d5c63593080f7",
+      "frames_dir": "data/anatomy/frames/subs-288a51a5-67684ba9",
+      "output_id": "288a51a5-748e-4bf1-b3e9-d93a1bd4760a",
+      "language": "fr",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 14.677,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.17,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.11
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 5,
+            "total_s": 0.7
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              0.5,
+              0.6
+            ],
+            [
+              4.7,
+              4.8
+            ],
+            [
+              9.2,
+              9.5
+            ],
+            [
+              10.8,
+              10.9
+            ],
+            [
+              11.2,
+              11.3
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "in_pad_s": null,
+              "out_pad_s": null,
+              "in_nearest_boundary_s": 2.38,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "±0.18s of a clause boundary; in-pad (0.1, 0.15), out-pad (0.15, 0.2)",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 1,
+            "runs": [
+              {
+                "at": 10.5,
+                "gap_s": 0.78
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 3
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                4.95,
+                6.626436143936864
+              ],
+              [
+                9.950000000000001,
+                9.189844158165604
+              ],
+              [
+                12.850000000000001,
+                6.267723183598429
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.734,
+            "line_dur_max_s": 3.425
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              14.64
+            ],
+            "max_static_s": 14.64,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.570235792795817,
+            "p10": 0.5683147366841633,
+            "p90": 0.5753453572591145
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "info",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 15,
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.023065100113550823,
+            "p10": 0.02187530239423116,
+            "p90": 0.024583925008773804
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "info",
+          "evidence": {
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        }
+      ]
+    },
+    {
+      "label": "subs-a385f1e7",
+      "family": "talking_head",
+      "content_md5": "1d183cb1a9f8f6bf2ad84baafb78edb3",
+      "frames_dir": "data/anatomy/frames/subs-a385f1e7-1d183cb1",
+      "output_id": "a385f1e7-4d0b-4da7-a7cc-1bd07c44ac0c",
+      "language": "es",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 14.677,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -15.73,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.16
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.1,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 5,
+            "total_s": 1.5
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              0.0,
+              0.1
+            ],
+            [
+              1.9,
+              2.1
+            ],
+            [
+              6.3,
+              7.1
+            ],
+            [
+              11.2,
+              11.4
+            ],
+            [
+              13.9,
+              14.1
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.1
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "in_pad_s": null,
+              "out_pad_s": null,
+              "in_nearest_boundary_s": 2.38,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "±0.18s of a clause boundary; in-pad (0.1, 0.15), out-pad (0.15, 0.2)",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 1,
+            "runs": [
+              {
+                "at": 10.5,
+                "gap_s": 0.78
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 4
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                0.55,
+                4.48665835543858
+              ],
+              [
+                4.55,
+                6.992980517930825
+              ],
+              [
+                7.3500000000000005,
+                7.263216682106867
+              ],
+              [
+                11.75,
+                7.83704437071829
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.385,
+            "line_dur_max_s": 3.689
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              14.64
+            ],
+            "max_static_s": 14.64,
+            "sub_1s_switches": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.570228926340739,
+            "p10": 0.5682673327128093,
+            "p90": 0.5752023951212565
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "info",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 15,
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.02304969628651937,
+            "p10": 0.021881322463353475,
+            "p90": 0.024353092114130656
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "info",
+          "evidence": {
+            "framing": "source-inherited (no reframe in chain)"
+          }
+        }
+      ]
+    }
+  ]
+}

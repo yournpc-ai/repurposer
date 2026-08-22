@@ -1,0 +1,5695 @@
+{
+  "card": "reframe",
+  "project_id": "13bc9809-7993-4138-aa73-c326ace7aafe",
+  "run_id": null,
+  "decision_layer": {
+    "understanding": {
+      "themes": [
+        "Cross-border tech collaboration (China-UK and China-Europe)",
+        "Shift from product trade to ecosystem co-building",
+        "Alignment of technology with social values",
+        "Strategic global hubs for international cooperation",
+        "Long-term ecosystem orchestration by neutral alliances"
+      ],
+      "core_thesis": "International tech collaboration must evolve beyond simple product trade into deep, value-driven ecosystem co-building, and organizations like WFT serve as the essential bridge for this transformation.",
+      "key_arguments": [
+        {
+          "id": "a1",
+          "text": "The London summit, held concurrently with London Tech Week, provides a vital platform for deep, face-to-face exchanges between leading Chinese enterprises and global firms, significantly boosting confidence in UK-China tech collaboration.",
+          "text_en": "The London summit, held concurrently with London Tech Week, provides a vital platform for deep, face-to-face exchanges between leading Chinese enterprises and global firms, significantly boosting confidence in UK-China tech collaboration.",
+          "text_zh": "与伦敦科技周同期举办的本次峰会，为中国领先企业与全球公司提供了重要的深度面对面交流平台，显著增强了中英科技合作的信心。",
+          "position": "opening, answering the first question"
+        },
+        {
+          "id": "a2",
+          "text": "London was strategically selected as the host city because it is a globally influential hub that radiates across the UK, Europe, and the Commonwealth, and its open, progressive culture naturally fosters international cooperation.",
+          "text_en": "London was strategically selected as the host city because it is a globally influential hub radiating across the UK, Europe, and the Commonwealth, and its open, progressive culture naturally fosters international cooperation.",
+          "text_zh": "选择伦敦作为举办地是经过战略考量的，因为它是辐射英国、欧洲和英联邦国家的全球影响力枢纽，其开放、进步的文化天然适合促进国际合作。",
+          "position": "second question, about a third into the interview"
+        },
+        {
+          "id": "a3",
+          "text": "Global tech progress requires worldwide cooperation, as no single nation can lead human advancement alone; WFT's mission is to advance technology and social values in tandem, building shared consensus and value systems.",
+          "text_en": "Global tech progress requires worldwide cooperation, as no single nation can lead human advancement alone; WFT's mission is to advance technology and social values in tandem, building shared consensus and value systems.",
+          "text_zh": "全球科技进步需要全球合作，没有任何单一国家能独自引领人类进步；WFT的使命是同步推动技术和社会价值观的进步，建立共同的共识和价值体系。",
+          "position": "third question, middle of the interview"
+        },
+        {
+          "id": "a4",
+          "text": "The shift from product export to ecosystem co-building transforms a simple, transactional trade relationship into a mutually beneficial partnership where parties jointly explore how technology can serve society.",
+          "text_en": "The shift from product export to ecosystem co-building transforms a simple, transactional trade relationship into a mutually beneficial partnership where parties jointly explore how technology can serve society.",
+          "text_zh": "从产品出口向生态共建的转变，将简单的交易型贸易关系转化为一种共赢的合作关系，双方共同探索技术如何服务社会。",
+          "position": "fourth question, towards the end of the interview"
+        },
+        {
+          "id": "a5",
+          "text": "After the summit, WFT will act as a long-term ecosystem builder, continuously integrating the needs of participating companies and individuals to facilitate not only trade deals but also deeper technical and market synergies.",
+          "text_en": "After the summit, WFT will act as a long-term ecosystem builder, continuously integrating the needs of participating companies and individuals to facilitate not only trade deals but also deeper technical and market synergies.",
+          "text_zh": "峰会结束后，WFT将作为长期的生态构建者，持续整合参会企业和个人的需求，不仅促成贸易，还要推动更深层次的技术与市场协同合作。",
+          "position": "closing, answering the final question"
+        }
+      ],
+      "overall_summary": "This is a five-question interview conducted at the 2026 World Future Technology Development Summit in London, focusing on cross-border tech cooperation. The interviewee, representing the WFT alliance, explains the strategic value of holding the summit alongside London Tech Week, the rationale for choosing London as the host city, the need to evolve from product export to ecosystem co-building, and WFT's ongoing role in bridging Chinese and European tech enterprises through shared values and deep collaboration.",
+      "target_audience": "Global tech industry leaders, entrepreneurs, policymakers, and ecosystem partners interested in international cooperation, particularly between Chinese firms and their UK/European counterparts.",
+      "quote_candidates": [
+        "在新的技術的推動和浪潮下面應該要促進全球的合作不是某一個國家能夠帶領人類的進步還有人類文明的進步",
+        "技術與社會價值同步推動讓大家因為技術而探討起來因為社會而合作起來是共同建立共同的Consensors、共同的價值觀",
+        "產品只是出口的話,它可能是一個貿易但是生態的共建的話,是一個共贏的關係",
+        "在倫敦是一個非常有影響力、有歷史也有非常大的全球影響力的輸流",
+        "未來的社會合作不僅僅是技術產品的合作也是價值的合作",
+        "不能只是說我們技術進步我們需要的是更多的社會理念、價值觀的進步",
+        "WFT會一直跟參加封會的這些企業個人及相關的技術深度的溝通服務然後把大家的需求整合起來創建一個生態、一個體系",
+        "我們已經看到有非常多的企業已經在外面下唐合作了我們就提示加這個非常好的科技公司他們已經找到了訂單也已經找到了可能更深度的合作"
+      ]
+    },
+    "storyboard": {
+      "slots": [
+        {
+          "cta": null,
+          "slot": "clips",
+          "count": 3,
+          "focus": "三段竖屏短片按主题递进：第一段讲伦敦峰会与伦敦科技周同期举办的战略价值；第二段讲为何选伦敦以及全球协作、技术与价值观同步推进的核心理念；第三段讲从产品出口到生态共建的转变及WFT会后的长期角色。镜头在两位访谈人之间切换，紧跟当前说话人。",
+          "argument_ids": [
+            "a1",
+            "a2",
+            "a3",
+            "a4",
+            "a5"
+          ],
+          "tone_override": "访谈原声节奏，镜头跟随说话人切换，画面紧凑，每段15-30秒",
+          "quote_candidates": [
+            "在倫敦是一個非常有影響力、有歷史也有非常大的全球影響力的輸流",
+            "在新的技術的推動和浪潮下面應該要促進全球的合作不是某一個國家能夠帶領人類的進步還有人類文明的進步",
+            "技術與社會價值同步推動讓大家因為技術而探討起來因為社會而合作起來是共同建立共同的Consensors、共同的價值觀",
+            "產品只是出口的話,它可能是一個貿易但是生態的共建的話,是一個共贏的關係",
+            "WFT會一直跟參加封會的這些企業個人及相關的技術深度的溝通服務然後把大家的需求整合起來創建一個生態、一個體系",
+            "未來的社會合作不僅僅是技術產品的合作也是價值的合作",
+            "我們已經看到有非常多的企業已經在外面下唐合作了我們就提示加這個非常好的科技公司他們已經找到了訂單也已經找到了可能更深度的合作"
+          ]
+        }
+      ],
+      "coverage": {
+        "collisions": [],
+        "assignments": {
+          "a1": [
+            "clips"
+          ],
+          "a2": [
+            "clips"
+          ],
+          "a3": [
+            "clips"
+          ],
+          "a4": [
+            "clips"
+          ],
+          "a5": [
+            "clips"
+          ]
+        },
+        "unused_arguments": []
+      }
+    },
+    "clip_payloads": [
+      {
+        "output_id": "9abb4a6f-405d-4abc-a4c8-5d5c133bbe96",
+        "language": "zh",
+        "payload": {
+          "hook": "產品出口只是貿易，生態共建才是共贏。",
+          "duration": 92,
+          "music_mood": "calm",
+          "title_options": [
+            "從賣產品到建生態：WFT如何重塑中歐科技合作？",
+            "WFT的長期角色：不只是撮合交易，更是生態共建者"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_003",
+            "hook": "產品出口只是貿易，生態共建才是共贏。",
+            "summary": "從產品出口到生態共建是貿易關係向共贏夥伴關係的轉型；WFT會後將持續整合企業需求，促成技術、市場與價值觀的深度協同。",
+            "end_marker": "到受訪者回答完WFT會後長期賦能部分結束",
+            "end_seconds": 330.6,
+            "source_text": "產品只是出口的話，它可能是一個貿易。但是生態的共建的話，是一個共贏的關係。產品就是我在你這兒來賺錢，但是是不是應該大家共同看看同樣的科系、同樣的產品怎麼為這個社會服務，或者是可以創建一種以來我往的這麼一個現象。所以說未來的社會合作不僅僅是技術產品的合作，也是價值的合作。WFT會一直跟參加封會的這些企業個人及相關的技術深度的溝通服務，然後把大家的需求整合起來，創建一個生態、一個體系。我們已經看到有非常多的企業已經找到了訂單，也已經找到了可能更深度的合作，也可能不只是買賣的合作，也許是技術的合作或者是市場的相互之前的協同上的合作。",
+            "golden_quote": "未來的社會合作不僅僅是技術產品的合作，也是價值的合作。",
+            "start_marker": "從受訪者開始回答第四個問題（產品出口轉生態共建）開始",
+            "start_seconds": 238.4,
+            "duration_seconds": 92,
+            "recommendation_score": 88
+          },
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "end_seconds": 330.6,
+          "start_seconds": 238.4
+        },
+        "score": {
+          "value": 88,
+          "reason": "清晰對比產品貿易與生態共建，完整呈現WFT的長期角色，論述有層次且具行動指引。"
+        }
+      },
+      {
+        "output_id": "c935958e-beac-4bdf-8713-c9c5ea2aeaa8",
+        "language": "zh",
+        "payload": {
+          "hook": "為什麼這場分會選在倫敦科技周同期舉辦？",
+          "duration": 71,
+          "music_mood": "corporate",
+          "title_options": [
+            "倫敦科技周：WFT分會如何重塑中英科技合作？",
+            "數十家中國領軍企業齊聚倫敦：WFT分會的戰略密碼"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_001",
+            "hook": "為什麼這場分會選在倫敦科技周同期舉辦？",
+            "summary": "WFT倫敦分會與倫敦科技周同期舉辦，數十家中國領先企業赴倫敦與英國企業深度對話，為中英科技合作注入信心。",
+            "end_marker": "到受訪者回答完第一個問題結束",
+            "end_seconds": 90.8,
+            "source_text": "這次是在中國和英國的兩邊的援手呼防之後我們舉辦的一次很重大的活動。這個活動我們有數十亞中國的領先企業和來自其他國家的一些企業來到倫敦，來到倫敦跟當地的企業和合作方進行深度的一個交流、面對面的交流。我們認為這次活動會對更多的中英之間的企業對方更有興趣、更有信心，然後在這方面做出一些努力。剛才其實也看到了英國的國會議員包括這個英國的企業家、包括40萬家旗團等等他們的負責人都非常的熱衷為這個中英之間的關系天專家網。所以我認為這次活動會帶來更多的體會。",
+            "golden_quote": "這次活動會對更多的中英之間的企業更有興趣、更有信心。",
+            "start_marker": "從受訪者開始回答第一個問題（倫敦峰會的戰略價值）開始",
+            "start_seconds": 20.3,
+            "duration_seconds": 71,
+            "recommendation_score": 82
+          },
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "end_seconds": 90.8,
+          "start_seconds": 20.3
+        },
+        "score": {
+          "value": 82,
+          "reason": "完整論述倫敦峰會的戰略價值，開場問題點明時機意義，數據與案例支撐充分。"
+        }
+      },
+      {
+        "output_id": "97f11cc1-6522-4273-9237-691d99541f1f",
+        "language": "zh",
+        "payload": {
+          "hook": "為什麼選擇倫敦？因為這座城市本身就是國際合作的天然樞紐。",
+          "duration": 113,
+          "music_mood": "calm",
+          "title_options": [
+            "倫敦為何成為WFT首選？全球科技協作的城市樣本",
+            "WFT使命：不只是技術進步，更是價值觀的同步推進"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_002",
+            "hook": "為什麼選擇倫敦？因為這座城市本身就是國際合作的天然樞紐。",
+            "summary": "倫敦作為輻射英國、歐洲、英聯邦的全球樞紐，是國際合作的天然選擇；WFT倡導技術與社會價值同步推進，共建全球科技共識。",
+            "end_marker": "到受訪者回答完WFT全球使命與技術價值觀同步推進部分結束",
+            "end_seconds": 215.2,
+            "source_text": "在倫敦是一個非常有影響力、有歷史也有非常大的全球影響力的輸流。為什麼說他是輸流了？因為在倫敦不只是輻射英國、他也輻射歐洲，他也輻射英聯邦的國家。他也是一個開化的理念非常先進也比較靈活和開放的一個城市，也是屬於世界最為一居的城市之一。所以選擇倫敦不只是因為我們有很多主辦方在這邊，更是因為他本身就具備天然的促進國際合作的優勢。我認為在新的技術的推動和浪潮下面，應該要促進全球的合作。不是某一個國家能夠帶領人類的進步，還有人類文明的進步。我們需要的是更多的社會理念、價值觀的進步。WFT希望技術與社會價值同步推動，讓大家因為技術而探討起來，因為社會而合作起來，共同建立共同的價值觀。",
+            "golden_quote": "技術與社會價值同步推動，讓大家因為技術而探討起來，因為社會而合作起來。",
+            "start_marker": "從受訪者開始回答第二個問題（為何選倫敦）開始",
+            "start_seconds": 102.1,
+            "duration_seconds": 113,
+            "recommendation_score": 85
+          },
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "end_seconds": 215.2,
+          "start_seconds": 102.1
+        },
+        "score": {
+          "value": 85,
+          "reason": "雙主題遞進完整，從選址邏輯自然過渡到WFT核心理念，金句感強，易引發觀眾共鳴。"
+        }
+      }
+    ]
+  },
+  "clips": [
+    {
+      "label": "out-9abb4a6f",
+      "family": "talking_head",
+      "content_md5": "1fb65f26e8edb02838ead3961efdb99b",
+      "frames_dir": "data/anatomy/frames/out-9abb4a6f-1fb65f26",
+      "output_id": "9abb4a6f-405d-4abc-a4c8-5d5c133bbe96",
+      "run_id": "5e3158d3-a3c0-473e-9ab5-cde73317b4be",
+      "video_key": "cc614c2c-7920-41e8-a09d-65fd36ef2518/outputs/projects/13bc9809-7993-4138-aa73-c326ace7aafe/9abb4a6f-405d-4abc-a4c8-5d5c133bbe96-1787417662.mp4",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "產品出口只是貿易，生態共建才是共贏。",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_1.mp4",
+          "kind": "video",
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "duration": 340.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "61e1e6aa1614",
+            "end": 330.56,
+            "url": null,
+            "start": 238.84,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "c266c110-ea74-4989-82e0-44fb865e0dd6",
+        "crop_track": [
+          {
+            "t": 238.84,
+            "x": 0.701327,
+            "y": 0.392903,
+            "scale": 1.272578
+          },
+          {
+            "t": 274.98,
+            "x": 0.254967,
+            "y": 0.394317,
+            "scale": 1.638963
+          },
+          {
+            "t": 284.84,
+            "x": 0.701327,
+            "y": 0.392903,
+            "scale": 1.272578
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 239.1,
+            "lang": "zh",
+            "text": "品",
+            "start": 238.84
+          },
+          {
+            "end": 239.68,
+            "lang": "zh",
+            "text": "只是",
+            "start": 239.1
+          },
+          {
+            "end": 240.04,
+            "lang": "zh",
+            "text": "出",
+            "start": 239.68
+          },
+          {
+            "end": 240.26,
+            "lang": "zh",
+            "text": "口",
+            "start": 240.04
+          },
+          {
+            "end": 240.58,
+            "lang": "zh",
+            "text": "的話,",
+            "start": 240.26
+          },
+          {
+            "end": 240.86,
+            "lang": "zh",
+            "text": "它",
+            "start": 240.74
+          },
+          {
+            "end": 241.08,
+            "lang": "zh",
+            "text": "可能",
+            "start": 240.86
+          },
+          {
+            "end": 241.32,
+            "lang": "zh",
+            "text": "是",
+            "start": 241.08
+          },
+          {
+            "end": 241.58,
+            "lang": "zh",
+            "text": "一個",
+            "start": 241.32
+          },
+          {
+            "end": 241.78,
+            "lang": "zh",
+            "text": "貿",
+            "start": 241.58
+          },
+          {
+            "end": 242.06,
+            "lang": "zh",
+            "text": "易",
+            "start": 241.78
+          },
+          {
+            "end": 242.7,
+            "lang": "zh",
+            "text": "但是",
+            "start": 242.46
+          },
+          {
+            "end": 243.08,
+            "lang": "zh",
+            "text": "生",
+            "start": 242.7
+          },
+          {
+            "end": 243.26,
+            "lang": "zh",
+            "text": "態",
+            "start": 243.08
+          },
+          {
+            "end": 243.42,
+            "lang": "zh",
+            "text": "的",
+            "start": 243.26
+          },
+          {
+            "end": 243.56,
+            "lang": "zh",
+            "text": "共",
+            "start": 243.42
+          },
+          {
+            "end": 243.76,
+            "lang": "zh",
+            "text": "建",
+            "start": 243.56
+          },
+          {
+            "end": 243.98,
+            "lang": "zh",
+            "text": "的話,",
+            "start": 243.76
+          },
+          {
+            "end": 244.18,
+            "lang": "zh",
+            "text": "是",
+            "start": 244.12
+          },
+          {
+            "end": 244.44,
+            "lang": "zh",
+            "text": "一個",
+            "start": 244.18
+          },
+          {
+            "end": 244.72,
+            "lang": "zh",
+            "text": "共",
+            "start": 244.44
+          },
+          {
+            "end": 244.94,
+            "lang": "zh",
+            "text": "贏",
+            "start": 244.72
+          },
+          {
+            "end": 245.24,
+            "lang": "zh",
+            "text": "的",
+            "start": 244.94
+          },
+          {
+            "end": 245.98,
+            "lang": "zh",
+            "text": "關係",
+            "start": 245.24
+          },
+          {
+            "end": 247.0,
+            "lang": "zh",
+            "text": "產",
+            "start": 246.52
+          },
+          {
+            "end": 247.18,
+            "lang": "zh",
+            "text": "品",
+            "start": 247.0
+          },
+          {
+            "end": 247.48,
+            "lang": "zh",
+            "text": "就是",
+            "start": 247.18
+          },
+          {
+            "end": 247.92,
+            "lang": "zh",
+            "text": "我在",
+            "start": 247.48
+          },
+          {
+            "end": 248.12,
+            "lang": "zh",
+            "text": "你",
+            "start": 247.92
+          },
+          {
+            "end": 248.26,
+            "lang": "zh",
+            "text": "這",
+            "start": 248.12
+          },
+          {
+            "end": 248.4,
+            "lang": "zh",
+            "text": "兒",
+            "start": 248.26
+          },
+          {
+            "end": 248.64,
+            "lang": "zh",
+            "text": "來",
+            "start": 248.4
+          },
+          {
+            "end": 248.88,
+            "lang": "zh",
+            "text": "賺",
+            "start": 248.64
+          },
+          {
+            "end": 249.14,
+            "lang": "zh",
+            "text": "錢",
+            "start": 248.88
+          },
+          {
+            "end": 250.08,
+            "lang": "zh",
+            "text": "但是",
+            "start": 249.14
+          },
+          {
+            "end": 251.12,
+            "lang": "zh",
+            "text": "是不是",
+            "start": 250.08
+          },
+          {
+            "end": 251.62,
+            "lang": "zh",
+            "text": "應該",
+            "start": 251.12
+          },
+          {
+            "end": 252.28,
+            "lang": "zh",
+            "text": "大家",
+            "start": 251.62
+          },
+          {
+            "end": 252.52,
+            "lang": "zh",
+            "text": "共",
+            "start": 252.28
+          },
+          {
+            "end": 252.64,
+            "lang": "zh",
+            "text": "同",
+            "start": 252.52
+          },
+          {
+            "end": 253.0,
+            "lang": "zh",
+            "text": "看看",
+            "start": 252.64
+          },
+          {
+            "end": 253.56,
+            "lang": "zh",
+            "text": "同",
+            "start": 253.0
+          },
+          {
+            "end": 253.66,
+            "lang": "zh",
+            "text": "樣",
+            "start": 253.56
+          },
+          {
+            "end": 253.76,
+            "lang": "zh",
+            "text": "的",
+            "start": 253.66
+          },
+          {
+            "end": 253.92,
+            "lang": "zh",
+            "text": "科",
+            "start": 253.76
+          },
+          {
+            "end": 254.04,
+            "lang": "zh",
+            "text": "系、",
+            "start": 253.92
+          },
+          {
+            "end": 254.24,
+            "lang": "zh",
+            "text": "同",
+            "start": 254.14
+          },
+          {
+            "end": 254.32,
+            "lang": "zh",
+            "text": "樣",
+            "start": 254.24
+          },
+          {
+            "end": 254.4,
+            "lang": "zh",
+            "text": "的",
+            "start": 254.32
+          },
+          {
+            "end": 254.6,
+            "lang": "zh",
+            "text": "產",
+            "start": 254.4
+          },
+          {
+            "end": 254.92,
+            "lang": "zh",
+            "text": "品",
+            "start": 254.6
+          },
+          {
+            "end": 255.56,
+            "lang": "zh",
+            "text": "怎麼",
+            "start": 254.92
+          },
+          {
+            "end": 256.22,
+            "lang": "zh",
+            "text": "為",
+            "start": 255.56
+          },
+          {
+            "end": 256.5,
+            "lang": "zh",
+            "text": "這個",
+            "start": 256.22
+          },
+          {
+            "end": 256.72,
+            "lang": "zh",
+            "text": "社",
+            "start": 256.5
+          },
+          {
+            "end": 256.94,
+            "lang": "zh",
+            "text": "會",
+            "start": 256.72
+          },
+          {
+            "end": 257.32,
+            "lang": "zh",
+            "text": "服",
+            "start": 256.94
+          },
+          {
+            "end": 257.52,
+            "lang": "zh",
+            "text": "務",
+            "start": 257.32
+          },
+          {
+            "end": 258.18,
+            "lang": "zh",
+            "text": "或者",
+            "start": 257.52
+          },
+          {
+            "end": 258.4,
+            "lang": "zh",
+            "text": "是",
+            "start": 258.18
+          },
+          {
+            "end": 258.64,
+            "lang": "zh",
+            "text": "說",
+            "start": 258.4
+          },
+          {
+            "end": 259.24,
+            "lang": "zh",
+            "text": "可以",
+            "start": 258.64
+          },
+          {
+            "end": 259.46,
+            "lang": "zh",
+            "text": "創",
+            "start": 259.24
+          },
+          {
+            "end": 259.62,
+            "lang": "zh",
+            "text": "建",
+            "start": 259.46
+          },
+          {
+            "end": 259.8,
+            "lang": "zh",
+            "text": "一",
+            "start": 259.62
+          },
+          {
+            "end": 259.94,
+            "lang": "zh",
+            "text": "種",
+            "start": 259.8
+          },
+          {
+            "end": 260.26,
+            "lang": "zh",
+            "text": "以",
+            "start": 259.94
+          },
+          {
+            "end": 260.44,
+            "lang": "zh",
+            "text": "來",
+            "start": 260.26
+          },
+          {
+            "end": 260.82,
+            "lang": "zh",
+            "text": "我",
+            "start": 260.44
+          },
+          {
+            "end": 261.06,
+            "lang": "zh",
+            "text": "往",
+            "start": 260.82
+          },
+          {
+            "end": 261.3,
+            "lang": "zh",
+            "text": "的",
+            "start": 261.06
+          },
+          {
+            "end": 261.62,
+            "lang": "zh",
+            "text": "這麼",
+            "start": 261.3
+          },
+          {
+            "end": 262.02,
+            "lang": "zh",
+            "text": "一個",
+            "start": 261.62
+          },
+          {
+            "end": 262.38,
+            "lang": "zh",
+            "text": "現",
+            "start": 262.02
+          },
+          {
+            "end": 262.58,
+            "lang": "zh",
+            "text": "象",
+            "start": 262.38
+          },
+          {
+            "end": 263.82,
+            "lang": "zh",
+            "text": "所以",
+            "start": 263.38
+          },
+          {
+            "end": 264.0,
+            "lang": "zh",
+            "text": "說",
+            "start": 263.82
+          },
+          {
+            "end": 264.26,
+            "lang": "zh",
+            "text": "我們",
+            "start": 264.0
+          },
+          {
+            "end": 265.14,
+            "lang": "zh",
+            "text": "跟",
+            "start": 264.26
+          },
+          {
+            "end": 265.5,
+            "lang": "zh",
+            "text": "認為",
+            "start": 265.14
+          },
+          {
+            "end": 265.84,
+            "lang": "zh",
+            "text": "的話",
+            "start": 265.5
+          },
+          {
+            "end": 266.14,
+            "lang": "zh",
+            "text": "未",
+            "start": 265.84
+          },
+          {
+            "end": 266.34,
+            "lang": "zh",
+            "text": "來",
+            "start": 266.14
+          },
+          {
+            "end": 266.64,
+            "lang": "zh",
+            "text": "的",
+            "start": 266.34
+          },
+          {
+            "end": 267.94,
+            "lang": "zh",
+            "text": "社",
+            "start": 266.64
+          },
+          {
+            "end": 268.14,
+            "lang": "zh",
+            "text": "會",
+            "start": 267.94
+          },
+          {
+            "end": 268.52,
+            "lang": "zh",
+            "text": "合",
+            "start": 268.14
+          },
+          {
+            "end": 268.72,
+            "lang": "zh",
+            "text": "作",
+            "start": 268.52
+          },
+          {
+            "end": 269.58,
+            "lang": "zh",
+            "text": "不",
+            "start": 268.72
+          },
+          {
+            "end": 269.74,
+            "lang": "zh",
+            "text": "僅",
+            "start": 269.58
+          },
+          {
+            "end": 269.96,
+            "lang": "zh",
+            "text": "僅",
+            "start": 269.74
+          },
+          {
+            "end": 270.18,
+            "lang": "zh",
+            "text": "是",
+            "start": 269.96
+          },
+          {
+            "end": 270.34,
+            "lang": "zh",
+            "text": "技",
+            "start": 270.18
+          },
+          {
+            "end": 270.56,
+            "lang": "zh",
+            "text": "術",
+            "start": 270.34
+          },
+          {
+            "end": 271.06,
+            "lang": "zh",
+            "text": "產",
+            "start": 270.56
+          },
+          {
+            "end": 271.2,
+            "lang": "zh",
+            "text": "品",
+            "start": 271.06
+          },
+          {
+            "end": 271.32,
+            "lang": "zh",
+            "text": "的",
+            "start": 271.2
+          },
+          {
+            "end": 271.48,
+            "lang": "zh",
+            "text": "合",
+            "start": 271.32
+          },
+          {
+            "end": 271.6,
+            "lang": "zh",
+            "text": "作",
+            "start": 271.48
+          },
+          {
+            "end": 272.06,
+            "lang": "zh",
+            "text": "也是",
+            "start": 271.6
+          },
+          {
+            "end": 272.42,
+            "lang": "zh",
+            "text": "價",
+            "start": 272.06
+          },
+          {
+            "end": 272.64,
+            "lang": "zh",
+            "text": "值",
+            "start": 272.42
+          },
+          {
+            "end": 272.8,
+            "lang": "zh",
+            "text": "的",
+            "start": 272.64
+          },
+          {
+            "end": 273.32,
+            "lang": "zh",
+            "text": "合",
+            "start": 272.8
+          },
+          {
+            "end": 273.56,
+            "lang": "zh",
+            "text": "作",
+            "start": 273.32
+          },
+          {
+            "end": 275.62,
+            "lang": "zh",
+            "text": "那麼",
+            "start": 275.18
+          },
+          {
+            "end": 275.84,
+            "lang": "zh",
+            "text": "最後",
+            "start": 275.62
+          },
+          {
+            "end": 276.04,
+            "lang": "zh",
+            "text": "一個",
+            "start": 275.84
+          },
+          {
+            "end": 276.46,
+            "lang": "zh",
+            "text": "問題",
+            "start": 276.04
+          },
+          {
+            "end": 277.88,
+            "lang": "zh",
+            "text": "分",
+            "start": 277.44
+          },
+          {
+            "end": 278.02,
+            "lang": "zh",
+            "text": "會",
+            "start": 277.88
+          },
+          {
+            "end": 278.22,
+            "lang": "zh",
+            "text": "結",
+            "start": 278.02
+          },
+          {
+            "end": 278.38,
+            "lang": "zh",
+            "text": "束",
+            "start": 278.22
+          },
+          {
+            "end": 278.62,
+            "lang": "zh",
+            "text": "後",
+            "start": 278.38
+          },
+          {
+            "end": 278.98,
+            "lang": "zh",
+            "text": "W",
+            "start": 278.62
+          },
+          {
+            "end": 279.14,
+            "lang": "zh",
+            "text": "F",
+            "start": 278.98
+          },
+          {
+            "end": 279.3,
+            "lang": "zh",
+            "text": "T",
+            "start": 279.14
+          },
+          {
+            "end": 279.52,
+            "lang": "zh",
+            "text": "還",
+            "start": 279.3
+          },
+          {
+            "end": 279.72,
+            "lang": "zh",
+            "text": "將",
+            "start": 279.52
+          },
+          {
+            "end": 279.9,
+            "lang": "zh",
+            "text": "通",
+            "start": 279.72
+          },
+          {
+            "end": 280.06,
+            "lang": "zh",
+            "text": "過",
+            "start": 279.9
+          },
+          {
+            "end": 280.26,
+            "lang": "zh",
+            "text": "哪",
+            "start": 280.06
+          },
+          {
+            "end": 280.5,
+            "lang": "zh",
+            "text": "些",
+            "start": 280.26
+          },
+          {
+            "end": 280.74,
+            "lang": "zh",
+            "text": "方",
+            "start": 280.5
+          },
+          {
+            "end": 280.96,
+            "lang": "zh",
+            "text": "式",
+            "start": 280.74
+          },
+          {
+            "end": 281.3,
+            "lang": "zh",
+            "text": "和",
+            "start": 280.96
+          },
+          {
+            "end": 281.5,
+            "lang": "zh",
+            "text": "落",
+            "start": 281.3
+          },
+          {
+            "end": 281.66,
+            "lang": "zh",
+            "text": "地",
+            "start": 281.5
+          },
+          {
+            "end": 281.84,
+            "lang": "zh",
+            "text": "項",
+            "start": 281.66
+          },
+          {
+            "end": 282.04,
+            "lang": "zh",
+            "text": "目",
+            "start": 281.84
+          },
+          {
+            "end": 282.24,
+            "lang": "zh",
+            "text": "來",
+            "start": 282.04
+          },
+          {
+            "end": 282.56,
+            "lang": "zh",
+            "text": "持",
+            "start": 282.24
+          },
+          {
+            "end": 282.76,
+            "lang": "zh",
+            "text": "續",
+            "start": 282.56
+          },
+          {
+            "end": 282.98,
+            "lang": "zh",
+            "text": "負",
+            "start": 282.76
+          },
+          {
+            "end": 283.1,
+            "lang": "zh",
+            "text": "能",
+            "start": 282.98
+          },
+          {
+            "end": 283.38,
+            "lang": "zh",
+            "text": "中",
+            "start": 283.1
+          },
+          {
+            "end": 283.56,
+            "lang": "zh",
+            "text": "歐",
+            "start": 283.38
+          },
+          {
+            "end": 283.76,
+            "lang": "zh",
+            "text": "科",
+            "start": 283.56
+          },
+          {
+            "end": 283.94,
+            "lang": "zh",
+            "text": "技",
+            "start": 283.76
+          },
+          {
+            "end": 284.14,
+            "lang": "zh",
+            "text": "合",
+            "start": 283.94
+          },
+          {
+            "end": 284.3,
+            "lang": "zh",
+            "text": "作",
+            "start": 284.14
+          },
+          {
+            "end": 285.48,
+            "lang": "zh",
+            "text": "W",
+            "start": 285.04
+          },
+          {
+            "end": 285.92,
+            "lang": "zh",
+            "text": "F",
+            "start": 285.48
+          },
+          {
+            "end": 286.06,
+            "lang": "zh",
+            "text": "T",
+            "start": 285.92
+          },
+          {
+            "end": 286.34,
+            "lang": "zh",
+            "text": "會",
+            "start": 286.06
+          },
+          {
+            "end": 287.82,
+            "lang": "zh",
+            "text": "一直",
+            "start": 286.34
+          },
+          {
+            "end": 288.38,
+            "lang": "zh",
+            "text": "跟",
+            "start": 287.82
+          },
+          {
+            "end": 289.08,
+            "lang": "zh",
+            "text": "參",
+            "start": 288.38
+          },
+          {
+            "end": 289.4,
+            "lang": "zh",
+            "text": "加",
+            "start": 289.08
+          },
+          {
+            "end": 290.24,
+            "lang": "zh",
+            "text": "封",
+            "start": 289.4
+          },
+          {
+            "end": 290.46,
+            "lang": "zh",
+            "text": "會",
+            "start": 290.24
+          },
+          {
+            "end": 290.78,
+            "lang": "zh",
+            "text": "的",
+            "start": 290.46
+          },
+          {
+            "end": 291.1,
+            "lang": "zh",
+            "text": "這些",
+            "start": 290.78
+          },
+          {
+            "end": 291.52,
+            "lang": "zh",
+            "text": "企",
+            "start": 291.1
+          },
+          {
+            "end": 291.72,
+            "lang": "zh",
+            "text": "業",
+            "start": 291.52
+          },
+          {
+            "end": 292.4,
+            "lang": "zh",
+            "text": "個人",
+            "start": 291.72
+          },
+          {
+            "end": 293.44,
+            "lang": "zh",
+            "text": "及",
+            "start": 292.4
+          },
+          {
+            "end": 293.82,
+            "lang": "zh",
+            "text": "相",
+            "start": 293.44
+          },
+          {
+            "end": 294.0,
+            "lang": "zh",
+            "text": "關",
+            "start": 293.82
+          },
+          {
+            "end": 294.2,
+            "lang": "zh",
+            "text": "的",
+            "start": 294.0
+          },
+          {
+            "end": 294.54,
+            "lang": "zh",
+            "text": "技",
+            "start": 294.2
+          },
+          {
+            "end": 294.76,
+            "lang": "zh",
+            "text": "術",
+            "start": 294.54
+          },
+          {
+            "end": 295.58,
+            "lang": "zh",
+            "text": "深",
+            "start": 295.28
+          },
+          {
+            "end": 295.78,
+            "lang": "zh",
+            "text": "度",
+            "start": 295.58
+          },
+          {
+            "end": 296.2,
+            "lang": "zh",
+            "text": "的",
+            "start": 295.78
+          },
+          {
+            "end": 297.34,
+            "lang": "zh",
+            "text": "溝",
+            "start": 296.2
+          },
+          {
+            "end": 297.54,
+            "lang": "zh",
+            "text": "通",
+            "start": 297.34
+          },
+          {
+            "end": 298.0,
+            "lang": "zh",
+            "text": "服",
+            "start": 297.54
+          },
+          {
+            "end": 298.26,
+            "lang": "zh",
+            "text": "務",
+            "start": 298.0
+          },
+          {
+            "end": 298.84,
+            "lang": "zh",
+            "text": "然後",
+            "start": 298.26
+          },
+          {
+            "end": 300.18,
+            "lang": "zh",
+            "text": "把",
+            "start": 298.84
+          },
+          {
+            "end": 301.08,
+            "lang": "zh",
+            "text": "大家",
+            "start": 300.18
+          },
+          {
+            "end": 301.26,
+            "lang": "zh",
+            "text": "的",
+            "start": 301.08
+          },
+          {
+            "end": 301.48,
+            "lang": "zh",
+            "text": "需",
+            "start": 301.26
+          },
+          {
+            "end": 301.74,
+            "lang": "zh",
+            "text": "求",
+            "start": 301.48
+          },
+          {
+            "end": 302.64,
+            "lang": "zh",
+            "text": "整",
+            "start": 301.74
+          },
+          {
+            "end": 302.78,
+            "lang": "zh",
+            "text": "合",
+            "start": 302.64
+          },
+          {
+            "end": 303.1,
+            "lang": "zh",
+            "text": "起來",
+            "start": 302.78
+          },
+          {
+            "end": 303.42,
+            "lang": "zh",
+            "text": "創",
+            "start": 303.1
+          },
+          {
+            "end": 303.6,
+            "lang": "zh",
+            "text": "建",
+            "start": 303.42
+          },
+          {
+            "end": 303.98,
+            "lang": "zh",
+            "text": "一個",
+            "start": 303.6
+          },
+          {
+            "end": 304.9,
+            "lang": "zh",
+            "text": "生",
+            "start": 303.98
+          },
+          {
+            "end": 305.08,
+            "lang": "zh",
+            "text": "態、",
+            "start": 304.9
+          },
+          {
+            "end": 305.66,
+            "lang": "zh",
+            "text": "一個",
+            "start": 305.5
+          },
+          {
+            "end": 305.84,
+            "lang": "zh",
+            "text": "體",
+            "start": 305.66
+          },
+          {
+            "end": 306.08,
+            "lang": "zh",
+            "text": "系",
+            "start": 305.84
+          },
+          {
+            "end": 307.12,
+            "lang": "zh",
+            "text": "我們",
+            "start": 306.08
+          },
+          {
+            "end": 307.46,
+            "lang": "zh",
+            "text": "已經",
+            "start": 307.12
+          },
+          {
+            "end": 307.88,
+            "lang": "zh",
+            "text": "看到",
+            "start": 307.46
+          },
+          {
+            "end": 308.86,
+            "lang": "zh",
+            "text": "有",
+            "start": 307.88
+          },
+          {
+            "end": 309.12,
+            "lang": "zh",
+            "text": "非常",
+            "start": 308.86
+          },
+          {
+            "end": 309.26,
+            "lang": "zh",
+            "text": "多",
+            "start": 309.12
+          },
+          {
+            "end": 309.38,
+            "lang": "zh",
+            "text": "的",
+            "start": 309.26
+          },
+          {
+            "end": 309.72,
+            "lang": "zh",
+            "text": "企",
+            "start": 309.38
+          },
+          {
+            "end": 309.92,
+            "lang": "zh",
+            "text": "業",
+            "start": 309.72
+          },
+          {
+            "end": 310.4,
+            "lang": "zh",
+            "text": "已經",
+            "start": 309.92
+          },
+          {
+            "end": 311.36,
+            "lang": "zh",
+            "text": "在",
+            "start": 310.4
+          },
+          {
+            "end": 311.62,
+            "lang": "zh",
+            "text": "外",
+            "start": 311.36
+          },
+          {
+            "end": 311.82,
+            "lang": "zh",
+            "text": "面",
+            "start": 311.62
+          },
+          {
+            "end": 312.3,
+            "lang": "zh",
+            "text": "下",
+            "start": 311.82
+          },
+          {
+            "end": 312.44,
+            "lang": "zh",
+            "text": "唐",
+            "start": 312.3
+          },
+          {
+            "end": 312.68,
+            "lang": "zh",
+            "text": "合",
+            "start": 312.44
+          },
+          {
+            "end": 312.78,
+            "lang": "zh",
+            "text": "作",
+            "start": 312.68
+          },
+          {
+            "end": 313.1,
+            "lang": "zh",
+            "text": "了",
+            "start": 312.78
+          },
+          {
+            "end": 313.66,
+            "lang": "zh",
+            "text": "我們",
+            "start": 313.1
+          },
+          {
+            "end": 313.82,
+            "lang": "zh",
+            "text": "就",
+            "start": 313.66
+          },
+          {
+            "end": 314.04,
+            "lang": "zh",
+            "text": "提",
+            "start": 313.82
+          },
+          {
+            "end": 314.2,
+            "lang": "zh",
+            "text": "示",
+            "start": 314.04
+          },
+          {
+            "end": 314.44,
+            "lang": "zh",
+            "text": "加",
+            "start": 314.2
+          },
+          {
+            "end": 314.82,
+            "lang": "zh",
+            "text": "這個",
+            "start": 314.44
+          },
+          {
+            "end": 315.1,
+            "lang": "zh",
+            "text": "非常",
+            "start": 314.82
+          },
+          {
+            "end": 315.56,
+            "lang": "zh",
+            "text": "好的",
+            "start": 315.1
+          },
+          {
+            "end": 316.48,
+            "lang": "zh",
+            "text": "科",
+            "start": 315.56
+          },
+          {
+            "end": 316.62,
+            "lang": "zh",
+            "text": "技",
+            "start": 316.48
+          },
+          {
+            "end": 316.8,
+            "lang": "zh",
+            "text": "公",
+            "start": 316.62
+          },
+          {
+            "end": 317.04,
+            "lang": "zh",
+            "text": "司",
+            "start": 316.8
+          },
+          {
+            "end": 317.68,
+            "lang": "zh",
+            "text": "他們",
+            "start": 317.04
+          },
+          {
+            "end": 318.28,
+            "lang": "zh",
+            "text": "已經",
+            "start": 317.68
+          },
+          {
+            "end": 318.48,
+            "lang": "zh",
+            "text": "找",
+            "start": 318.28
+          },
+          {
+            "end": 318.76,
+            "lang": "zh",
+            "text": "到了",
+            "start": 318.48
+          },
+          {
+            "end": 319.44,
+            "lang": "zh",
+            "text": "訂",
+            "start": 318.76
+          },
+          {
+            "end": 319.62,
+            "lang": "zh",
+            "text": "單",
+            "start": 319.44
+          },
+          {
+            "end": 320.12,
+            "lang": "zh",
+            "text": "也",
+            "start": 319.62
+          },
+          {
+            "end": 320.4,
+            "lang": "zh",
+            "text": "已經",
+            "start": 320.12
+          },
+          {
+            "end": 320.6,
+            "lang": "zh",
+            "text": "找",
+            "start": 320.4
+          },
+          {
+            "end": 320.88,
+            "lang": "zh",
+            "text": "到了",
+            "start": 320.6
+          },
+          {
+            "end": 321.48,
+            "lang": "zh",
+            "text": "可能",
+            "start": 320.88
+          },
+          {
+            "end": 321.68,
+            "lang": "zh",
+            "text": "更",
+            "start": 321.48
+          },
+          {
+            "end": 321.88,
+            "lang": "zh",
+            "text": "深",
+            "start": 321.68
+          },
+          {
+            "end": 322.02,
+            "lang": "zh",
+            "text": "度",
+            "start": 321.88
+          },
+          {
+            "end": 322.22,
+            "lang": "zh",
+            "text": "的",
+            "start": 322.02
+          },
+          {
+            "end": 322.68,
+            "lang": "zh",
+            "text": "合",
+            "start": 322.22
+          },
+          {
+            "end": 322.84,
+            "lang": "zh",
+            "text": "作",
+            "start": 322.68
+          },
+          {
+            "end": 323.42,
+            "lang": "zh",
+            "text": "也",
+            "start": 322.84
+          },
+          {
+            "end": 323.66,
+            "lang": "zh",
+            "text": "可能",
+            "start": 323.42
+          },
+          {
+            "end": 323.9,
+            "lang": "zh",
+            "text": "不",
+            "start": 323.66
+          },
+          {
+            "end": 324.16,
+            "lang": "zh",
+            "text": "只是",
+            "start": 323.9
+          },
+          {
+            "end": 324.44,
+            "lang": "zh",
+            "text": "買",
+            "start": 324.16
+          },
+          {
+            "end": 324.62,
+            "lang": "zh",
+            "text": "賣",
+            "start": 324.44
+          },
+          {
+            "end": 324.74,
+            "lang": "zh",
+            "text": "的",
+            "start": 324.62
+          },
+          {
+            "end": 324.88,
+            "lang": "zh",
+            "text": "合",
+            "start": 324.74
+          },
+          {
+            "end": 324.98,
+            "lang": "zh",
+            "text": "作",
+            "start": 324.88
+          },
+          {
+            "end": 325.18,
+            "lang": "zh",
+            "text": "也",
+            "start": 324.98
+          },
+          {
+            "end": 325.34,
+            "lang": "zh",
+            "text": "許",
+            "start": 325.18
+          },
+          {
+            "end": 325.64,
+            "lang": "zh",
+            "text": "是",
+            "start": 325.34
+          },
+          {
+            "end": 325.9,
+            "lang": "zh",
+            "text": "技",
+            "start": 325.64
+          },
+          {
+            "end": 326.06,
+            "lang": "zh",
+            "text": "術",
+            "start": 325.9
+          },
+          {
+            "end": 326.18,
+            "lang": "zh",
+            "text": "的",
+            "start": 326.06
+          },
+          {
+            "end": 326.36,
+            "lang": "zh",
+            "text": "合",
+            "start": 326.18
+          },
+          {
+            "end": 326.58,
+            "lang": "zh",
+            "text": "作",
+            "start": 326.36
+          },
+          {
+            "end": 327.18,
+            "lang": "zh",
+            "text": "或者",
+            "start": 326.58
+          },
+          {
+            "end": 327.52,
+            "lang": "zh",
+            "text": "是",
+            "start": 327.18
+          },
+          {
+            "end": 327.74,
+            "lang": "zh",
+            "text": "市",
+            "start": 327.52
+          },
+          {
+            "end": 328.56,
+            "lang": "zh",
+            "text": "場",
+            "start": 327.74
+          },
+          {
+            "end": 328.74,
+            "lang": "zh",
+            "text": "的",
+            "start": 328.56
+          },
+          {
+            "end": 329.06,
+            "lang": "zh",
+            "text": "相",
+            "start": 328.74
+          },
+          {
+            "end": 329.26,
+            "lang": "zh",
+            "text": "互",
+            "start": 329.06
+          },
+          {
+            "end": 329.48,
+            "lang": "zh",
+            "text": "之前",
+            "start": 329.26
+          },
+          {
+            "end": 329.64,
+            "lang": "zh",
+            "text": "的",
+            "start": 329.48
+          },
+          {
+            "end": 329.8,
+            "lang": "zh",
+            "text": "協",
+            "start": 329.64
+          },
+          {
+            "end": 329.94,
+            "lang": "zh",
+            "text": "同",
+            "start": 329.8
+          },
+          {
+            "end": 330.1,
+            "lang": "zh",
+            "text": "上",
+            "start": 329.94
+          },
+          {
+            "end": 330.24,
+            "lang": "zh",
+            "text": "的",
+            "start": 330.1
+          },
+          {
+            "end": 330.36,
+            "lang": "zh",
+            "text": "合",
+            "start": 330.24
+          },
+          {
+            "end": 330.56,
+            "lang": "zh",
+            "text": "作",
+            "start": 330.36
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "zh",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 945,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 91.776,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.14,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.76
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 2,
+            "total_s": 0.3
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              3.5,
+              3.7
+            ],
+            [
+              61.9,
+              62.0
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 0.0,
+              "pause_available_after_s": 1.16,
+              "in_nearest_boundary_s": 1.74,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 4,
+            "runs": [
+              {
+                "at": 262.58,
+                "gap_s": 0.8
+              },
+              {
+                "at": 273.56,
+                "gap_s": 1.62
+              },
+              {
+                "at": 276.46,
+                "gap_s": 0.98
+              },
+              {
+                "at": 284.3,
+                "gap_s": 0.74
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 1,
+            "tokens": [
+              "就是"
+            ]
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 18
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                0.35000000000000003,
+                8.015889505786204
+              ],
+              [
+                2.95,
+                8.594508529823411
+              ],
+              [
+                9.15,
+                10.717914309058548
+              ],
+              [
+                12.850000000000001,
+                7.627159245454454
+              ],
+              [
+                17.95,
+                7.951978504213539
+              ],
+              [
+                22.05,
+                9.481849157608433
+              ],
+              [
+                27.35,
+                10.070690853529536
+              ],
+              [
+                39.25,
+                8.655151949047706
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.31,
+            "line_dur_max_s": 4.24,
+            "line_chars_median": 14.5,
+            "line_chars_p90": 16.300000000000004
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              36.14,
+              9.86,
+              45.72
+            ],
+            "max_static_s": 45.72,
+            "sub_1s_switches": 0,
+            "keyframe_deltas": [
+              0.7357,
+              0.6713
+            ],
+            "keyframes_perceptual": 2
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product",
+            "note": "keyframe delta = |Δx|+|Δy|+relΔscale; ≥0.05 reads as a perceptual reframe, micro-drift does not"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.4048269192377726,
+            "p10": 0.39764601389567056,
+            "p90": 0.41265459219614664
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 92
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.2472856874819155,
+            "p10": 0.22911729883264612,
+            "p90": 0.2651006458423756
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "out-c935958e",
+      "family": "talking_head",
+      "content_md5": "be8a7f59abb41764da2daed0b4789bc8",
+      "frames_dir": "data/anatomy/frames/out-c935958e-be8a7f59",
+      "output_id": "c935958e-beac-4bdf-8713-c9c5ea2aeaa8",
+      "run_id": "5e3158d3-a3c0-473e-9ab5-cde73317b4be",
+      "video_key": "cc614c2c-7920-41e8-a09d-65fd36ef2518/outputs/projects/13bc9809-7993-4138-aa73-c326ace7aafe/c935958e-beac-4bdf-8713-c9c5ea2aeaa8-1787417457.mp4",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "為什麼這場分會選在倫敦科技周同期舉辦？",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_1.mp4",
+          "kind": "video",
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "duration": 340.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "2c2afa5a5f94",
+            "end": 90.78,
+            "url": null,
+            "start": 20.66,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "c266c110-ea74-4989-82e0-44fb865e0dd6",
+        "crop_track": [
+          {
+            "t": 20.66,
+            "x": 0.701327,
+            "y": 0.392903,
+            "scale": 1.272578
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 20.9,
+            "lang": "zh",
+            "text": "次",
+            "start": 20.66
+          },
+          {
+            "end": 21.38,
+            "lang": "zh",
+            "text": "是",
+            "start": 20.9
+          },
+          {
+            "end": 22.46,
+            "lang": "zh",
+            "text": "在",
+            "start": 21.38
+          },
+          {
+            "end": 23.76,
+            "lang": "zh",
+            "text": "中國",
+            "start": 22.46
+          },
+          {
+            "end": 24.32,
+            "lang": "zh",
+            "text": "和",
+            "start": 23.76
+          },
+          {
+            "end": 24.86,
+            "lang": "zh",
+            "text": "英",
+            "start": 24.32
+          },
+          {
+            "end": 25.04,
+            "lang": "zh",
+            "text": "國",
+            "start": 24.86
+          },
+          {
+            "end": 25.2,
+            "lang": "zh",
+            "text": "的",
+            "start": 25.04
+          },
+          {
+            "end": 25.44,
+            "lang": "zh",
+            "text": "兩",
+            "start": 25.2
+          },
+          {
+            "end": 25.64,
+            "lang": "zh",
+            "text": "邊",
+            "start": 25.44
+          },
+          {
+            "end": 25.94,
+            "lang": "zh",
+            "text": "的",
+            "start": 25.64
+          },
+          {
+            "end": 26.12,
+            "lang": "zh",
+            "text": "援",
+            "start": 25.94
+          },
+          {
+            "end": 26.42,
+            "lang": "zh",
+            "text": "手",
+            "start": 26.12
+          },
+          {
+            "end": 26.68,
+            "lang": "zh",
+            "text": "呼",
+            "start": 26.42
+          },
+          {
+            "end": 26.88,
+            "lang": "zh",
+            "text": "防",
+            "start": 26.68
+          },
+          {
+            "end": 27.42,
+            "lang": "zh",
+            "text": "之後",
+            "start": 26.88
+          },
+          {
+            "end": 28.3,
+            "lang": "zh",
+            "text": "我們",
+            "start": 27.42
+          },
+          {
+            "end": 28.56,
+            "lang": "zh",
+            "text": "舉",
+            "start": 28.3
+          },
+          {
+            "end": 28.72,
+            "lang": "zh",
+            "text": "辦",
+            "start": 28.56
+          },
+          {
+            "end": 28.96,
+            "lang": "zh",
+            "text": "的",
+            "start": 28.72
+          },
+          {
+            "end": 29.64,
+            "lang": "zh",
+            "text": "一次",
+            "start": 28.96
+          },
+          {
+            "end": 30.22,
+            "lang": "zh",
+            "text": "很",
+            "start": 29.64
+          },
+          {
+            "end": 30.44,
+            "lang": "zh",
+            "text": "重",
+            "start": 30.22
+          },
+          {
+            "end": 30.66,
+            "lang": "zh",
+            "text": "大的",
+            "start": 30.44
+          },
+          {
+            "end": 31.1,
+            "lang": "zh",
+            "text": "活",
+            "start": 30.66
+          },
+          {
+            "end": 31.28,
+            "lang": "zh",
+            "text": "動",
+            "start": 31.1
+          },
+          {
+            "end": 31.9,
+            "lang": "zh",
+            "text": "這個",
+            "start": 31.28
+          },
+          {
+            "end": 32.1,
+            "lang": "zh",
+            "text": "活",
+            "start": 31.9
+          },
+          {
+            "end": 32.22,
+            "lang": "zh",
+            "text": "動",
+            "start": 32.1
+          },
+          {
+            "end": 32.52,
+            "lang": "zh",
+            "text": "我們",
+            "start": 32.22
+          },
+          {
+            "end": 32.92,
+            "lang": "zh",
+            "text": "有",
+            "start": 32.52
+          },
+          {
+            "end": 33.48,
+            "lang": "zh",
+            "text": "數",
+            "start": 32.92
+          },
+          {
+            "end": 33.72,
+            "lang": "zh",
+            "text": "十",
+            "start": 33.48
+          },
+          {
+            "end": 33.92,
+            "lang": "zh",
+            "text": "亞",
+            "start": 33.72
+          },
+          {
+            "end": 34.4,
+            "lang": "zh",
+            "text": "中國",
+            "start": 33.92
+          },
+          {
+            "end": 35.22,
+            "lang": "zh",
+            "text": "的",
+            "start": 34.4
+          },
+          {
+            "end": 35.6,
+            "lang": "zh",
+            "text": "領",
+            "start": 35.22
+          },
+          {
+            "end": 35.76,
+            "lang": "zh",
+            "text": "先",
+            "start": 35.6
+          },
+          {
+            "end": 36.04,
+            "lang": "zh",
+            "text": "企",
+            "start": 35.76
+          },
+          {
+            "end": 36.28,
+            "lang": "zh",
+            "text": "業",
+            "start": 36.04
+          },
+          {
+            "end": 36.44,
+            "lang": "zh",
+            "text": "和",
+            "start": 36.28
+          },
+          {
+            "end": 36.72,
+            "lang": "zh",
+            "text": "來",
+            "start": 36.44
+          },
+          {
+            "end": 36.94,
+            "lang": "zh",
+            "text": "自",
+            "start": 36.72
+          },
+          {
+            "end": 37.34,
+            "lang": "zh",
+            "text": "其",
+            "start": 36.94
+          },
+          {
+            "end": 37.46,
+            "lang": "zh",
+            "text": "他",
+            "start": 37.34
+          },
+          {
+            "end": 37.68,
+            "lang": "zh",
+            "text": "國家",
+            "start": 37.46
+          },
+          {
+            "end": 37.84,
+            "lang": "zh",
+            "text": "的",
+            "start": 37.68
+          },
+          {
+            "end": 38.1,
+            "lang": "zh",
+            "text": "一些",
+            "start": 37.84
+          },
+          {
+            "end": 38.38,
+            "lang": "zh",
+            "text": "企",
+            "start": 38.1
+          },
+          {
+            "end": 39.18,
+            "lang": "zh",
+            "text": "業",
+            "start": 38.38
+          },
+          {
+            "end": 39.62,
+            "lang": "zh",
+            "text": "來",
+            "start": 39.18
+          },
+          {
+            "end": 40.3,
+            "lang": "zh",
+            "text": "到",
+            "start": 39.62
+          },
+          {
+            "end": 40.44,
+            "lang": "zh",
+            "text": "倫",
+            "start": 40.3
+          },
+          {
+            "end": 40.58,
+            "lang": "zh",
+            "text": "敦",
+            "start": 40.44
+          },
+          {
+            "end": 41.34,
+            "lang": "zh",
+            "text": "來",
+            "start": 40.58
+          },
+          {
+            "end": 41.46,
+            "lang": "zh",
+            "text": "到",
+            "start": 41.34
+          },
+          {
+            "end": 41.6,
+            "lang": "zh",
+            "text": "倫",
+            "start": 41.46
+          },
+          {
+            "end": 41.7,
+            "lang": "zh",
+            "text": "敦",
+            "start": 41.6
+          },
+          {
+            "end": 42.06,
+            "lang": "zh",
+            "text": "跟",
+            "start": 41.7
+          },
+          {
+            "end": 42.68,
+            "lang": "zh",
+            "text": "當",
+            "start": 42.06
+          },
+          {
+            "end": 42.9,
+            "lang": "zh",
+            "text": "地",
+            "start": 42.68
+          },
+          {
+            "end": 43.14,
+            "lang": "zh",
+            "text": "的",
+            "start": 42.9
+          },
+          {
+            "end": 44.62,
+            "lang": "zh",
+            "text": "企",
+            "start": 43.14
+          },
+          {
+            "end": 44.82,
+            "lang": "zh",
+            "text": "業",
+            "start": 44.62
+          },
+          {
+            "end": 45.06,
+            "lang": "zh",
+            "text": "和",
+            "start": 44.82
+          },
+          {
+            "end": 45.26,
+            "lang": "zh",
+            "text": "合",
+            "start": 45.06
+          },
+          {
+            "end": 45.34,
+            "lang": "zh",
+            "text": "作",
+            "start": 45.26
+          },
+          {
+            "end": 45.54,
+            "lang": "zh",
+            "text": "方",
+            "start": 45.34
+          },
+          {
+            "end": 45.96,
+            "lang": "zh",
+            "text": "進",
+            "start": 45.54
+          },
+          {
+            "end": 46.34,
+            "lang": "zh",
+            "text": "行",
+            "start": 45.96
+          },
+          {
+            "end": 46.62,
+            "lang": "zh",
+            "text": "深",
+            "start": 46.34
+          },
+          {
+            "end": 46.82,
+            "lang": "zh",
+            "text": "度",
+            "start": 46.62
+          },
+          {
+            "end": 46.98,
+            "lang": "zh",
+            "text": "的",
+            "start": 46.82
+          },
+          {
+            "end": 47.22,
+            "lang": "zh",
+            "text": "一個",
+            "start": 46.98
+          },
+          {
+            "end": 47.68,
+            "lang": "zh",
+            "text": "交",
+            "start": 47.22
+          },
+          {
+            "end": 47.86,
+            "lang": "zh",
+            "text": "流、",
+            "start": 47.68
+          },
+          {
+            "end": 48.08,
+            "lang": "zh",
+            "text": "面",
+            "start": 48.0
+          },
+          {
+            "end": 48.2,
+            "lang": "zh",
+            "text": "對",
+            "start": 48.08
+          },
+          {
+            "end": 48.32,
+            "lang": "zh",
+            "text": "面",
+            "start": 48.2
+          },
+          {
+            "end": 48.48,
+            "lang": "zh",
+            "text": "的",
+            "start": 48.32
+          },
+          {
+            "end": 48.66,
+            "lang": "zh",
+            "text": "交",
+            "start": 48.48
+          },
+          {
+            "end": 48.92,
+            "lang": "zh",
+            "text": "流",
+            "start": 48.66
+          },
+          {
+            "end": 50.24,
+            "lang": "zh",
+            "text": "我們",
+            "start": 49.76
+          },
+          {
+            "end": 50.62,
+            "lang": "zh",
+            "text": "認為",
+            "start": 50.24
+          },
+          {
+            "end": 51.02,
+            "lang": "zh",
+            "text": "這",
+            "start": 50.62
+          },
+          {
+            "end": 51.4,
+            "lang": "zh",
+            "text": "次",
+            "start": 51.02
+          },
+          {
+            "end": 52.26,
+            "lang": "zh",
+            "text": "活",
+            "start": 51.4
+          },
+          {
+            "end": 52.4,
+            "lang": "zh",
+            "text": "動",
+            "start": 52.26
+          },
+          {
+            "end": 52.82,
+            "lang": "zh",
+            "text": "會",
+            "start": 52.4
+          },
+          {
+            "end": 54.2,
+            "lang": "zh",
+            "text": "對",
+            "start": 52.82
+          },
+          {
+            "end": 54.54,
+            "lang": "zh",
+            "text": "更",
+            "start": 54.2
+          },
+          {
+            "end": 54.8,
+            "lang": "zh",
+            "text": "多",
+            "start": 54.54
+          },
+          {
+            "end": 55.16,
+            "lang": "zh",
+            "text": "的",
+            "start": 54.8
+          },
+          {
+            "end": 55.78,
+            "lang": "zh",
+            "text": "中",
+            "start": 55.16
+          },
+          {
+            "end": 55.96,
+            "lang": "zh",
+            "text": "英",
+            "start": 55.78
+          },
+          {
+            "end": 56.2,
+            "lang": "zh",
+            "text": "之",
+            "start": 55.96
+          },
+          {
+            "end": 56.3,
+            "lang": "zh",
+            "text": "間",
+            "start": 56.2
+          },
+          {
+            "end": 56.46,
+            "lang": "zh",
+            "text": "的",
+            "start": 56.3
+          },
+          {
+            "end": 56.76,
+            "lang": "zh",
+            "text": "企",
+            "start": 56.46
+          },
+          {
+            "end": 56.92,
+            "lang": "zh",
+            "text": "業",
+            "start": 56.76
+          },
+          {
+            "end": 57.78,
+            "lang": "zh",
+            "text": "對",
+            "start": 56.92
+          },
+          {
+            "end": 58.16,
+            "lang": "zh",
+            "text": "方",
+            "start": 57.78
+          },
+          {
+            "end": 60.1,
+            "lang": "zh",
+            "text": "更",
+            "start": 58.16
+          },
+          {
+            "end": 60.24,
+            "lang": "zh",
+            "text": "有",
+            "start": 60.1
+          },
+          {
+            "end": 60.44,
+            "lang": "zh",
+            "text": "興",
+            "start": 60.24
+          },
+          {
+            "end": 60.68,
+            "lang": "zh",
+            "text": "趣、",
+            "start": 60.44
+          },
+          {
+            "end": 61.7,
+            "lang": "zh",
+            "text": "更",
+            "start": 60.96
+          },
+          {
+            "end": 62.02,
+            "lang": "zh",
+            "text": "有",
+            "start": 61.7
+          },
+          {
+            "end": 62.4,
+            "lang": "zh",
+            "text": "信",
+            "start": 62.02
+          },
+          {
+            "end": 62.8,
+            "lang": "zh",
+            "text": "心",
+            "start": 62.4
+          },
+          {
+            "end": 64.26,
+            "lang": "zh",
+            "text": "然後",
+            "start": 63.78
+          },
+          {
+            "end": 64.74,
+            "lang": "zh",
+            "text": "在",
+            "start": 64.26
+          },
+          {
+            "end": 64.92,
+            "lang": "zh",
+            "text": "這",
+            "start": 64.74
+          },
+          {
+            "end": 65.12,
+            "lang": "zh",
+            "text": "方面",
+            "start": 64.92
+          },
+          {
+            "end": 65.44,
+            "lang": "zh",
+            "text": "做",
+            "start": 65.12
+          },
+          {
+            "end": 65.64,
+            "lang": "zh",
+            "text": "出",
+            "start": 65.44
+          },
+          {
+            "end": 65.98,
+            "lang": "zh",
+            "text": "一些",
+            "start": 65.64
+          },
+          {
+            "end": 66.9,
+            "lang": "zh",
+            "text": "努",
+            "start": 65.98
+          },
+          {
+            "end": 67.14,
+            "lang": "zh",
+            "text": "力",
+            "start": 66.9
+          },
+          {
+            "end": 67.76,
+            "lang": "zh",
+            "text": "剛",
+            "start": 67.14
+          },
+          {
+            "end": 67.9,
+            "lang": "zh",
+            "text": "才",
+            "start": 67.76
+          },
+          {
+            "end": 68.26,
+            "lang": "zh",
+            "text": "其實",
+            "start": 67.9
+          },
+          {
+            "end": 68.44,
+            "lang": "zh",
+            "text": "也",
+            "start": 68.26
+          },
+          {
+            "end": 68.66,
+            "lang": "zh",
+            "text": "看到",
+            "start": 68.44
+          },
+          {
+            "end": 68.98,
+            "lang": "zh",
+            "text": "了",
+            "start": 68.66
+          },
+          {
+            "end": 69.48,
+            "lang": "zh",
+            "text": "英",
+            "start": 68.98
+          },
+          {
+            "end": 69.62,
+            "lang": "zh",
+            "text": "國",
+            "start": 69.48
+          },
+          {
+            "end": 69.76,
+            "lang": "zh",
+            "text": "的",
+            "start": 69.62
+          },
+          {
+            "end": 70.06,
+            "lang": "zh",
+            "text": "國",
+            "start": 69.76
+          },
+          {
+            "end": 70.2,
+            "lang": "zh",
+            "text": "會",
+            "start": 70.06
+          },
+          {
+            "end": 70.36,
+            "lang": "zh",
+            "text": "議",
+            "start": 70.2
+          },
+          {
+            "end": 70.78,
+            "lang": "zh",
+            "text": "員",
+            "start": 70.36
+          },
+          {
+            "end": 71.24,
+            "lang": "zh",
+            "text": "包括",
+            "start": 70.78
+          },
+          {
+            "end": 71.92,
+            "lang": "zh",
+            "text": "這個",
+            "start": 71.24
+          },
+          {
+            "end": 72.28,
+            "lang": "zh",
+            "text": "英",
+            "start": 71.92
+          },
+          {
+            "end": 72.42,
+            "lang": "zh",
+            "text": "國",
+            "start": 72.28
+          },
+          {
+            "end": 72.54,
+            "lang": "zh",
+            "text": "的",
+            "start": 72.42
+          },
+          {
+            "end": 72.76,
+            "lang": "zh",
+            "text": "企",
+            "start": 72.54
+          },
+          {
+            "end": 72.86,
+            "lang": "zh",
+            "text": "業",
+            "start": 72.76
+          },
+          {
+            "end": 73.04,
+            "lang": "zh",
+            "text": "家、",
+            "start": 72.86
+          },
+          {
+            "end": 73.32,
+            "lang": "zh",
+            "text": "包括",
+            "start": 73.14
+          },
+          {
+            "end": 73.58,
+            "lang": "zh",
+            "text": "40",
+            "start": 73.32
+          },
+          {
+            "end": 73.76,
+            "lang": "zh",
+            "text": "萬",
+            "start": 73.58
+          },
+          {
+            "end": 73.92,
+            "lang": "zh",
+            "text": "家",
+            "start": 73.76
+          },
+          {
+            "end": 74.06,
+            "lang": "zh",
+            "text": "旗",
+            "start": 73.92
+          },
+          {
+            "end": 74.26,
+            "lang": "zh",
+            "text": "團",
+            "start": 74.06
+          },
+          {
+            "end": 75.38,
+            "lang": "zh",
+            "text": "等等",
+            "start": 74.26
+          },
+          {
+            "end": 76.02,
+            "lang": "zh",
+            "text": "他們",
+            "start": 75.78
+          },
+          {
+            "end": 76.2,
+            "lang": "zh",
+            "text": "的",
+            "start": 76.02
+          },
+          {
+            "end": 77.36,
+            "lang": "zh",
+            "text": "負",
+            "start": 76.2
+          },
+          {
+            "end": 77.48,
+            "lang": "zh",
+            "text": "責",
+            "start": 77.36
+          },
+          {
+            "end": 77.62,
+            "lang": "zh",
+            "text": "人",
+            "start": 77.48
+          },
+          {
+            "end": 77.78,
+            "lang": "zh",
+            "text": "都",
+            "start": 77.62
+          },
+          {
+            "end": 78.28,
+            "lang": "zh",
+            "text": "非常的",
+            "start": 77.78
+          },
+          {
+            "end": 79.6,
+            "lang": "zh",
+            "text": "熱",
+            "start": 78.28
+          },
+          {
+            "end": 79.9,
+            "lang": "zh",
+            "text": "衷",
+            "start": 79.6
+          },
+          {
+            "end": 80.66,
+            "lang": "zh",
+            "text": "為",
+            "start": 79.9
+          },
+          {
+            "end": 81.1,
+            "lang": "zh",
+            "text": "這個",
+            "start": 80.66
+          },
+          {
+            "end": 81.36,
+            "lang": "zh",
+            "text": "中",
+            "start": 81.1
+          },
+          {
+            "end": 81.5,
+            "lang": "zh",
+            "text": "英",
+            "start": 81.36
+          },
+          {
+            "end": 81.72,
+            "lang": "zh",
+            "text": "之",
+            "start": 81.5
+          },
+          {
+            "end": 81.82,
+            "lang": "zh",
+            "text": "間",
+            "start": 81.72
+          },
+          {
+            "end": 82.02,
+            "lang": "zh",
+            "text": "的",
+            "start": 81.82
+          },
+          {
+            "end": 82.46,
+            "lang": "zh",
+            "text": "關",
+            "start": 82.02
+          },
+          {
+            "end": 82.8,
+            "lang": "zh",
+            "text": "系",
+            "start": 82.46
+          },
+          {
+            "end": 83.72,
+            "lang": "zh",
+            "text": "天",
+            "start": 82.8
+          },
+          {
+            "end": 83.86,
+            "lang": "zh",
+            "text": "專",
+            "start": 83.72
+          },
+          {
+            "end": 84.06,
+            "lang": "zh",
+            "text": "家",
+            "start": 83.86
+          },
+          {
+            "end": 84.26,
+            "lang": "zh",
+            "text": "網",
+            "start": 84.06
+          },
+          {
+            "end": 85.02,
+            "lang": "zh",
+            "text": "所以",
+            "start": 84.26
+          },
+          {
+            "end": 85.18,
+            "lang": "zh",
+            "text": "我",
+            "start": 85.02
+          },
+          {
+            "end": 85.54,
+            "lang": "zh",
+            "text": "認為",
+            "start": 85.18
+          },
+          {
+            "end": 86.14,
+            "lang": "zh",
+            "text": "這",
+            "start": 85.54
+          },
+          {
+            "end": 86.24,
+            "lang": "zh",
+            "text": "次",
+            "start": 86.14
+          },
+          {
+            "end": 86.4,
+            "lang": "zh",
+            "text": "活",
+            "start": 86.24
+          },
+          {
+            "end": 86.5,
+            "lang": "zh",
+            "text": "動",
+            "start": 86.4
+          },
+          {
+            "end": 86.84,
+            "lang": "zh",
+            "text": "會",
+            "start": 86.5
+          },
+          {
+            "end": 88.18,
+            "lang": "zh",
+            "text": "帶",
+            "start": 86.84
+          },
+          {
+            "end": 88.32,
+            "lang": "zh",
+            "text": "來",
+            "start": 88.18
+          },
+          {
+            "end": 88.5,
+            "lang": "zh",
+            "text": "更",
+            "start": 88.32
+          },
+          {
+            "end": 88.68,
+            "lang": "zh",
+            "text": "多",
+            "start": 88.5
+          },
+          {
+            "end": 89.02,
+            "lang": "zh",
+            "text": "的",
+            "start": 88.68
+          },
+          {
+            "end": 89.5,
+            "lang": "zh",
+            "text": "體",
+            "start": 89.02
+          },
+          {
+            "end": 89.68,
+            "lang": "zh",
+            "text": "會",
+            "start": 89.5
+          },
+          {
+            "end": 90.78,
+            "lang": "zh",
+            "text": "好的,",
+            "start": 90.38
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "zh",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 945,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 70.187,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.18,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.63
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 0,
+            "total_s": 0
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": []
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 0.0,
+              "pause_available_after_s": 0.28,
+              "in_nearest_boundary_s": 8.64,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 3,
+            "runs": [
+              {
+                "at": 48.92,
+                "gap_s": 0.84
+              },
+              {
+                "at": 62.8,
+                "gap_s": 0.98
+              },
+              {
+                "at": 89.68,
+                "gap_s": 0.7
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 17
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                0.55,
+                8.50747338731994
+              ],
+              [
+                2.95,
+                6.9335033507850365
+              ],
+              [
+                12.850000000000001,
+                8.374006601911322
+              ],
+              [
+                15.15,
+                9.855672087922773
+              ],
+              [
+                19.950000000000003,
+                8.997238927653814
+              ],
+              [
+                22.25,
+                10.046648043691839
+              ],
+              [
+                27.650000000000002,
+                8.325330911243157
+              ],
+              [
+                29.85,
+                8.450882900455483
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.34,
+            "line_dur_max_s": 4.38,
+            "line_chars_median": 14.0,
+            "line_chars_p90": 15.400000000000002
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              70.12
+            ],
+            "max_static_s": 70.12,
+            "sub_1s_switches": 0,
+            "keyframe_deltas": [],
+            "keyframes_perceptual": 0
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product",
+            "note": "keyframe delta = |Δx|+|Δy|+relΔscale; ≥0.05 reads as a perceptual reframe, micro-drift does not"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.389098072052002,
+            "p10": 0.3842361609141032,
+            "p90": 0.40273979504903157
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 71
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.2502381218804253,
+            "p10": 0.2219702402750651,
+            "p90": 0.27014244927300346
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "out-97f11cc1",
+      "family": "talking_head",
+      "content_md5": "9b2e632d37733c0d8cebcd893a9afddd",
+      "frames_dir": "data/anatomy/frames/out-97f11cc1-9b2e632d",
+      "output_id": "97f11cc1-6522-4273-9237-691d99541f1f",
+      "run_id": "5e3158d3-a3c0-473e-9ab5-cde73317b4be",
+      "video_key": "cc614c2c-7920-41e8-a09d-65fd36ef2518/outputs/projects/13bc9809-7993-4138-aa73-c326ace7aafe/97f11cc1-6522-4273-9237-691d99541f1f-1787417535.mp4",
+      "type": "clip",
+      "spec": {
+        "dub": null,
+        "crop": {
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0
+        },
+        "brand": {
+          "intro": null,
+          "outro": null,
+          "fill_mode": "fill",
+          "caption_font": "lilita",
+          "caption_size": 68,
+          "caption_color": "#facc15",
+          "caption_enabled": true
+        },
+        "music": {
+          "url": null,
+          "enabled": false,
+          "gain_db": -18.0,
+          "music_id": null
+        },
+        "title": {
+          "size": null,
+          "text": "為什麼選擇倫敦？因為這座城市本身就是國際合作的天然樞紐。",
+          "enabled": true,
+          "position": {
+            "x": 0.5,
+            "y": 0.12
+          }
+        },
+        "aspect": "9:16",
+        "layers": [],
+        "source": {
+          "fps": 30,
+          "url": "https://repurposer.tos-ap-southeast-1.volces.com/demo/uploads/xy_1.mp4",
+          "kind": "video",
+          "asset_id": "f1190d93-92de-4919-ab84-bbbb6f34da73",
+          "duration": 340.0,
+          "image_urls": []
+        },
+        "segments": [
+          {
+            "id": "4697bec4db62",
+            "end": 215.16,
+            "url": null,
+            "start": 102.12,
+            "hidden": false,
+            "asset_id": null,
+            "provenance": null,
+            "transition": "none"
+          }
+        ],
+        "brand_ref": "c266c110-ea74-4989-82e0-44fb865e0dd6",
+        "crop_track": [
+          {
+            "t": 102.12,
+            "x": 0.701327,
+            "y": 0.392903,
+            "scale": 1.272578
+          },
+          {
+            "t": 164.66,
+            "x": 0.254967,
+            "y": 0.394317,
+            "scale": 1.638963
+          },
+          {
+            "t": 178.88,
+            "x": 0.701327,
+            "y": 0.392903,
+            "scale": 1.272578
+          },
+          {
+            "t": 187.34,
+            "x": 0.254967,
+            "y": 0.394317,
+            "scale": 1.638963
+          }
+        ],
+        "caption_track": [
+          {
+            "end": 102.22,
+            "lang": "zh",
+            "text": "在",
+            "start": 102.12
+          },
+          {
+            "end": 102.66,
+            "lang": "zh",
+            "text": "倫",
+            "start": 102.22
+          },
+          {
+            "end": 102.86,
+            "lang": "zh",
+            "text": "敦",
+            "start": 102.66
+          },
+          {
+            "end": 103.2,
+            "lang": "zh",
+            "text": "是",
+            "start": 102.86
+          },
+          {
+            "end": 103.52,
+            "lang": "zh",
+            "text": "一個",
+            "start": 103.2
+          },
+          {
+            "end": 103.94,
+            "lang": "zh",
+            "text": "非常",
+            "start": 103.52
+          },
+          {
+            "end": 104.28,
+            "lang": "zh",
+            "text": "有",
+            "start": 103.94
+          },
+          {
+            "end": 104.44,
+            "lang": "zh",
+            "text": "影",
+            "start": 104.28
+          },
+          {
+            "end": 104.6,
+            "lang": "zh",
+            "text": "響",
+            "start": 104.44
+          },
+          {
+            "end": 104.78,
+            "lang": "zh",
+            "text": "力、",
+            "start": 104.6
+          },
+          {
+            "end": 105.0,
+            "lang": "zh",
+            "text": "有",
+            "start": 104.92
+          },
+          {
+            "end": 105.2,
+            "lang": "zh",
+            "text": "歷",
+            "start": 105.0
+          },
+          {
+            "end": 105.58,
+            "lang": "zh",
+            "text": "史",
+            "start": 105.2
+          },
+          {
+            "end": 106.1,
+            "lang": "zh",
+            "text": "也",
+            "start": 105.58
+          },
+          {
+            "end": 106.5,
+            "lang": "zh",
+            "text": "有",
+            "start": 106.1
+          },
+          {
+            "end": 108.12,
+            "lang": "zh",
+            "text": "非常",
+            "start": 106.5
+          },
+          {
+            "end": 109.14,
+            "lang": "zh",
+            "text": "大的",
+            "start": 108.12
+          },
+          {
+            "end": 111.22,
+            "lang": "zh",
+            "text": "全",
+            "start": 109.14
+          },
+          {
+            "end": 111.6,
+            "lang": "zh",
+            "text": "球",
+            "start": 111.22
+          },
+          {
+            "end": 112.08,
+            "lang": "zh",
+            "text": "影",
+            "start": 111.6
+          },
+          {
+            "end": 112.3,
+            "lang": "zh",
+            "text": "響",
+            "start": 112.08
+          },
+          {
+            "end": 112.52,
+            "lang": "zh",
+            "text": "力",
+            "start": 112.3
+          },
+          {
+            "end": 113.18,
+            "lang": "zh",
+            "text": "的",
+            "start": 112.52
+          },
+          {
+            "end": 114.3,
+            "lang": "zh",
+            "text": "輸",
+            "start": 113.18
+          },
+          {
+            "end": 114.48,
+            "lang": "zh",
+            "text": "流",
+            "start": 114.3
+          },
+          {
+            "end": 115.34,
+            "lang": "zh",
+            "text": "為",
+            "start": 114.48
+          },
+          {
+            "end": 115.4,
+            "lang": "zh",
+            "text": "什",
+            "start": 115.34
+          },
+          {
+            "end": 115.48,
+            "lang": "zh",
+            "text": "麽",
+            "start": 115.4
+          },
+          {
+            "end": 115.62,
+            "lang": "zh",
+            "text": "說",
+            "start": 115.48
+          },
+          {
+            "end": 115.74,
+            "lang": "zh",
+            "text": "他是",
+            "start": 115.62
+          },
+          {
+            "end": 116.06,
+            "lang": "zh",
+            "text": "輸",
+            "start": 115.74
+          },
+          {
+            "end": 116.2,
+            "lang": "zh",
+            "text": "流",
+            "start": 116.06
+          },
+          {
+            "end": 116.32,
+            "lang": "zh",
+            "text": "了",
+            "start": 116.2
+          },
+          {
+            "end": 116.56,
+            "lang": "zh",
+            "text": "因為",
+            "start": 116.32
+          },
+          {
+            "end": 117.02,
+            "lang": "zh",
+            "text": "在",
+            "start": 116.56
+          },
+          {
+            "end": 117.14,
+            "lang": "zh",
+            "text": "倫",
+            "start": 117.02
+          },
+          {
+            "end": 117.28,
+            "lang": "zh",
+            "text": "敦",
+            "start": 117.14
+          },
+          {
+            "end": 117.72,
+            "lang": "zh",
+            "text": "不",
+            "start": 117.28
+          },
+          {
+            "end": 118.08,
+            "lang": "zh",
+            "text": "只是",
+            "start": 117.72
+          },
+          {
+            "end": 118.5,
+            "lang": "zh",
+            "text": "輻",
+            "start": 118.08
+          },
+          {
+            "end": 118.64,
+            "lang": "zh",
+            "text": "射",
+            "start": 118.5
+          },
+          {
+            "end": 118.8,
+            "lang": "zh",
+            "text": "英",
+            "start": 118.64
+          },
+          {
+            "end": 119.04,
+            "lang": "zh",
+            "text": "國、",
+            "start": 118.8
+          },
+          {
+            "end": 119.32,
+            "lang": "zh",
+            "text": "他",
+            "start": 119.22
+          },
+          {
+            "end": 119.48,
+            "lang": "zh",
+            "text": "也",
+            "start": 119.32
+          },
+          {
+            "end": 119.7,
+            "lang": "zh",
+            "text": "輻",
+            "start": 119.48
+          },
+          {
+            "end": 119.88,
+            "lang": "zh",
+            "text": "射",
+            "start": 119.7
+          },
+          {
+            "end": 120.12,
+            "lang": "zh",
+            "text": "歐",
+            "start": 119.88
+          },
+          {
+            "end": 120.3,
+            "lang": "zh",
+            "text": "洲",
+            "start": 120.12
+          },
+          {
+            "end": 121.2,
+            "lang": "zh",
+            "text": "他",
+            "start": 120.76
+          },
+          {
+            "end": 121.32,
+            "lang": "zh",
+            "text": "也",
+            "start": 121.2
+          },
+          {
+            "end": 121.48,
+            "lang": "zh",
+            "text": "輻",
+            "start": 121.32
+          },
+          {
+            "end": 121.62,
+            "lang": "zh",
+            "text": "射",
+            "start": 121.48
+          },
+          {
+            "end": 121.82,
+            "lang": "zh",
+            "text": "英",
+            "start": 121.62
+          },
+          {
+            "end": 121.94,
+            "lang": "zh",
+            "text": "聯",
+            "start": 121.82
+          },
+          {
+            "end": 122.12,
+            "lang": "zh",
+            "text": "邦",
+            "start": 121.94
+          },
+          {
+            "end": 122.24,
+            "lang": "zh",
+            "text": "的",
+            "start": 122.12
+          },
+          {
+            "end": 122.58,
+            "lang": "zh",
+            "text": "國家",
+            "start": 122.24
+          },
+          {
+            "end": 122.92,
+            "lang": "zh",
+            "text": "他",
+            "start": 122.58
+          },
+          {
+            "end": 125.42,
+            "lang": "zh",
+            "text": "也是",
+            "start": 122.92
+          },
+          {
+            "end": 125.68,
+            "lang": "zh",
+            "text": "一個",
+            "start": 125.42
+          },
+          {
+            "end": 125.96,
+            "lang": "zh",
+            "text": "開",
+            "start": 125.68
+          },
+          {
+            "end": 126.18,
+            "lang": "zh",
+            "text": "化",
+            "start": 125.96
+          },
+          {
+            "end": 126.52,
+            "lang": "zh",
+            "text": "的",
+            "start": 126.18
+          },
+          {
+            "end": 127.1,
+            "lang": "zh",
+            "text": "理",
+            "start": 126.52
+          },
+          {
+            "end": 127.26,
+            "lang": "zh",
+            "text": "念",
+            "start": 127.1
+          },
+          {
+            "end": 127.82,
+            "lang": "zh",
+            "text": "非常",
+            "start": 127.26
+          },
+          {
+            "end": 128.9,
+            "lang": "zh",
+            "text": "先",
+            "start": 127.82
+          },
+          {
+            "end": 129.08,
+            "lang": "zh",
+            "text": "進",
+            "start": 128.9
+          },
+          {
+            "end": 129.56,
+            "lang": "zh",
+            "text": "也",
+            "start": 129.08
+          },
+          {
+            "end": 129.86,
+            "lang": "zh",
+            "text": "比較",
+            "start": 129.56
+          },
+          {
+            "end": 131.4,
+            "lang": "zh",
+            "text": "靈",
+            "start": 129.86
+          },
+          {
+            "end": 131.7,
+            "lang": "zh",
+            "text": "活",
+            "start": 131.4
+          },
+          {
+            "end": 132.24,
+            "lang": "zh",
+            "text": "和",
+            "start": 131.7
+          },
+          {
+            "end": 132.56,
+            "lang": "zh",
+            "text": "開",
+            "start": 132.24
+          },
+          {
+            "end": 132.72,
+            "lang": "zh",
+            "text": "放",
+            "start": 132.56
+          },
+          {
+            "end": 132.86,
+            "lang": "zh",
+            "text": "的",
+            "start": 132.72
+          },
+          {
+            "end": 133.32,
+            "lang": "zh",
+            "text": "一個",
+            "start": 132.86
+          },
+          {
+            "end": 135.34,
+            "lang": "zh",
+            "text": "城",
+            "start": 133.32
+          },
+          {
+            "end": 135.62,
+            "lang": "zh",
+            "text": "市",
+            "start": 135.34
+          },
+          {
+            "end": 136.4,
+            "lang": "zh",
+            "text": "也是",
+            "start": 135.62
+          },
+          {
+            "end": 136.66,
+            "lang": "zh",
+            "text": "屬",
+            "start": 136.4
+          },
+          {
+            "end": 136.8,
+            "lang": "zh",
+            "text": "於",
+            "start": 136.66
+          },
+          {
+            "end": 137.18,
+            "lang": "zh",
+            "text": "世界",
+            "start": 136.8
+          },
+          {
+            "end": 138.18,
+            "lang": "zh",
+            "text": "最",
+            "start": 137.18
+          },
+          {
+            "end": 138.44,
+            "lang": "zh",
+            "text": "為",
+            "start": 138.18
+          },
+          {
+            "end": 138.88,
+            "lang": "zh",
+            "text": "一",
+            "start": 138.44
+          },
+          {
+            "end": 139.06,
+            "lang": "zh",
+            "text": "居",
+            "start": 138.88
+          },
+          {
+            "end": 139.24,
+            "lang": "zh",
+            "text": "的",
+            "start": 139.06
+          },
+          {
+            "end": 139.46,
+            "lang": "zh",
+            "text": "城",
+            "start": 139.24
+          },
+          {
+            "end": 139.72,
+            "lang": "zh",
+            "text": "市",
+            "start": 139.46
+          },
+          {
+            "end": 140.24,
+            "lang": "zh",
+            "text": "之",
+            "start": 139.72
+          },
+          {
+            "end": 140.44,
+            "lang": "zh",
+            "text": "一",
+            "start": 140.24
+          },
+          {
+            "end": 141.28,
+            "lang": "zh",
+            "text": "就",
+            "start": 141.0
+          },
+          {
+            "end": 141.52,
+            "lang": "zh",
+            "text": "不能",
+            "start": 141.28
+          },
+          {
+            "end": 141.74,
+            "lang": "zh",
+            "text": "作",
+            "start": 141.52
+          },
+          {
+            "end": 141.88,
+            "lang": "zh",
+            "text": "為",
+            "start": 141.74
+          },
+          {
+            "end": 142.06,
+            "lang": "zh",
+            "text": "人、",
+            "start": 141.88
+          },
+          {
+            "end": 142.3,
+            "lang": "zh",
+            "text": "作",
+            "start": 142.24
+          },
+          {
+            "end": 142.44,
+            "lang": "zh",
+            "text": "為",
+            "start": 142.3
+          },
+          {
+            "end": 142.72,
+            "lang": "zh",
+            "text": "企",
+            "start": 142.44
+          },
+          {
+            "end": 142.92,
+            "lang": "zh",
+            "text": "業、",
+            "start": 142.72
+          },
+          {
+            "end": 143.24,
+            "lang": "zh",
+            "text": "作",
+            "start": 143.16
+          },
+          {
+            "end": 143.62,
+            "lang": "zh",
+            "text": "為",
+            "start": 143.24
+          },
+          {
+            "end": 144.32,
+            "lang": "zh",
+            "text": "技",
+            "start": 143.62
+          },
+          {
+            "end": 144.7,
+            "lang": "zh",
+            "text": "術",
+            "start": 144.32
+          },
+          {
+            "end": 145.94,
+            "lang": "zh",
+            "text": "在",
+            "start": 145.38
+          },
+          {
+            "end": 146.42,
+            "lang": "zh",
+            "text": "倫",
+            "start": 145.94
+          },
+          {
+            "end": 146.56,
+            "lang": "zh",
+            "text": "敦",
+            "start": 146.42
+          },
+          {
+            "end": 146.78,
+            "lang": "zh",
+            "text": "來",
+            "start": 146.56
+          },
+          {
+            "end": 147.58,
+            "lang": "zh",
+            "text": "應該",
+            "start": 146.78
+          },
+          {
+            "end": 147.8,
+            "lang": "zh",
+            "text": "會",
+            "start": 147.58
+          },
+          {
+            "end": 148.0,
+            "lang": "zh",
+            "text": "找",
+            "start": 147.8
+          },
+          {
+            "end": 148.28,
+            "lang": "zh",
+            "text": "到",
+            "start": 148.0
+          },
+          {
+            "end": 148.88,
+            "lang": "zh",
+            "text": "非常",
+            "start": 148.28
+          },
+          {
+            "end": 149.18,
+            "lang": "zh",
+            "text": "多",
+            "start": 148.88
+          },
+          {
+            "end": 149.54,
+            "lang": "zh",
+            "text": "的",
+            "start": 149.18
+          },
+          {
+            "end": 150.84,
+            "lang": "zh",
+            "text": "機會",
+            "start": 149.54
+          },
+          {
+            "end": 151.7,
+            "lang": "zh",
+            "text": "所以",
+            "start": 150.84
+          },
+          {
+            "end": 151.98,
+            "lang": "zh",
+            "text": "選",
+            "start": 151.7
+          },
+          {
+            "end": 152.12,
+            "lang": "zh",
+            "text": "擇",
+            "start": 151.98
+          },
+          {
+            "end": 152.3,
+            "lang": "zh",
+            "text": "倫",
+            "start": 152.12
+          },
+          {
+            "end": 152.48,
+            "lang": "zh",
+            "text": "敦",
+            "start": 152.3
+          },
+          {
+            "end": 152.86,
+            "lang": "zh",
+            "text": "不",
+            "start": 152.48
+          },
+          {
+            "end": 153.06,
+            "lang": "zh",
+            "text": "只是",
+            "start": 152.86
+          },
+          {
+            "end": 153.42,
+            "lang": "zh",
+            "text": "因為",
+            "start": 153.06
+          },
+          {
+            "end": 153.76,
+            "lang": "zh",
+            "text": "我們",
+            "start": 153.42
+          },
+          {
+            "end": 153.94,
+            "lang": "zh",
+            "text": "有",
+            "start": 153.76
+          },
+          {
+            "end": 154.78,
+            "lang": "zh",
+            "text": "很多",
+            "start": 153.94
+          },
+          {
+            "end": 156.5,
+            "lang": "zh",
+            "text": "主",
+            "start": 154.78
+          },
+          {
+            "end": 156.68,
+            "lang": "zh",
+            "text": "辦",
+            "start": 156.5
+          },
+          {
+            "end": 156.84,
+            "lang": "zh",
+            "text": "方",
+            "start": 156.68
+          },
+          {
+            "end": 157.36,
+            "lang": "zh",
+            "text": "在",
+            "start": 156.84
+          },
+          {
+            "end": 157.74,
+            "lang": "zh",
+            "text": "這邊",
+            "start": 157.36
+          },
+          {
+            "end": 158.34,
+            "lang": "zh",
+            "text": "更",
+            "start": 157.74
+          },
+          {
+            "end": 158.52,
+            "lang": "zh",
+            "text": "是",
+            "start": 158.34
+          },
+          {
+            "end": 158.76,
+            "lang": "zh",
+            "text": "因為",
+            "start": 158.52
+          },
+          {
+            "end": 158.94,
+            "lang": "zh",
+            "text": "他",
+            "start": 158.76
+          },
+          {
+            "end": 159.14,
+            "lang": "zh",
+            "text": "本",
+            "start": 158.94
+          },
+          {
+            "end": 159.34,
+            "lang": "zh",
+            "text": "身",
+            "start": 159.14
+          },
+          {
+            "end": 159.7,
+            "lang": "zh",
+            "text": "就",
+            "start": 159.34
+          },
+          {
+            "end": 160.02,
+            "lang": "zh",
+            "text": "具",
+            "start": 159.7
+          },
+          {
+            "end": 160.2,
+            "lang": "zh",
+            "text": "備",
+            "start": 160.02
+          },
+          {
+            "end": 160.66,
+            "lang": "zh",
+            "text": "天",
+            "start": 160.2
+          },
+          {
+            "end": 160.86,
+            "lang": "zh",
+            "text": "然",
+            "start": 160.66
+          },
+          {
+            "end": 161.34,
+            "lang": "zh",
+            "text": "的",
+            "start": 160.86
+          },
+          {
+            "end": 161.7,
+            "lang": "zh",
+            "text": "促",
+            "start": 161.34
+          },
+          {
+            "end": 161.86,
+            "lang": "zh",
+            "text": "進",
+            "start": 161.7
+          },
+          {
+            "end": 162.08,
+            "lang": "zh",
+            "text": "國",
+            "start": 161.86
+          },
+          {
+            "end": 162.22,
+            "lang": "zh",
+            "text": "際",
+            "start": 162.08
+          },
+          {
+            "end": 162.44,
+            "lang": "zh",
+            "text": "合",
+            "start": 162.22
+          },
+          {
+            "end": 162.56,
+            "lang": "zh",
+            "text": "作",
+            "start": 162.44
+          },
+          {
+            "end": 162.8,
+            "lang": "zh",
+            "text": "的",
+            "start": 162.56
+          },
+          {
+            "end": 163.0,
+            "lang": "zh",
+            "text": "優",
+            "start": 162.8
+          },
+          {
+            "end": 163.24,
+            "lang": "zh",
+            "text": "勢",
+            "start": 163.0
+          },
+          {
+            "end": 165.3,
+            "lang": "zh",
+            "text": "好的,",
+            "start": 164.86
+          },
+          {
+            "end": 165.8,
+            "lang": "zh",
+            "text": "謝謝",
+            "start": 165.46
+          },
+          {
+            "end": 166.2,
+            "lang": "zh",
+            "text": "你",
+            "start": 165.8
+          },
+          {
+            "end": 166.86,
+            "lang": "zh",
+            "text": "那麼,",
+            "start": 166.64
+          },
+          {
+            "end": 167.12,
+            "lang": "zh",
+            "text": "再",
+            "start": 166.96
+          },
+          {
+            "end": 167.28,
+            "lang": "zh",
+            "text": "一個",
+            "start": 167.12
+          },
+          {
+            "end": 167.7,
+            "lang": "zh",
+            "text": "問題",
+            "start": 167.28
+          },
+          {
+            "end": 168.24,
+            "lang": "zh",
+            "text": "您",
+            "start": 167.7
+          },
+          {
+            "end": 168.56,
+            "lang": "zh",
+            "text": "覺得",
+            "start": 168.24
+          },
+          {
+            "end": 169.08,
+            "lang": "zh",
+            "text": "W",
+            "start": 168.56
+          },
+          {
+            "end": 169.3,
+            "lang": "zh",
+            "text": "F",
+            "start": 169.08
+          },
+          {
+            "end": 169.48,
+            "lang": "zh",
+            "text": "T",
+            "start": 169.3
+          },
+          {
+            "end": 169.7,
+            "lang": "zh",
+            "text": "作",
+            "start": 169.48
+          },
+          {
+            "end": 169.84,
+            "lang": "zh",
+            "text": "為",
+            "start": 169.7
+          },
+          {
+            "end": 170.06,
+            "lang": "zh",
+            "text": "國",
+            "start": 169.84
+          },
+          {
+            "end": 170.26,
+            "lang": "zh",
+            "text": "際",
+            "start": 170.06
+          },
+          {
+            "end": 170.44,
+            "lang": "zh",
+            "text": "中",
+            "start": 170.26
+          },
+          {
+            "end": 170.62,
+            "lang": "zh",
+            "text": "立",
+            "start": 170.44
+          },
+          {
+            "end": 170.84,
+            "lang": "zh",
+            "text": "科",
+            "start": 170.62
+          },
+          {
+            "end": 171.0,
+            "lang": "zh",
+            "text": "技",
+            "start": 170.84
+          },
+          {
+            "end": 171.18,
+            "lang": "zh",
+            "text": "聯",
+            "start": 171.0
+          },
+          {
+            "end": 171.38,
+            "lang": "zh",
+            "text": "盟",
+            "start": 171.18
+          },
+          {
+            "end": 172.0,
+            "lang": "zh",
+            "text": "面",
+            "start": 171.38
+          },
+          {
+            "end": 172.16,
+            "lang": "zh",
+            "text": "對",
+            "start": 172.0
+          },
+          {
+            "end": 172.38,
+            "lang": "zh",
+            "text": "全",
+            "start": 172.16
+          },
+          {
+            "end": 172.56,
+            "lang": "zh",
+            "text": "球",
+            "start": 172.38
+          },
+          {
+            "end": 172.8,
+            "lang": "zh",
+            "text": "科",
+            "start": 172.56
+          },
+          {
+            "end": 172.96,
+            "lang": "zh",
+            "text": "技",
+            "start": 172.8
+          },
+          {
+            "end": 173.14,
+            "lang": "zh",
+            "text": "競",
+            "start": 172.96
+          },
+          {
+            "end": 173.3,
+            "lang": "zh",
+            "text": "爭",
+            "start": 173.14
+          },
+          {
+            "end": 173.56,
+            "lang": "zh",
+            "text": "和",
+            "start": 173.3
+          },
+          {
+            "end": 173.82,
+            "lang": "zh",
+            "text": "職",
+            "start": 173.56
+          },
+          {
+            "end": 174.12,
+            "lang": "zh",
+            "text": "將",
+            "start": 173.82
+          },
+          {
+            "end": 174.52,
+            "lang": "zh",
+            "text": "如何",
+            "start": 174.12
+          },
+          {
+            "end": 174.84,
+            "lang": "zh",
+            "text": "持",
+            "start": 174.52
+          },
+          {
+            "end": 175.18,
+            "lang": "zh",
+            "text": "續",
+            "start": 174.84
+          },
+          {
+            "end": 175.82,
+            "lang": "zh",
+            "text": "推",
+            "start": 175.18
+          },
+          {
+            "end": 176.0,
+            "lang": "zh",
+            "text": "動",
+            "start": 175.82
+          },
+          {
+            "end": 176.34,
+            "lang": "zh",
+            "text": "跨",
+            "start": 176.0
+          },
+          {
+            "end": 176.52,
+            "lang": "zh",
+            "text": "境",
+            "start": 176.34
+          },
+          {
+            "end": 176.78,
+            "lang": "zh",
+            "text": "技",
+            "start": 176.52
+          },
+          {
+            "end": 176.86,
+            "lang": "zh",
+            "text": "術",
+            "start": 176.78
+          },
+          {
+            "end": 177.04,
+            "lang": "zh",
+            "text": "協",
+            "start": 176.86
+          },
+          {
+            "end": 177.18,
+            "lang": "zh",
+            "text": "動",
+            "start": 177.04
+          },
+          {
+            "end": 177.38,
+            "lang": "zh",
+            "text": "與",
+            "start": 177.18
+          },
+          {
+            "end": 177.54,
+            "lang": "zh",
+            "text": "成",
+            "start": 177.38
+          },
+          {
+            "end": 177.7,
+            "lang": "zh",
+            "text": "果",
+            "start": 177.54
+          },
+          {
+            "end": 177.86,
+            "lang": "zh",
+            "text": "轉",
+            "start": 177.7
+          },
+          {
+            "end": 178.08,
+            "lang": "zh",
+            "text": "化",
+            "start": 177.86
+          },
+          {
+            "end": 178.3,
+            "lang": "zh",
+            "text": "嗎?",
+            "start": 178.08
+          },
+          {
+            "end": 179.34,
+            "lang": "zh",
+            "text": "我",
+            "start": 179.08
+          },
+          {
+            "end": 179.62,
+            "lang": "zh",
+            "text": "認為",
+            "start": 179.34
+          },
+          {
+            "end": 179.92,
+            "lang": "zh",
+            "text": "在",
+            "start": 179.62
+          },
+          {
+            "end": 181.14,
+            "lang": "zh",
+            "text": "新",
+            "start": 179.92
+          },
+          {
+            "end": 181.28,
+            "lang": "zh",
+            "text": "的",
+            "start": 181.14
+          },
+          {
+            "end": 181.48,
+            "lang": "zh",
+            "text": "技",
+            "start": 181.28
+          },
+          {
+            "end": 181.68,
+            "lang": "zh",
+            "text": "術",
+            "start": 181.48
+          },
+          {
+            "end": 182.34,
+            "lang": "zh",
+            "text": "的",
+            "start": 181.68
+          },
+          {
+            "end": 183.78,
+            "lang": "zh",
+            "text": "推",
+            "start": 182.34
+          },
+          {
+            "end": 183.96,
+            "lang": "zh",
+            "text": "動",
+            "start": 183.78
+          },
+          {
+            "end": 184.44,
+            "lang": "zh",
+            "text": "和",
+            "start": 183.96
+          },
+          {
+            "end": 184.6,
+            "lang": "zh",
+            "text": "浪",
+            "start": 184.44
+          },
+          {
+            "end": 184.82,
+            "lang": "zh",
+            "text": "潮",
+            "start": 184.6
+          },
+          {
+            "end": 185.22,
+            "lang": "zh",
+            "text": "下面",
+            "start": 184.82
+          },
+          {
+            "end": 188.02,
+            "lang": "zh",
+            "text": "應該",
+            "start": 187.54
+          },
+          {
+            "end": 188.3,
+            "lang": "zh",
+            "text": "要",
+            "start": 188.02
+          },
+          {
+            "end": 188.54,
+            "lang": "zh",
+            "text": "促",
+            "start": 188.3
+          },
+          {
+            "end": 188.66,
+            "lang": "zh",
+            "text": "進",
+            "start": 188.54
+          },
+          {
+            "end": 188.94,
+            "lang": "zh",
+            "text": "全",
+            "start": 188.66
+          },
+          {
+            "end": 189.1,
+            "lang": "zh",
+            "text": "球",
+            "start": 188.94
+          },
+          {
+            "end": 189.3,
+            "lang": "zh",
+            "text": "的",
+            "start": 189.1
+          },
+          {
+            "end": 189.6,
+            "lang": "zh",
+            "text": "合",
+            "start": 189.3
+          },
+          {
+            "end": 189.78,
+            "lang": "zh",
+            "text": "作",
+            "start": 189.6
+          },
+          {
+            "end": 190.16,
+            "lang": "zh",
+            "text": "不是",
+            "start": 189.78
+          },
+          {
+            "end": 190.34,
+            "lang": "zh",
+            "text": "某",
+            "start": 190.16
+          },
+          {
+            "end": 190.6,
+            "lang": "zh",
+            "text": "一個",
+            "start": 190.34
+          },
+          {
+            "end": 190.98,
+            "lang": "zh",
+            "text": "國家",
+            "start": 190.6
+          },
+          {
+            "end": 191.24,
+            "lang": "zh",
+            "text": "能",
+            "start": 190.98
+          },
+          {
+            "end": 191.62,
+            "lang": "zh",
+            "text": "夠",
+            "start": 191.24
+          },
+          {
+            "end": 192.1,
+            "lang": "zh",
+            "text": "帶",
+            "start": 191.62
+          },
+          {
+            "end": 192.34,
+            "lang": "zh",
+            "text": "領",
+            "start": 192.1
+          },
+          {
+            "end": 193.2,
+            "lang": "zh",
+            "text": "人",
+            "start": 192.34
+          },
+          {
+            "end": 193.38,
+            "lang": "zh",
+            "text": "類",
+            "start": 193.2
+          },
+          {
+            "end": 193.56,
+            "lang": "zh",
+            "text": "的",
+            "start": 193.38
+          },
+          {
+            "end": 193.72,
+            "lang": "zh",
+            "text": "進",
+            "start": 193.56
+          },
+          {
+            "end": 193.92,
+            "lang": "zh",
+            "text": "步",
+            "start": 193.72
+          },
+          {
+            "end": 194.66,
+            "lang": "zh",
+            "text": "還有",
+            "start": 193.92
+          },
+          {
+            "end": 195.12,
+            "lang": "zh",
+            "text": "人",
+            "start": 194.66
+          },
+          {
+            "end": 195.28,
+            "lang": "zh",
+            "text": "類",
+            "start": 195.12
+          },
+          {
+            "end": 195.46,
+            "lang": "zh",
+            "text": "文",
+            "start": 195.28
+          },
+          {
+            "end": 195.68,
+            "lang": "zh",
+            "text": "明",
+            "start": 195.46
+          },
+          {
+            "end": 195.84,
+            "lang": "zh",
+            "text": "的",
+            "start": 195.68
+          },
+          {
+            "end": 196.0,
+            "lang": "zh",
+            "text": "進",
+            "start": 195.84
+          },
+          {
+            "end": 196.22,
+            "lang": "zh",
+            "text": "步",
+            "start": 196.0
+          },
+          {
+            "end": 197.06,
+            "lang": "zh",
+            "text": "不能",
+            "start": 196.22
+          },
+          {
+            "end": 197.52,
+            "lang": "zh",
+            "text": "只是",
+            "start": 197.06
+          },
+          {
+            "end": 197.82,
+            "lang": "zh",
+            "text": "說",
+            "start": 197.52
+          },
+          {
+            "end": 198.14,
+            "lang": "zh",
+            "text": "我們",
+            "start": 197.82
+          },
+          {
+            "end": 198.38,
+            "lang": "zh",
+            "text": "技",
+            "start": 198.14
+          },
+          {
+            "end": 198.5,
+            "lang": "zh",
+            "text": "術",
+            "start": 198.38
+          },
+          {
+            "end": 198.72,
+            "lang": "zh",
+            "text": "進",
+            "start": 198.5
+          },
+          {
+            "end": 198.88,
+            "lang": "zh",
+            "text": "步",
+            "start": 198.72
+          },
+          {
+            "end": 199.16,
+            "lang": "zh",
+            "text": "我們",
+            "start": 198.88
+          },
+          {
+            "end": 199.5,
+            "lang": "zh",
+            "text": "需要",
+            "start": 199.16
+          },
+          {
+            "end": 199.86,
+            "lang": "zh",
+            "text": "的是",
+            "start": 199.5
+          },
+          {
+            "end": 200.32,
+            "lang": "zh",
+            "text": "更",
+            "start": 199.86
+          },
+          {
+            "end": 200.6,
+            "lang": "zh",
+            "text": "多",
+            "start": 200.32
+          },
+          {
+            "end": 200.92,
+            "lang": "zh",
+            "text": "的",
+            "start": 200.6
+          },
+          {
+            "end": 201.48,
+            "lang": "zh",
+            "text": "社",
+            "start": 200.92
+          },
+          {
+            "end": 201.68,
+            "lang": "zh",
+            "text": "會",
+            "start": 201.48
+          },
+          {
+            "end": 202.04,
+            "lang": "zh",
+            "text": "理",
+            "start": 201.68
+          },
+          {
+            "end": 202.22,
+            "lang": "zh",
+            "text": "念、",
+            "start": 202.04
+          },
+          {
+            "end": 202.54,
+            "lang": "zh",
+            "text": "價",
+            "start": 202.42
+          },
+          {
+            "end": 202.66,
+            "lang": "zh",
+            "text": "值",
+            "start": 202.54
+          },
+          {
+            "end": 202.8,
+            "lang": "zh",
+            "text": "觀",
+            "start": 202.66
+          },
+          {
+            "end": 202.94,
+            "lang": "zh",
+            "text": "的",
+            "start": 202.8
+          },
+          {
+            "end": 203.14,
+            "lang": "zh",
+            "text": "進",
+            "start": 202.94
+          },
+          {
+            "end": 203.34,
+            "lang": "zh",
+            "text": "步",
+            "start": 203.14
+          },
+          {
+            "end": 204.3,
+            "lang": "zh",
+            "text": "所以",
+            "start": 203.82
+          },
+          {
+            "end": 204.48,
+            "lang": "zh",
+            "text": "說",
+            "start": 204.3
+          },
+          {
+            "end": 204.68,
+            "lang": "zh",
+            "text": "我",
+            "start": 204.48
+          },
+          {
+            "end": 205.02,
+            "lang": "zh",
+            "text": "認為",
+            "start": 204.68
+          },
+          {
+            "end": 206.16,
+            "lang": "zh",
+            "text": "W",
+            "start": 205.02
+          },
+          {
+            "end": 206.56,
+            "lang": "zh",
+            "text": "F",
+            "start": 206.16
+          },
+          {
+            "end": 206.72,
+            "lang": "zh",
+            "text": "T",
+            "start": 206.56
+          },
+          {
+            "end": 206.94,
+            "lang": "zh",
+            "text": "的話",
+            "start": 206.72
+          },
+          {
+            "end": 207.34,
+            "lang": "zh",
+            "text": "我們",
+            "start": 206.94
+          },
+          {
+            "end": 207.84,
+            "lang": "zh",
+            "text": "是",
+            "start": 207.34
+          },
+          {
+            "end": 208.46,
+            "lang": "zh",
+            "text": "希望",
+            "start": 207.84
+          },
+          {
+            "end": 209.46,
+            "lang": "zh",
+            "text": "技",
+            "start": 208.46
+          },
+          {
+            "end": 209.66,
+            "lang": "zh",
+            "text": "術",
+            "start": 209.46
+          },
+          {
+            "end": 209.88,
+            "lang": "zh",
+            "text": "與",
+            "start": 209.66
+          },
+          {
+            "end": 210.14,
+            "lang": "zh",
+            "text": "社",
+            "start": 209.88
+          },
+          {
+            "end": 210.3,
+            "lang": "zh",
+            "text": "會",
+            "start": 210.14
+          },
+          {
+            "end": 210.5,
+            "lang": "zh",
+            "text": "價",
+            "start": 210.3
+          },
+          {
+            "end": 210.74,
+            "lang": "zh",
+            "text": "值",
+            "start": 210.5
+          },
+          {
+            "end": 211.38,
+            "lang": "zh",
+            "text": "同",
+            "start": 210.74
+          },
+          {
+            "end": 211.56,
+            "lang": "zh",
+            "text": "步",
+            "start": 211.38
+          },
+          {
+            "end": 211.76,
+            "lang": "zh",
+            "text": "推",
+            "start": 211.56
+          },
+          {
+            "end": 211.92,
+            "lang": "zh",
+            "text": "動",
+            "start": 211.76
+          },
+          {
+            "end": 212.66,
+            "lang": "zh",
+            "text": "讓",
+            "start": 211.92
+          },
+          {
+            "end": 213.48,
+            "lang": "zh",
+            "text": "大家",
+            "start": 212.66
+          },
+          {
+            "end": 214.02,
+            "lang": "zh",
+            "text": "因為",
+            "start": 213.48
+          },
+          {
+            "end": 214.28,
+            "lang": "zh",
+            "text": "技",
+            "start": 214.02
+          },
+          {
+            "end": 214.48,
+            "lang": "zh",
+            "text": "術",
+            "start": 214.28
+          },
+          {
+            "end": 214.66,
+            "lang": "zh",
+            "text": "而",
+            "start": 214.48
+          },
+          {
+            "end": 214.8,
+            "lang": "zh",
+            "text": "探",
+            "start": 214.66
+          },
+          {
+            "end": 214.92,
+            "lang": "zh",
+            "text": "討",
+            "start": 214.8
+          },
+          {
+            "end": 215.16,
+            "lang": "zh",
+            "text": "起來",
+            "start": 214.92
+          }
+        ],
+        "caption_enabled": true,
+        "target_language": "zh",
+        "caption_position": {
+          "x": 0.5,
+          "y": 0.84
+        },
+        "translation_track": [],
+        "caption_style_preset": "clean-bottom"
+      },
+      "word_count": 945,
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 113.088,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -16.26,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": 1.67
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 1,
+            "total_s": 0.2
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": [
+            [
+              3.6,
+              3.8
+            ]
+          ]
+        },
+        {
+          "key": "hook_delay_s",
+          "value": 0.0,
+          "prior": "≤0.3",
+          "verdict": "ok",
+          "evidence": {
+            "planned_intro_s": 0.0,
+            "actual_audio_onset_s": 0.0
+          }
+        },
+        {
+          "key": "cut_boundaries",
+          "value": [
+            {
+              "seg": 0,
+              "pre_pad_s": 0.0,
+              "post_pad_s": 0.0,
+              "pause_available_before_s": 1.66,
+              "pause_available_after_s": 0.82,
+              "in_nearest_boundary_s": 1.66,
+              "mid_word_cut": false
+            }
+          ],
+          "prior": "in-pad (0.1, 0.15), out-pad (0.15, 0.2); edge within ±0.18s of a clause boundary",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "dead_air",
+          "value": {
+            "count": 4,
+            "runs": [
+              {
+                "at": 144.7,
+                "gap_s": 0.68
+              },
+              {
+                "at": 163.24,
+                "gap_s": 1.62
+              },
+              {
+                "at": 178.3,
+                "gap_s": 0.78
+              },
+              {
+                "at": 185.22,
+                "gap_s": 2.32
+              }
+            ]
+          },
+          "prior": "pauses >0.6–0.8s removed",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product"
+          }
+        },
+        {
+          "key": "filler_kept",
+          "value": {
+            "count": 0,
+            "tokens": []
+          },
+          "prior": "um/uh-class fillers removed (intentional beats excepted)",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_events",
+          "value": {
+            "spec_events": 0,
+            "audio_energy_peaks": 29
+          },
+          "prior": "emphasis aligned to pitch/energy peaks",
+          "verdict": "gap",
+          "evidence": {
+            "peaks_top": [
+              [
+                0.15000000000000002,
+                7.985762696886491
+              ],
+              [
+                5.8500000000000005,
+                12.60609853125549
+              ],
+              [
+                10.05,
+                11.726924497975945
+              ],
+              [
+                12.25,
+                13.275207122785362
+              ],
+              [
+                18.150000000000002,
+                8.925499944843898
+              ],
+              [
+                26.85,
+                11.818214322610613
+              ],
+              [
+                30.450000000000003,
+                10.740670082908444
+              ],
+              [
+                33.45,
+                13.822012252213158
+              ]
+            ]
+          }
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.35,
+            "line_dur_max_s": 6.2,
+            "line_chars_median": 14.0,
+            "line_chars_p90": 16.0
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s; or phrase ≤2 lines 32–42 chars",
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "cut_frequency",
+          "value": {
+            "intervals_s": [
+              62.54,
+              14.22,
+              8.46,
+              27.82
+            ],
+            "max_static_s": 62.54,
+            "sub_1s_switches": 0,
+            "keyframe_deltas": [
+              0.7357,
+              0.6713,
+              0.7357
+            ],
+            "keyframes_perceptual": 3
+          },
+          "prior": "no >2 consecutive cuts <1s; no static shot >(8.0, 10.0)s",
+          "verdict": "gap",
+          "evidence": {
+            "scope": "product",
+            "note": "keyframe delta = |Δx|+|Δy|+relΔscale; ≥0.05 reads as a perceptual reframe, micro-drift does not"
+          }
+        },
+        {
+          "key": "end_hold_s",
+          "value": 0.0,
+          "prior": "≥1.8s",
+          "verdict": "gap",
+          "evidence": {
+            "video_tail_s": 0.0,
+            "outro_card_s": 0.0,
+            "scope": "product"
+          }
+        },
+        {
+          "key": "eye_line_y",
+          "value": {
+            "median": 0.39432226022084554,
+            "p10": 0.3814689286549886,
+            "p90": 0.40758179187774657
+          },
+          "prior": "(0.35, 0.45) of frame height",
+          "verdict": "ok",
+          "evidence": {
+            "coverage": 1.0,
+            "frames": 114
+          }
+        },
+        {
+          "key": "face_width",
+          "value": {
+            "median": 0.25232880203812214,
+            "p10": 0.2232670748675311,
+            "p90": 0.26984514024522566
+          },
+          "prior": "(0.3, 0.5) of frame width",
+          "verdict": "gap",
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,641 @@
+{
+  "card": "image-video",
+  "project_id": "25596626-4b52-406e-b4c7-d2f55f380945",
+  "run_id": "79dac469-6e1d-4c5a-8157-26cc23a4d0ca",
+  "decision_layer": {
+    "understanding": {
+      "themes": [
+        "Future industries — not buzzwords — as the real engine of progress",
+        "Patient capital and cross-border collaboration over hype",
+        "From digitalization to intelligence; from invention to system-level deployment",
+        "Building global consensus, high-quality industry–capital links, and an enduring ecosystem",
+        "Turning a one-day summit into a long-term community of cooperation"
+      ],
+      "core_thesis": "The next industrial race will be won not by who invents the most advanced technology, but by who can evaluate it, fund it patiently, deploy it through real industries, and share it across borders through global collaboration.",
+      "key_arguments": [
+        {
+          "id": "a1",
+          "text": "The next industrial race is about use cases, patient capital, and global collaboration — not about technology buzzwords.",
+          "text_en": "The next industrial race is about use cases, patient capital, and global collaboration — not about technology buzzwords.",
+          "text_zh": "下一场产业竞赛的关键在于落地场景、耐心资本与全球协作，而非技术热词。",
+          "position": "opening sentence of the keynote"
+        },
+        {
+          "id": "a2",
+          "text": "The summit focuses on six specific industries that can enter real life, real production, and real social systems: robotics, artificial intelligence, smart wearables, medical devices, new energy, and intelligent manufacturing.",
+          "text_en": "The summit focuses on six specific industries that can enter real life, real production, and real social systems: robotics, artificial intelligence, smart wearables, medical devices, new energy, and intelligent manufacturing.",
+          "text_zh": "本届峰会聚焦六大真正能进入真实生活、真实生产与真实社会系统的产业：机器人、人工智能、智能可穿戴、医疗器械、新能源与智能制造。",
+          "position": "opening section, after the framing argument; reinforced by the 'Future Industries' slide"
+        },
+        {
+          "id": "a3",
+          "text": "The defining shift of this era is from digitalization to intelligence, and from single-point innovation to system-level transformation.",
+          "text_en": "The defining shift of this era is from digitalization to intelligence, and from single-point innovation to system-level transformation.",
+          "text_zh": "这个时代决定性的转变，是从数字化走向智能化，从单点创新走向系统级转型。",
+          "position": "middle of the framing section; appears as a pull-quote on the 'Future Industries' slide"
+        },
+        {
+          "id": "a4",
+          "text": "Taken together, these six industries form the main channels through which future technology enters society.",
+          "text_en": "Taken together, these six industries form the main channels through which future technology enters society.",
+          "text_zh": "这六大产业共同构成了未来科技进入社会的主干通道。",
+          "position": "end of the framing section; echoed at the bottom of the 'Future Industries' slide"
+        },
+        {
+          "id": "a5",
+          "text": "We must not only invent the technology — we must also learn how to evaluate it, fund it patiently, and share it across borders.",
+          "text_en": "We must not only invent the technology — we must also learn how to evaluate it, fund it patiently, and share it across borders.",
+          "text_zh": "我们不仅要发明技术，更要学会评估技术、用耐心资本支持它，并跨越国界共享它。",
+          "position": "closing of the opening section / transition into the summit's purpose"
+        },
+        {
+          "id": "a6",
+          "text": "The summit is designed to build three outcomes: a new global consensus, high-quality industry–capital links, and a sustainable global ecosystem.",
+          "text_en": "The summit is designed to build three outcomes: a new global consensus, high-quality industry–capital links, and a sustainable global ecosystem.",
+          "text_zh": "峰会的目标是要构建三大成果：新的全球共识、高质量的产业—资本链接，以及可持续的全球生态。",
+          "position": "introducing the 'Three Outcomes' slide, roughly two-thirds into the keynote"
+        },
+        {
+          "id": "a7",
+          "text": "The new global consensus is anchored in the principles of AI for Good, Capital for Good, and Love Shaping the Future, which together create a common language for future technology cooperation.",
+          "text_en": "The new global consensus is anchored in the principles of AI for Good, Capital for Good, and Love Shaping the Future, which together create a common language for future technology cooperation.",
+          "text_zh": "新的全球共识根植于「AI 向善」「资本向善」与「用爱塑造未来」三大原则，它们共同为未来的科技合作建立一种共通语言。",
+          "position": "first pillar of the 'Three Outcomes' slide"
+        },
+        {
+          "id": "a8",
+          "text": "A summit succeeds only when today's dialogue becomes shared direction, trusted connection, and a platform that continues to work after the event.",
+          "text_en": "A summit succeeds only when today's dialogue becomes shared direction, trusted connection, and a platform that continues to work after the event.",
+          "text_zh": "一届峰会要算成功，必须让今天的对话转化为共同方向、互信连接，以及一个会后仍在运作的平台。",
+          "position": "opening framing line on the 'Three Outcomes' slide"
+        },
+        {
+          "id": "a9",
+          "text": "The summit should grow into a long-term community of cooperation — a continuing platform connecting talent, capital, industry, and markets, not just a one-day event.",
+          "text_en": "The summit should grow into a long-term community of cooperation — a continuing platform connecting talent, capital, industry, and markets, not just a one-day event.",
+          "text_zh": "峰会应当演进为一个长期运作的合作共同体——一个持续连接人才、资本、产业与市场的平台，而不仅仅是一场一天的活动。",
+          "position": "closing line of the 'Three Outcomes' slide and the keynote"
+        }
+      ],
+      "overall_summary": "Prof. Yu Xiong's opening keynote at the World Future Technology Development Summit 2026 in London reframes the 'next industrial race' away from technology buzzwords and toward six real-world industries — robotics, AI, smart wearables, medical devices, new energy, and intelligent manufacturing. He then sets out three outcomes the summit is designed to build: a new global consensus, high-quality industry–capital links, and a sustainable global ecosystem that continues to operate long after the event itself.",
+      "target_audience": "Global technology investors, policymakers, industry leaders, and ecosystem builders gathered at the World Future Technology Development Summit in London — the people who decide how capital, talent, and emerging technology converge across borders.",
+      "quote_candidates": [
+        "The next industrial race isn't about buzzwords. It is about use cases, patient capital, and global collaboration.",
+        "This summit does not focus on technology buzzwords alone. It focuses on the industries that can enter real life, real production, and real social systems — robotics, artificial intelligence, smart wearables, medical devices, new energy, and intelligent manufacturing.",
+        "From digitalization to intelligence; from single-point innovation to system-level transformation.",
+        "Together, these industries form the main channels through which future technology enters society.",
+        "We must not only invent the technology — we must learn how to evaluate it, fund it patiently, and share it across borders.",
+        "That is what this summit is for.",
+        "A summit succeeds only when today's dialogue becomes shared direction, trusted connection, and a platform that continues to work after the event.",
+        "From one summit to a long-term community of cooperation",
+        "Connecting the world through technology · Empowering innovation through capital · Shaping the future through trust"
+      ]
+    },
+    "storyboard": {
+      "slots": [
+        {
+          "cta": "From one summit to a long-term community of cooperation — join the global platform connecting talent, capital, industry, and markets.",
+          "slot": "clips",
+          "count": 3,
+          "focus": "A three-part subtitled slideshow set to music, opening with the keynote's reframe of the 'next industrial race' away from buzzwords and toward real, system-level change, then revealing the six future industries as the real channels of impact, and closing on the summit's three outcomes and its ambition to become a long-term global community of cooperation.",
+          "argument_ids": [
+            "a1",
+            "a3",
+            "a2",
+            "a4",
+            "a5",
+            "a6",
+            "a8",
+            "a9"
+          ],
+          "tone_override": "cinematic, measured, and forward-looking; short on-screen subtitles set against slow visual rhythm and ambient score, designed to feel like an opening film for a global summit rather than a marketing reel.",
+          "quote_candidates": [
+            "The next industrial race isn't about buzzwords. It is about use cases, patient capital, and global collaboration.",
+            "From digitalization to intelligence; from single-point innovation to system-level transformation.",
+            "This summit does not focus on technology buzzwords alone. It focuses on the industries that can enter real life, real production, and real social systems — robotics, artificial intelligence, smart wearables, medical devices, new energy, and intelligent manufacturing.",
+            "Together, these industries form the main channels through which future technology enters society.",
+            "We must not only invent the technology — we must learn how to evaluate it, fund it patiently, and share it across borders.",
+            "A summit succeeds only when today's dialogue becomes shared direction, trusted connection, and a platform that continues to work after the event.",
+            "From one summit to a long-term community of cooperation"
+          ]
+        }
+      ],
+      "coverage": {
+        "collisions": [],
+        "assignments": {
+          "a1": [
+            "clips"
+          ],
+          "a2": [
+            "clips"
+          ],
+          "a3": [
+            "clips"
+          ],
+          "a4": [
+            "clips"
+          ],
+          "a5": [
+            "clips"
+          ],
+          "a6": [
+            "clips"
+          ],
+          "a8": [
+            "clips"
+          ],
+          "a9": [
+            "clips"
+          ]
+        },
+        "unused_arguments": [
+          "a7"
+        ]
+      }
+    },
+    "clip_payloads": [
+      {
+        "output_id": "0466d36f-7352-44ae-b6fc-dba9153a72a7",
+        "language": "en",
+        "payload": {
+          "hook": "The next industrial race isn't about buzzwords.",
+          "duration": 14,
+          "music_mood": "calm",
+          "title_options": [
+            "The Next Industrial Race Isn't About Buzzwords",
+            "What's Actually Winning the Next Industrial Race",
+            "Use Cases, Patient Capital, and Global Collaboration"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_001",
+            "hook": "The next industrial race isn't about buzzwords.",
+            "summary": "The keynote's opening reframe: the next industrial race is about use cases, patient capital, and global collaboration — not buzzwords.",
+            "end_marker": "End of the use cases patient capital and global collaboration line",
+            "end_seconds": 14.0,
+            "source_text": "We Focus on Industries that Shape the Future Keynote at the World Future Technology Development Summit June 2026 The next industrial race isn't about buzzwords. It is about use cases patient capital and global collaboration.",
+            "golden_quote": "The next industrial race isn't about buzzwords. It is about use cases, patient capital, and global collaboration.",
+            "start_marker": "Opening title slide and thesis reframe",
+            "start_seconds": 0.0,
+            "duration_seconds": 14,
+            "recommendation_score": 82
+          },
+          "asset_id": "036fd678-1f74-44f5-a354-4e80184aa3aa",
+          "end_seconds": 14.0,
+          "start_seconds": 0.0
+        },
+        "score": {
+          "value": 82,
+          "reason": "Strong opening hook with a clear counter-intuitive reframe; represents the talk's central thesis and works as a standalone argument."
+        }
+      },
+      {
+        "output_id": "b5e9dfdf-5650-4a4e-9933-2b1bc10cb543",
+        "language": "en",
+        "payload": {
+          "hook": "Six industries that actually enter real life.",
+          "duration": 19,
+          "music_mood": "calm",
+          "title_options": [
+            "Six Industries That Actually Enter Real Life",
+            "The Six Industries Shaping the Future",
+            "From Digitalization to Intelligence"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_002",
+            "hook": "Six industries that actually enter real life.",
+            "summary": "The six future industries that will enter real life — and the defining shift from digitalization to intelligence, and from single-point innovation to system-level transformation.",
+            "end_marker": "End of system-level transformation line",
+            "end_seconds": 33.5,
+            "source_text": "This summit does not focus on technology buzzwords alone. It focuses on the industries that can enter real life real production and real social systems robotics artificial intelligence smart wearables medical devices new energy and intelligent manufacturing. From digitalization to intelligence; from single-point innovation to system-level transformation.",
+            "golden_quote": "From digitalization to intelligence; from single-point innovation to system-level transformation.",
+            "start_marker": "This summit does not focus on technology buzzwords alone.",
+            "start_seconds": 14.4,
+            "duration_seconds": 19,
+            "recommendation_score": 78
+          },
+          "asset_id": "036fd678-1f74-44f5-a354-4e80184aa3aa",
+          "end_seconds": 33.5,
+          "start_seconds": 14.4
+        },
+        "score": {
+          "value": 78,
+          "reason": "Concrete enumeration of the six industries with a strong visual reveal on the slide; clear arc from problem statement to the digitalization-to-intelligence shift."
+        }
+      },
+      {
+        "output_id": "ffe14d27-ac58-42d5-80c1-b6d1bc0c2e32",
+        "language": "en",
+        "payload": {
+          "hook": "Don't just invent. Evaluate, fund patiently, share globally.",
+          "duration": 17,
+          "music_mood": "calm",
+          "title_options": [
+            "Don't Just Invent — Evaluate, Fund Patiently, Share Globally",
+            "Beyond Invention: The Real Work of Future Tech",
+            "That's What This Summit Is For"
+          ]
+        },
+        "source_ref": {
+          "segment": {
+            "id": "clip_003",
+            "hook": "Don't just invent. Evaluate, fund patiently, share globally.",
+            "summary": "The closing call: future technology must not only be invented — it must be evaluated, funded patiently, and shared across borders.",
+            "end_marker": "That is what this summit is for.",
+            "end_seconds": 50.7,
+            "source_text": "Together these industries form the main channels through which future technology enters society. We must not only invent the technology we must learn how to evaluate it fund it patiently and share it across borders. That is what this summit is for.",
+            "golden_quote": "We must not only invent the technology — we must learn how to evaluate it, fund it patiently, and share it across borders.",
+            "start_marker": "Together these industries form the main channels",
+            "start_seconds": 33.8,
+            "duration_seconds": 17,
+            "recommendation_score": 85
+          },
+          "asset_id": "036fd678-1f74-44f5-a354-4e80184aa3aa",
+          "end_seconds": 50.7,
+          "start_seconds": 33.8
+        },
+        "score": {
+          "value": 85,
+          "reason": "Strong closing arc with a three-part actionable call; memorable, quotable, and reinforces the core thesis on patient capital and global collaboration over hype."
+        }
+      }
+    ]
+  },
+  "clips": [
+    {
+      "label": "image-video-0466d36f",
+      "family": "stills",
+      "content_md5": "dad1e9b2ece0d822af44873547d3ffdc",
+      "frames_dir": "data/anatomy/frames/image-video-0466d36f-dad1e9b2",
+      "output_id": "0466d36f-7352-44ae-b6fc-dba9153a72a7",
+      "language": "en",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 13.696,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -18.11,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -1.45
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 0,
+            "total_s": 0
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": []
+        },
+        {
+          "key": "image_dwell_s",
+          "value": {
+            "per_image": [
+              4.533,
+              4.533,
+              4.56
+            ],
+            "uniform": false
+          },
+          "prior": "sweet zone (2.4, 4.8)s; never <1.3s / >4.0s; emphasis 1.6–2.4s",
+          "verdict": "gap",
+          "evidence": "uniform dwell = reading-pace even split; no content awareness"
+        },
+        {
+          "key": "ken_burns",
+          "value": {
+            "events": 0
+          },
+          "prior": "zoom (1.05, 1.2)× per image, alternating direction, ease 200–300ms",
+          "verdict": "gap",
+          "evidence": "contract carries no stills motion field — static hard-cut slideshow (splitFrames)"
+        },
+        {
+          "key": "image_cuts_at_meaning",
+          "value": {
+            "cuts": [
+              4.533333333333333,
+              9.066666666666666
+            ],
+            "nearest_boundary_s": [
+              5.282,
+              0.748
+            ],
+            "within_prior": "0/2"
+          },
+          "prior": "±0.2s of a clause boundary / emphasis word",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_isolation",
+          "value": {
+            "events": 0
+          },
+          "prior": "≥60% emphasis words get hold/push-in/caption-pop",
+          "verdict": "gap",
+          "evidence": "no emphasis mechanism in contract"
+        },
+        {
+          "key": "structural_breathing",
+          "value": {
+            "resets": 0
+          },
+          "prior": "one reset (wider/slower/pause) every (12.0, 18.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "audio_mix",
+          "value": {
+            "music_enabled": true,
+            "music_gain_db": -18.0,
+            "output_lufs": -18.11
+          },
+          "prior": "voice (-15.0, -13.0) LUFS; BGM duck (-22.0, -18.0)dB under voice",
+          "verdict": "info",
+          "evidence": "stills family carries no speech track — ducking n/a; loudness = music bed level"
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word (estimated timeline)",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.792
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "image-video-b5e9dfdf",
+      "family": "stills",
+      "content_md5": "6ffb39d4d1f07849101d7784360590cd",
+      "frames_dir": "data/anatomy/frames/image-video-b5e9dfdf-6ffb39d4",
+      "output_id": "b5e9dfdf-5650-4a4e-9933-2b1bc10cb543",
+      "language": "en",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 18.795,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -17.4,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.66
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 0,
+            "total_s": 0
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": []
+        },
+        {
+          "key": "image_dwell_s",
+          "value": {
+            "per_image": [
+              6.233,
+              6.233,
+              6.275
+            ],
+            "uniform": false
+          },
+          "prior": "sweet zone (2.4, 4.8)s; never <1.3s / >4.0s; emphasis 1.6–2.4s",
+          "verdict": "gap",
+          "evidence": "uniform dwell = reading-pace even split; no content awareness"
+        },
+        {
+          "key": "ken_burns",
+          "value": {
+            "events": 0
+          },
+          "prior": "zoom (1.05, 1.2)× per image, alternating direction, ease 200–300ms",
+          "verdict": "gap",
+          "evidence": "contract carries no stills motion field — static hard-cut slideshow (splitFrames)"
+        },
+        {
+          "key": "image_cuts_at_meaning",
+          "value": {
+            "cuts": [
+              6.233333333333333,
+              12.466666666666667
+            ],
+            "nearest_boundary_s": [
+              3.582,
+              1.545
+            ],
+            "within_prior": "0/2"
+          },
+          "prior": "±0.2s of a clause boundary / emphasis word",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_isolation",
+          "value": {
+            "events": 0
+          },
+          "prior": "≥60% emphasis words get hold/push-in/caption-pop",
+          "verdict": "gap",
+          "evidence": "no emphasis mechanism in contract"
+        },
+        {
+          "key": "structural_breathing",
+          "value": {
+            "resets": 0
+          },
+          "prior": "one reset (wider/slower/pause) every (12.0, 18.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "audio_mix",
+          "value": {
+            "music_enabled": true,
+            "music_gain_db": -18.0,
+            "output_lufs": -17.4
+          },
+          "prior": "voice (-15.0, -13.0) LUFS; BGM duck (-22.0, -18.0)dB under voice",
+          "verdict": "info",
+          "evidence": "stills family carries no speech track — ducking n/a; loudness = music bed level"
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word (estimated timeline)",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.692
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "label": "image-video-ffe14d27",
+      "family": "stills",
+      "content_md5": "1d6eae32ab4a2c347baa6d853a156d22",
+      "frames_dir": "data/anatomy/frames/image-video-ffe14d27-1d6eae32",
+      "output_id": "ffe14d27-ac58-42d5-80c1-b6d1bc0c2e32",
+      "language": "en",
+      "type": "clip",
+      "metrics": [
+        {
+          "key": "duration_s",
+          "value": 16.917,
+          "prior": null,
+          "verdict": "info",
+          "evidence": null
+        },
+        {
+          "key": "integrated_loudness_lufs",
+          "value": -17.22,
+          "prior": "voice (-15.0, -13.0) LUFS (-14 ±1)",
+          "verdict": "info",
+          "evidence": {
+            "peak_dbfs": -0.07
+          }
+        },
+        {
+          "key": "lead_silence_s",
+          "value": 0.0,
+          "prior": "hook ≤0.3s",
+          "verdict": "ok",
+          "evidence": null
+        },
+        {
+          "key": "silence_runs",
+          "value": {
+            "count": 0,
+            "total_s": 0
+          },
+          "prior": null,
+          "verdict": "info",
+          "evidence": []
+        },
+        {
+          "key": "image_dwell_s",
+          "value": {
+            "per_image": [
+              5.6,
+              5.6,
+              5.654
+            ],
+            "uniform": false
+          },
+          "prior": "sweet zone (2.4, 4.8)s; never <1.3s / >4.0s; emphasis 1.6–2.4s",
+          "verdict": "gap",
+          "evidence": "uniform dwell = reading-pace even split; no content awareness"
+        },
+        {
+          "key": "ken_burns",
+          "value": {
+            "events": 0
+          },
+          "prior": "zoom (1.05, 1.2)× per image, alternating direction, ease 200–300ms",
+          "verdict": "gap",
+          "evidence": "contract carries no stills motion field — static hard-cut slideshow (splitFrames)"
+        },
+        {
+          "key": "image_cuts_at_meaning",
+          "value": {
+            "cuts": [
+              5.6,
+              11.2
+            ],
+            "nearest_boundary_s": [
+              4.215,
+              1.385
+            ],
+            "within_prior": "0/2"
+          },
+          "prior": "±0.2s of a clause boundary / emphasis word",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "emphasis_isolation",
+          "value": {
+            "events": 0
+          },
+          "prior": "≥60% emphasis words get hold/push-in/caption-pop",
+          "verdict": "gap",
+          "evidence": "no emphasis mechanism in contract"
+        },
+        {
+          "key": "structural_breathing",
+          "value": {
+            "resets": 0
+          },
+          "prior": "one reset (wider/slower/pause) every (12.0, 18.0)s",
+          "verdict": "gap",
+          "evidence": null
+        },
+        {
+          "key": "audio_mix",
+          "value": {
+            "music_enabled": true,
+            "music_gain_db": -18.0,
+            "output_lufs": -17.22
+          },
+          "prior": "voice (-15.0, -13.0) LUFS; BGM duck (-22.0, -18.0)dB under voice",
+          "verdict": "info",
+          "evidence": "stills family carries no speech track — ducking n/a; loudness = music bed level"
+        },
+        {
+          "key": "caption_rhythm",
+          "value": {
+            "cue_level": "word (estimated timeline)",
+            "words_per_line": 7,
+            "line_dur_median_s": 2.692
+          },
+          "prior": "karaoke bursts (1, 3) words / (0.2, 0.8)s",
+          "verdict": "info",
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}
