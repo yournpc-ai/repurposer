@@ -1433,12 +1433,118 @@ class KeyArgument(BaseModel):
     position: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Beat map (产物质量线期 1, docs/tasks/output-quality-line.md §2.2): the
+# understanding's SEMANTIC halves. The acoustic/visual halves live on
+# asset.meta["prosody"] / asset.meta["visual_anchors"] — separate fields by
+# design (预合并 = 自信地错且不可溯源; the channels' disagreement is the
+# editor's arbitration signal). ``start``/``end``/``asset_id`` are NEVER LLM
+# output: the LLM writes verbatim text anchors (and may copy coarse cue
+# seconds into ``approx_start``); code snaps them onto the ASR word axis
+# (word-level timestamps are the deterministic foundation, never overwritten).
+# ---------------------------------------------------------------------------
+
+
+class TopicBoundary(BaseModel):
+    """One topic segment of the talk (semantic segmentation)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Stable id within the understanding (t1, t2, …)")
+    label: str = ""
+    # The LLM's evidence: the verbatim first words of the segment — the
+    # snapping anchor. ``approx_start`` is an optional coarse cue-second hint.
+    marker: str = ""
+    approx_start: float | None = None
+    # Code-resolved onto the ASR word axis; None when unresolved / untimed.
+    asset_id: str = ""
+    start: float | None = None
+    end: float | None = None
+
+
+class ClimaxSpan(BaseModel):
+    """A semantic climax span — the semantic half of the climax channel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = ""  # the verbatim climax sentence(s)
+    why: str = ""
+    approx_start: float | None = None
+    asset_id: str = ""
+    start: float | None = None
+    end: float | None = None
+
+
+class EmphasisWord(BaseModel):
+    """A word the LLM judges semantically emphasized (semantic half).
+
+    The weight here is the LLM's; the acoustic F0/energy z-scores stay on
+    asset.meta["prosody"]["words"] — never merged.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    word: str
+    weight: float = 0.5
+    approx_start: float | None = None
+    asset_id: str = ""
+    start: float | None = None
+
+
+class QuotableLine(BaseModel):
+    """A verbatim quotable line with a code-checked self-containment flag."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str  # verbatim from the material
+    approx_start: float | None = None
+    asset_id: str = ""
+    start: float | None = None
+    end: float | None = None
+    # Code-set, never the LLM's: False when the line opens with a dangling
+    # pronoun / connective (it, this, but, 这/但/而且…) or trails off mid-thought.
+    self_contained: bool = True
+
+
+class NarrativeRoleHint(BaseModel):
+    """The global-arc role of a span (setup/payoff/example/transition)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["setup", "payoff", "example", "transition"]
+    note: str = ""
+    marker: str = ""  # verbatim first words of the span (snapping anchor)
+    approx_start: float | None = None
+    asset_id: str = ""
+    start: float | None = None
+    end: float | None = None
+
+
+class VisualAnchor(BaseModel):
+    """The LLM's semantic half of a visual anchor for one image asset.
+
+    The deterministic half (faces / subject box / safe area) lives on the
+    asset's meta["visual_anchors"]; this row joins them by ``asset_id``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # The image's ordinal in the media list the LLM saw ("image 2" → 2);
+    # code-resolved to the asset id at persist time ("" = unresolved).
+    ref: str = ""
+    asset_id: str = ""
+    label: str = ""  # what / whom the image shows
+    # Ids of key_arguments this image visually backs.
+    argument_ids: list[str] = Field(default_factory=list)
+
+
 class MaterialUnderstanding(BaseModel):
     """素材理解: director step 1 — what the material says (material-scoped).
 
     Pure: built from source texts/media only — never persona, tone,
     instruction, or target language — so it stays reusable across runs,
-    languages, and task books (asset-hash invalidation).
+    languages, and task books (asset-hash invalidation). The beat-map fields
+    (期 1) extend it into the material-level beat map: semantic halves only.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1448,8 +1554,15 @@ class MaterialUnderstanding(BaseModel):
     key_arguments: list[KeyArgument] = Field(default_factory=list)
     themes: list[str] = Field(default_factory=list)
     target_audience: str = ""
-    # Verbatim sentences from the material, in the source language.
-    quote_candidates: list[str] = Field(default_factory=list)
+    # Verbatim lines from the material, in the source language, with the
+    # code-checked self-containment flag. The planning prompt's Quote Pool
+    # is the derived ``[q.text for q in quotable_lines]`` view (one write).
+    quotable_lines: list[QuotableLine] = Field(default_factory=list)
+    topic_boundaries: list[TopicBoundary] = Field(default_factory=list)
+    climax_spans: list[ClimaxSpan] = Field(default_factory=list)
+    emphasis_words: list[EmphasisWord] = Field(default_factory=list)
+    narrative_role_hints: list[NarrativeRoleHint] = Field(default_factory=list)
+    visual_anchors: list[VisualAnchor] = Field(default_factory=list)
 
 
 class StoryboardSlot(BaseModel):

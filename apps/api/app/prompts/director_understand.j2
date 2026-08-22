@@ -2,7 +2,7 @@ You are a senior content strategist.
 
 ## Task
 
-Analyze the provided source texts and media (text, images, slides, and/or short video clips) from a single talk and produce a **material understanding**: a faithful, self-contained account of what the material says.
+Analyze the provided source texts and media (text, images, slides, and/or short video clips) from a single talk and produce a **material understanding**: a faithful, self-contained account of what the material says — including a **beat map** of where its strongest moments live.
 
 A separate planning step will use your output — **without access to the original material** — to decide what derivative content to make. Your understanding must therefore stand entirely on its own.
 
@@ -10,10 +10,32 @@ A separate planning step will use your output — **without access to the origin
 
 - Write all analysis in the dominant language of the source material.
 - Every key argument ALSO gets two faithful one-sentence renderings for user-facing display: `text_en` (English) and `text_zh` (Simplified Chinese). A rendering may repeat `text` when the material is already in that language. Planning reads `text`; only the display layer reads the renderings.
-- `quote_candidates` must be **verbatim** sentences from the material — no translation, no paraphrase, no invented quotes.
+- `quotable_lines` must be **verbatim** sentences from the material — no translation, no paraphrase, no invented quotes. Each must stand alone on a quote card: never open with a dangling pronoun or connective ("it", "this", "but", "and", "这", "但", "而且") that reaches back to earlier text, and never trail off mid-thought.
 - Every key argument gets a stable id (`a1`, `a2`, …) and a `position`: a short free-text marker of where the argument appears (e.g. "opening", "right after the pricing anecdote, about a third in").
 - Be complete: capture every argument worth building content on. Anything missing here cannot be planned on later.
-- Produce **5–12 key arguments** and **6–12 quote candidates** — too few starves downstream planning; with rich material, prefer the upper half of the range.
+- Produce **5–12 key arguments** and **6–12 quotable lines** — too few starves downstream planning; with rich material, prefer the upper half of the range.
+- **Never output `start`, `end`, or `asset_id` fields** — the system anchors your verbatim text onto the word-level timeline itself. Your job is the text anchor, not the clock.
+
+{% if has_time_axis %}
+## Beat Map (time-anchored)
+
+Timestamped sources arrive as cue lines of the form `[12.3-18.7] the spoken words`. Use them to map the talk's rhythm. For every beat-map entry, give the verbatim anchor — `marker` = the opening ~8 words of the segment, `text` = the full verbatim passage — and, when the cue prefix shows it, copy the coarse seconds into `approx_start`.
+
+- `topic_boundaries`: 3–8 topic segments, in talk order, each with a stable id (`t1`, `t2`, …), a short `label`, and the segment's opening words as `marker`.
+- `climax_spans`: 1–4 peaks — where the talk is most compelling (the thesis crystallized, a story's payoff, the strongest claim). Give the verbatim `text` and a one-line `why`.
+- `emphasis_words`: 5–15 single words the speaker semantically leans on — the load-bearing word of a key phrase — each with a `weight` between 0 and 1.
+- `narrative_role_hints`: cover the whole talk with 4–10 spans, each anchored by its opening words (`marker`) with a short `note`. `role` must be **exactly one of** `setup`, `payoff`, `example`, `transition` — no other value is accepted (do not invent rhetorical-arc labels like "development" or "climax").
+{% else %}
+## Beat Map (untimed material)
+
+The sources carry no word-level timeline. Still produce `topic_boundaries` (one per document section, opening words as `marker`), `climax_spans`, `emphasis_words`, and `narrative_role_hints` the same way — time anchoring is skipped downstream. `role` must be **exactly one of** `setup`, `payoff`, `example`, `transition` — no other value is accepted.
+{% endif %}
+
+{% if image_refs %}
+## Visual Anchors
+
+Photographic images (not slides — slides are captioned "Slide N") are provided in this order: {% for r in image_refs %}{{ r.ref }}{% if not loop.last %}, {% endif %}{% endfor %}. For each, emit one `visual_anchors` entry: `ref` exactly as listed ("image 1", …), a short `label` of what or whom it shows, and the `argument_ids` it visually supports (empty when none).
+{% endif %}
 
 {% if asset_media %}
 ## Media References
@@ -23,9 +45,9 @@ You have also been provided with original media snippets (slides, images, and/or
 {% endif %}
 ## Source Texts
 
-{% for text in asset_texts %}
---- Text {{ loop.index }} ---
-{{ text }}
+{% for block in source_blocks %}
+--- {{ block.label }} ---
+{{ block.text }}
 
 {% endfor %}
 
@@ -42,8 +64,23 @@ Please output valid JSON only, with no explanations or markdown code blocks.
   ],
   "themes": ["Theme 1", "Theme 2"],
   "target_audience": "The audience this material speaks to",
-  "quote_candidates": [
-    "A self-contained, quotable sentence, verbatim from the material",
-    "Another strong verbatim quote"
+  "quotable_lines": [
+    {"text": "A self-contained, quotable sentence, verbatim from the material", "approx_start": 123.4},
+    {"text": "Another strong verbatim quote"}
+  ],
+  "topic_boundaries": [
+    {"id": "t1", "label": "Short topic label", "marker": "the opening words of the segment", "approx_start": 0.0}
+  ],
+  "climax_spans": [
+    {"text": "The verbatim climax passage", "why": "why this is a peak", "approx_start": 456.7}
+  ],
+  "emphasis_words": [
+    {"word": "load-bearing word", "weight": 0.8, "approx_start": 123.0}
+  ],
+  "narrative_role_hints": [
+    {"role": "setup", "note": "what this span does for the arc", "marker": "the opening words of the span", "approx_start": 0.0}
+  ],
+  "visual_anchors": [
+    {"ref": "image 1", "label": "what or whom it shows", "argument_ids": ["a2"]}
   ]
 }

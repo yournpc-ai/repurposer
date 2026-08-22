@@ -23,6 +23,8 @@ from app.models.schemas import (
     EMOTIONAL_TONES,
     AskOption,
     AskPayload,
+    AssetStatus,
+    AssetType,
     IntentSlot,
     MaterialUnderstanding,
     RenderStatus,
@@ -59,6 +61,11 @@ from app.pipeline.step_context import (
     collect_asset_media,
 )
 from app.pipeline.step_display import _set_summary
+from app.pipeline.beat_map import (
+    build_source_blocks,
+    image_refs_from_assets,
+    word_axis_from_assets,
+)
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_persona,
@@ -235,6 +242,115 @@ class PersonaBootstrap(NodeBase):
         return []
 
 
+async def _find_reusable_understanding(
+    db: AsyncSession, project: Project, digest: str
+) -> Output | None:
+    """The latest same-user understanding row matching the asset hash.
+
+    Cross-project by design (期 1 素材理解前移): the digest is
+    content-addressed, so any earlier materialization — a run's node or an
+    upload-time warm row — in ANY of the user's projects satisfies the
+    reuse. The row is referenced, never copied (no duplicate understanding
+    rows accumulate); a stale-shaped payload fails validation at the call
+    site and regenerates.
+    """
+    rows = (
+        (
+            await db.execute(
+                select(Output)
+                .join(Project, Output.project_id == Project.id)
+                .where(
+                    Project.user_id == project.user_id,
+                    Output.type == "material_understanding",
+                )
+                .order_by(Output.created_at.desc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        if (row.source_ref or {}).get("asset_hash") == digest:
+            return row
+    return None
+
+
+async def _materialize_understanding(
+    project: Project, assets: list
+) -> MaterialUnderstanding:
+    """The one understand LLM call — the run's node and the upload-time warm
+    share it (same blocks / word axis / image refs, same postprocess snapping)."""
+    asset_media = await collect_asset_media(assets)
+    return await director_understand.call(
+        source_blocks=build_source_blocks(assets),
+        asset_media=asset_media,
+        word_axis=word_axis_from_assets(assets),
+        image_refs=image_refs_from_assets(assets),
+    )
+
+
+async def warm_understanding(project_id: UUID) -> None:
+    """Upload-time materialization (期 1 素材理解前移): once every project
+    asset has completed processing, build the understanding before any run
+    asks, so the first run's understand node reuses it at zero LLM cost.
+
+    Runs outside a workflow step — metering's bind-less no-op is the
+    documented request-path precedent (the per-call ledger lands with the
+    agent_calls 台账, PROGRESS 需求池); the row carries
+    ``source_ref.warmed=true``. Never raises: a warm failure only means the
+    run path pays the call later.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            project = await db.get(Project, project_id)
+            if project is None:
+                return
+            assets = await _list_assets(db, project_id)
+            if not assets or any(
+                a.processing_status != AssetStatus.COMPLETED for a in assets
+            ):
+                return  # a later asset's completion re-triggers the warm
+            asset_texts = [
+                t for a in assets if (t := (a.extracted_text or a.transcript))
+            ]
+            has_media = any(
+                (a.type == AssetType.IMAGE and a.file_url)
+                or (a.type == AssetType.SLIDES and a.slide_pages)
+                or (a.type == AssetType.VIDEO and a.file_url)
+                for a in assets
+            )
+            if not asset_texts and not has_media:
+                return
+            digest = _asset_digest(assets)
+            if await _find_reusable_understanding(db, project, digest) is not None:
+                logger.info("understanding_warm_reuse_hit", project_id=str(project_id))
+                return
+            understanding = await _materialize_understanding(project, assets)
+            row = Output(
+                project_id=project.id,
+                workflow_step_id=None,
+                type="material_understanding",
+                language=_source_language(project, assets),
+                provenance="generated",
+                payload=understanding.model_dump(mode="json"),
+                source_ref={"asset_hash": digest, "warmed": True},
+            )
+            db.add(row)
+            await db.commit()
+            logger.info(
+                "understanding_warmed",
+                project_id=str(project_id),
+                arguments=len(understanding.key_arguments),
+                quotes=len(understanding.quotable_lines),
+                beats=len(understanding.topic_boundaries),
+            )
+    except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
+        logger.warning(
+            "understanding_warm_failed", project_id=str(project_id), error=str(e)
+        )
+
+
 class DirectorUnderstand(NodeBase):
     kind = "director_understand"
     task_name = "Understand material"
@@ -260,29 +376,20 @@ class DirectorUnderstand(NodeBase):
         run: WorkflowRun,
         node: WorkflowStep,
         project: Project,
-        asset_texts: list[str],
         assets: list,
     ) -> UUID | None:
         """Idempotent reuse (asset-hash) — the ``reuse()`` protocol's first case.
 
-        The reuse predicate is the asset hash stored on the output row's
-        ``source_ref`` — media downloads and the (expensive, multimodal) LLM call
-        only happen when the hash misses. A reuse returns the earlier row's id, so
-        no duplicate understanding rows accumulate and the node costs nothing.
+        The reuse predicate is the content-addressed asset hash: media
+        downloads and the (expensive, multimodal) LLM call only happen when
+        no same-user understanding row matches — whether the hit was
+        materialized by an earlier run or by the upload-time warm (期 1 前移).
+        A reuse returns the earlier row's id, so no duplicate understanding
+        rows accumulate and the node costs nothing.
         """
-        digest = _asset_digest(asset_texts, assets)
-        latest = (
-            await db.execute(
-                select(Output)
-                .where(
-                    Output.project_id == project.id,
-                    Output.type == "material_understanding",
-                )
-                .order_by(Output.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if latest is not None and (latest.source_ref or {}).get("asset_hash") == digest:
+        digest = _asset_digest(assets)
+        latest = await _find_reusable_understanding(db, project, digest)
+        if latest is not None:
             try:
                 cached = MaterialUnderstanding.model_validate(latest.payload)
             except Exception:  # noqa: BLE001 — stale shape: fall through, regenerate
@@ -311,18 +418,13 @@ class DirectorUnderstand(NodeBase):
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
         """Director step 1: material-scoped understanding, reused across runs."""
-        asset_texts = await collect_asset_texts(db, project.id)
         assets = await _list_assets(db, project.id)
 
-        reused = await self.reuse(db, run, node, project, asset_texts, assets)
+        reused = await self.reuse(db, run, node, project, assets)
         if reused is not None:
             return [reused]
 
-        asset_media = await collect_asset_media(assets)
-        understanding = await director_understand.call(
-            asset_texts=asset_texts,
-            asset_media=asset_media,
-        )
+        understanding = await _materialize_understanding(project, assets)
 
         row = Output(
             project_id=project.id,
@@ -331,7 +433,7 @@ class DirectorUnderstand(NodeBase):
             language=_source_language(project, assets),
             provenance="generated",
             payload=understanding.model_dump(mode="json"),
-            source_ref={"asset_hash": _asset_digest(asset_texts, assets)},
+            source_ref={"asset_hash": _asset_digest(assets)},
         )
         db.add(row)
         await db.flush()
@@ -339,10 +441,12 @@ class DirectorUnderstand(NodeBase):
         await _set_summary(
             node.id,
             f"理解了 {len(understanding.key_arguments)} 个论点 · "
-            f"{len(understanding.quote_candidates)} 条金句"
+            f"{len(understanding.quotable_lines)} 条金句 · "
+            f"{len(understanding.topic_boundaries)} 个节拍"
             if zh
             else f"Understood {len(understanding.key_arguments)} arguments · "
-            f"{len(understanding.quote_candidates)} quotes",
+            f"{len(understanding.quotable_lines)} quotes · "
+            f"{len(understanding.topic_boundaries)} beats",
         )
         return [row.id]
 

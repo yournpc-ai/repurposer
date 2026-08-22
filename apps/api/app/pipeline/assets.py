@@ -7,6 +7,7 @@ line, ``docs/tasks/synthetic-talk-video.md``: a transcript the pipeline can
 pair with photos later).
 """
 
+import hashlib
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +40,8 @@ async def create_transcript_asset_from_text(
     worker to extract. Flush-only: the caller commits with its turn.
     """
     key = await get_upload_path(project_id, user_id, "transcript.txt")
-    await save(key, text.encode("utf-8"), content_type="text/plain")
+    payload = text.encode("utf-8")
+    await save(key, payload, content_type="text/plain")
     asset = Asset(
         user_id=user_id,
         project_id=project_id,
@@ -48,6 +50,9 @@ async def create_transcript_asset_from_text(
         title=_material_title(text),
         extracted_text=text,
         processing_status=AssetStatus.COMPLETED,
+        # Stamped at creation (this path bypasses the worker): the content-
+        # addressing key the understanding digest builds on (期 1 前移).
+        meta={"content_sha256": hashlib.sha256(payload).hexdigest()},
     )
     db.add(asset)
     await db.flush()

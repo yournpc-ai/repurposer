@@ -15,7 +15,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import MAX_CHARS_PER_TEXT
 from app.models.schemas import (
     AssetType,
     MediaInput,
@@ -68,28 +67,32 @@ def _source_language(project: Project, assets: list[Asset]) -> str:
     return project.language or "en"
 
 
-def _asset_digest(asset_texts: list[str], assets: list[Asset]) -> str:
-    """Content hash of the understanding's exact inputs.
+def _asset_digest(assets: list[Asset]) -> str:
+    """Content-addressed digest of the understanding's material set (v3).
 
-    Texts are trimmed to the same window the prompt sees (a change beyond the
-    trim window does not alter the LLM input, so it must not invalidate).
-    Media identity = file_url (unique storage path per upload); ``words`` meta
-    is not an understanding input and stays out of the hash.
+    Each asset contributes ``type|content_sha256`` (stamped by the first
+    processor / at creation for pasted text), so the same bytes re-uploaded
+    to another of the user's projects produce the same digest and reuse the
+    existing understanding with zero LLM (期 1 素材理解前移). The derived
+    texts are NOT hashed separately: they are deterministic functions of the
+    same bytes, and hashing them would reintroduce upload-identity
+    sensitivity through ASR nondeterminism. (Trade-off, accepted: an ASR
+    model upgrade does not invalidate content-addressed rows — the salt
+    bumps when the understand CONTRACT changes.)
 
-    The ``understanding_v2`` salt invalidates pre-alternate payloads: the
-    KeyArgument display renderings (text_en/text_zh, 2026-08-12) change the
-    prompt's requested output, so a v1 cache row must regenerate once.
+    Assets without a content hash (legacy rows, failed processing) fall back
+    to the per-upload ``id|file_url`` identity — same-project reuse only,
+    never cross-project. Descriptors self-sort (content hashes are
+    order-stable; asset ids are not).
     """
     h = hashlib.sha256()
-    h.update(b"understanding_v2\x00")
-    for text in asset_texts:
-        if text and text.strip():
-            h.update(text[:MAX_CHARS_PER_TEXT].encode("utf-8"))
-            h.update(b"\x00")
-    for asset in sorted(assets, key=lambda a: str(a.id)):
-        descriptor = (
-            f"{asset.id}|{asset.type}|{asset.file_url}|{len(asset.slide_pages or [])}"
-        )
+    h.update(b"understanding_v3\x00")
+    descriptors = []
+    for asset in assets:
+        content = (asset.meta or {}).get("content_sha256")
+        identity = f"content:{content}" if content else f"upload:{asset.id}|{asset.file_url}"
+        descriptors.append(f"{asset.type}|{identity}")
+    for descriptor in sorted(descriptors):
         h.update(descriptor.encode("utf-8"))
         h.update(b"\x00")
     return h.hexdigest()

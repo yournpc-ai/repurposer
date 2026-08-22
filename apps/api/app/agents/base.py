@@ -243,9 +243,11 @@ class Agent(Generic[OutT]):
         exceptions are not always easy to classify. When media inputs are
         present AND the declaration allows it, fall back to the text-only
         prompt so generation can still succeed from transcripts/extracted
-        text. Failures without media inputs are re-raised immediately. The
-        fallback retry never streams (same interleaved-deltas reason as the
-        repair round).
+        text. A schema rejection is the carve-out: it routes to the repair
+        round with the media still attached (media-derived fields must never
+        be blind-labeled on a text-only retry). Failures without media inputs
+        are re-raised immediately. The fallback retry never streams (same
+        interleaved-deltas reason as the repair round).
         """
         try:
             if on_delta is not None:
@@ -261,6 +263,11 @@ class Agent(Generic[OutT]):
                 response_model=self.schema,
                 temperature=self.temperature,
             )
+        except MiniMaxSchemaError:
+            # A schema rejection is NOT media brittleness — it belongs to the
+            # repair round (with the media still attached, so media-derived
+            # fields never get blind-labeled on a text-only retry).
+            raise
         except Exception as first_error:  # noqa: BLE001
             if not media or not self.media_text_fallback:
                 raise

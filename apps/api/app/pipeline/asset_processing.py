@@ -5,10 +5,15 @@ processor chain registered for the asset's type and writes the terminal state
 (``COMPLETED`` with its outputs, or ``FAILED`` with an error). This module is
 the single seam where heavier processors plug in:
 
+- EVERY type -> content hash first (``meta.content_sha256`` — the
+  content-addressing key for cross-project understanding reuse, 期 1 前移)
 - VIDEO -> ASR (faster-whisper: transcript + word timestamps) -> speaker_map
   (ADR-045: form gate + mouth-energy attribution, the asset-level
-  who-speaks-when fact)
-- AUDIO -> ASR (speaker_map stays video-only: its signal is visual)
+  who-speaks-when fact) -> prosody (产物质量线期 1: F0/energy per-word stats,
+  emphasis peaks, filler regions — the acoustic half of the beat map)
+- AUDIO -> ASR -> prosody (speaker_map stays video-only: its signal is visual)
+- IMAGE -> visual_anchors (期 1: deterministic faces / subject box / safe
+  area — the original image itself still feeds the agents)
 - SLIDES -> per-page render + OCR (future; today plain PDF text)
 
 A type maps to an ORDERED chain of processors (ADR-045 D4's "第二处理器"
@@ -18,6 +23,7 @@ scalar fields take the last non-None value).
 """
 
 import asyncio
+import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -32,6 +38,8 @@ from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
 from app.pipeline.graph import media_missing
 from app.pipeline.speaker_map import speaker_map_processor
+from app.pipeline.prosody import prosody_processor
+from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.providers.storage import download_to_temp, get_project_output_dir
 
@@ -67,6 +75,10 @@ class ProcessResult:
 # the processors before it in the chain (empty for the first).
 Processor = Callable[[Asset, ProcessResult], Awaitable[ProcessResult]]
 
+# Strong refs for fire-and-forget warm tasks (the worker's node-task set is
+# the same pattern — a bare create_task can be GC'd mid-flight).
+_warm_tasks: set[asyncio.Task] = set()
+
 
 async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     """Whether the project has a renderable media source (file-backed).
@@ -76,6 +88,34 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     the chat plan path uses for the clips-needs-media clarification reason.
     """
     return not await media_missing(db, project_id)
+
+
+async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
+    """Stamp ``meta.content_sha256`` — the content-addressing key the
+    understanding digest (v3) builds on, so a user's second upload of the
+    same bytes reuses the existing understanding with zero LLM (期 1 前移).
+
+    File bytes when there is a file, the carried text otherwise. Hash
+    failures degrade to absence (the digest falls back to per-upload
+    identity) — never an asset failure.
+    """
+    h = hashlib.sha256()
+    if asset.file_url:
+        path = await download_to_temp(asset.file_url)
+        if path is None:
+            return ProcessResult()
+        try:
+            with path.open("rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+        finally:
+            path.unlink(missing_ok=True)
+    else:
+        text = (asset.extracted_text or asset.transcript) or ""
+        if not text.strip():
+            return ProcessResult()
+        h.update(text.encode("utf-8"))
+    return ProcessResult(meta={"content_sha256": h.hexdigest()})
 
 
 async def _extract_text_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
@@ -135,15 +175,20 @@ async def _noop_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
 
 
 PROCESSORS: dict[AssetType, list[Processor]] = {
-    AssetType.TRANSCRIPT: [_extract_text_processor],
-    AssetType.PAST_MATERIAL: [_extract_text_processor],
-    AssetType.SLIDES: [_slides_processor],  # PDF page renders only
+    # Every chain opens with the content hash (the understanding digest's
+    # addressing key — cheap, uniform, degrade-on-error).
+    AssetType.TRANSCRIPT: [_content_hash_processor, _extract_text_processor],
+    AssetType.PAST_MATERIAL: [_content_hash_processor, _extract_text_processor],
+    AssetType.SLIDES: [_content_hash_processor, _slides_processor],  # PDF page renders only
     # speaker_map is VIDEO's second processor (ADR-045 D4); AUDIO stays
-    # ASR-only — the attribution signal is visual.
-    AssetType.VIDEO: [_asr_processor, speaker_map_processor],
-    AssetType.AUDIO: [_asr_processor],
-    AssetType.VOICE_SAMPLE: [_noop_processor],
-    AssetType.IMAGE: [_noop_processor],  # agents consume the original image
+    # ASR-only for it — the attribution signal is visual. prosody is the
+    # third/second for VIDEO/AUDIO (its signal is audio — both carry one).
+    AssetType.VIDEO: [_content_hash_processor, _asr_processor, speaker_map_processor, prosody_processor],
+    AssetType.AUDIO: [_content_hash_processor, _asr_processor, prosody_processor],
+    AssetType.VOICE_SAMPLE: [_content_hash_processor, _noop_processor],
+    # IMAGE: content hash + deterministic visual anchors (faces / subject /
+    # safe area, 期 1); the agents still consume the original image itself.
+    AssetType.IMAGE: [_content_hash_processor, visual_anchors_processor],
 }
 
 
@@ -185,6 +230,16 @@ async def process_asset(asset_id: UUID) -> None:
                 type=asset.type.value,
                 chars=len((result.transcript or result.extracted_text) or ""),
             )
+            # 期 1 素材理解前移: once the whole project set is COMPLETED, the
+            # understanding materializes before any run asks (the warm itself
+            # re-checks set completeness). Fire-and-forget so the tick moves
+            # on; persona-bound assets (project_id=None) never warm.
+            if asset.project_id is not None:
+                from app.pipeline.node_runners import warm_understanding  # deferred: runtime-only edge
+
+                task = asyncio.create_task(warm_understanding(asset.project_id))
+                _warm_tasks.add(task)
+                task.add_done_callback(_warm_tasks.discard)
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
             asset.processing_status = AssetStatus.FAILED

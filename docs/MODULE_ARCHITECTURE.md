@@ -206,7 +206,10 @@ apps/api/
 │   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手（step_context 兼估价事实装配 _estimate_facts）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
-│   │   ├── asset_processing.py    # 预处理分发：ASR / 文本提取 / 幻灯片转图 / 图片视觉
+│   │   ├── asset_processing.py    # 预处理分发（PROCESSORS 链）：内容哈希 → ASR / 文本提取 / 幻灯片转图 → speaker_map / prosody
+│   │   ├── speaker_map.py / prosody.py  # asset 级确定性工序：说话人话轮（ADR-045）/ 韵律特征（期 1，ASR 同族）
+│   │   ├── visual_anchors.py      # IMAGE 确定性视觉半（期 1）：YuNet 人脸/主体框/安全区（归一化坐标）
+│   │   ├── beat_map.py            # 节拍地图代码半（期 1）：LLM 文本锚吸附 ASR 词轴 + 金句自包含检查 + 理解 prompt 源块装配
 │   │   ├── assets.py              # 服务端源素材创建（chat 声明文本 → transcript 资产）
 │   │   ├── tracks.py              # TRACK_REGISTRY 可执行 catalog：轨分区 fold（烘焙缝/C2PA/ops 寻址/一轨一写者 422，ADR-044）
 │   │   ├── recipes.py             # RECIPE_REGISTRY 服务端静态注册表（配方 = 数据，ADR-040）
@@ -247,6 +250,8 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 ### 7.3 横切数据约定
 
 - **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表（旧 PRD 副本已 drift 删除）。
+- **asset.meta 键词汇**（处理链产物一律进 meta JSONB，不加表列）：`words`（ASR 词级时间戳——确定性地基，LLM 永不覆写）/ `language` / `speaker_map`（话轮归属）/ `prosody`（韵律：逐词 F0/能量 z、强调峰、filler 区）/ `visual_anchors`（确定性视觉半：人脸/主体框/安全区，归一化坐标；语义半在理解载荷，按 asset_id 汇合）/ `content_sha256`（内容寻址键，见下条）。
+- **素材理解前移（产物质量线期 1）**：项目素材集齐（全部 COMPLETED）即由 `process_asset` 完成钩子 fire-and-forget warm 出 `material_understanding` 行（`workflow_step_id=NULL`、`source_ref.warmed=true`）；digest 内容寻址（`understanding_v3` salt + 逐素材 `type|content_sha256` 描述符自排序；无哈希行回退上传身份，仅同项目复用）；复用查询 = **同用户跨项目**最近 20 行内哈希命中，命中行**引用不复制**（删除源项目会使他项目 run 的 output_refs 悬空——重跑即再生，期 1 接受）；warm 无 workflow step 绑定，计量按 request-path 先例静默 no-op（per-call 台账 = 需求池 agent_calls P1）。
 - **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / conversations 全部按 user 隔离；seed 默认用户仅作共享默认 personas 的属主；启动仅播种默认音乐。
 - **存储 key**：DB 只存对象 key，字节在 TOS（ADR-024）；key 前缀 `{user_id}/…` 承载归属；上传走短时 presigned PUT；读取经 API 归属校验后 307 重定向到公开对象 URL（程序拉取走 `?proxy=1` 由 API 转流）。
 - **EU 数据驻留**：project 级 `data_region` 是未来差异化（PROGRESS 明确不在本周期），未实现。

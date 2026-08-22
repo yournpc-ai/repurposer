@@ -24,26 +24,56 @@ from app.models.schemas import (
     Storyboard,
 )
 
-from app.agents.base import Agent, trim_texts
+from app.agents.base import Agent, MAX_CHARS_PER_TEXT, trim_texts
 
 logger = structlog.get_logger()
 
 
 def _assemble_understand(
-    asset_texts: list[str],
+    source_blocks: list[dict[str, Any]],
     asset_media: list[MediaInput] | None = None,
+    word_axis: list[dict[str, Any]] | None = None,
+    image_refs: list[dict[str, str]] | None = None,
 ):
     """Director step 1 inputs — deliberately NO persona/tone/instruction:
     the understanding is material-scoped and reused across runs (asset-hash
     invalidation), so per-request values would poison reuse (purity is
-    signature-enforced: there is no persona parameter to pass)."""
-    if not asset_texts and not asset_media:
+    signature-enforced: there is no persona parameter to pass).
+
+    ``source_blocks`` are the per-asset prompt texts (anchored cue lines when
+    the asset carries an ASR word axis); ``word_axis``/``image_refs`` are the
+    resolver's snapping inputs — they never render into the prompt itself
+    beyond the ``has_time_axis`` / image-order facts.
+    """
+    if not source_blocks and not asset_media:
         raise MiniMaxError("No source texts or media provided for understanding")
     media = asset_media or []
-    trimmed = trim_texts(asset_texts)
-    if not trimmed and not media:
+    blocks = [
+        {**b, "text": str(b.get("text") or "")[:MAX_CHARS_PER_TEXT]}
+        for b in source_blocks
+        if str(b.get("text") or "").strip()
+    ]
+    if not blocks and not media:
         raise MiniMaxError("No usable text or media found")
-    return {"asset_texts": trimmed, "asset_media": media}, media
+    return {
+        "source_blocks": blocks,
+        "asset_media": media,
+        "has_time_axis": bool(word_axis),
+        "image_refs": image_refs or [],
+    }, media
+
+
+def _resolve_understanding(
+    result: MaterialUnderstanding, ctx: dict[str, Any]
+) -> MaterialUnderstanding:
+    """Snap the beat map's text anchors onto the ASR word axis (code half of
+    理解层 v2 — the LLM never writes timestamps) and flag quotable-line
+    self-containment."""
+    from app.pipeline.beat_map import resolve_beat_map  # deferred: pipeline layer
+
+    return resolve_beat_map(
+        result, ctx.get("word_axis") or [], ctx.get("image_refs") or []
+    )
 
 
 director_understand: Agent[MaterialUnderstanding] = Agent(
@@ -57,6 +87,7 @@ director_understand: Agent[MaterialUnderstanding] = Agent(
     ),
     temperature=0.3,
     assemble=_assemble_understand,
+    postprocess=_resolve_understanding,
     media_text_fallback=True,
 )
 
@@ -72,9 +103,13 @@ def _assemble_plan(
     sources. ``count_defaults_text`` is the registry-derived per-type count
     defaults line (N-32), supplied by the caller — the harness never imports
     the graph layer."""
+    dump = understanding.model_dump()
+    # The Quote Pool is the derived one-write view of quotable_lines (the
+    # understanding stores the checked/anchored rows; planning reads texts).
+    dump["quote_candidates"] = [q.text for q in understanding.quotable_lines]
     return (
         {
-            "understanding": understanding.model_dump(),
+            "understanding": dump,
             "context": context.model_dump(),
             "task_book": task_book,
             "count_defaults_text": count_defaults_text,
