@@ -452,10 +452,10 @@ const en = {
       subs_zh_bilingual: "CN-EN bilingual",
       subs_fr: "French captions",
       dub_es: "Spanish dub",
-      // Post-bake labels for the text-tribe cards (land with the bake).
-      social_post_preview: "Sample post",
-      quote_card_preview: "Sample quote card",
-      carousel_preview: "Sample carousel",
+      // Post-bake labels for the text-tribe cards (2026-08-24 bake landing).
+      post_output: "Post example",
+      quotes_output: "Quote cards example",
+      carousel_output: "Carousel example",
     },
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
     // right = inspect tabs; left = the launch zone (composer's send

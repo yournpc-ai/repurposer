@@ -29,14 +29,12 @@ Drift guard: ``flow`` is curated display data but must truthfully mirror the
 graph the declared chain compiles to — both live in this file and are
 reviewed together (RECIPES §7.1).
 
-Recipe gallery v2 (ADR-048, 2026-08-23): the registry owns 8 cards — 5
-``live`` (evidence-backed, grid-ready) and 3 ``reserved`` (data shape
-fully authored, awaiting the bake harvest — RECIPES §10 reserves a grid
-seat with a Soon pill, no overlay until the bake lands). When the text
-tribe bake finishes (``scripts/bake_text_tribe_demos.py``, modelled on
-``bake_dub_contrast.py``), flip those entries' ``status`` to
-``"live"`` and update the example_outputs URLs to the content-hashed
-artifacts.
+Recipe gallery v2 (ADR-048, 2026-08-23; 2026-08-24 text-tribe flip):
+the registry owns 8 cards, all ``live`` (text-tribe landed in the
+``bake_text_tribe_demos.py`` harvest 2026-08-24). ``"reserved"`` stays in
+the schema only because the registry ships with code (TOOL_REGISTRY 同款,
+NAMING §5, N-39) — never a real grid state again (RECIPES §10 retired the
+Soon pill with the bake landing).
 """
 
 from typing import Literal
@@ -456,8 +454,16 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     # "live", replace the placeholder.example_outputs URLs with the
     # content-hashed artifacts, and run the prompt-surface gate (§B.4) to
     # confirm each card's template still infers its expected tool kind.
+    # === Text-tribe (RECIPES §4.6, ADR-048 §7.3): 2026-08-24 bake. ===
+    #
+    # The three text-tribe cards went from reserved to live when the
+    # `scripts/bake_text_tribe_demos.py` harvest landed: real pipeline runs
+    # on demo-article.md, content-hashed under demo/outputs/<stem>-<hash>.{json,png}.
+    # Each writer agent is now also pinned to its skill pack
+    # (quote-cards / carousel — N-42 指令包纪律), so the writer prompt sees
+    # the domain conventions at assembly time.
     "social-post": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="transcript")],
         # write_post requires `language` (CopyWriterParams.language is
         # mandatory — declared in app/pipeline/derivative_dispatch.py).
@@ -473,12 +479,20 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 label_key="demo_article",
             ),
         ],
-        # POST-BAKE: replace with the content-hashed social-post example
-        # harvested from a real pipeline run (write_post on demo-article.md).
-        example_outputs=[],
+        # 2026-08-24 harvest (write_post on demo-article.md, English). JSON
+        # payload — the overlay's Examples tab renders the content as a doc
+        # preview card (post kind = "image" per the ExampleOutput schema).
+        example_outputs=[
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/post-699d2254.json",
+                poster_url=None,
+                label_key="post_output",
+            ),
+        ],
     ),
     "quote-cards": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="transcript")],
         tasks=[
             TaskItem(tool="write_quotes", params={"language": "en", "count": 4})
@@ -493,11 +507,20 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 label_key="demo_article",
             ),
         ],
-        # POST-BAKE: content-hashed quote-card image(s) from a real run.
-        example_outputs=[],
+        # 2026-08-24 harvest (write_quotes on demo-article.md, count=4, EN).
+        # The writer's first-card PNG is the overlay poster — JSON payload
+        # rides alongside, the four full quotes are the overlay's content.
+        example_outputs=[
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/quotes-e9a31561.json",
+                poster_url=f"{_DEMO}/outputs/quotes-poster-d74c0cdb.png",
+                label_key="quotes_output",
+            ),
+        ],
     ),
     "carousel": RecipeEntry(
-        status="reserved",
+        status="live",
         input_slots=[InputSlot(type="transcript")],
         tasks=[
             TaskItem(tool="write_carousel", params={"language": "en", "count": 6})
@@ -512,8 +535,18 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 label_key="demo_article",
             ),
         ],
-        # POST-BAKE: content-hashed carousel slide image(s) from a real run.
-        example_outputs=[],
+        # 2026-08-24 harvest (write_carousel on demo-article.md, count=6, EN).
+        # Carousel has no render-side product (writer's 6 slides are JSON
+        # only); poster_url is None — the overlay's Examples tab renders
+        # the JSON slides as the preview.
+        example_outputs=[
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/carousel-f14c251c.json",
+                poster_url=None,
+                label_key="carousel_output",
+            ),
+        ],
     ),
 }
 

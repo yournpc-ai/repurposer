@@ -445,10 +445,10 @@ const zh: Resources = {
       subs_zh_bilingual: "中英双语",
       subs_fr: "法语字幕",
       dub_es: "西语配音",
-      // 文本族示例卡标签（示例烘焙落桶后消费）。
-      social_post_preview: "示例帖子",
-      quote_card_preview: "示例金句卡",
-      carousel_preview: "示例轮播",
+      // 文本族示例卡标签（2026-08-24 烘焙落桶后消费）。
+      post_output: "帖子样例",
+      quotes_output: "金句卡样例",
+      carousel_output: "轮播样例",
     },
     inspect: {
       tabs: {
