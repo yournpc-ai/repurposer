@@ -1,4 +1,7 @@
-"""Carousel writer — the write_carousel tool's private agent declaration (N-30)."""
+"""Carousel writer — the write_carousel tool's private agent declaration (N-30).
+
+The carousel craft lives in the ``carousel`` skill pack (N-42 指令包) —
+woven in at assembly time, never loaded by the model."""
 
 from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
@@ -45,4 +48,5 @@ carousel_writer: Agent[CarouselResponse] = Agent(
     ),
     temperature=0.4,
     assemble=_assemble,
+    packs=["carousel"],
 )

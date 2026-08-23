@@ -324,6 +324,148 @@ body {
   margin: 0;
 }
 
+/* Recipe-card cover animations (ADR-048, recipe-gallery-v2 brief): each
+ * cover SVG carries schema-specific class hooks (sc-highlight / sc-subs /
+ * sc-dub / sc-reframe / sc-imageVideo / sc-post / sc-quote / sc-carousel)
+ * used by these keyframe-played animations. Rest = static schematic.
+ * Hover = the schematic "plays its process": brackets pulse, caption grows,
+ * waveform bounces, viewport slides, text types line-by-line. The hover
+ * trigger lives on the RecipeCard root (`group`), so the selectors below
+ * only animate while the card is actually hovered — never on idle scroll.
+ *
+ * prefers-reduced-motion: pauses every animation to a still frame; the
+ * rest geometry is already a readable schematic.
+ */
+.recipe-cover .br,
+.recipe-cover .cap,
+.recipe-cover .cap2,
+.recipe-cover .vp,
+.recipe-cover .fr,
+.recipe-cover .qm,
+.recipe-cover .tl,
+.recipe-cover .wb rect {
+  transform-box: fill-box;
+}
+.recipe-cover .tl {
+  transform-origin: left center;
+}
+.recipe-cover .qm {
+  transform-origin: center;
+}
+
+@keyframes rc-chipA {
+  0%, 40%, 100% { opacity: 1; }
+  55%, 85% { opacity: 0.15; }
+}
+@keyframes rc-chipB {
+  0%, 40%, 100% { opacity: 0.15; }
+  55%, 85% { opacity: 1; }
+}
+@keyframes rc-capGrow {
+  0% { transform: scaleX(0.15); }
+  55%, 100% { transform: scaleX(1); }
+}
+@keyframes rc-brPulse {
+  0%, 100% { opacity: 0.3; }
+  35% { opacity: 1; }
+}
+@keyframes rc-vpSlide {
+  0%, 18% { transform: translateX(0); }
+  50%, 68% { transform: translateX(150px); }
+  86%, 100% { transform: translateX(0); }
+}
+@keyframes rc-capFade {
+  0% { opacity: 0; transform: translateY(5px); }
+  30%, 75% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; }
+}
+@keyframes rc-dashFlow {
+  to { stroke-dashoffset: -14; }
+}
+@keyframes rc-wbBounce {
+  0%, 100% { transform: scaleY(0.55); }
+  50% { transform: scaleY(1); }
+}
+@keyframes rc-lineGrow {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+@keyframes rc-qPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.group:hover .recipe-cover.sc-subs .chip-en {
+  animation: rc-chipA 2.4s ease-in-out infinite;
+}
+.group:hover .recipe-cover.sc-subs .chip-zh {
+  animation: rc-chipB 2.4s ease-in-out infinite;
+}
+.group:hover .recipe-cover.sc-subs .cap {
+  animation: rc-capGrow 2s ease-out infinite;
+}
+
+.group:hover .recipe-cover.sc-dub .wb rect {
+  animation: rc-wbBounce 1.1s ease-in-out infinite;
+}
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(2) { animation-delay: 0.09s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(3) { animation-delay: 0.18s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(4) { animation-delay: 0.27s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(5) { animation-delay: 0.36s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(6) { animation-delay: 0.45s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(7) { animation-delay: 0.54s; }
+.group:hover .recipe-cover.sc-dub .wb rect:nth-child(8) { animation-delay: 0.63s; }
+
+.group:hover .recipe-cover.sc-highlight .br { animation: rc-brPulse 1.6s ease-in-out infinite; }
+.group:hover .recipe-cover.sc-highlight .br2 { animation-delay: 0.28s; }
+.group:hover .recipe-cover.sc-highlight .br3 { animation-delay: 0.56s; }
+
+.group:hover .recipe-cover.sc-reframe .vp {
+  animation: rc-vpSlide 3s ease-in-out infinite;
+}
+
+.group:hover .recipe-cover.sc-imageVideo .cap2 {
+  animation: rc-capFade 2.2s ease-out infinite;
+}
+.group:hover .recipe-cover.sc-imageVideo .arrp,
+.group:hover .recipe-cover.sc-carousel .arrp {
+  stroke-dasharray: 5 5;
+  animation: rc-dashFlow 0.8s linear infinite;
+}
+
+.group:hover .recipe-cover.sc-post .tl1 { animation: rc-lineGrow 1.4s ease-out both; }
+.group:hover .recipe-cover.sc-post .tl2 { animation: rc-lineGrow 1.4s ease-out 0.15s both; }
+.group:hover .recipe-cover.sc-post .tl3 { animation: rc-lineGrow 1.4s ease-out 0.3s both; }
+.group:hover .recipe-cover.sc-post .tl4 { animation: rc-lineGrow 1.4s ease-out 0.45s both; }
+
+.group:hover .recipe-cover.sc-quote .qm {
+  animation: rc-qPulse 2s ease-in-out infinite;
+}
+
+.group:hover .recipe-cover.sc-carousel .fr {
+  animation: rc-brPulse 1.6s ease-in-out infinite;
+}
+.group:hover .recipe-cover.sc-carousel .f2 { animation-delay: 0.28s; }
+.group:hover .recipe-cover.sc-carousel .f3 { animation-delay: 0.56s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .recipe-cover .br,
+  .recipe-cover .cap,
+  .recipe-cover .cap2,
+  .recipe-cover .vp,
+  .recipe-cover .fr,
+  .recipe-cover .qm,
+  .recipe-cover .tl,
+  .recipe-cover .wb rect,
+  .group:hover .recipe-cover *,
+  .group:hover .recipe-cover *::before,
+  .group:hover .recipe-cover *::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 @theme inline {
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);

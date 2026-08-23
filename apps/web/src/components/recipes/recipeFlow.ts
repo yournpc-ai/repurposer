@@ -2,7 +2,7 @@ import type { TFunction } from "i18next"
 
 import { thumbNodeSize } from "@/components/flow/layout"
 import type { FlowEdge, FlowGroup, FlowNode } from "@/components/flow/types"
-import type { RecipeCard } from "@/lib/recipes"
+import type { RecipePublic } from "@/lib/recipes"
 
 /** Recipe adapter (D6 二次修订 2026-08-08, ADR-035/036): the Recipe data
  * pack → FlowView contract, rendered exactly ONCE in the overlay's 流程 tab
@@ -23,7 +23,7 @@ const materialLabel = (t: TFunction, labelKey?: string | null) =>
   labelKey ? t(`recipes.materials.${labelKey}`) : null
 
 export function recipeProcessFlow(
-  card: RecipeCard,
+  card: RecipePublic,
   t: TFunction,
 ): { nodes: FlowNode[]; edges: FlowEdge[]; groups: FlowGroup[] } {
   const nodes: FlowNode[] = []

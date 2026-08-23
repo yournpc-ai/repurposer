@@ -1,4 +1,7 @@
-"""Quotes writer — the write_quotes tool's private agent declaration (N-30)."""
+"""Quotes writer — the write_quotes tool's private agent declaration (N-30).
+
+The quote-card craft lives in the ``quote-cards`` skill pack (N-42 指令包) —
+woven in at assembly time, never loaded by the model."""
 
 from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
@@ -45,4 +48,5 @@ quotes_writer: Agent[Quotes] = Agent(
     ),
     temperature=0.4,
     assemble=_assemble,
+    packs=["quote-cards"],
 )

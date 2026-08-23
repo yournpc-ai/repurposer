@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
-import { slotCoversFile, type RecipeCard } from "@/lib/recipes"
+import { slotCoversFile, type RecipePublic } from "@/lib/recipes"
 import { ASSETS_ACCEPT } from "@/lib/stagedFiles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -66,7 +66,7 @@ export function RecipeInspectOverlay({
   card,
   onClose,
 }: {
-  card: RecipeCard
+  card: RecipePublic
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -155,12 +155,24 @@ export function RecipeInspectOverlay({
       <DialogPortal>
         <DialogOverlay />
         {/* Hand-composed popup (custom split-pane size, `inset-0 m-auto`
-            centering) — the chrome MIRRORS DialogContent exactly:
-            overlay-surface (whisper shadow baked in) + the ring-foreground/10 hairline +
-            rounded-xl. Without the hairline the light-theme glass dissolves
-            into the white backdrop wash. */}
+            centering). All chrome comes from the **single global utility**
+            `overlay-surface` (CLAUDE.md "Floating Layers"): it bundles the
+            92% white wash + 24px backdrop-blur + the whisper shadow under
+            one name. Hand-composed popups stack the structural bits only
+            (positioning + the ring hairline that DialogContent also has):
+              rounded-xl + ring-1 ring-foreground/10 — DialogContent's
+                                                          chrome mirrored
+                                                          (without the
+                                                          hairline the
+                                                          light glass
+                                                          dissolves into
+                                                          the backdrop
+                                                          wash, per the
+                                                          2026-08-10
+                                                          precedent).
+            No `shadow-xl` here — the utility already carries box-shadow. */}
         <DialogPrimitive.Popup
-          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 md:h-[84vh]"
+          className="overlay-surface fixed inset-0 z-50 m-auto flex h-[92vh] w-[calc(100%-2rem)] max-w-7xl flex-col overflow-hidden rounded-xl text-popover-foreground ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 md:h-[84vh]"
         >
           <DialogClose
             aria-label={t("common.close")}
@@ -296,13 +308,13 @@ export function RecipeInspectOverlay({
             </div>
 
             {/* RIGHT — the canvas IS the zone: full-bleed, tabs floating on
-                top. Light: NO solid paint — --popover and --background are
-                both pure white, so a solid bg-background half would read as a
-                two-tone seam against the 92% glass; the glass alone keeps the
-                modal one surface (the Login read). Dark: the inverted inset
-                well (bg-inset) — a deliberate darker canvas. The left seam is
-                the /10 hairline. */}
-            <div className="relative min-h-0 flex-1 border-foreground/10 border-t md:border-l md:border-t-0 dark:bg-inset">
+                top. NO solid paint on either theme (the previous dark:bg-inset
+                here was a deliberate darker canvas, but it ate the glass —
+                2/3 of the popup read as flat dark and the overlay-surface
+                blur disappeared; the Login read is uniformly glassy because
+                it has no right-column solid fill, mirror that). The /10
+                hairline on the left seam carries the column separation. */}
+            <div className="relative min-h-0 flex-1 border-foreground/10 border-t md:border-l md:border-t-0">
               <Tabs
                 value={tab}
                 onValueChange={(v) => setTab(v as "examples" | "flow")}

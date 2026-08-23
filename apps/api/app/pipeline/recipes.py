@@ -28,6 +28,15 @@ serves the public projection (base / flow / example_* / input_slots).
 Drift guard: ``flow`` is curated display data but must truthfully mirror the
 graph the declared chain compiles to — both live in this file and are
 reviewed together (RECIPES §7.1).
+
+Recipe gallery v2 (ADR-048, 2026-08-23): the registry owns 8 cards — 5
+``live`` (evidence-backed, grid-ready) and 3 ``reserved`` (data shape
+fully authored, awaiting the bake harvest — RECIPES §10 reserves a grid
+seat with a Soon pill, no overlay until the bake lands). When the text
+tribe bake finishes (``scripts/bake_text_tribe_demos.py``, modelled on
+``bake_dub_contrast.py``), flip those entries' ``status`` to
+``"live"`` and update the example_outputs URLs to the content-hashed
+artifacts.
 """
 
 from typing import Literal
@@ -92,6 +101,14 @@ class RecipeEntry(BaseModel):
     and reconciles the curated ``flow`` against it (AGENT_ARCH §4.2). It is
     never a request-path input: a launch's behavioral payload is the prompt
     template alone (2026-08-11 ruling — 配方 = 提示词).
+
+    Recipe gallery v2 (ADR-048): ``status`` keeps BOTH ``"live"`` and
+    ``"reserved"`` — RECIPES §10 holds: a reserved card sits in the grid
+    with a Soon pill (no hover chrome, no overlay), the moment its example
+    bake lands it flips to ``"live"`` and joins the rest. The text-tribe
+    cards (``social-post`` / ``quote-cards`` / ``carousel``) live in this
+    half-state until a real pipeline harvest writes content-hashed
+    artifacts under ``demo/outputs/`` (after which they flip to live).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -110,7 +127,8 @@ class RecipeEntry(BaseModel):
 class RecipePublic(BaseModel):
     """The public card catalogue shape (``GET /api/v1/recipes``) — the
     server-internal compile-shape declaration (``tasks``) is not part of
-    the projection."""
+    the projection. Status mirrors ``RecipeEntry`` (gallery v2 — both
+    ``"live"`` and ``"reserved"`` are public)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -128,14 +146,13 @@ class RecipePublic(BaseModel):
 # once, RECIPES §7.3 素材策展总账).
 _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 
+# Card order = insertion order (RECIPES §4, ADR-048 lineup: row 1 has video
+# sources, row 2 has text/image sources). The dub card is back to its own
+# seat — its capability was always there, the gallery just stopped showing
+# it (2026-08-10 配音降为字幕卡配音变体翻案，08-23 配音卡复座). The text-tribe
+# cards (social-post / quote-cards / carousel) are NOT registered yet — see
+# the file docstring and ``PENDING_BAKE_BLOCK`` below for the bake gate.
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
-    # Card order = insertion order (2026-08-13 lineup restructure, user
-    # ruling, RECIPES §4): multilingual-subs → image-video → highlight-clips →
-    # reframe → ai-visuals. The dub card left the gallery — the capability
-    # stays as the subs card's voice-over variant (chat one-liner; the dub
-    # contrast pack objects remain in the bucket as its evidence); the
-    # talking-head seat is removed (低频 + 数字人信任风险).
-    #
     # R6: one video -> multilingual caption forks + a voice-over dub (the card
     # showcases the multilingual/caption capability ONLY — 2026-08-14 ruling:
     # no clip-planning steps in the flow; the baked examples happen to be
@@ -210,6 +227,79 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 poster_url=f"{_DEMO}/outputs/subs-contrast-es-dub-poster-cf01bd16.jpg",
                 label_key="dub_es",
             ),
+        ],
+    ),
+    # 原声AI配音 (voice-dub, RECIPES §4.5): your own voice in another
+    # language. The card's name IS its moat (声纹克隆 written into the dish
+    # name — a generic LLM can write a translation, it cannot clone your
+    # voice, so the capability is doubly non-substitutable, RECIPES §4.5
+    # gate ② + C2PA compliance chain ADR-026). Reuses the dub contrast pack
+    # already in TOS (the same 4-case EN/ZH/FR/ES bake as the subs-card uses
+    # for its dub_es leg): voice-dub is the card those outputs belong on.
+    # Their `subs-contrast-*` URLs are the hash-named objects from the
+    # 2026-08-07 bake; `label_key` reuses the subs-card's labels because the
+    # language identity is the same content.
+    "voice-dub": RecipeEntry(
+        status="live",
+        input_slots=[InputSlot(type="video")],
+        tasks=[
+            TaskItem(
+                tool="dub_clip",
+                params={"target_language": "zh", "fork": True},
+            ),
+            TaskItem(
+                tool="dub_clip",
+                params={"target_language": "fr", "fork": True},
+            ),
+            TaskItem(
+                tool="dub_clip",
+                params={"target_language": "es", "fork": True},
+            ),
+        ],
+        # Same 1:1 source as the subs card — the dub card reuses the same
+        # 5s segment so an inspector can compare EN original alongside the
+        # 3 dub variants on the inspect overlay.
+        aspect="1:1",
+        tags=["voice-clone"],
+        flow=[
+            FlowStep(key="materialize_source"),
+            FlowStep(key="dub_clip", fanout=3),
+            FlowStep(key="render"),
+        ],
+        example_assets=[
+            ExampleAsset(
+                kind="video",
+                url=f"{_DEMO}/uploads/xy_2_15s.mp4",
+                label_key="demo_keynote",
+            ),
+        ],
+        # The dub contrast pack: EN original read + 3 cloned voice variants,
+        # baked on 2026-08-07 with `bake_dub_contrast.py`. Per-case posters
+        # content-hashed into the demo/ tree. The subs-card uses the same
+        # outputs (specifically the es leg); listing them on voice-dub too
+        # — with the same label keys — keeps both cards' "evidence" honest
+        # and saves a re-bake.
+        example_outputs=[
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/subs-contrast-en-b5735bd2.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-en-poster-14813bde.jpg",
+                label_key="subs_en",
+            ),
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/subs-contrast-es-dub-c4d1e436.mp4",
+                poster_url=f"{_DEMO}/outputs/subs-contrast-es-dub-poster-cf01bd16.jpg",
+                label_key="dub_es",
+            ),
+            # NOTE: the ZH/FR dub legs were baked into the same pack during
+            # the multilingual-subs harvest (translate paths). To keep the
+            # voice-dub card truthful about ITS capability (voice cloning,
+            # not translation), the example_outputs here showcase the EN
+            # original + the canonical ES dub — which together demonstrate
+            # the voice-clone moat. Re-adding the full 4-case pack would
+            # mix translation evidence into the dub card; the subs card
+            # owns the translation lineage.
         ],
     ),
     # R2: transcript + photos -> stills slideshow + captions (estimated
@@ -356,20 +446,86 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
     ),
-    # R5 seat: nothing but a talk — every scene AI-generated, the zero-asset
-    # end of the source-material spectrum. Positioned as 趣味/实验
-    # (2026-08-13 ruling, RECIPES §4.4): honest experimental labeling, no
-    # professional promise; lights only after the R5 line is ready.
-    "ai-visuals": RecipeEntry(
+    # === Text-tribe (RECIPES §4.6): reserved half-state (RECIPES §10). ===
+    #
+    # The text-tribe cards live in the grid NOW with a Soon pill (no hover
+    # chrome, no overlay — RecipeCard gates on `live`). Their data shape is
+    # complete (i18n ✓, tasks ✓, flow ✓); only the example harvest is
+    # outstanding (`scripts/bake_text_tribe_demos.py`, to be modelled on
+    # `bake_dub_contrast.py`). When the bake lands: swap `status` to
+    # "live", replace the placeholder.example_outputs URLs with the
+    # content-hashed artifacts, and run the prompt-surface gate (§B.4) to
+    # confirm each card's template still infers its expected tool kind.
+    "social-post": RecipeEntry(
         status="reserved",
-        input_slots=[InputSlot(type="audio")],
-        tasks=[TaskItem(tool="select_clips", params={})],
+        input_slots=[InputSlot(type="transcript")],
+        # write_post requires `language` (CopyWriterParams.language is
+        # mandatory — declared in app/pipeline/derivative_dispatch.py).
+        # The card defaults to English; chat overrides per language.
+        tasks=[TaskItem(tool="write_post", params={"language": "en"})],
+        aspect="1:1",
+        tags=["text-output"],
+        flow=[FlowStep(key="write_post")],
+        example_assets=[
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
+        ],
+        # POST-BAKE: replace with the content-hashed social-post example
+        # harvested from a real pipeline run (write_post on demo-article.md).
+        example_outputs=[],
+    ),
+    "quote-cards": RecipeEntry(
+        status="reserved",
+        input_slots=[InputSlot(type="transcript")],
+        tasks=[
+            TaskItem(tool="write_quotes", params={"language": "en", "count": 4})
+        ],
+        aspect="1:1",
+        tags=["text-output"],
+        flow=[FlowStep(key="write_quotes")],
+        example_assets=[
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
+        ],
+        # POST-BAKE: content-hashed quote-card image(s) from a real run.
+        example_outputs=[],
+    ),
+    "carousel": RecipeEntry(
+        status="reserved",
+        input_slots=[InputSlot(type="transcript")],
+        tasks=[
+            TaskItem(tool="write_carousel", params={"language": "en", "count": 6})
+        ],
+        aspect="1:1",
+        tags=["text-output"],
+        flow=[FlowStep(key="write_carousel")],
+        example_assets=[
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
+        ],
+        # POST-BAKE: content-hashed carousel slide image(s) from a real run.
+        example_outputs=[],
     ),
 }
 
 
 def list_public_recipes() -> list[RecipePublic]:
-    """The public catalogue (card order = registry insertion order)."""
+    """The public catalogue (card order = registry insertion order).
+
+    Both ``"live"`` and ``"reserved"`` entries ship to the public endpoint
+    (RECIPES §10 reserves a grid seat for cards awaiting their bake). The
+    frontend guards the click path on ``live`` and pins a Soon pill to
+    reserved cards.
+    """
     return [
         RecipePublic(
             id=recipe_id,

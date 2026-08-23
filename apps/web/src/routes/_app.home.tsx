@@ -3,13 +3,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
-import { fetchRecipeCards, type RecipeCard } from "@/lib/recipes"
+import { fetchRecipeCards, type RecipePublic } from "@/lib/recipes"
 import type { ChatMention } from "@/lib/mentions"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { LogoMark } from "@/components/LogoMark"
 import { RecipeCard as RecipeCardView } from "@/components/home/RecipeCard"
-import { MasonryGrid, MasonryItem } from "@/components/home/MasonryGrid"
 import { RecipeInspectOverlay } from "@/components/recipes/RecipeInspectOverlay"
 import type { PersonaPickerEntry } from "@/components/home/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
@@ -34,7 +33,7 @@ const DOCK_WINDOW_PX = 140
 function Home() {
   const { t } = useTranslation()
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [cards, setCards] = useState<RecipeCard[]>([])
+  const [cards, setCards] = useState<RecipePublic[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
   // through `editorRef`.
@@ -44,7 +43,7 @@ function Home() {
   // Every live-card click (body or hover Remix, 2026-08-10) opens the inspect
   // overlay — inspect tabs + the launch zone (the composer's send mechanism
   // parked inside). The composer keeps only the manual @-mention path.
-  const [inspecting, setInspecting] = useState<RecipeCard | null>(null)
+  const [inspecting, setInspecting] = useState<RecipePublic | null>(null)
 
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
   // NEVER scrolls — the dot grid it carries stays pinned to the viewport.
@@ -54,12 +53,14 @@ function Home() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const chromeRef = useRef<HTMLDivElement>(null)
   const subtitleRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
   // The chrome's flow top = the docking scrollTop (offsetTop is unaffected by
-  // scroll); the subtitle's rest height feeds its fold. Both measured on
-  // mount, re-measured on resize (the vh spacer and text wrapping move them).
-  // pinPoint lives in a ref — only the scroll handler reads it.
+  // scroll); the subtitle's rest height feeds its fold; the section title's
+  // height feeds ITS identical fold (mirror copy — same morph family,
+  // same RAF driver). All three measured on mount, re-measured on resize.
   const pinPointRef = useRef<number | null>(null)
   const [subtitleH, setSubtitleH] = useState<number | null>(null)
+  const [titleH, setTitleH] = useState<number | null>(null)
   const [heroP, setHeroP] = useState(0)
   const [dockP, setDockP] = useState(0)
 
@@ -69,6 +70,8 @@ function Home() {
       if (chrome) pinPointRef.current = chrome.offsetTop
       const sub = subtitleRef.current
       if (sub) setSubtitleH(sub.offsetHeight)
+      const title = titleRef.current
+      if (title) setTitleH(title.offsetHeight)
     }
     measure()
     window.addEventListener("resize", measure)
@@ -119,6 +122,21 @@ function Home() {
   // the chrome (below its top edge), so the docking point never moves.
   const subtitleStyle: CSSProperties = {
     maxHeight: subtitleH == null ? undefined : (1 - heroP) * subtitleH,
+    opacity: 1 - heroP,
+    transform: `translateY(${-12 * heroP}px)`,
+    filter: heroP === 0 ? undefined : `blur(${heroP * 3}px)`,
+    visibility: heroP >= 1 ? "hidden" : undefined,
+  }
+
+  // Section title — LITERAL MIRROR of subtitleStyle (every field, same
+  // heroP driver, same 0–160px window). Subtitle FOLDS upward into the
+  // chrome; h2 FOLDS upward into the chrome on the SAME scroll trigger
+  // — two identical morphs on opposite sides of the chrome's top edge.
+  // At rest (heroP=0): opacity 1, full height, no transform, no blur
+  // (the earlier `opacity: titleP` mistake hid it at rest; using
+  // heroP=0 at rest gives opacity 1 = visible).
+  const titleStyle: CSSProperties = {
+    maxHeight: titleH == null ? undefined : (1 - heroP) * titleH,
     opacity: 1 - heroP,
     transform: `translateY(${-12 * heroP}px)`,
     filter: heroP === 0 ? undefined : `blur(${heroP * 3}px)`,
@@ -183,33 +201,37 @@ function Home() {
           </div>
         </div>
 
-        {/* Recipe gallery (ADR-046 D4): poster-first cards in a data-driven
-            dense flow — each tile's shape comes from its poster's real pixels
-            (registry w/h), featured cards span two columns; every live-card
-            click opens the inspect overlay with the launch zone inside. */}
-        <section className="flex flex-col items-center px-6 pt-4 pb-16">
+        {/* Recipe gallery (recipe-gallery v2, ADR-048): uniform 4-column grid
+            of process-schematic covers — no real media on the card face, no
+            featured spans, no masonry. Card order = registry insertion order
+            (RECIPES §4: row 1 video sources, row 2 text/image sources).
+            Every click opens the inspect overlay — the ONLY launch path
+            (ADR-040). */}
+        <section className="flex flex-col items-center px-4 pt-3 pb-10 sm:px-6 sm:pt-4 sm:pb-16">
           <div className="w-full max-w-6xl">
-            <h2 className="mb-6 text-center text-xl font-medium">
+            <h2
+              ref={titleRef}
+              style={titleStyle}
+              className="mb-6 overflow-hidden text-center text-base font-medium text-balance sm:text-lg md:text-xl"
+            >
               {t("recipes.sectionTitle")}
             </h2>
-            <MasonryGrid className="grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
               {cards.map((card, index) => (
-                <MasonryItem
+                <div
                   key={card.id}
-                  span={card.span}
                   data-tour={index === 0 ? "home-recipes" : undefined}
                 >
                   <RecipeCardView
                     card={card}
                     onInspect={(c) => {
-                      // Mouse-leave pauses the teaser; the overlay owns
-                      // attention from here.
+                      // The overlay owns attention from here.
                       setInspecting(c)
                     }}
                   />
-                </MasonryItem>
+                </div>
               ))}
-            </MasonryGrid>
+            </div>
           </div>
         </section>
       </div>

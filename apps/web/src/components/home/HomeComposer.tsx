@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUp, BrainCircuit, Paperclip, User } from "lucide-react"
+import { ArrowUp, Paperclip, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
@@ -376,11 +376,13 @@ export function HomeComposer({
             here — it's the absolute anchor below so it survives the fold).
             Pill value state law: rest value in meta-foreground, set value in
             foreground — that single color step is the whole state change (no
-            fills, no accent color). The pr-11 reserves the send anchor's
-            space. */}
+            fills, no accent color). The pr-12 reserves the send anchor's
+            space. No model control (2026-08-22): the pipeline assigns models
+            per modality, so the composer can't decide — or honestly display —
+            the final model. */}
         <InputGroupAddon
           align="block-end"
-          className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 font-normal"
+          className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
           style={controlRowStyle}
           onClick={focusEditor}
         >
@@ -457,43 +459,6 @@ export function HomeComposer({
             </Popover>
           </div>
 
-          <div className="ml-auto flex items-center gap-2 pr-12">
-            {/* AI model — display-only (single provider): hover reveals the
-                provider breakdown. A picker lands only when a real second
-                provider exists (provider abstraction, PROGRESS 需求池). */}
-            <Popover>
-              <PopoverTrigger
-                openOnHover
-                delay={150}
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
-                  >
-                    <BrainCircuit className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{t("composer.aiModel")}</span>
-                  </Button>
-                }
-              />
-              <PopoverContent side="bottom" align="end" className="w-64 ring-0">
-                <div className="flex flex-col gap-1.5 px-0.5 pb-0.5">
-                  {(
-                    [
-                      [t("composer.aiModelRowText"), "MiniMax M3"],
-                      [t("composer.aiModelRowVoice"), "MiniMax T2A"],
-                      [t("composer.aiModelRowVisual"), "MiniMax"],
-                    ] as const
-                  ).map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span>{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
         </InputGroupAddon>
 
         {/* Send — the absolute bottom-right anchor in BOTH forms (expanded:

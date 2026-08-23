@@ -1,74 +1,43 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Maximize2, Volume2, VolumeX, Wand2 } from "lucide-react"
+import { Maximize2, Wand2 } from "lucide-react"
 
-import type { RecipeCard as RecipeCardData } from "@/lib/recipes"
+import { recipeCovers } from "@/components/recipes/covers"
+import type { RecipePublic } from "@/lib/recipes"
 
 /**
- * One recipe card — poster-first state machine (ADR-046 D4):
- *   rest  = the poster (capability chip top-left, aspect badge bottom-left,
- *           NO autoplay — the gallery is still until asked);
- *   hover = the teaser plays WITH SOUND (2026-08-21 ruling — sound is the
- *           default, not a toggle away). The browser gesture policy is the
- *           only gate: an unmuted play() that rejects (no prior user
- *           activation) falls back to muted and the toggle reflects it —
- *           any click on the page (the toggle itself included) grants
- *           activation, so sound works from the next hover on. Hover also
- *           raises the ACTION TRIO (MiniMax anatomy): sound toggle takes
- *           the aspect badge's bottom-left slot, a white stadium Remix pill
- *           centers, an expand button sits bottom-right — Remix and expand
- *           open the same inspect overlay (no quick-launch, ADR-040);
- *   click = the RecipeInspectOverlay (the ONLY launch path — the launch
- *           zone lives inside; hover never launches anything).
- * The tile's aspect comes from the poster's real pixels (registry w/h), so
- * any-shaped asset fills exactly — no letterboxing, no forced 9:16 slot.
- * Reserved cards carry a Soon pill in the caption and never play.
+ * One recipe card (recipe-gallery-v2, ADR-048): the card is a STATIC
+ * process schematic at rest and a re-triggered schematic animation on
+ * hover. The card face holds no real material — no video, no poster, no
+ * audio. The schema cover is a single inline SVG, three grayscale tiers
+ * only (currentColor + opacity), and the same `transform-box: fill-box`
+ * CSS keyframes that drive the v2 demo (`docs/tasks/recipe-gallery-v2-covers.html`).
  *
- * The caption stays UNDER the tile (title + promise — the dish explains
- * itself at rest, no hover needed to read it).
+ * Hover state machine (MiniMax anatomy, second pass 2026-08-23):
+ *   rest  = the schematic (static, no chrome) — title + promise + input
+ *           row always readable under the tile;
+ *   hover = the schematic plays its process animation (see styles.css
+ *           `rc-*` keyframes, gated by `.group:hover`); a white stadium
+ *           Remix pill (`Wand2` + label) centers, an expand icon-button
+ *           sits top-right — both open the same inspect overlay (no
+ *           quick-launch, ADR-040);
+ *   click = the RecipeInspectOverlay (the ONLY launch path).
+ *
+ * Color law: the cover's `text-foreground` color governs the schematic;
+ * `prefers-reduced-motion` disables every animation (the rest geometry
+ * remains legible on its own).
  */
 export function RecipeCard({
   card,
   onInspect,
 }: {
-  card: RecipeCardData
-  onInspect: (card: RecipeCardData) => void
+  card: RecipePublic
+  onInspect: (card: RecipePublic) => void
 }) {
   const { t } = useTranslation()
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const Cover = recipeCovers[card.id]
   const live = card.status === "live"
-  const playable = Boolean(card.preview.videoUrl)
-  const [hovering, setHovering] = useState(false)
-  // Sound: user intent (default ON) vs the EFFECTIVE audible state (the
-  // policy fallback flips it until the first click anywhere).
-  const [muteIntent, setMuteIntent] = useState(false)
-  const [muted, setMuted] = useState(false)
-
-  // Hover play: nothing loads at rest (preload="none"); the teaser loads on
-  // first hover, pauses and hides on leave (the poster returns). Sound first,
-  // muted fallback — React's `muted` prop is unreliable after mount
-  // (attribute vs property), so drive it imperatively.
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    if (hovering && playable) {
-      video.muted = muteIntent
-      setMuted(muteIntent)
-      video.play().catch(() => {
-        // Autoplay policy (no activation yet) — retry muted; the toggle
-        // shows the fallback. A later click unlocks sound.
-        video.muted = true
-        setMuted(true)
-        video.play().catch(() => {
-          // Codec edge — the poster simply stays.
-        })
-      })
-    } else {
-      video.pause()
-    }
-  }, [hovering, playable, muteIntent])
 
   return (
     <div
@@ -81,116 +50,49 @@ export function RecipeCard({
           onInspect(card)
         }
       }}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-      className={`group flex flex-col gap-2.5 outline-none ${live ? "cursor-pointer" : ""}`}
+      className={`group flex flex-col gap-2.5 outline-none ${
+        live ? "cursor-pointer" : ""
+      }`}
     >
-      <div
-        className="relative overflow-hidden rounded-lg bg-muted"
-        style={{ aspectRatio: `${card.preview.w} / ${card.preview.h}` }}
-      >
-        {/* Rest layer: the poster (media content is its own separation —
-            no ring, no shadow, no chrome). */}
-        <img
-          src={card.preview.posterUrl}
-          alt={t(`recipes.${card.id}.title`)}
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-
-        {/* Hover layer: the teaser (same ratio as the poster — exact fill).
-            Mounts only for cards that have a preview video. */}
-        {playable && (
-          <video
-            ref={videoRef}
-            src={card.preview.videoUrl}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
-              hovering ? "opacity-100" : "opacity-0"
-            }`}
-            preload="none"
-            muted
-            loop
-            playsInline
-          />
+      {/* The tile — bg-inset well, no ring, no shadow (fill-first, ADR-046).
+          16:10 carries the schematic; the inline SVG is the only content. */}
+      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-inset text-foreground">
+        {Cover ? (
+          <Cover />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+            {card.id}
+          </div>
         )}
 
-        {/* Capability chip (top-left): the card's first tag is its capability
-            mark — the MiniMax ribbon role. On-media text is constant white
-            (it follows the media, not the theme). */}
-        {card.tags.length > 0 && (
-          <span className="absolute left-2.5 top-2.5 rounded-md bg-black/35 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-            {t(`recipes.tags.${card.tags[0]}`)}
-          </span>
-        )}
-
-        {/* Aspect badge (bottom-left): the output's shape, stated on the
-            face (画幅跟源). Rest chrome — on hover its slot TRANSFORMS into
-            the sound toggle (MiniMax anatomy: the badge is rest-only). */}
-        <span
-          className={`absolute bottom-2.5 left-2.5 rounded-md bg-black/35 px-1.5 py-0.5 text-[10px] tabular-nums text-white backdrop-blur-sm transition-opacity duration-200 ${
-            hovering && playable ? "opacity-0" : "opacity-100"
-          }`}
-        >
-          {card.aspect}
-        </span>
-
-        {/* Hover chrome (MiniMax anatomy, 2026-08-21 walkthrough): the scrim
-            plus an action trio — sound toggle bottom-LEFT (takes the aspect
-            badge's slot), a white stadium Remix pill at CENTER, an expand
-            button bottom-RIGHT. Remix and expand both open the inspect
-            overlay — the ONLY launch path (ADR-040); hover never launches. */}
-        {playable && (
+        {/* Hover chrome — stadium Remix pill centered, expand icon
+            top-right. Both open the overlay (ADR-040). Kept off the card
+            at rest (the schematic IS the card face). Reserved cards stay
+            non-launchable: no hover chrome, no click. */}
+        {live && (
           <>
-            <div
-              className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent transition-opacity duration-200 ${
-                hovering ? "opacity-100" : "opacity-0"
-              }`}
-            />
             <button
               type="button"
-              aria-label={muted ? t("recipes.unmute") : t("recipes.mute")}
-              tabIndex={hovering ? 0 : -1}
-              onClick={(e) => {
-                e.stopPropagation()
-                setMuteIntent((v) => !v)
-              }}
-              className={`absolute bottom-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/25 ${
-                hovering
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-1 opacity-0"
-              }`}
-            >
-              {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              tabIndex={hovering ? 0 : -1}
+              tabIndex={-1}
+              aria-hidden
               onClick={(e) => {
                 e.stopPropagation()
                 onInspect(card)
               }}
-              className={`absolute left-1/2 top-1/2 flex h-10 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-medium text-black shadow-lg transition-all duration-200 hover:bg-white ${
-                hovering
-                  ? "scale-100 opacity-100"
-                  : "pointer-events-none scale-95 opacity-0"
-              }`}
+              className="pointer-events-none absolute left-1/2 top-1/2 flex h-9 -translate-x-1/2 -translate-y-1/2 scale-95 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-medium text-black opacity-0 transition-all duration-200 hover:bg-white group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
             >
               <Wand2 className="h-4 w-4" />
               {t("recipes.remix")}
             </button>
             <button
               type="button"
+              tabIndex={-1}
               aria-label={t("recipes.expand")}
-              tabIndex={hovering ? 0 : -1}
               onClick={(e) => {
                 e.stopPropagation()
                 onInspect(card)
               }}
-              className={`absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/25 ${
-                hovering
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-1 opacity-0"
-              }`}
+              className="pointer-events-none absolute right-2.5 top-2.5 flex h-8 w-8 scale-90 items-center justify-center rounded-md bg-white/15 text-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
@@ -198,19 +100,26 @@ export function RecipeCard({
         )}
       </div>
 
-      {/* Caption: the dish explains itself — title + promise; reserved cards
-          pin the Soon pill next to the title. */}
+      {/* Three rows under the tile, grid-aligned across the row (consistent
+          baseline across cards): title (with optional Soon pill for
+          reserved) / promise (2-line clamp) / input scenario row (single-
+          line meta, tracked uppercase — `text-meta` only sets color +
+          uppercase + tracking, the size must come from a utility class,
+          otherwise it falls back to 16px). */}
       <div className="px-0.5">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium">{t(`recipes.${card.id}.title`)}</p>
           {!live && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {t("recipes.soon")}
             </span>
           )}
         </div>
-        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-0.5 line-clamp-2 min-h-10 text-xs leading-relaxed text-muted-foreground">
           {t(`recipes.${card.id}.promise`)}
+        </p>
+        <p className="mt-1 truncate text-[10.5px] leading-snug tracking-[0.06em] text-meta">
+          {t(`recipes.${card.id}.inputScenario`)}
         </p>
       </div>
     </div>

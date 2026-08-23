@@ -391,15 +391,11 @@ const zh: Resources = {
     fileKinds: { video: "视频", audio: "音频", image: "图片", doc: "文档" },
     assetsUpload: "上传文件",
     assetsFormats: "MP4 · MOV · WEBM · MP3 · WAV · M4A · PNG · JPG · WEBP · TXT · MD · PDF · DOC · DOCX · SRT · VTT",
-    aiModel: "AI 模型",
-    aiModelRowText: "文案与导演",
-    aiModelRowVoice: "配音与声纹",
-    aiModelRowVisual: "图像与音乐",
     uploadFailed: "上传失败，请重试",
     managePersonas: "管理人设…",
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
-  // reserved 卡在此留座但不渲染。
+  // reserved 卡在此留座但不渲染发射区。
   recipes: {
     sectionTitle: "汲取灵感，化为己作",
     soon: "即将推出",
@@ -422,12 +418,19 @@ const zh: Resources = {
       dub_clip: "用你的声音配音",
       add_music: "加配乐",
       render: "渲染",
+      // 文本族流程键（配方画廊 v2, ADR-048）—— social-post / quote-cards /
+      // carousel 三卡解阻后消费；提前落在这里，避免新卡登记时文案键断裂。
+      write_post: "写帖子",
+      write_quotes: "挑金句",
+      write_carousel: "排幻灯",
     },
     // 配方标签 chip（信息卡）——共享命名空间。
     tags: {
       multilingual: "多语言",
       "no-footage": "无需录像",
       "auto-framing": "自动取景",
+      "voice-clone": "声音克隆",
+      "text-output": "文本产物",
     },
     // 示例素材 / 成片标签（overlay 堆叠项）。
     materials: {
@@ -442,6 +445,10 @@ const zh: Resources = {
       subs_zh_bilingual: "中英双语",
       subs_fr: "法语字幕",
       dub_es: "西语配音",
+      // 文本族示例卡标签（示例烘焙落桶后消费）。
+      social_post_preview: "示例帖子",
+      quote_card_preview: "示例金句卡",
+      carousel_preview: "示例轮播",
     },
     inspect: {
       tabs: {
@@ -459,39 +466,100 @@ const zh: Resources = {
     },
     "multilingual-subs": {
       title: "多语言字幕",
-      promise: "为你的视频带来多语言单行或双语字幕，或原声多语言配音。",
+      promise: "为你的视频配上多语言字幕——单行或双语对照。",
+      inputScenario: "适用：演讲 · 会议录像",
       inputTitle: "原始视频",
       inputHint: "在这里上传你的原视频。",
-      promptTemplate: "帮我把字幕做成中英双语的，法语字幕也出一版，西语版直接用我的声音配。",
-      promptHint: "直接发送，或者试试「双语字幕」「中文字幕」「西语配音」等。",
+      promptTemplate:
+        "用上传的整段视频（演示源 1:1）做 4 版多语言字幕——每版独立成片，原始视频不改：原声 EN 版（英文原声 + 英文单行字幕，1:1 保留）；中英双语版（中文译文主行 ×0.82 + 英文原文小行 ×0.55，对照轨；标题 overlay 中文）；法语单行版（FR 单行字幕，原声轨留着）；西语配音版（用我的声音从原声克隆声纹替换原音轨，ES 单行字幕；保留音色指纹，AI 通用合成声不要）。字幕字号按画幅等比缩放（皮肤默认 68 → 1:1 得 38），左右边距 8%。双语对照只画译文轨 + 英文小行，不要堆叠墙。所有版本保持 1:1 原画幅，上下留黑保原比例，不裁切。",
+      promptHint: "直接发送，或者试试「中英双语」「法语版」「加德语」等。",
+    },
+    "voice-dub": {
+      title: "原声AI配音",
+      promise:
+        "用你的声音把同一段视频讲成另一种语言——不是通用合成声。",
+      inputScenario: "适用：演讲 · 会议录像",
+      inputTitle: "原始视频",
+      inputHint: "在这里上传你的原视频。",
+      promptTemplate:
+        "用上传的整段视频做 3 版 AI 配音——每版独立成片，原始视频不动：中文版（用我的声音从原声克隆声纹替换原音轨，ZH 单行字幕），法语版（同上 FR），西语版（同上 ES）。3 版都保留我的音色指纹——AI 通用合成声不要。原声轨作为对照层压在主轨之下，方便我对照自然度。1:1 原画幅不裁切，上下留黑保原比例。字幕字号按画幅等比缩放（皮肤默认 68 → 1:1 得 38），左右边距 8%。声画对齐按 ASR 词级时间戳回配，不要音画漂移。",
+      promptHint:
+        "直接发送，或者试试「改配普通话」「加德语版」等。",
+    },
+    "social-post": {
+      // 配方画廊 v2（ADR-048 §4.6）：承诺句里的环路价值句（"发哪个平台你定"）
+      // 是过闸门②的那一句——通用大模型写得翻译文，但握不住你的风格 + 渠道分发。
+      title: "社媒帖",
+      promise:
+        "讲稿或长文 → 可以直接发的帖子。你的风格来写，发哪个平台你定。",
+      inputScenario: "适用：讲稿 · 论文 · 会议纪要",
+      inputTitle: "原始素材",
+      inputHint: "你的演讲文字稿、论文草稿或会议纪要——长文本就行。",
+      promptTemplate:
+        "把这段演讲变成 LinkedIn 帖，按我的风格来。哪个平台发——你选合适的就行。",
+      promptHint:
+        "直接发送，或者试试「再短一些，钩子先行」「改成 thread」「换成德语」等。",
+    },
+    "quote-cards": {
+      title: "金句卡",
+      promise:
+        "挑最亮的几句话，排成可以直接发的图片。",
+      inputScenario: "适用：讲稿 · 录像文字稿",
+      inputTitle: "原始素材",
+      inputHint: "你的演讲或文章文字稿——我们替你挑最亮的几句。",
+      promptTemplate:
+        "从这场演讲里挑最亮的金句，做成可以直接发的金句卡。",
+      promptHint:
+        "直接发送，或者试试「再尖锐一些」「少一点金句」「竖版」等。",
+    },
+    carousel: {
+      title: "轮播图",
+      promise:
+        "讲稿或课件要点，排成可以翻页的图文幻灯。",
+      inputScenario: "适用：讲稿 · 课件要点",
+      inputTitle: "原始素材",
+      inputHint: "你的讲稿或课件大纲——我们排成幻灯。",
+      promptTemplate:
+        "把这场演讲做成一组轮播幻灯——一图一意，可以直接发。",
+      promptHint:
+        "直接发送，或者试试「少几张」「加一个钩子在第一张」「法语版」等。",
     },
     "image-video": {
       title: "图文视频",
       promise: "没有录像——照片加文字稿，变成带字幕和音乐的轮播短片。",
+      inputScenario: "适用：文稿 + 照片 · 课件",
       inputTitle: "文字稿和照片",
       inputHint: "你的演讲文字稿，加一组照片或直接给课件（PDF/PPT）——现场图、幻灯片、人像都可以。",
-      promptTemplate: "把我的文字稿和照片做成带字幕和音乐的短片，保持照片的原画幅。",
-      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
+      promptTemplate:
+        "用上传的文字稿（演讲实录 + 一组照片，或直接给课件 PDF/PPT）做一条照片轮播短片：视觉底 = 照片序列或课件页图，按文字稿的逻辑段落切镜头，单张照片满帧停留 + 字幕推进，不做动画或转场（委托剪映）；字幕 = 单行替换（catalog 6 种样式可换：clean-bottom / karaoke-highlight / fade-in / pop-in / slide-up / stacking），字号按画幅等比缩放（皮肤默认 68 → 16:9 得 38），左右边距 8%，保留文字稿语义单元不按句硬切；音频 = 静默版（无声纹版本先行），加一段背景音乐循环；阅读节奏用 align_stills 估算时间轴，与字幕词级时间戳同构。输出 = 1 条 16:9 视频（保持照片原画幅不裁切），时长由文字稿长度和照片数量决定。",
+      promptHint:
+        "直接发送，或者试试「再短一些」「用课件替换照片」「加更多照片」等。",
     },
     "highlight-clips": {
       title: "高光切片",
       promise: "长视频里最好的几段剪成竖屏短片——镜头自动跟人，最值得先发的也标出来。",
+      inputScenario: "适用：长演讲录像",
       inputTitle: "原始视频",
       inputHint: "演讲、会议、访谈录像都行——中景画面效果最好。",
-      promptTemplate: "帮我把这个视频里最好的几段剪出来，做成竖屏短片，镜头跟着人走。",
+      promptTemplate:
+        "用上传的长演讲视频（最佳为大型中景登台演讲）剪 3-5 段高光切片——每段独立成片，竖屏 9:16：选段标准 = 信息密度最高的几个瞬间（结论性句子、关键数据点、最有共鸣的表达），agent 标出首推段（最值得先发的）；竖屏构图 = 镜头自动跟人（reframe_clip dynamic mode），speaker 居中偏上，下方留出字幕空间，不要固定中央裁切；字幕 = 单行替换（catalog 6 种样式可换），字号按画幅等比缩放（皮肤默认 68），左右边距 8%，不要堆叠；横竖比转换 = 9:16 渲染端按帧高缩放，原画幅用 object-contain 不裁切，上下留黑。输出 = 3-5 段独立短片，每段 15-60 秒，原视频保留不动。",
       promptHint: "直接发送，或者试试「切成横屏」「多剪几段」等。",
     },
     reframe: {
       title: "访谈分镜",
       promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
+      inputScenario: "适用：双人对谈录像",
       inputTitle: "输入视频",
       inputHint: "双人对话的横屏录像——访谈或对谈节目。",
-      promptTemplate: "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。",
-      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
+      promptTemplate:
+        "用上传的双人对话录像（最佳为左右对坐的访谈或对谈节目，横屏）剪 2-4 段竖屏分镜——每段独立成片，9:16：说话人切换 = 静态分镜模式：检测当前说话人（左侧或右侧），镜头切换到对应人物；切换要平滑（最短驻留 + 缓动），不要硬切眩晕；竖屏构图 = 单人在画面中央偏上，下方留字幕空间，不要塞两个人在画面里；字幕 = 单行替换（catalog 6 种样式可换），字号按画幅等比缩放，左右边距 8%；横竖比转换 = 9:16 object-contain 不裁切，上下留黑保原比例。输出 = 2-4 段竖屏短片，每段覆盖一次完整的话轮切换（提问→回答），原视频保留不动。",
+      promptHint:
+        "直接发送，或者试试「多切几段」「覆盖整场访谈」「更快节奏」等。",
     },
     "ai-visuals": {
       title: "虚拟视频",
       promise: "没有素材也没关系——每个画面都根据你的演讲生成。",
+      inputScenario: "适用：演讲录音",
       inputTitle: "输入音频",
       inputHint: "你的演讲录音——画面全部围绕它生成。",
       promptTemplate: "把我的演讲变成一条短片，画面全部 AI 生成，不需要素材。",
@@ -986,8 +1054,6 @@ const zh: Resources = {
       synth_talk_video: "正在生成视频…",
       align_stills: "正在为你的文字稿对齐节奏…",
       verify: "质检中…",
-      hook_gate: "准备钩子预览…",
-      release_renders: "放行渲染…",
       materialize_source: "正在准备整条视频…",
     },
     qa: {
@@ -1102,12 +1168,6 @@ const zh: Resources = {
       review: "审阅",
     },
     bail: "停止生成",
-  },
-  hookGate: {
-    currentOpener: "当前开场",
-    makeOpener: "设为开场",
-    ending: "结尾",
-    adjustedNote: "预览还是调整前的版本——放行后按调整后的剪辑渲染。",
   },
   clipMenu: {
     more: "更多操作",

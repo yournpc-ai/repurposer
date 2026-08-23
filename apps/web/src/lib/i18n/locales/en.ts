@@ -203,7 +203,7 @@ const en = {
       cards: {
         c1: { type: "LinkedIn post", text: "Storage, not generation, is the bottleneck of the energy transition. Three numbers from my ECC keynote…" },
         c2: { type: "Quote card", text: "“The grid of 2040 is being decided in committee rooms this year.”" },
-        c3: { type: "Short clip", text: "0:42 — the battery analogy that got the room laughing. 9:16, subtitled." },
+        c3: { type: "Short clip", text: "0:42 — the battery analogy that got the room laughing. 9:16, captioned." },
         c4: { type: "Newsletter", text: "This month: what grid-scale storage actually costs, and why the curve just bent…" },
         c5: { type: "Artikel (DE)", text: "Warum Speicher — nicht Erzeugung — über die Energiewende entscheidet…" },
         c6: { type: "Résumé (FR)", text: "Trois chiffres à retenir de la keynote ECC sur le stockage réseau…" },
@@ -393,10 +393,6 @@ const en = {
     fileKinds: { video: "Video", audio: "Audio", image: "Image", doc: "Document" },
     assetsUpload: "Upload files",
     assetsFormats: "MP4 · MOV · WEBM · MP3 · WAV · M4A · PNG · JPG · WEBP · TXT · MD · PDF · DOC · DOCX · SRT · VTT",
-    aiModel: "AI model",
-    aiModelRowText: "Text & direction",
-    aiModelRowVoice: "Voice & dubbing",
-    aiModelRowVisual: "Image & music",
     uploadFailed: "Upload failed — please try again",
     managePersonas: "Manage personas…",
   },
@@ -423,16 +419,25 @@ const en = {
       materialize_source: "Prepare the full video",
       select_clips: "Select highlight segments",
       reframe_clip: "Reframe vertical, follow the speaker",
-      translate_clip: "Translate the subtitles",
+      translate_clip: "Translate the captions",
       dub_clip: "Dub it in your own voice",
       add_music: "Add music",
       render: "Render",
+      // Text-tribe flow keys (recipe-gallery v2, ADR-048) — land when the
+      // social-post / quote-cards / carousel cards uncomment into the
+      // registry. Kept here so the flow lookup never breaks the moment a
+      // new card lands.
+      write_post: "Write the post",
+      write_quotes: "Pick the quote lines",
+      write_carousel: "Lay out the slides",
     },
     // Recipe tag chips (info card) — shared namespace.
     tags: {
       multilingual: "Multilingual",
       "no-footage": "No footage needed",
       "auto-framing": "Auto framing",
+      "voice-clone": "Voice clone",
+      "text-output": "Text output",
     },
     // Example material / output labels (overlay stack items).
     materials: {
@@ -445,8 +450,12 @@ const en = {
       image_video_preview: "Slideshow preview",
       subs_en: "Original (EN)",
       subs_zh_bilingual: "CN-EN bilingual",
-      subs_fr: "French subtitles",
+      subs_fr: "French captions",
       dub_es: "Spanish dub",
+      // Post-bake labels for the text-tribe cards (land with the bake).
+      social_post_preview: "Sample post",
+      quote_card_preview: "Sample quote card",
+      carousel_preview: "Sample carousel",
     },
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
     // right = inspect tabs; left = the launch zone (composer's send
@@ -468,50 +477,106 @@ const en = {
       send: "Generate",
     },
     "multilingual-subs": {
-      title: "Multilingual subtitles",
+      title: "Multilingual captions",
       promise:
-        "Single-line or bilingual subtitles — or a dub in your own voice.",
+        "Caption your video in any language — single-line, or bilingual side-by-side.",
+      inputScenario: "For: talks · meetings",
       inputTitle: "Source video",
       inputHint: "Upload your original video here.",
       promptTemplate:
-        "Can you make the subtitles Chinese-English bilingual? A French-subtitled version too — and for Spanish, just dub it in my voice.",
+        "From the uploaded full video (demo source 1:1), make 4 multilingual caption versions — each a separate clip, source untouched: EN original (English voice + English single-line captions, keep 1:1 frame); ZH bilingual (Chinese translation on the main line at font ×0.82 with English original below at ×0.55, translation_track; title overlays translated to Chinese); FR single-line (French single-line captions, original soundtrack stays untouched); ES dub (replace original audio with my cloned voice from the source, ES single-line captions; keep my voice fingerprint — no stock narrator). Caption font size scales with frame (skin default 68 → 38 at 1:1), 8% side margins. Bilingual uses stack layout with only the translation track + a smaller English line — no stacked wall. All versions stay at 1:1 source frame, letterboxed, never cropped.",
       promptHint:
-        "Send it as is, or try “bilingual subtitles”, “Chinese subtitles”, “a Spanish dub”…",
+        "Send it as is, or try “bilingual captions”, “French captions”, “add a German version”…",
+    },
+    "voice-dub": {
+      title: "Your-voice AI dub",
+      promise:
+        "The same talk, in another language — in your voice, not a stock narrator.",
+      inputScenario: "For: talks · meetings",
+      inputTitle: "Source video",
+      inputHint: "Upload your original video here.",
+      promptTemplate:
+        "From the uploaded full video, make 3 voice-cloned dub versions — each a separate clip, source untouched: ZH dub (replace original audio with my cloned voice from the source, ZH single-line captions), FR dub (same, French), ES dub (same, Spanish). All 3 keep my voice fingerprint — no stock narrator. The original soundtrack stays as a reference layer below the main track so I can hear how natural the clone sounds. Keep the 1:1 source frame, letterboxed, never cropped. Caption font size scales with frame (skin default 68 → 38 at 1:1), 8% side margins. Audio re-times to ASR word-level timestamps — no drift.",
+      promptHint:
+        "Send it as is, or try “dub it in Mandarin instead”, “add a German version”…",
+    },
+    "social-post": {
+      // Recipe-gallery v2 (ADR-048, §4.6): the loop-value clause on the
+      // promise ("the channel's up to you") is what clears gate ② — a
+      // generic LLM can translate, it can't own your style + the route.
+      title: "Social post",
+      promise:
+        "Long-form talk or paper, ready-to-post. Written in your style — pick the channel.",
+      inputScenario: "For: talks · papers · meeting notes",
+      inputTitle: "Source material",
+      inputHint: "Your talk transcript, paper draft, or meeting notes — long-form text.",
+      promptTemplate:
+        "Turn this talk into a LinkedIn post in my style. The platform is up to you — pick whatever fits.",
+      promptHint:
+        "Send it as is, or try “shorter, hook-first”, “make it a thread instead”, “in German”…",
+    },
+    "quote-cards": {
+      title: "Quote cards",
+      promise:
+        "Pick the strongest lines, lay them out as shareable images.",
+      inputScenario: "For: transcripts · scripts",
+      inputTitle: "Source material",
+      inputHint: "Your talk transcript or article — we'll pick the strongest lines.",
+      promptTemplate:
+        "Pull the strongest quotes from this talk and turn them into quote cards ready to share.",
+      promptHint:
+        "Send it as is, or try “pick sharper lines”, “fewer quotes”, “vertical format”…",
+    },
+    carousel: {
+      title: "Carousel slides",
+      promise:
+        "Talk or deck points, paginated into a swipeable slide deck.",
+      inputScenario: "For: scripts · slide notes",
+      inputTitle: "Source material",
+      inputHint: "Your talk script or deck outline — we'll lay it out as slides.",
+      promptTemplate:
+        "Turn this talk into a carousel of slides — one idea per slide, ready to post.",
+      promptHint:
+        "Send it as is, or try “fewer slides”, “add a hook on the first one”, “in French”…",
     },
     "image-video": {
       title: "Photos to video",
       promise: "No footage — photos plus your script, with captions and music.",
+      inputScenario: "For: scripts + photos · slide decks",
       inputTitle: "Script and photos",
       inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
-        "Turn my script and photos into short clips with captions and music, keeping my photos' original frame.",
+        "From the uploaded transcript (talk write-up + a set of photos, or a slide deck PDF/PPT), make one stills slideshow: visuals = photo sequence (or deck page images), cut by the transcript's logical sections, each photo holds full-frame while captions advance — no animation or transitions (that's for CapCut); captions = single-line replacement (catalog 6 presets: clean-bottom / karaoke-highlight / fade-in / pop-in / slide-up / stacking), font size scales with frame (skin default 68 → 38 at 16:9), 8% side margins, preserve semantic units from the transcript (don't chop mid-thought); audio = silent version first (voice-clone path comes later), with a background music loop; align_stills estimates the reading-pace timeline, mirror of ASR word-level timestamps. Output = 1 landscape 16:9 video (keep source frame, no cropping); duration driven by transcript length and photo count.",
       promptHint:
-        "Use the example to tell Repurposer what you need — feel free to edit it.",
+        "Send it as is, or try “shorter”, “use the slide deck instead”, “add more photos”…",
     },
     "highlight-clips": {
       title: "Highlight clips",
       promise:
         "Your long video's best moments as vertical clips — top pick flagged.",
+      inputScenario: "For: long talk recordings",
       inputTitle: "Source video",
       inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
-        "Find the best moments of this video and cut them into vertical clips — the camera follows the speaker.",
+        "From the uploaded long talk recording (large mid-shot stage talk works best), cut 3-5 highlight clips — each a separate vertical 9:16 clip: selection = highest information-density moments (concluding statements, key data points, most resonant lines); agent flags the top pick (the one to post first); vertical framing = camera follows the speaker automatically (reframe_clip dynamic mode), speaker centered upper-middle, caption space below — not fixed center-crop; captions = single-line replacement (catalog 6 presets), font size scales with frame (skin default 68), 8% side margins — no stacking; aspect conversion = 9:16 scales by frame height, source frame letterboxed via object-contain, no crop. Output = 3-5 short clips, each 15-60 seconds; original video untouched.",
       promptHint:
         "Send it as is, or try “make them landscape”, “cut a few more”…",
     },
     reframe: {
       title: "Interview reframe",
       promise: "Two-person talk recut vertical — the camera follows the speaker.",
+      inputScenario: "For: two-person interviews",
       inputTitle: "Input video",
       inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
-        "Recut my two-person interview into vertical clips that follow whoever is speaking.",
+        "From the uploaded two-person conversation recording (landscape left-right interview / talk show works best), cut 2-4 vertical reframe clips — each a separate 9:16 clip: speaker switching = static-reframe mode: detect who's currently speaking (left or right), cut to that person; transitions must be smooth (min dwell + easing), no jarring hard cuts; vertical framing = single speaker centered upper-middle, caption space below — don't try to fit both in frame; captions = single-line replacement (catalog 6 presets), font size scales with frame, 8% side margins; aspect conversion = 9:16 object-contain, letterboxed, source frame preserved. Output = 2-4 vertical clips, each covering one complete turn switch (question → answer); original video untouched.",
       promptHint:
-        "Use the example to tell Repurposer what you need — feel free to edit it.",
+        "Send it as is, or try “cut a few more”, “cover the full interview”, “faster pace”…",
     },
     "ai-visuals": {
       title: "Virtual scenes",
       promise: "No footage, no photos — every scene is AI-generated for your talk.",
+      inputScenario: "For: talk audio",
       inputTitle: "Input audio",
       inputHint: "A recording of your talk — every visual is generated around it.",
       promptTemplate:
@@ -1014,8 +1079,6 @@ const en = {
       synth_talk_video: "Generating your video…",
       align_stills: "Timing your transcript…",
       verify: "Checking quality…",
-      hook_gate: "Preparing hook previews…",
-      release_renders: "Releasing the renders…",
       materialize_source: "Preparing your full video…",
     },
     qa: {
@@ -1070,7 +1133,7 @@ const en = {
       "The steps I'll run, in order — adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
     addTask: "Add task",
     tools: {
-      translate_clip: "Subtitled version",
+      translate_clip: "Captioned version",
       dub_clip: "Voice-over version",
       remove_filler: "Remove filler words",
       add_music: "Background music",
@@ -1083,7 +1146,7 @@ const en = {
       quotes: "Quote cards",
       carousel: "Carousel",
       article: "Article",
-      subs: "subtitled",
+      subs: "captioned",
       dub: "voice-over",
       bilingual: "bilingual",
     },
@@ -1132,13 +1195,6 @@ const en = {
       review: "Review",
     },
     bail: "Stop generation",
-  },
-  hookGate: {
-    currentOpener: "Current opener",
-    makeOpener: "Make this the opener",
-    ending: "Ending",
-    adjustedNote:
-      "Previews still show the pre-adjustment cut — the release renders the adjusted one.",
   },
   clipMenu: {
     more: "More actions",
