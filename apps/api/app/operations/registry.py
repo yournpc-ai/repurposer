@@ -51,6 +51,14 @@ class SetTitleParams(BaseModel):
     enabled: bool
 
 
+class SwapHookShotParams(BaseModel):
+    """换图锚 (期 4 钩子预览闸轻量调整): move a stills shot to the hook slot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shot_index: int = Field(ge=1)  # 0 is the hook itself — swapping it is a no-op
+
+
 class SetCaptionStyleParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -249,6 +257,21 @@ def _apply_set_title(spec: dict, params: dict) -> dict:
     cs = _roundtrip(spec)
     cs.title.text = p.text
     cs.title.enabled = p.enabled
+    return cs.model_dump(mode="json")
+
+
+def _apply_swap_hook_shot(spec: dict, params: dict) -> dict:
+    """Move ``image_shots[shot_index]`` to the hook slot (index 0), keeping the
+    remaining order. Stills planned shots only — an even-split spec (no
+    image_shots) has no shot identity to swap and rejects."""
+    p = SwapHookShotParams.model_validate(params)
+    cs = _roundtrip(spec)
+    shots = cs.source.image_shots
+    if p.shot_index >= len(shots):
+        raise ValueError(
+            f"swap_hook_shot: shot_index {p.shot_index} out of range ({len(shots)} shots)"
+        )
+    cs.source.image_shots = [shots[p.shot_index], *shots[: p.shot_index], *shots[p.shot_index + 1 :]]
     return cs.model_dump(mode="json")
 
 
@@ -466,6 +489,12 @@ OP_REGISTRY: dict[str, OpDef] = {
         SetTitleParams, _apply_set_title,
         description="Set the title/hook overlay text and on/off",
         writes=("title",),
+    ),
+    "swap_hook_shot": OpDef(
+        SwapHookShotParams, _apply_swap_hook_shot,
+        llm_visible=False,  # 期 4 钩子预览闸的 dock 调整控件直调，不进 chat 词表
+        description="Move a stills shot to the hook position (params: shot_index)",
+        writes=("source",),
     ),
     "set_caption_style": OpDef(
         SetCaptionStyleParams, _apply_set_caption_style,

@@ -47,6 +47,7 @@
 | 质检环 | verify loop（`pipeline/verify.py`） | 期 3 落地的完整机制：executor 后挂 verify（`spec.for` = 产物类型；modifier 链尾部进 inputs，永远检终态）→ 确定性检查矩阵（quality.py，零 LLM）+ judge  advisory（§2.7 校准集落地前不作闸，cls="judge" 只进台账）→ 打回/回退/升级路由；裁决落 `outputs.quality`（`passed` / `needs_human` 非阻塞徽章） | 不是外挂流程——图内节点，attempt 预算是环的界 |
 | 打回 | `QualityBounce` | 质检环的有界环传输（ADR-047 节点内有界环）：verify 抛出 → execute_step 复位 executor+verify 为 pending（反馈骑 executor `spec.feedback`，runner 一次性弹出进 repair echo），下游已完成 modifier 一并复位重施；≤2 轮，成本落 executor 节点 | 不是 tool-loop；不是盲重试（反馈必带失败项+白名单纪律行） |
 | 最优轮回退 | best-not-last | 逐轮独立评分（同一检查矩阵），回归轮恢复 `spec.rounds` 快照里的最优早轮（新 id 重插 / targeted run 原位回滚），"末轮即最终"被禁 | 不是版本树（只存轮快照，无分支语义） |
+| 钩子预览闸 | hook preview gate（`pipeline/hook_gate.py`，kind `hook_gate` + `release_renders`） | 期 4 落地的产品面新闸（§2.5）：review 档 + 单条纯 select_clips 链（无 modifier）编译注入 `select_clips → verify → hook_gate → release_renders`；select_clips 抑制渲染扇出（render_status NULL），闸渲染每条 ≤5s 低清钩子预览（渲染服务黑盒 `preview` 参数，ADR-016 不破）落 `files.hook_preview`，dock 提问（`AskPayload.previews`）挂起；确认（默认，TTL 自动放行）/ 调整（dock 内联换图锚 `swap_hook_shot` + 调尾切点 `set_trim`，走用户可调 ops 端点）/ 降级（标题卡开场 = set_title ops，期 3 升级同机构）三路径；弃做 = 级联跳过 release，短片留 spec 不渲染 | 不是全量预览闸（每变体全预览 = 评审疲劳）；预览不是契约变体——黑盒内部参数 |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
 | 导演 | director | 素材理解 + 分镜表的产出者（两步走，N-17） | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |

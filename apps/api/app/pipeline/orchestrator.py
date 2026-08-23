@@ -484,6 +484,30 @@ def _compile_task_list(
             )
             seq += 1
 
+    # 钩子预览闸 (期 4, §2.5): review tier + exactly one plain select_clips
+    # chain (NO modifiers — a morph would rewrite specs AFTER the previews,
+    # showing pre-morph footage; v0 documented boundary). The run parks on the
+    # low-res hook previews before any full render fans out; release_renders
+    # owns the fan-out the gate made select_clips suppress. The executor rides
+    # the gate's inputs explicitly so the runner's upstream walk is by kind.
+    clips_tasks = sum(1 for entry in entries if entry.name == "select_clips")
+    if task.autonomy == "review" and clips_tasks == 1 and not modifiers:
+        clips_idx = skill_node_idx["select_clips"]
+        verify_idx = next(
+            (
+                i
+                for i, ns in enumerate(nodes)
+                if ns.kind == "verify" and ns.inputs and ns.inputs[0] == clips_idx
+            ),
+            None,
+        )
+        if verify_idx is not None:
+            gate_idx = len(nodes)
+            nodes.append(_NodeSpec("hook_gate", seq, inputs=[verify_idx, clips_idx]))
+            seq += 1
+            nodes.append(_NodeSpec("release_renders", seq, inputs=[gate_idx]))
+            seq += 1
+
     return nodes
 
 
@@ -1195,7 +1219,8 @@ async def maybe_finalize_run(run_id: UUID) -> None:
 
 async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
     """Auto-answer long-parked waiting nodes (direction interrupt, 期 3 verify
-    escalation — any kind parks on the ``waiting`` seat) with their default option.
+    escalation, 期 4 hook gate — any kind parks on the ``waiting`` seat) with
+    their default option.
 
     Expiry semantics = the review tier degrades to best-judgment completion
     after the TTL (the leave-note promise: 离开不中断) — never a bail, never
@@ -1219,7 +1244,10 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
             (
                 await db.execute(
                     select(WorkflowStep).where(
-                        WorkflowStep.kind == "interrupt",
+                        # The waiting seat, ANY kind (direction interrupt, 期 3
+                        # verify escalation, 期 4 hook gate) — a kind filter
+                        # would park non-interrupt kinds past their TTL,
+                        # breaking 离开不中断.
                         WorkflowStep.status == "waiting",
                         WorkflowStep.started_at < cutoff,
                     )

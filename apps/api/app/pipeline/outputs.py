@@ -151,8 +151,9 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
     "Wrote a LinkedIn post · 739 words" — the recap tells what the user GOT,
     so only **tool** summaries join (registry members; internal-crew lines —
     understand / plan / render bookkeeping — stay on their own step rows),
-    plus the bailed interrupt's user-abort note (deliberate, see
-    ``bail_waiting_interrupt``). Joined in seq order (CHAT_ARCH §8)."""
+    plus any bailed waiting-seat node's user-abort note (deliberate, see
+    ``bail_waiting_interrupt`` — direction interrupt, 期 4 hook gate, …).
+    Joined in seq order (CHAT_ARCH §8)."""
     from app.tools import TOOL_REGISTRY  # deferred: import cycle
 
     parts = [
@@ -162,7 +163,7 @@ def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
         and (summary := (node.spec or {}).get("summary"))
         and (
             node.kind in TOOL_REGISTRY
-            or (node.kind == "interrupt" and (node.spec or {}).get("bailed"))
+            or (node.spec or {}).get("bailed")
         )
     ]
     return " · ".join(parts) if parts else None

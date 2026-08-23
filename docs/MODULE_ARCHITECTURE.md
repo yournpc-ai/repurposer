@@ -139,7 +139,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写 |
 | `projects` | Pipeline | 各模块只读 |
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
-| `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
+| `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline（`files.hook_preview` = 期 4 钩子预览闸的低清预览 key，release 放行后照常全量渲染）；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
 | `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第六~八周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
@@ -218,6 +218,8 @@ apps/api/
 │   │   ├── verify.py            # 质检环节点（期 3）：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
+│   │   ├── hook_gate.py         # 钩子预览闸双件（期 4）：hook_gate（逐条低清钩子预渲染 → dock 提问挂起，
+│   │   │                        #   确认/调整/降级三路径）+ release_renders（确认后补 pend + 渲染扇出）
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：director/persona/
 │   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）

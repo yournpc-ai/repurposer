@@ -288,7 +288,21 @@ class SelectClips(NodeBase):
         # place and owns the render — the base fan-out would be dead work and
         # a last-writer-wins race on the rows. Leave render_status NULL; the
         # morph pends + fans out (skips are rescued by the morph).
-        suppressed = await _later_inplace_morph_exists(db, run, node)
+        # 钩子预览闸 (期 4): a hook_gate sibling in this run owns the release
+        # instead — the base fan-out would render before the user ever sees
+        # the hook previews. Same suppression shape; release_renders pends +
+        # fans out after the gate's confirm.
+        gated = (
+            await db.execute(
+                select(WorkflowStep.id)
+                .where(
+                    WorkflowStep.run_id == run.id,
+                    WorkflowStep.kind == "hook_gate",
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none() is not None
+        suppressed = gated or await _later_inplace_morph_exists(db, run, node)
         output_ids: list[UUID] = []
         for plan in plans.clips[:clip_count]:
             segment = plan.to_segment()
@@ -373,7 +387,8 @@ class SelectClips(NodeBase):
         # Render fan-out (D2): one render node per clip with a render spec. These
         # nodes are NOT claimed via the node claim — the render worker claims the
         # output row (render_status=PENDING) and mirrors terminal state back here.
-        # (Skipped when a later non-fork morph owns the render — see above.)
+        # (Skipped when the render's owner sits downstream — a later non-fork
+        # morph, or the 期 4 hook gate's release_renders; see above.)
         if not suppressed:
             max_seq = int(node.seq)
             label = await _render_step_label(db, run)

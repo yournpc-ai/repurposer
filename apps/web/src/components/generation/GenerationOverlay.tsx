@@ -104,7 +104,11 @@ import {
 } from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
 import { QaPair, qaAnswerText, type QaAnswer } from "@/components/chat/QaPair"
-import { QuestionDock, type Autonomy } from "@/components/chat/QuestionDock"
+import {
+  QuestionDock,
+  type Autonomy,
+  type HookPreviewItem,
+} from "@/components/chat/QuestionDock"
 import { RunTaskList } from "@/components/generation/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
 
@@ -403,6 +407,8 @@ interface QuestionPayload {
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
   estimate?: string | null
+  /** 钩子预览闸 (期 4): one low-res hook preview per parked clip. */
+  previews?: HookPreviewItem[]
 }
 
 /** A question-carrying chat message (ask primitive): the dock's pending
@@ -2808,6 +2814,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         plain={shell === "dock"}
         question={pendingChoice.content ?? ""}
         options={pendingChoice.question?.options ?? []}
+        previews={pendingChoice.question?.previews}
         estimate={pendingChoice.question?.estimate}
         onAnswer={handleChoiceAnswer}
         answering={answering}

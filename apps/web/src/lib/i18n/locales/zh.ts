@@ -986,6 +986,8 @@ const zh: Resources = {
       synth_talk_video: "正在生成视频…",
       align_stills: "正在为你的文字稿对齐节奏…",
       verify: "质检中…",
+      hook_gate: "准备钩子预览…",
+      release_renders: "放行渲染…",
       materialize_source: "正在准备整条视频…",
     },
     qa: {
@@ -1100,6 +1102,12 @@ const zh: Resources = {
       review: "审阅",
     },
     bail: "停止生成",
+  },
+  hookGate: {
+    currentOpener: "当前开场",
+    makeOpener: "设为开场",
+    ending: "结尾",
+    adjustedNote: "预览还是调整前的版本——放行后按调整后的剪辑渲染。",
   },
   clipMenu: {
     more: "更多操作",

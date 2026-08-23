@@ -188,6 +188,32 @@ class AskOption(BaseModel):
     label: str
 
 
+class HookTrim(BaseModel):
+    """The 调尾切点 seat on a hook preview: the clip's current kept span
+    (seconds) so the dock's tail-trim control has honest bounds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float
+    end: float
+
+
+class HookPreview(BaseModel):
+    """One clip's hook preview on the 钩子预览闸 question (期 4): the low-res
+    ≤5s render parked for the user's pre-render check."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_id: UUID
+    url: str  # public URL of files.hook_preview (resolved at dock time)
+    hook: str | None = None  # the clip's hook line — the strip's caption
+    # 缩略图序列 (§2.5 扫读结构): the planned stills shots as resolved URLs,
+    # hook shot first — empty for footage clips (the video tile alone carries
+    # the structure). Also the 换图锚 control's addressing: index = shot_index.
+    shots: list[str] = Field(default_factory=list)
+    trim: HookTrim | None = None
+
+
 class AskPayload(BaseModel):
     """The typed ``question`` payload on a message (ask primitive).
 
@@ -209,6 +235,8 @@ class AskPayload(BaseModel):
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
+    # 钩子预览闸 only (期 4): one low-res hook preview per parked clip.
+    previews: list[HookPreview] = Field(default_factory=list)
 
 
 class AnswerPayload(BaseModel):
@@ -1999,7 +2027,7 @@ class OutputResponse(BaseModel):
         """Resolve stored object keys in files/publishing to public URLs."""
         from app.providers.storage import resolve_stored_url
 
-        for key in ("video", "srt", "image"):
+        for key in ("video", "srt", "image", "hook_preview"):
             if self.files.get(key):
                 self.files[key] = resolve_stored_url(self.files[key])
         if self.publishing.get("cover_image_url"):

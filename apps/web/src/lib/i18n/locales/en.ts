@@ -1014,6 +1014,8 @@ const en = {
       synth_talk_video: "Generating your video…",
       align_stills: "Timing your transcript…",
       verify: "Checking quality…",
+      hook_gate: "Preparing hook previews…",
+      release_renders: "Releasing the renders…",
       materialize_source: "Preparing your full video…",
     },
     qa: {
@@ -1130,6 +1132,13 @@ const en = {
       review: "Review",
     },
     bail: "Stop generation",
+  },
+  hookGate: {
+    currentOpener: "Current opener",
+    makeOpener: "Make this the opener",
+    ending: "Ending",
+    adjustedNote:
+      "Previews still show the pre-adjustment cut — the release renders the adjusted one.",
   },
   clipMenu: {
     more: "More actions",
