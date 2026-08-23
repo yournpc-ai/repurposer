@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配方画廊演示 v5.5 — 7 张 · ChatGPT 测试后</title>
+<style>
+  :root { --bg: #141414; --fg: #f2f2f2; --muted: #a3a3a3; --meta: #7a7a7a; }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(circle, rgba(255,255,255,.13) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--fg);
+    font-family: -apple-system, "SF Pro", "PingFang SC", "Helvetica Neue", sans-serif;
+    min-height: 100vh; padding: 40px 24px 80px;
+  }
+  .note { max-width: 1152px; margin: 0 auto 4px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.7; }
+  .note b { color: var(--fg); font-weight: 500; }
+  h2 { text-align: center; font-size: 20px; font-weight: 500; margin: 14px 0 24px; }
+
+  .grid {
+    max-width: 1152px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 16px;
+  }
+  .card { position: relative; cursor: pointer; }
+  .tile {
+    position: relative; overflow: hidden; border-radius: 8px;
+    aspect-ratio: 16 / 10; background: #0A0A0B; width: 100%;
+  }
+  .tile svg.schem { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* 文字区在媒体下方：三行，逐行对齐 */
+  .info { padding: 10px 2px 0; }
+  .title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; }
+  .promise {
+    margin-top: 3px; font-size: 12px; line-height: 1.55; color: var(--muted);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 37px;
+  }
+  .input { margin-top: 4px; font-size: 11px; letter-spacing: .04em; color: var(--meta); }
+
+  /* hover 操作件：Remix 居中 + 展开右上（两者都开检视 overlay） */
+  .trio { opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 2; }
+  .card:hover .trio { opacity: 1; pointer-events: auto; }
+  .remix {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.92); color: #000;
+    border: none; border-radius: 999px; padding: 0 16px; height: 36px;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .iconbtn {
+    position: absolute; width: 32px; height: 32px; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.16); backdrop-filter: blur(6px);
+    border-radius: 999px; color: #fff;
+  }
+  .expand { right: 10px; top: 10px; }
+  .iconbtn svg { width: 14px; height: 14px; }
+
+  /* ── hover 工艺动画：rest 静止，hover 图示"播放"转换过程 ── */
+  .tile svg.schem .cap, .tile svg.schem .cap2, .tile svg.schem .vp,
+  .tile svg.schem .tl, .tile svg.schem .qm { transform-box: fill-box; }
+  .tile svg.schem .tl { transform-origin: left center; }
+  .tile svg.schem .qm { transform-origin: center; }
+  .tile svg.schem .wb rect { transform-box: fill-box; transform-origin: center; }
+
+  @keyframes chipA { 0%,40%,100% { opacity: 1 } 55%,85% { opacity: .15 } }
+  @keyframes chipB { 0%,40%,100% { opacity: .15 } 55%,85% { opacity: 1 } }
+  @keyframes capGrow { 0% { transform: scaleX(.15) } 55%,100% { transform: scaleX(1) } }
+  @keyframes brPulse { 0%,100% { opacity: .3 } 35% { opacity: 1 } }
+  @keyframes vpSlide { 0%,18% { transform: translateX(0) } 50%,68% { transform: translateX(150px) } 86%,100% { transform: translateX(0) } }
+  @keyframes capFade { 0% { opacity: 0; transform: translateY(5px) } 30%,75% { opacity: 1; transform: translateY(0) } 100% { opacity: 0 } }
+  @keyframes dashFlow { to { stroke-dashoffset: -14 } }
+  @keyframes wbBounce { 0%,100% { transform: scaleY(.55) } 50% { transform: scaleY(1) } }
+  @keyframes lineGrow { 0% { transform: scaleX(0) } 100% { transform: scaleX(1) } }
+  @keyframes qPulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.12) } }
+
+  .card:hover .sc-subs .chip-en, .card:hover .sc-dub .chip-en { animation: chipA 2.4s ease-in-out infinite; }
+  .card:hover .sc-subs .chip-zh, .card:hover .sc-dub .chip-zh { animation: chipB 2.4s ease-in-out infinite; }
+  .card:hover .sc-subs .cap { transform-origin: left center; animation: capGrow 2s ease-out infinite; }
+
+  .card:hover .sc-dub .wb rect { animation: wbBounce 1.1s ease-in-out infinite; }
+  .card:hover .sc-dub .wb rect:nth-child(2) { animation-delay: .09s; }
+  .card:hover .sc-dub .wb rect:nth-child(3) { animation-delay: .18s; }
+  .card:hover .sc-dub .wb rect:nth-child(4) { animation-delay: .27s; }
+  .card:hover .sc-dub .wb rect:nth-child(5) { animation-delay: .36s; }
+  .card:hover .sc-dub .wb rect:nth-child(6) { animation-delay: .45s; }
+  .card:hover .sc-dub .wb rect:nth-child(7) { animation-delay: .54s; }
+  .card:hover .sc-dub .wb rect:nth-child(8) { animation-delay: .63s; }
+
+  .card:hover .sc-highlight .br { animation: brPulse 1.6s ease-in-out infinite; }
+  .card:hover .sc-highlight .br2 { animation-delay: .28s; }
+  .card:hover .sc-highlight .br3 { animation-delay: .56s; }
+
+  .card:hover .sc-reframe .vp { animation: vpSlide 3s ease-in-out infinite; }
+
+  .card:hover .sc-imageVideo .cap2 { animation: capFade 2.2s ease-out infinite; }
+  .card:hover .sc-imageVideo .arrp, .card:hover .sc-carousel .arrp { stroke-dasharray: 5 5; animation: dashFlow .8s linear infinite; }
+
+  .card:hover .sc-post .tl1 { animation: lineGrow 1.4s ease-out both; }
+  .card:hover .sc-post .tl2 { animation: lineGrow 1.4s ease-out .15s both; }
+  .card:hover .sc-post .tl3 { animation: lineGrow 1.4s ease-out .3s both; }
+  .card:hover .sc-post .tl4 { animation: lineGrow 1.4s ease-out .45s both; }
+
+  .card:hover .sc-quote .qm { animation: qPulse 2s ease-in-out infinite; }
+
+  .card:hover .sc-carousel .fr { animation: brPulse 1.6s ease-in-out infinite; }
+  .card:hover .sc-carousel .f2 { animation-delay: .28s; }
+  .card:hover .sc-carousel .f3 { animation-delay: .56s; }
+
+  @media (max-width: 1000px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">v5.6：<b>社媒帖回列</b>——闸门修订为两级：①场景真实性（一票否决，语音转观点出列）②形态或环路不可替代（社媒帖的环路写在 promise 上：你的风格 + 平台由你定）。8 张 4×2，rest 静止 · hover 播工艺动画 · click = 检视 overlay。</p>
+<h2>从配方开始</h2>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const ACCENT = "#ffffff"
+const W = "rgba(255,255,255,.4)"
+const W2 = "rgba(255,255,255,.85)"
+
+const SCHEMS = {
+  highlight: `<svg class="schem sc-highlight" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="24" y="70" width="150" height="110" rx="6" fill="none" stroke="${W}" stroke-width="2"/>
+    <polyline points="36,128 50,112 64,140 78,104 92,134 106,116 120,130 134,108 148,136 162,120 166,124"
+      fill="none" stroke="${W}" stroke-width="1.5"/>
+    <rect class="br" x="52" y="79" width="22" height="92" rx="3" fill="none" stroke="${ACCENT}" stroke-width="2"/>
+    <rect class="br br2" x="92" y="79" width="22" height="92" rx="3" fill="none" stroke="${ACCENT}" stroke-width="2"/>
+    <rect class="br br3" x="132" y="79" width="22" height="92" rx="3" fill="none" stroke="${ACCENT}" stroke-width="2"/>
+    <rect x="196" y="77" width="54" height="96" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="262" y="77" width="54" height="96" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="328" y="77" width="54" height="96" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="203" y="150" width="40" height="6" rx="3" fill="${ACCENT}"/>
+    <rect x="269" y="150" width="40" height="6" rx="3" fill="${ACCENT}"/>
+    <rect x="335" y="150" width="40" height="6" rx="3" fill="${ACCENT}"/>
+  </svg>`,
+  subs: `<svg class="schem sc-subs" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="30" y="70" width="230" height="130" rx="8" fill="none" stroke="${W}" stroke-width="2"/>
+    <circle cx="145" cy="120" r="15" fill="none" stroke="${W}" stroke-width="2"/>
+    <rect x="70" y="165" width="120" height="12" rx="4" fill="${W}"/>
+    <rect class="cap" x="88" y="182" width="90" height="9" rx="4" fill="${ACCENT}"/>
+    <g class="chip-en">
+      <rect x="292" y="95" width="46" height="20" rx="6" fill="none" stroke="${W2}" stroke-width="1.5"/>
+      <text x="315" y="109" font-size="11" fill="${W2}" text-anchor="middle" font-family="inherit">EN</text>
+    </g>
+    <g class="chip-zh">
+      <rect x="292" y="135" width="46" height="20" rx="6" fill="${ACCENT}" opacity=".9"/>
+      <text x="315" y="149" font-size="11" fill="#0A0A0B" text-anchor="middle" font-family="inherit">中</text>
+    </g>
+    <path d="M264 135 Q 278 122 288 108" fill="none" stroke="${W}" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <rect x="95" y="222" width="110" height="5" rx="2.5" fill="${W}" opacity=".5"/>
+  </svg>`,
+  dub: `<svg class="schem sc-dub" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <circle cx="95" cy="115" r="34" fill="none" stroke="${W2}" stroke-width="2"/>
+    <path d="M52 190 q 43 -46 86 0" fill="none" stroke="${W2}" stroke-width="2"/>
+    <path d="M137 100 a 24 24 0 0 1 0 30" fill="none" stroke="${W}" stroke-width="2"/>
+    <path d="M145 91 a 34 34 0 0 1 0 48" fill="none" stroke="${W}" stroke-width="2"/>
+    <g class="wb" fill="${W2}">
+      <rect x="190" y="119" width="6" height="22" rx="3"/>
+      <rect x="207" y="111" width="6" height="38" rx="3"/>
+      <rect x="224" y="122" width="6" height="16" rx="3"/>
+      <rect x="241" y="108" width="6" height="44" rx="3"/>
+      <rect x="258" y="115" width="6" height="30" rx="3"/>
+      <rect x="275" y="104" width="6" height="52" rx="3"/>
+      <rect x="292" y="117" width="6" height="26" rx="3"/>
+      <rect x="309" y="112" width="6" height="36" rx="3"/>
+    </g>
+    <g class="chip-en">
+      <rect x="345" y="95" width="46" height="20" rx="6" fill="none" stroke="${W2}" stroke-width="1.5"/>
+      <text x="368" y="109" font-size="11" fill="${W2}" text-anchor="middle" font-family="inherit">EN</text>
+    </g>
+    <g class="chip-zh">
+      <rect x="345" y="135" width="46" height="20" rx="6" fill="${ACCENT}" opacity=".9"/>
+      <text x="368" y="149" font-size="11" fill="#0A0A0B" text-anchor="middle" font-family="inherit">中</text>
+    </g>
+  </svg>`,
+  reframe: `<svg class="schem sc-reframe" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="40" y="65" width="320" height="120" rx="8" fill="none" stroke="${W}" stroke-width="2"/>
+    <circle cx="125" cy="103" r="15" fill="none" stroke="${W2}" stroke-width="2"/>
+    <path d="M102 152 q 23 -24 46 0" fill="none" stroke="${W2}" stroke-width="2"/>
+    <circle cx="275" cy="103" r="15" fill="none" stroke="${W}" stroke-width="2"/>
+    <path d="M252 152 q 23 -24 46 0" fill="none" stroke="${W}" stroke-width="2"/>
+    <rect x="238" y="55" width="76" height="140" rx="8" fill="none" stroke="${W}" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <rect class="vp" x="88" y="55" width="76" height="140" rx="8" fill="none" stroke="${ACCENT}" stroke-width="2.5"/>
+  </svg>`,
+  imageVideo: `<svg class="schem sc-imageVideo" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="30" y="60" width="90" height="110" rx="6" fill="none" stroke="${W}" stroke-width="2"/>
+    <rect x="44" y="82" width="60" height="7" rx="3" fill="${W}"/>
+    <rect x="44" y="98" width="48" height="7" rx="3" fill="${W}" opacity=".6"/>
+    <rect x="44" y="114" width="54" height="7" rx="3" fill="${W}" opacity=".6"/>
+    <rect x="132" y="60" width="64" height="50" rx="6" fill="none" stroke="${W}" stroke-width="2"/>
+    <path d="M138 102 L150 86 L160 96 L167 89 L190 102" fill="none" stroke="${W}" stroke-width="1.5"/>
+    <rect x="132" y="120" width="64" height="50" rx="6" fill="none" stroke="${W}" stroke-width="2"/>
+    <circle cx="152" cy="138" r="7" fill="none" stroke="${W}" stroke-width="1.5"/>
+    <path class="arrp" d="M210 115 L 240 115" stroke="${W}" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="252" y="66" width="132" height="94" rx="8" fill="none" stroke="${W}" stroke-width="2"/>
+    <rect x="252" y="66" width="132" height="94" rx="8" fill="${W2}" opacity=".05"/>
+    <rect class="cap2" x="268" y="136" width="92" height="10" rx="4" fill="${ACCENT}"/>
+    <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="${W}" stroke-width="1.5"/></marker></defs>
+  </svg>`,
+  quote: `<svg class="schem sc-quote" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="75" y="40" width="250" height="170" rx="8" fill="none" stroke="${W}" stroke-width="2"/>
+    <text class="qm" x="95" y="105" font-size="54" fill="${ACCENT}" font-family="Georgia, serif">&ldquo;</text>
+    <rect x="100" y="128" width="170" height="13" rx="4" fill="${W2}"/>
+    <rect x="100" y="152" width="130" height="13" rx="4" fill="${W2}"/>
+    <rect x="100" y="186" width="40" height="5" rx="2.5" fill="${W}"/>
+    <rect x="146" y="186" width="56" height="5" rx="2.5" fill="${W}" opacity=".5"/>
+  </svg>`,
+  post: `<svg class="schem sc-post" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="85" y="35" width="230" height="185" rx="8" fill="none" stroke="${W}" stroke-width="2"/>
+    <circle cx="113" cy="66" r="13" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="134" y="57" width="70" height="8" rx="3" fill="${W2}"/>
+    <rect x="134" y="71" width="48" height="6" rx="3" fill="${W}" opacity=".6"/>
+    <rect class="tl tl1" x="105" y="102" width="190" height="7" rx="3" fill="${W}"/>
+    <rect class="tl tl2" x="105" y="120" width="190" height="7" rx="3" fill="${W}"/>
+    <rect class="tl tl3" x="105" y="138" width="140" height="7" rx="3" fill="${W}"/>
+    <rect class="tl tl4" x="105" y="162" width="110" height="7" rx="3" fill="${ACCENT}"/>
+    <rect x="105" y="192" width="8" height="8" rx="2" fill="none" stroke="${W}" stroke-width="1.5"/>
+    <rect x="119" y="195" width="28" height="3" rx="1.5" fill="${W}" opacity=".6"/>
+    <rect x="165" y="192" width="8" height="8" rx="2" fill="none" stroke="${W}" stroke-width="1.5"/>
+    <rect x="179" y="195" width="28" height="3" rx="1.5" fill="${W}" opacity=".6"/>
+    <rect x="225" y="192" width="8" height="8" rx="2" fill="none" stroke="${W}" stroke-width="1.5"/>
+    <rect x="239" y="195" width="28" height="3" rx="1.5" fill="${W}" opacity=".6"/>
+  </svg>`,
+  carousel: `<svg class="schem sc-carousel" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+    <rect x="30" y="60" width="90" height="110" rx="6" fill="none" stroke="${W}" stroke-width="2"/>
+    <rect x="44" y="82" width="60" height="7" rx="3" fill="${W}"/>
+    <rect x="44" y="98" width="48" height="7" rx="3" fill="${W}" opacity=".6"/>
+    <rect x="44" y="114" width="54" height="7" rx="3" fill="${W}" opacity=".6"/>
+    <rect x="44" y="130" width="40" height="7" rx="3" fill="${W}" opacity=".6"/>
+    <path class="arrp" d="M140 115 L 168 115" stroke="${W}" stroke-width="2" marker-end="url(#arrC)"/>
+    <rect class="fr f1" x="182" y="55" width="60" height="75" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="190" y="68" width="30" height="8" rx="3" fill="${ACCENT}"/>
+    <rect x="190" y="84" width="44" height="5" rx="2.5" fill="${W}"/>
+    <rect x="190" y="95" width="38" height="5" rx="2.5" fill="${W}" opacity=".6"/>
+    <rect class="fr f2" x="250" y="55" width="60" height="75" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="258" y="68" width="30" height="8" rx="3" fill="${W2}"/>
+    <rect x="258" y="84" width="44" height="5" rx="2.5" fill="${W}"/>
+    <rect x="258" y="95" width="38" height="5" rx="2.5" fill="${W}" opacity=".6"/>
+    <rect class="fr f3" x="318" y="55" width="60" height="75" rx="5" fill="none" stroke="${W2}" stroke-width="2"/>
+    <rect x="326" y="68" width="30" height="8" rx="3" fill="${W2}"/>
+    <rect x="326" y="84" width="44" height="5" rx="2.5" fill="${W}"/>
+    <rect x="326" y="95" width="38" height="5" rx="2.5" fill="${W}" opacity=".6"/>
+    <circle cx="212" cy="150" r="2.5" fill="${ACCENT}"/>
+    <circle cx="280" cy="150" r="2.5" fill="${W}"/>
+    <circle cx="348" cy="150" r="2.5" fill="${W}"/>
+    <defs><marker id="arrC" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="${W}" stroke-width="1.5"/></marker></defs>
+  </svg>`,
+}
+
+const CARDS = [
+  {
+    title: "高光切片", input: "适用：长演讲录像", schem: "highlight",
+    promise: "长视频里最好的几段剪成竖屏短片——镜头自动跟人，最值得先发的也标出来。",
+  },
+  {
+    title: "多语言字幕", input: "适用：演讲 · 会议录像", schem: "subs",
+    promise: "为你的视频配上多语言字幕，单行或双语，观众按自己的语言看。",
+  },
+  {
+    title: "原声AI配音", input: "适用：演讲 · 会议录像", schem: "dub",
+    promise: "用你的声音，把同一段视频讲成另一种语言。",
+  },
+  {
+    title: "访谈分镜", input: "适用：双人对谈录像", schem: "reframe",
+    promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
+  },
+  {
+    title: "图文视频", input: "适用：文稿 + 照片 · 课件", schem: "imageVideo",
+    promise: "没有录像——照片加文字稿，变成带字幕和音乐的轮播短片。",
+  },
+  {
+    title: "社媒帖", input: "适用：讲稿 · 论文 · 会议纪要", schem: "post",
+    promise: "讲稿或长文，变成可以直接发的帖子——用你的风格写，发哪个平台你定。",
+  },
+  {
+    title: "金句卡", input: "适用：讲稿 · 录像文字稿", schem: "quote",
+    promise: "挑出最亮的几句话，做成可以直接发的图片。",
+  },
+  {
+    title: "轮播图", input: "适用：讲稿 · 课件要点", schem: "carousel",
+    promise: "讲稿或课件要点，变成一叠可以翻页的图文幻灯。",
+  },
+]
+
+const ICON_EXPAND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'
+
+const grid = document.getElementById("grid")
+
+for (const c of CARDS) {
+  const card = document.createElement("div")
+  card.className = "card"
+  card.innerHTML = `
+    <div class="tile">
+      ${SCHEMS[c.schem]}
+      <div class="trio">
+        <button class="remix">Remix</button>
+        <button class="iconbtn expand">${ICON_EXPAND}</button>
+      </div>
+    </div>
+    <div class="info">
+      <div class="title">${c.title}</div>
+      <p class="promise">${c.promise}</p>
+      <p class="input">${c.input}</p>
+    </div>
+  `
+  grid.appendChild(card)
+}
+</script>
+
+</body>
+</html>

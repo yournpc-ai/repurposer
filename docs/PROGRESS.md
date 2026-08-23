@@ -51,7 +51,7 @@
 
 ### 1.2 产品与调研工作（文档层）
 
-六周里相当比例的工作沉淀在文档层，清单如下。
+六周里相当比例的工作沉淀在文档层。
 
 | 层 | 资产 | 规模 |
 |---|---|---|
@@ -82,11 +82,11 @@
 | 08-06 | 视觉语言二次校准（双主题参考集对齐，token 单点收口）：dark 改**近黑画布** + 玻璃浮层降透明（68% + blur 28px）、全 app hover 统一白纱（`--accent` 半透明，骑缝元素实心提亮为例外）、inset 井反转（比面板更深）；light 改**纯白画布** + 玻璃 92%，弹窗遮罩分主题（light 白纱洗白 / dark 黑 30%）；文字三档制（新增 meta 大写字距档）；composer 硬编码色全部收编进变量层；修复 scroll-fade 死类复活导致附件 chip 左右溶解；border/shadow 互斥裁定修订为"发丝线可与软阴影共存，可见描边不行" ｜ 剧本 harness 扩编 S23–S40：dock 生命周期（bail 回 draft 可重开 / autonomy 透传 run.context / 一行一答 409 / pending_question 待决重建 / QA 入档 superseded+start 标记 / 无配方 clips 无媒体 / count 边界 422 / attachment-only 持久化）+ 四态实分派首覆盖（task_list 起新 run / edit_ops 落 operations 行 / 进度询问 answer / 元信息导航 / asset scope 永不进 plan path）+ checkpoint 全家首覆盖（三答法+空白不答 / bail 级联 / supersede 级联 / 过期扫描 / task_book 不参与 autoResume）；G-7 当日登记即修：短贴文（~25 词开场白式）零素材首轮曾被判非素材→反问死循环（S21 fixture 3/3 复现，根因=PlanAgent 上下文真空——answer 轮后每条消息在真空里判，看不见"上一轮刚被要素材"）；修法=recent 对话注入（`_plan_turn` 传最近 5 轮原文，`infer` 加 "Recent conversation" 段，只喂上下文不加倾向规则——素材/请求判定归 LLM 凭语境完成，同 presented_plan 硬化先例），S21 fixture 保持 25 词短贴文作回归 |
 | 08-06 | **结果工作面立项 + 配方=数据定案 + 闭环链重排**（用户拍板，产品决策行）：六屏形态定案——终态不跳转（run 收官就地落结果网格，无 toast 关窗）、中央区状态机（进度网格 → 结果网格 ⇄ 舞台+检视器）、流=档案/网格=当前/舞台=焦点、双 modal（ClipDetailModal/ChatModal）退役、配方检视 overlay（只读详情+静态流程图节，Remix 回填 composer，否决自带生成按钮的表单 modal）；**DAG 用户化三切**（ADR-035）：静态配方流程图=采纳、可操作画布=永久拒绝、运行期活图=spike+小白复述测试 09-03 裁决；**配方 = base+flow+prompt+example_assets+example_outputs 一个数据包**（RECIPES §7.1 统一 schema；风格卡撤座沉 look 层，卡面立项门槛 = 一道具体的菜）；排期 = **闭环链 08-07~09-04 连续攻坚**（dub 全程载体：schema → dub 实例 → overlay → composer 回填 → 结果网格 → 终态不跳转 → 工作面 → 三档重跑），原分镜/生成产物线后移为"扩展配方类型"行（分镜压缩 1 周 ⚠️），纵览收口 8 行，go/no-go 保 **10-23**（回退 10-30）（简报 `tasks/results-workspace.md`） |
 | 08-09 | **人设模块第一刀：全栈改名迁移落地**（speakers→personas 全栈：数据表/端点/前端路由/文案/存储前缀，存量数据自动平移、用户行为零变化；从首页一句话到生成完成全链路实测通过）；**配方检视 overlay v3 定稿**（D6 二次修订收口）：左发射区去灰底全玻璃化 + 预填 prompt 常显可改 + 预设镜像 chips 撤除（预填文案即预设的可见面）+ 每卡一句大白话上传文案（"上传你的原视频"）+ 发送按钮直给"生成"；右区满幅画布（light 白纸 / dark inset 井 + 点阵提亮，tabs 浮于画布之上）；外壳收编 Dialog 组件族——修掉两条手写 chrome 的坑：遮罩当父级触发 Backdrop Root 吞掉面板 blur（退化成纯染色）、`DialogContent` 的 translate 居中会瞬移 MentionPicker（改 `inset-0 m-auto` 零变换组合），规则已入 CLAUDE.md 浮层节 |
-| 08-10 | **人设模块第二刀落地：新 schema 五列 + 皮肤吸收**（brand_templates 退役，详见插入周表本日行）；**排查出渲染链环境回归（非本刀引入，已复绿）**：存量渲染回归首跑 500——根因 = 本机直连 TOS 桶被限速至 ~110 KB/s（经系统代理 8.8 MB/s 对照），Remotion 内部 asset proxy 的服务端 fetch 不走系统代理 → 取帧超 180s delayRender 超时；同视频本地托管同参数渲染 120 帧全绿、最小 spec 复现锁定；修法 = 渲染服务进程带 `HTTPS_PROXY=127.0.0.1:6152` 重启，demo clip 与 dev clip 双双重渲染 COMPLETED。教训：渲染回归失败先量源站链路速度（直连 vs 代理），再怀疑 spec 契约 |
+| 08-10 | **人设模块第二刀落地：新 schema 五列 + 皮肤吸收**（brand_templates 退役）；**排查出渲染链环境回归（非本刀引入，已复绿）**：存量渲染回归首跑 500——根因 = 本机直连 TOS 桶被限速至 ~110 KB/s（经系统代理 8.8 MB/s 对照），Remotion 内部 asset proxy 的服务端 fetch 不走系统代理 → 取帧超 180s delayRender 超时；同视频本地托管同参数渲染 120 帧全绿、最小 spec 复现锁定；修法 = 渲染服务进程带 `HTTPS_PROXY=127.0.0.1:6152` 重启，demo clip 与 dev clip 双双重渲染 COMPLETED。教训：渲染回归失败先量源站链路速度（直连 vs 代理），再怀疑 spec 契约 |
 | 08-08 | **配方入口分工定案 + D6 二次修订（用户拍板，ElevenCreative 配方 modal 证据）**：**composer = 通用 / 多种 / 复杂 / 自定义提示词的组合式需求入口；配方卡 = 预设快捷需求入口**——两入口共用同一发射机构与同一 chat 主线。overlay = **检视 tabs + 发射区**（左区：上传暂存为主角 + 产出预设 chips 可见 + 收起态可编辑预填 prompt + 发送；右区 tabs：示例 = 输出/输入平铺卡（自动播放单张发声） / 流程 = 唯一图画布（素材→步骤→成片一张图，图只画一次——ElevenCreative 证据），单屏不滚动，手风琴退役）；**发射区 = composer 发送机构挂载**（useProjectLaunch 共享 hook，同一发射台第二停放位）——overlay 零推断 / 零 prior / 零生成，A 形态否决精确化为"禁 modal 直接跑 run"，发射机构位置解禁；**两跳删除**（Remix 回填 composer 折返退役）；**修改通道定案**：预设参数永不做选择器控件（禁令 #15），预设可见 = chips，修改唯一入口 = 预填文本 / chat（chat 恒胜）；需求池登记"使用示例跑一遍"（demo 素材试跑，增长向） |
 | 08-07 | dub 生产级（上）音画对齐落地 + **dub 对照数据包烘完**（同一片段 EN 原声 + ZH/FR/ES 对齐配音四片 + 共享 poster，`scripts/bake_dub_contrast.py` 一条命令重烘，内容寻址入 demo/ 桶；配方 dub_languages 预设随展示包对齐 zh/fr/es）；**Flow 基座定案（用户拍板，ADR-036）**：只读图渲染扶正为共享能力 **FlowView**——原话"先只暴露只读图，但该连线的连线、该有的节点是节点；只能通过 chat 修改，不变"——配方扇出 / run 进度图 / 家族视图 / 血缘板四面共用一支画笔，组件无 drag/connect/pan/zoom API（只读结构性执行）；**run 进度图升正排产**（单 run 拓扑编译期定死 = 死图+状态动画，修订 ADR-035 第 3 条，取代"进度网格"）、**spike 收窄为项目全史血缘板**（09-03 复述测试照跑）；overlay 规格修订 = 扇出主视觉（对照包四片同屏，tabs 退役）+ FlowStrip（flow 字段图渲染，fanout 展开） |
-| 08-09 | **架构规范级大迭代拍板（用户拍板，ADR-039；最高优先级，随人设插入周后连续攻坚）**：三轮架构评审沉淀——① 内核核对确认"agent loop graph 是核、配方背后是技能"同构，但 skill 一词三义、产物类型散在 6 处、tools/ 混 LLM 调用为历史残留；② 定案**技能叙事**——Repurposer 是一个 AI 助手，身怀剪辑/配音/字幕/自媒体规划等技能，技能内部 = agent 调 LLM 用 tools 实现；③ 定案**多 agent 事实落成结构**——loop（chat 治理环）编译出 graph（DAG 执行核），协作经落库产物流动，agent 互不对话；④ 定案四层工程地图 **Model / Harness / Graph / Loop**：harness = 模型调用面漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底），Agent 归一（一个 Agent 类 + 声明实例，xxx_agent 前缀技能化）；⑤ 定案节点对象化（`NodeBase`：run/estimate/requires/label/reuse/retries，内核退化为图算法——报价=fold、执行=topo、校验=∀、对账=⊆）+ outputs 注册表派生（产物=技能的属性，可扩展）+ 估价系统（cost_hint→estimate()，生成前报价）+ 配方 flow 对账机械化；⑥ 表结构终审：仅 `workflow_steps.estimate` 增量列 + kind 与技能名统一数据迁移，其余零变化。**排期：架构迭代两周（08-17~08-28）最高优先级插入，闭环链及其后整体顺延 2 周，go/no-go 10-30 → 11-13（回退 11-20）** |
-| 08-10 | **排期重排（用户拍板）**：架构迭代（ADR-039）、意图层收尾（轨 A 顾问姿态）、配方卡闭环链三线并入本周（08-09~08-14）与人设模块并行收口，周五 08-14 联合验收；后续整体提前 6 周，工期按全栈排实（前端/界面反复校准/调研 spike/e2e 测试各占行）：分镜 08-17 起、四卡齐亮 09-04、商业化闭环 09-18、分发+合规 09-25、go/no-go **10-02**（回退 10-09） |
+| 08-09 | **架构规范级大迭代拍板（用户拍板，ADR-039；最高优先级，随人设插入周后连续攻坚）**：三轮架构评审沉淀——① 内核核对确认"agent loop graph 是核、配方背后是技能"同构，但 skill 一词三义、产物类型散在 6 处、tools/ 混 LLM 调用为历史残留；② 定案**技能叙事**——Repurposer 是一个 AI 助手，身怀剪辑/配音/字幕/自媒体规划等技能，技能内部 = agent 调 LLM 用 tools 实现；③ 定案**多 agent 事实落成结构**——loop（chat 治理环）编译出 graph（DAG 执行核），协作经落库产物流动，agent 互不对话；④ 定案四层工程地图 **Model / Harness / Graph / Loop**：harness = 模型调用面漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底），Agent 归一（一个 Agent 类 + 声明实例，xxx_agent 前缀技能化）；⑤ 定案节点对象化（`NodeBase`：run/estimate/requires/label/reuse/retries，内核退化为图算法——报价=fold、执行=topo、校验=∀、对账=⊆）+ outputs 注册表派生（产物=技能的属性，可扩展）+ 估价系统（cost_hint→estimate()，生成前报价）+ 配方 flow 对账机械化；⑥ 表结构终审：仅 `workflow_steps.estimate` 增量列 + kind 与技能名统一数据迁移，其余零变化。**排期：架构迭代两周（08-17~08-28）最高优先级插入，闭环链及其后整体顺延 2 周** |
+| 08-10 | **排期重排（用户拍板）**：架构迭代（ADR-039）、意图层收尾（轨 A 顾问姿态）、配方卡闭环链三线并入本周（08-09~08-14）与人设模块并行收口，周五 08-14 联合验收；后续整体提前，工期按全栈排实（前端/界面反复校准/调研 spike/e2e 测试各占行） |
 | 08-10 | **配方卡五座位定格 + 卡面/详情窗改版**：五卡 = 视频配音 / 访谈分镜 / 口播（先占位，能力路线后定）/ 虚拟视频 / 图文视频；卡面改为卡下常驻标题+一句话说明（hover 动作区与 Remix 按钮退役，点卡即开详情窗）；详情窗左区按 ElevenCreative 模式重构——标题、一句话说明、Input 素材小节、通用上传区、**自定义提示词 textarea（模板预填可见可改）**+ 生成；左区 chrome 补齐 Dialog 发丝线（手写 Popup 须镜像 DialogContent，规则已入 CLAUDE.md）；流程图三修——fit 缩放地板 0.4→0.15（宽图不再溢出画布右缘）、边改非缩放描边（任何缩放下恒定 2px）、步骤节点双行换行（省略号节点消除）；修复详情窗预填播种竞态（MentionEditor 命令式插 chip 在 portal 挂载时静默落空，改 textarea 受控初值结构性消除） |
 | 08-11 | **配方线 review 两连修**（详情窗 chip 被 flex 交叉轴拉成通栏条、卡面 Space 键滚动、fit padding 按 xyflow `1/(1+p)` 公式校准到 ~9%/侧避开浮动 tabs、双 rAF 悬空回调、开窗时背景画廊声音不停）+ **mention 哲学升级立项（用户拍板）**：mention 只面向"与 AI 交流"——两族分类（请求 = @asset/@skill；指认 = @output/@transcript_segment/@workflow_step），配方/产出类型/参数/人设永不是 mention；新文档 `docs/MENTIONS.md` 为一切 mention 需求的判定方针（排除清单 + 判定三问 + @skill 方针：候选源 = SKILL_REGISTRY 公开投影、seat 项永不进 picker）；简报 `tasks/recipe-launch-context.md`——配方脱离 mention 体系，`recipe_id` 走 plan-path transport（`persona_id` 同座位），服务端播种改键不改行为 |
 | 08-11 | **recipe-launch-context 落地**：配方脱离 mention 体系——`ChatRequest.recipe_id`（plan-path transport）+ `resolve_recipe_launch` 改键（unknown/reserved 422 原样，存在性填充 + 三方合并原样）；overlay 发射区删 chip 行（点卡动作已是配方身份），composer @ picker 只剩 @asset；`ChatMention.type` 保留 `"recipe"` 供历史消息渲染。harness S5/S10/S11/S15/S22 走新通道全绿（S22 期望随 08-07 注册表语言裁决修正 zh/fr/es）；文档现在时同步 RECIPES 裁决⑤/§7.2、CLAUDE.md、NAMING（`recipe_id`/`resolve_recipe_launch` 入词汇表）、CHAT_ARCH/INTENT_COVERAGE 指针 |
@@ -95,7 +95,7 @@
 | 08-11 | **结果画布拍板（同日晚拍板，ADR-041）**：闭环链施工中途转向——结果面从"网格为默认中心"升为**整屏只读 canvas + 底部 chat dock**。根因 = 多产物扇出被一切线性容器（tabs / 手风琴 / 消息流）物理消灭，空间面是唯一解法；进度不进图（打勾流唯一进度面，run 进度图排产撤销），收官转场 = 遮罩淡出 + 输入组零位移 + 画布编译序诞生回放；产物节点即卡（hover toolbar = 预览/下载/发布平移旧卡面动作，单击 = detail modal 原样），ChatModal 族退役、detail/publish modal 保留、工作面舞台/检视器页面区方案取消；密度三档（说明书策展密度 / 结果骨架密度 + 过程脊折叠——视图行为不伤数据）；缩放门禁按面重划（说明书锁 fit，结果画布开 pan/zoom/minimap）；移动端不渲染 canvas，UI in chat（一回合一张 RunCard：血缘行 + 过程脊 + 缩略条 + chips，点卡即焦点）；复述测试转为周五画布转正复核门（不过则网格回退）。results-workspace 简报退役（D5 配方身份三站条款随 ADR-040 正式关闭），新简报 `tasks/results-canvas.md` |
 | 08-12 | **RunFlowGraph 边表下发 + 技能标注 chips 点亮**：`StepResponse.inputs` 随步骤下发（d272fa4，边表物化期早已存上游 UUID，此处纯增量序列化、前端暂无消费者，对外零变化）——ADR-041 结果画布的画图地基，节点 + 边 + 产物归属一个 `/runs/{id}` 响应全齐；配方检视 overlay 承诺句下方出**应用技能标注 chips**（04ab4d1，注册表 `tags` 首渲染——数据早已端到端铺好只缺渲染；标注 = 陈列事实，非自我表扬）；CTA 判例勘误入 CLAUDE.md（c55e804："Start making" 否的是该文案本身，不是"动词+具体名词"结构） |
 | 08-13 | **定位根概念重构拍板（用户拍板，ADR-042）**：身份根从「人设」升格为「**定位（positioning）**」——定位是动作（自媒体新人的第一句话是"找定位"），品牌/IP 退到营销承诺层；行业话语三分结构落为产品骨架——**内容定位**（战略字段，对话共建带确认）/ **人设定位**（表达分区：风格 + 声纹 + 皮肤，素材提取维修点）/ **平台定位**（渠道挂根：凭据 + 公共档案 + 适配默认）；**选题库升一等公民**（运营中枢，生命周期：灵感→排期→生产→发布→有数据；来源 = 素材档案挖矿为主、对标降级为 P2 校准信号），project 退居内部执行容器，素材档案上提根级，声纹资产用户层共享。根本分界：定位是商量出来的（选择），人设是挖出来的（特征）。**排期：生产层闭环（第二~五周）不动，运营端插第六~八周（定位根重构 → 选题库 → 回访 home + 素材上提），商业化/分发/合规/法务顺延 3 周，go/no-go 10-02 → 10-23（回退 10-30）**。母文档 `docs/POSITIONING.md` |
-| 08-13 | **配方卡阵容重构拍板（用户拍板）**：外部评审（Gemini）经闸门过滤后部分采纳——收下"起家能力无卡"的批评（理解→选段→字幕→渲染 06-22 起在跑却无卡承载），否决打包卡 / 文案违规 / L3 转场 / 数字人兜底。五卡新阵容（点亮序）：① **多语言字幕**（新旗舰，本周 R6 点亮——LinkedIn 静音自动播放，字幕就是主消费层；原声 = 真实性指纹，dub 撤座降为配音变体）② 图文视频（已 Live，扩 slides 槽收编课件场景）③ 演讲短片（`crop_track` 动态追踪，**雷军发布会式大型中景**是目标用户真实素材形态）④ 访谈分镜（同一工艺层静态双人菜）⑤ 虚拟视频（趣味/实验定位，诚实标注，R5 就绪后点亮）。口播卡撤座（低频 + 信任风险）；"一鱼多吃"打包卡永久否决。**variants desc 拍板**：附属变体（双语/单多语/dub 配音）以承诺句下方引导句呈现——教路径不是控件，唯一合法可点形态 = 点击插入预填 textarea（待证据再建）。**点亮节奏**：字幕卡 + 图文视频本周（第二周）→ 演讲短片/访谈分镜随定位根落地（第八周批次 authoring）→ 虚拟视频待 R5；能力周不动（第三周 spike 扩为双验证 ⚠️、第四~五周 R5 照跑）。落档 RECIPES §4 全文重写 |
+| 08-13 | **配方卡阵容重构拍板（用户拍板）**：外部评审（Gemini）经闸门过滤后部分采纳——收下"起家能力无卡"的批评（理解→选段→字幕→渲染 06-22 起在跑却无卡承载），否决打包卡 / 文案违规 / L3 转场 / 数字人兜底。五卡新阵容（点亮序）：① **多语言字幕**（新旗舰，本周 R6 点亮——LinkedIn 静音自动播放，字幕就是主消费层；原声 = 真实性指纹，dub 撤座降为配音变体）② 图文视频（已 Live，扩 slides 槽收编课件场景）③ 演讲短片（`crop_track` 动态追踪，**雷军发布会式大型中景**是目标用户真实素材形态）④ 访谈分镜（同一工艺层静态双人菜）⑤ 虚拟视频（趣味/实验定位，诚实标注，R5 平台 skill 落位后点亮）。口播卡撤座（低频 + 信任风险）；"一鱼多吃"打包卡永久否决。**variants desc 拍板**：附属变体（双语/单多语/dub 配音）以承诺句下方引导句呈现——教路径不是控件，唯一合法可点形态 = 点击插入预填 textarea（待证据再建）。**点亮节奏**：字幕卡 + 图文视频本周（第二周）→ 演讲短片/访谈分镜随账号体系绑定（positioning root 落地，W9 运营端中）批 authoring → 虚拟视频待 R5 平台 skill 落位（W8 运营端上）；能力周不动（第三周 spike 扩为双验证 ⚠️）。落档 RECIPES §4 全文重写 |
 | 08-14 | **多语言字幕卡点亮（R6 提前一天落地）**：任务书新字段 `caption_languages` 全栈纵贯（schema → PlanAgent 三路语言区分 prompt → 三方合并镜像 → 编译期每语言扇出 `translate_clip` fork 节点 → 出生地空集丢弃）；`translate_clip` 加 fork 分支（派生行共存，**provenance 继承原件**——翻译字幕 ≠ 合成媒体）+ `canvas_group` 分语言叠卡。画廊新五卡序生效（字幕卡 live / 图文视频 live+slides 槽 / 演讲短片+访谈分镜+虚拟视频 reserved 挂 Soon）；dub、口播卡出列。variants desc 上线（承诺句下引导句：任意语言点名 + 配音变体指路，非控件）；确认 dock 字幕语言集可见可减（dub 块同款镜像）。**e2e 真管线验收通过**：xy_2 截取 15s 登台演讲（960×960 方幅，-14 LUFS）进 → EN 原声 + FR/DE/ES 三字幕版四条 clips 同 run 产出（fork 血缘 `derived_from_output_id` 正确，字幕确译 "So"→"Donc"）；对照包以内容寻址入 demo/ 桶（`subs-contrast-*`），卡面 teaser 换真产物竖屏帧。回归网：S42 估价地基加字幕扇出断言、S5 换字幕模板、新增 S43（字幕归类永不落 dub/槽位语言），S10 dub 归类回归照绿 |
 | 08-14 | **recap 内容重构 + provider 错误人话化**（dock 刀收尾时标记的两把缓做刀）：① run 收官 recap 收录规则改为**只聚技能行**（`aggregate_run_summary` 收 `SKILL_REGISTRY` 成员 kind + bailed checkpoint；内部班组的理解/规划/渲染簿记行留在步骤行不进 recap，读取时派生故历史 run 自动变干净）+ 摘要内容三类修正（en 模板复数位自动注入 `{参数名}_s` 修 "1 clips"；dub/translate 语言码大写修 "· de"；revise 摘要点名目标标题替内部 slug "hook_and_title"）；② 错误人话化全链——异常携 `user_key`（MiniMax 客户端按 429/5xx/传输/schema 分键、voice 族自带、包装层透传），终态 `node.error` 烘焙 run UI 语言本地化短句（`pipeline/errors.py` 的 `USER_ERROR_LINES`），render_error 同源（项目语言链），编辑器 dub 端点 502 detail 同律（请求域 locale），原始异常全文只留 structlog——SQL/httpx 内脏不再上失败行与 ClipCard。验证：S31/S36/S37/S38/S42 全绿；活 worker 故障探针（translate_clip 缺参确定性失败）回 "这一步出了意外错误" + run FAILED；已知非目标 = 确定性 ValueError 的英文 authored 文案（另一类 i18n 债） |
 | 08-14 | **字幕卡二次修订（用户走查拍板）+ 三档画幅 + 双语对照**：① **画幅纵贯线**——clip-spec `aspect` 全链放行 `9:16/1:1/16:9`（schema / clip_spec clamp / 渲染端 ASPECT_DIMENSIONS 1920×1080 / `set_aspect` op / 编辑器下拉补 16:9）；任务书新字段 `aspect`（PlanAgent 从"横版/竖版/方形/保持原画幅"点名识别，null = 皮肤默认），select_clips 读 run.context 覆盖品牌默认；示例区输出卡按 `card.aspect` 出框（输入卡保持 16:9——素材不是产品）。② **双语字幕落地**（承诺先于能力不破例——能力同日交付）：`ClipSpec.translation_track` 单元级对照轨 + 任务书 `caption_bilingual`，fork 保留原文 word 轨、译文入对照轨（译文主行 + 原文小行在下；stack 布局只画原文轨）；**标题 overlay 随字幕同译**（`translate_text`，dub 对照包 EN 标题残留同款教训）。③ **默认字幕字号 44 → 68**（对齐渲染端 Clip.tsx 自带回退与 TikTok/CapCut 规范，皮肤编辑器镜像同步）。④ **文案重写**：承诺句主语放开到"视频"（"为你的视频带来多语言单行或双语字幕，或原声多语言配音"）；variants desc 机制退役、教学位移入提示词区（「示例提示词」+ 按卡 `promptHint` 引导句点名「双语字幕」「中文字幕」「西语配音」）；inputHint 直给「在这里上传你的原视频」。⑤ 字幕卡 demo 烘焙 1:1（方幅源零裁剪），对照包真管线重跑收获 + 每语言独立 poster。登录跳转两修同批：受保护页登录成功停留原页（关框弹回判断改读同步 storage）+ 落地页登录成功进 /home |
@@ -107,9 +107,9 @@
 
 ---
 
-## 2. 后续排期开发计划（2026-08-03 → 2026-11-06，仅工作日）
+## 2. 后续排期开发计划（2026-08-03 → 2026-10-23，仅工作日）
 
-**排期口径**：工作日顺排，每周五验收并滚动修正后续日程；2026-08-10 起重排——架构迭代 / 意图层收尾 / 配方卡闭环链三线并入第二周收口（见 §1.3 本日行），后续周次整体提前。2026-08-13 再排——**运营端（定位根重构，ADR-042）插入生产层闭环之后**（第六~八周），商业化 / 分发合规 / 法务上线顺延 3 周，go/no-go 10-02 → **10-23**（回退 10-30）。**2026-08-22 再排——产物质量线期 0（解剖）+ 期 1（理解层 v2）拍板插入为第四~五周**（ADR-047，简报 `tasks/output-quality-line.md`；期 2~4 待解剖证据表产出后指认窗口），AI 虚拟画面线及其后整体顺延 2 周，go/no-go 10-23 → **11-06**（回退 11-13）。工期按全栈排实：前端与后端双端各占工期，界面留出反复校准时间，调研 spike 与 e2e 测试显性占行。
+**排期口径**：工作日顺排，每周五验收。前五周（意图层 / 人设 / 分镜 / 质量线期 0 / 质量线期 1）已收口。后续排期分为五阶段——**闭环验证 + 8 卡齐亮 + 首页优化（W6）→ 消耗计算大迭代含支付/积分架构（W7）→ 运营端质量飞跃（W8-W10，内容生产中台 / Memory + 账号体系 / 端到端联调三刀）→ 支付实际开发与分发联调（W11）→ 法务与 AI 合规（W12）+ 缓冲续项（W13）+ go/no-go 评估（W14）**；go/no-go **10-23**（回退 10-30）。施工依据：闭环优先于卡片数量（ADR-035/041，简报 `tasks/results-canvas.md`）；运营端排期承接 ADR-042 / 母文档 `docs/POSITIONING.md`；消耗计算大迭代承接第二周 P4 估价地基（`workflow_steps.estimate`）。工期按全栈排实：前端与后端双端各占工期，界面留出反复校准时间，调研 spike 与 e2e 测试显性占行。
 
 ### 纵览：十二个阶段
 
@@ -120,19 +120,19 @@
 | 第三周 | 扩展配方类型：分镜剪辑 ✅（08-21 验收：双验证过闸 + 双子卡点亮 + 上线前自检） | 分镜能力就绪 + 双子卡 authoring 提前落地 |
 | **第四周（08-24~08-28）** | **产物质量线 期 0：解剖**（craft 清单可测量项脚本化 + 全 live 配方卡 × 真素材跑批 + 四层归因证据表，ADR-047 尺子先行） ✅ **提前完成（08-22）** | 证据表落地（每配方 × 四层归因 + 先验校准值）→ `research/craft-anatomy-2026-08-22.md` |
 | **第五周（08-31~09-04）** | **产物质量线 期 1：理解层 v2**（节拍地图 schema + prosody 确定性工序 + 上传时跑汇合素材理解前移） ✅ **提前完成（08-23）** | 节拍地图全字段产出 + 词级时间戳零覆写 + asset 级复用（验收三件套 + visual anchors 双半，`scripts/verify_beat_map.py` 全绿） |
-| 第六周 | 扩展配方类型：AI 虚拟画面（上）——声纹打磨（听调反复）+ R5 生成管线 | — |
-| 第七周 | 扩展配方类型：AI 虚拟画面（下）——Memory 一致性 + 门禁 v2 + R5 管线 | 生成产物线就绪（R5 管线就绪，虚拟视频卡具备点亮条件）= **生产层闭环** |
-| 第八周 | 运营端（上）：定位根重构——改名刀 + 三分区 + 渠道挂根 + 定位对话化（ADR-042 / `POSITIONING.md`） | 定位根就绪（定位聊出来，不靠填表） |
-| 第九周 | 运营端（中）：选题库——topics 表 + 生命周期 + 选题 agent + 选题卡发射 | 选题中枢通路（从选题到产物一张卡点通） |
-| 第十周 | 运营端（下）：回访 home（定位面板 v1）+ 素材档案上提 + 虚拟视频卡卡面 authoring + 全链联调 | **运营端闭环**（定位可共建、选题驱动回访）+ 画廊五卡齐亮 |
-| 第十一周 | 成本统计深化 + 报价呈现（dock 总价 / chat 单价 / 配方卡估价贴三面 UI）+ 定价调研 | 成本透明 + 定价就绪 |
-| 第十二周 | 支付接入（沙盒联调）+ 套餐权益 + 用户计费中心（⚠️ 入驻审批为前提） | 商业化闭环 |
-| 第十三周 | 双平台联调 + AI 内容标识（含 C2PA 选型调研）+ 披露 | 分发 + 合规就绪 |
-| 第十四周 | 法务落地 + SEO + 监控 / 邮件 + 全周期验收 | 上线 go/no-go 评估材料（11-06） |
+| **第六周（08-24~08-28）** | **闭环验证 + 8 卡齐亮 + 首页优化**（首要目标）——4 卡 authoring（voice-dub / social-post / quote-cards / carousel）+ voice-dub 声纹打磨 + 完整闭环 e2e 测试（Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产，跑遍 8 卡）+ 首页双形态校准（首次/回访）+ 配方→闭环→选题接力点对齐 | 🎯 8 卡完整通路 + 闭环 e2e 绿 + 首页体验就绪 |
+| **第七周（08-31~09-04）** | **消耗计算大迭代——架构 + 展示 + 钱包骨架**——消耗架构（DAG 节点 estimate fold）+ 配方卡估价贴 + Plan 里展示消耗（chat 意图确认后）+ 三面 UI 校准 + 积分+支付联合架构（display-only）+ 失败不扣费语义 + 余额不足入流灰行 | 🎯 消耗透明就绪 + 钱包架构就绪（支付留 W11 实际开发） |
+| **第八周（09-07~09-11）** | **运营端（上）：内容生产中台**——选题库（topics + lifecycle + agent + 选题卡发射）+ 内容形态库（分镜 / 脚本 / 预设 / 文章）+ 不同平台 skill 添加（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026） | 内容生产中台通路 |
+| **第九周（09-14~09-18）** | **运营端（中）：Memory + 账号体系**——Memory（persona）模块迭代（风格学习 + 校准回路 + Voice DNA）+ Persona 显化深化 + 账号体系绑定（**positioning root**：`personas`→`positionings` 改名刀 + 三分区 + `channel_accounts.positioning_id` + 公共档案）+ 意图识别智能化升级 | 🎯 身份复利资产就绪（persona 校准回路 + 渠道有所属） |
+| **第十周（09-21~09-25）** | **运营端（下）：端到端联调**——home 改版（回访态 = 选题管道 + 最近产物 + 渠道状态）+ 全链联调（定位 → 选题 → 生成 → 精修 → 发布）+ 闭环质量验证（多 persona × 多选题组合） | 🎯 **运营端闭环 + 质量飞跃** |
+| **第十一周（09-28~10-02）** | **支付实际开发 + 分发联调**——支付接入（沙盒 + 入驻审批为前提 ⚠️）+ 订阅生命周期 + webhook + 套餐权益执行 + 用户计费中心 + LinkedIn / TikTok OAuth 发布链路（开发者权限到位 ⚠️） | 🎯 商业化闭环 + 分发就绪 |
+| **第十二周（10-05~10-09）** | **法务 + AI 合规**——法务页面 + 用户协议 + 隐私协议 + Cookie 同意 + AI 内容标识（C2PA 选型 + 自动判定 + 披露）+ SEO + 邮件送达 + 监控告警 | 法务 + 合规 + 上线配套就绪 |
+| **第十三周（10-12~10-16）** | **缓冲周 + 续项收口**——性能压测 + 文档收口 + 回归全套 + Last-mile 修复（W11 入驻审批 / 开发者权限未到位时的回退位） | 上线前提全部到位 |
+| **第十四周（10-19~10-23）** | **全周期验收 + go/no-go 评估**——九阶段成果整体走查 + 修复 + 上线演练 + 🎯 go/no-go 评估材料 + 全周期进度回填 | 🎯 上线 go/no-go 评估材料（**10-23**） |
 
 > **闭环优先于卡片数量（2026-08-05 拍板）**：配方卡全部点亮但不闭环时，期中汇报只能说"还没跑通"；先立闭环——闭环链于第二周收口，dub 为全程载体卡；此后每张新卡 = 一行"扩展配方类型"，上线即落入既有通路——叙事从"补窟窿"变成"扩展通路"。哲学论证 → STRATEGY §5；行为规格 → CHAT_ARCH §3.3；形态裁决 → ADR-035/041，简报 `tasks/results-canvas.md`；配方数据 schema → RECIPES §7.1。分镜压缩 1 周 ⚠️，回退则 go/no-go 移至 10-30。闭环链全部图面由 **FlowView 只读图基座**渲染（ADR-036）——overlay 扇出主视觉 / 结果画布 / 血缘板（复核门），chat 唯一修改通道不变；并直接消费架构迭代红利（ADR-039）：画布节点自动获得友好名，配方卡的流程图与真实执行自动核对、图不骗人。
 
-**外部因素（需按期启动）**：LinkedIn / TikTok 开发者权限（暂缓，时间未定——2026-08-05 拍板；第十三周联调排期届时按实际申请时间重排）；支付商入驻申请（08-14 前提交，审批周期数周——第十二周支付接入前提 ⚠️，顺延后审批跑道更充裕）；律师法务联系（08-24 前启动，周期 2–4 周——第十四周法务落地前提）。术语表、管理后台、帮助中心等最后项按需再考虑。
+**外部因素（需按期启动）**：LinkedIn / TikTok 开发者权限（暂缓，时间未定——W11 联调排期届时按实际申请时间重排）；支付商入驻申请（08-14 前提交，审批周期数周——W11 支付接入前提 ⚠️，顺延后审批跑道更充裕）；律师法务联系（08-24 前启动，周期 2–4 周——W12 法务落地前提）。术语表、管理后台、帮助中心等最后项按需再考虑。
 
 ### 第 1 周（08-03 ~ 08-07）：意图层单面化（chat 唯一入口）
 
@@ -183,7 +183,7 @@
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
 | 一 08-17 | 立项评审（重启 VIDEO_EDITOR 封存的 auto face reframe 决策评估）+ 双验证 spike 启动：①"识别谁在说话"（whisper 词轴切段 + M3 画面网格判定，`demo/uploads/xy_1.mp4` 已策展）②单人中景动态追踪（`demo/uploads/xy_2.mp4` 大型登台演讲已策展）+ **轨道模型升级动工（上）**：词汇表 + 判例 + ADR-044 + TRACK_REGISTRY 骨架 + 两条自检 + 消费方 fold（简报 `tasks/done/track-model.md`） | 立项结论落档；系统能自动分辨访谈中谁在说话；中景追踪可行性有结论 |
-| 二 08-18 | ✅ **轨道模型升级（下）落地**：**12 操作闭包契约全落**（segments widen 段 id/异源段 + layers 层轨 + 锚三形态 + 过渡枚举 + 六 op 登记 + 泳道投影 fold + remap 单函数化，ADR-044；`crop_track` 契约与 speaker_map 在 08-19 随能力同批）——详见上方 08-18 落地行 | 加一条轨 = 一条注册项（phantom 自检实证）；12 操作每个有契约座位 + 注册 op + 渲染件 |
+| 二 08-18 | ✅ **轨道模型升级（下）落地**：**12 操作闭包契约全落**（segments widen 段 id/异源段 + layers 层轨 + 锚三形态 + 过渡枚举 + 六 op 登记 + 泳道投影 fold + remap 单函数化，ADR-044；`crop_track` 契约与 speaker_map 在 08-19 随能力同批） | 加一条轨 = 一条注册项（phantom 自检实证）；12 操作每个有契约座位 + 注册 op + 渲染件 |
 | 三 08-19 | ✅ **Reframe 能力线全批落地**（简报 `tasks/done/reframe-line.md`，ADR-045）：**双验证 spike 双路过闸**（数据见上方结论行）——OpenCV 5.x + 2026may 权重 vendor 入仓，引擎缝 `tools/vision.py`；`speaker_map` 落 VIDEO 第二 PROCESSOR（形态闸门 + 嘴部能量归属 + M3 视频段仲裁 ≤5 次/片；AUDIO 不上——信号纯视觉，无框可检）；`crop_track` 契约双端（schema + `sampleCrop`/`sample_crop` 604 样本逐值 parity + 空轨 = 静态 crop 退化实证 + Clip.tsx 源窗口显式定位路——cover 预裁先于 transform 吃掉 16:9 两侧，关键帧在场必须走窗口）；`reframe_clip` 技能包登记（`interview_switch` / `speaker_follow` / `static_center` + `auto` 过 NAMING §7；crop TrackDef.owner 登记；`detect_seconds` 零定价计量；S46 实证对话可调用）；防眩晕写侧约束实片看调通过（dwell ≥1.2s / 切提前 0.2s / 跟随死区+转速帽——xy_1 切换帧抽帧核对说话人正确、xy_2 中景稳定无巡猎）；**教训入档**：注册表新条目扰动 plan prompt——冗长条目致 G-7 边界判断 S21 单跑 2/2 翻车，条目精简 + 媒体门禁枚举补齐后单跑复绿；全量扫下 S21 在本批前代码同样不稳（provider 抖动类，2×2 对照实证与本批无关；S9 空 answer 字段翻车同属 sweep 抖动类，单跑复绿） | 说话人时间轴落成可重跑的数据；对 AI 说"把这条换成分镜模式"就变，成片切换不晃眼 |
 | 三 08-19（插入批·落地页） | ✅ **落地页叙事批 + FlowView 边两刀**（FLORA 首页/工作台走查驱动，证据 `research/flora.md`，工作文档 `LANDING.md`）：**叙事立场拍板**——单助手（用户只说话、工具素养不可假设，FLORA 工具叙事不适用）；角色署名（导演/音乐等内部子 agent 落到用户面）讨论封存；hero 对仗结构保留、文案可换（四方向候选在 LANDING §3，A 推荐待定稿）。**落地页叙事修复**——Gallery/Testimonials 隐藏（产物卡全是虚构文案 + 引语不可验证，注释保留可恢复；`#gallery` 死链清 header 下拉与 footer）+ 五 section 全屏化（min-h-svh 垂直居中，修"两幕挤一屏"高度塌陷）。**FlowView 边**——lineage 品牌色去除（全边统一安静灰，lineage/dependency 语义仅存数据层）+ active 边整边蚂蚁线改单数据包动画（底边常静、一短亮段沿路跑）。**对比滑块 chrome**——label/tags/静音钮去滚动渐变，画框生长完成即常驻全亮 | 一屏一幕；产物边不再单独突出；隐藏模块注释可恢复 |
 | 插入批（08-19，当天完成） | ✅ **FlowView 精致度包**（LANDING §4，FLORA 对照驱动；组件仍一个、差异走 props）：**名词节点收窄**——select_clips / dub / add_music 的 `canvas_group` 授予全移除、过程动词折叠进过程脊（translate_clip 08-15 先例推广），画布只剩 素材 / 文本（任务书）/ 产物三类名词节点；干预通道 = 产物卡 dock 焦点 + 脊内步骤 pill（@workflow_step 锚定是步骤驱动，零改码）；canvas_key 序列化时从节点类现算（从不入行），存量 run 重序列化即同一收窄画布，零迁移。**任务书玻璃文本节点**——dock-surface 霜面（与 dock 同停一片点阵、点格透霜）260×200 六行正文，对应 FLORA 的 GPT-5 文本节点。**结果画布顶栏换血**——右上 home 继承三控件（主题/语言/通知）撤出全屏世界，换 FlowView `controls` prop（explore 面专属）：雾面缩放 pill（− / 实时 % 点击归位 / +）。**`groups` prop 区域框**（FLORA technique workflow 形态，ViewportPortal 垫底于边与节点之下）：配方 surface 首用——策展步骤组包进以配方名标注的圆角框 | 画布上只有名词节点；"分析了/翻译了"类过程节点消失；两端同一组件同一契约 |
@@ -195,138 +195,135 @@
 | 周评审收口（08-19 晚） | ✅ **一轮评审 + 修复批**：评审面 = 四轮评审后未审的 13 提交（本线 6 + 平行会话 flow/landing 5 + 文档 2）——零功能缺陷、零架构违规，六发现全落地：① **deferred 落档**（四轮评审六项遗留此前只存于会话——治理缺口，补登需求池六行）；② **注释改实**（"旧 run 残留 key 兼容渲染"机制不存在——`canvas_key` 序列化时从节点类现算、从不入行，存量 run 零迁移统一收窄；runFlow/types/LANDING/PROGRESS 四处改实）；③ 验收闸钉注释（CARDS 模板为仿写 stand-in，第八周双子卡 authoring 时换 locale 真串）；④ zh `projects.emptyTitle`「还没有 Project」→「还没有项目」（同页标准词统一）；⑤ 死键 `projects.subtitle` 双端删（零消费方 + 违反"永不假设输入是演讲"）；⑥ `service.py` logger 归位 import 块外。项目页撤三控件（主题/语言/通知）确认为走查拍板，关账。验证：web tsc + api compileall 在 HEAD 组合绿 | 评审发现不再只活在对话里；注释与机制一致 |
 | 四 08-20（二轮评审） | ✅ **二轮评审 + 修复批**（对抗性深度轮：冷 agent 零上下文审 reframe 机械核心 + chat/plan 面深读）：① **C1 中症**——reframe 节点 `compute_crop_track` 在 worker 单事件循环上裸跑（分钟级 CPU 检测冻住全 worker：render 认领/镜像/checkpoint 过期全停），仓内姿势本是 `asyncio.to_thread`（ASR/speaker_map 两先例），reframe 是唯一漏网——已修；② **R2-B 中症**——拒答文案从未过 08-14 人话化批：`_cannot_do_text` 五调用点跨两意图面英文硬编码 + 念注册表技能名，`"missing an input: {e}"` 插值异常原文——全改人话双语（`_prefers_zh` 启发式共享），异常全文只留 structlog；③ **R2-A**——`_plan_turn` 素材查询无 ORDER BY（filename/excerpt 多素材跨回合不确定），补 `order_by(created_at)` 并顺带修同形邻居 `contexts.py`；④ **C2 潜伏**——`fill_mode=fit` 下渲染器窗口路径基准缩放取 min 致取景偏 ~3 倍：crop_track 在场 = 显式取景决策，窗口路径恒 cover 几何（Clip.tsx）；⑤ cosmetic——static_center 无轨路径补 skipped 计数。冷审验证为对：采样器双端逐分支相等、抑制/rescue 矩阵非罕见拓扑恒恰好一次渲染、morph 失败路径回滚/rescue/认领语义全对、两阶段零写锁尾毫秒级。需求池补一行（定点 reframe 报价虚高，纯展示）。验证：compileall + clip tsc + API reload 200 + worker 重启过 `assert_runners_registered` | 长访谈 reframe 不再冻 worker；拒答说人话 |
 | 四 08-20（双子卡点亮） | ✅ **分镜双子卡 authoring 落地**（2026-08-20 拍板提前项，RECIPES §4.3）：注册表双条目转 live（declared chain `[select_clips, reframe_clip]` + flow 五键过启动自检 + auto-framing 标签 + 策展素材/烘焙产物全挂）+ i18n 双端（卡面字段 + `flow.reframe_clip` + 素材署名键）+ **demo 真管线烘焙**（`scripts/bake_reframe_demos.py` 入仓：烘焙人设挂 `karaoke-highlight` 皮肤——**captionColor 必须覆写为白**，默认皮的黄与 karaoke 高亮同色会吃掉逐词扫读；访谈卡素材按整片 speaker_map 真实话轮重切 [172.5,187.0]——**loudnorm 会填掉 whisper 切话轮依赖的 ≥0.6s 静音缝**，用户源素材不过响度；harvest 等全部 clip 输出落地——run COMPLETED ≠ 渲染落地，worker 每 tick 只认领一个渲染，多片 run 的 MP4 逐个到；渲染 FAILED 带 render_error 即拒收，不空等 poll）。成品 = TikTok 顶级解剖三件套全在：常驻顶部 hook 标题 + 底部 karaoke 逐词高亮 + 9:16 crop_track——访谈卡问→答切换可见，演讲卡跟随滑动诚实呈现。验收闸换卡面真串 **12/12 全绿**（双卡 × 双语 × 3 试，任务书恒含 `select_clips → reframe_clip`）+ 回归子集 S5/S15/S44/S45 全绿 + web tsc / api compileall 绿；画廊四卡可点。**评审加固（同日）**：验收闸加 locale 真串漂移断言（闸镜像的模板串与 web locale 逐字符不等即拒跑——测仿写串的闸证明的是仿写串）；需求池补一行（字幕简繁归一） | 画廊里访谈分镜与高光切片两张卡点进去，看到的示例就是真实管线的产出 |
-| 四 08-20（上线前自检） | ✅ **上线前自检（AI 虚拟画面线之前全量）**：机械闸全绿（web tsc / api compileall / alembic current==head / 启动自检显式过 / demo 桶 34 对象全 200 / 零密钥入库 / worker·API 同码）+ prompt 验收闸 12/12 + harness 46/46 全绿、修复后受影响子集 11 剧本复绿 + 三冷 agent 分面深审（chat·plan 面 / 人设·配方·烘焙面 / 落地页·文案·i18n 面）。**两阻断**：① chat edit_ops 对 mention 透传 id 零归属校验——跨租户写 IDOR（编辑器路由/revise/render/derivative 执行点都有复查，chat 是唯一漏网），补本项目归属闸；② 任务书 start 无锁 check-then-act——双击/重试双付 run，Message 行锁到请求边界（并发者提交后重读撞 409）。**两加固**：prose start 补转发 `prior_intent`（typed Start parity——此前面板手改被静默丢弃、run 执行旧链）；create_run 活跃 run 护栏（项目行锁串行化，PENDING/RUNNING 拒生新 run——并发 run 会按 project_id 互删 clips；`RunAlreadyActiveError` 专型 + chat/typed 双路双语文案，行为冒烟实证二次出生被拒）。**人设毒行三连修**：裸创建写 NULL 撞 PersonaContext 严格字段（500 且毒行永久拖垮列表/生成默认解析）→ 创建填默认（需求池旧坑出列清零）；LLM 提取 tone 出界同毒 → 两写入点 `EMOTIONAL_TONES` 枚举归一；default 用户共享人设任何登录用户可改/删（dev 库实存 3 行）→ 写路径 owner-only（读保留）。**卡面三修**：image-video 声明链漏 add_music（承诺/模板/demo 三方有音乐——补上 + `flow.add_music` 双端键）；前端发射门与 inputHint 矛盾（deck-only 被挡）deck 认 images 槽；recipeFlow fanout 标签启发式对 subs 卡错标（EN 原片标到翻译分支）改「超分支数则首条是原片」规则。**烘焙安全**：两个 bake `--harvest` 加 bake 用户归属守卫（image-video 版 cleanup 按 user_id 删资产+人设+User 行，灭门级）。**文案合规批**：meta/OG 三处违令（"AI agent" + 被否句 "You review, it publishes" + 未落地 "Hosted in the EU"）+ 打包式 title 全换定位承诺句；footer 三列死锚连 GDPR 声明并陈列强删（法务周恢复）；TikTok 三处清（showcase/发布 mock/渠道 pill）；定价机构版退役模块卖点（共享品牌模板）删 + EU data residency 硬承诺改 GDPR-ready；manifest.json 被否词 "knowledge assets" 清；ThemeProvider 挂载不 applyResolved（浅色系统用户锁深色）修；`html lang` 跟 SSR cookie 语言；tour 机翻英文重写 + @templates 不存在类型清；i18n 语义漂移五处 + 死键七组清。需求池补五行（任务链上限 P1、僵尸 dock、run_events SSE、brand craft 过滤、OG/meta/sitemap）；拍板三件落定（公开域名 = **repurposer.ai**——sitemap 统一；落地页 = 营销面豁免工作室设计系统——CLAUDE.md 入档；checkpoint freeform 保持现状——代码注释入档）。**自检遗留五件当日清零**：任务链/输入上限落地（拍板值：任务数 ≤10——`MAX_TASKS_PER_RUN` 进 validate_task_list 单 chokepoint、超限走 SkillRejected 问回；message ≤20k 字符 / attachments ≤5 / mentions ≤10 在 prepare_chat_turn 入口 422 双语指引「长文稿走文件上传」；plan 累积 prompt 4k 截断保头保尾——中间老散文让位，修订早已合进任务书槽位）；僵尸 dock 修——`_active_run_line` 迟到回合守卫（项目行锁与 create_run 互斥，活跃即退化为「上一批还在生成」双语行，不落 pending 不 dock，`has_active_run` 谓词提取到 orchestrator 两处共用）；run_events SSE 删 `is_disconnected()` 轮询改 chat 面同款 cancel-based 清理；persona.brand craft 键（aspect/fillMode/captionEnabled）PUT 即 422 点名（`PERSONA_CRAFT_KEYS`，不静默剥——API 调用方要学规则）；OG/meta 齐活——og.png 真实 hero 截图（prod build 深色 1200×630，devtools 仅 dev 渲染故不入镜）、head() 随 root loader cookie 语言出双语 meta、canonical + hreflang en/zh/x-default 补全 | AI 虚拟画面线动工前，存量功能过一遍完整闸：两阻断修复、存量坑清零、文案与定位纪律对齐 |
+| 四 08-20（上线前自检） | ✅ **上线前自检（运营端质量飞跃之前全量）**：机械闸全绿（web tsc / api compileall / alembic current==head / 启动自检显式过 / demo 桶 34 对象全 200 / 零密钥入库 / worker·API 同码）+ prompt 验收闸 12/12 + harness 46/46 全绿、修复后受影响子集 11 剧本复绿 + 三冷 agent 分面深审（chat·plan 面 / 人设·配方·烘焙面 / 落地页·文案·i18n 面）。**两阻断**：① chat edit_ops 对 mention 透传 id 零归属校验——跨租户写 IDOR（编辑器路由/revise/render/derivative 执行点都有复查，chat 是唯一漏网），补本项目归属闸；② 任务书 start 无锁 check-then-act——双击/重试双付 run，Message 行锁到请求边界（并发者提交后重读撞 409）。**两加固**：prose start 补转发 `prior_intent`（typed Start parity——此前面板手改被静默丢弃、run 执行旧链）；create_run 活跃 run 护栏（项目行锁串行化，PENDING/RUNNING 拒生新 run——并发 run 会按 project_id 互删 clips；`RunAlreadyActiveError` 专型 + chat/typed 双路双语文案，行为冒烟实证二次出生被拒）。**人设毒行三连修**：裸创建写 NULL 撞 PersonaContext 严格字段（500 且毒行永久拖垮列表/生成默认解析）→ 创建填默认（需求池旧坑出列清零）；LLM 提取 tone 出界同毒 → 两写入点 `EMOTIONAL_TONES` 枚举归一；default 用户共享人设任何登录用户可改/删（dev 库实存 3 行）→ 写路径 owner-only（读保留）。**卡面三修**：image-video 声明链漏 add_music（承诺/模板/demo 三方有音乐——补上 + `flow.add_music` 双端键）；前端发射门与 inputHint 矛盾（deck-only 被挡）deck 认 images 槽；recipeFlow fanout 标签启发式对 subs 卡错标（EN 原片标到翻译分支）改「超分支数则首条是原片」规则。**烘焙安全**：两个 bake `--harvest` 加 bake 用户归属守卫（image-video 版 cleanup 按 user_id 删资产+人设+User 行，灭门级）。**文案合规批**：meta/OG 三处违令（"AI agent" + 被否句 "You review, it publishes" + 未落地 "Hosted in the EU"）+ 打包式 title 全换定位承诺句；footer 三列死锚连 GDPR 声明并陈列强删（法务周恢复）；TikTok 三处清（showcase/发布 mock/渠道 pill）；定价机构版退役模块卖点（共享品牌模板）删 + EU data residency 硬承诺改 GDPR-ready；manifest.json 被否词 "knowledge assets" 清；ThemeProvider 挂载不 applyResolved（浅色系统用户锁深色）修；`html lang` 跟 SSR cookie 语言；tour 机翻英文重写 + @templates 不存在类型清；i18n 语义漂移五处 + 死键七组清。需求池补五行（任务链上限 P1、僵尸 dock、run_events SSE、brand craft 过滤、OG/meta/sitemap）；拍板三件落定（公开域名 = **repurposer.ai**——sitemap 统一；落地页 = 营销面豁免工作室设计系统——CLAUDE.md 入档；checkpoint freeform 保持现状——代码注释入档）。**自检遗留五件当日清零**：任务链/输入上限落地（拍板值：任务数 ≤10——`MAX_TASKS_PER_RUN` 进 validate_task_list 单 chokepoint、超限走 SkillRejected 问回；message ≤20k 字符 / attachments ≤5 / mentions ≤10 在 prepare_chat_turn 入口 422 双语指引「长文稿走文件上传」；plan 累积 prompt 4k 截断保头保尾——中间老散文让位，修订早已合进任务书槽位）；僵尸 dock 修——`_active_run_line` 迟到回合守卫（项目行锁与 create_run 互斥，活跃即退化为「上一批还在生成」双语行，不落 pending 不 dock，`has_active_run` 谓词提取到 orchestrator 两处共用）；run_events SSE 删 `is_disconnected()` 轮询改 chat 面同款 cancel-based 清理；persona.brand craft 键（aspect/fillMode/captionEnabled）PUT 即 422 点名（`PERSONA_CRAFT_KEYS`，不静默剥——API 调用方要学规则）；OG/meta 齐活——og.png 真实 hero 截图（prod build 深色 1200×630，devtools 仅 dev 渲染故不入镜）、head() 随 root loader cookie 语言出双语 meta、canonical + hreflang en/zh/x-default 补全 | 运营端质量飞跃动工前，存量功能过一遍完整闸：两阻断修复、存量坑清零、文案与定位纪律对齐 |
 
 | 五 08-21（骨架重塑） | ✅ **studio 视觉骨架重塑四期全落地**（ADR-046 + 简报 `tasks/home-skeleton-revamp.md`，08-20 拍板、本日指认排期即动工）：**Phase A token 地基**——light 底 1.0→**0.96** / hover accent 0.95→0.92 / sidebar 跟随 / 新 token（`--disabled` 族、`--icon-chip`，引用 inset/meta 单源）+ @theme 接线；overlay-surface **烘焙耳语 shadow-xl**（dark 显式 none）——浮层组件（dialog/dropdown/popover/select/sheet/tour/MentionPicker/检视 overlay）摘除各自 shadow class 全收编，在流表面 25 处去影（结果卡族/personas/settings/clip 编辑页）；**landing 豁免 = CSS var 作用域**（路由根 div 覆写 `--background`/`--accent` 回 1.0/0.95，营销面零视觉变化，SSR HTML 实证）；**Phase B composer 三段带**——骑缝 blocks 退役，卡 = 类型化 chips 顶带（视频首帧缩略图+时长 / 音频图标+时长 / 文档图标+格式标；`lib/stagedFiles.ts` 本地探针零依赖，object URL 全回收）+ MentionEditor 带 + 底排；实体 = 底排左簇 **ghost pills**（值状态律 meta→foreground 一步变色）开**雾面 Popover 面板**（Assets 面板 = 上传行+文件行+× / Persona 面板 = Auto 行+人设行+manage 链接——picker 即关），AssetsModal/PersonaPickerModal 删除；send disabled 独立色役入 Button default variant（inset 井 + meta 字，破 `disabled:opacity-50` 一刀切）；**Phase C 画廊 poster-first**——RecipeCard 状态机重写（静止 = poster + 能力 chip 左上 + 画幅 badge 左下**无 autoplay** → hover 播放 + 底部 scrim + 声音右下 → click 检视 overlay 唯一发射）；注册表加 poster 真实 w/h 元数据（实测 1080² / 1920×1080 / 1080×1920）+ featured `span:2`（image-video 横版跨列）；新 **MasonryGrid** 基座（grid + dense + 8px 行高测量 + ResizeObserver 重排，SSR 安全 = isomorphic layout effect + visibility 守卫）——强制 9:16 竖槽与 letterbox「黑色墓碑」消失，**卡片尺寸进数据不进枚举**；**Phase D chrome 拆建**——AppHeader 删除（theme-toggle/language-switcher 归 landing 独有）；**账户 console** Popover 入 rail footer（身份头 → inset 账户组（plan / credits 槽 / subscription / settings——/settings 路由险成孤儿补链）→ 偏好 segmented（theme 三态 + EN/中）→ 帮助（replay tour = sessionStorage 旗 + 事件双通道，已挂载/跨页两路径都接）→ logout）；NotificationBell 迁**右上浮芯片**（overlay-surface + 发丝 + 耳语影，右上槽位全 app 保留）；移动端浮动 sidebar trigger。i18n 死键 10 组清 + 新键 8 枚双端。验证：web tsc 绿 ×4 批、在流 shadow grep 清零、landing/home SSR 200、landing 豁免类 SSR 实证。**当日追加拍板**：① 点阵采纳——home（`dot-grid` utility）+ 结果画布（FlowView `dots` 既有）两面专用，muted-foreground 30%/40%·1.5px·28px 同配方；② demo 封面维持现烘焙帧，重烘需求池行出列；③ 走查修订（用户逐帧对照 MiniMax）：点阵细化固定（1px/26px/20%·18%，根不滚内容内滚）、滚动条治理（`color-scheme` 双主题 + home 无滚动条）；④ 二轮走查：composer rest 居中停驻 → 滑上钉顶成单行 stadium 探索条（rounded-full 第三例外，左 attach 带计数 + 单行输入 + send 绝对锚点常驻，chips/控制行折叠），唯一滚动口装全部；⑤ 位置对批（双屏对照）：rest 集群下移居中（28vh spacer），**核心 hero 标题常驻**（钉顶收缩 `text-xl` 悬于条上，MiniMax docked parity），subtitle chrome 内部折叠（钉点零位移）；⑥ **设置改共享弹窗**（MiniMax/FLORA 对照拍板）：新 `SettingsDialog`（左 section nav + 右内容）+ `SettingsDialogProvider`/`useSettingsDialog` 随处可唤，console 设置行改开 dialog，channels 内容原样迁入 section，`/settings` 页面退役为 OAuth 回调 shim（toast + 开 dialog + 弹回 home，重定向 URI 零后端改动）；⑦ **console 分组对批**：inset 账户块只留价值面（plan/credits，设置行撤出），偏好组改 MiniMax 行解剖——行标签 + 尾置 segmented（theme 图标三态 / 语言 EN·中，inset 轨 + card 滑块）+ 设置 chevron 行，新键 `common.theme` 双端；⑧ **形变改纯滚动链接**（快滚滞后修复）：`dockP` = 距钉点末 140px scrollTop 插值，半径/padding/输入带高/折叠带/send 锚点/背板透明度全部随动，300ms 时钟过渡与阈值迟滞全废（半途 stadium 悬中屏的病根）；⑨ **home hero 换血**（MiniMax 解剖）：品牌锁up（LogoMark+Repurposer，em 尺寸 mark）常驻钉顶 + 品类句「你的自媒体Agent团队 / Your social media agent team」折叠，welcome 问候双键清尸——⚠️ 品类句带 "Agent" 与 NAMING N-25 对外禁令冲突，按用户拍板原话照发，N-25 修订待明文；⑩ **面板对批**：pill 面板一律 `side="bottom"` 向下开（向上开盖输入区）、面板滚动列表 `no-scrollbar`（dark 灰滚动条消除）、上传行虚线描边降透明度；docked 条下方留白 `pb-14` + 32px 溶解带（卡片不贴条底消失）；⑪ **列表一处律**：Assets 面板开则 chips 带收起（面板 = 带的展开形态，文件列表不同帧双呈，计数 pill 留锚）；⑫ **面板行解剖升级 + 画廊带声**：Assets 面板行升 mock 解剖（方形 h-9 类型 tile + 名称/类型化 meta 两行——AV = 类型 · 时长 · 体积、`formatFileSize` 新入库 + × 垂直居中），Persona 面板同构两行（圆形身份 tile + tags · 声音绑定态 meta），列律落定 = 文件列方、身份列圆；配方卡 hover 默认带声播放（unmuted 先行、策略拒绝回落 muted 开关如实反映、任意点击授予激活），卡片 sounding 状态机全废（`muteIntent`/`muted` 卡内自洽）；新键 `composer.fileKinds.*` 双端、formats 行改中点简表；⑬ **半径简化 + padding 收紧**（MiniMax 对照）：半径撤出 dockP 插值改常量 40px——坍缩态 CSS 半径帽自动裁半高成 stadium（「只有坍缩才 full radius」零插值代码），padding 非对称 `px-5 pt-5 pb-3`（底 chin 20→12，控制行贴底）；⑭ **hover 动作三件套**（MiniMax 逐帧对照）：声音开关移左下占位 badge 槽（badge 改 rest-only）、居中白色 stadium Remix 丸（Wand2，复 6c31804 hover Remix 传统）、右下 expand 钮——Remix/expand 同开检视 overlay（ADR-040 不破）；新键 `recipes.remix`/`recipes.expand` 双端；⑮ **composer 壳收编 shadcn InputGroup**（用户拍板「没做异类了，直接用自带组件」）：Card+CardContent 手卷退役，MentionEditor 根挂 `data-slot=input-group-control` 白得 focus-within 环 + cursor-text 点击聚焦；描边换皮守卡律（transparent + 发丝 + 无影）；密度律落定 = padding 住 addon 不住容器（px-4 / pt-4 / pb-3，编辑带 py 16→8 随动防裁字，条高 56→44、send 锚 16·12→4）。验证：web tsc 绿 | 灰底上白卡浮起、composer 三段带、画廊海报化、无顶条工作室、home 图纸底 |
 | 五 08-21（命名批 v2 + 指令包切片） | ✅ **命名对齐批 v2 七施工项 + 默认指令包最小垂直切片全落地**（简报 `tasks/done/naming-batch-v2.md`，八提交连落）：① 节点 kind `checkpoint`→`interrupt`（kind 字符串/函数族/config/前端 stepKinds 键，机制词不动）；② `agents/roster.py`→`registry.py`（git rename 98% 相似度）；③ 能力层 skills→tools 全量换位（12 包迁入 + TOOL_REGISTRY + TaskItem.skill→tool 全栈 + plan/intent prompt 措辞 13 处——token 级零假设 diff 取证）；④ `app/providers/` 立座（storage/asr/voice/vision+weights）+ 通用件随消费方（dubbing→dub 包等）；⑤ NAMING 去核「更名中」注记 27 处现在时；⑥ `clients/`→`providers/llm/`（Model 缝含 PRICING）；⑦ **指令包切片**——`app/skills/` 行业本义重生：SKILL.md（Agno 六键 frontmatter 白名单校验，畸形包启动炸）+ SKILL_REGISTRY + 装配期注入唯一形态（Agent 声明 `packs` 字段，禁 runtime discovery）+ 启动自检 packs 闸；首包 `linkedin-longform` = write_post 内嵌散文逐字节平移。验收：零假设双证（prompt 13 处 token diff / post.j2 渲染字节级一致）+ harness 46/46 + grep 门禁清零 + reset_db 全清后真链复走通。**当日 review + 修复批**（独立复算双零假设全真）：P2 流程发现 = ③ 在自身 HEAD 不可引导（13 个 app.skills 顶层 import ④ 才修，bisect 断点——教训入记忆：改名批 commit 级自绿或声明不可拆）；修复三刀——check_gates Gate 4 退役标识符永固化 + `_TOOL_TO_OUTPUT` 新词补洞（负向用例 14/14）、前端三处旧词残留清零（sweep 现零命中）、`pack_instructions` 多包空行分隔（单包字节级复证仍成立） | 全栈一词（tool / interrupt / registry / providers）+ 领域知识即数据（SKILL.md），改名不改行为 |
-| 08-22 | **产物质量线拍板（ADR-047）+ 期 0/期 1 排期指认**：用户判词"图片轮播+浮字配不上用户花钱"→ 读码归因 = 缺层（storyboard→clip-spec 之间无 timeline 创作层，逐拍由阅读速度常量代劳）+ 缺环（无质检回看）+ 缺尺（无质量度量），非地基问题，DAG/工具纪律零推翻；两轮外部评审（Grok/Gemini/Claude 三源）收敛设计契约，tool-loop 否决边界明文化（模型编排 = 禁；节点内有界环 = 合法）。简报 `tasks/output-quality-line.md`（craft 语法先验表 + 节拍地图 schema + 验收五期）。**排期：期 0 解剖 + 期 1 理解层 v2 插入第四~五周，AI 虚拟画面线及其后顺延 2 周，go/no-go 10-23 → 11-06（回退 11-13）**；期 2~4（剪辑师/质检环/钩子闸）待解剖证据表产出后指认窗口。同日：composer 模型 pill 退役（管线按模态分派 provider，pill 无法诚实展示终值；picker 待真实第二 provider，用户面形态 = 策略开关） | 质量从"隐性感觉"开始变成可量化、可归因、可改进的工程对象 |
-| 08-23 | **产物质量线期 0+期 1 落地（双双提前于排期）**：期 0 = 三源测量引擎 × 四 live 卡 × 真素材 → 四层归因证据表（缺层归因坐实：决策层只到 what、契约无 timeline 字段、渲染只能均分；talking-head 零气垫切/零尾停/零强调/零感知重取景四缺口全部归因契约常量与缺层，DAG/工具纪律零推翻）；期 1 = 节拍地图（语义半 schema 六字段 + 代码半文本锚吸附词轴，声学半 prosody 工序、视觉半 visual_anchors 工序，三半分字段永不预合并）+ 内容寻址复用（content_sha256 → digest v3，同用户跨项目引用命中零 LLM）+ 上传时跑（素材集齐即 warm）。验收三件套全绿（780s 真讲座全字段 / 词级时间戳零覆写 / 二次上传零 LLM）+ visual anchors 双半齐；附带漏斗修正：schema 拒绝恒走带媒体修复轮（禁媒体→文本兜底盲标）。**期 0+期 1 合计 2 天完成（原排 10 个工作日）——后续周次是否整体提前 = 待拍板（周五滚动）；期 2~4 窗口指认条件已满足（证据表已产出），待拍板** | 尺子与地基同时就位：期 2 剪辑师的输入契约第一次有真实节拍数据可消费 |
+| 08-22 | **产物质量线拍板（ADR-047）+ 期 0/期 1 排期指认**：用户判词"图片轮播+浮字配不上用户花钱"→ 读码归因 = 缺层（storyboard→clip-spec 之间无 timeline 创作层，逐拍由阅读速度常量代劳）+ 缺环（无质检回看）+ 缺尺（无质量度量），非地基问题，DAG/工具纪律零推翻；两轮外部评审（Grok/Gemini/Claude 三源）收敛设计契约，tool-loop 否决边界明文化（模型编排 = 禁；节点内有界环 = 合法）。简报 `tasks/output-quality-line.md`（craft 语法先验表 + 节拍地图 schema + 验收五期）。**排期：期 0 + 期 1 排入第四~五周（提前完成 08-22~08-23）**。同日：composer 模型 pill 退役（管线按模态分派 provider，pill 无法诚实展示终值；picker 待真实第二 provider，用户面形态 = 策略开关） | 质量从"隐性感觉"开始变成可量化、可归因、可改进的工程对象 |
+| 08-23 | **产物质量线期 0+期 1 落地（双双提前于排期）**：期 0 = 三源测量引擎 × 四 live 卡 × 真素材 → 四层归因证据表（缺层归因坐实：决策层只到 what、契约无 timeline 字段、渲染只能均分；talking-head 零气垫切/零尾停/零强调/零感知重取景四缺口全部归因契约常量与缺层，DAG/工具纪律零推翻）；期 1 = 节拍地图（语义半 schema 六字段 + 代码半文本锚吸附词轴，声学半 prosody 工序、视觉半 visual_anchors 工序，三半分字段永不预合并）+ 内容寻址复用（content_sha256 → digest v3，同用户跨项目引用命中零 LLM）+ 上传时跑（素材集齐即 warm）。验收三件套全绿（780s 真讲座全字段 / 词级时间戳零覆写 / 二次上传零 LLM）+ visual anchors 双半齐；附带漏斗修正：schema 拒绝恒走带媒体修复轮（禁媒体→文本兜底盲标）。**期 0+期 1 合计 2 天完成（原排 10 个工作日）——buffer 8 工作日释放，质量线期 0-3 全部代码级落地；期 4 钩子闸同日落地后整套退役（08-24，ADR-049，评审回 chat）。** | 尺子与地基同时就位：期 2 剪辑师的输入契约第一次有真实节拍数据可消费 |
 | 08-23 | **期 2 剪辑师 + 期 3 质检环落地（用户拍板提前，免 e2e 代码级交付）**：期 2 = 节拍方案（BeatPlan/StillBeat：LLM 只出文本锚+图序/运动/强调，代码吸附词轴后**平铺**——拍尾=下一拍头，dwell=词跨，字幕/切点/停顿共享一只词钟）+ 剪辑师双件（≤15拍/≤45s 单发；超限两段式大纲→逐拍，handoff 显式交接）+ stills-editing-craft 指令包 + 独立跨拍连贯性检查（骑 repair_feedback 一轮有界重掷）+ clip-spec 契约扩展（`source.image_shots` + 字幕 `emphasis`，烘焙缝注册表接管）+ 渲染端 Ken Burns 原语（pan 行程安全界修正：translate 先于 scale 生效）+ locate_span 前垫 0.12s/尾停 1.8s（talking-head 快赢，只向相邻静音扩张）；期 3 = verify 节点全量接线（executor 后挂，modifier 链尾部进 inputs 永远检终态）+ 确定性检查矩阵（fidelity 族 + craft 四可测量项：图停/字幕同步/人脸安全区/强调贴内容）+ QualityBounce 打回（≤2 轮，下游已完成 modifier 一并复位重施，成本落 executor）+ best-not-last 快照回退（回归轮恢复最优早轮，targeted run 原位回滚保身份与 ops 链）+ 白名单最小 diff 监视（repair_scope 越界即新失败）+ 双败路由（fidelity→needs_human 徽章非阻塞；craft→dock escalation 提问：降级接受=TTL 默认 / 标题卡开场=真 set_title op+重渲）+ judge 声明接线但 advisory（§2.7 校准集落地前不作闸，cls="judge" 只进台账）+ `outputs.quality` 列（迁移 b7c2d4e6f801 已应用）+ 产物卡待复核徽标。waiting 座位泛化（resume/bail/TTL 扫荡按 status 认座，任何 kind 可停） | 质量环闭合：产物第一次有了"生成→检查→打回/回退/升级"的完整回路，末轮不再天然等于最优轮 |
 | 08-23 | **期 4 钩子预览闸落地（免 e2e 代码级交付）**：渲染服务黑盒新参数 `preview:{seconds}`（只渲前 N 秒 ≤15 + 半分辨率 + 高 CRF，无 SRT/响度 pass，frameRange 夹到合成末帧——ADR-016 契约不变体）+ 编译注入（仅 review 档 + 单条纯 select_clips 链 + 无 modifier 装闸：`select_clips → verify → hook_gate → release_renders`，executor 显式骑闸 inputs）+ select_clips 闸感抑制（闸兄弟存在即 render_status NULL 不扇出，release_renders 确认后补 pend + 复用 `_pend_suppressed_base_renders` 扇出）+ 闸体（逐条 ≤5s 低清预渲染落 `files.hook_preview`，commit 先于 Suspend；预览全败诚实降级直接放行，部分败在提问文案点名）+ dock 预览块（`AskPayload.previews`：低清点击播放 + 缩略图序列扫结构 + hook 行 + 轻量调整口——换图锚新 op `swap_hook_shot`（拍序号寻址，llm_visible=False）/ 调尾切点 `set_trim`，直调用户 ops 端点，调整后诚实标注"预览为调整前版本"，放行按新 spec 渲染）+ 三路径（确认=TTL 默认·离开不中断 / 调整 / 降级=标题卡开场 set_title ops，期 3 升级同机构；弃做=级联跳过 release，短片留 spec 不渲染）。附带修正：TTL 扫荡残留的 `kind=="interrupt"` 过滤真删（期 3 行宣称的座位泛化在扫荡函数里漏改——verify escalation / hook gate 的等待座位此刻才真进扫荡）；run 汇总聚合认任何 bailed 等待座位的弃权行 | 钩子从"静态形态验不了"变成"全量渲染前用户 15 秒扫一眼"——唯一一次付费预渲染花在后果最重的段上 |
+| 08-23 | **配方画廊 v2 拍板 + 全档落定（用户拍板，ADR-048；落档不实施，施工窗口待指认）**：八卡阵容——4 live 原样保留（多语言字幕 / 图文视频 / 演讲短片 / 访谈分镜）+ 4 新增（**原声AI配音**〔多语言配音卡更名复座：08-13 字幕/dub 合并拍板当日翻案，字幕配音确拆；卡名即护城河，dub 对照包示例零新烘焙〕、**社媒帖**、**金句卡**、**轮播**——文本族三卡能力 06-22/06-29 起在跑，补齐"起家能力无卡"）；**虚拟视频卡出列进需求池**（趣味/实验定位过不了闸门①，管线工作不受影响）；语音转观点卡否决（ChatGPT 可替代）。**卡面形态定案**：封面 = 黑白灰工艺示意图（内联 SVG 注册表逐卡一张，三档灰阶 token 驱动双主题自反，16:10，构图左素材→右成品，hover 播 CSS 过程动画——网格零真实素材零媒体请求，hover 带声裁决迁入 overlay 示例 tab）；卡下三行文字（菜名 / 承诺句两行 clamp / 适用素材 meta 行）；画幅 badge 与类别 chip 双退役（卡不锁输出形状；输入锚由适用行承担）；**渠道不进卡面**（品类名 + 预填模板默认渠道 + chat 恒胜）；布局 = 统一 4/3/2 列等宽网格（MasonryGrid / featured 跨列退役）。**证据层移交 overlay**：真实成对前后对比住示例 tab = 准入验收闸（拿不出真实成对示例的卡不进网格，Soon/reserved 形态退役）。**准入两级闸门**（RECIPES §4.8）：① 场景真实性（专家真实高频场景，人造场景一票否决）② 形态或环路不可替代（ChatGPT 测试；环路价值写上卡面可豁免——社媒帖靠"用你的风格写，发哪个平台你定"过闸）。外部评审经闸门过滤：采纳 200px 无字防呆测试 + 文本族方向，否决 chip 分类学 / badge 类型学 / 营销形容词。落档六处：ADR-048（含 ADR-046 D4/附⑯/附⑱ 修订）+ RECIPES §4 全文重写（§4.5 配音卡 / §4.6 文本族 / §4.7 撤座 / §4.8 闸门）+ STRATEGY §5 陈列窗条目 + CLAUDE.md 画廊段 + 简报 `tasks/recipe-gallery-v2.md` + 封面 SVG 稿附件 `tasks/recipe-gallery-v2-covers.html` | 画廊从"真实 teaser 海报墙"转向"工艺示意图菜单 + 决策点证据"——卡面彻底规范化，阵容对齐"帮专家打造和运营自媒体内容的 agent"定位 |
+| 08-24 | **钩子闸退役拍板（用户走查 ADR-047 §5 过度，ADR-049）**：dock 三路径把评审 AI 钩子质量交给知识专家用户（决策疲劳）+ 哲学冲突（ADR-041 评审在 chat / 渲染进 canvas + ADR-035 可操作画布永拒，hook gate 在 chat 之外插"评审视频"环节）。正确评审面 = 节拍方案（ADR-047 §1，beat plan 中间产物，图序 / 运动 / 切点 / 强调，纯数据 + 图片引用，可寻址，零渲染成本）。**整套机制退役**（不是简化）：hook_gate / release_renders 节点 + 编译期注入条件 + 闸感抑制分支 + 渲染服务 `preview:{seconds}` + AskPayload.previews / HookPreview / HookTrim + swap_hook_shot op + QuestionDock.HookPreviewStrip + hookGate.* i18n 键。**保留**：set_trim / set_title op（chat 评审调整 + AI 自动降级）；质检环（AI 自评内循环）；节拍方案（评审界面的卡片化形态，下一期拍板渲染位置）。代码退役排期合并入节拍方案产品面下一期。**前置清理**（commit 待提）：hook_gate 4 bug 修复——闸注入条件 fork=true 派生应装闸 + UI 告知派生行 / trim 越界 server 校验 + source_duration 字段 + 前端 +5 替换 / hook_preview object key 累积清理 / hook_gate session 合并消 3 事务 race window——作为机制退役工程清理保留。**ADR 翻案**：ADR-047 §5 删节改写（标题加"钩子闸 2026-08-24 转 ADR-049 退役"）/ Related 加 ADR-049 / Alternatives"静态确认闸"删节 | 评审回到 chat，渲染无闸——hook gate 整套机制（节点 / 黑盒参数 / op / schema / UI / i18n）退役；节拍方案作为评审界面落位——评审点对齐产品哲学，不再绕一步让用户看视频 |
+| 08-24（文本族插入批） | **配方文本族三卡烘焙→点亮（social-post / quote-cards / carousel，ADR-048 §7.3 证据层落位）**：三卡底层能力 06-22 / 06-29 起即在跑——`tools/posts/node.py` / `tools/quotes/node.py` / `tools/carousel/node.py` 全链齐备，继承 `DerivativeWriterNode` 共体于 `pipeline/derivative_dispatch.py`；recipes.py 注册表三条目 tasks/flow/i18n 键已挂，但 status="reserved" 占位因缺真实成对示例（RECIPES §10 + ADR-048 §7.3 "拿不出真示例的卡不进网格"）**且** quote-cards / carousel **裸奔**（writer agent 全靠系统 prompt 无 Skill 指令包）。今日串**四把刀**收口：① **Skill 包补齐（命名批 v2 禁裸奔纪律）**——`app/skills/quote-cards/SKILL.md` + `app/skills/carousel/SKILL.md` 入仓（Agno 六键 frontmatter + 工艺约定：quote-cards = 自包含性 / 单条长度 / attribution / 钩子排序 / 修辞多样性 / 人设保真；carousel = 三段骨架 / 封面纪律 / 一要点一张 / 论证链路 / CTA 四选一 / 张数甜区），`quotes_writer` / `carousel_writer` Agent 接 `packs=[...]`，SKILL_REGISTRY 启动闸零报警；② **烘焙脚本 `scripts/bake_text_tribe_demos.py`**（仿 `bake_reframe_demos.py` + `bake_subs_contrast.py` harvest 模式，真管线 `create_run` 对 `demo/uploads/demo-article.md` 三条声明链：write_post EN / write_quotes EN×4 / write_carousel EN×6，content-hash URL 入 demo/ 桶，每产物独立 poster；quote-cards 多 1 张 PNG 副产物）；③ **注册表三卡 status="live"** + example_outputs URL 填充 + `recipes.materials.{post_output,quotes_output,carousel_output}` 双端 i18n 键入库；④ **prompt 验收闸 `accept_prompt_surface.py` 扩 12/12**（三卡 × 双语 × 2 试，换卡面真串后回归）。**画廊 v2 八卡齐亮**——4 老 live（多语言字幕 / 图文视频 / 高光切片 / 访谈分镜）+ 1 复座（原声AI配音）+ 3 新点亮（社媒帖 / 金句卡 / 轮播图），Soon pill 全消，无 reserved 占位；画廊 v2 八卡齐亮**提前 33 天**（原排第十周 10-09 行为当前占位，本批当日落地）。配额账单：MiniMax ~3 LLM 调用（文本族无 video 渲染，images_per_run 仅金句卡 1 PNG）+ TOS 写入 ~6 个对象。前提：常驻 worker 重启（pipeline 代码不动 / Agent packs 字段动）+ 验收闸换版 + 卡面真串双端 i18n 同步。施工简报 `docs/tasks/text-tribe-live.md` | "照这个做一个"覆盖文本族三卡——讲稿→帖子/金句/轮播，chat 即修，闭环链路打通至第十周前 |
 
 ### 第四周（08-24 ~ 08-28）：产物质量线 期 0——解剖（尺子先行） ✅ 提前完成（08-22）
 
-> **完成实记（08-22）**：三源测量引擎 `scripts/craft_anatomy.py`（手卷 BS.1770 响度 + YIN F0，无 scipy/librosa；帧目录 take 隔离 + md5 对齐 URL stem 过判片纪律）× `scripts/run_anatomy_matrix.py` 四 live 卡真跑 → 证据表 `research/craft-anatomy-2026-08-22.md`：缺层归因坐实（决策层只到 what、契约无 timeline 字段、渲染只能均分），talking-head 四系统性缺口（零气垫切/零尾停/零强调/零感知重取景）全部归因契约常量与缺层；先验校准 6 条入 §5。原排期日级行保留为计划记录：
+> **完成实记（08-22）**：三源测量引擎 `scripts/craft_anatomy.py`（手卷 BS.1770 响度 + YIN F0，无 scipy/librosa；帧目录 take 隔离 + md5 对齐 URL stem 过判片纪律）× `scripts/run_anatomy_matrix.py` 四 live 卡真跑 → 证据表 `research/craft-anatomy-2026-08-22.md`：缺层归因坐实（决策层只到 what、契约无 timeline 字段、渲染只能均分），talking-head 四系统性缺口（零气垫切/零尾停/零强调/零感知重取景）全部归因契约常量与缺层；先验校准 6 条入 §5。**期 2-3 同日落地（08-23，代码级免 e2e 交付）；期 4 同日落地（08-23）→整套退役（08-24，ADR-049）——质量线全档收口。**
 >
-> **2026-08-22 拍板插入**（ADR-047，简报 `tasks/output-quality-line.md`）：施工顺序 = 尺子先行——解剖 → 理解层 v2；期 2~4（剪辑师 / 质检环 / 钩子预览闸）待解剖证据表产出后指认窗口（**条件已于 08-22 满足，待拍板**）。铁律：§2.1 全部数值是先验不是验收标准（解剖校准前不作闸）；判片纪律 = 帧目录按 take 隔离 + md5 对齐 URL stem；验证 run 用完按 FK 序清；常驻 worker 抢跑手工 run（改 pipeline 代码必重启 worker）。
-
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 08-24 | 解剖脚本地基（`apps/api/scripts/` 新解剖脚本）：三源输入装配——clip-spec JSON + ASR 词轴/speaker_map + 渲染 MP4（ffmpeg/ffprobe 提响度/能量/静音/帧）+ 报告骨架 | — |
-| 二 08-25 | talking-head 可测量项脚本化：钩子延迟 / 思维边界切 / filler 死寂 / 强调跟韵律（能量面，F0 归期 1）/ 字幕节奏 / 切频包络 / 收束尾帧 / 眼位脸宽（YuNet 已在仓） | — |
-| 三 08-26 | 图文视频可测量项脚本化：视觉钩子时序 / 图停甜区 / Ken Burns 速率与方向交替 / 切在意义上 / 强调隔离 / 结构呼吸 / 音频闪避与响度 | — |
-| 四 08-27 | 全卡跑批（字幕卡 / 图文视频 / 演讲短片 / 访谈分镜 × demo/uploads 策展集 + xy_1/xy_2）+ 帧取证 + 主观项人工判 | — |
-| 五 08-28 | 四层归因证据表（数据 / 决策者 / 契约 / 渲染 × 差距量化 + 先验校准值）落 docs +【验收】🎯 **证据表落地**（判片纪律过：哈希对齐） | 每张 live 卡的质量差距第一次有了量化清单——差在哪、差多少、归因到哪一层，一目了然 |
+> **2026-08-22 拍板插入**（ADR-047，简报 `tasks/output-quality-line.md`）：施工顺序 = 尺子先行——解剖 → 理解层 v2；期 0 + 期 1 落地 08-22~08-23，期 2-3 同日代码级落地 08-23，期 4 整套退役 08-24（ADR-049，评审回 chat）——质量线全档收口。铁律：§2.1 全部数值是先验不是验收标准（解剖校准前不作闸）；判片纪律 = 帧目录按 take 隔离 + md5 对齐 URL stem；验证 run 用完按 FK 序清；常驻 worker 抢跑手工 run（改 pipeline 代码必重启 worker）。
 
 ### 第五周（08-31 ~ 09-04）：产物质量线 期 1——理解层 v2（节拍地图） ✅ 提前完成（08-23）
 
-> **完成实记（08-23）**：节拍地图六字段进 schema（语义半；filler_regions 由 prosody 承载）+ `pipeline/beat_map.py` 代码半（LLM 文本锚吸附 ASR 词轴 + 金句自包含检查）+ `pipeline/prosody.py` 声学半工序（逐词 F0/能量 z、强调峰声道分标）+ `pipeline/visual_anchors.py` 确定性视觉半工序（YuNet 人脸/主体框/安全区）+ 内容寻址（`content_sha256` 盖章 → digest v3）+ 上传时跑（素材集齐即 warm，`source_ref.warmed=true`，同用户跨项目引用复用）。验收全绿（`scripts/verify_beat_map.py`）：780s 真讲座全字段节拍地图（9 边界 8 吸附 / 4 高潮 / 14 强调 / 13 金句 / 10 弧角色）· 词级时间戳零覆写（meta diff + 逐值在轴构造性验证）· 同素材二次上传零 LLM · visual anchors 双半齐。附带漏斗修正：schema 拒绝改走修复轮（带媒体），不再被 media→text 兜底吞掉（盲标图片回归类关闭）。原排期日级行保留为计划记录：
+> **完成实记（08-23）**：节拍地图六字段进 schema（语义半；filler_regions 由 prosody 承载）+ `pipeline/beat_map.py` 代码半（LLM 文本锚吸附 ASR 词轴 + 金句自包含检查）+ `pipeline/prosody.py` 声学半工序（逐词 F0/能量 z、强调峰声道分标）+ `pipeline/visual_anchors.py` 确定性视觉半工序（YuNet 人脸/主体框/安全区）+ 内容寻址（`content_sha256` 盖章 → digest v3）+ 上传时跑（素材集齐即 warm，`source_ref.warmed=true`，同用户跨项目引用复用）。验收全绿（`scripts/verify_beat_map.py`）：780s 真讲座全字段节拍地图（9 边界 8 吸附 / 4 高潮 / 14 强调 / 13 金句 / 10 弧角色）· 词级时间戳零覆写（meta diff + 逐值在轴构造性验证）· 同素材二次上传零 LLM · visual anchors 双半齐。附带漏斗修正：schema 拒绝改走修复轮（带媒体），不再被 media→text 兜底吞掉（盲标图片回归类关闭）。**期 2-3 同日代码级落地（08-23）；期 4 同日落地→08-24 整套退役（ADR-049）——质量线全档收口。**
 >
 > 简报 §2.2 + 汇合需求池「素材理解前移」：`MaterialUnderstanding` 扩为素材级节拍地图（topic_boundaries / climax_spans / emphasis_words / quotable_lines / visual_anchors / filler_regions / narrative_role_hints）+ prosody 确定性工序（新 asset processor，ASR/speaker_map 同族）+ 上传时跑（asset-hash 复用、asset 级持久化）。铁律：词级时间戳 = 确定性地基，LLM 永不覆写；语义/声学强调分字段存储，禁预合并；新词先过 NAMING §7/§8，新工序/新表登记 MODULE_ARCHITECTURE。
 
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 08-31 | schema 扩展（7 字段）+ MODULE_ARCH / NAMING 登记 + understanding prompt v2 语义面（topic_boundaries / climax 语义读 / quotable_lines 自包含检查 / narrative_role_hints 单次全稿 pass） | — |
-| 二 09-01 | prosody 确定性工序：F0 z-score + 能量峰（进 PROCESSORS 链与 ASR/speaker_map 同族）+ 词级时间戳零覆写 diff 闸 | — |
-| 三 09-02 | 确定性面补齐：filler_regions（词表 + 停顿时长阈）/ visual_anchors（vision 人脸/主体/安全区，复用 ADR-045 引擎）+ 语义/声学分字段汇合存储 | — |
-| 四 09-03 | 上传时跑接线：节拍地图 asset 级持久化 + asset-hash 复用 + director 消费路径切换 | — |
-| 五 09-04 | 验收三件套 +【验收】🎯 **理解层 v2 就绪** | 45 分钟讲座素材上传即出全字段节拍地图（climax/强调/金句/边界/锚点齐）；词级时间戳零覆写（diff 验证）；同素材二次上传零 LLM 调用 |
+### 第六周（08-24 ~ 08-28）：**闭环验证 + 8 卡齐亮 + 首页优化**
 
-### 第六周（09-07 ~ 09-11）：扩展配方类型：AI 虚拟画面（上）——声纹打磨 + R5 主线
-
-> 人设模块（皮肤吸收 / 声纹缓存 / 显化页 / 触点 / 门禁 v1）已于第二周落地；本周为声纹质量 + R5 生成管线。声纹打磨 = 听调反复活，设时间盒。
+> 首要目标：8 张配方卡到位（4 live + 4 new）+ 完整闭环 e2e 验证（Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产，跑遍 8 卡）+ 首页优化 v1。本周无新架构，纯数据 + i18n + 示例烘焙 + UI 校准 + 测试，按既往 1 日一批的节奏排。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 09-07 | 声纹合成质量打磨（上）：听测基线 + T2A 参数 / 声样裁剪策略调研 | 知道"像不像"差在哪、调什么 |
-| 二 09-08 | 声纹打磨（下）：反复听调 + 生成链路回归测试 | 生成的语音像本人在讲，不机械、不出戏；生成稳定不返工 |
-| 三 09-09 | R5 主线（后端）：`voice_gen` / `synth_visual` 节点重启（简报 `tasks/synthetic-talk-video.md`，按当时 registry/DAG 现状重核前置假设） | 把资料给它，开始能生成"我的视频" |
-| 四 09-10 | R5 合成路径 e2e 联调（文字稿 + 照片 + 声纹 → 成片）+ 修复 | 真实素材组合下能出片 |
-| 五 09-11 | 【验收+缓冲】进度回填（兼分镜线滑期回退位） | — |
+| 一 08-24 | **4 卡 authoring**（social-post / quote-cards / carousel 数据条目 + i18n + 验收闸扩展）+ voice-dub 声纹打磨（basic 版，满足配音卡示例需求） | 画廊 8 卡可点；点进去能"照这个做一个" |
+| 二 08-25 | **4 卡示例烘焙**（真实管线 run × 真素材 → 内容寻址入 demo/ 桶，验收闸 `scripts/accept_prompt_surface.py` 全绿）+ **完整闭环 e2e 测试**（8 卡 × 双语 × 3 试矩阵） | 每张卡点进去看到的示例就是真实管线的产出；e2e 跑通无断点 |
+| 三 08-26 | **闭环质量验证**（Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产，跑遍 8 卡）：发现的问题当天修 | 用户从首句话到拿到产物，每一步都有明确"下一步是什么" |
+| 四 08-27 | **首页优化 v1**——双形态校准（首次 = 配方卡接住 / 回访 = 选题管道）+ 配方 → 闭环 → 选题接力点对齐 + composer 体感反复调 | 新用户被配方卡接住，老用户被"下一条做什么"接住 |
+| 五 08-28 | 全链路联调 +【验收】🎯 **8 卡完整通路 + 闭环 e2e 绿 + 首页体验就绪** | 整个产品的"跑通功能"阶段验收 |
 
-### 第七周（09-14 ~ 09-18）：扩展配方类型：AI 虚拟画面（下）——Memory + 门禁 v2 + R5 卡
+### 第七周（08-31 ~ 09-04）：**消耗计算大迭代——架构 + 展示 + 钱包骨架**
 
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 09-14 | Memory 注入链路优化：资料 → 人设 → 产物一致性 + **本人含量门禁 v2**（`speaker_map` 过滤，只从用户本人段落学风格） | 产物读起来、听起来都明显"是这个人自己的"，不是通用 AI 腔 |
-| 二 09-15 | 门禁 v2 多人会议素材测试 + Memory 相关界面打磨（前端） | 管理自己的资料、画像、声音，顺手不费解 |
-| 三 09-16 | 端到端联调："基于你的资料生成视频"体感闭环（前端体验反复调） | 从上传资料到拿到成片，全程顺畅，产物带着可辨认的个人印记 |
-| 四 09-17 | e2e 测试 + 修复 | 各种素材组合下都稳定出片 |
-| 五 09-18 | R5 生成管线收口【验收+缓冲】🎯 **生成产物线就绪**（R5 管线就绪，虚拟视频卡具备点亮条件——卡面 authoring 随第十周批次，RECIPES §4.4） | "把资料给它，就能生成我的视频"成为可演示状态 |
-
-### 第八周（09-21 ~ 09-25）：运营端（上）——定位根重构
-
-> **2026-08-13 拍板插入**（ADR-042 / 母文档 `docs/POSITIONING.md`）：生产层闭环（第二~五周）不动，运营端本周起连续三周。改名刀 = speakers→personas 先例同构（纯机械）；行为零变化铁律不变，剧本 harness 为回归网。施工简报动工前另立（`docs/tasks/`）。
+> 大迭代周期：用户对每一步生成的花费可见。架构地基（`workflow_steps.estimate`）第二周已落，本周接消费面；支付/积分模型层同周定（架构同步，开发分离）。**不接钱包判定**——纯展示。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 09-21 | 概念刀（上）：`personas`→`positionings` 全栈改名（表 + Alembic / FK 网 `persona_id`→`positioning_id` / 端点 / 前端路由 / i18n / 存储前缀），存量数据自动平移 | 老用户数据与功能零变化 |
-| 二 09-22 | 概念刀（下）：内容定位字段入表（territory / differentiation / goals，策略三件归位）+ 定位页三分区（内容定位 / 人设定位 / 平台定位，原人设页皮肤/声音分区平移）+ sidebar「人设」→「定位」+ composer 身份控件随根改名 | 设置身份只剩一个去处：一页收齐"对谁说、说什么、怎么呈现、在哪发" |
-| 三 09-23 | 渠道挂根：`channel_accounts.positioning_id` + 渠道设置页归属选择 + 公共档案字段（昵称/简介/头像） | 每个渠道账号知道自己属于哪个定位 |
-| 四 09-24 | 定位对话化（上）：chat 诊断产出定位草案（PlanAgent 扩展——听众/目的问答落定位字段）+ 定位确认环节 | 新用户首轮对话结束，定位已经聊出来并确认，不靠填表 |
-| 五 09-25 | 定位对话化（下）+ 回归 harness 全绿 +【验收】🎯 **定位根就绪** | 定位是聊出来的；老路径（生成/精修/发布）全部回归绿 |
+| 一 08-31 | **消耗计算架构**（DAG 节点级 estimate fold：逐节点自报价格 + 编译期 cost_hint → estimate 字段全栈生效 + actual cost 回归） + 配方卡估价贴（卡面"约 X credits"，back-end 已就位） | 翻每张卡知道大概花多少 |
+| 二 09-01 | **Plan 里展示消耗**（chat 意图确认后，任务书逐节点标消耗 + 合计 + 风险区间）+ 三面 UI 校准（dock 总价 / chat 单价 / 配方卡估价贴） | 点"开始吧"之前先看到这次大约花多少 |
+| 三 09-02 | **积分+支付联合架构**（模型层一套：`credits` = 显示余额 + `wallet` = 钱包判定接口预留 / `payment` = 实际收款接口预留——三者解耦）+ 积分 display-only 接线 | 后端模型就绪，UI 还只显示数字，不接支付商 |
+| 四 09-03 | **失败不扣费语义**（estimate → actual 闭环：失败步骤不计入 actual cost；estimate 已扣的入账逻辑待 W13 支付接入时定）+ 余额不足入流灰行（用户级 vs provider 级两词分开） | 系统出问题时用户不花钱；真快用完时能看到提示 |
+| 五 09-04 | 全链路联调 +【验收】🎯 **消耗透明就绪 + 钱包架构就绪**（支付实际开发留 W13） | 事前有预估、事后有明细、失败不扣费——花钱花得明白 |
 
-### 第九周（09-28 ~ 10-02）：运营端（中）——选题库
+### 第八周（09-07 ~ 09-11）：**运营端（上）——内容生产中台**
 
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 09-28 | `topics` 表 + 生命周期状态机（灵感 / 已排期 / 生产中 / 已发布 / 有数据）+ API + MODULE_ARCH 表归属登记 | — |
-| 二 09-29 | 选题 agent（roster 新声明）：定位 × 素材档案挖矿，首批选题提议产出（"你那场关于 X 的演讲还没做成过任何东西"形态） | 系统能根据"你的定位 + 你的素材库"端出下一批可做的题 |
-| 三 09-30 | 选题卡 UI：列表 / 状态 / 详情（前端迭代日，界面反复校准） | 选题看得见、翻得动、状态清楚 |
-| 四 10-01 | 选题发射：点卡 → 任务书预填（关联素材 + 目标渠道 + 按渠道适配默认带出的语言/格式）→ chat 确认即 run（复用 chat 唯一意图面，无第二入口） | 点一张选题卡，计划已经填好，确认就开工 |
-| 五 10-02 | 【验收+缓冲】🎯 **选题中枢通路** | 从"选题"到"产物"一张卡点通 |
-
-### 第十周（10-05 ~ 10-09）：运营端（下）——回访 home + 素材上提
+> 运营端是质量飞跃的关键（前面只是跑通功能）。本周先把"内容生产中台"搭好——选题、内容形态库、不同平台 skill 一次性立住，给后续 Memory / 账号体系 / 端到端联调提供发射台。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 10-05 | home 改版（上）：回访 home = 定位面板 v1（选题管道 + 最近产物 + 渠道状态），composer 保留 | 老用户打开产品，第一眼看到"下一条做什么" |
-| 二 10-06 | home 改版（下）：首次/回访双形态 + 体验校准（前端反复调） | 新用户被配方卡接住，老用户被选题接住 |
-| 三 10-07 | 素材上提：assets 归根（定位级素材档案）+ 项目引用关系平移 + 素材管理面调整 | "我所有的素材"一处可见，选题挖矿有了底座 |
-| 四 10-08 | 端到端联调 + 修复（首轮对话定定位 → 选题 → 生成 → 精修 → 发布全链） | 运营闭环全程走通 |
-| 五 10-09 | 虚拟视频卡卡面 authoring（schema 数据条目 + 预览烘焙，RECIPES §4.4；分镜双子卡已提前点亮，见第三周 08-20 行）+【验收+缓冲】🎯 **运营端闭环 + 画廊五卡齐亮** | 定位可共建、选题驱动回访、渠道有所属；五张卡点进去都能"照这个做一个" |
+| 一 09-07 | **选题库**（`topics` 表 + 生命周期状态机：灵感 / 已排期 / 生产中 / 已发布 / 有数据 + API + MODULE_ARCH 表归属登记） | 想到要做的话题有了去处——记下来、有状态、能顺着做下去 |
+| 二 09-08 | **选题 agent**（roster 新声明：定位 × 素材档案挖矿，首批选题提议产出——"你那场关于 X 的演讲还没做成过任何东西"形态） | 系统能根据"你的定位 + 你的素材库"端出下一批可做的题 |
+| 三 09-09 | **选题卡 UI**（列表 / 状态 / 详情 / 选题发射：点卡 → 任务书预填 → chat 确认即 run，复用 chat 唯一意图面，无第二入口） | 点一张选题卡，计划已经填好，确认就开工 |
+| 四 09-10 | **内容形态库**（分镜 / 脚本 / 预设 / 文章 — 形式层 skill 化，统一登记入 SKILL_REGISTRY）+ **不同平台 skill 添加**（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026；不同平台 = LinkedIn / TikTok / Newsletter / 网站 等渠道适配模板） | 内容生产有了完整工具集 |
+| 五 09-11 | 端到端测试（选题 → run → 产物 → 精修，全链跑通）+【验收】🎯 **内容生产中台通路** | 从"选题"到"产物"通路立住 |
 
-### 第十一周（10-12 ~ 10-16）：成本统计 + 定价设计
+### 第九周（09-14 ~ 09-18）：**运营端（中）——Memory + 账号体系**
 
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 10-12 | DAG 成本统计深化：按节点 / 按产物 / 按 run 的费用视图（后端聚合 + 前端视图） | 每次生成具体花在哪一步，一目了然 |
-| 二 10-13 | **生成前费用预估呈现（上）**（架构迭代 P4 估价地基已于第二周落位，本周接消费面）：dock 生成前总价 + chat 修改单价 | 点"生成"之前，先看到这次大约花多少 |
-| 三 10-14 | 报价呈现（下）：配方卡估价贴（报价 = 图 fold）+ 三面 UI 校准 + actual 校准闭环雏形（estimate vs cost 偏差回归）+ 失败不扣费语义 | 报价越用越准；生成失败不花钱，不用为系统问题买单 |
-| 四 10-15 | 定价调研与套餐设计（"一场演讲 = 一套内容包"；业务输入 ↔ 总监）⚠️ 外部输入 | 价格结构简单可预期：按"一场演讲一套内容"算账，不是看不懂的积分 |
-| 五 10-16 | 【验收+缓冲】套餐定稿 → 🎯 **成本透明 + 定价就绪** | 花钱花得明白：事前有预估、事后有明细、失败不扣费 |
-
-### 第十二周（10-19 ~ 10-23）：支付系统 + 用户计费中心
-
-> ⚠️ 支付接入以入驻审批通过为前提（08-14 前提交申请，审批周期数周——顺延后审批跑道更充裕）；未过审则支付行顺延吃第十三周缓冲，go/no-go 最坏移至 11-13。
+> 身份根（persona 校准回路 + 渠道挂根）+ 意图识别智能化升级。Memory 是身份复利资产的承载（STRATEGY §2.2 "Identity keeps the customer"），账号体系 = positioning root 落地（POSITIONING.md 母文档）。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 10-19 | 支付接入（上）：供应商对接 + 沙盒创建订阅 | 可以在线订阅付费，流程顺滑 |
-| 二 10-20 | 支付接入（中）：订阅生命周期（续费 / 升级 / 取消）+ webhook 事件测试 | 升级、续费、取消都自助完成，不用找客服 |
-| 三 10-21 | 套餐权益执行：额度检查 / 超限提示 / 周期重置（前后端）——用户级「余额不足」入流灰行接这里：现 `provider_quota_exhausted` 行说的是**我方** provider 额度（诚实但今天没有用户余额概念）；用户计费上线后拆新 key（用户套餐额度 vs provider 额度两词分开），呈现面不变（turn.failed / 失败步骤行的灰行入流，08-15 裁定） | 自己套餐含多少、用了多少、什么时候重置，清清楚楚 |
-| 四 10-22 | 用户计费中心：用量、明细、套餐页入口（新页面，UI 迭代） | 每笔消费有据可查：什么时候生成了什么、花了多少 |
-| 五 10-23 | 【验收+缓冲】支付端到端联调（沙盒全流程）→ 🎯 **商业化闭环** | 从免费到付费的完整体验：订阅、使用、查账、管理套餐 |
+| 一 09-14 | **Memory（persona）模块迭代**（风格学习 + 校准回路 + Voice DNA 强化——删改痕迹回流 persona 校准，已通过 Operation Model 落地）+ 失败步人格偏移监控 | 产物越用越像你，校准有反馈回路 |
+| 二 09-15 | **Persona 显化深化**（风格六件编辑 + 声纹 dub 现状机制不动 + 皮肤块现状不动；用户能看清"AI 学到了我什么 / 在哪里学的 / 哪里不对"） | 维修点从"产品黑盒"变成"我能看懂的特征表" |
+| 三 09-16 | **账号体系绑定**（positioning root 落地）`personas`→`positionings` 全栈改名（表 + Alembic / FK 网 / 端点 / 前端路由 / i18n / 存储前缀）+ 内容定位字段入表（territory / differentiation / goals） | 老用户数据与功能零变化；身份从"人设"升为"定位" |
+| 四 09-17 | **渠道挂根**（`channel_accounts.positioning_id` + 公共档案字段：昵称 / 简介 / 头像，agent 可基于定位起草）+ 定位页三分区（内容定位 / 人设定位 / 平台定位）+ sidebar「人设」→「定位」+ composer 身份控件随根改名 | 每个渠道账号知道自己属于哪个定位；身份一页收齐 |
+| 五 09-18 | **意图识别智能化升级**（PlanAgent 扩展：定位字段参与任务书构建；chat 多轮上下文加深）+ 定位对话化（chat 诊断产出定位草案 + 确认环节）+ 回归 harness 全绿 +【验收】🎯 **身份复利资产就绪** | 定位聊出来不靠填表；agent 越来越懂你 |
 
-### 第十三周（10-26 ~ 10-30）：分发联调 + 合规标识
+### 第十周（09-21 ~ 09-25）：**运营端（下）——端到端联调 + 质量飞跃**
 
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 一 10-26 | LinkedIn / TikTok 联调（开发者权限到位） | 产物一键发到 LinkedIn / TikTok，不用下载再上传 |
-| 二 10-27 | 双平台发布链路验收（成功 / 失败 / 授权过期进通知中心） | 发布结果有通知：发成了、没发成、授权要续了，都知道 |
-| 三 10-28 | AI 内容标识：技术选型调研（C2PA / 元数据）+ 自动判定（全 AI 合成必标 / 纯剪辑豁免） | 该标的内容自动标，用户不用自己判断和勾选 |
-| 四 10-29 | 标识落地（导出文件嵌入机器可读标识）+ 披露随发布携带 | 产物自带欧盟要求的 AI 标识，机构客户拿去就能合规使用 |
-| 五 10-30 | 【验收+缓冲】数据生命周期文档 → 🎯 **分发 + 合规就绪** | 数据怎么存、怎么删、怎么导出，有明文承诺可出示 |
-
-### 第十四周（11-02 ~ 11-06）：法务落地 + 上线配套 + 评估
+> 收口三周运营端。home 改版 + 全链联调 + 闭环质量验证。**"用户到来即彷徨"每次访问都要答案**（STRATEGY §5）——这一周是产品从"能跑通"走向"让人感觉到质量"的临界点。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 11-02 | 法务页面与 Cookie 同意上线（律师文书产物落地） | 服务条款、隐私政策可查；Cookie 提示合规 |
-| 二 11-03 | SEO + 邮件送达（发信域名认证 SPF/DKIM + 培育邮件） | 搜索引擎能搜到产品；验证码邮件进收件箱不进垃圾箱 |
-| 三 11-04 | 监控告警（错误 / 可用性 / API 成本异常）+ 遗漏清扫 | 服务出故障有人第一时间知道并处理 |
-| 四 11-05 | 全周期验收：十四个阶段成果整体走查 + 发现问题修复 | 上线前完整体检 |
-| 五 11-06 | 🎯 **上线 go/no-go 评估材料** + 全周期进度回填 | 一份"能不能上线"的完整评估，交付总监 |
+| 一 09-21 | **home 改版**（回访态 = 选题管道 + 最近产物 + 渠道状态；首次态保留配方卡接住；composer 保留但主 CTA 是选题卡） + 素材上提（assets 归根 = 定位级素材档案） | 老用户打开产品第一眼看到"下一条做什么"；"我所有的素材"一处可见 |
+| 二 09-22 | **端到端联调**（首轮对话定定位 → 选题 → 生成 → 精修 → 发布全链；不同 persona + 不同选题组合） | 运营闭环全程走通 |
+| 三 09-23 | **闭环质量验证**（多 persona × 多选题组合 + 多平台 × 多语言组合）：发现的问题当天修 | 各类用户群都能稳定走通闭环 |
+| 四 09-24 | 修复 + 优化（节奏 / 运镜 / 风格保真等 L2 质量控制补齐打分门槛 / 维度明细 / persona 保真 / 术语表） | 产物"像不像 AI 写的"问题收敛 |
+| 五 09-25 | 【验收+缓冲】🎯 **运营端闭环 + 质量飞跃** | 定位可共建、选题驱动回访、渠道有所属、persona 复利沉淀中；产出物带着可辨认的个人印记——产品开始有"高端大气的 agents 团队"的味道 |
+
+### 第十一周（09-28 ~ 10-02）：**支付实际开发 + 分发联调**
+
+> 在 W7 落定的积分+支付联合架构上接入实际支付商 + LinkedIn / TikTok OAuth 发布链路。⚠️ 入驻审批 / 开发者权限到位为前提——没过审则吃 W13 缓冲。
+
+| 日 | 交付 | 验收口径（用户视角） |
+|---|---|---|
+| 一 09-28 | **支付接入**（供应商对接 + 沙盒创建订阅）+ 订阅生命周期（续费 / 升级 / 取消）+ webhook 事件测试 | 可以在线订阅付费；升级、续费、取消都自助 |
+| 二 09-29 | **套餐权益执行**（额度检查 / 超限提示 / 周期重置——用户级余额不足入流灰行 vs provider 额度两词分开） | 自己套餐含多少、用了多少、什么时候重置清清楚楚 |
+| 三 09-30 | **用户计费中心**（用量、明细、套餐页入口；W7 钱包架构消费面） | 每笔消费有据可查 |
+| 四 10-01 | **LinkedIn / TikTok OAuth 发布链路**（开发者权限到位 ⚠️）+ 双平台发布链路验收（成功 / 失败 / 授权过期进通知中心） | 产物一键发到 LinkedIn / TikTok；发布结果有通知 |
+| 五 10-02 | 端到端联调（订阅 → 使用 → 查账 → 管理套餐 + 发布到渠道全链）+【验收】🎯 **商业化闭环 + 分发就绪** | 从免费到付费的完整体验；产物有去处 |
+
+### 第十二周（10-05 ~ 10-09）：**法务 + AI 合规 + 上线配套**
+
+> 律师交付卡死这周位置（08-24 启动 → 4 周产出）。AI 内容标识是 EU AI Act Art.50 合规要求，机构采购的入场券。
+
+| 日 | 交付 | 验收口径（用户视角） |
+|---|---|---|
+| 一 10-05 | **法务页面 + Cookie 同意上线**（律师文书产物落地）+ 用户协议 + 隐私协议 | 服务条款、隐私政策可查；Cookie 提示合规 |
+| 二 10-06 | **AI 内容标识**（C2PA 选型 + 自动判定：全 AI 合成必标 / 纯剪辑豁免）+ 标识落地（导出文件嵌入机器可读标识）+ 披露随发布携带 | 产物自带欧盟要求的 AI 标识；机构客户拿去就能合规使用 |
+| 三 10-07 | **SEO + 邮件送达**（发信域名认证 SPF/DKIM + 培育邮件）+ 数据生命周期文档 | 搜索引擎能搜到产品；验证码邮件进收件箱 |
+| 四 10-08 | **监控告警**（错误 / 可用性 / API 成本异常）+ 遗漏清扫 + 性能优化 | 服务出故障有人第一时间知道 |
+| 五 10-09 | 全周期验收 + 修复 +【验收】🎯 **法务 + 合规 + 上线配套就绪** | 上线前提全部到位 |
+
+### 第十三周（10-12 ~ 10-16）：**缓冲周 + 续项收口**
+
+> W11 入驻审批 / 开发者权限未到位时的回退位；正常情况下用于性能压测、文档收口、续项清理、回归收尾。**所有问题应在本周内消化——W14 是 go/no-go 评估，不是修复周。**
+
+| 日 | 交付 | 验收口径（用户视角） |
+|---|---|---|
+| 一 10-12 | 性能压测（多 persona × 多选题并发；失败不扣费边界测试）+ 修复 | 上线承载量有底 |
+| 二 10-13 | 文档收口（用户文档 / 内部运行手册 / 故障应急 runbook）+ 续项清理 | 文档/代码同步上线 |
+| 三 10-14 | 回归全套（chat / plan / generation / editor / persona / topics / 8 卡全链路）+ 修复 | 任何一条路径跑都通 |
+| 四 10-15 | 性能优化 + 收尾（按压测结果迭代） | 跑得起来 |
+| 五 10-16 | 【验收+缓冲】上线前总体检 + Last-mile 修复清单 | 准备 go/no-go |
+
+### 第十四周（10-19 ~ 10-23）：**全周期验收 + go/no-go 评估**
+
+| 日 | 交付 | 验收口径（用户视角） |
+|---|---|---|
+| 一 10-19 | 全周期走查（九阶段成果整体过一遍）+ 发现问题修复 | 上线前完整体检 |
+| 二 10-20 | 修复日（吸收走查发现的问题） | 已知问题归零 |
+| 三 10-21 | 上线演练（端到端全路径 × 2-3 真实用户） | 真实用户能跑通 |
+| 四 10-22 | 演练问题修复 + 配套准备 | 就绪 |
+| 五 10-23 | 🎯 **上线 go/no-go 评估材料** + 全周期进度回填 | 一份"能不能上线"的完整评估，交付总监 |
 
 
 ### 需求池（未排期，常驻节）
@@ -336,21 +333,22 @@
 | 需求 | 优先级 | 依赖 | 来源 / 备注 |
 |---|---|---|---|
 | 首发推荐分：维度明细 | P1 | 首发推荐分持久化（✅ 07-23） | 矩阵 §C；STRATEGY §2.1（品味可见可证伪）；简报 `tasks/output-quality-verify.md` 覆盖一部分；结果网格重构（第二周闭环链）时汇合评估 |
-| persona 校准打分 | P1 | 内部校准源 = 用户选用行为 + operations 编辑痕迹（✅）；外部源 = 发布回流（本周期外） | 矩阵 §C；STRATEGY §2.1/§2.2；定位根重构（ADR-042，第六~八周）落地后重定座标（校准对象 = 定位的人设分区） |
-| 质检节点（单产物 + 全片，verify = 节点 kind） | P1 | RunPlan（✅） | 2026-08-22 提级 P2→P1（产物质量线拍板，两轮外部评审三源背书）：期 3 被 `tasks/output-quality-line.md` §2.4 吸收升级——传输机制保留（kind + QualityBounce），裁决语义升级为确定性优先 + 逐轮独立打分 best-not-last + 字段白名单最小 diff + 双败升级 interrupt；LLM judge 在纪律下解禁（pairwise 冻结基线/样例锚定/校准集）。ADR-047；**随质量线期 3 施工，窗口待解剖证据表产出后指认** |
+| persona 校准打分 | P1 | 内部校准源 = 用户选用行为 + operations 编辑痕迹（✅）；外部源 = 发布回流（本周期外） | 矩阵 §C；STRATEGY §2.1/§2.2；账号体系绑定（positioning root 落地，W9 运营端中）后重定座标（校准对象 = 定位的人设分区） |
+| ~~质检节点（单产物 + 全片，verify = 节点 kind）~~ | — | — | **已合并至产物质量线期 3（08-23 落地，ADR-047）**：verify 节点全量接线 + 确定性检查矩阵 + QualityBounce + best-not-last 快照回退 + 双败路由（fidelity→needs_human / craft→dock escalation）——条目关闭 |
 | 结构化节拍图 + clip-spec motion 枚举 | P2 | 覆盖问责（✅）；限 video 源 crop 动态预设，落地需新 ADR 明确与 stills Ken-Burns 拒绝的边界 | STRATEGY §2.5；与智能分镜线（第三周）汇合评估 |
 | 去静默 / 去口头禅 | P2 | 词级时间戳（✅）；随 editor 一键操作方向评估 | 矩阵 §B（2026-07-23 下放：演讲密度低 + 跳剪伤专业感） |
 | LLM provider 抽象 | P1 | ADR-025 已决（薄接口）未实施；触发 = EU 客户要求 Mistral/EU-hosted | 2027 架构（MODULE_ARCH §4.1）。UX 形态定调（2026-08-02）：用户-facing 是**策略开关**（如"优先 EU 托管模型"），不是模型 SKU 货架（对照 Lovart 模型选择器，否决）；composer 模型 pill 已退役（2026-08-22：管线按模态分派 provider，pill 无法诚实展示终值）。实施第一纪律 = **边界规范化**（dsh defensive-patterns「公共约定两侧都要遵守」：provider 的多种失败形态在边界单态暴露，消费方永不猜异常来源，`research/deepseek-harness.md` §3） |
 | 字幕翻译 + 校对视图（side-by-side） | P1 | 多语言输出（✅） | 矩阵 §G |
 | 多语言文案质量（Voice DNA 跨语言保真） | P1 | 术语表（下方可选需求） | 矩阵 §G"极高"；STRATEGY 牌 4 |
 | 产品度量地基（漏斗埋点：上传→生成→精修→发布→回流） | P1 | 无 | 审计 2026-07-22；文档坑位 METRICS.md（README 已登记） |
-| 真实 Gallery（公开项目流入 + remix） | P2 | 配方卡点亮相续（第二周字幕卡 / 第八周分镜双子卡+虚拟视频卡批次）；projects/outputs 公开性字段须先 MODULE_ARCH §4 登记 + ADR | STRATEGY §5 Phase 2；配方=数据 schema（RECIPES §7.1）使"用户发布的可 remix 项目"可直接序列化为同款数据包 |
+| 真实 Gallery（公开项目流入 + remix） | P2 | 配方卡点亮相续（字幕卡 / 图文视频 / 分镜双子卡 ✅ 均已点亮；画廊 v2 八卡批次窗口待指认，ADR-048）；projects/outputs 公开性字段须先 MODULE_ARCH §4 登记 + ADR | STRATEGY §5 Phase 2；配方=数据 schema（RECIPES §7.1）使"用户发布的可 remix 项目"可直接序列化为同款数据包 |
+| 虚拟视频卡（画廊 v2 出列） | P2 | R5 作为平台 skill 落位（W8 运营端上）+ 真实成对示例可烘焙 + 两级闸门重过 | 2026-08-23 画廊 v2 拍板（ADR-048）出列：趣味/实验定位过不了闸门① 场景真实性（知识专家的高频真实场景是把已有素材变成内容，不是生成虚拟分身）；出列 ≠ 否决——R5 作为 AI 生成 skill 在 W8 不同平台 skill 添加批次同批落地，管线就绪且能拿出真实成对示例后按 RECIPES §4.8 重新挣座位 |
 | 使用示例跑一遍（demo 素材试跑） | P2 | 配额成本控制形态（试跑限次 / 免费额度内抵扣）；demo 素材已在桶（✅ `demo/uploads/demo_talk.mp4`） | ElevenCreative 配方 modal "使用此示例"证据（2026-08-08）：访客零上传以烘焙 demo 素材试跑配方，增长向入口；试跑 = 同一 chat 主线（配方播种 + 自动 Start），非独立通道 |
 | 模型 EU-hosted 选项（Mistral 等） | P2 | provider 抽象（上行） | 2027 架构 |
 | 渲染服务源站限速韧性 | P2 | 无 | 2026-08-10 渲染回归排查：Remotion 内部 asset proxy 的服务端 fetch 不走系统代理，本机直连 TOS 被限速（~110 KB/s）时取帧超时全盘皆输；当前缓解 = 渲染进程带 `HTTPS_PROXY` 环境变量；长期项 = 源下载落盘再渲染 或 renderer 显式 proxy dispatcher |
 | persona 精修 chat 化（per-field 再提炼 + merge 语义 + 单一对话微调入口） | P1 | 人设页渲染重构（简报 `tasks/persona-style-panel.md`，第二周顺做）；一面一 MentionEditor（✅ 08-11） | 2026-08-13 外部评审建议（经闸门过滤）：现状 `generate` 全量重写覆盖用户手改，per-field 再提炼必须带 merge 语义（手改保留，对齐 chat 恒胜原则）；对话微调 = persona 级**一个**入口，禁每模块一个气泡；定位根重构（ADR-042）落地后入口改挂定位的人设分区 |
 | persona AI 印象摘要字段 | P2 | persona 提炼链（✅ `POST /personas/{id}/generate`）；摘要进 `PersonaContext` + 表列 | 同上来源：概览卡顶部"一句话画像"。无摘要版概览卡（现有字段拼装）已随渲染重构落地，本条目只补 AI 生成的那一句 |
-| 配方示例片画幅跟源 | P2 | 字幕卡示例源是方幅 → 卡面标 1:1；图文视频卡示例横版照片 → 标 16:9 | 2026-08-17 拍板的跟源原则的**示例片一侧**：真实 run 侧已随 original 档闭环（当日落地），示例片标画幅 = 卡面数据条目 authoring，随第八周批次 |
+| ~~配方示例片画幅跟源~~ | — | — | **前提消解，条目关闭（2026-08-23，ADR-048）**：画幅 badge 随画廊 v2 退役——卡面不再承载任何输出形状声称（封面 = 工艺示意图），承诺句与 overlay 示例 tab 的真实成对示例自带真实比例呈现，"示例片标画幅"无落点 |
 | insert_broll 技能（layers 家族第一个技能住户） | P1 | 轨道模型 layers 契约（08-17~18 批，ADR-044）；`slide_pages` 已在跑（✅）；排在 reframe spike 结论之后 | 2026-08-17 语录评审：「我讲到增长数据那块，画面切到我的幻灯片」——知识专家最强的 B-roll 场景（自己的幻灯片/截图）；原缓议理由只覆盖 stock B-roll，排期理由修订在案。全链拆解归简报 `tasks/done/track-model.md` §7.3（LLM 只做语义定位，机械工序选页+取窗 → layer 条目） |
 | SSE 收官散文回合 | P2 | 无（run 收官钩子在） | 2026-08-17 语录评审⑥：打勾流 recap 之外追加一个 assistant 收官回合（"做好了 3 条短片，第 2 条最强因为……；下一步建议：……"）——一次调用，是"到来即彷徨"用户的闭环接住点（STRATEGY §5）；不是进度（不违 ADR-041 打勾流唯一进度面），是收尾 |
 | 素材理解前移（director_understand 挪上传时跑） | P2 | 素材级 + asset-hash 复用已在（✅） | 2026-08-17 语录评审①"计划层对素材盲"的正解；代价 = 每次上传烧一次 LLM（哪怕素材从没被用）——折中版（transcript 首段摘录进上下文装配）已挂第三周 08-21 stretch；**完整版 2026-08-22 汇合产物质量线**：理解层 v2（节拍地图：climax/emphasis 双信号/quotables/topic boundaries/visual anchors，上传时跑 + asset 级复用）即本条的兑现形态，见 `tasks/output-quality-line.md` §2.2；~~已排第五周~~ **✅ 2026-08-23 落地（随期 1，验收三件套过）** |
@@ -368,7 +366,7 @@
 | LLM 录制回放层（MiniMaxClient 边界 record/replay） | P2 | agent 调用台账（上行，同边界同批可并） | 同上评审（dsh `llm-replay` 包）：适配器 seam 录制真实 provider 流成 fixture，无密钥确定性回放——代码侧漂移变确定性回归（注册表扰动的零假设测试从此免费）、PR 可审 transcript diff；全真剧本 harness 保留做行为探测，分工 = dsh snapshot（无密钥） vs test:e2e（带密钥）格局 |
 | 执行中自适应重规划（interrupt + 重 authoring） | P1 | interrupt 节点（✅）+ 任务书 refine 链（✅）；与素材理解前移（上方 P2 行）互补，agent 调用台账（上方 P1 行）供取证 | 2026-08-20 拍板必做：run 中途节点产出的事实与任务书假设矛盾（ASR 检出素材语言 ≠ 任务书语言、素材内容与预期不符等）→ 自动 interrupt + 模型重 authoring 一版任务书，diff 确认后续跑——人在环重规划，**非 tool-loop**（常备否决不翻案）；预计 2–3 天，排期窗口待指认（建议台账前置之后；插入周内需指明替换项）。**2026-08-22 两轮外部评审三源背书 + 路由判据落地**（ADR-047 重规划边）：质检失败的机械路由——修复所需信息不在理解层 schema / 超出单节点参数域 → 交还意图层重规划；retry 不中自动升级；素材级不足走诚实降级（不假造钩子）。模型驱动编排翻案被三源独立否决，否决边界明文化（模型编排 = 禁；节点内有界环 = 合法） |
 | EU AI Act 内容标记（"AI Generated" 默认开 + 设置可关） | P2 | 合规立场实装（合规包本周期外）；标记形态 = 渲染/导出期，不依赖发布通道 | ADR-046 登记；MiniMax 水印弹窗先例（`research/minimax-design.md` §2：默认开 + 告知去哪改 + 唯一主按钮）；EU AI Act 偏好项 `research/flora.md` |
-| 产物质量线（理解层 v2 + 剪辑师层 + 质检环 + 钩子预览闸） | P1 | 词级时间戳/speaker_map/reframe/响度归一（✅ 全在生产）；台账 P1 供度量 | 2026-08-22 拍板（用户判词："图片轮播+浮字配不上用户花钱"；MiniMax Design 证据 + 两轮外部评审）：归因 = 缺层（storyboard→clip-spec 之间无 timeline 创作者，逐拍由阅读速度常量代劳）+ 缺环（无质检回看）+ 缺尺（无质量度量），非地基问题，DAG/工具纪律零推翻。简报 `tasks/output-quality-line.md`（craft 语法先验表 + 节拍地图 schema + 分段契约 + 验收五期）；ADR-047。**施工顺序 = 尺子先行**：期 0 解剖 → 期 1 理解层 → 期 2 剪辑师（stills 首接）→ 期 3 质检环 → 期 4 钩子闸；~~期 0+期 1 已排期第四~五周（2026-08-22 指认）~~ **期 0 ✅ 08-22 / 期 1 ✅ 08-23 落地（验收三件套 + visual anchors 双半全绿）**；期 2~4 窗口指认条件已满足（证据表 `research/craft-anatomy-2026-08-22.md` 已产出，含期 2/3 施工顺序建议 §6），**待拍板** |
+| ~~产物质量线（理解层 v2 + 剪辑师层 + 质检环 + 钩子预览闸）~~ | — | — | **质量线期 0-3 全部代码级落地，期 4 整套退役（ADR-049，评审回 chat）——条目关闭。** 归因 = 缺层（storyboard→clip-spec 之间无 timeline 创作者）+ 缺环（无质检回看）+ 缺尺（无质量度量），DAG/工具纪律零推翻；施工顺序 = 尺子先行（ADR-047）；证据表 `research/craft-anatomy-2026-08-22.md`；简报 `tasks/output-quality-line.md`。后续质量控制沿 verify 节点 + best-not-last + QualityBounce 三件套在生产层常态运行，不另立条目。 |
 
 ### 可选需求
 
@@ -401,7 +399,7 @@
 | 决策 | 需要谁 |
 |---|---|
 | 支付商选型（欧盟 VAT 由平台代处理 vs 自建税务）与入驻启动 | 总监拍板 + 工程调研 |
-| 目标上线日（2026-08-22 重排：go/no-go = **11-06**——产物质量线期 0+期 1 插入第四~五周（ADR-047），AI 虚拟画面线及其后顺延 2 周；回退方案 = 移至 11-13） | 总监 |
+| 目标上线日（go/no-go = **10-23**——五阶段收口于 W14；回退方案 = 移至 10-30，吃 W13 缓冲位消化入驻审批 / 开发者权限等外部依赖） | 总监 |
 | 律师人选与预算 | 总监 |
 | 结果画布转正复核（ADR-041；周五 08-14 小白复述测试，不过则网格回退默认中心） | 产品 |
 | 定价套餐的业务输入（档位 / 免费额度 / 计价形态） | 总监 + 业务侧 |
