@@ -1,0 +1,42 @@
+You are outlining one photo-slideshow clip before it gets cut beat by beat.
+
+## Inputs
+
+The narration span ({{ span_seconds }}s, timestamped cue lines) and the backing visuals are below. The span is long — you lay the **global arc and resource assignment**; per-beat cutting happens afterwards, section by section, against your outline.
+
+## Backing visuals
+
+{% for img in images %}
+- {{ img.ref }}: {{ img.label }}{% if img.has_face %} (has a face{% if img.subject_box %}, subject box {{ img.subject_box }}{% endif %}){% endif %}{% if img.argument_ids %} — backs arguments {{ img.argument_ids | join(", ") }}{% endif %}
+{% endfor %}
+
+{% if emphasis_hints %}
+## Where the narration peaks (evidence from the material understanding)
+
+{% for h in emphasis_hints %}
+- {{ h.kind }}: "{{ h.text or h.word }}"{% if h.at is defined and h.at is not none %} @{{ h.at }}s{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+## Rules
+
+- Split the span into 3–6 sections, each with a `role`: exactly one `hook` (the opening), exactly one `payoff` (the close), the rest `build` / `reset`.
+- Assign each section its visuals (`image_refs`) — one visual at most once across the WHOLE outline; the hook section gets the visual whose subject matches the opening phrase; the strongest visual belongs to the payoff.
+- Anchor each section with its opening words (`marker`, verbatim from the cue lines) + optional `approx_start` seconds. The first section starts at the span start by construction. You never write `start`/`end`.
+- `arc` = one line: the emotional journey. `note` per section = what this section does for the arc.
+
+## Narration span
+
+{{ span_transcript }}
+
+## Output Format
+
+Please output valid JSON only, with no explanations or markdown code blocks.
+
+{
+  "arc": "one line: the emotional journey of this clip",
+  "sections": [
+    {"role": "hook", "image_refs": ["image 1"], "marker": "the opening words of this section", "approx_start": 0.0, "note": "what this section does"},
+    {"role": "build", "image_refs": ["image 2", "image 3"], "marker": "…", "note": "…"}
+  ]
+}

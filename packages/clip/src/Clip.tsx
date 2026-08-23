@@ -15,7 +15,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { getVideoMetadata } from "@remotion/media-utils";
-import type { CaptionCue, ClipLayer, ClipSpec, IntroOutroCard, Point, SegmentTransition } from "./types";
+import type { CaptionCue, ClipLayer, ClipSpec, ImageShot, IntroOutroCard, Point, SegmentTransition } from "./types";
 import {
   COMPOSITION_FPS,
   introSeconds,
@@ -78,6 +78,60 @@ function splitFrames(count: number, total: number): number[] {
     i === count - 1 ? Math.max(1, total - base * (count - 1)) : base,
   );
 }
+
+/** Planned per-shot frame counts (期 2): dwell_s → frames, the last shot
+ * absorbing the remainder so the shots tile the video portion exactly
+ * (splitFrames' own discipline). */
+function shotFrames(shots: ImageShot[], total: number, fps: number): number[] {
+  const durs = shots.map((s) => Math.max(1, Math.round(s.dwell_s * fps)));
+  const head = durs.slice(0, -1).reduce((a, b) => a + b, 0);
+  durs[durs.length - 1] = Math.max(1, total - head);
+  return durs;
+}
+
+/**
+ * One stills shot: the image plus the editor's Ken Burns motion (期 2). The
+ * interpolation runs over the shot's own frames with an out-cubic ease, so
+ * the move settles before the cut instead of snapping into it (craft: ease
+ * 200–300ms 不贴切帧). Pan keeps a base scale so the travel never exposes an
+ * edge. No motion -> the plain <Img>, pixel-identical to the legacy path.
+ */
+const StillShot: React.FC<{
+  src: string;
+  shot?: ImageShot;
+  durFrames: number;
+  objectFit: React.CSSProperties["objectFit"];
+}> = ({ src, shot, durFrames, objectFit }) => {
+  const frame = useCurrentFrame(); // Series.Sequence-relative
+  const kind = shot?.motion ?? "none";
+  const rate = Math.max(1, shot?.motion_rate ?? 1);
+  const end = Math.max(1, durFrames - 1);
+  let transform: string | undefined;
+  if (kind === "zoom_in" || kind === "zoom_out") {
+    const [from, to] = kind === "zoom_in" ? [1, rate] : [rate, 1];
+    const s = interpolate(frame, [0, end], [from, to], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    });
+    transform = `scale(${s})`;
+  } else if (kind === "pan_left" || kind === "pan_right") {
+    // Safe travel bound: translateX applies BEFORE the scale, so the visual
+    // shift is rate·x% and edges stay covered while x ≤ (rate−1)/(2·rate)·100.
+    // 48 (= 96% of the bound) keeps a hairline margin at every rate.
+    const travel = ((rate - 1) / rate) * 48; // % of width per side
+    const [from, to] = kind === "pan_left" ? [travel, -travel] : [-travel, travel];
+    const x = interpolate(frame, [0, end], [from, to], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    });
+    transform = `scale(${rate}) translateX(${x}%)`;
+  }
+  return (
+    <Img src={src} style={{ width: "100%", height: "100%", objectFit, transform }} />
+  );
+};
 
 /**
  * Per-line caption entrance animation — the `entrance` primitive from the
@@ -363,7 +417,16 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
   const isStills = spec.source.kind === "stills";
   const images = spec.source.image_urls ?? [];
   const audioUrl = spec.source.url || null;
-  const imageDurs = images.length > 0 ? splitFrames(images.length, videoFrames) : [];
+  // 期 2: the editor's planned shots replace the even split when present
+  // (shot list references the same storage-seam URLs; empty = legacy path).
+  const shots = spec.source.image_shots ?? [];
+  const planned = isStills && shots.length > 0;
+  const shotUrls = planned ? shots.map((s) => s.image_url) : images;
+  const imageDurs = planned
+    ? shotFrames(shots, videoFrames, fpsv)
+    : images.length > 0
+      ? splitFrames(images.length, videoFrames)
+      : [];
 
   const lines = groupLines(spec.caption_track);
   const activeLine = !onMainSource
@@ -431,7 +494,13 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
     transform: stackAnchor.y > 0.5 ? "translate(-50%, -100%)" : "translate(-50%, 0)",
     width: "84%",
   };
-  const entrance = captionEntrance(preset.entrance, frame, revealFrame);
+  // 期 2 强调隔离: a line carrying an emphasized cue pops in regardless of
+  // the preset's entrance (the editor's caption_pop device).
+  const entrance = captionEntrance(
+    activeLine.some((c) => c.emphasis) ? "pop-in" : preset.entrance,
+    frame,
+    revealFrame,
+  );
 
   // stack + title: the title is a ~3s intro card (it fades out below); the
   // caption wall waits for it, so the two never share the top area. Lines
@@ -478,9 +547,14 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
           {images.length > 0 ? (
             <AbsoluteFill>
               <Series>
-                {images.map((src, i) => (
+                {shotUrls.map((src, i) => (
                   <Series.Sequence key={i} durationInFrames={imageDurs[i]}>
-                    <Img src={src} style={{ width: "100%", height: "100%", objectFit }} />
+                    <StillShot
+                      src={src}
+                      shot={planned ? shots[i] : undefined}
+                      durFrames={imageDurs[i]}
+                      objectFit={objectFit}
+                    />
                   </Series.Sequence>
                 ))}
               </Series>
@@ -675,7 +749,7 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
         >
           {visibleStack.map((line, i) => {
             const lineEntrance = captionEntrance(
-              preset.entrance,
+              line.some((c) => c.emphasis) ? "pop-in" : preset.entrance,
               frame,
               lineRevealFrame(line),
             );

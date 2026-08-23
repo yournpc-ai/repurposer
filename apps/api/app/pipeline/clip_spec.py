@@ -22,6 +22,7 @@ from app.models.schemas import (
     ClipSource,
     ClipSpec,
     ClipTitle,
+    ImageShot,
     Segment,
 )
 from app.models.tables import Asset
@@ -69,12 +70,28 @@ def _locate(haystack: list[str], needle: list[str], *, want: str) -> int | None:
     return None
 
 
-def locate_span(words: list[dict[str, Any]], segment: Segment) -> tuple[float, float]:
+def locate_span(
+    words: list[dict[str, Any]],
+    segment: Segment,
+    *,
+    pre_pad_s: float = 0.0,
+    post_pad_s: float = 0.0,
+    source_end_s: float | None = None,
+) -> tuple[float, float]:
     """Locate a segment's [start, end] seconds within ASR word timestamps.
 
     Prefer exact ``start_seconds`` / ``end_seconds`` when the agent provided them.
     Otherwise fall back to text matching via start/end markers -> source_text
     ends -> the whole transcript. Never raises; returns a best-effort span.
+
+    Pads (产物质量线期 2 talking-head 快赢, anatomy §4 零气垫/零尾停): after
+    snapping to word boundaries, expand INTO THE ADJACENT SILENCE ONLY —
+    ``pre_pad_s`` backwards past the start word (never past the previous
+    word's end), ``post_pad_s`` forwards past the end word (never past the
+    next word's start, and never past ``source_end_s`` when the source's
+    real duration is known). The padded zones contain no words by
+    construction, so captions are untouched; a 1.8s post budget is the 尾停
+    craft target (the tail settles into whatever silence the source has).
     """
     if not words:
         return (0.0, float(segment.duration_seconds))
@@ -98,7 +115,7 @@ def locate_span(words: list[dict[str, Any]], segment: Segment) -> tuple[float, f
         )
         if end_idx < start_idx:
             end_idx = len(words) - 1
-        return (float(words[start_idx]["start"]), float(words[end_idx]["end"]))
+        return _pad_span(words, start_idx, end_idx, pre_pad_s, post_pad_s, source_end_s)
 
     flat = [(_norm(w.get("word", "")) or [""])[0] for w in words]
 
@@ -113,7 +130,64 @@ def locate_span(words: list[dict[str, Any]], segment: Segment) -> tuple[float, f
     if end_idx < start_idx:
         end_idx = len(words) - 1
 
-    return (float(words[start_idx]["start"]), float(words[end_idx]["end"]))
+    return _pad_span(words, start_idx, end_idx, pre_pad_s, post_pad_s, source_end_s)
+
+
+def _pad_span(
+    words: list[dict[str, Any]],
+    start_idx: int,
+    end_idx: int,
+    pre_pad_s: float,
+    post_pad_s: float,
+    source_end_s: float | None,
+) -> tuple[float, float]:
+    """The pad application (locate_span's single exit funnel): word-boundary
+    snap first, then expand into adjacent silence, never into a word and
+    never past the source's real end."""
+    start = float(words[start_idx]["start"])
+    end = float(words[end_idx]["end"])
+    if pre_pad_s > 0:
+        floor = float(words[start_idx - 1]["end"]) if start_idx > 0 else 0.0
+        start = max(floor, start - pre_pad_s)
+    if post_pad_s > 0:
+        candidates = [end + post_pad_s]
+        if end_idx + 1 < len(words):
+            candidates.append(float(words[end_idx + 1]["start"]))
+        if source_end_s is not None:
+            candidates.append(float(source_end_s))
+        end = min(candidates)
+    return (start, end)
+
+
+def _compile_image_shots(beat_plan: Any) -> list[ImageShot]:
+    """Beat plan → clip-spec shots (stills). Dwell = the beat's resolved
+    word-span duration; punch_in lowers to a zoom_in in the craft band
+    (≥1.15); motion rates clamp into the Ken Burns band (1.0–1.20)."""
+    if beat_plan is None:
+        return []
+    shots: list[ImageShot] = []
+    for b in beat_plan.beats:
+        if b.start is None or b.end is None or not b.image_url:
+            continue
+        dwell = float(b.end) - float(b.start)
+        if dwell <= 0:
+            continue
+        motion = b.motion
+        rate = min(1.20, max(1.0, float(b.motion_rate or 1.0)))
+        if b.emphasis == "punch_in":
+            motion = "zoom_in"
+            rate = max(rate, 1.15)
+        if motion == "none":
+            rate = 1.0
+        shots.append(
+            ImageShot(
+                image_url=b.image_url,
+                dwell_s=round(dwell, 3),
+                motion=motion,
+                motion_rate=rate,
+            )
+        )
+    return shots
 
 
 def build_clip_spec(
@@ -130,6 +204,7 @@ def build_clip_spec(
     title_position: Any = None,
     title_enabled: bool = True,
     image_urls: list[str] | None = None,
+    beat_plan: Any = None,
     brand: ClipBrand | None = None,
     music: ClipMusic | None = None,
     brand_ref: Any = None,
@@ -141,6 +216,11 @@ def build_clip_spec(
     ``source`` is either a speech AUDIO asset (ASR words -> captions + audio
     track) or, when there's no recording, the primary IMAGE asset (no audio, a
     fixed-length slideshow sized by the image count).
+
+    ``beat_plan`` (期 2 剪辑师, stills only): the resolved BeatPlan — its
+    beats compile to ``source.image_shots`` (planned dwells/motion replacing
+    the even split) and ``caption_pop`` beats mark their caption cues'
+    ``emphasis``. None = the legacy even-split slideshow.
 
     ``caption_position`` / ``title_position`` are normalized ``{x, y}`` points
     (or None for the renderer default); pydantic coerces the dicts into ``Point``.
@@ -177,6 +257,19 @@ def build_clip_spec(
                         end=float(w["end"]),
                         text=str(w["word"]).strip(),
                         lang=target_language,
+                        # 期 2 强调隔离: cues overlapping a caption_pop beat's
+                        # span take the pop-in entrance (renderer-side).
+                        emphasis=bool(
+                            beat_plan
+                            and any(
+                                b.emphasis == "caption_pop"
+                                and b.start is not None
+                                and b.end is not None
+                                and float(w["start"]) < b.end
+                                and float(w["end"]) > b.start
+                                for b in beat_plan.beats
+                            )
+                        ),
                     )
                     for w in words
                     if start <= float(w["start"]) and float(w["end"]) <= end + 0.05
@@ -187,10 +280,15 @@ def build_clip_spec(
             url, duration = audio_url or "", (
                 float(source.duration_seconds) if source.duration_seconds else None
             )
+            # 期 2: the editor's beats compile to planned shots (dwell = the
+            # beat's word-span duration — captions, cuts, and dwells share the
+            # one word clock). punch_in lowers to a zoom_in in the craft band.
+            image_shots = _compile_image_shots(beat_plan)
         else:
             # No recording: a fixed-length slideshow (no per-word captions).
             start, end = 0.0, float(max(1, len(images)) * SECS_PER_IMAGE)
             caption_track = []
+            image_shots = []
             url, duration = "", end
         return ClipSpec(
             source=ClipSource(
@@ -198,6 +296,7 @@ def build_clip_spec(
                 kind="stills",
                 url=url,
                 image_urls=images,
+                image_shots=image_shots,
                 duration=duration,
             ),
             aspect=aspect,
@@ -218,7 +317,13 @@ def build_clip_spec(
         return None
 
     words = cast("dict[str, Any]", source.meta or {}).get("words", [])
-    start, end = locate_span(words, segment)
+    # 期 2 talking-head 快赢 (anatomy §4): 前垫 120ms / 尾停预算 1.8s, both
+    # expanding into adjacent silence only — never into a word, never past
+    # the source's real duration.
+    start, end = locate_span(
+        words, segment, pre_pad_s=0.12, post_pad_s=1.8,
+        source_end_s=float(source.duration_seconds) if source.duration_seconds else None,
+    )
 
     caption_track = (
         [

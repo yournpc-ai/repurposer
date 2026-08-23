@@ -49,7 +49,12 @@ preview == 成片 是结构性的，不是测试出来的。
 {
   // kind="video": 真人实拍，url 为视频；kind="stills": 图片音频幻灯，
   // url 为可选语音轨（无录音为空串），image_urls 为背景图（0→纯色 / 1→满屏 / N→均分硬切）
-  "source": { "asset_id": "uuid", "kind": "video", "url": "/api/v1/files/...mp4", "image_urls": [], "fps": 30, "duration": 120.5 },
+  "source": { "asset_id": "uuid", "kind": "video", "url": "/api/v1/files/...mp4", "image_urls": [], "fps": 30, "duration": 120.5,
+    "image_shots": [                          // 期 2 节拍方案（stills 可选）：剪辑师规划的分镜，非空时代替 image_urls 均分
+      { "image_url": "/api/v1/files/...jpg", "dwell_s": 3.2, "motion": "zoom_in", "motion_rate": 1.1 }
+      // dwell_s = 该拍词轴跨度（拍平铺首尾相接，Σdwell = 视频体）；motion: none|zoom_in|zoom_out|pan_left|pan_right，rate ∈ [1.0,1.2]
+    ]
+  },
   "aspect": "9:16",                         // 9:16 | 1:1 | 16:9 | original（整条材料化跟源画幅）
   "segments": [                              // 主轨。删句 = 标 hidden（非破坏）；输出 = 保留段数组序连接
     {
@@ -81,7 +86,8 @@ preview == 成片 是结构性的，不是测试出来的。
     }
   ],
   "caption_track": [                         // ASR 词级时间戳；用户可改字
-    { "start": 12.4, "end": 12.9, "text": "So", "lang": "en" }
+    { "start": 12.4, "end": 12.9, "text": "So", "lang": "en", "emphasis": false }
+    // emphasis（期 2，缺省 false）：该行覆盖到 caption_pop 拍 → 字幕以 pop-in 进场（覆盖预设 entrance）
   ],
   "translation_track": [                     // 双语对照轨：单元级译文 cue（无逐字 karaoke 时轴），与 caption_track 原文行按时间重叠配对；空 = 单语。渲染 = 译文主行 + 原文小行在下（stack 布局只画原文轨）
     { "start": 12.4, "end": 16.8, "text": "Donc une entreprise d'Oxford…", "lang": "fr" }
@@ -114,7 +120,8 @@ preview == 成片 是结构性的，不是测试出来的。
 - **Brand 入渲染**：`brand` 块由 API 在**生成时**从 `persona.brand` 合并系统默认皮肤烘焙（ADR-038）；渲染服务/预览只读 spec 不读库。
 - **音乐入渲染**：`music.url` 为曲目的公开对象 URL（生成时自 `Music.file_path` 烘焙，ADR-023）；`<Audio>` 循环混音，`gain_db` 控增益。
 - **头尾卡**：`brand.intro/outro` 存在时，主视频时间轴前后各插一张卡（`duration_seconds`，null → 2s 默认）；卡 = `{kind: text|image|video, ...}`——text 渲染标题卡样式，image/video 满帧填充、超长截断；视频体 `<Sequence>` 后移，字幕 remap 自动对齐。
-- **双源形态**（ADR-020）：`kind="video"` 走 `<OffthreadVideo>`；`kind="stills"` 图片音频幻灯——`image_urls` 为背景视觉（1 满屏 / N 均分硬切 / 0 纯色兜底），`url` 为可选语音轨；有语音复用 ASR 词级 `caption_track`，无语音为定长幻灯（每图 `SECS_PER_IMAGE` 秒，后端写合成段）。背景视觉优先级：**slides PDF 页图（`Asset.slide_pages`）优先**，上传照片其次；源选择优先级 VIDEO→AUDIO→SLIDES/IMAGE。**刻意不做**：Ken-Burns / 多句动效文字轨 / 转场画廊（L2 停线，ADR-020；B-roll 已由层轨承接为契约能力，写者技能随能力批）；PROGRESS 需求池的 motion 枚举（P2）若做，限于 **video 源** crop 动态预设，落地需新 ADR 明确与 Ken-Burns 拒绝的边界（ADR-028 关联）。
+- **双源形态**（ADR-020）：`kind="video"` 走 `<OffthreadVideo>`；`kind="stills"` 图片音频幻灯——`image_urls` 为背景视觉（1 满屏 / N 均分硬切 / 0 纯色兜底），`url` 为可选语音轨；有语音复用 ASR 词级 `caption_track`，无语音为定长幻灯（每图 `SECS_PER_IMAGE` 秒，后端写合成段）。背景视觉优先级：**slides PDF 页图（`Asset.slide_pages`）优先**，上传照片其次；源选择优先级 VIDEO→AUDIO→SLIDES/IMAGE。**期 2 节拍方案**（产物质量线）：stills 携带非空 `image_shots` 时以剪辑师规划的分镜代替均分——拍在词轴上平铺（dwell = 词跨），`motion`/`motion_rate` 为 Ken Burns 枚举（编译夹带 1.0–1.20，punch_in 强调降格为 zoom_in ≥1.15）；规划失败/为空回退均分，契约向后兼容。**刻意不做**的其余项不变：多句动效文字轨 / 转场画廊（L2 停线，ADR-020；B-roll 已由层轨承接为契约能力，写者技能随能力批）；PROGRESS 需求池的 motion 枚举（P2）若做，限于 **video 源** crop 动态预设，落地需新 ADR 明确与 stills Ken Burns 的边界（ADR-028 关联）。
+- **前垫/尾停**（期 2 talking-head 快赢）：video 源的 `locate_span` 在词界吸附后向**相邻静音**扩张——前垫 0.12s（不过上一词尾）、尾停预算 1.8s（不过下一词头、不过素材真实时长）；垫区无词，字幕轨不受影响。无新契约字段，渲染零改动。
 - **文本拖拽定位**：`caption_position` / `title.position` 为归一化中心点（= libass `\pos`，可移植），null → 渲染默认；`title.size` / `caption_size` 是 **1080×1920 竖屏参考系上的参考值**——渲染端按帧高等比缩放（9:16 不变，1:1/16:9 ≈ ×0.56；双语对照译文主行再 ×0.82、原文小行 ×0.55；字幕块宽 84% = 两侧 8% 边距随帧宽自适应）。人设页皮肤分区的预览叠透明层支持拖拽 marker 改位置/字号（无独立盒宽高、无关键帧动画）。
 - **声纹克隆配音（dub）**：`POST /outputs/{id}/dub` 用人设声纹经 voice_clone + T2A 把（翻译后的）字幕合成目标语言语音，烘入 `dub` 轨；渲染时 `dub.enabled` ⇒ **原声静音**、播放 dub（无唇形同步，ADR-037）。dub 在注册表声明 `depends: ["main"]`——时间轴 op 落地后 ops 响应带 `stale_tracks`（重配一句话的素材；不产生"合法的谎"）。
 
@@ -147,7 +154,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
   - `setTrim(spec, start, end)` — 移动首/末保留段边界（id/过渡随段走）。`trimBounds` / `sourceDuration` 为滑杆供数。
   - `ASPECT_DIMENSIONS`（9:16/1:1/16:9；original 由渲染端 calculateMetadata 解析源尺寸）/ `COMPOSITION_FPS=30`（合成 fps，与源 fps 无关）。
 - `tracks.ts` — **轨道分区（TS 端）**：`TRACK_FIELDS` = 9 轨 × spec 顶层字段 + `TrackId` + 类型级分区断言（ClipSpec 键必须全登记，tsc 强制）。本端只声明分区——可执行目录在 Python（运行时唯一消费端）。
-- `Clip.tsx` — 唯一渲染组件。泳道投影消费 `types.ts` 单一家；`LayerView`（层渲染件，按 `media.kind` 单分支）；`TransitionVeil`（入边过渡单侧面纱：fade 12f 黑场 / dip 8f 白闪，媒体之上、层与文字之下）；`groupLines`（7 词一行）；`lineRevealFrame`（行级入场帧 = `outputTimeAtSourceTime`）；`captionEntrance`（entrance 原语 → opacity/transform，每值过 libass 映射闸）；stack 布局（锚点上下半场决定容器生长方向，滑窗 `maxLines`）；双语对照配对（闸在主源段——异源段不匹配主源字幕）；`pointStyle`（归一化中心点 → CSS translate，= libass `\pos`）；尺寸按画面推导（`size × height/1920` 参考系）。
+- `Clip.tsx` — 唯一渲染组件。泳道投影消费 `types.ts` 单一家；`LayerView`（层渲染件，按 `media.kind` 单分支）；`TransitionVeil`（入边过渡单侧面纱：fade 12f 黑场 / dip 8f 白闪，媒体之上、层与文字之下）；`groupLines`（7 词一行）；`lineRevealFrame`（行级入场帧 = `outputTimeAtSourceTime`）；`captionEntrance`（entrance 原语 → opacity/transform，每值过 libass 映射闸；**期 2**：行内任一 cue `emphasis` 则以 pop-in 覆盖预设 entrance，single/stack 两调用点同规则）；stack 布局（锚点上下半场决定容器生长方向，滑窗 `maxLines`）；双语对照配对（闸在主源段——异源段不匹配主源字幕）；`pointStyle`（归一化中心点 → CSS translate，= libass `\pos`）；尺寸按画面推导（`size × height/1920` 参考系）。**期 2 分镜**：`shotFrames`（dwell → 帧数，末拍吸收余数——splitFrames 同款纪律）、`StillShot`（Ken Burns 原语：zoom 1↔rate out-cubic；pan 带底缩放、行程按 `(rate−1)/rate·48%` 安全界——translate 先于 scale 生效，超界露边）；`image_shots` 非空时代替均分（空 = legacy 路径，向后兼容）。
 - `captions.ts` — `CAPTION_PRESETS` **字幕样式目录**（注册表先例）：样式 = 三原语（`layout` × `entrance` × `wordHighlight`）组合；**加样式 = 一行登记**（TS 类型由此推导，Python 只校验成员）；**加原语 = 过 libass 映射闸 + Clip.tsx 一分支**（CSS ∩ libass 子集纪律）。
 - `fonts.ts` — `fontFamilyFor`（品牌字体枚举 → 字体族）。
 - `Root.tsx` — `calculateMetadata`：aspect → 画幅尺寸（original 探源）、`totalDurationSeconds` → 合成时长；`DEFAULT_SPEC` 兜底。
@@ -165,14 +172,14 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 - `tracks.py` — **TRACK_REGISTRY 可执行目录（唯一运行时端）** + fold 助手：`resolve_spec_urls`（烘焙缝，walker 支持路径中段 `[*]`）/ `spec_provenance`（轨级 + 段/层项级 generated 扫描）/ `track_of_field` / `skill_written_tracks` / `stale_tracks`（派生轨失效声明）/ `assert_single_writer_per_track`（一轨一写者，create_run 编译期 422）+ 两条启动自检（分区对账 + phantom track fixture，挂 `orchestrator.assert_runners_registered`）。
 - `clip_spec.py`
-  - `build_clip_spec(source, segment, …)` — spec 唯一构建处（段 id 出生即铸）。video / stills 两分支（stills：有声 → 词级字幕 + 语音轨；无声 → `SECS_PER_IMAGE` 定长幻灯 + 合成段）。
-  - `locate_span(words, segment)` — 选段定位：agent 数值时间戳优先（**向最近词边界吸附**），否则 start/end marker 文本匹配（渐短探针容忍 LLM 改写），**永不 raise**，兜底全段。
+  - `build_clip_spec(source, segment, …)` — spec 唯一构建处（段 id 出生即铸）。video / stills 两分支（stills：有声 → 词级字幕 + 语音轨；无声 → `SECS_PER_IMAGE` 定长幻灯 + 合成段）。`beat_plan=`（期 2，stills only）：`_compile_image_shots` 把解析后的拍编译为 `source.image_shots`（dwell = 词跨，rate 夹 1.0–1.20，punch_in→zoom_in ≥1.15），`caption_pop` 拍覆盖到的字幕 cue 标 `emphasis`。
+  - `locate_span(words, segment, *, pre_pad_s, post_pad_s, source_end_s)` — 选段定位：agent 数值时间戳优先（**向最近词边界吸附**），否则 start/end marker 文本匹配（渐短探针容忍 LLM 改写），**永不 raise**，兜底全段。垫（期 2）：词界吸附后只向相邻静音扩张——前垫不过上一词尾、尾停不过下一词头与 `source_end_s`（`_pad_span` 单一出口）。
   - `remove_range` / `set_trim` — TS 函数的 Python 镜像（同名同义；id 继承/过渡边规则双端一致）。
   - 泳道投影 Python 孪生（dict 版）：`intro_seconds` / `outro_seconds` / `video_duration_seconds` / `video_timeline` / `source_time_at_output_time` / `output_time_at_source_time` / `project_layer_windows`。
   - `total_output_seconds` — 计价时长 = kept video + 头尾卡秒（坐上面的共享算术）。**已知边界**：时长贡献不随注册表自动收养——未来带时长的轨在此扩展算术（与其渲染件同批）。
 - `rendering.py`
   - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：条件 UPDATE（`render_status == RENDERING`）——渲染中途 morph 重排（re-pend）时本次产物为陈品，删孤键、镜像 superseded，永不覆盖新 spec。
-  - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
+  - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / image_shots[*].image_url / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
   - `_mirror_render_node` — 渲染生命周期镜像到 run 的 render 步骤（可见性 + 成本的家；run-less 重渲染路径不受影响）。
 - `app/operations/registry.py`（与 pipeline 平级） — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的六 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer）= 操作集闭包登记——客户端可调、LLM 词汇随技能批开放；载荷 = 实体引用（段 id / 锚 / 枚举），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
 - 认领谓词：`outputs.render_status`（NULL = 未请求 / PENDING 可认领），worker `FOR UPDATE SKIP LOCKED`（ADR-017）。

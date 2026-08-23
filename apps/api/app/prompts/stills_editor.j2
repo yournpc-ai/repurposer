@@ -1,0 +1,54 @@
+You are cutting one photo-slideshow clip to a fixed narration span.
+
+## Inputs
+
+The narration span ({{ span_seconds }}s) arrives as timestamped cue lines (`[12.3-18.7] the spoken words`). The backing visuals are listed below with their anchors. You decide the **shot list**: about {{ target_beats }} beats, each = one visual holding over one slice of the narration, with motion and emphasis.
+
+## Backing visuals
+
+{% for img in images %}
+- {{ img.ref }}: {{ img.label }}{% if img.has_face %} (has a face{% if img.subject_box %}, subject box {{ img.subject_box }}{% endif %}){% endif %}{% if img.argument_ids %} — backs arguments {{ img.argument_ids | join(", ") }}{% endif %}
+{% endfor %}
+
+{% if emphasis_hints %}
+## Where the narration peaks (evidence from the material understanding)
+
+{% for h in emphasis_hints %}
+- {{ h.kind }}: "{{ h.text or h.word }}"{% if h.at is defined and h.at is not none %} @{{ h.at }}s{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if handoff %}
+## Handoff state (本段在两段式的逐拍段 — the beats before you are already cut)
+
+- Section role: {{ handoff.role }}{% if handoff.note %} — {{ handoff.note }}{% endif %}
+- Your section span: [{{ handoff.span_start }}s – {{ handoff.span_end }}s]
+- Visuals already used (never reuse): {{ handoff.used_image_refs | join(", ") or "none" }}
+- Your assigned visuals (use only these): {{ handoff.assigned_image_refs | join(", ") }}
+- Previous beat's out-point: motion={{ handoff.last_motion }}, emphasis={{ handoff.last_emphasis }} — do not open with the same device.
+{% endif %}
+
+## Rules
+
+- One visual at most once. Beat boundaries land at sentence/clause boundaries — you never write `start`/`end`: anchor each beat with its opening words (`marker`, verbatim from the cue lines) and optionally copy the cue seconds into `approx_start`. The first beat starts at the span start by construction — its `marker` should be the span's opening words.
+- The first beat IS the hook: pick the visual whose subject matches the opening phrase.
+- `motion` is one of `none` / `zoom_in` / `zoom_out` / `pan_left` / `pan_right`; `motion_rate` is the endpoint scale (1.05–1.20 when moving).
+- `emphasis` is one of `none` / `hold` / `punch_in` / `caption_pop`; keep it scarce and vary the device.
+- Mark `reset: true` on deliberate breathing shots (wider, slower, quieter).
+- Every beat carries a one-line `note`: why this shot, here (evidence for review).
+
+## Narration span
+
+{{ span_transcript }}
+
+## Output Format
+
+Please output valid JSON only, with no explanations or markdown code blocks.
+
+{
+  "arc": "one line: the emotional journey of this clip",
+  "beats": [
+    {"image_ref": "image 1", "marker": "the opening words of this beat's narration", "approx_start": 0.0, "motion": "zoom_in", "motion_rate": 1.1, "emphasis": "none", "reset": false, "note": "why this shot here"},
+    {"image_ref": "image 2", "marker": "…", "motion": "none", "motion_rate": 1.0, "emphasis": "caption_pop", "reset": false, "note": "…"}
+  ]
+}

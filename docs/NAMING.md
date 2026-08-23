@@ -26,6 +26,8 @@
 | 对话 | `Conversation` | chat 的会话容器 | 不是 thread、不是 session（撞 auth session） |
 | 素材理解 | `MaterialUnderstanding` / type `material_understanding` | 导演第一步产出：素材级理解（论点带位置/金句/主题/受众 + 节拍地图），内容寻址复用（`content_sha256`，同用户跨项目） | 不含任务信息 |
 | 节拍地图 | beat map（`MaterialUnderstanding` 期 1 字段集） | 素材级语义节拍：`topic_boundaries` / `climax_spans` / `emphasis_words` / `quotable_lines` / `narrative_role_hints` / `visual_anchors`——LLM 只出文本锚（+ 可选秒数提示），`start`/`end`/`asset_id` 恒由代码吸附 ASR 词轴（locate_span 同纪律，词级时间戳零覆写） | 不是节拍方案（beat plan = 期 2 剪辑师产出）；声学半不住这里（`asset.meta["prosody"]`） |
+| 节拍方案 | `BeatPlan` / `StillBeat` | 期 2 剪辑师产出：一条 stills 切片的拍级时间线（图序/运动/强调/复位 + 文本锚）；代码吸附词轴后**平铺**（拍尾 = 下一拍头，dwell = 词跨——字幕/切点/停顿时长共享一只词钟），编译为 `source.image_shots` + 字幕 cue `emphasis`；跨拍连贯性检查（`coherence_violations`）独立存在，违规骑 `repair_feedback` 一轮有界重掷 | 不是节拍地图（素材级语义标注）；不落库——编译产物住 render_spec |
+| 剪辑师 | stills editor（`stills_editor` / `stills_editor_outline`） | stills 工具包的私有 agent 双件：单发可靠域（≤15 拍/≤45s）一发成案；超限两段式——大纲段（arc + 资源分配）→ 逐段拍（handoff 显式交接：已用图/末拍运动/强调史/段锚），拼后全局重平铺；工艺惯例骑 `stills-editing-craft` 指令包（装配期注入，N-42 ⑦） | 不是导演（派工层）；LLM 永不写时间戳（锚 + 吸附，同理解层铁律） |
 | 韵律 | `prosody`（asset.meta 键） | 确定性声学特征工序（PROCESSORS 链，ASR/speaker_map 同族）：逐词 F0/能量 z 分、强调峰（f0/energy 声道分标不合流）、filler/死寂区 | 不是语义强调（`emphasis_words` 是语义半——两字段永不合并，预合并 = 自信地错且不可溯源） |
 | 内容寻址 | `content_sha256`（asset.meta 键） | 素材字节哈希（处理链首工序/粘贴文本创建时盖章）：理解层复用的寻址键，同素材二次上传零 LLM | 不是 asset id / file_url（那是上传身份，仅作无哈希行的回退） |
 | 分镜表 | `Storyboard` / type `storyboard` | 导演第二步产出：请求级派工（槽位+覆盖报告），每 run 重排 | 不是 task board（撞任务书词族）；不读原稿 |

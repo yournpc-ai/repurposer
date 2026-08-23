@@ -44,6 +44,11 @@ export interface ClipSource {
    * for the whole clip; N -> even hard-cut slideshow across the duration.
    */
   image_urls?: string[];
+  /**
+   * stills only, 期 2 剪辑师: the editor's planned shots. Non-empty replaces
+   * the even-split fallback; absent/empty renders exactly like a pre-期 2 spec.
+   */
+  image_shots?: ImageShot[];
   fps: number;
   /** Source length in seconds (trim slider upper bound); optional for old specs. */
   duration?: number | null;
@@ -195,11 +200,25 @@ export const sampleCrop = (spec: ClipSpec, sourceTime: number): ClipCrop => {
   };
 };
 
+/** One planned shot of a stills clip (期 2 剪辑师契约段, ADR-016 兼容扩展) —
+ * renderer-agnostic WHAT: which image holds, for how long, with what motion. */
+export interface ImageShot {
+  /** storage-seam URL (same seam as image_urls). */
+  image_url: string;
+  dwell_s: number;
+  motion?: "none" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right";
+  /** Ken Burns endpoint scale (craft band 1.05–1.20; pan reuses it as travel). */
+  motion_rate?: number;
+}
+
 export interface CaptionCue {
   start: number;
   end: number;
   text: string;
   lang: string;
+  /** 期 2 强调隔离: the editor marked this word emphasized — its line takes
+   * the pop-in entrance regardless of the preset's default entrance. */
+  emphasis?: boolean;
 }
 
 export interface ClipTitle {

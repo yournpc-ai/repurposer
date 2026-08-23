@@ -1191,6 +1191,25 @@ class RenderStatus(StrEnum):
 # ---------------------------------------------------------------------------
 
 
+class ImageShot(BaseModel):
+    """One planned shot of a stills clip (期 2 剪辑师契约段, ADR-016 兼容扩展).
+
+    Renderer-agnostic WHAT: which image holds, for how long, with what
+    motion. When ``ClipSource.image_shots`` is non-empty it replaces the
+    renderer's even-split fallback — an absent/empty list renders exactly
+    like a pre-期 2 spec (backward compatible).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_url: str  # storage-seam URL (same seam as image_urls)
+    dwell_s: float = Field(gt=0)
+    motion: Literal["none", "zoom_in", "zoom_out", "pan_left", "pan_right"] = "none"
+    # Ken Burns endpoint scale (craft band 1.05–1.20; pan reuses it as the
+    # travel magnitude). 1.0 with a motion kind is meaningless but legal.
+    motion_rate: float = Field(default=1.0, ge=1.0, le=1.5)
+
+
 class ClipSource(BaseModel):
     """Source backing a clip: an on-camera video, or a "stills" audiogram."""
 
@@ -1204,6 +1223,10 @@ class ClipSource(BaseModel):
     # stills only: ordered backing images (0 -> solid bg, 1 -> full-frame,
     # N -> even hard-cut slideshow across the duration).
     image_urls: list[str] = Field(default_factory=list)
+    # stills only, 期 2: the editor's planned shots. Empty = the legacy even
+    # split over ``image_urls`` (both stay in the spec — shots reference the
+    # same URLs; the empty-fallback keeps old specs rendering identically).
+    image_shots: list[ImageShot] = Field(default_factory=list)
     fps: int = 30
     duration: float | None = None  # source length (seconds) — trim slider bound
 
@@ -1350,6 +1373,9 @@ class CaptionCue(BaseModel):
     end: float = Field(ge=0)
     text: str
     lang: str = "en"
+    # 期 2 强调隔离: the editor marked this word as emphasized — its line
+    # takes the pop-in entrance regardless of the preset's default entrance.
+    emphasis: bool = False
 
 
 class Point(BaseModel):
@@ -1563,6 +1589,81 @@ class MaterialUnderstanding(BaseModel):
     emphasis_words: list[EmphasisWord] = Field(default_factory=list)
     narrative_role_hints: list[NarrativeRoleHint] = Field(default_factory=list)
     visual_anchors: list[VisualAnchor] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Beat plan (产物质量线期 2, docs/tasks/output-quality-line.md §2.3): the
+# stills editor's per-shot timeline decisions — the timeline-creation layer
+# between storyboard (WHAT) and clip-spec (怎么渲). Same 铁律 as the beat
+# map: the LLM writes verbatim markers (+ optional coarse seconds); code
+# snaps them onto the word axis and chains the ends (zero-gap sequence,
+# cuts always on word boundaries — dwell IS the word-span duration, so
+# captions, cuts, and dwells can never drift apart).
+# ---------------------------------------------------------------------------
+
+
+class StillBeat(BaseModel):
+    """One shot decision of a stills beat plan (节拍方案的一拍)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # The backing visual, exactly as listed in the prompt ("image 2" → the
+    # second backing visual); code resolves it to asset_id + image_url.
+    image_ref: str
+    asset_id: str = ""  # "" for slide pages (no asset) or unresolved
+    image_url: str = ""
+    # The beat's narration anchor: the verbatim opening words of its span.
+    # Ends are code-chained by TILING (each beat ends exactly at the next
+    # beat's first word — shots play back-to-back on the render timeline, so
+    # dwells, cuts, and captions share the one word clock); the last beat
+    # ends at the clip span's end.
+    marker: str = ""
+    approx_start: float | None = None
+    start: float | None = None
+    end: float | None = None
+    motion: Literal["none", "zoom_in", "zoom_out", "pan_left", "pan_right"] = "none"
+    # Ken Burns endpoint scale within the craft band (1.05–1.20); the
+    # compiler clamps into the band.
+    motion_rate: float = 1.0
+    # 强调隔离: hold (the dwell itself lengthens — no extra mechanics),
+    # punch_in (compiles to zoom_in ≥1.15), caption_pop (the span's caption
+    # cues get emphasis=true → pop-in entrance).
+    emphasis: Literal["none", "hold", "punch_in", "caption_pop"] = "none"
+    # 结构呼吸: a deliberate reset shot (wider/slower/quieter).
+    reset: bool = False
+    note: str = ""  # one-line why (judge-facing evidence)
+
+
+class BeatPlan(BaseModel):
+    """节拍方案: the stills editor's output — one clip's shot timeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    arc: str = ""  # the one-line global arc (two-stage: from the outline pass)
+    beats: list[StillBeat] = Field(default_factory=list)
+
+
+class BeatSection(BaseModel):
+    """大纲段的一节 (>15 拍两段式): role + assigned visuals + span anchor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["hook", "build", "reset", "payoff"]
+    image_refs: list[str] = Field(default_factory=list)
+    marker: str = ""  # verbatim opening words of the section
+    approx_start: float | None = None
+    note: str = ""
+    start: float | None = None  # code-resolved / chained
+    end: float | None = None
+
+
+class BeatOutline(BaseModel):
+    """大纲段产出: global arc + resource assignment before per-beat work."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    arc: str = ""
+    sections: list[BeatSection] = Field(default_factory=list)
 
 
 class StoryboardSlot(BaseModel):

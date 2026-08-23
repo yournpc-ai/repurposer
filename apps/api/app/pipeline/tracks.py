@@ -45,7 +45,13 @@ TRACKS: dict[str, TrackDef] = {
         owner=("select_clips", "materialize_source", "remove_filler"),
         pairs=(), provenance="real",
         # segments[*].url: hetero splice donor URLs (切 op) ride the same seam
-        url_fields=("source.url", "source.image_urls[*]", "segments[*].url"),
+        # source.image_shots[*].image_url: the 期 2 节拍方案's planned stills
+        url_fields=(
+            "source.url",
+            "source.image_urls[*]",
+            "source.image_shots[*].image_url",
+            "segments[*].url",
+        ),
         fields=("source", "segments", "aspect", "target_language"),
     ),
     "caption": TrackDef(

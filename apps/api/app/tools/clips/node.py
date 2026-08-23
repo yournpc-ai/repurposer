@@ -49,6 +49,8 @@ from app.pipeline.step_display import (
 from app.platform.project_context import collect_asset_texts, resolve_run_persona
 from app.tools.clips.agents import clip_writer
 from app.tools.clips.transcript import build_anchored_transcript
+from app.tools.stills.agents import stills_editor, stills_editor_outline
+from app.tools.stills.beats import plan_still_beats
 from app.providers.storage import stream_url
 
 logger = structlog.get_logger()
@@ -129,7 +131,7 @@ class SelectClips(NodeBase):
     produces_outputs = True
     count_default = 3
     count_limits = (1, 10)
-    agents = (clip_writer,)
+    agents = (clip_writer, stills_editor, stills_editor_outline)
 
     # No canvas_group (2026-08-19 名词节点收窄): the canvas renders nouns
     # only (素材 / 文本 / 产物) — the selection is a process VERB. Its two old
@@ -140,15 +142,23 @@ class SelectClips(NodeBase):
     # (2026-08-15).
     def estimate(self, ctx: dict) -> dict | None:
         """One clip_writer call (multimodal): anchored transcript + asset
-        texts + media snippets, completion scaling with the clip count. The
-        per-clip render fan-out is born mid-run — unquoted (P4 NULL)."""
+        texts + media snippets, completion scaling with the clip count;
+        stills chains (align_stills upstream) add one text-only editor call
+        per clip (期 2 剪辑师 — two-stage overage is the ledger's calibration
+        domain). The per-clip render fan-out is born mid-run — unquoted (P4 NULL)."""
         chars = min(ctx["text_chars"], MAX_CHARS_PER_TEXT * ctx["text_count"])
         prompt = token_bounds(chars)
         prompt[0] += 800 * ctx["media_count"] + 500
         prompt[1] += 4000 * ctx["media_count"] + 2000
         slot = (ctx["spec"] or {}).get("slot") or {}
         count = slot.get("count") or self.count_default
-        return estimate_agent(prompt, [80 * count, 200 * count])
+        completion = [80 * count, 200 * count]
+        if "align_stills" in (ctx.get("input_kinds") or ()):
+            prompt[0] += 600 * count
+            prompt[1] += 1500 * count
+            completion[0] += 80 * count
+            completion[1] += 250 * count
+        return estimate_agent(prompt, completion)
 
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
@@ -275,6 +285,17 @@ class SelectClips(NodeBase):
         for plan in plans.clips[:clip_count]:
             segment = plan.to_segment()
             music = await music_from_plan(db, plan, brand_cfg)
+            # 期 2 剪辑师 (stills 首接): the beat plan subdivides the clip's
+            # narration span into planned shots. Editor failure degrades to
+            # the legacy even split — never fails the clip.
+            beat_plan = None
+            if render_kind == "stills" and render_source is not None and still_images:
+                try:
+                    beat_plan = await plan_still_beats(
+                        render_source, segment, understanding, assets
+                    )
+                except Exception as e:  # noqa: BLE001 — even-split fallback
+                    logger.warning("beat_plan_failed", error=str(e))
             # Clip agent decides whether burned-in captions make sense for this segment;
             # the skin block only supplies the default.
             caption_enabled = (
@@ -296,6 +317,7 @@ class SelectClips(NodeBase):
                     title_position=ttl_pos,
                     title_enabled=ttl_enabled,
                     image_urls=still_images if render_kind == "stills" else None,
+                    beat_plan=beat_plan,
                     brand=brand,
                     music=music,
                     brand_ref=brand_ref,

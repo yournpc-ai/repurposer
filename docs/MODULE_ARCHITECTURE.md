@@ -218,11 +218,16 @@ apps/api/
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：director/persona/
 │   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）
-│   ├── skills/          # 技能包（能力唯一家）：__init__.py（SKILL_REGISTRY 收编 + 注册门）+
-│   │                    #   clips / dub / captions / posts / quotes /
-│   │                    #   carousel / article / music / filler / stills…（节点类+params+私有工序+估价）
-│   ├── tools/           # 机械（确定性执行，禁 import agents/LLM client）：asr / voice /
-│   │                    #   dubbing / extraction / filler / music / storage / transcript
+│   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
+│   │                    #   dub / filler / music / posts / quotes / reframe / revise / stills
+│   │                    #   （节点类+params+私有工序+估价+私有 agent 声明）；
+│   │                    #   stills/beats.py = 节拍方案代码半（期 2）：backing 表装配 + 拍锚吸附平铺 +
+│   │                    #   coherence_violations 跨拍连贯性检查 + 两段式编排（大纲→逐拍，handoff 交接）；
+│   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）
+│   ├── skills/          # 指令包（SKILL.md 领域知识即数据，装配期注入，模型无感）：SKILL_REGISTRY 收编；
+│   │                    #   linkedin-longform / stills-editing-craft（期 2 剪辑工艺先验表）
+│   ├── providers/       # 外部服务包装（禁 import agents/LLM 决策层）：llm/（Model 缝 + PRICING）/
+│   │                    #   asr / voice / vision（YuNet 人脸 + vendored weights）/ storage
 │   ├── memory/          # Memory：personas 端点、人设皮肤块 → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
