@@ -164,16 +164,27 @@ async def render_hook_preview(
     output_id: UUID,
     render_spec: dict[str, Any],
     seconds: float = 5.0,
+    previous_key: str | None = None,
 ) -> str | None:
     """期 4 钩子预览闸: render just the clip's hook (first ``seconds``, half
     scale, cheap CRF, no SRT/loudnorm) via the render service's black-box
     ``preview`` parameter — the clip-spec contract is untouched (ADR-016).
+
+    ``previous_key`` (期 4 bug #3): the output's prior ``files.hook_preview``
+    when the gate re-renders (worker retry, etc.) — deleted before the new
+    render so storage doesn't accumulate orphans. Best-effort: a delete
+    failure is logged and ignored (the next render will overwrite the row).
 
     Returns the stored object key on success, ``None`` on any failure: the
     gate degrades honestly (a clip without a preview parks without one). No DB
     session inside — the caller owns persistence (``files.hook_preview``) and
     the commit; cleanup of a failed upload's orphan object is best-effort.
     """
+    if previous_key:
+        try:
+            await delete(previous_key)
+        except Exception as e:  # noqa: BLE001 — best-effort cleanup
+            logger.warning("hook_preview_prev_delete_failed", key=previous_key, error=str(e))
     video_key: str | None = None
     try:
         spec = _absolutize(copy.deepcopy(render_spec))
