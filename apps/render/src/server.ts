@@ -55,17 +55,13 @@ app.get("/health", (_req, res) => {
  * Black-box render endpoint: clip-spec in -> MP4 + SRT out.
  * Body: { spec, out_subdir?, basename?, outputs: { video: { key, put_url, content_type? }, srt: { key, put_url, content_type? } } }.
  *
- * `preview: { seconds }` (期 4 钩子预览闸): renders only the hook — first N
- * seconds, half scale, cheap CRF, no SRT/loudnorm (outputs.srt not required).
- *
  * The render service renders to a temp dir, PUTs the rendered files to the
  * supplied presigned URLs, and returns the object keys.
  */
 app.post("/render", async (req, res) => {
-  const { spec, basename, outputs, preview } = req.body as {
+  const { spec, basename, outputs } = req.body as {
     spec?: ClipSpec;
     basename?: string;
-    preview?: { seconds?: number };
     outputs?: {
       video?: { key: string; put_url: string; content_type?: string };
       srt?: { key: string; put_url: string; content_type?: string };
@@ -80,24 +76,15 @@ app.post("/render", async (req, res) => {
     return;
   }
 
-  const previewSeconds =
-    preview && typeof preview.seconds === "number" && preview.seconds > 0
-      ? Math.min(preview.seconds, 15)
-      : null;
-  if (!outputs?.video?.put_url || (previewSeconds === null && !outputs?.srt?.put_url)) {
-    res.status(400).json({ error: "outputs.video.put_url is required (outputs.srt.put_url for full renders)" });
+  if (!outputs?.video?.put_url || !outputs?.srt?.put_url) {
+    res.status(400).json({ error: "outputs.video.put_url and outputs.srt.put_url are required" });
     return;
   }
 
   try {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
     const name = basename ?? `clip-${Date.now()}`;
-    const { videoPath, srtPath } = await renderClip(
-      spec,
-      outDir,
-      name,
-      previewSeconds !== null ? { seconds: previewSeconds } : undefined,
-    );
+    const { videoPath, srtPath } = await renderClip(spec, outDir, name);
 
     await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
     if (srtPath && outputs.srt?.put_url) {

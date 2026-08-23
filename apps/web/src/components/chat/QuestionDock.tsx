@@ -20,7 +20,6 @@
  */
 
 import { Check, ChevronDown, Loader2 } from "lucide-react"
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -30,7 +29,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { apiFetch } from "@/lib/api"
 
 export type Autonomy = "auto" | "review"
 
@@ -44,20 +42,6 @@ const SHOW_AUTONOMY_PICKER = false
 export interface DockOption {
   id: string
   label: string
-}
-
-/** One clip's parked hook preview (期 4 钩子预览闸 — mirrors the API's
- * HookPreview): the ≤5s low-res render + the planned stills shots (the
- * 换图锚 control's addressing: index = shot_index) + the kept span (the
- * 调尾切点 seat) + the source's real duration (the trim stepper's upper
- * bound — replaces the legacy blind "+5s past initial trim"). */
-export interface HookPreviewItem {
-  output_id: string
-  url: string
-  hook?: string | null
-  shots?: string[]
-  trim?: { start: number; end: number } | null
-  source_duration?: number | null
 }
 
 interface TaskBookDockProps {
@@ -85,9 +69,6 @@ interface ChoiceDockProps {
   /** The question's human text (LLM-written user data, shown as-is). */
   question: string
   options: DockOption[]
-  /** 钩子预览闸 (期 4): one parked hook preview per clip — rendered between
-   * the question line and the options. */
-  previews?: HookPreviewItem[]
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
   estimate?: string | null
   onAnswer: (optionId: string) => void
@@ -198,201 +179,9 @@ function TaskBookForm({
   )
 }
 
-/** One clip's adjust op against the parked spec (期 4): the same
- * user-callable ops endpoint the clip editor saves through. The server
- * detail rides apiFetch's default error toast; the boolean gates the
- * optimistic local update. */
-async function applyHookOp(
-  outputId: string,
-  op: { op: string; params: Record<string, unknown> },
-): Promise<boolean> {
-  const res = await apiFetch(`/api/v1/outputs/${outputId}/operations`, {
-    method: "POST",
-    body: { ops: [op] },
-  })
-  return res.ok
-}
-
-/** One parked clip: the ≤5s low-res hook player (click-to-play — the hook
- * judgment needs the audio) + the hook line + the light adjust row
- * (换图锚 thumbnails for stills, 调尾切点 stepper for any clip). Adjustments
- * journal real ops against the parked spec; the preview honestly stays the
- * pre-adjustment cut (the strip's note says so once anything changes). */
-function HookPreviewTile({
-  preview,
-  disabled,
-  onAdjusted,
-}: {
-  preview: HookPreviewItem
-  /** An answer is in flight — the release may already own the render, so
-   * further adjustments could miss it. */
-  disabled?: boolean
-  onAdjusted: () => void
-}) {
-  const { t } = useTranslation()
-  const [shots, setShots] = useState(preview.shots ?? [])
-  const trimStart = preview.trim?.start ?? 0
-  const initialEnd = preview.trim?.end ?? 0
-  const [trimEnd, setTrimEnd] = useState(initialEnd)
-  const [busy, setBusy] = useState(false)
-  const locked = busy || disabled
-
-  const swap = async (index: number) => {
-    if (locked || index === 0) return
-    setBusy(true)
-    try {
-      const ok = await applyHookOp(preview.output_id, {
-        op: "swap_hook_shot",
-        params: { shot_index: index },
-      })
-      if (ok) {
-        setShots((prev) => [
-          prev[index],
-          ...prev.slice(0, index),
-          ...prev.slice(index + 1),
-        ])
-        onAdjusted()
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const trim = async (delta: number) => {
-    if (locked || !preview.trim) return
-    const next = trimEnd + delta
-    // Bounds: never under a 1s clip; the upper bound is the source's real
-    // duration when known (the server-side set_trim enforces it), or the
-    // legacy blind "+5s past initial trim" as a fallback (期 4 bug #2 — the
-    // server now rejects trim past duration; the dock reads source_duration
-    // so the +1s stepper stops at the real cap).
-    const upper = preview.source_duration ?? initialEnd + 5
-    if (next < trimStart + 1 || next > upper) return
-    setBusy(true)
-    try {
-      const ok = await applyHookOp(preview.output_id, {
-        op: "set_trim",
-        params: { start: trimStart, end: next },
-      })
-      if (ok) {
-        setTrimEnd(next)
-        onAdjusted()
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="flex w-36 shrink-0 flex-col gap-1.5">
-      <video
-        src={preview.url}
-        controls
-        playsInline
-        preload="metadata"
-        className="h-36 w-auto max-w-full self-start rounded-md"
-      />
-      {preview.hook ? (
-        <p className="line-clamp-2 text-xs text-muted-foreground">
-          {preview.hook}
-        </p>
-      ) : null}
-      {shots.length > 1 ? (
-        <div className="flex flex-wrap gap-1">
-          {shots.map((url, i) => (
-            // Key carries the index: a beat plan may legitimately reuse an
-            // image (图耗尽 reuse), so the URL alone is not unique.
-            <button
-              key={`${i}-${url}`}
-              type="button"
-              disabled={locked || i === 0}
-              title={
-                i === 0
-                  ? t("hookGate.currentOpener")
-                  : t("hookGate.makeOpener")
-              }
-              onClick={() => swap(i)}
-              className={
-                i === 0
-                  ? "cursor-default"
-                  : "cursor-pointer opacity-60 transition-opacity hover:opacity-100"
-              }
-            >
-              <img
-                src={url}
-                alt=""
-                className="h-9 w-9 rounded object-cover"
-              />
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {preview.trim ? (
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-muted-foreground">
-            {t("hookGate.ending")}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-[11px]"
-            disabled={locked || trimEnd - 1 < trimStart + 1}
-            onClick={() => trim(-1)}
-          >
-            −1s
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-[11px]"
-            disabled={locked || trimEnd + 1 > (preview.source_duration ?? initialEnd + 5)}
-            onClick={() => trim(1)}
-          >
-            +1s
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/** The 钩子预览闸's preview strip (期 4, §2.5): one tile per parked clip in
- * a horizontal scroll row — structure scans off the shot thumbnails, pacing
- * off the click-to-play low-res hook. */
-function HookPreviewStrip({
-  previews,
-  disabled,
-}: {
-  previews: HookPreviewItem[]
-  disabled?: boolean
-}) {
-  const { t } = useTranslation()
-  const [adjusted, setAdjusted] = useState(false)
-  return (
-    <div className="mt-3">
-      <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
-        {previews.map((p) => (
-          <HookPreviewTile
-            key={p.output_id}
-            preview={p}
-            disabled={disabled}
-            onAdjusted={() => setAdjusted(true)}
-          />
-        ))}
-      </div>
-      {adjusted ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {t("hookGate.adjustedNote")}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
 function ChoiceForm({
   question,
   options,
-  previews,
   estimate,
   onAnswer,
   answering,
@@ -420,9 +209,6 @@ function ChoiceForm({
           </span>
         ) : null}
       </div>
-      {previews && previews.length > 0 ? (
-        <HookPreviewStrip previews={previews} disabled={answering} />
-      ) : null}
       {options.length > 0 ? (
         // Full-width rows, not pills: long option labels must wrap inside
         // the card (the old button row let them bleed past the right edge).

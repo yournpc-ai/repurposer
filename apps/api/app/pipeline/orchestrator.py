@@ -484,60 +484,6 @@ def _compile_task_list(
             )
             seq += 1
 
-    # 钩子预览闸 (期 4, §2.5): review tier + exactly one plain select_clips
-    # chain (NO in-place morphs — a morph would rewrite specs AFTER the
-    # previews, showing pre-morph footage; v0 documented boundary). Fork
-    # modifiers (translate_clip / dub_clip with ``fork: true``) derive new
-    # rows and leave the base clip's spec untouched — the preview still
-    # reflects what the user will see, so they're allowed.
-    # Non-previewed siblings: fork variants' derived rows render
-    # independently of the gate (v0 — these are not previewed). Their target
-    # languages ride the gate's spec so the docked question can name them —
-    # otherwise the user sees only the EN previews and learns about the
-    # DE/FR forks only after they auto-render.
-    clips_tasks = sum(1 for entry in entries if entry.name == "select_clips")
-    has_inplace_morph = any(
-        entry.name in INPLACE_MORPH_KINDS
-        and not bool((item.params or {}).get("fork"))
-        for item, entry in modifiers
-    )
-    if task.autonomy == "review" and clips_tasks == 1 and not has_inplace_morph:
-        clips_idx = skill_node_idx["select_clips"]
-        verify_idx = next(
-            (
-                i
-                for i, ns in enumerate(nodes)
-                if ns.kind == "verify" and ns.inputs and ns.inputs[0] == clips_idx
-            ),
-            None,
-        )
-        if verify_idx is not None:
-            pending_subs: list[str] = []
-            pending_dubs: list[str] = []
-            for item in task.tasks or []:
-                lang = (item.params or {}).get("target_language")
-                if not isinstance(lang, str) or not lang:
-                    continue
-                if item.tool == "translate_clip":
-                    pending_subs.append(lang)
-                elif item.tool == "dub_clip":
-                    pending_dubs.append(lang)
-            gate_idx = len(nodes)
-            nodes.append(
-                _NodeSpec(
-                    "hook_gate",
-                    seq,
-                    inputs=[verify_idx, clips_idx],
-                    spec={
-                        "pending_subs": pending_subs,
-                        "pending_dubs": pending_dubs,
-                    },
-                )
-            )
-            seq += 1
-            nodes.append(_NodeSpec("release_renders", seq, inputs=[gate_idx]))
-            seq += 1
-
     return nodes
 
 

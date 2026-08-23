@@ -157,67 +157,6 @@ async def _mirror_superseded_node(output_id: UUID, project: Project) -> None:
         )
 
 
-async def render_hook_preview(
-    *,
-    project_id: UUID,
-    user_id: UUID,
-    output_id: UUID,
-    render_spec: dict[str, Any],
-    seconds: float = 5.0,
-    previous_key: str | None = None,
-) -> str | None:
-    """期 4 钩子预览闸: render just the clip's hook (first ``seconds``, half
-    scale, cheap CRF, no SRT/loudnorm) via the render service's black-box
-    ``preview`` parameter — the clip-spec contract is untouched (ADR-016).
-
-    ``previous_key`` (期 4 bug #3): the output's prior ``files.hook_preview``
-    when the gate re-renders (worker retry, etc.) — deleted before the new
-    render so storage doesn't accumulate orphans. Best-effort: a delete
-    failure is logged and ignored (the next render will overwrite the row).
-
-    Returns the stored object key on success, ``None`` on any failure: the
-    gate degrades honestly (a clip without a preview parks without one). No DB
-    session inside — the caller owns persistence (``files.hook_preview``) and
-    the commit; cleanup of a failed upload's orphan object is best-effort.
-    """
-    if previous_key:
-        try:
-            await delete(previous_key)
-        except Exception as e:  # noqa: BLE001 — best-effort cleanup
-            logger.warning("hook_preview_prev_delete_failed", key=previous_key, error=str(e))
-    video_key: str | None = None
-    try:
-        spec = _absolutize(copy.deepcopy(render_spec))
-        preview_ts = int(time.time())
-        video_key = await get_output_path(
-            project_id, user_id, f"{output_id}-hook-{preview_ts}.mp4"
-        )
-        video_put_url = await presign_upload(video_key, content_type="video/mp4", ttl=900)
-        payload = {
-            "spec": spec,
-            "preview": {"seconds": seconds},
-            "outputs": {
-                "video": {
-                    "key": video_key,
-                    "put_url": video_put_url,
-                    "content_type": "video/mp4",
-                },
-            },
-        }
-        async with httpx.AsyncClient(timeout=300) as client:
-            resp = await client.post(settings.render_url, json=payload)
-            resp.raise_for_status()
-        return video_key
-    except Exception as e:  # noqa: BLE001 — preview is best-effort
-        logger.warning("hook_preview_failed", output_id=str(output_id), error=str(e))
-        if video_key is not None:
-            try:
-                await delete(video_key)
-            except Exception:  # noqa: BLE001
-                pass
-        return None
-
-
 async def render_output(output_id: UUID) -> None:
     """Render a claimed output via the render service; persist terminal state.
 

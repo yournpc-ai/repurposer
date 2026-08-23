@@ -26,24 +26,18 @@ function getBundle(): Promise<string> {
 
 export interface RenderResult {
   videoPath: string;
-  srtPath: string | null; // null on hook previews (no deliverable sidecar)
+  srtPath: string;
 }
 
 /**
  * Render one clip-spec to MP4 + SRT. The spec's `source.url` must be an absolute
  * URL the render process can fetch (the api worker absolutizes the stored
  * relative stream URL before calling — see docs/VIDEO_EDITOR.md storage seam).
- *
- * `preview` (期 4 钩子预览闸): render only the hook — the first `seconds` of
- * the composition at half scale + a cheap CRF, no SRT, no loudnorm pass. The
- * clip-spec is untouched (ADR-016: the preview is a black-box-internal
- * parameter, never a contract variant).
  */
 export async function renderClip(
   spec: ClipSpec,
   outDir: string,
   basename: string,
-  preview?: { seconds: number },
 ): Promise<RenderResult> {
   await fs.mkdir(outDir, { recursive: true });
 
@@ -75,31 +69,10 @@ export async function renderClip(
     // fetched through Remotion's internal proxy, so keep headroom over the
     // 28 s delayRender default for slow origins.
     timeoutInMilliseconds: 180_000,
-    ...(preview
-      ? {
-          // Hook preview: the first N seconds only, half scale, cheap CRF.
-          // Clamped to the composition — a clip shorter than N seconds has
-          // no frames past its end.
-          frameRange: [
-            0,
-            Math.min(
-              Math.max(0, Math.round(preview.seconds * composition.fps) - 1),
-              composition.durationInFrames - 1,
-            ),
-          ] as [number, number],
-          scale: 0.5,
-          crf: 28,
-        }
-      : {}),
   });
 
   const clipStart = keptSegments(spec)[0]?.start ?? 0;
   const srtPath = path.join(outDir, `${basename}.srt`);
-  if (preview) {
-    // Previews carry no deliverable sidecar — the SRT is a full-render
-    // artifact (CapCut handoff), the loudnorm pass is wasted on a throwaway.
-    return { videoPath, srtPath: null };
-  }
   await fs.writeFile(srtPath, captionTrackToSrt(spec.caption_track, clipStart), "utf8");
 
   try {
