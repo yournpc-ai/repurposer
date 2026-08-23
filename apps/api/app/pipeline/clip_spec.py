@@ -414,9 +414,17 @@ def set_trim(spec: ClipSpec, start: float, end: float) -> ClipSpec:
     same name across the stack (NAMING §1).
 
     Set the outer in/out by moving the first/last kept segment boundaries.
+    ``end`` is bounded by the source length when known — a trim past the
+    source's real duration renders a still-frame tail (Remotion has no frames
+    to draw from) and the dock's +5s headroom assumes the source outlives
+    the trim (期 4 bug #2 — trim slider bound was unchecked server-side).
     """
     if end <= start:
         return spec
+    if spec.source.duration is not None and end > spec.source.duration:
+        raise ValueError(
+            f"set_trim: end {end}s exceeds source duration {spec.source.duration}s"
+        )
     kept_idx = [i for i, s in enumerate(spec.segments) if not s.hidden]
     if not kept_idx:
         return spec

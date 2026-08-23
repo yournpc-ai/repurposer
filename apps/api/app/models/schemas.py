@@ -212,6 +212,10 @@ class HookPreview(BaseModel):
     # the structure). Also the 换图锚 control's addressing: index = shot_index.
     shots: list[str] = Field(default_factory=list)
     trim: HookTrim | None = None
+    # 调尾切点的真上界 (期 4 bug #2): the source's real duration — the dock's
+    # "+1s" stepper caps here instead of the previous blind "+5s past initial
+    # trim". None when the source length is unknown (the legacy +5 fallback).
+    source_duration: float | None = None
 
 
 class AskPayload(BaseModel):

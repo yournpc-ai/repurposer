@@ -49,13 +49,15 @@ export interface DockOption {
 /** One clip's parked hook preview (期 4 钩子预览闸 — mirrors the API's
  * HookPreview): the ≤5s low-res render + the planned stills shots (the
  * 换图锚 control's addressing: index = shot_index) + the kept span (the
- * 调尾切点 seat). */
+ * 调尾切点 seat) + the source's real duration (the trim stepper's upper
+ * bound — replaces the legacy blind "+5s past initial trim"). */
 export interface HookPreviewItem {
   output_id: string
   url: string
   hook?: string | null
   shots?: string[]
   trim?: { start: number; end: number } | null
+  source_duration?: number | null
 }
 
 interface TaskBookDockProps {
@@ -259,10 +261,13 @@ function HookPreviewTile({
   const trim = async (delta: number) => {
     if (locked || !preview.trim) return
     const next = trimEnd + delta
-    // Bounds: never under a 1s clip; the slack above the cut stays small —
-    // the source tail beyond the span is unknowable here (期 2's post-pad
-    // is 1.8s), so +5s is the honest room.
-    if (next < trimStart + 1 || next > initialEnd + 5) return
+    // Bounds: never under a 1s clip; the upper bound is the source's real
+    // duration when known (the server-side set_trim enforces it), or the
+    // legacy blind "+5s past initial trim" as a fallback (期 4 bug #2 — the
+    // server now rejects trim past duration; the dock reads source_duration
+    // so the +1s stepper stops at the real cap).
+    const upper = preview.source_duration ?? initialEnd + 5
+    if (next < trimStart + 1 || next > upper) return
     setBusy(true)
     try {
       const ok = await applyHookOp(preview.output_id, {
@@ -340,7 +345,7 @@ function HookPreviewTile({
             variant="ghost"
             size="sm"
             className="h-6 px-1.5 text-[11px]"
-            disabled={locked || trimEnd + 1 > initialEnd + 5}
+            disabled={locked || trimEnd + 1 > (preview.source_duration ?? initialEnd + 5)}
             onClick={() => trim(1)}
           >
             +1s
