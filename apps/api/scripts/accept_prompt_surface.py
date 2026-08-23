@@ -4,9 +4,9 @@ reliably include the card's expected node kinds?
 
 Mirrors the gallery (recipe-gallery-v2 brief §6): a fresh project with
 the card's declared input asset, first message = the card's template
-copy. 3 zh + 3 en trials per card (LLM variance — one run is a coin
-flip, never a verdict). Plan-only: no book is ever confirmed, nothing
-renders.
+copy. TRIALS_PER_LANG trials per language (LLM variance — one run is a
+coin flip, never a verdict). Per-card ``trials`` overrides the default.
+Plan-only: no book is ever confirmed, nothing renders.
 
 Each card declares its ``expected_tools`` list — the validator asserts
 all of those tool kinds appear in the compiled plan, in order. The card's
@@ -17,10 +17,11 @@ template INFERRED that shape from the user's free-form message.
 Recipe gallery v2 additions:
 - voice-dub is now in scope (was merged back into a card on 2026-08-23,
   ADR-048 §4.5).
-- The text-tribe cards (social-post / quote-cards / carousel) are
-  referenced as DRAFT entries below — they stay commented until the
-  bake harvest lands (recipe-gallery-v2 brief §6: "拿不出成对示例的卡
-  不进网格"). When the entries uncomment, the gate will test them.
+- The text-tribe cards (social-post / quote-cards / carousel) landed
+  2026-08-24 (recipes/tasks/text-tribe-live.md): bake harvest + skill
+  packs + 12/12 prompt-surface gate = status flipped from reserved to
+  live. The gate asserts each writer template lands on its own writer
+  kind only (no write_post / write_quotes / write_carousel cross-talk).
 """
 
 import asyncio
@@ -44,8 +45,14 @@ CARDS = {
         "asset": "xy_1-interview.mp4",
         "expected_tools": ["select_clips", "reframe_clip"],
         "templates": [
-            ("zh", "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。"),
-            ("en", "Recut my two-person interview into vertical clips that follow whoever is speaking."),
+            (
+                "zh",
+                "用上传的双人对话录像（最佳为左右对坐的访谈或对谈节目，横屏）剪 2-4 段竖屏分镜——每段独立成片，9:16：说话人切换 = 静态分镜模式：检测当前说话人（左侧或右侧），镜头切换到对应人物；切换要平滑（最短驻留 + 缓动），不要硬切眩晕；竖屏构图 = 单人在画面中央偏上，下方留字幕空间，不要塞两个人在画面里；字幕 = 单行替换（catalog 6 种样式可换），字号按画幅等比缩放，左右边距 8%；横竖比转换 = 9:16 object-contain 不裁切，上下留黑保原比例。输出 = 2-4 段竖屏短片，每段覆盖一次完整的话轮切换（提问→回答），原视频保留不动。",
+            ),
+            (
+                "en",
+                "From the uploaded two-person conversation recording (landscape left-right interview / talk show works best), cut 2-4 vertical reframe clips — each a separate 9:16 clip: speaker switching = static-reframe mode: detect who's currently speaking (left or right), cut to that person; transitions must be smooth (min dwell + easing), no jarring hard cuts; vertical framing = single speaker centered upper-middle, caption space below — don't try to fit both in frame; captions = single-line replacement (catalog 6 presets), font size scales with frame, 8% side margins; aspect conversion = 9:16 object-contain, letterboxed, source frame preserved. Output = 2-4 vertical clips, each covering one complete turn switch (question → answer); original video untouched.",
+            ),
         ],
     },
     "高光切片/highlight-clips": {
@@ -53,8 +60,14 @@ CARDS = {
         "asset": "xy_2-keynote.mp4",
         "expected_tools": ["select_clips", "reframe_clip"],
         "templates": [
-            ("zh", "帮我把这个视频里最好的几段剪出来，做成竖屏短片，镜头跟着人走。"),
-            ("en", "Find the best moments of this video and cut them into vertical clips — the camera follows the speaker."),
+            (
+                "zh",
+                "用上传的长演讲视频（最佳为大型中景登台演讲）剪 3-5 段高光切片——每段独立成片，竖屏 9:16：选段标准 = 信息密度最高的几个瞬间（结论性句子、关键数据点、最有共鸣的表达），agent 标出首推段（最值得先发的）；竖屏构图 = 镜头自动跟人（reframe_clip dynamic mode），speaker 居中偏上，下方留出字幕空间，不要固定中央裁切；字幕 = 单行替换（catalog 6 种样式可换），字号按画幅等比缩放（皮肤默认 68），左右边距 8%，不要堆叠；横竖比转换 = 9:16 渲染端按帧高缩放，原画幅用 object-contain 不裁切，上下留黑。输出 = 3-5 段独立短片，每段 15-60 秒，原视频保留不动。",
+            ),
+            (
+                "en",
+                "From the uploaded long talk recording (large mid-shot stage talk works best), cut 3-5 highlight clips — each a separate vertical 9:16 clip: selection = highest information-density moments (concluding statements, key data points, most resonant lines); agent flags the top pick (the one to post first); vertical framing = camera follows the speaker automatically (reframe_clip dynamic mode), speaker centered upper-middle, caption space below — not fixed center-crop; captions = single-line replacement (catalog 6 presets), font size scales with frame (skin default 68), 8% side margins — no stacking; aspect conversion = 9:16 scales by frame height, source frame letterboxed via object-contain, no crop. Output = 3-5 short clips, each 15-60 seconds; original video untouched.",
+            ),
         ],
     },
     # Recipe-gallery v2 (ADR-048, 2026-08-23): the dub card is back to its
@@ -68,53 +81,55 @@ CARDS = {
         "templates": [
             (
                 "zh",
-                "把我的演讲用我的声音配音成西班牙语和法语——原声轨留着顶在头上，方便我听自然度。",
+                "用上传的整段视频做 3 版 AI 配音——每版独立成片，原始视频不动：中文版（用我的声音从原声克隆声纹替换原音轨，ZH 单行字幕），法语版（同上 FR），西语版（同上 ES）。3 版都保留我的音色指纹——AI 通用合成声不要。原声轨作为对照层压在主轨之下，方便我对照自然度。1:1 原画幅不裁切，上下留黑保原比例。字幕字号按画幅等比缩放（皮肤默认 68 → 1:1 得 38），左右边距 8%。声画对齐按 ASR 词级时间戳回配，不要音画漂移。",
             ),
             (
                 "en",
-                "Dub my talk into Spanish and French in my own voice — keep the original soundtrack on top so I can hear how natural it sounds.",
+                "From the uploaded full video, make 3 voice-cloned dub versions — each a separate clip, source untouched: ZH dub (replace original audio with my cloned voice from the source, ZH single-line captions), FR dub (same, French), ES dub (same, Spanish). All 3 keep my voice fingerprint — no stock narrator. The original soundtrack stays as a reference layer below the main track so I can hear how natural the clone sounds. Keep the 1:1 source frame, letterboxed, never cropped. Caption font size scales with frame (skin default 68 → 38 at 1:1), 8% side margins. Audio re-times to ASR word-level timestamps — no drift.",
             ),
         ],
     },
-    # === DRAFT: text-tribe cards — uncomment when the bake harvest lands. ===
-    # Brief §6: "新卡未过「成对示例烘焙 + 验收闸全绿」双闸，禁止注册进 recipes.py"
-    # The entries below assume the eventual asset is a transcript article.
-    # Pre-bake referencing them would test a template against unregistered
-    # cards — wrong-shaped invariant. When the bake finishes, flip these on.
-    #
-    # "社媒帖/social-post": {
-    #     "asset_type": AssetType.TRANSCRIPT,
-    #     "asset": "demo-article.md",
-    #     "expected_tools": ["write_post"],
-    #     "templates": [
-    #         (
-    #             "zh",
-    #             "把这段演讲变成 LinkedIn 帖，按我的风格来。哪个平台发——你选合适的就行。",
-    #         ),
-    #         (
-    #             "en",
-    #             "Turn this talk into a LinkedIn post in my style. The platform is up to you — pick whatever fits.",
-    #         ),
-    #     ],
-    # },
-    # "金句卡/quote-cards": {
-    #     "asset_type": AssetType.TRANSCRIPT,
-    #     "asset": "demo-article.md",
-    #     "expected_tools": ["write_quotes"],
-    #     "templates": [
-    #         ("zh", "从这场演讲里挑最亮的金句，做成可以直接发的金句卡。"),
-    #         ("en", "Pull the strongest quotes from this talk and turn them into quote cards ready to share."),
-    #     ],
-    # },
-    # "轮播图/carousel": {
-    #     "asset_type": AssetType.TRANSCRIPT,
-    #     "asset": "demo-article.md",
-    #     "expected_tools": ["write_carousel"],
-    #     "templates": [
-    #         ("zh", "把这场演讲做成一组轮播幻灯——一图一意，可以直接发。"),
-    #         ("en", "Turn this talk into a carousel of slides — one idea per slide, ready to post."),
-    #     ],
-    # },
+    # === Text-tribe (RECIPES §4.6, 2026-08-24 12/12 gate) ===
+    # Each writer template must land on its own writer kind only — the
+    # chain is single-task, no select_clips / clip tools to confuse the
+    # LLM, so a leak into write_article / dub_clip / etc. is the gate's
+    # failure mode. 2 trials per language × 3 cards × 2 langs = 12.
+    "社媒帖/social-post": {
+        "asset_type": AssetType.TRANSCRIPT,
+        "asset": "demo-article.md",
+        "expected_tools": ["write_post"],
+        "trials": 2,
+        "templates": [
+            (
+                "zh",
+                "把这段演讲变成 LinkedIn 帖，按我的风格来。哪个平台发——你选合适的就行。",
+            ),
+            (
+                "en",
+                "Turn this talk into a LinkedIn post in my style. The platform is up to you — pick whatever fits.",
+            ),
+        ],
+    },
+    "金句卡/quote-cards": {
+        "asset_type": AssetType.TRANSCRIPT,
+        "asset": "demo-article.md",
+        "expected_tools": ["write_quotes"],
+        "trials": 2,
+        "templates": [
+            ("zh", "从这场演讲里挑最亮的金句，做成可以直接发的金句卡。"),
+            ("en", "Pull the strongest quotes from this talk and turn them into quote cards ready to share."),
+        ],
+    },
+    "轮播图/carousel": {
+        "asset_type": AssetType.TRANSCRIPT,
+        "asset": "demo-article.md",
+        "expected_tools": ["write_carousel"],
+        "trials": 2,
+        "templates": [
+            ("zh", "把这场演讲做成一组轮播幻灯——一图一意，可以直接发。"),
+            ("en", "Turn this talk into a carousel of slides — one idea per slide, ready to post."),
+        ],
+    },
 }
 TRIALS_PER_LANG = 3
 
@@ -188,8 +203,9 @@ async def main() -> None:
     passed = failed = 0
     try:
         for card, cfg in CARDS.items():
+            trials = cfg.get("trials", TRIALS_PER_LANG)
             for lang, template in cfg["templates"]:
-                for i in range(TRIALS_PER_LANG):
+                for i in range(trials):
                     try:
                         ok, kinds, turn = await one_trial(
                             ctx, card, lang, template, cfg["expected_tools"]
