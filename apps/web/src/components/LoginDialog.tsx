@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LogoMark } from "@/components/LogoMark"
-import { apiPost, errorDetail } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import { setAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
@@ -44,7 +44,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const [step, setStep] = useState<"email" | "code">("email")
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [loading, setLoading] = useState<"send" | "verify" | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(0)
   const inputsRef = useRef<Array<HTMLInputElement | null>>([])
   const reduce = useReducedMotion()
@@ -65,7 +64,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     setDigits(Array(CODE_LENGTH).fill(""))
     setStep("email")
     setSentTo(null)
-    setError(null)
     setCountdown(0)
     setLoading(null)
   }
@@ -82,24 +80,15 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const sendCode = async () => {
     if (!email.trim() || loading) return
     setLoading("send")
-    setError(null)
     try {
-      const res = await apiPost(
-        "/api/v1/auth/send-code",
-        { email: email.trim() },
-        // Errors render inline inside the dialog; suppress the global toast.
-        { toast: false }
-      )
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(errorDetail(body, t("login.sendFailed")))
-      }
+      const res = await apiPost("/api/v1/auth/send-code", {
+        email: email.trim(),
+      })
+      if (!res.ok) return // sonner already surfaced the server detail
       setDigits(Array(CODE_LENGTH).fill(""))
       setSentTo(email.trim())
       setStep("code")
       setCountdown(RESEND_COOLDOWN_SECONDS)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("login.sendFailed"))
     } finally {
       setLoading(null)
     }
@@ -108,27 +97,23 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const verify = async (value: string) => {
     if (value.length !== CODE_LENGTH || loading) return
     setLoading("verify")
-    setError(null)
     try {
-      const res = await apiPost(
-        "/api/v1/auth/verify-code",
-        { email: email.trim(), code: value },
-        { toast: false }
-      )
+      const res = await apiPost("/api/v1/auth/verify-code", {
+        email: email.trim(),
+        code: value,
+      })
       if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(errorDetail(body, t("login.verifyFailed")))
+        // Wrong code: clear + refocus on digit 1 so the user retypes.
+        // The focus is deferred a tick so the input has been re-enabled
+        // (loading cleared in finally) first. Sonner carries the message.
+        setDigits(Array(CODE_LENGTH).fill(""))
+        setTimeout(() => focusInput(0), 0)
+        return
       }
       const data = await res.json()
       setAuth(data.token, data.user)
       handleOpenChange(false)
       onSuccess?.()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("login.verifyFailed"))
-      // Wrong code: start over on digit 1. The focus is deferred a tick so
-      // the input has been re-enabled (loading cleared in finally) first.
-      setDigits(Array(CODE_LENGTH).fill(""))
-      setTimeout(() => focusInput(0), 0)
     } finally {
       setLoading(null)
     }
@@ -180,7 +165,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const goBackToEmail = () => {
     setStep("email")
     setDigits(Array(CODE_LENGTH).fill(""))
-    setError(null)
   }
 
   const swap: Variants = {
@@ -312,7 +296,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                   </p>
                 )}
               </form>
-              {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
             </motion.div>
           ) : (
             <motion.div
@@ -363,7 +346,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                       : t("login.enterAllDigits")}
                 </Button>
               </form>
-              {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
               <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
                 {t("login.didntReceive")}{" "}
                 {countdown > 0 ? (
