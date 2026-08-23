@@ -139,6 +139,16 @@ export interface OutputScore {
  * semantics (source_ref) and the render pipeline; derivatives are plain
  * types. Creative fields live in payload, artifacts in files, publish
  * metadata in publishing. */
+/** 质检裁决 (产物质量线期 3): the verify node's verdict on the product row.
+ * null = never verified (legacy rows / verify-less graphs). needs_human is
+ * non-blocking — the badge is the only surface (成功安静). */
+export interface OutputQuality {
+  status: "passed" | "needs_human"
+  checks: { id: string; ok: boolean | null; detail: string; cls: string }[]
+  attempt: number
+  checked_at: string
+}
+
 export interface Output {
   id: string
   project_id: string
@@ -154,6 +164,7 @@ export interface Output {
   render_status: string | null
   render_error: string | null
   score: OutputScore | null
+  quality: OutputQuality | null
   publishing: OutputPublishing
   created_at: string
   updated_at: string | null

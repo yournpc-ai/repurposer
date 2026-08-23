@@ -910,6 +910,7 @@ const zh: Resources = {
     retryFailed: "重试失败的输出",
     clipNotRendered: "点击渲染此片段。",
     topPick: "首发推荐",
+    qualityNeedsReview: "待复核",
     scoreLabel: "推荐度",
     scoreReason: "推荐理由",
     noQuote: "暂无名言文本。",
@@ -984,6 +985,7 @@ const zh: Resources = {
       write_article: "正在撰写文章…",
       synth_talk_video: "正在生成视频…",
       align_stills: "正在为你的文字稿对齐节奏…",
+      verify: "质检中…",
       materialize_source: "正在准备整条视频…",
     },
     qa: {
@@ -1208,6 +1210,23 @@ const zh: Resources = {
   },
   a11y: {
     toggleSidebar: "切换侧边栏",
+  },
+  // 质检环（产物质量线期 3）：verify 节点检查项的人话标签——
+  // 徽标悬浮层渲染「<标签>: <明细>」。
+  qualityChecks: {
+    span_fidelity: "切片与源片段一致",
+    quote_verbatim: "金句逐字一致",
+    language_match: "语言符合目标",
+    avoid_words: "规避词未命中",
+    length_in_bounds: "长度在区间内",
+    count_match: "数量符合请求",
+    slide_count: "页数符合规划",
+    shot_dwells: "分镜节奏",
+    caption_sync: "字幕同步",
+    face_safe_area: "人脸避开字幕区",
+    emphasis_alignment: "强调贴在内容峰值上",
+    repair_scope: "修复未越界",
+    judge_quote_readability: "金句独立可读",
   },
 }
 

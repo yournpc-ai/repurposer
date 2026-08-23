@@ -1666,6 +1666,35 @@ class BeatOutline(BaseModel):
     sections: list[BeatSection] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Verify judge (产物质量线期 3, §2.7 judge rubric 纪律): the LLM half of the
+# verify loop — subjective items only (金句上下文可读性). Evidence-citation-
+# first (context_read BEFORE the verdict field), no abstract scores, temp 0
+# (declared on the agent), provenance-blind (the prompt never sees ids/round).
+# Verdicts ride the ledger as cls="judge" — advisory until the human
+# calibration set lands (judge 漂移无地面真值不可检测).
+# ---------------------------------------------------------------------------
+
+
+class QuoteJudgment(BaseModel):
+    """One quote's context-readability judgment (evidence before verdict)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quote: str = ""  # echoed verbatim — the evidence anchor
+    context_read: str = ""  # what the source excerpt around it establishes
+    standalone: bool = True  # reads in context AND stands alone on a card
+    issue: str = ""  # when not standalone: what's missing / awkward
+
+
+class QuoteReadability(BaseModel):
+    """The judge's verdict over one quotes output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    judgments: list[QuoteJudgment] = Field(default_factory=list)
+
+
 class StoryboardSlot(BaseModel):
     """槽位: one output's WHAT (angle/arguments/language/format). HOW is the executor's."""
 
@@ -1944,6 +1973,9 @@ class OutputResponse(BaseModel):
     render_status: RenderStatus | None = None
     render_error: str | None = None
     score: dict | None = None
+    # 质检裁决 (期 3): verify 节点的 {status, checks, attempt, checked_at};
+    # None = 未质检（旧行 / 无 verify 的图）。
+    quality: dict | None = None
     publishing: dict = Field(default_factory=dict)
     # Chain-integrity hash of render_spec (ADR-032) — the client's base_hash
     # for operation batches. None when there is no render_spec.

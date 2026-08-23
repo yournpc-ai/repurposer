@@ -44,6 +44,9 @@
 | 调用面 harness | harness | 模型调用面脚手架（N-33 限定）：Agent 漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底）+ contexts 装配 + prompts 模板 | 验收语境叫剧本 harness（test harness，两义行业并存） |
 | 估价 | `estimate` | 节点级估价函数（N-34）：机械精确价 / agent token 区间；**报价 = 图 fold**（全图 = 生成前总价，子图 = 修改单价）；`workflow_steps.estimate` 计划侧列与 `cost` 账簿侧对称 | 不是 `cost_hint`（三档已退役） |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
+| 质检环 | verify loop（`pipeline/verify.py`） | 期 3 落地的完整机制：executor 后挂 verify（`spec.for` = 产物类型；modifier 链尾部进 inputs，永远检终态）→ 确定性检查矩阵（quality.py，零 LLM）+ judge  advisory（§2.7 校准集落地前不作闸，cls="judge" 只进台账）→ 打回/回退/升级路由；裁决落 `outputs.quality`（`passed` / `needs_human` 非阻塞徽章） | 不是外挂流程——图内节点，attempt 预算是环的界 |
+| 打回 | `QualityBounce` | 质检环的有界环传输（ADR-047 节点内有界环）：verify 抛出 → execute_step 复位 executor+verify 为 pending（反馈骑 executor `spec.feedback`，runner 一次性弹出进 repair echo），下游已完成 modifier 一并复位重施；≤2 轮，成本落 executor 节点 | 不是 tool-loop；不是盲重试（反馈必带失败项+白名单纪律行） |
+| 最优轮回退 | best-not-last | 逐轮独立评分（同一检查矩阵），回归轮恢复 `spec.rounds` 快照里的最优早轮（新 id 重插 / targeted run 原位回滚），"末轮即最终"被禁 | 不是版本树（只存轮快照，无分支语义） |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
 | 导演 | director | 素材理解 + 分镜表的产出者（两步走，N-17） | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |

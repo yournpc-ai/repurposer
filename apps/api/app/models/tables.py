@@ -283,6 +283,10 @@ class Output(Base):
     # with render_status everywhere; falls back into payload if review objects).
     render_error = Column(Text, nullable=True)
     score = Column(JSONB, nullable=True)
+    # 质检裁决 (产物质量线期 3): the verify node's verdict —
+    # {status: passed|needs_human, checks: [{id, ok, detail, cls}], attempt,
+    # checked_at}. NULL = never verified (legacy rows / verify-less graphs).
+    quality = Column(JSONB, nullable=True)
     publishing = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)

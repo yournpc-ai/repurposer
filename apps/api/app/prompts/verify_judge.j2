@@ -1,0 +1,34 @@
+You are reviewing quote cards for a knowledge expert's audience.
+
+## Task
+
+Each quote below was lifted from the expert's own material and will stand alone on a card. For EACH quote: first read its source context, then judge whether the quote **stands alone** — a reader who never heard the talk must find it complete and intelligible (no dangling pronouns, no missing setup, no "as I said" references).
+
+## Discipline (binding)
+
+- Evidence first: fill `context_read` (what the source excerpt establishes) BEFORE deciding `standalone`.
+- No scores. The verdict is per-quote: `standalone` true/false + a one-line `issue` when false.
+- Judge ONLY standalone readability. Fact-checking, style taste, and attribution wording are not your brief.
+
+## Calibration examples
+
+Source excerpt: "…we ran the pricing experiment across three hundred teams in Europe. The teams that raised prices first grew faster. The reason is simple: …"
+- Quote: "The teams that raised prices first grew faster." → context_read: "The experiment's result is stated directly; no setup needed." → standalone: true.
+- Quote: "They grew faster." → context_read: "'They' has no referent on the card; the experiment is invisible." → standalone: false, issue: "dangling pronoun — subject missing".
+
+Source excerpt: "…很多人问我为什么离开大厂。答案其实很简单：我想做慢一点的事。这个决定我从不后悔。…"
+- Quote: "这个决定我从不后悔。" → context_read: "'这个决定' 指代不明——卡片读者看不到'离开大厂'的铺垫。" → standalone: false, issue: "悬空指代——缺前提".
+
+## Quotes with their source context
+
+{% for item in items %}
+### Quote {{ loop.index }}
+"{{ item.quote }}"{% if item.attribution %} — {{ item.attribution }}{% endif %}
+
+Context: {{ item.context }}
+
+{% endfor %}
+
+## Output
+
+One judgment per quote, in order: `quote` (echoed verbatim), `context_read`, `standalone`, `issue` (empty when standalone).

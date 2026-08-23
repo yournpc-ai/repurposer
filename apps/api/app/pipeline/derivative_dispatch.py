@@ -122,17 +122,20 @@ class DerivativeWriterNode(NodeBase):
         context: GenerationContext,
         understanding: MaterialUnderstanding,
         storyboard: Storyboard,
+        feedback: str | None = None,
     ) -> dict:
         """Generate a single derivative via the package's writer declaration.
 
         Returns the agent's generated content as a plain dict. Callers are
-        responsible for persisting it.
+        responsible for persisting it. ``feedback`` (期 3 质检打回) rides the
+        funnel's repair echo — the writer sees the failed checks verbatim.
         """
         result = await self.writer.call(
             asset_texts=asset_texts,
             context=context,
             understanding=understanding,
             storyboard=storyboard,
+            repair_feedback=feedback,
         )
         return validate_derivative_content(self.derivative_type, result.model_dump())
 
@@ -147,6 +150,13 @@ class DerivativeWriterNode(NodeBase):
         """
         derivative_type = self.derivative_type
         ctx = run.context or {}
+        # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
+        # once — pop it (reassign = SQLAlchemy-tracked) so a later targeted
+        # regen never eats stale feedback.
+        spec = dict(node.spec or {})
+        feedback = spec.pop("feedback", None)
+        if feedback is not None:
+            node.spec = spec
         slot = _node_slot(node, ctx, derivative_type.value)
         target_id = node.spec.get("target_id")
         # Language resolves per slot first, then the node's targeted language,
@@ -179,6 +189,7 @@ class DerivativeWriterNode(NodeBase):
             context=generation_context,
             understanding=understanding,
             storyboard=storyboard,
+            feedback=feedback,
         )
 
         if target_id:

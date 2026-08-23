@@ -938,6 +938,7 @@ const en = {
     retryFailed: "Retry failed output",
     clipNotRendered: "Click to render this clip.",
     topPick: "Top pick",
+    qualityNeedsReview: "Needs review",
     scoreLabel: "Pick score",
     scoreReason: "Why this clip",
     noQuote: "No quote text available.",
@@ -1012,6 +1013,7 @@ const en = {
       write_article: "Writing your article…",
       synth_talk_video: "Generating your video…",
       align_stills: "Timing your transcript…",
+      verify: "Checking quality…",
       materialize_source: "Preparing your full video…",
     },
     qa: {
@@ -1241,6 +1243,23 @@ const en = {
   },
   a11y: {
     toggleSidebar: "Toggle Sidebar",
+  },
+  // 质检环 (产物质量线期 3): human labels for the verify node's check ids —
+  // the badge tooltip renders "<label>: <detail>".
+  qualityChecks: {
+    span_fidelity: "Clip matches its source span",
+    quote_verbatim: "Quote is verbatim",
+    language_match: "Language matches the target",
+    avoid_words: "Avoided words",
+    length_in_bounds: "Length in bounds",
+    count_match: "Requested count produced",
+    slide_count: "Slide count matches the plan",
+    shot_dwells: "Shot pacing",
+    caption_sync: "Caption sync",
+    face_safe_area: "Faces clear of captions",
+    emphasis_alignment: "Emphasis on the content peaks",
+    repair_scope: "Repair stayed in scope",
+    judge_quote_readability: "Quote reads standalone",
   },
 }
 

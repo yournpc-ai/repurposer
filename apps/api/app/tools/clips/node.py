@@ -170,6 +170,13 @@ class SelectClips(NodeBase):
         node per produced clip (claimed via outputs.render_status, D2).
         """
         ctx = run.context or {}
+        # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
+        # once — pop it (reassign = SQLAlchemy-tracked) so a later targeted
+        # regen never eats stale feedback.
+        spec = dict(node.spec or {})
+        feedback = spec.pop("feedback", None)
+        if feedback is not None:
+            node.spec = spec
         slot = _node_slot(node, ctx, "clips")
         clip_count = (slot.count if slot else None) or self.count_default
         # Language resolves per slot first, then the task-book language.
@@ -228,6 +235,7 @@ class SelectClips(NodeBase):
             clip_count=clip_count,
             anchored_transcript=anchored_transcript,
             music_pieces=await _load_music_pieces(),
+            repair_feedback=feedback,
         )
 
         await _set_stage(node.id, "building_specs")

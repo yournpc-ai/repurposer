@@ -86,6 +86,23 @@ class Suspend(Exception):
         self.payload = payload
 
 
+class QualityBounce(Exception):
+    """质检打回 (产物质量线期 3, ADR-047 节点内有界环): the verify node's
+    bounded-loop transport.
+
+    The verify runner raises it after recording the round's snapshot; the
+    execute_step catch branch resets BOTH the verify node and its upstream
+    executor to ``pending`` with the structured feedback riding the
+    executor's ``spec.feedback`` (its runner pops it into the agent call's
+    repair echo). No failure, no cascade — the claim loop re-runs executor →
+    verify, bounded by the verify node's attempt budget (≤ 2 bounces)."""
+
+    def __init__(self, executor_id: UUID, feedback: str) -> None:
+        super().__init__("quality bounce")
+        self.executor_id = executor_id
+        self.feedback = feedback
+
+
 class TaskSpec(BaseModel):
     """The task book: normalized generation intent (任务书).
 
@@ -227,6 +244,8 @@ def compile_graph(
                     "target_type": target_type,
                 },
             ),
+            # 质检环 (期 3): the targeted regen gets the same gate.
+            _NodeSpec("verify", 4, inputs=[2], spec={"for": target_type}),
         ]
 
     if scope == "render":
@@ -425,6 +444,45 @@ def _compile_task_list(
             spec["summary"] = f"{base} · {lang.upper()}"
         nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
         seq += 1
+
+    # 质检环 (期 3): one verify node trails every generation executor — the
+    # gate is the node's own declaration (needs_director + produces_outputs:
+    # the writers and select_clips; revise_script / materialize_source /
+    # modifiers / render never get one, old-brief §2.3 topology kept). The
+    # snapshot copy keeps the loop off the appended verify nodes. A modifier
+    # chain downstream of the executor rides the verify's inputs too — the
+    # check always sees the FINAL spec (remove_filler rewrites captions), and
+    # a bounce resets those modifiers with the executor (orchestrator's
+    # QualityBounce branch) so they re-apply to the repaired round.
+    modifier_idxs = [
+        i for i, ns in enumerate(nodes)
+        if (lambda c: not c.needs_director and not c.produces_outputs)(NODE_KINDS[ns.kind])
+    ]
+
+    def _reaches(from_idx: int, target_idx: int) -> bool:
+        seen: set[int] = set()
+        frontier = list(nodes[from_idx].inputs)
+        while frontier:
+            cur = frontier.pop()
+            if cur == target_idx:
+                return True
+            if cur in seen:
+                continue
+            seen.add(cur)
+            frontier.extend(nodes[cur].inputs)
+        return False
+
+    for idx, ns in enumerate(list(nodes)):
+        node_cls = NODE_KINDS[ns.kind]
+        if node_cls.needs_director and node_cls.produces_outputs:
+            downstream_mods = [m for m in modifier_idxs if _reaches(m, idx)]
+            nodes.append(
+                _NodeSpec(
+                    "verify", seq, inputs=[idx, *downstream_mods],
+                    spec={"for": node_cls.output_type},
+                )
+            )
+            seq += 1
 
     return nodes
 
@@ -855,6 +913,73 @@ async def execute_step(node_id: UUID) -> None:
                     run.status = WorkflowStatus.WAITING_HUMAN
                 await db.commit()
                 logger.info("workflow_step_waiting", node_id=str(node_id), kind=node.kind)
+        except QualityBounce as q:
+            # 质检打回 (期 3): the verify node judged this round failed within
+            # its bounce budget. Reset BOTH nodes to pending — the executor
+            # re-runs with the feedback popped into its agent call, the verify
+            # re-checks the new round (its attempt counter is the loop's
+            # bound). Done modifiers downstream of the executor reset with it:
+            # the executor's idempotent re-run deletes the round-1 rows (their
+            # morph writes die with them), so the modifiers re-apply to the
+            # repaired round — never a silently unmorphed final product.
+            # No cascade, no failure record, run stays open.
+            async with AsyncSessionLocal() as db:
+                node = await db.get(WorkflowStep, node_id)
+                node.status = "pending"
+                node.finished_at = None
+                executor = await db.get(WorkflowStep, q.executor_id)
+                if executor is not None and executor.status == "done":
+                    executor.status = "pending"
+                    executor.finished_at = None
+                    executor.error = None
+                    executor.spec = {**(executor.spec or {}), "feedback": q.feedback}
+                    siblings = list(
+                        (
+                            await db.execute(
+                                select(WorkflowStep).where(
+                                    WorkflowStep.run_id == node.run_id
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    by_id = {str(s.id): s for s in siblings}
+
+                    def _depends_on(step: WorkflowStep, target: str) -> bool:
+                        seen: set[str] = set()
+                        frontier = [str(i) for i in (step.inputs or [])]
+                        while frontier:
+                            cur = frontier.pop()
+                            if cur == target:
+                                return True
+                            if cur in seen:
+                                continue
+                            seen.add(cur)
+                            up = by_id.get(cur)
+                            if up is not None:
+                                frontier.extend(str(i) for i in (up.inputs or []))
+                        return False
+
+                    for s in siblings:
+                        cls = NODE_KINDS.get(s.kind)
+                        if (
+                            cls is not None
+                            and not cls.needs_director
+                            and not cls.produces_outputs
+                            and not cls.runtime_fanout
+                            and s.status == "done"
+                            and _depends_on(s, str(executor.id))
+                        ):
+                            s.status = "pending"
+                            s.finished_at = None
+                            s.error = None
+                await db.commit()
+                logger.info(
+                    "quality_bounce",
+                    node_id=str(node_id),
+                    executor_id=str(q.executor_id),
+                )
         except Exception as e:  # noqa: BLE001 — record any failure on the node
             logger.error("workflow_step_failed", node_id=str(node_id), error=str(e))
             async with AsyncSessionLocal() as db:
@@ -954,15 +1079,16 @@ async def _cascade_skip(
 async def resume_waiting_interrupt(
     db: AsyncSession, run: WorkflowRun, answer: dict
 ) -> WorkflowStep | None:
-    """answer = resume: write the AnswerPayload dump into the waiting
-    interrupt's spec, flip the node back to pending and the run back to
-    RUNNING — the claim loop re-executes the thin node, whose spec.answer
-    branch goes straight to done. Idempotent: no waiting interrupt → None
-    (already resumed or bailed). Flush-only; the caller commits."""
+    """answer = resume: write the AnswerPayload dump into the waiting node's
+    spec, flip it back to pending and the run back to RUNNING — the claim
+    loop re-executes the node, whose spec.answer branch goes straight to
+    done. The seat is the ``waiting`` status, any kind (direction interrupt,
+    期 3 verify escalation): each runner's own answer branch decides what the
+    answer means. Idempotent: no waiting node → None (already resumed or
+    bailed). Flush-only; the caller commits."""
     result = await db.execute(
         select(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
-            WorkflowStep.kind == "interrupt",
             WorkflowStep.status == "waiting",
         )
     )
@@ -984,12 +1110,13 @@ async def bail_waiting_interrupt(
     """Bail path (期 4): node done with ``spec.bailed`` + downstream cascade-
     skipped with the non-failure reason (#5). The run itself settles
     COMPLETED via maybe_finalize_run once the caller commits — the bailed
-    interrupt's summary line ("Bailed by user") is the user-abort note in
-    the aggregated run summary. Idempotent like resume. Flush-only."""
+    node's summary line ("Bailed by user") is the user-abort note in
+    the aggregated run summary. The seat is the ``waiting`` status, any kind
+    (direction interrupt, 期 3 verify escalation). Idempotent like resume.
+    Flush-only."""
     result = await db.execute(
         select(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
-            WorkflowStep.kind == "interrupt",
             WorkflowStep.status == "waiting",
         )
     )
@@ -1067,7 +1194,8 @@ async def maybe_finalize_run(run_id: UUID) -> None:
 
 
 async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
-    """Auto-answer long-parked interrupts with their default option.
+    """Auto-answer long-parked waiting nodes (direction interrupt, 期 3 verify
+    escalation — any kind parks on the ``waiting`` seat) with their default option.
 
     Expiry semantics = the review tier degrades to best-judgment completion
     after the TTL (the leave-note promise: 离开不中断) — never a bail, never

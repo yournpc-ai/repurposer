@@ -16,6 +16,7 @@ import {
   Newspaper,
   Quote,
   Trash2,
+  TriangleAlert,
   Volume2,
   VolumeX,
   Waypoints,
@@ -508,6 +509,13 @@ function ProductCard({
     )
 
   const score = typeof output.score?.value === "number" ? output.score.value : null
+  // 质检裁决 (期 3): needs_human rides the media's bottom-right corner —
+  // non-blocking, so the badge is quiet chrome with the failing checks in
+  // its tooltip (成功安静, passed renders nothing).
+  const qualityFailed =
+    output.quality?.status === "needs_human"
+      ? (output.quality.checks ?? []).filter((c) => c.ok === false)
+      : []
   const duration = output.type === "clip" ? (output.payload.duration ?? null) : null
   const hasVideo = !!output.files.video
   // The clip's MP4 plays inline (recipe-gallery 同款 ambient loop, 2026-08-16
@@ -735,6 +743,20 @@ function ProductCard({
               )}
             >
               {node.topPick ? `${t("results.topPick")} · ${score}` : score}
+            </span>
+          )}
+          {qualityFailed.length > 0 && !renderFailed && (
+            <span
+              title={qualityFailed
+                .map(
+                  (c) =>
+                    `${t(`qualityChecks.${c.id}`, { defaultValue: c.id })}: ${c.detail}`,
+                )
+                .join("\n")}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white"
+            >
+              <TriangleAlert className="h-3 w-3" />
+              {t("results.qualityNeedsReview")}
             </span>
           )}
           {(hasVideo || node.thumbUrl) && !renderActive && onExpandMedia ? (
