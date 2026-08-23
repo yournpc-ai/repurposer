@@ -31,7 +31,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import AskOption, AskPayload, HookPreview, HookTrim
+from app.models.schemas import AskOption, AskPayload, HookPreview, HookTrim, WorkflowStatus
 from app.models.tables import Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.morph import _pend_suppressed_base_renders
@@ -117,12 +117,18 @@ class HookGate(NodeBase):
 
         previews: list[HookPreview] = []
         for output in outputs:
+            # 期 4 bug #3: delete the previous hook_preview object (if any)
+            # before re-rendering — a retry or re-render would otherwise leave
+            # the old object as storage garbage (the new key overwrites the
+            # row's files dict but not the bucket).
+            prev_key = (output.files or {}).get("hook_preview")
             key = await render_hook_preview(
                 project_id=project.id,
                 user_id=project.user_id,
                 output_id=output.id,
                 render_spec=output.render_spec,
                 seconds=_PREVIEW_SECONDS,
+                previous_key=prev_key,
             )
             if key is None:
                 continue
@@ -134,6 +140,8 @@ class HookGate(NodeBase):
                 if (resolved := resolve_stored_url(s.get("image_url")))
             ][:6]
             span = _kept_span(output.render_spec)
+            src_dur = ((output.render_spec or {}).get("source") or {}).get("duration")
+            source_duration = float(src_dur) if isinstance(src_dur, (int, float)) else None
             previews.append(
                 HookPreview(
                     output_id=output.id,
@@ -141,11 +149,18 @@ class HookGate(NodeBase):
                     hook=(output.payload or {}).get("hook") or None,
                     shots=shots,
                     trim=HookTrim(start=span[0], end=span[1]) if span else None,
+                    source_duration=source_duration,
                 )
             )
-        # Persist the preview keys BEFORE any park — the Suspend unwind rolls
-        # an uncommitted flush back (the verify bounce's commit-before-raise
-        # precedent).
+        # Single transaction for the entire park (期 4 bug #4): preview keys,
+        # the docked question message, the node → waiting, and the run →
+        # WAITING_HUMAN all land in one commit. The previous 3-transaction
+        # split (preview commit / dock-commit / node-waiting commit) had a
+        # race window where a crash between any two left the run stuck
+        # RUNNING with previews already saved — node.status was still
+        # "running" and the worker would never reclaim it. Committing here
+        # makes the park atomic; the orchestrator's Suspend catch branch
+        # remains a no-op fallback (it reads committed state).
         await db.commit()
 
         if not previews:
@@ -159,16 +174,47 @@ class HookGate(NodeBase):
             return []
 
         missed = len(outputs) - len(previews)
+        # Non-previewed siblings (期 4 v0 边界): translate_clip / dub_clip fork
+        # off the select_clips outputs and render their own derived rows
+        # independently — the gate's preview only covers the EN base. Name
+        # them so the user isn't surprised by auto-renders landing while the
+        # dock sits waiting for their call.
+        pending_subs: list[str] = [
+            str(lang) for lang in (spec.get("pending_subs") or []) if isinstance(lang, str) and lang
+        ]
+        pending_dubs: list[str] = [
+            str(lang) for lang in (spec.get("pending_dubs") or []) if isinstance(lang, str) and lang
+        ]
+        also_parts: list[str] = []
+        if pending_subs:
+            also_parts.append(
+                f"{len(pending_subs)} 个字幕版" if zh
+                else f"{len(pending_subs)} translated version(s)"
+            )
+        if pending_dubs:
+            also_parts.append(
+                f"{len(pending_dubs)} 个配音版" if zh
+                else f"{len(pending_dubs)} dubbed version(s)"
+            )
+        also_suffix = ""
+        if also_parts:
+            also_suffix = (
+                "另外，" + "、".join(also_parts) + " 不经预览直接渲染。"
+                if zh
+                else " Also rendering without preview: " + " + ".join(also_parts) + "."
+            )
         question_text = (
             f"钩子预览好了——{len(previews)} 条短片各取前 5 秒的低清版。"
             "看着没问题就放行渲染；想要更稳的开场，可以让它加标题卡。"
             + (f"（{missed} 条预览没生成出来，放行后照常渲染。）" if missed else "")
+            + also_suffix
             if zh
             else
             f"Hook previews are in — the first 5 seconds of {len(previews)} "
             "clip(s), low-res. Release the renders if they look right, or have "
             "them open with a title card for a safer start."
             + (f" ({missed} preview(s) didn't render — they release normally.)" if missed else "")
+            + also_suffix
         )
         confirm_label = "放行渲染" if zh else "Release renders"
         title_label = "标题卡开场" if zh else "Open with a title card"
@@ -183,28 +229,49 @@ class HookGate(NodeBase):
             dock_interrupt_question,
             finalize_bailed_runs,
         )
-        from app.models.database import AsyncSessionLocal
 
-        async with AsyncSessionLocal() as s:
-            message, bailed_run_ids = await dock_interrupt_question(
-                s,
-                UUID(str(project.user_id)),
-                UUID(str(project.id)),
-                UUID(str(run.id)),
-                question_text,
-                payload,
-            )
-            question_message_id = str(message.id)
-            await s.commit()
+        # Dock the question on the SAME session so preview keys + the
+        # message + node → waiting + run → WAITING_HUMAN all commit in one
+        # transaction (see the comment above the preview-key commit). The
+        # message row's workflow_run_id is the dispatch marker — the answer
+        # endpoint recognizes a hook-gate question by it and resumes the
+        # parked run (answer = resume).
+        message, bailed_run_ids = await dock_interrupt_question(
+            db,
+            UUID(str(project.user_id)),
+            UUID(str(project.id)),
+            UUID(str(run.id)),
+            question_text,
+            payload,
+        )
+        question_message_id = str(message.id)
+        # Park the node and the run in the SAME session (the suspend_payload
+        # rides the node's spec — execute_step's Suspend catch branch will
+        # re-read it and write it again, idempotently).
+        node.status = "waiting"
+        node.spec = {
+            **(node.spec or {}),
+            "suspend_payload": {
+                "question_message_id": question_message_id,
+                "options": [
+                    # argument_id=None marks the default (the TTL sweep's
+                    # auto-answer) — 确认放行 keeps 离开不中断.
+                    {"id": "a", "label": confirm_label, "argument_id": None},
+                    {"id": "b", "label": title_label, "argument_id": "title_card"},
+                ],
+            },
+        }
+        if run.status != WorkflowStatus.WAITING_HUMAN:
+            run.status = WorkflowStatus.WAITING_HUMAN
+        await db.commit()
         # Docking superseded an older parked question (single-pending
-        # invariant) — its run was cascade-bailed in the same stroke; settle it.
+        # invariant) — its run was cascade-bailed in the same stroke; settle
+        # it AFTER the commit so finalize reads the new state.
         await finalize_bailed_runs(bailed_run_ids)
         raise Suspend(
             {
                 "question_message_id": question_message_id,
                 "options": [
-                    # argument_id=None marks the default (the TTL sweep's
-                    # auto-answer) — 确认放行 keeps 离开不中断.
                     {"id": "a", "label": confirm_label, "argument_id": None},
                     {"id": "b", "label": title_label, "argument_id": "title_card"},
                 ],
