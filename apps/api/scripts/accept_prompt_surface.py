@@ -102,11 +102,11 @@ CARDS = {
         "templates": [
             (
                 "zh",
-                "把这段演讲变成 LinkedIn 帖，按我的风格来。哪个平台发——你选合适的就行。",
+                "把这段演讲写成一条社媒帖，按我的风格来。哪个平台发——你选合适的就行。纯文本——不要 Markdown（不要 **加粗** / _斜体_ / # 标题 / [链接](url) / 代码块）；主流社交平台都把 Markdown 当源文渲染，看起来是碎的。",
             ),
             (
                 "en",
-                "Turn this talk into a LinkedIn post in my style. The platform is up to you — pick whatever fits.",
+                "Turn this talk into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
             ),
         ],
     },

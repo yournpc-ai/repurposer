@@ -511,7 +511,7 @@ const en = {
       inputTitle: "Source material",
       inputHint: "Your talk transcript, paper draft, or meeting notes — long-form text.",
       promptTemplate:
-        "Turn this talk into a LinkedIn post in my style. The platform is up to you — pick whatever fits.",
+        "Turn this talk into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
       promptHint:
         "Send it as is, or try “shorter, hook-first”, “make it a thread instead”, “in German”…",
     },

@@ -5,8 +5,11 @@ import { useTranslation } from "react-i18next"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import {
   FileText,
+  Hash,
   Image as ImageIcon,
+  Loader2,
   Music,
+  Quote,
   Upload,
   Video,
   Volume2,
@@ -447,6 +450,16 @@ function ExampleCard({
         ? "aspect-square"
         : "aspect-video"
 
+  // Writer outputs are JSON (text payload, no media to <img>). Detect by
+  // the URL extension baked into demo/outputs/ — the inspector fetches +
+  // dispatches by shape (post → paragraphs + hashtag chips; quotes →
+  // standalone quote rows; carousel → slide stack).
+  const isTextPayload = url.toLowerCase().endsWith(".json")
+
+  if (isTextPayload) {
+    return <JsonTextExample url={url} label={label} aspect={aspect} />
+  }
+
   return (
     <div
       className={cn(
@@ -515,5 +528,177 @@ function ExampleCard({
         </button>
       )}
     </div>
+  )
+}
+
+/** Writer output renderer (text-tribe evidence, 2026-08-24):
+ * the bake lands JSON under demo/outputs/<stem>-<hash>.json — fetch +
+ * dispatch by shape to one of three layouts. Plain text only (no MD
+ * conversion — social platforms don't render Markdown). */
+function JsonTextExample({
+  url,
+  label,
+  aspect,
+}: {
+  url: string
+  label: string
+  aspect?: string
+}) {
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "error"; message: string }
+    | { kind: "ready"; data: unknown }
+  >({ kind: "loading" })
+
+  useEffect(() => {
+    let alive = true
+    fetch(url)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((data) => {
+        if (alive) setState({ kind: "ready", data })
+      })
+      .catch((e: Error) => {
+        if (alive) setState({ kind: "error", message: e.message })
+      })
+    return () => {
+      alive = false
+    }
+  }, [url])
+
+  // Text cards keep the recipe's frame (the gallery is uniform aspect per
+  // card, ADR-048); height flows from content, scroll on overflow.
+  const frameClass =
+    aspect === "9:16"
+      ? "aspect-[9/16]"
+      : aspect === "1:1"
+        ? "aspect-square"
+        : "aspect-video"
+
+  return (
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-lg border bg-card text-card-foreground",
+        frameClass,
+      )}
+    >
+      <div className="absolute inset-0 flex flex-col">
+        {state.kind === "loading" ? (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : state.kind === "error" ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
+            <FileText className="h-5 w-5" />
+            <span>{state.message}</span>
+          </div>
+        ) : (
+          <JsonTextBody data={state.data} />
+        )}
+      </div>
+      <span className="absolute bottom-2 left-2 rounded-md bg-foreground/5 px-2 py-0.5 text-xs text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  )
+}
+
+function JsonTextBody({ data }: { data: unknown }) {
+  // Dispatch by JSON shape (the writer schemas are the only producers):
+  //   { slides: [{ title, body }] }   → carousel
+  //   { quotes: [{ quote, attribution }] } → quote cards
+  //   { content: string, hashtags?: string[] } → social post
+  if (isCarousel(data)) {
+    return (
+      <ol className="flex h-full w-full flex-col gap-2 overflow-y-auto p-3 text-left text-xs">
+        {data.slides.map((s, i) => (
+          <li
+            key={i}
+            className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2"
+          >
+            <span className="text-meta text-muted-foreground">
+              {i + 1}/{data.slides.length}
+            </span>
+            <span className="font-medium leading-snug">{s.title}</span>
+            {s.body ? (
+              <span className="text-muted-foreground leading-relaxed">
+                {s.body}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    )
+  }
+  if (isQuotes(data)) {
+    return (
+      <ol className="flex h-full w-full flex-col gap-2 overflow-y-auto p-3 text-left text-xs">
+        {data.quotes.map((q, i) => (
+          <li
+            key={i}
+            className="flex flex-col gap-1 rounded-md border bg-muted/40 p-3"
+          >
+            <Quote className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="leading-snug">{q.quote}</span>
+            <span className="text-meta text-muted-foreground">
+              {q.attribution}
+            </span>
+          </li>
+        ))}
+      </ol>
+    )
+  }
+  if (isPost(data)) {
+    return (
+      <div className="flex h-full w-full flex-col gap-3 overflow-y-auto p-4 text-left text-sm">
+        <p className="whitespace-pre-wrap leading-relaxed">{data.content}</p>
+        {data.hashtags && data.hashtags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {data.hashtags.map((tag, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                <Hash className="h-3 w-3" />
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+  // Unknown shape — fall back to plain JSON dump (defensive; future writer
+  // kinds would land here before a typed branch lands).
+  return (
+    <pre className="h-full w-full overflow-auto p-3 text-left text-[10px] text-muted-foreground">
+      {JSON.stringify(data, null, 2)}
+    </pre>
+  )
+}
+
+function isCarousel(d: unknown): d is { slides: { title: string; body?: string }[] } {
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    Array.isArray((d as { slides?: unknown }).slides)
+  )
+}
+function isQuotes(d: unknown): d is { quotes: { quote: string; attribution: string }[] } {
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    Array.isArray((d as { quotes?: unknown }).quotes)
+  )
+}
+function isPost(
+  d: unknown,
+): d is { content: string; hashtags?: string[] } {
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    typeof (d as { content?: unknown }).content === "string"
   )
 }
