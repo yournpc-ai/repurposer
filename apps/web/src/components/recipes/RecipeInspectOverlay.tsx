@@ -398,7 +398,7 @@ export function RecipeInspectOverlay({
 
                 <TabsContent
                   value="examples"
-                  className="h-[70vh] min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-14 [mask-image:linear-gradient(to_bottom,transparent,black_56px)] md:h-auto"
+                  className="h-[70vh] min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-20 [mask-image:linear-gradient(to_bottom,transparent,black_56px)] md:h-auto"
                 >
                   <div className="flex flex-col gap-8">
                     {card.example_outputs.length > 0 && (
