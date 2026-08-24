@@ -232,12 +232,12 @@ export function RecipeInspectOverlay({
             render={
               <Button
                 variant="ghost"
-                size="icon-sm"
-                className="absolute top-2 right-2 z-10"
+                size="icon"
+                className="absolute top-2 right-2 z-10 h-9 w-9"
               />
             }
           >
-            <X />
+            <X className="h-5 w-5" />
           </DialogClose>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
