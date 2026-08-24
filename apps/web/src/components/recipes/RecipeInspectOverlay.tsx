@@ -375,7 +375,7 @@ export function RecipeInspectOverlay({
               >
                 <TabsList
                   variant="line"
-                  className="absolute left-6 top-5 z-10 gap-2"
+                  className="absolute left-6 top-4 z-10 gap-1 rounded-md bg-card/95 px-1.5 py-0.5 ring-1 ring-foreground/10 backdrop-blur-md"
                 >
                   <TabsTrigger value="examples" className="px-3 text-sm">
                     {t("recipes.inspect.tabs.examples")}
