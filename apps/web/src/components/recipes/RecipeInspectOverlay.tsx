@@ -377,12 +377,12 @@ export function RecipeInspectOverlay({
             <div className="relative min-h-0 flex-1 border-foreground/10 border-t md:border-l md:border-t-0">
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-14 bg-card/95 backdrop-blur-md border-b border-foreground/10"
+                className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-14 bg-card backdrop-blur-md border-b border-foreground/10"
               />
               <Tabs
                 value={tab}
                 onValueChange={(v) => setTab(v as "examples" | "flow")}
-                className="relative z-10 flex h-full min-h-0 flex-col"
+                className="flex h-full min-h-0 flex-col"
               >
                 <TabsList
                   variant="line"
