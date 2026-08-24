@@ -5,8 +5,10 @@ import { useTranslation } from "react-i18next"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import {
   FileText,
+  Headphones,
   Image as ImageIcon,
   Music,
+  Presentation,
   Upload,
   Video,
   Volume2,
@@ -585,9 +587,13 @@ function ExampleCard({
           loop
           playsInline
         />
-      ) : kind === "transcript" || kind === "slides" || kind === "audio" ? (
+      ) : kind === "transcript" ||
+        kind === "slides" ||
+        kind === "audio" ? (
         /* Documents aren't renderable media — a quiet icon tile carries the
-           label (the label pill below names the file kind). */
+           label (per-kind icon so users read what kind of file it is at a
+           glance: transcript→doc, slides→deck, audio→waveform; the label
+           pill below names the file kind). */
         <a
           href={url}
           target="_blank"
@@ -595,7 +601,13 @@ function ExampleCard({
           onClick={(e) => e.stopPropagation()}
           className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted text-muted-foreground transition-colors hover:bg-accent"
         >
-          <FileText className="h-6 w-6" />
+          {kind === "audio" ? (
+            <Headphones className="h-6 w-6" />
+          ) : kind === "slides" ? (
+            <Presentation className="h-6 w-6" />
+          ) : (
+            <FileText className="h-6 w-6" />
+          )}
           <span className="max-w-[85%] truncate text-xs">{url.split("/").pop()}</span>
         </a>
       ) : (
@@ -605,7 +617,9 @@ function ExampleCard({
       {/* The label pill's white veil only works over media (dark imagery);
           on the document tile's light muted fill it washes out — there the
           label is plain meta text directly on the tile (fill-first). */}
-      {kind === "transcript" || kind === "slides" || kind === "audio" ? (
+      {kind === "transcript" ||
+      kind === "slides" ||
+      kind === "audio" ? (
         <span className="absolute bottom-2 left-2 px-2 py-0.5 text-xs text-muted-foreground">
           {label}
         </span>
