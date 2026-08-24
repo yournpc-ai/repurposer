@@ -5,11 +5,8 @@ import { useTranslation } from "react-i18next"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import {
   FileText,
-  Hash,
   Image as ImageIcon,
-  Loader2,
   Music,
-  Quote,
   Upload,
   Video,
   Volume2,
@@ -34,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 
 import { recipeProcessFlow } from "./recipeFlow"
 
@@ -90,6 +88,56 @@ export function RecipeInspectOverlay({
   // The one card currently sounding (autoplay is muted; the toggle circle
   // unmutes one card at a time — the home gallery's pattern).
   const [soundingId, setSoundingId] = useState<string | null>(null)
+
+  // Text-tribe examples (RECIPES §4.6, 2026-08-24): the writer lands JSON
+  // under demo/outputs/<stem>-<hash>.json — a textarea for the social-post
+  // body, stacked slide cards for carousel. Quote-cards ships an actual PNG
+  // poster so its example stays an `<img>`. Fetching is gated on the card
+  // id so the other cards don't pay the round-trip.
+  const socialPostUrl =
+    card.id === "social-post" ? card.example_outputs[0]?.url ?? null : null
+  const carouselUrl =
+    card.id === "carousel" ? card.example_outputs[0]?.url ?? null : null
+  const [socialPost, setSocialPost] = useState<SocialPostPayload | null>(null)
+  const [carousel, setCarousel] = useState<CarouselPayload | null>(null)
+
+  useEffect(() => {
+    if (!socialPostUrl) {
+      setSocialPost(null)
+      return
+    }
+    let alive = true
+    fetch(socialPostUrl)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: SocialPostPayload) => {
+        if (alive) setSocialPost(d)
+      })
+      .catch(() => {
+        if (alive) setSocialPost(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [socialPostUrl])
+
+  useEffect(() => {
+    if (!carouselUrl) {
+      setCarousel(null)
+      return
+    }
+    let alive = true
+    fetch(carouselUrl)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: CarouselPayload) => {
+        if (alive) setCarousel(d)
+      })
+      .catch(() => {
+        if (alive) setCarousel(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [carouselUrl])
 
   const process = useMemo(() => recipeProcessFlow(card, t), [card, t])
 
@@ -345,23 +393,92 @@ export function RecipeInspectOverlay({
                         <p className="text-meta mb-3">
                           {t("recipes.inspect.sections.outputs")}
                         </p>
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                          {card.example_outputs.map((o, i) => (
-                            <ExampleCard
-                              key={`output:${i}`}
-                              id={`output:${i}`}
-                              kind={o.kind}
-                              url={o.url}
-                              poster={o.poster_url ?? null}
-                              label={materialLabel(o.label_key) ?? o.kind}
-                              aspect={card.aspect}
-                              sounding={soundingId === `output:${i}`}
-                              onToggleSound={(id) =>
-                                setSoundingId((prev) => (prev === id ? null : id))
-                              }
+                        {card.id === "social-post" ? (
+                          // Writer output is plain text + hashtags. Render as
+                          // a readonly textarea so the user reads the post
+                          // the way it would actually appear on social —
+                          // paragraphs preserved, hashtags inlined (the
+                          // upstream writer is Markdown-free; social
+                          // platforms render **bold** etc. as raw source).
+                          socialPost ? (
+                            <Textarea
+                              readOnly
+                              value={[
+                                socialPost.content,
+                                ...(socialPost.hashtags ?? []).map(
+                                  (h) => `#${h}`,
+                                ),
+                              ].join("\n\n")}
+                              className="min-h-[200px] resize-none text-sm leading-relaxed"
                             />
-                          ))}
-                        </div>
+                          ) : null
+                        ) : card.id === "carousel" ? (
+                          // Carousel has no render-side product — the
+                          // writer drops N slide cards as JSON. Show them
+                          // stacked so the user reads the deck top-to-
+                          // bottom in the same order it'll post.
+                          carousel ? (
+                            <div className="flex flex-col gap-3">
+                              {carousel.slides.map((s, i) => (
+                                <div
+                                  key={i}
+                                  className="rounded-lg bg-card p-4 ring-1 ring-foreground/10"
+                                >
+                                  <p className="text-meta mb-2 text-muted-foreground">
+                                    {i + 1} / {carousel.slides.length}
+                                  </p>
+                                  <p className="font-medium leading-snug">
+                                    {s.title}
+                                  </p>
+                                  {s.body ? (
+                                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                      {s.body}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null
+                        ) : card.id === "quote-cards" &&
+                          card.example_outputs[0]?.poster_url ? (
+                          // Quote-cards has a real PNG poster (the writer
+                          // bakes the first quote card as the thumbnail).
+                          // Render it as an `<img>` — the poster IS the
+                          // product's look; we don't need to redraw the
+                          // cards from JSON. (The other four quotes still
+                          // ride inside the JSON for the live run.)
+                          <img
+                            src={card.example_outputs[0].poster_url}
+                            alt={
+                              materialLabel(
+                                card.example_outputs[0].label_key,
+                              ) ?? ""
+                            }
+                            className="aspect-square w-full max-w-md rounded-lg bg-card object-cover ring-1 ring-foreground/10"
+                          />
+                        ) : (
+                          // Default: video / image outputs (reframe,
+                          // highlight-clips, voice-dub, etc.).
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                            {card.example_outputs.map((o, i) => (
+                              <ExampleCard
+                                key={`output:${i}`}
+                                id={`output:${i}`}
+                                kind={o.kind}
+                                url={o.url}
+                                poster={o.poster_url ?? null}
+                                label={materialLabel(o.label_key) ?? o.kind}
+                                aspect={card.aspect}
+                                sounding={soundingId === `output:${i}`}
+                                onToggleSound={(id) =>
+                                  setSoundingId((prev) =>
+                                    prev === id ? null : id,
+                                  )
+                                }
+                              />
+                            ))}
+                          </div>
+                        )}
                       </section>
                     )}
                     {card.example_assets.length > 0 && (
@@ -450,16 +567,6 @@ function ExampleCard({
         ? "aspect-square"
         : "aspect-video"
 
-  // Writer outputs are JSON (text payload, no media to <img>). Detect by
-  // the URL extension baked into demo/outputs/ — the inspector fetches +
-  // dispatches by shape (post → paragraphs + hashtag chips; quotes →
-  // standalone quote rows; carousel → slide stack).
-  const isTextPayload = url.toLowerCase().endsWith(".json")
-
-  if (isTextPayload) {
-    return <JsonTextExample url={url} label={label} aspect={aspect} />
-  }
-
   return (
     <div
       className={cn(
@@ -531,174 +638,9 @@ function ExampleCard({
   )
 }
 
-/** Writer output renderer (text-tribe evidence, 2026-08-24):
- * the bake lands JSON under demo/outputs/<stem>-<hash>.json — fetch +
- * dispatch by shape to one of three layouts. Plain text only (no MD
- * conversion — social platforms don't render Markdown). */
-function JsonTextExample({
-  url,
-  label,
-  aspect,
-}: {
-  url: string
-  label: string
-  aspect?: string
-}) {
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "error"; message: string }
-    | { kind: "ready"; data: unknown }
-  >({ kind: "loading" })
-
-  useEffect(() => {
-    let alive = true
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then((data) => {
-        if (alive) setState({ kind: "ready", data })
-      })
-      .catch((e: Error) => {
-        if (alive) setState({ kind: "error", message: e.message })
-      })
-    return () => {
-      alive = false
-    }
-  }, [url])
-
-  // Text cards keep the recipe's frame (the gallery is uniform aspect per
-  // card, ADR-048); height flows from content, scroll on overflow.
-  const frameClass =
-    aspect === "9:16"
-      ? "aspect-[9/16]"
-      : aspect === "1:1"
-        ? "aspect-square"
-        : "aspect-video"
-
-  return (
-    <div
-      className={cn(
-        "group relative overflow-hidden rounded-lg border bg-card text-card-foreground",
-        frameClass,
-      )}
-    >
-      <div className="absolute inset-0 flex flex-col">
-        {state.kind === "loading" ? (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        ) : state.kind === "error" ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
-            <FileText className="h-5 w-5" />
-            <span>{state.message}</span>
-          </div>
-        ) : (
-          <JsonTextBody data={state.data} />
-        )}
-      </div>
-      <span className="absolute bottom-2 left-2 rounded-md bg-foreground/5 px-2 py-0.5 text-xs text-muted-foreground">
-        {label}
-      </span>
-    </div>
-  )
-}
-
-function JsonTextBody({ data }: { data: unknown }) {
-  // Dispatch by JSON shape (the writer schemas are the only producers):
-  //   { slides: [{ title, body }] }   → carousel
-  //   { quotes: [{ quote, attribution }] } → quote cards
-  //   { content: string, hashtags?: string[] } → social post
-  if (isCarousel(data)) {
-    return (
-      <ol className="flex h-full w-full flex-col gap-2 overflow-y-auto p-3 text-left text-xs">
-        {data.slides.map((s, i) => (
-          <li
-            key={i}
-            className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2"
-          >
-            <span className="text-meta text-muted-foreground">
-              {i + 1}/{data.slides.length}
-            </span>
-            <span className="font-medium leading-snug">{s.title}</span>
-            {s.body ? (
-              <span className="text-muted-foreground leading-relaxed">
-                {s.body}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-    )
-  }
-  if (isQuotes(data)) {
-    return (
-      <ol className="flex h-full w-full flex-col gap-2 overflow-y-auto p-3 text-left text-xs">
-        {data.quotes.map((q, i) => (
-          <li
-            key={i}
-            className="flex flex-col gap-1 rounded-md border bg-muted/40 p-3"
-          >
-            <Quote className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="leading-snug">{q.quote}</span>
-            <span className="text-meta text-muted-foreground">
-              {q.attribution}
-            </span>
-          </li>
-        ))}
-      </ol>
-    )
-  }
-  if (isPost(data)) {
-    return (
-      <div className="flex h-full w-full flex-col gap-3 overflow-y-auto p-4 text-left text-sm">
-        <p className="whitespace-pre-wrap leading-relaxed">{data.content}</p>
-        {data.hashtags && data.hashtags.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {data.hashtags.map((tag, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-              >
-                <Hash className="h-3 w-3" />
-                {tag}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    )
-  }
-  // Unknown shape — fall back to plain JSON dump (defensive; future writer
-  // kinds would land here before a typed branch lands).
-  return (
-    <pre className="h-full w-full overflow-auto p-3 text-left text-[10px] text-muted-foreground">
-      {JSON.stringify(data, null, 2)}
-    </pre>
-  )
-}
-
-function isCarousel(d: unknown): d is { slides: { title: string; body?: string }[] } {
-  return (
-    typeof d === "object" &&
-    d !== null &&
-    Array.isArray((d as { slides?: unknown }).slides)
-  )
-}
-function isQuotes(d: unknown): d is { quotes: { quote: string; attribution: string }[] } {
-  return (
-    typeof d === "object" &&
-    d !== null &&
-    Array.isArray((d as { quotes?: unknown }).quotes)
-  )
-}
-function isPost(
-  d: unknown,
-): d is { content: string; hashtags?: string[] } {
-  return (
-    typeof d === "object" &&
-    d !== null &&
-    typeof (d as { content?: unknown }).content === "string"
-  )
-}
+/** Text-tribe writer output payloads (RECIPES §4.6, 2026-08-24): the bake
+ * drops the writer's structured result at demo/outputs/<stem>-<hash>.json.
+ * Type mirrors the writer schemas — content / hashtags for posts, slides
+ * for carousels. Quote-cards ships an actual PNG poster, no JSON fetch. */
+type SocialPostPayload = { content: string; hashtags?: string[] }
+type CarouselPayload = { slides: { title: string; body?: string }[] }
