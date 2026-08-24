@@ -361,21 +361,32 @@ export function RecipeInspectOverlay({
             </div>
 
             {/* RIGHT — the canvas IS the zone: full-bleed, tabs floating on
-                top. NO solid paint on either theme (the previous dark:bg-inset
-                here was a deliberate darker canvas, but it ate the glass —
-                2/3 of the popup read as flat dark and the overlay-surface
-                blur disappeared; the Login read is uniformly glassy because
-                it has no right-column solid fill, mirror that). The /10
-                hairline on the left seam carries the column separation. */}
+                top. NO solid paint on the canvas itself (the previous
+                dark:bg-inset here was a deliberate darker canvas, but it
+                ate the glass — 2/3 of the popup read as flat dark and the
+                overlay-surface blur disappeared; the Login read is
+                uniformly glassy because it has no right-column solid fill,
+                mirror that). The /10 hairline on the left seam carries
+                the column separation.
+
+                The TOP STRIP IS opaque though — a frosted bar across the
+                full right-pane width so scrolling content can't bleed
+                through the tabs row OR the dialog-level close button
+                (which is z-10 of the dialog and sits on top). The TabsList
+                rides this strip instead of carrying its own background. */}
             <div className="relative min-h-0 flex-1 border-foreground/10 border-t md:border-l md:border-t-0">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-14 bg-card/95 backdrop-blur-md border-b border-foreground/10"
+              />
               <Tabs
                 value={tab}
                 onValueChange={(v) => setTab(v as "examples" | "flow")}
-                className="flex h-full min-h-0 flex-col"
+                className="relative z-10 flex h-full min-h-0 flex-col"
               >
                 <TabsList
                   variant="line"
-                  className="absolute left-6 top-4 z-10 gap-1 rounded-md bg-card/95 px-1.5 py-0.5 ring-1 ring-foreground/10 backdrop-blur-md"
+                  className="absolute left-6 top-4 z-10 gap-2"
                 >
                   <TabsTrigger value="examples" className="px-3 text-sm">
                     {t("recipes.inspect.tabs.examples")}
@@ -387,7 +398,7 @@ export function RecipeInspectOverlay({
 
                 <TabsContent
                   value="examples"
-                  className="h-[70vh] min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-16 [mask-image:linear-gradient(to_bottom,transparent,black_56px)] md:h-auto"
+                  className="h-[70vh] min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-14 [mask-image:linear-gradient(to_bottom,transparent,black_56px)] md:h-auto"
                 >
                   <div className="flex flex-col gap-8">
                     {card.example_outputs.length > 0 && (
