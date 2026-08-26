@@ -464,7 +464,10 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     # the domain conventions at assembly time.
     "social-post": RecipeEntry(
         status="live",
-        input_slots=[InputSlot(type="transcript")],
+        # 2026-08-24 lift: transcript is OPTIONAL. The card drafts from
+        # prompt + persona when the user has nothing to attach — the
+        # promptHint echoes this so the user sees the choice at send time.
+        input_slots=[InputSlot(type="transcript", required=False)],
         # write_post requires `language` (CopyWriterParams.language is
         # mandatory — declared in app/pipeline/derivative_dispatch.py).
         # The card defaults to English; chat overrides per language.
@@ -493,35 +496,76 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     ),
     "quote-cards": RecipeEntry(
         status="live",
-        input_slots=[InputSlot(type="transcript")],
-        tasks=[
-            TaskItem(tool="write_quotes", params={"language": "en", "count": 4})
+        # 2026-08-25 Phase 2→4 重设计：quote-cards 不再是 LLM 自由发挥的
+        # 1:1 PNG——它是 ASR+Remotion 真管线短视频（9:16 单条金句）。素材
+        # 必传：video（OffthreadVideo 渲染底，quote 那段原声+画面+ASR 字幕
+        # 一次成型）。transcript 槽不列——ASR 在 chain 内由 video 自动
+        # 派生文字稿 + 词级时间戳 → 驱动 understanding.quotable_lines 候选
+        # → runner 据此 snap 时间戳；用户无需重复上传文字稿。用户红线：
+        # quote 必须有源素材绑定。images 作为未来 image 源 fallback（Phase
+        # 4 之后看真实需求再立）。
+        #
+        # Chain variant (2026-08-25, RECIPES §4.6.2): count is now the
+        # writer's HINT, not a hard pin — the writer picks how many
+        # sentences are needed to express the core idea (3..7 dynamic).
+        # We seed count=5 (the middle of the band) so the prompt has a
+        # sensible default; the writer's verdict is final. Materialiser
+        # renders ALL chain entries as ONE composite PNG (cascade of
+        # caption strips), not N separate cards.
+        input_slots=[
+            InputSlot(type="video", required=True),
         ],
-        aspect="1:1",
-        tags=["text-output"],
+        tasks=[
+            # count=5: chain midpoint — the writer judges actual N (3..7).
+            # aspect=9:16: 竖屏短片金句卡，对齐真实小红书金句卡形态。
+            # caption_mode 走 Phase 1 chat 反问：bilingual / source_only /
+            # target_only 三选一，默认值是 chat 的默认值而非 recipes 端的
+            # 默认值（pre-LLM 闸门已撤，run.context.caption_mode 由 LLM 在
+            # task_book 落字）。layout_mode="stacked" 触发 chain 合成器；
+            # 由 chat 在 task_book 中按用户意图落字（bake-time override）。
+            TaskItem(tool="write_quotes", params={"language": "en", "count": 5})
+        ],
+        aspect="9:16",
+        tags=["text-output", "captions"],
         flow=[FlowStep(key="write_quotes")],
+        # 2026-08-25 Phase 4 + chain variant: example_assets 跟 recipes
+        # §7.1 对账——demo 源是 xy_2.mp4（单人 TED 风 talk，60s 截屏
+        # 960×960，ASR 词级时间戳很密），跟实际 baked 流水线一致：writer
+        # 选自 understanding.quotable_lines（来自这一段 ASR），runner 据此
+        # snap 时间戳并生成 frame_at。video 必传（卡片承诺的视觉底 = 真人
+        # 说话帧），transcript 由 ASR 在 chain 内补（资产侧不必显式传文字稿）。
         example_assets=[
             ExampleAsset(
-                kind="transcript",
-                url=f"{_DEMO}/uploads/demo-article.md",
-                label_key="demo_article",
+                kind="video",
+                url=f"{_DEMO}/uploads/xy_2.mp4",
+                label_key="demo_keynote",
             ),
         ],
-        # 2026-08-24 harvest (write_quotes on demo-article.md, count=4, EN).
-        # The writer's first-card PNG is the overlay poster — JSON payload
-        # rides alongside, the four full quotes are the overlay's content.
+        # 2026-08-25 Phase 4 + chain variant bake landed: 9:16 视频金
+        # 句卡 (xy_2.mp4 → 流水线渲染 → quote-card-chain-*.mp4).
+        # writer 判 N=3 句（落在 3..7 band 内），每条 chain entry = 一
+        # 张真实视频帧（PyAV 在 frame_at 时刻抓）+ 烤在上面的双语字幕。
+        # 几何 = v2 y-stack (overlap=200px, y_top=i*(vh-overlap)) +
+        # v3 宽度金字塔（CHAIN_CARD_WIDTH_FACTOR=0.92，顶部最窄、底部
+        # 最宽 → 在 overlap 区两侧露出下条边沿，sticky-note cascade
+        # 视觉）。绘制顺序 reversed（chain[N-1] 先画在画布底部=z 最
+        # 小=back；chain[0] 最后画在画布顶部=z 最大=front），视觉上
+        # 后画盖前画。needs_speaker_frame 没启用（纯帧卡 cascade）。
+        # stills kind spec + zoom_in 1.05 渲染 4s 9:16 MP4。Examples
+        # tab 显示这条视频。
         example_outputs=[
             ExampleOutput(
                 kind="image",
-                url=f"{_DEMO}/outputs/quotes-e9a31561.json",
-                poster_url=f"{_DEMO}/outputs/quotes-poster-d74c0cdb.png",
+                url=f"{_DEMO}/outputs/quote-card-chain-v9-72402480.png",
+                poster_url=None,
                 label_key="quotes_output",
             ),
         ],
     ),
     "carousel": RecipeEntry(
         status="live",
-        input_slots=[InputSlot(type="transcript")],
+        # 2026-08-24 lift: transcript is OPTIONAL — see social-post note.
+        input_slots=[InputSlot(type="transcript", required=False)],
         tasks=[
             TaskItem(tool="write_carousel", params={"language": "en", "count": 6})
         ],
