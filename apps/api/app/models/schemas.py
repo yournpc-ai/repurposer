@@ -2055,6 +2055,11 @@ class OutputResponse(BaseModel):
     # None = 未质检（旧行 / 无 verify 的图）。
     quality: dict | None = None
     publishing: dict = Field(default_factory=dict)
+    # Display-layer aspect (产物展示统一 P1, 2026-08-27): server-side single
+    # derivation — ``render_spec.aspect`` (clip family) → payload-declared
+    # ``aspect`` (image products) → None; the ``"original"`` sentinel
+    # normalizes to None (the frame follows the source, unknown here).
+    aspect: str | None = None
     # Chain-integrity hash of render_spec (ADR-032) — the client's base_hash
     # for operation batches. None when there is no render_spec.
     spec_hash: str | None = None
@@ -2084,6 +2089,28 @@ class OutputResponse(BaseModel):
             self.publishing["cover_image_url"] = resolve_stored_url(
                 self.publishing["cover_image_url"]
             )
+        return self
+
+    @model_validator(mode="after")
+    def _derive_aspect(self) -> OutputResponse:
+        """Single server-side aspect derivation (产物展示统一 P1): the
+        clip family declares via ``render_spec.aspect``; image products
+        declare ``payload["aspect"]`` at the write point; ``"original"``
+        and empty values normalize to None (unknown frame — surfaces
+        fall back to their default tier or the shared probe)."""
+        declared = self.payload.get("aspect") if isinstance(self.payload, dict) else None
+        candidates = (
+            self.render_spec.aspect if self.render_spec is not None else None,
+            declared,
+        )
+        self.aspect = next(
+            (
+                a
+                for a in candidates
+                if isinstance(a, str) and a and a != "original"
+            ),
+            None,
+        )
         return self
 
 

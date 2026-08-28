@@ -77,13 +77,37 @@ export function RecipeInspectOverlay({
   const { launching, launch } = useProjectLaunch()
 
   const title = t(`recipes.${card.id}.title`)
-  const template = t(`recipes.${card.id}.promptTemplate`)
+  // State order matters: ``files`` is read by the template picker below,
+  // so its useState must come first (TS2448).
+  const [files, setFiles] = useState<File[]>([])
+
+  // 2026-08-24 dual-template (RECIPES §7.2): the launch pre-fills the
+  // beginner voice ("I want a quote card.") when no source is attached,
+  // and the more specific voice ("Pull the strongest quotes from my
+  // source and turn them into quote cards ready to share.") once the
+  // user picks files in the overlay. The picker fires on every file
+  // change — but only overrides the prompt when the user has NOT edited
+  // it yet (their draft wins, chat always beats preset, same rule as
+  // everywhere else). Cards without `promptTemplateWithMaterial` (text
+  // tribe is the only current user) fall back to the no-material voice.
+  const hasFiles = files.length > 0
+  const template = hasFiles
+    ? (t(`recipes.${card.id}.promptTemplateWithMaterial`, {
+        defaultValue: "",
+      }) ||
+        t(`recipes.${card.id}.promptTemplate`))
+    : t(`recipes.${card.id}.promptTemplate`)
 
   // The draft: the template as plain editable text. The recipe's identity
   // stays frontend-local — no chip row, no wire field (the template text
   // already says everything; a repetition is noise).
   const [prompt, setPrompt] = useState(template)
-  const [files, setFiles] = useState<File[]>([])
+  const [hasEdited, setHasEdited] = useState(false)
+  // Keep the live template in sync with file state — but only when the
+  // user hasn't touched the textarea (their edits win, never overwritten).
+  useEffect(() => {
+    if (!hasEdited) setPrompt(template)
+  }, [template, hasEdited])
 
   // Inspect tabs (right zone): 示例 = flat cards; 流程 = the one canvas.
   const [tab, setTab] = useState<"examples" | "flow">("examples")
@@ -91,55 +115,35 @@ export function RecipeInspectOverlay({
   // unmutes one card at a time — the home gallery's pattern).
   const [soundingId, setSoundingId] = useState<string | null>(null)
 
-  // Text-tribe examples (RECIPES §4.6, 2026-08-24): the writer lands JSON
-  // under demo/outputs/<stem>-<hash>.json — a textarea for the social-post
-  // body, stacked slide cards for carousel. Quote-cards ships an actual PNG
-  // poster so its example stays an `<img>`. Fetching is gated on the card
-  // id so the other cards don't pay the round-trip.
-  const socialPostUrl =
-    card.id === "social-post" ? card.example_outputs[0]?.url ?? null : null
-  const carouselUrl =
-    card.id === "carousel" ? card.example_outputs[0]?.url ?? null : null
-  const [socialPost, setSocialPost] = useState<SocialPostPayload | null>(null)
-  const [carousel, setCarousel] = useState<CarouselPayload | null>(null)
+  // Document examples (产物展示统一 P1, 2026-08-27): text-tribe writers
+  // drop their JSON at demo/outputs/<stem>-<hash>.json, registered as
+  // kind="document" — the overlay fetches it and dispatches the render on
+  // `doc_format` (post → readonly textarea, carousel → slide stack).
+  // Display logic is type-driven; the card id never enters it.
+  const docOutput =
+    card.example_outputs.find((o) => o.kind === "document") ?? null
+  const [docPayload, setDocPayload] = useState<
+    SocialPostPayload | CarouselPayload | null
+  >(null)
 
   useEffect(() => {
-    if (!socialPostUrl) {
-      setSocialPost(null)
+    if (!docOutput) {
+      setDocPayload(null)
       return
     }
     let alive = true
-    fetch(socialPostUrl)
+    fetch(docOutput.url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: SocialPostPayload) => {
-        if (alive) setSocialPost(d)
+      .then((d: SocialPostPayload | CarouselPayload) => {
+        if (alive) setDocPayload(d)
       })
       .catch(() => {
-        if (alive) setSocialPost(null)
+        if (alive) setDocPayload(null)
       })
     return () => {
       alive = false
     }
-  }, [socialPostUrl])
-
-  useEffect(() => {
-    if (!carouselUrl) {
-      setCarousel(null)
-      return
-    }
-    let alive = true
-    fetch(carouselUrl)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: CarouselPayload) => {
-        if (alive) setCarousel(d)
-      })
-      .catch(() => {
-        if (alive) setCarousel(null)
-      })
-    return () => {
-      alive = false
-    }
-  }, [carouselUrl])
+  }, [docOutput])
 
   const process = useMemo(() => recipeProcessFlow(card, t), [card, t])
 
@@ -341,7 +345,10 @@ export function RecipeInspectOverlay({
               <div className="flex h-36 flex-col gap-1.5 rounded-lg bg-inset p-2.5">
                 <textarea
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setHasEdited(true)
+                    setPrompt(e.target.value)
+                  }}
                   disabled={launching}
                   placeholder={t("home.pastePlaceholder")}
                   className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -400,72 +407,65 @@ export function RecipeInspectOverlay({
                         <p className="text-meta mb-3">
                           {t("recipes.inspect.sections.outputs")}
                         </p>
-                        {card.id === "social-post" ? (
-                          // Writer output is plain text + hashtags. Render as
-                          // a readonly textarea so the user reads the post
+                        {docOutput ? (
+                          docOutput.doc_format === "carousel" ? (
+                            // Carousel has no render-side product — the
+                            // writer drops N slide cards as JSON. Show them
+                            // stacked so the user reads the deck top-to-
+                            // bottom in the same order it'll post.
+                            (docPayload as CarouselPayload | null)?.slides ? (
+                              <div className="flex flex-col gap-3">
+                                {(docPayload as CarouselPayload).slides.map(
+                                  (s, i) => (
+                                    <div
+                                      key={i}
+                                      className="rounded-lg bg-card p-4 ring-1 ring-foreground/10"
+                                    >
+                                      <p className="text-meta mb-2 text-muted-foreground">
+                                        {i + 1} /{" "}
+                                        {
+                                          (docPayload as CarouselPayload)
+                                            .slides.length
+                                        }
+                                      </p>
+                                      <p className="font-medium leading-snug">
+                                        {s.title}
+                                      </p>
+                                      {s.body ? (
+                                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                          {s.body}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            ) : null
+                          ) : // Writer output is plain text + hashtags. Render
+                          // as a readonly textarea so the user reads the post
                           // the way it would actually appear on social —
                           // paragraphs preserved, hashtags inlined (the
                           // upstream writer is Markdown-free; social
                           // platforms render **bold** etc. as raw source).
-                          socialPost ? (
+                          (docPayload as SocialPostPayload | null)?.content !=
+                            null ? (
                             <Textarea
                               readOnly
                               value={[
-                                socialPost.content,
-                                ...(socialPost.hashtags ?? []).map(
-                                  (h) => `#${h}`,
-                                ),
+                                (docPayload as SocialPostPayload).content,
+                                ...(
+                                  (docPayload as SocialPostPayload).hashtags ??
+                                  []
+                                ).map((h) => `#${h}`),
                               ].join("\n\n")}
                               className="min-h-[200px] resize-none text-sm leading-relaxed"
                             />
                           ) : null
-                        ) : card.id === "carousel" ? (
-                          // Carousel has no render-side product — the
-                          // writer drops N slide cards as JSON. Show them
-                          // stacked so the user reads the deck top-to-
-                          // bottom in the same order it'll post.
-                          carousel ? (
-                            <div className="flex flex-col gap-3">
-                              {carousel.slides.map((s, i) => (
-                                <div
-                                  key={i}
-                                  className="rounded-lg bg-card p-4 ring-1 ring-foreground/10"
-                                >
-                                  <p className="text-meta mb-2 text-muted-foreground">
-                                    {i + 1} / {carousel.slides.length}
-                                  </p>
-                                  <p className="font-medium leading-snug">
-                                    {s.title}
-                                  </p>
-                                  {s.body ? (
-                                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                                      {s.body}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null
-                        ) : card.id === "quote-cards" &&
-                          card.example_outputs[0]?.poster_url ? (
-                          // Quote-cards has a real PNG poster (the writer
-                          // bakes the first quote card as the thumbnail).
-                          // Render it as an `<img>` — the poster IS the
-                          // product's look; we don't need to redraw the
-                          // cards from JSON. (The other four quotes still
-                          // ride inside the JSON for the live run.)
-                          <img
-                            src={card.example_outputs[0].poster_url}
-                            alt={
-                              materialLabel(
-                                card.example_outputs[0].label_key,
-                              ) ?? ""
-                            }
-                            className="aspect-square w-full max-w-md rounded-lg bg-card object-cover ring-1 ring-foreground/10"
-                          />
                         ) : (
-                          // Default: video / image outputs (reframe,
-                          // highlight-clips, voice-dub, etc.).
+                          // Media kinds (video / image / audio outputs): the
+                          // container sizes to the example's declared aspect
+                          // (or the card-level one) and ExampleCard fits the
+                          // media with object-contain — never cropped.
                           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                             {card.example_outputs.map((o, i) => (
                               <ExampleCard
@@ -475,7 +475,7 @@ export function RecipeInspectOverlay({
                                 url={o.url}
                                 poster={o.poster_url ?? null}
                                 label={materialLabel(o.label_key) ?? o.kind}
-                                aspect={card.aspect}
+                                aspect={o.aspect ?? card.aspect}
                                 sounding={soundingId === `output:${i}`}
                                 onToggleSound={(id) =>
                                   setSoundingId((prev) =>
@@ -560,6 +560,36 @@ function ExampleCard({
 }) {
   const { t } = useTranslation()
   const videoRef = useRef<HTMLVideoElement>(null)
+  // Auto-derive the container aspect from the video's intrinsic
+  // dimensions once metadata loads (2026-08-25 recipe-card fix): the
+  // recipe's declared ``card.aspect`` is a design hint, not a
+  // pixel-fidelity promise — a baked stacked-quote-card MP4 can drift to
+  // 1:1 if a future recipe change lands, and the Examples tab shouldn't
+  // show it cropped. Fall back to the declared aspect on metadata load
+  // failure / no metadata.
+  const [intrinsicAspect, setIntrinsicAspect] = useState<string | null>(null)
+  useEffect(() => {
+    if (kind !== "video") return
+    const v = videoRef.current
+    if (!v) return
+    const onMeta = () => {
+      const w = v.videoWidth
+      const h = v.videoHeight
+      if (!w || !h) return
+      const r = w / h
+      // Snap to one of the declared tiers; non-tiers round to the closest
+      // (1:1 = 1.0, 9:16 ≈ 0.5625, 16:9 ≈ 1.778). Tighter than ±0.05 keeps
+      // a slightly-cropped render from snapping to a wrong tier.
+      if (Math.abs(r - 1) < 0.05) setIntrinsicAspect("1:1")
+      else if (Math.abs(r - 9 / 16) < 0.05) setIntrinsicAspect("9:16")
+      else if (Math.abs(r - 16 / 9) < 0.05) setIntrinsicAspect("16:9")
+      else setIntrinsicAspect(`${w}:${h}`)
+    }
+    v.addEventListener("loadedmetadata", onMeta)
+    // Some browsers don't fire loadedmetadata for cached blobs; check now.
+    if (v.readyState >= 1) onMeta()
+    return () => v.removeEventListener("loadedmetadata", onMeta)
+  }, [kind, url])
 
   // React's `muted` prop is unreliable after mount (attribute vs property) —
   // drive it imperatively so the sound toggle always lands.
@@ -567,12 +597,21 @@ function ExampleCard({
     if (videoRef.current) videoRef.current.muted = !sounding
   }, [sounding])
 
+  const effectiveAspect = intrinsicAspect ?? aspect
   const aspectClass =
-    aspect === "9:16"
+    effectiveAspect === "9:16"
       ? "aspect-[9/16]"
-      : aspect === "1:1"
+      : effectiveAspect === "1:1"
         ? "aspect-square"
-        : "aspect-video"
+        : effectiveAspect === "16:9"
+          ? "aspect-video"
+          // Arbitrary "W:H" from the metadata probe — render with an
+          // inline style so the container fits the actual pixel ratio.
+          : (() => {
+              const m = /^(\d+):(\d+)$/.exec(effectiveAspect)
+              if (!m) return "aspect-video"
+              return `aspect-[${m[1]}/${m[2]}]`
+            })()
 
   return (
     <div

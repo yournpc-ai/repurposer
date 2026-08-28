@@ -511,21 +511,38 @@ const en = {
       inputTitle: "Source material",
       inputHint: "Your talk transcript, paper draft, or meeting notes — long-form text.",
       promptTemplate:
-        "Turn this talk into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
+        "I want a social post.",
+      // 2026-08-24 dual-template: when the overlay already has attached
+      // files, the launch pre-fills with this richer variant — beginner
+      // copy stays on the no-material template (small voice).
+      promptTemplateWithMaterial:
+        "Turn my source into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
       promptHint:
         "Send it as is, or try “shorter, hook-first”, “make it a thread instead”, “in German”…",
     },
     "quote-cards": {
+      // 2026-08-27 v3 (ADR-048 第 7 条): the stacked cascade IS the quote
+      // card — the promise names the stacked dish, never the one-liner
+      // single card (single-quote images are a chat capability, not the
+      // card face). Templates keep the bilingual default + chat-driven
+      // caption_mode (Phase 1).
       title: "Quote cards",
       promise:
-        "Pick the strongest lines, lay them out as shareable images.",
-      inputScenario: "For: transcripts · scripts",
-      inputTitle: "Source material",
-      inputHint: "Your talk transcript or article — we'll pick the strongest lines.",
+        "The sharpest lines of your talk, stacked into one ready-to-post quote card.",
+      inputScenario: "For: talk recordings · interviews",
+      inputTitle: "Talk recording",
+      inputHint: "Upload a video of someone speaking — we'll stack the sharpest lines into one card.",
+      // Bilingual CN+EN default example (per brief 2026-08-25 §1.6):
+      // real bilingual users type this — short, direct, names the format.
       promptTemplate:
-        "Pull the strongest quotes from this talk and turn them into quote cards ready to share.",
+        "Make a bilingual quote card.",
+      promptTemplateWithMaterial:
+        "From my talk, pick the sharpest lines and turn them into a bilingual quote card.",
+      // promptHint teaches the user the two customisation axes (RECIPES
+      // §7.2): language pair + caption mode — both are chat-only (no
+      // selector widgets, per the promptHint-as-text-not-control rule).
       promptHint:
-        "Send it as is, or try “pick sharper lines”, “fewer quotes”, “vertical format”…",
+        "Default is CN+EN bilingual. Tell the chat your own language pair and caption mode (bilingual / source only / target only).",
     },
     carousel: {
       title: "Carousel slides",
@@ -535,7 +552,9 @@ const en = {
       inputTitle: "Source material",
       inputHint: "Your talk script or deck outline — we'll lay it out as slides.",
       promptTemplate:
-        "Turn this talk into a carousel of slides — one idea per slide, ready to post.",
+        "I want a carousel.",
+      promptTemplateWithMaterial:
+        "Turn my source into a carousel of slides — one idea per slide, ready to post.",
       promptHint:
         "Send it as is, or try “fewer slides”, “add a hook on the first one”, “in French”…",
     },

@@ -2473,7 +2473,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
    * in-flight live plan card anchors after its own echo bubble. */
   const renderConversationMessage = (m: OverlayMessage) => (
     <Fragment key={m.id}>
-      <MessageScrollerItem>
+      <MessageScrollerItem messageId={m.id}>
         {m.qa ? (
           <QaPair
             question={m.qa.question}
@@ -2538,7 +2538,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   )
 
   const chatScroller = (
-        <MessageScrollerProvider>
+        <MessageScrollerProvider
+          // autoScroll: the assistant's streaming reply's live edge
+          // follows the viewport as the bubble grows (independent of
+          // scrollAnchor — which only fires on a NEW anchored row).
+          // Explicit even though shadcn defaults to true: future-proofs
+          // against upstream default drift, and makes the intent
+          // auditable to the next reader. The provider owns the prop —
+          // not MessageScroller.Root (which is a plain div).
+          autoScroll
+        >
           <MessageScroller className="h-full">
             <MessageScrollerViewport className="scroll-fade-y">
               <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4">

@@ -20,6 +20,16 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   const firstQuote = quotes[0]
   const imageUrl = output.files.image ?? null
 
+  // Server-declared aspect drives the frame (产物展示统一 P1, 2026-08-27):
+  // the stacked card bakes 9:16 — a hardcoded square cropped it. Products
+  // are never cropped: object-contain inside the declared frame.
+  const frameAspect =
+    output.aspect === "9:16"
+      ? "aspect-[9/16]"
+      : output.aspect === "16:9"
+        ? "aspect-video"
+        : "aspect-square"
+
   const handleDownload = () => {
     const url = toAbsoluteUrl(imageUrl)
     if (!url) return
@@ -45,15 +55,15 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
   return (
     <Card className="overflow-hidden">
       {imageUrl ? (
-        <div className="relative aspect-square bg-muted">
+        <div className={`relative ${frameAspect} bg-muted`}>
           <img
             src={toAbsoluteUrl(imageUrl) || undefined}
             alt={firstQuote?.quote || "Quote card"}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
           />
         </div>
       ) : (
-        <div className="flex aspect-square flex-col justify-between bg-muted p-6">
+        <div className={`flex ${frameAspect} flex-col justify-between bg-muted p-6`}>
           {firstQuote ? (
             <>
               <p className="text-xl font-medium leading-snug text-foreground">

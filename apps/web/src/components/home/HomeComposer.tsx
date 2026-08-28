@@ -46,6 +46,11 @@ interface HomeComposerProps {
   mentions: ChatMention[]
   onMentionsChange: (value: ChatMention[]) => void
   editorRef: RefObject<MentionEditorHandle | null>
+  /** Fired when the prompt band (or any descendant — the MentionEditor
+   * contentEditable) gains focus via click or keyboard. The home route
+   * uses this to scroll the band back into view if the page has been
+   * scrolled past it — keeps the prompt always usable. */
+  onFocus?: () => void
 }
 
 const AUTO_GENERATE = "__auto_generate__"
@@ -130,6 +135,7 @@ export function HomeComposer({
   mentions,
   onMentionsChange,
   editorRef,
+  onFocus,
 }: HomeComposerProps) {
   const { t } = useTranslation()
   const { launching: isGenerating, launch } = useProjectLaunch()
@@ -356,6 +362,7 @@ export function HomeComposer({
             style={editorBandStyle}
             data-tour="composer-prompt"
             onClick={focusEditor}
+            onFocus={onFocus}
           >
             <MentionEditor
               ref={editorRef}

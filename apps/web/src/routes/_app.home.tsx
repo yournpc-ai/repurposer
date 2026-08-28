@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
@@ -116,6 +116,20 @@ function Home() {
     })
   }, [])
 
+  // Anchor the composer on focus: when the user clicks the prompt band (or
+  // tabs into it), scroll all the way back to the rest state (scrollTop=0).
+  // The morph is scroll-linked, so a docked chrome snaps back to the
+  // expanded composer card the moment the scrollTop lands at zero — no
+  // half-measure: half-scroll leaves the chrome mid-collapse and the band
+  // in an awkward hybrid pose. Full-back is the only state worth focusing
+  // the prompt in.
+  const handleComposerFocus = useCallback(() => {
+    const container = scrollRef.current
+    if (!container) return
+    if (container.scrollTop === 0) return
+    container.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
+
   // Subtitle fold: copy-level fade + measured-height collapse (the gap below
   // it is padding, so the fold swallows it too). The TITLE never folds — it
   // is the core hero and docks smaller above the bar. The fold lives INSIDE
@@ -197,6 +211,7 @@ function Home() {
               mentions={mentions}
               onMentionsChange={setMentions}
               editorRef={editorRef}
+              onFocus={handleComposerFocus}
             />
           </div>
         </div>
@@ -207,7 +222,7 @@ function Home() {
             (RECIPES §4: row 1 video sources, row 2 text/image sources).
             Every click opens the inspect overlay — the ONLY launch path
             (ADR-040). */}
-        <section className="flex flex-col items-center px-4 pt-3 pb-10 sm:px-6 sm:pt-4 sm:pb-16">
+        <section className="flex flex-col items-center px-4 pt-3 pb-[max(64px,40vh)] sm:px-6 sm:pt-4">
           <div className="w-full max-w-6xl">
             <h2
               ref={titleRef}
