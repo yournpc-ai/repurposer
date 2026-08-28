@@ -3,7 +3,6 @@
 The carousel craft lives in the ``carousel`` skill pack (N-42 指令包) —
 woven in at assembly time, never loaded by the model."""
 
-from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
     CarouselResponse,
     GenerationContext,
@@ -20,11 +19,10 @@ def _assemble(
     understanding: MaterialUnderstanding,
     storyboard: Storyboard,
 ):
-    if not asset_texts:
-        raise MiniMaxError("No source texts provided for carousel generation")
+    # 2026-08-25 copy-writer lift (RECIPES §4.6 sixth gate): empty
+    # asset_texts is allowed — carousel slides draw from persona + topic.
+    # See posts/agents.py for the broader rationale.
     trimmed = trim_texts(asset_texts)
-    if not trimmed:
-        raise MiniMaxError("No usable text found in source texts")
     slot = find_slot(storyboard, "carousel")
     return (
         {

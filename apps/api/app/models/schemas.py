@@ -516,8 +516,8 @@ class PersonaContext(BaseModel):
     avatar_url: str | None = None
     core_values: list[str] = Field(default_factory=list)
     favorite_metaphors: list[str] = Field(default_factory=list)
-    sentence_style: str = ""
-    emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] = "rational"
+    sentence_style: str | None = ""
+    emotional_tone: Literal["rational", "passionate", "gentle", "sharp", "humorous"] | None = "rational"
     typical_hooks: list[str] = Field(default_factory=list)
     avoid_words: list[str] = Field(default_factory=list)
     # Voice = audio only: {"kind":"cloned", voice_id, sample_asset_id} |
@@ -798,6 +798,22 @@ class InferredIntent(BaseModel):
         description=(
             "True when the user explicitly named the work themselves. "
             "False when the chain is the default proposal."
+        ),
+    )
+    # Caption mode for runs that produce captioned video (Phase 1, 2026-08-25):
+    # quote-cards' write_quotes task asks the user via chat which caption mode
+    # they want — bilingual is the canonical default (matches the recipe's
+    # example prompt), source_only / target_only honour a single-language pick.
+    # None = chat should dock the question; a value = the answer has been
+    # recorded and lands in run.context.caption_mode at the run birthplace.
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
+        default=None,
+        description=(
+            "Caption mode for captioned-video runs (write_quotes / future "
+            "caption-bearing recipes). None = chat should ask the user. "
+            "Bilingual = original + target language side-by-side; "
+            "source_only = original language only; target_only = the run's "
+            "target language only."
         ),
     )
 
@@ -1100,19 +1116,74 @@ class Post(BaseModel):
 
 
 class Quote(BaseModel):
-    """Generated quote card."""
+    """Generated quote card (Phase 2, 2026-08-25, RECIPES §4.6.2).
+
+    The writer LLM NEVER sets timestamps — the runner snaps them off
+    ``understanding.quotable_lines[id]`` (Phase 2 line 7: pick by id, snap
+    by code). ``quote_alt`` is filled either by the LLM (when it knows the
+    target language) or by the runner via the translator agent
+    (RECIPES §4.6.2 — alt = LLM-judged translation of the source quote,
+    not the writer's free composition).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     quote: str
     attribution: str
+    # LLM picks by ordinal into understanding.quotable_lines; None when the
+    # chain had no material (vague prompt → writer drafts from persona style
+    # alone, the runner leaves timestamps null and Phase 3's image source
+    # fallback carries the card without source video).
+    quotable_line_id: int | None = None
+    # Code-set timestamps snapped off the picked quotable line — the renderer
+    # (Phase 3) reads these to slice the source video and pick the cover frame.
+    source_start: float | None = None
+    source_end: float | None = None
+    # Midpoint of [source_start, source_end] rounded to 0.1s (the
+    # frame-grabber's quantize step). Null when the line has no timecode.
+    frame_at: float | None = None
+    # Source-language quote (verbatim from the material when
+    # quotable_line_id is set; otherwise the writer's persona-style draft).
+    # Phase 3 reads this as the main caption line.
+    quote_source: str | None = None
+    # The opposite-language translation; populated when caption_mode is
+    # "bilingual". Source/target are decided by ``caption_mode`` on the run
+    # (REVIEWED FOR PHASE 2: NEVER auto-inferred from output language).
+    quote_alt: str | None = None
 
 
 class Quotes(BaseModel):
-    """Multiple quote cards response."""
+    """Quote-card chain response (RECIPES §4.6.2 chain variant, 2026-08-25).
+
+    Phase 2 / 3 default: ``quotes`` was a single-element list — "1 quote = 1
+    video card". The chain variant replaces that with a CORE-IDEAL-CHAIN:
+    the writer picks a core idea, then judges how many sentences are
+    needed to fully express it (N = 3..7, dynamic — depends on the topic's
+    complexity), and selects N verbatim ``quotable_line_id``s in sequence.
+    The materializer renders all N as a vertical stack of caption strips
+    on a 9:16 canvas, with an optional speaker frame on top
+    (``needs_speaker_frame``).
+
+    The schema tolerates ``quotes=[]`` for the no-material path (writer
+    drafts from persona style alone). ``core_idea`` is always filled when
+    the writer had material to anchor on; ``needs_speaker_frame`` defaults
+    to False (text-only stack, image #34 style — the safer default; the
+    writer opts in to a speaker face when the topic reads as visual
+    anchor worthy, image #35 style).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    # 2026-08-25 chain variant: the writer's verdict on the talk's central
+    # idea. Lands on the Quotes output payload and rides to the renderer via
+    # _materialize_quote_card_outputs (currently display-only — the chain
+    # strips show the sentences themselves, the idea is upstream reasoning).
+    core_idea: str | None = None
+    # Optional speaker frame at the top of the cascade (image #35 Charlie
+    # Munger style); off = pure caption strips (image #34 style). Writer
+    # judges — no LLM-only path can derive this from text alone, the
+    # persona/topic feel carries it.
+    needs_speaker_frame: bool = False
     quotes: list[Quote] = Field(default_factory=list)
 
 
@@ -1432,6 +1503,13 @@ class GenerationContext(BaseModel):
     # Clip Agent uses this as the default unless a clip's content suggests
     # otherwise.
     brand_music_id: str | None = None
+    # 2026-08-25 Phase 2: caption mode for caption-bearing runs
+    # (write_quotes when the chain produces a captioned video card).
+    # Three values: "bilingual" (source + target), "source_only", or
+    # "target_only". None = no caption-mode decision yet (legacy / no
+    # caption work). Threaded from run.context.caption_mode by the
+    # derivative dispatch.
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
 
 
 # ---------------------------------------------------------------------------

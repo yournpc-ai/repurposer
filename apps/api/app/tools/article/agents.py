@@ -1,6 +1,5 @@
 """Article writer — the write_article tool's private agent declaration (N-30)."""
 
-from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import (
     Article,
     GenerationContext,
@@ -17,11 +16,10 @@ def _assemble(
     understanding: MaterialUnderstanding,
     storyboard: Storyboard,
 ):
-    if not asset_texts:
-        raise MiniMaxError("No source texts provided for article generation")
+    # 2026-08-25 copy-writer lift (RECIPES §4.6 sixth gate): empty
+    # asset_texts is allowed — articles draft from persona + topic.
+    # See posts/agents.py for the broader rationale.
     trimmed = trim_texts(asset_texts)
-    if not trimmed:
-        raise MiniMaxError("No usable text found in source texts")
     return (
         {
             "asset_texts": trimmed,

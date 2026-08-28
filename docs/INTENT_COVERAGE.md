@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，plan_agent_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -54,7 +54,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | 空指令 | 前端本地拦截（toast） | ✅ |
 | 只要 clips 但无媒体 | PlanAgent 排除 clips；绕过则出生地 422 | ✅ |
 | 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | plan path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
-| G 无素材且未贴内容 | answer 反问引导（回形针上传或直接贴文；PlanAgent 规则 + 服务端安全带，永不 dock 无米任务书） | ✅（S13，2026-08-05） |
+| G 无素材且未贴内容 | 拆为两路：copy-writer-only 链 → plan path generate + dock（`text_without_material` 软信号 + echo 散文告知从 prompt + persona 起草）；链含 media-needing 工具 → PlanAgent 自动 drop media 任务保留 writers + 解释，或 answer 反问引导 | ✅（S13 仅对 media-needing 路径；S48 新覆盖 writer-only 软信号，2026-08-24） |
 | 配方播种 clips 但无媒体 | dock 保留 clips + 警告，echo 散文主动解释（上传解锁或去 clips 开工）；Start 422 后手编去 clips 可起 | ✅（S11） |
 | Remix 配方后 revise 字段（"clips only needs 2"） | 配方=预设只铺第一版（不钉任何字段）→ 修订直达 docked 书 | ✅（S15，2026-08-05） |
 | S 闲聊 | /chat plan path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |
@@ -108,6 +108,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | **M 元信息（"换人设/换皮肤/换声音"）** | /chat → answer 导航文案（Personas 页面） | ✅（期 4 补四 G-6，answer 引导收编） |
 | M 目标语言改 | chat task_list（translate/write 新任务）折算 | ✅（产物级正解） |
 | 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（plan path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
+| **G 再来一条同族 writer（"再写一条德语 post"/"also 4 quote cards about AI"），已有 project 未上新素材** | chat → task_list write_post(de) / write_quotes(count=4) 等；从 persona + instruction 起草，**永不**反问上传（2026-08-24 lift：copy-writer 不再被硬门禁要求素材） | ✅ |
 
 ### 3.4 产物会话（dock + 焦点注入；ChatModal / asset scope 已退役——ADR-041）
 
@@ -153,7 +154,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 ## 6. 测试矩阵（e2e 覆盖对照）
 
-**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
+**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空；S46 reframe 派发、S47 workflow_step 提及、S48 copy-writer 无素材软信号，2026-08-24）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
 
 | 路径 | 覆盖 |
 |---|---|
@@ -188,6 +189,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | repair 有界重试：schema 拒 → 一轮修复带结构化回显，再拒即败无第三轮；transport 不修 | ✅ harness S41 |
 | 估价地基：flow 对账自检 + 报价 fold 单调性（子图 ≤ 全图、非负）+ NULL 语义 | ✅ harness S42 |
 | materialize 注入矩阵：media / stills 注入（stills 先 align_stills）、existing 空 inputs、无画像编译期拒绝、select_clips 在场不注入 | ✅ harness S45 |
+| copy-writer 解除硬门禁：无素材 + 写帖 → generate + dock 带 `text_without_material` reason + Start 起 run；media-needing 不夹带 | ✅ harness S48（2026-08-24） |
 
 ---
 

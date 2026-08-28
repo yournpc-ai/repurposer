@@ -16,8 +16,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.registry import director_plan, director_understand, persona
 from app.agents.base import MAX_CHARS_PER_TEXT
+from app.agents.contexts import _generation_context
+from app.agents.registry import director_plan, director_understand, persona
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     EMOTIONAL_TONES,
@@ -28,22 +29,29 @@ from app.models.schemas import (
     IntentSlot,
     MaterialUnderstanding,
     RenderStatus,
+    Storyboard,
 )
 from app.models.tables import (
     Output,
-    WorkflowStep,
     Persona,
     Project,
     WorkflowRun,
+    WorkflowStep,
 )
-from app.pipeline.derivative_dispatch import derivative_output_types
+from app.pipeline.beat_map import (
+    build_source_blocks,
+    image_refs_from_assets,
+    word_axis_from_assets,
+)
+from app.pipeline.derivative_dispatch import DerivativeWriterNode, derivative_output_types
 from app.pipeline.edges import (
     _align_storyboard_slots,
-    _interrupt_direction,
     _compute_coverage,
+    _interrupt_direction,
     _load_understanding,
 )
 from app.pipeline.graph import (
+    NODE_KINDS,
     NodeBase,
     estimate_agent,
     estimate_free,
@@ -52,7 +60,6 @@ from app.pipeline.graph import (
     slot_default_counts,
     token_bounds,
 )
-from app.agents.contexts import _generation_context
 from app.pipeline.step_context import (
     _asset_digest,
     _list_assets,
@@ -61,11 +68,6 @@ from app.pipeline.step_context import (
     collect_asset_media,
 )
 from app.pipeline.step_display import _set_summary
-from app.pipeline.beat_map import (
-    build_source_blocks,
-    image_refs_from_assets,
-    word_axis_from_assets,
-)
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_persona,
@@ -90,6 +92,24 @@ def _display_zh(run: WorkflowRun, project: Project, assets: list) -> bool:
     ).startswith("zh")
 
 
+def _all_copy_writers(run: WorkflowRun) -> bool:
+    """True iff every task in this run's chain is a copy-writer
+    (write_post / write_quotes / write_carousel / write_article — the
+    no-material lift removed their ``(TRANSCRIPT,)`` requires).
+
+    Registry-native (NODE_KINDS.get → isinstance DerivativeWriterNode) —
+    same gate the chat safety net uses, single source of truth. An empty
+    task book returns False (we never know — be safe; Director layers run
+    as normal and either return a real understanding or hit the standard
+    "no material" exception path)."""
+    ctx = run.context if isinstance(run.context, dict) else {}
+    chain_tasks = ctx.get("tasks") or []
+    return bool(chain_tasks) and all(
+        isinstance(NODE_KINDS.get(t.get("tool")), DerivativeWriterNode)
+        for t in chain_tasks
+    )
+
+
 class Preprocess(NodeBase):
     kind = "preprocess"
     task_name = "Analyze uploads"
@@ -110,17 +130,33 @@ class Preprocess(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        """Validate source material exists (texts or media), like the old inline check."""
+        """Validate source material exists (texts or media), like the old inline check.
+
+        2026-08-24 carve-out (RECIPES §4.6, copy-writer lift third gate):
+        a chain composed ENTIRELY of copy-writer tasks (write_post /
+        write_quotes / write_carousel / write_article — the no-material
+        lift removed their ``(TRANSCRIPT,)`` requires) is allowed to ship
+        with no source attached — the draft comes from prompt + persona
+        (text_without_material reason rides the book). Mixed chains
+        (writer + media-needing) keep the gate: the LLM is supposed to
+        drop the media-needing rows in EXCEPTION 2, this catches the
+        leak. Registry-native (DerivativeWriterNode isinstance) — no
+        parallel "which tools need text" list.
+        """
+        context = run.context if isinstance(run.context, dict) else {}
+        all_copy_writers = _all_copy_writers(run)
+
         asset_texts = await collect_asset_texts(db, project.id)
         assets = await _list_assets(db, project.id)
         has_media = any(a.file_url for a in assets)
-        if not asset_texts and not has_media:
+        if not asset_texts and not has_media and not all_copy_writers:
             raise ValueError("No source material to analyze")
         logger.info(
             "generation_asset_inputs_collected",
             project_id=str(project.id),
             text_count=len(asset_texts),
             media_asset_count=sum(1 for a in assets if a.file_url),
+            all_copy_writers=all_copy_writers,
         )
         # Done summary (a finished step must never keep the progressive stage
         # copy — "正在分析…" reading on a ✓ row). Quantified by file count.
@@ -417,8 +453,56 @@ class DirectorUnderstand(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        """Director step 1: material-scoped understanding, reused across runs."""
+        """Director step 1: material-scoped understanding, reused across runs.
+
+        2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fourth gate):
+        when the chain is all copy-writers the material is optional — the
+        understanding would only re-summarize an absent source, so we
+        materialize a STUB row (core_thesis="" + every list field empty) and
+        write it as a fresh non-reusable Output. The downstream ``director_plan``
+        and the four writer agents all handle the empty-shape understanding
+        gracefully (their prompts' ``{% for %}`` loops degrade to nothing
+        rendered, and the slot-level fallback copy lights up). director_plan
+        writes its own matching stub on the same gate, so the executor's
+        _load_director_outputs always returns a paired (understanding,
+        storyboard) tuple."""
         assets = await _list_assets(db, project.id)
+
+        if _all_copy_writers(run):
+            asset_texts = await collect_asset_texts(db, project.id)
+            has_media = any(a.file_url for a in assets)
+            if not asset_texts and not has_media:
+                zh = _display_zh(run, project, assets)
+                understanding = MaterialUnderstanding(
+                    core_thesis="",
+                    overall_summary=(
+                        "本轮为文案写作任务，无素材输入，draft 由 persona + 用户指令生成。"
+                        if zh
+                        else "No source material — this run is a copy-writer task "
+                        "drafting from persona + user instruction only."
+                    ),
+                )
+                row = Output(
+                    project_id=project.id,
+                    workflow_step_id=node.id,
+                    type="material_understanding",
+                    language=_source_language(project, assets),
+                    provenance="generated",
+                    payload=understanding.model_dump(mode="json"),
+                    source_ref={"asset_hash": None, "copy_writer_stub": True},
+                )
+                db.add(row)
+                await db.flush()
+                await _set_summary(
+                    node.id,
+                    "文案写作任务，跳过素材理解" if _display_zh(run, project, assets)
+                    else "Copy-writer run — material understanding skipped",
+                )
+                logger.info(
+                    "director_understand_copy_writer_stub",
+                    project_id=str(project.id),
+                )
+                return [row.id]
 
         reused = await self.reuse(db, run, node, project, assets)
         if reused is not None:
@@ -609,9 +693,44 @@ class DirectorPlan(NodeBase):
         code and persisted with the storyboard. The task book is passed slot by
         slot (per-slot count/focus/language); explicit slot fields are enforced
         by code after the LLM returns.
-        """
+
+        2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fifth gate):
+        when the chain is all copy-writers and director_understand wrote a
+        stub understanding, the storyboard LLM has nothing to plan from
+        either — same skip rule, paired stub Storyboard (empty slots, empty
+        coverage). Executors handle the empty storyboard: ``find_slot``
+        returns ``{}`` and the prompt's ``{{ slot.focus or default }}``
+        fallback fires."""
         ctx = run.context or {}
         understanding = await _load_understanding(db, node)
+
+        if (
+            _all_copy_writers(run)
+            and (understanding.core_thesis == "")
+            and not understanding.key_arguments
+            and not understanding.quotable_lines
+        ):
+            assets = await _list_assets(db, project.id)
+            row = Output(
+                project_id=project.id,
+                workflow_step_id=node.id,
+                type="storyboard",
+                language=ctx.get("target_language", "en"),
+                provenance="generated",
+                payload=Storyboard().model_dump(mode="json"),
+            )
+            db.add(row)
+            await db.flush()
+            await _set_summary(
+                node.id,
+                "文案写作任务，跳过分镜规划" if _display_zh(run, project, assets)
+                else "Copy-writer run — storyboard skipped",
+            )
+            logger.info(
+                "director_plan_copy_writer_stub",
+                project_id=str(project.id),
+            )
+            return [row.id]
 
         # The storyboard's intent slots come from THIS RUN'S COMPILED GRAPH
         # (ADR-043 item 6): each generation sibling carries its task's params

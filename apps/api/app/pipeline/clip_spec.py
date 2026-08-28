@@ -28,6 +28,15 @@ from app.models.schemas import (
 from app.models.tables import Asset
 from app.providers.storage import stream_url
 
+
+# Quote card breathing room (RECIPES §4.6.2, 2026-08-25): the picked line's
+# ASR span is the cue's display window. The 0.12s pre-pad eases in the cut;
+# the 1.8s post-pad matches the standard talking-head tail (anatomy §4
+# 零尾停) so the quote reads before the frame settles. Pads expand into
+# adjacent silence only — never past the source's real duration.
+_QUOTE_CARD_PRE_PAD_S = 0.12
+_QUOTE_CARD_POST_PAD_S = 1.8
+
 # Seconds each backing image holds in a no-audio "stills" slideshow.
 SECS_PER_IMAGE = 4.0
 
@@ -356,6 +365,261 @@ def build_clip_spec(
         target_language=target_language,
         brand=brand,
         music=music or ClipMusic(),
+        brand_ref=brand_ref,
+    )
+
+
+def build_quote_card_spec(
+    source: Asset,
+    quote: dict[str, Any],
+    *,
+    target_language: str,
+    source_language: str | None,
+    caption_mode: str | None,
+    brand: ClipBrand | None,
+    brand_ref: Any,
+    aspect: str = "9:16",
+    caption_style_preset: str = "clean-bottom",
+    caption_position: Any = None,
+) -> ClipSpec | None:
+    """Build a 9:16 quote-card clip-spec from a Quote + the source video.
+
+    Phase 3 (2026-08-25, RECIPES §4.6.2): the canonical "1 quote = 1 video
+    card" wire. The quote's verbatim source-language text becomes the main
+    caption (a SINGLE cue spanning the kept span — the card reads as one
+    complete sentence, not per-word karaoke); the alt translation rides the
+    ``translation_track`` when bilingual. Attribution sits as the title (top
+    of frame).
+
+    Returns ``None`` when the source has no ASR words OR the quote lacks a
+    time-bind (no ``source_start``/``source_end``). The image-source fallback
+    (no source video) is a future follow-up — for now the recipe requires
+    video + transcript (Phase 4 recipe registry hard-enforces both).
+
+    The kept span = the ASR-cued window of the picked line, padded by
+    ``_QUOTE_CARD_PRE_PAD_S`` / ``_QUOTE_CARD_POST_PAD_S`` for breathing room
+    (matches build_clip_spec's talking-head craft band — pre eases the cut,
+    post is the standard tail settle).
+
+    ``caption_style_preset`` and ``caption_position`` default to the
+    persona's brand block (callers pass whatever the brand config resolved
+    to); this helper never silently overrides persona choice. Quote cards
+    share the same caption primitives as talking-head clips — same preset
+    catalog, same position semantics (RENDERING §3).
+    """
+    if source is None:
+        return None
+    words = cast("dict[str, Any]", source.meta or {}).get("words", [])
+    if not words:
+        return None
+
+    start_raw = quote.get("source_start")
+    end_raw = quote.get("source_end")
+    if start_raw is None or end_raw is None:
+        return None
+    try:
+        start = float(start_raw)
+        end = float(end_raw)
+    except (TypeError, ValueError):
+        return None
+    if end <= start:
+        return None
+
+    url = stream_url(source.file_url)
+    if url is None:
+        return None
+
+    # Word-boundary snap then pad into adjacent silence — mirrors build_clip_spec's
+    # talking-head path (locate_span's numeric-seconds branch). The pad
+    # budget = the recipe's craft band, NOT a clip's dynamic trim (quote
+    # cards have no trim slider; this is the only pad).
+    start_idx = next(
+        (i for i, w in enumerate(words) if float(w.get("start", 0)) >= start),
+        0,
+    )
+    end_idx = next(
+        (
+            i for i in range(len(words) - 1, -1, -1)
+            if float(words[i].get("end", 0)) <= end
+        ),
+        len(words) - 1,
+    )
+    if end_idx < start_idx:
+        end_idx = len(words) - 1
+    start, end = _pad_span(
+        words,
+        start_idx,
+        end_idx,
+        _QUOTE_CARD_PRE_PAD_S,
+        _QUOTE_CARD_POST_PAD_S,
+        float(source.duration_seconds) if source.duration_seconds else None,
+    )
+
+    # Caption track — the main caption (what shows as the headline). For
+    # bilingual / source_only, the verbatim SOURCE-language text rides the
+    # caption_track (the renderer auto-stacks translation_track over it as
+    # the visual headline for bilingual mode — see RENDERING §3 stack
+    # layout: translation ×0.82 main, caption ×0.55 small). For
+    # target_only, the caption_track carries the TARGET translation
+    # directly so the renderer has a single cue to render as the main
+    # line. None / unspecified defaults to bilingual if the runner filled
+    # quote_alt, else source_only.
+    main_text = (
+        quote.get("quote_source")
+        or quote.get("quote")
+        or ""
+    )
+    if caption_mode == "target_only":
+        caption_track_text = quote.get("quote") or main_text
+        caption_lang = target_language
+        translation_track = []
+    elif caption_mode in ("bilingual", "source_only"):
+        caption_track_text = main_text
+        caption_lang = source_language or target_language
+        if caption_mode == "bilingual":
+            alt = quote.get("quote_alt")
+            translation_track = (
+                [
+                    CaptionCue(
+                        start=start,
+                        end=end,
+                        text=str(alt),
+                        lang=target_language,
+                    )
+                ]
+                if alt
+                else []
+            )
+        else:
+            translation_track = []
+    else:
+        # None / unspecified — legacy / chat hasn't gated yet. Default to
+        # bilingual if the runner filled quote_alt, else single-language.
+        caption_track_text = main_text
+        caption_lang = source_language or target_language
+        alt = quote.get("quote_alt")
+        translation_track = (
+            [
+                CaptionCue(
+                    start=start,
+                    end=end,
+                    text=str(alt),
+                    lang=target_language,
+                )
+            ]
+            if alt
+            else []
+        )
+
+    caption_track = [
+        CaptionCue(
+            start=start,
+            end=end,
+            text=str(caption_track_text),
+            lang=caption_lang,
+        )
+    ]
+
+    title_text = str(quote.get("attribution") or "")
+    title = ClipTitle(
+        text=title_text,
+        enabled=bool(title_text),
+        size=None,
+        position=None,
+    )
+
+    return ClipSpec(
+        source=ClipSource(
+            asset_id=source.id,
+            url=url,
+            duration=float(source.duration_seconds) if source.duration_seconds else None,
+        ),
+        aspect=aspect if aspect in ("9:16", "1:1", "16:9", "original") else "9:16",
+        segments=[ClipSegment(start=start, end=end)],
+        caption_track=caption_track,
+        translation_track=translation_track,
+        caption_enabled=True,
+        # Preset + position come from the persona's brand block (callers
+        # resolve brand_cfg → captionStylePreset + captionPosition). We never
+        # silently override persona choice here — RECIPES §3.2 catalog is
+        # one source of truth for both quote cards and talking-head clips.
+        caption_style_preset=(
+            caption_style_preset if caption_style_preset in _CAPTION_STYLE_PRESETS else "clean-bottom"
+        ),
+        caption_position=caption_position,
+        title=title,
+        target_language=target_language,
+        brand=brand,
+        music=ClipMusic(),
+        brand_ref=brand_ref,
+    )
+
+
+def build_stacked_quote_card_spec(
+    *,
+    composite_image_url: str,
+    asset_id: Any,
+    duration_s: float = 6.0,
+    target_language: str = "en",
+    brand: ClipBrand | None = None,
+    brand_ref: Any = None,
+) -> ClipSpec:
+    """Build a 9:16 quote-card clip-spec from a PRE-COMPOSITED cascade PNG
+    (RECIPES §4.6.2 stacked variant, 2026-08-25).
+
+    The cascade image is the WHOLE visual — frame cards + captions are
+    baked into one PNG (see ``app.pipeline.quote_card_stack``). This
+    spec is a thin wrapper: ``stills`` kind, single image URL, no
+    caption_track (the composite carries the text), ~6s duration with a
+    subtle 5% zoom-in for visual interest.
+
+    The render worker treats it like any other stills clip: a single
+    ImageShot with motion="zoom_in" so the Remotion player animates
+    from the source's own frame out to a 1.05x scale over the duration
+    (Ken Burns band upper edge).
+
+    Callers (currently ``_materialize_quote_card_outputs``) build the
+    composite PNG BEFORE calling this — the spec never invents the
+    visuals. Returns a valid ``ClipSpec`` even when ``composite_image_url``
+    is empty (empty ``image_urls`` + empty ``image_shots`` = the
+    renderer's empty-card fallback; rarely useful but consistent).
+    """
+    from app.models.schemas import ClipMusic  # local import avoids cycle in some test boots
+
+    shot = (
+        ImageShot(
+            image_url=composite_image_url,
+            dwell_s=float(duration_s),
+            motion="zoom_in",
+            motion_rate=1.05,
+        )
+        if composite_image_url
+        else None
+    )
+    image_shots = [shot] if shot else []
+    return ClipSpec(
+        source=ClipSource(
+            asset_id=asset_id,
+            kind="stills",
+            url="",  # stills source with image_urls only — no speech audio
+            image_urls=[composite_image_url] if composite_image_url else [],
+            image_shots=image_shots,
+            fps=30,
+            duration=float(duration_s),
+        ),
+        aspect="9:16",
+        segments=[],  # stills — no time segments; image_shots drive the timeline
+        caption_track=[],  # captions are baked into the composite PNG
+        translation_track=[],
+        # caption_track is empty AND caption_enabled=False — the render
+        # worker must not look up caption cues that aren't there.
+        caption_enabled=False,
+        caption_style_preset="clean-bottom",
+        caption_position=None,
+        title=ClipTitle(text="", enabled=False),
+        target_language=target_language,
+        brand=brand,
+        music=ClipMusic(),
         brand_ref=brand_ref,
     )
 

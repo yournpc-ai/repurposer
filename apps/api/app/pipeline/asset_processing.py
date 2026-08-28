@@ -31,16 +31,17 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset
-from app.pipeline.graph import media_missing
-from app.pipeline.speaker_map import speaker_map_processor
-from app.pipeline.prosody import prosody_processor
-from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
+from app.pipeline.graph import media_missing
+from app.pipeline.prosody import prosody_processor
+from app.pipeline.speaker_map import speaker_map_processor
+from app.pipeline.visual_anchors import visual_anchors_processor
 from app.providers.storage import download_to_temp, get_project_output_dir
 
 logger = structlog.get_logger()
@@ -88,6 +89,53 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
     the chat plan path uses for the clips-needs-media clarification reason.
     """
     return not await media_missing(db, project_id)
+
+
+async def has_any_text_material(db: AsyncSession, project_id: UUID) -> bool:
+    """Whether the project has any text-yielding source — transcript /
+    past_material / media with extracted text / ASR'd word axis (2026-08-24).
+
+    Sibling of ``has_renderable_media``: the chat plan path's
+    ``text_without_material`` reason rides this predicate (the prior
+    ``requires=(TRANSCRIPT,)`` gate hard-422ed legitimate "I have nothing,
+    write me a post" requests). Mirrors ``_TranscriptRequirement.missing``
+    in ``graph.py`` — kept as a parallel helper so the chat layer doesn't
+    re-import the graph predicate just to check it.
+    """
+    result = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project_id,
+            or_(
+                Asset.transcript.isnot(None),
+                Asset.extracted_text.isnot(None),
+                Asset.meta["words"].isnot(None),
+            ),
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is not None:
+        return True
+    # Words-in-waiting: a text-typed asset with bytes or a media-typed
+    # asset with bytes will yield words at extraction / preprocess — they
+    # count as material under the soft signal.
+    derivable = await db.execute(
+        select(Asset.id)
+        .where(
+            Asset.project_id == project_id,
+            Asset.type.in_(
+                [
+                    AssetType.TRANSCRIPT,
+                    AssetType.PAST_MATERIAL,
+                    AssetType.VIDEO,
+                    AssetType.AUDIO,
+                ]
+            ),
+            Asset.file_url.isnot(None),
+        )
+        .limit(1)
+    )
+    return derivable.scalar_one_or_none() is not None
 
 
 async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
@@ -235,7 +283,9 @@ async def process_asset(asset_id: UUID) -> None:
             # re-checks set completeness). Fire-and-forget so the tick moves
             # on; persona-bound assets (project_id=None) never warm.
             if asset.project_id is not None:
-                from app.pipeline.node_runners import warm_understanding  # deferred: runtime-only edge
+                from app.pipeline.node_runners import (
+                    warm_understanding,  # deferred: runtime-only edge
+                )
 
                 task = asyncio.create_task(warm_understanding(asset.project_id))
                 _warm_tasks.add(task)

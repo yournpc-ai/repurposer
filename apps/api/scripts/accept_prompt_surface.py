@@ -22,6 +22,12 @@ Recipe gallery v2 additions:
   packs + 12/12 prompt-surface gate = status flipped from reserved to
   live. The gate asserts each writer template lands on its own writer
   kind only (no write_post / write_quotes / write_carousel cross-talk).
+- 2026-08-24 dual-template split (RECIPES §7.2): copy-writer cards ship
+  TWO locale templates — ``promptTemplate`` (no-material beginner voice)
+  and ``promptTemplateWithMaterial`` (specific, grounded). The composer
+  picks by file attachment at launch time; the gate tests both, asserting
+  each one independently maps to the same writer kind (no cross-talk).
+  Cards without dual templates keep a flat ``templates`` list.
 """
 
 import asyncio
@@ -32,7 +38,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from chat_scenarios import Ctx, make_user, seed_asset, pending_book, book_tasks
+from chat_scenarios import Ctx, book_tasks, make_user, pending_book, seed_asset
+
 from app.models.schemas import AssetType
 
 # Per-card expected plan shape. ``expected_tools`` is an ORDERED subset of
@@ -93,42 +100,76 @@ CARDS = {
     # Each writer template must land on its own writer kind only — the
     # chain is single-task, no select_clips / clip tools to confuse the
     # LLM, so a leak into write_article / dub_clip / etc. is the gate's
-    # failure mode. 2 trials per language × 3 cards × 2 langs = 12.
+    # failure mode. 2026-08-24 dual-template split (RECIPES §7.2): the
+    # composer picks by file attachment at launch — ``variants`` carries
+    # both voices and the gate tests them independently.
+    # 2 trials × 3 cards × 2 langs × 2 variants = 24 trials.
     "社媒帖/social-post": {
         "asset_type": AssetType.TRANSCRIPT,
         "asset": "demo-article.md",
         "expected_tools": ["write_post"],
         "trials": 2,
-        "templates": [
-            (
-                "zh",
-                "把这段演讲写成一条社媒帖，按我的风格来。哪个平台发——你选合适的就行。纯文本——不要 Markdown（不要 **加粗** / _斜体_ / # 标题 / [链接](url) / 代码块）；主流社交平台都把 Markdown 当源文渲染，看起来是碎的。",
-            ),
-            (
-                "en",
-                "Turn this talk into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
-            ),
-        ],
+        "variants": {
+            "no_material": [
+                ("zh", "帮我写一条社媒帖。"),
+                ("en", "I want a social post."),
+            ],
+            "with_material": [
+                (
+                    "zh",
+                    "把这段素材写成一条社媒帖，按我的风格来。哪个平台发——你选合适的就行。纯文本——不要 Markdown（不要 **加粗** / _斜体_ / # 标题 / [链接](url) / 代码块）；主流社交平台都把 Markdown 当源文渲染，看起来是碎的。",
+                ),
+                (
+                    "en",
+                    "Turn my source into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
+                ),
+            ],
+        },
     },
     "金句卡/quote-cards": {
         "asset_type": AssetType.TRANSCRIPT,
         "asset": "demo-article.md",
         "expected_tools": ["write_quotes"],
         "trials": 2,
-        "templates": [
-            ("zh", "从这场演讲里挑最亮的金句，做成可以直接发的金句卡。"),
-            ("en", "Pull the strongest quotes from this talk and turn them into quote cards ready to share."),
-        ],
+        "variants": {
+            "no_material": [
+                # 2026-08-25 Phase 4 — bilingual default example (real
+                # bilingual user voice). Recipe contract: video + transcript
+                # required; the no-material template is what users see BEFORE
+                # attaching files (intent preview); chat docks for material.
+                ("zh", "做一张中英双语金句卡。"),
+                ("en", "Make a bilingual quote card."),
+            ],
+            "with_material": [
+                (
+                    "zh",
+                    "从我的演讲里挑几句最亮的，做成中英双语金句卡。",
+                ),
+                (
+                    "en",
+                    "From my talk, pick the sharpest lines and turn them into a bilingual quote card.",
+                ),
+            ],
+        },
     },
     "轮播图/carousel": {
         "asset_type": AssetType.TRANSCRIPT,
         "asset": "demo-article.md",
         "expected_tools": ["write_carousel"],
         "trials": 2,
-        "templates": [
-            ("zh", "把这场演讲做成一组轮播幻灯——一图一意，可以直接发。"),
-            ("en", "Turn this talk into a carousel of slides — one idea per slide, ready to post."),
-        ],
+        "variants": {
+            "no_material": [
+                ("zh", "帮我做一组轮播。"),
+                ("en", "I want a carousel."),
+            ],
+            "with_material": [
+                ("zh", "把这段素材做成一组轮播幻灯——一图一意，可以直接发。"),
+                (
+                    "en",
+                    "Turn my source into a carousel of slides — one idea per slide, ready to post.",
+                ),
+            ],
+        },
     },
 }
 TRIALS_PER_LANG = 3
@@ -144,25 +185,48 @@ def _card_block(src: str, card_id: str) -> str:
     return m.group(1)
 
 
-def _locale_template(lang: str, card_id: str) -> str:
-    """promptTemplate straight from the locale file (single- or multi-line)."""
+def _locale_template(lang: str, card_id: str, key: str = "promptTemplate") -> str:
+    """The card's prompt template straight from the locale file. ``key`` is
+    either ``promptTemplate`` (no-material voice) or
+    ``promptTemplateWithMaterial`` (with-material voice, copy-writer
+    dual-template split). Both follow the same ``key:``/value layout in
+    the locale block — same regex, same multi-line tolerant."""
     src = (_LOCALES / f"{lang}.ts").read_text()
-    m = re.search(r'promptTemplate:\s*\n?\s*"((?:[^"\\]|\\.)*)"', _card_block(src, card_id))
+    m = re.search(rf'{re.escape(key)}:\s*\n?\s*"((?:[^"\\]|\\.)*)"', _card_block(src, card_id))
     if not m:
-        raise SystemExit(f"promptTemplate not found: {lang} {card_id}")
+        raise SystemExit(f"{key} not found: {lang} {card_id}")
     return m.group(1)
 
 
 def _assert_templates_in_sync() -> None:
     """Drift guard: CARDS mirrors the locales BY HAND — fail loud when an
-    edit to the real copy leaves the gate testing its own stale strings."""
+    edit to the real copy leaves the gate testing its own stale strings.
+
+    Cards with a flat ``templates`` list read from ``promptTemplate``.
+    Cards with a ``variants`` dict (copy-writer dual-template split) read
+    from ``promptTemplate`` + ``promptTemplateWithMaterial`` per variant
+    key — both must stay in lockstep with the locale."""
     drift = []
     for label, cfg in CARDS.items():
         card_id = label.split("/")[-1]
-        for lang, template in cfg["templates"]:
-            real = _locale_template(lang, card_id)
-            if real != template:
-                drift.append(f"{card_id}/{lang}:\n  gate:   {template!r}\n  locale: {real!r}")
+        if "variants" in cfg:
+            for variant_key, entries in cfg["variants"].items():
+                locale_key = (
+                    "promptTemplateWithMaterial"
+                    if variant_key == "with_material"
+                    else "promptTemplate"
+                )
+                for lang, template in entries:
+                    real = _locale_template(lang, card_id, locale_key)
+                    if real != template:
+                        drift.append(
+                            f"{card_id}/{lang}/{variant_key}:\n  gate:   {template!r}\n  locale: {real!r}"
+                        )
+        else:
+            for lang, template in cfg["templates"]:
+                real = _locale_template(lang, card_id)
+                if real != template:
+                    drift.append(f"{card_id}/{lang}:\n  gate:   {template!r}\n  locale: {real!r}")
     if drift:
         raise SystemExit("gate templates out of sync with web locales:\n" + "\n".join(drift))
 
@@ -204,7 +268,20 @@ async def main() -> None:
     try:
         for card, cfg in CARDS.items():
             trials = cfg.get("trials", TRIALS_PER_LANG)
-            for lang, template in cfg["templates"]:
+            # Dual-template cards (RECIPES §7.2): flatten the variants into
+            # (variant, lang, template) tuples so the trial loop stays linear.
+            # The variant tag rides the log line for the gate report.
+            if "variants" in cfg:
+                entries: list[tuple[str, str, str]] = [
+                    (variant_key, lang, template)
+                    for variant_key, items in cfg["variants"].items()
+                    for lang, template in items
+                ]
+            else:
+                entries = [
+                    ("", lang, template) for lang, template in cfg["templates"]
+                ]
+            for variant_key, lang, template in entries:
                 for i in range(trials):
                     try:
                         ok, kinds, turn = await one_trial(
@@ -214,8 +291,9 @@ async def main() -> None:
                         ok, kinds, turn = False, [f"ERROR: {e}"], None
                     passed += ok
                     failed += not ok
+                    tag = f"/{variant_key}" if variant_key else ""
                     print(
-                        f"{'PASS' if ok else 'FAIL'} {card} {lang}#{i + 1}: {kinds}",
+                        f"{'PASS' if ok else 'FAIL'} {card}{tag} {lang}#{i + 1}: {kinds}",
                         flush=True,
                     )
                     if not ok and turn:

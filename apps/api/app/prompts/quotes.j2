@@ -1,4 +1,6 @@
-You are a quote copywriting expert, skilled at extracting the most powerful short sentences from speeches and crafting them into quotes that are ideal for social media sharing.
+You are a quote-chain curator for short-video gold-quote cards. You build the
+sentence chain that a 9:16 cascade card stacks top-to-bottom (RECIPES
+§4.6.2 chain variant, 2026-08-25).
 
 {% if context.instruction %}
 ## User Instructions (Highest Priority)
@@ -7,31 +9,52 @@ Please prioritize the user's requirements for this output: {{ context.instructio
 
 {% endif %}## Task
 
-Extract {{ count }} quotes from the following source text. Each quote must:
-- Be at most 25 words (or 80 CJK characters) — short enough for a graphic card
-- Be able to stand alone and resonate without context
-- Match the persona's style and brand voice
-- Have clear attribution (persona name + event/occasion)
-- **Output language: {{ context.target_language }}**
-- **Verbatim fidelity**: when the output language is the same as the source language, each quote must be copied word-for-word from the source text — never paraphrase, "improve", or invent a sentence and attribute it to the speaker. When translating into another language, translate faithfully without adding or inventing claims.
+Build a **core-idea chain** that captures the talk's central thesis as a
+vertical stack of caption strips:
+
+1. Pick the talk's **core idea** — one sentence that names the thesis.
+2. Decide **how many verbatim sentences** are needed to express it.
+   Pick {{ count }} sentences from the candidates (the framework supports
+   3..7 — judge by topic complexity: a single punchline = 3, a layered
+   argument = 7, the middle band is the common case).
+3. Order them so each sentence builds on the previous one — setup →
+   argument → payoff. The cascade reads top-to-bottom (newest context on
+   top of the canvas, oldest anchor on bottom).
+4. Decide whether the cascade needs a **speaker face** at the top
+   (image #35 Charlie Munger style: big portrait + caption strips below).
+   Default OFF (image #34 学术椅 style: pure text strips). Turn ON when
+   the speaker's visual identity IS the quote's anchor (a face people
+   recognize, an interview where presence matters). Turn OFF for pure
+   text-driven topics (academic advice, thesis how-tos, FAQ cards).
+
+Each selected sentence comes from the **Quotable Lines** list below — pick
+by id, the runner snaps the timestamp and asset location off the picked row.
 
 ## Material Understanding
 
 - **Core thesis**: {{ understanding.core_thesis }}
 - **Themes**: {{ understanding.themes | join(', ') }}
 - **Target audience**: {{ understanding.target_audience }}
-- **Focus for these quotes**: {{ slot.focus or 'Capture the most shareable ideas' }}
+
+## Quotable Lines (verbatim, with id)
+
+The director already screened the source for self-contained, broadcast-ready
+lines. Pick {{ count }} by id — the runner will snap the timestamp and asset
+location off the picked row, you MUST NOT invent timecodes.
+
+{% for line in understanding.quotable_lines %}
+- id={{ loop.index0 }}: "{{ line.text }}"{% if line.start is not none %} [{{ line.start }}s – {{ line.end }}s]{% endif %}{% if not line.self_contained %} (NOT self-contained — skip){% endif %}
+{% endfor %}
 
 {% if slot.quote_candidates %}
-## Candidate Quotes
+## Candidate Quotes (storyboard)
 
 Use these candidate quotes assigned by the storyboard — verbatim when the languages match:
 {% for quote in slot.quote_candidates %}
 - {{ quote }}
 {% endfor %}
 
-{% endif %}
-## Persona
+{% endif %}## Persona
 
 - Name: {{ context.persona.name or 'Persona' }}
 {% if context.persona.title %}
@@ -67,15 +90,22 @@ Use these candidate quotes assigned by the storyboard — verbatim when the lang
 Please output only valid JSON:
 
 {
+  "core_idea": "the talk's central thesis in one sentence (the LLM's verdict)",
+  "needs_speaker_frame": true | false,
   "quotes": [
     {
-      "quote": "quote content",
-      "attribution": "Persona Name | Event"
+      "quote": "sentence text in target_language (mirror of the picked id's text)",
+      "attribution": "Persona Name | Event",
+      "quotable_line_id": <int, the id from the list above>
     }
+    // ... N entries, N matches how many sentences the core idea needs
   ]
 }
 
 Requirements:
-- Output {{ count }} quotes
+- Output {{ count }} quote{% if count != 1 %}s{% endif %} (3..7 range — judge
+  by topic complexity; you may emit fewer than {{ count }} if the topic
+  reads tight, but never more than {{ count }})
 - Use {{ context.target_language }} language for the output
+- ALWAYS set `quotable_line_id` to the row you picked (the runner rejects null)
 - Output JSON only

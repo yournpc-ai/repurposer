@@ -569,11 +569,34 @@ async def pending_book(ctx: Ctx, pid: str) -> dict | None:
 
 
 async def s1_vague_first_turn_then_prose_start(ctx: Ctx) -> None:
-    """S1 模糊首次（有媒体）→ dock 任务书（reasons 非空）→ “开始吧”起 run。"""
+    """S1 模糊首次（有媒体）→ dock 任务书（reasons 非空）→ "开始吧" 起 run.
+
+    2026-08-25 修订：默认链含 write_quotes 时，Phase 1 caption_mode 反问
+    优先 dock（用户红线：字幕模式必须问），后续 task_book 才出书。测试
+    现在跑完整 3-turn 旅程：caption_mode 选择 → task_book → start。
+    """
     pid = await ctx.new_project("S1 vague start")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
 
     turn1 = await ctx.chat(pid, "帮我处理一下这个演讲")
+    q1 = turn1["assistant_message"].get("question")
+    # Phase 1: 默认链含 write_quotes → caption_mode choice 先 dock
+    if q1 is not None and q1.get("kind") == "choice" and any(
+        o.get("id", "").startswith("caption_mode_") for o in q1.get("options", [])
+    ):
+        caption_qid = turn1["assistant_message"]["id"]
+        ans = await ctx.answer(caption_qid, {"kind": "option", "option_id": "caption_mode_bilingual"})
+        check(ans.status_code in (200, 201), "caption_mode answer accepted", ans.text)
+        # The answer endpoint returns {answered_question, follow_up}; the
+        # follow_up is the new task_book question. Wrap it in the same
+        # shape turn1 has so the assertions below (is_task_book_dock /
+        # run_id / pending_intent) work without touching the S1 contract.
+        follow = ans.json().get("follow_up") or {}
+        turn1 = {
+            "assistant_message": follow,
+            "run_id": None,
+            "answered_question": ans.json().get("answered_question"),
+        }
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book", turn1["assistant_message"])
     check(turn1["run_id"] is None, "turn1 starts no run")
     book = (await ctx.results(pid)).get("pending_intent")
@@ -1056,15 +1079,30 @@ async def s12_declared_material_promotes(ctx: Ctx) -> None:
 
 
 async def s13_no_material_asks(ctx: Ctx) -> None:
-    """S13 零素材反问：无素材声明的 generate 请求 → answer 引导，无 dock 无 run。"""
+    """S13 零素材反问：媒体需请求 + 无素材 → ask-for-material 散文，无 dock 无 run。
+
+    2026-08-27 修订（D8）：S13 回归媒体需路径本位——copy-writer 无素材
+    路径是 S48 的地盘。媒体需链（select_clips 等）+ 零素材 → 零素材安全
+    网把 generate 降为 answer + 反问散文。断言保持兼容：caption_mode
+    dock 可出现（LLM 若把请求读成 write_quotes 链），但 task_book /
+    run / pending_intent / 假资产永不落。
+    """
     pid = await ctx.new_project("S13 no material asks")
 
-    turn1 = await ctx.chat(pid, "帮我做 LinkedIn 内容")
+    turn1 = await ctx.chat(pid, "帮我把上周的讲座剪成 3 条竖屏短片")
     check(turn1["run_id"] is None, "no run without material", turn1)
-    check(not turn1["assistant_message"].get("question"),
-          "no task book docks without material", turn1["assistant_message"])
     check(has_prose(turn1["assistant_message"]),
           "an ask-for-material reply lands", turn1["assistant_message"])
+    # The default chain may dock a caption_mode choice (if the LLM reads
+    # the request as a write_quotes chain) — legal dock. task_book,
+    # however, never docks without material for a media-needing chain.
+    question = turn1["assistant_message"].get("question")
+    if question is not None:
+        check(
+            question.get("kind") != "task_book",
+            "no task_book docks without material",
+            turn1["assistant_message"],
+        )
     check((await ctx.results(pid)).get("pending_intent") is None,
           "no groundless book is persisted")
     check(await project_assets(pid) == [], "no fake asset was created")
@@ -1117,6 +1155,55 @@ async def s21_lost_and_empty_handed(ctx: Ctx) -> None:
     assets = await project_assets(pid)
     check(any(a["type"].endswith("transcript") for a in assets),
           "the pasted content became a transcript asset", assets)
+
+
+async def s48_text_writer_without_material(ctx: Ctx) -> None:
+    """S48 copy-writer 解除硬门禁（2026-08-24 lift）：无素材 + 写帖请求 →
+    generate 不再被反问（plan path 软信号），dock 任务书带 text_without_material
+    reason，Start → 跑 → 出 post。镜像 S13 的"无素材→ask 反问"作为旧行为
+    文档；S48 断言新行为（"没米也下锅"，但 plan 落地 + 用户知情）。"""
+    pid = await ctx.new_project("S48 text writer no material")
+
+    # 无 media 上传、无粘贴——只有一句 prompt + topic。
+    turn1 = await ctx.chat(pid, "write me a LinkedIn post about leadership")
+    check(turn1["run_id"] is None,
+          "no run before Start", turn1)
+    check(is_task_book_dock(turn1["assistant_message"]),
+          "a text-tribe task book docks (no ask-back, no answer-away)",
+          turn1["assistant_message"])
+
+    book = await pending_book(ctx, pid)
+    check(book is not None, "the book is persisted", book)
+    reasons = (book or {}).get("reasons") or []
+    check("text_without_material" in reasons,
+          "the no-material soft reason rides the docked book",
+          reasons)
+    # 任务链是 writer-only（不应被反问、也不应夹带 media-needing 任务）。
+    tasks = (book or {}).get("intent", {}).get("tasks") or []
+    tools = [t.get("tool") for t in tasks]
+    check("write_post" in tools,
+          "write_post is the chain's anchor (drafts from prompt + persona)",
+          tools)
+    media_need = {"select_clips", "translate_clip", "dub_clip", "remove_filler",
+                  "add_music", "reframe_clip"}
+    check(not (set(tools) & media_need),
+          "no media-needing tasks sneak in when there's nothing to attach",
+          tools)
+    check(await project_assets(pid) == [],
+          "no fake transcript asset is created (the gate moved, the synthetic "
+          "promotion didn't)", await project_assets(pid))
+
+    # 启动 → 跑 id 落地。Harness 停在此层：run 实际写出产物属 e2e 范畴，
+    # 剧本回归只验 chat / dock / answer 契约（CLAUDE.md Testing 纪律）。
+    qid = turn1["assistant_message"]["id"]
+    res = await ctx.answer(qid, {"kind": "start"})
+    check(res.status_code == 200, "Start answers the docked task book", res.text)
+    answered = res.json()["answered_question"]
+    check(answered.get("workflow_run_id"),
+          "Start lands a workflow run id", answered)
+    check(await count_runs(pid) == 1,
+          "exactly one run was born from the no-material book",
+          await count_runs(pid))
 
 
 # ---- Scenarios: 契约（dock 生命周期 / answer 端点 / 重建） --------------------
@@ -2152,6 +2239,7 @@ SCENARIOS = {
     "S13": s13_no_material_asks,
     "S14": s14_bare_pasted_content_promotes,
     "S21": s21_lost_and_empty_handed,
+    "S48": s48_text_writer_without_material,
     # 契约（dock 生命周期 / answer 端点 / 重建 / 附件）
     "S23": s23_task_book_bail_and_reopen,
     "S24": s24_autonomy_review_rides_to_run,

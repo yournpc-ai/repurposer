@@ -23,6 +23,7 @@ dependencies = [
     "numpy>=1.26",
     "opencv-python-headless>=5.0,<6",
     "av>=13",  # PyAV: direct dep for speaker_map arbitration clip cuts
+    "pillow>=10.0",  # quote-card stack compositor (RECIPES §4.6.2 stacked variant)
     "pymupdf>=1.27.2.3",
     "pyjwt>=2.8",
     "boto3>=1.34",

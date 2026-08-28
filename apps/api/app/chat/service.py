@@ -37,18 +37,17 @@ option letter/number/label hit answers with that option; otherwise
 is a new intent and the question stays pending.
 """
 
-from datetime import UTC, datetime
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import structlog
 
-from app.providers.llm.minimax import MiniMaxError
 from app.agents.contexts import _build_context
 from app.chat.intent import chat_intent_agent, plan_agent
 from app.models.schemas import (
@@ -80,9 +79,11 @@ from app.models.tables import (
 )
 from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
-from app.pipeline.asset_processing import has_renderable_media
+from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
+from app.pipeline.derivative_dispatch import DerivativeWriterNode
 from app.pipeline.graph import MEDIA, NODE_KINDS
+from app.providers.llm.minimax import MiniMaxError
 from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
@@ -242,6 +243,225 @@ def _prefers_zh(text: str) -> bool:
     """Language heuristic for server-composed reply lines — the CJK check
     rides the user's own words (the turn's text), not a stored setting."""
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
+
+
+# Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES §4.7):
+# the chat path asks the user to pick bilingual / source_only / target_only
+# when a `write_quotes` task is proposed without an explicit caption-mode
+# hint. Three layers of detection, in priority order:
+#
+#  1. LLM-set on InferredIntent.caption_mode (the plan agent recognises the
+#     user's wording — "bilingual subtitles" / "中英双语字幕" — and sets it).
+#  2. Code-level keyword scan on the user prompt (defence-in-depth: the LLM
+#     may miss the phrasing, but a literal "bilingual"/"双语" is unambiguous).
+#  3. Otherwise: dock a choice question, the answer rides the AskProposal path.
+#
+# Single source of truth for the option_id encoding — answer_question uses
+# the same prefix to recover the choice (caption_mode_bilingual / _source_only
+# / _target_only → Literal value), so the question and the answer share a
+# hand-shake no LLM can break.
+_CAPTION_MODE_KEYWORDS_BILINGUAL: tuple[str, ...] = (
+    "bilingual",
+    "bilingual subtitles",
+    "bilingual captions",
+    "双语",
+    "中英双语",
+    "中英对照",
+    "双语字幕",
+    "中英",
+)
+_CAPTION_MODE_KEYWORDS_SOURCE_ONLY: tuple[str, ...] = (
+    "source only",
+    "source language only",
+    "源语言",
+    "原文",
+    "原声字幕",
+    "只保留原",
+    "只保留源",
+)
+_CAPTION_MODE_KEYWORDS_TARGET_ONLY: tuple[str, ...] = (
+    "target only",
+    "target language only",
+    "目标语言",
+    "只保留目标",
+)
+
+
+def _detect_caption_mode(prompt: str) -> str | None:
+    """Code-level keyword scan — the LLM may set caption_mode too, but a
+    literal "bilingual"/"双语" is unambiguous so we don't waste a question.
+    Source/target-only is intentionally left for the chat to ask: the user's
+    intent is genuinely ambiguous without knowing the source language."""
+    text = (prompt or "").lower()
+    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_BILINGUAL):
+        return "bilingual"
+    return None
+
+
+def _needs_caption_mode_question(tasks: list) -> bool:
+    """Quote-card chain (write_quotes) is the only recipe currently asking
+    for caption mode — registry-native via the DerivativeWriterNode check,
+    no parallel "which tools need subtitles" list."""
+    return any(
+        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
+        and t.tool == "write_quotes"
+        for t in tasks
+    )
+
+
+def _build_caption_mode_question(text: str) -> AskProposal:
+    """The caption-mode choice question — bilingual is the canonical default
+    (matches the recipe's example prompt and the reference images). The
+    option_id prefix `caption_mode_` is a handshake the answer path uses to
+    recover the choice (caption_mode_bilingual → Literal "bilingual")."""
+    zh = _prefers_zh(text)
+    if zh:
+        return AskProposal(
+            type="ask",
+            question="字幕模式？",
+            kind="choice",
+            options=[
+                AskOption(id="caption_mode_bilingual", label="双语字幕（推荐）"),
+                AskOption(id="caption_mode_source_only", label="只保留源语言"),
+                AskOption(id="caption_mode_target_only", label="只保留目标语言"),
+            ],
+            allow_freeform=False,
+        )
+    return AskProposal(
+        type="ask",
+        question="Caption mode?",
+        kind="choice",
+        options=[
+            AskOption(id="caption_mode_bilingual", label="Bilingual (recommended)"),
+            AskOption(id="caption_mode_source_only", label="Source language only"),
+            AskOption(id="caption_mode_target_only", label="Target language only"),
+        ],
+        allow_freeform=False,
+    )
+
+
+def _recover_caption_mode_from_answer(message: Message) -> str | None:
+    """Read a docked caption-mode question's answer off the message row.
+    The option_id prefix `caption_mode_` is the handshake; free-form answers
+    fall back to a keyword scan (the LLM may have written a localised label
+    like 'bilingual' as freeform text)."""
+    answer = message.answer if isinstance(message.answer, dict) else None
+    if not answer:
+        return None
+    option_id = answer.get("option_id")
+    if isinstance(option_id, str) and option_id.startswith("caption_mode_"):
+        return option_id[len("caption_mode_"):]
+    text = (answer.get("text") or "").lower()
+    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_BILINGUAL):
+        return "bilingual"
+    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_SOURCE_ONLY):
+        return "source_only"
+    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_TARGET_ONLY):
+        return "target_only"
+    return None
+
+
+def _has_resolved_caption_mode(project: Project) -> bool:
+    """A caption-mode question was already answered and the answer is
+    reflected in the stored pending_intent — the next plan turn re-uses it
+    instead of re-docking the question (the user has spoken). Mirrors the
+    pending_intent's role for the task book (CHAT_ARCH §3)."""
+    pending = project.pending_intent if isinstance(project.pending_intent, dict) else None
+    if not pending:
+        return False
+    intent = pending.get("intent") or {}
+    return bool(intent.get("caption_mode"))
+
+
+def _is_caption_mode_question(question: AskPayload) -> bool:
+    """Identify a docked caption-mode question by its option_id prefix — the
+    only stable handshake between the dock and the answer paths."""
+    return bool(question.options) and all(
+        o.id.startswith("caption_mode_") for o in question.options
+    )
+
+
+def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
+    """Recover the stashed intent the caption-mode question was holding.
+
+    Two shapes ride the question's ``intent`` field:
+      - ``TaskListProposal`` from ``_propose_turn`` (chat_intent_agent path;
+        carries ``type="task_list"`` + ``tasks`` + ``summary``) — we wrap it
+        back into an InferredIntent, the same shape plan-path stores
+      - bare ``InferredIntent`` from ``_plan_turn`` (plan_agent path; first
+        turn goes here) — used as-is, the LLM already gave us a complete intent
+
+    Returns None when the stash is missing or unrecognized — the caller
+    degrades to a no-op (the answer is recorded but no follow-up docks).
+    """
+    stashed = message.intent
+    if not isinstance(stashed, dict):
+        return None
+    if stashed.get("type") == "task_list":
+        # _propose_turn path: TaskListProposal
+        try:
+            tlp = TaskListProposal.model_validate(stashed)
+        except Exception:  # noqa: BLE001 — bad stash, degrade
+            return None
+        return InferredIntent(tasks=tlp.tasks)
+    if "tasks" in stashed and "action" in stashed:
+        # _plan_turn path: bare InferredIntent (the plan agent's verdict)
+        try:
+            return InferredIntent.model_validate(stashed)
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
+async def _compute_book_reasons(
+    db: AsyncSession,
+    project: Project,
+    intent: InferredIntent,
+) -> list[str]:
+    """Re-derive the soft-signal reasons for a docked task book (Phase 1
+    answer path needs this — the caption_mode replay rebuilds the
+    PendingIntent from the stashed intent and the reasons computed in
+    _plan_turn are scoped to that function's stack).
+
+    Pure function over (db, project, intent) — the answer path passes the
+    replay_intent (caption_mode already stamped) and the project, and gets
+    back the same reasons the original dock would have. Registry-native
+    checks; no parallel tool lists.
+    """
+    reasons: list[str] = []
+    if not intent.tasks_explicit:
+        reasons.append("chain_default")
+    clips_task = next((t for t in intent.tasks if t.tool == "select_clips"), None)
+    if clips_task is not None and (clips_task.params or {}).get("count") is None:
+        reasons.append("clip_count_default")
+    has_media = await has_renderable_media(db, UUID(str(project.id)))
+    if not has_media and any(_needs_media(t.tool) for t in intent.tasks):
+        reasons.append("clips_without_media")
+    has_text_tribe = any(
+        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
+        for t in intent.tasks
+    )
+    if has_text_tribe and not await has_any_text_material(
+        db, UUID(str(project.id))
+    ):
+        reasons.append("text_without_material")
+    return reasons
+
+
+def _needs_media(tool: str) -> bool:
+    """True iff a tool's node requires MEDIA or materializes source.
+
+    Hoisted out of _plan_turn (2026-08-25) so the answer path's
+    ``_compute_book_reasons`` and the plan path's carve-out can both
+    call it. Registry-native: walks ``node.requires`` + ``node.after``
+    rather than maintaining a parallel tool list (RECIPES §4.6).
+    """
+    node = NODE_KINDS.get(tool)
+    if node is None:
+        return False
+    return any(r.key == MEDIA.key for r in node.requires) or (
+        "materialize_source" in (node.after or ())
+    )
 
 
 def _run_active_text(text: str) -> str:
@@ -659,6 +879,83 @@ async def answer_question(
     follow_up: Message | None = None
     bailed_run_ids: list[UUID] = []
 
+    # Caption-mode fast path (Phase 1, 2026-08-25, RECIPES §4.7): the question
+    # is one of ours when every option_id starts with ``caption_mode_``. The
+    # user picked a mode, so we re-stitch the stashed intent (a TaskListProposal
+    # from _propose_turn, or a bare InferredIntent from _plan_turn's first
+    # turn) into an InferredIntent + PendingIntent and dock a task_book
+    # question — the user then confirms with Start like any normal generation.
+    # Skipping _propose_turn here is intentional: the LLM would re-derive the
+    # task list from the option label alone, which is the brittle 续聊 path.
+    if (
+        question.kind == "choice"
+        and data.kind in ("option", "freeform")
+        and _is_caption_mode_question(question)
+        and message.intent is not None
+        and isinstance(message.intent, dict)
+    ):
+        recovered_mode = _recover_caption_mode_from_answer(message)
+        if recovered_mode is not None:
+            stashed_intent = _replay_stashed_caption_intent(message)
+            if stashed_intent is not None:
+                project = await db.get(Project, conversation.project_id)
+                if project is not None:
+                    # Pull the original user prompt out of the conversation's
+                    # first user message — the stashed intent carries only
+                    # the structural chain, the prompt text is in the
+                    # conversation timeline.
+                    prompt_text = await get_project_prompt(
+                        db, UUID(str(project.id))
+                    ) or ""
+                    # The stashed InferredIntent already carries tasks +
+                    # specific_instruction (from the plan path) — keep them
+                    # verbatim, just stamp caption_mode. The chat path
+                    # stashed a TaskListProposal (no specific_instruction) —
+                    # synthesize one from the prompt so the downstream
+                    # text-tribe agents see the user's intent. caption_mode
+                    # itself rides the structured field end-to-end
+                    # (intent → PendingIntent → TaskSpec → run.context) —
+                    # no machine marker in the prose.
+                    if stashed_intent.specific_instruction:
+                        replay_intent = stashed_intent.model_copy(
+                            update={"caption_mode": recovered_mode}
+                        )
+                    else:
+                        replay_intent = stashed_intent.model_copy(
+                            update={
+                                "specific_instruction": prompt_text or None,
+                                "caption_mode": recovered_mode,
+                            }
+                        )
+                    project.pending_intent = PendingIntent(
+                        prompt=prompt_text,
+                        intent=replay_intent,
+                        reasons=await _compute_book_reasons(db, project, replay_intent),
+                        persona_id=(
+                            project.pending_intent.get("persona_id")
+                            if isinstance(project.pending_intent, dict)
+                            else None
+                        ),
+                        derived=[],
+                    ).model_dump(mode="json")
+                    # sync_task_book_question docks a task_book question; its
+                    # bailed_run_ids are the cascade-bailed run interrupts (none
+                    # here, but the contract is the same).
+                    bailed_run_ids = await sync_task_book_question(
+                        db, user_id, project, replay_intent, prompt_text,
+                        reasons=project.pending_intent["reasons"],
+                    )
+                    follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
+                    # Skip the 续聊 fallback below — the task book question is
+                    # the follow_up, no need to re-propose.
+                    await db.commit()
+                    if bailed_run_ids:
+                        await finalize_bailed_runs(bailed_run_ids)
+                    await db.refresh(message)
+                    if follow_up is not None:
+                        await db.refresh(follow_up)
+                    return message, follow_up
+
     if question.kind == "task_book":
         project = await db.get(Project, conversation.project_id)
         if project is None:
@@ -716,6 +1013,10 @@ async def answer_question(
                         ),
                         autonomy=data.autonomy or "auto",
                         scope="full",
+                        # Caption mode rides the run context verbatim from
+                        # the InferredIntent — the chat path's caption-mode
+                        # question stores it on the intent (RECIPES §4.7).
+                        caption_mode=intent.caption_mode,
                     ),
                 )
             except ToolRejected as exc:
@@ -893,9 +1194,9 @@ async def _plan_turn(
     # asset carrying text (transcript beats extracted_text), capped.
     material_excerpt = next(
         (
-            text
+            excerpt
             for a in assets
-            if (text := (a.transcript or a.extracted_text or "").strip())
+            if (excerpt := (a.transcript or a.extracted_text or "").strip())
         ),
         None,
     )
@@ -969,12 +1270,49 @@ async def _plan_turn(
     # assets at all and no declared material must not dock a groundless task
     # book — degrade to the ask-for-material answer. Only when no book is
     # already on the table (a pending book's refine/start is untouched).
-    if (
-        intent.action == "generate"
-        and stored is None
-        and not assets
-        and material_asset is None
-    ):
+    # 2026-08-24 lift carve-out: when the chain is copy-writers alone
+    # (write_post / write_quotes / write_carousel / write_article) the
+    # draft comes from prompt + persona style, no material gate. Letting
+    # the book dock with the `text_without_material` reason (computed
+    # below from ``has_any_text_material``) is the designed soft signal —
+    # NOT a blocker. Mixed chains (writers + media-needing) are still
+    # defended here because the LLM is supposed to drop the media-needing
+    # rows in EXCEPTION 2; if it doesn't, this guard catches it.
+    # The "ask for material" backstop (RECIPES §4.6 S13 regression guard) is
+    # two-pronged:
+    #  1. A chain that mixes media-needing tasks with no attached file → ask
+    #     for material (clips / dub / subtitle work can't run without a source).
+    #  2. A vague, EXPLICITLY default proposal with no material → ask for
+    #     clarification ("what product exactly?").
+    # But the LLM's `tasks_explicit` flag is brittle: prompts like "make a
+    # quote card" or "write a post about leadership" name a specific recipe
+    # yet the LLM often defaults to `tasks_explicit=False`, which would
+    # short-circuit the no-material copy-writer lift. The carve-out: a
+    # PURE copy-writer chain (no media-needing task in the list) skips the
+    # `tasks_explicit` gate — the lift's own check downstream lets the
+    # copy-writer draft from prompt + persona style without source material.
+    def _zero_material_net(verdict: InferredIntent) -> bool:
+        """True when the zero-material safety net must downgrade this generate
+        verdict to an ask-for-material answer.
+
+        Recomputed from the verdict's CURRENT task list — the misfire flips
+        below (answer-misfire, start-misfire) re-apply the net AFTER the
+        chain-adjudication repair may have swapped ``intent.tasks``, so
+        pre-computed flags would judge the wrong chain (2026-08-28: the
+        answer-misfire flip let a clips×3 book dock with zero material —
+        S13 red; the flags must follow the chain being docked)."""
+        media_task = any(_needs_media(t.tool) for t in verdict.tasks)
+        only_writers = bool(verdict.tasks) and not media_task
+        return (
+            not assets
+            and material_asset is None
+            and (
+                media_task
+                or (not verdict.tasks_explicit and not only_writers)
+            )
+        )
+
+    if intent.action == "generate" and stored is None and _zero_material_net(intent):
         intent.action = "answer"
         intent.answer = _ask_for_material_text(prompt)
 
@@ -1016,27 +1354,7 @@ async def _plan_turn(
                 intent.action = "answer"
                 intent.answer = _cannot_do_text(prompt)
 
-    has_media = await has_renderable_media(db, UUID(str(project.id)))
-
-    reasons: list[str] = []
-    if not intent.tasks_explicit:
-        reasons.append("chain_default")
-    clips_task = next((t for t in intent.tasks if t.tool == "select_clips"), None)
-    if clips_task is not None and (clips_task.params or {}).get("count") is None:
-        reasons.append("clip_count_default")
-    # Media-needing work without media: the chain's own declarations answer —
-    # a tool whose node requires MEDIA, or a clip-spec consumer (its `after`
-    # names materialize_source). Registry-native; no parallel list.
-    def _needs_media(tool: str) -> bool:
-        node = NODE_KINDS.get(tool)
-        if node is None:
-            return False
-        return any(r.key == MEDIA.key for r in node.requires) or (
-            "materialize_source" in (node.after or ())
-        )
-
-    if not has_media and any(_needs_media(t.tool) for t in intent.tasks):
-        reasons.append("clips_without_media")
+    reasons = await _compute_book_reasons(db, project, intent)
 
     # An answer action without answer text is an LLM misfire — degrade to a
     # plan turn (dock the book for confirmation) when a chain exists, else
@@ -1045,6 +1363,15 @@ async def _plan_turn(
     if intent.action == "answer" and not intent.answer:
         if intent.tasks:
             intent.action = "generate"
+            # The zero-material net re-applies verbatim (S13, 2026-08-28):
+            # the net above ran while the action was still "answer" and
+            # skipped this verdict — without the re-check, an answer-misfire
+            # carrying a media-needing chain docks a groundless book with
+            # zero material (the exact hole the start-misfire branch below
+            # already closes; this is the missed sibling).
+            if stored is None and _zero_material_net(intent):
+                intent.action = "answer"
+                intent.answer = _ask_for_material_text(prompt)
         else:
             intent.answer = _cannot_do_text(prompt)
 
@@ -1089,7 +1416,16 @@ async def _plan_turn(
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
             return question, None, None, bailed_run_ids
+        # Start-misfire → treat the turn as a fresh generate verdict: the
+        # zero-material safety net re-applies verbatim (the net above ran
+        # while the action was still "start" and skipped it). Without this
+        # a "start" verdict for a media-needing chain with nothing attached
+        # would dock a groundless book — the exact hole the net exists to
+        # close (D8, 2026-08-27).
         intent.action = "generate"
+        if _zero_material_net(intent):
+            intent.action = "answer"
+            intent.answer = _ask_for_material_text(prompt)
 
     if intent.action == "answer" and intent.answer:
         # Capability question: the reply lands as a plain assistant message
@@ -1129,6 +1465,48 @@ async def _plan_turn(
             db, conversation_id, "assistant", active_line
         )
         return assistant_message, None, None, []
+    # Caption mode for captioned-video runs (Phase 1 plan-path fix,
+    # 2026-08-25, RECIPES §4.7): the plan_path is the FIRST-turn entry
+    # point for fresh projects — the chat path's elif alone leaves the very
+    # first "make a quote card" prompt to dock a task_book without ever
+    # asking which caption mode the user wants. Mirror the chat path's
+    # three escape hatches (LLM-set / keyword / prior answer) and dock a
+    # caption_mode choice before the task_book; the bare InferredIntent
+    # rides the question's `intent` field, the answer path replays it
+    # verbatim back into PendingIntent (chat_path stashes a TaskListProposal,
+    # plan_path stashes an InferredIntent — both shapes handled).
+    if (
+        intent.action == "generate"
+        and _needs_caption_mode_question(intent.tasks)
+        and intent.caption_mode is None
+        and _detect_caption_mode(text) is None
+        and _detect_caption_mode(intent.specific_instruction or "") is None
+        and not _has_resolved_caption_mode(project)
+    ):
+        caption_question = _build_caption_mode_question(text)
+        stashed_intent = intent.model_dump(mode="json")
+        assistant_message, bailed_run_ids = await _dock_question(
+            db,
+            conversation_id,
+            caption_question.question,
+            AskPayload(
+                kind="choice",
+                options=caption_question.options,
+                allow_freeform=caption_question.allow_freeform,
+            ),
+            intent=stashed_intent,
+        )
+        return assistant_message, None, None, bailed_run_ids
+    # Caption-mode keyword auto-classification (Phase 1 plan-path fix,
+    # 2026-08-25, RECIPES §4.7): when the user prompt carries an
+    # unambiguous bilingual keyword ("双语" / "bilingual" / "中英对照" /
+    # "双语字幕" / "中英双语"), stamp intent.caption_mode="bilingual" so
+    # the run lands with the right value even when the LLM didn't set it.
+    # Source / target-only keywords stay null here — they're ambiguous
+    # without knowing the source language, the chat question handles them.
+    keyword_mode = _detect_caption_mode(text)
+    if keyword_mode is not None and intent.caption_mode is None:
+        intent = intent.model_copy(update={"caption_mode": keyword_mode})
     project.pending_intent = PendingIntent(
         prompt=prompt,
         intent=intent,
@@ -1293,7 +1671,7 @@ async def _propose_turn(
                     message_id=UUID(str(assistant_message.id)),
                 )
                 assistant_content = proposal.summary
-            except (OpRejected, OpConflict) as e:
+            except (OpRejected, OpConflict):
                 assistant_message.content = _cannot_do_text(text)
                 assistant_content = assistant_message.content
                 proposal = None
@@ -1312,7 +1690,66 @@ async def _propose_turn(
             AskPayload(kind="choice", options=[], allow_freeform=True),
             intent=proposal.model_dump(mode="json"),
         )
+    elif (
+        # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES
+        # §4.7): when the chain asks for a quote card and the user didn't name
+        # a caption mode, dock the bilingual/source/target choice BEFORE
+        # letting the run start — the answer rides run.context.caption_mode
+        # downstream (write_quotes Phase 2 reads it, Remotion Phase 3 layouts
+        # off it). Three escape hatches: the LLM already set caption_mode on
+        # the intent, the user prompt carries an unambiguous keyword, or the
+        # stored pending_intent already locked the choice from an earlier
+        # answer (so a follow-up refinement turn doesn't re-ask).
+        isinstance(proposal, TaskListProposal)
+        and _needs_caption_mode_question(proposal.tasks)
+        and proposal.intent.caption_mode is None
+        and _detect_caption_mode(text) is None
+        and _detect_caption_mode(
+            (proposal.intent.specific_instruction or "")
+        ) is None
+        and not _has_resolved_caption_mode(project)
+    ):
+        caption_question = _build_caption_mode_question(text)
+        # The original TaskListProposal's dump is stashed on the docked
+        # question's `intent` field — the answer path replays it once the
+        # user picks a mode, rather than re-running the plan agent (the plan
+        # would otherwise re-enter the question-dock loop). The intent we
+        # replay is a `TaskListProposal`-shaped dict (not an InferredIntent):
+        # the resume code path below knows to convert it into an
+        # InferredIntent + PendingIntent + task_book dock.
+        stashed_proposal = proposal.model_dump(mode="json")
+        assistant_message, bailed_run_ids = await _dock_question(
+            db,
+            conversation_id,
+            caption_question.question,
+            AskPayload(
+                kind="choice",
+                options=caption_question.options,
+                allow_freeform=caption_question.allow_freeform,
+            ),
+            intent=stashed_proposal,
+        )
     else:
+        # Caption-mode keyword auto-classification (Phase 1, 2026-08-25,
+        # RECIPES §4.7): if the user prompt carries an unambiguous bilingual
+        # keyword, the run starts with caption_mode stamped — no question
+        # docked, the run lands with the right value. The chat path's elif
+        # above already skipped the question for this case; we now mirror
+        # the plan path's auto-stamp on the run's TaskSpec.
+        keyword_mode = _detect_caption_mode(text)
+        if (
+            keyword_mode is not None
+            and isinstance(proposal, TaskListProposal)
+            and proposal.intent is not None
+            and proposal.intent.caption_mode is None
+        ):
+            proposal = proposal.model_copy(
+                update={
+                    "intent": proposal.intent.model_copy(
+                        update={"caption_mode": keyword_mode}
+                    )
+                }
+            )
         try:
             run_id = await _create_run_from_tasks(
                 db, project, proposal.tasks, proposal.summary

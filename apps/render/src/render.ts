@@ -48,10 +48,41 @@ export async function renderClip(
   // dedupes per URL across this run's clips, and hands Remotion a loopback
   // URL (see stage.ts).
   const stagedUrl = await stageRemoteSource(spec.source.url);
+  // image_urls + image_shots[i].image_url (stills: the baked composite PNG
+  // for stacked quote-cards, RECIPES §4.6.2) ride the same staging path —
+  // Remotion's <Img> reads the URL directly from the headless renderer,
+  // which doesn't honor HTTPS_PROXY. Without staging, a TOS-hosted
+  // composite surfaces as a 178s delayRender timeout + 500 (the same trap
+  // stage.ts was written for, just for image_urls / image_shots).
+  const rawImageUrls = spec.source.image_urls ?? [];
+  const stagedImageUrls = await Promise.all(
+    rawImageUrls.map((u) => stageRemoteSource(u)),
+  );
+  const rawShotUrls = (spec.source.image_shots ?? []).map((s) => s.image_url);
+  const stagedShotUrls = await Promise.all(
+    rawShotUrls.map((u) => stageRemoteSource(u)),
+  );
+  const stagedImageShots = (spec.source.image_shots ?? []).map((s, i) =>
+    stagedShotUrls[i] === s.image_url
+      ? s
+      : { ...s, image_url: stagedShotUrls[i] },
+  );
+  const imageChanged = stagedImageUrls.some((u, i) => u !== rawImageUrls[i]);
+  const shotChanged = stagedImageShots.some(
+    (s, i) => s.image_url !== (spec.source.image_shots ?? [])[i]?.image_url,
+  );
   const stagedSpec =
-    stagedUrl === spec.source.url
+    stagedUrl === spec.source.url && !imageChanged && !shotChanged
       ? spec
-      : { ...spec, source: { ...spec.source, url: stagedUrl } };
+      : {
+          ...spec,
+          source: {
+            ...spec.source,
+            url: stagedUrl,
+            image_urls: stagedImageUrls.length ? stagedImageUrls : spec.source.image_urls,
+            image_shots: stagedImageShots,
+          },
+        };
 
   const serveUrl = await getBundle();
   const inputProps = { spec: stagedSpec };

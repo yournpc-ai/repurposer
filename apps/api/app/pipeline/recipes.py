@@ -81,14 +81,29 @@ class ExampleAsset(BaseModel):
 
 
 class ExampleOutput(BaseModel):
-    """烘焙成片 (Recipe.example_outputs) — the overlay's big preview."""
+    """烘焙成片 (Recipe.example_outputs) — the overlay's big preview.
+
+    ``kind`` is the MediaKind of the baked artifact (产物展示统一 v1,
+    2026-08-27): ``video`` / ``image`` / ``audio`` are renderable media;
+    ``document`` is a JSON payload (text-tribe writers drop their result
+    at demo/outputs/<stem>-<hash>.json) — the overlay fetches it and
+    dispatches the render on ``doc_format``. ``aspect`` declares the
+    frame for media kinds (falls back to the card-level ``aspect`` when
+    absent)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["video", "image"]
+    kind: Literal["video", "image", "audio", "document"]
     url: str
     poster_url: str | None = None
     label_key: str | None = None
+    # kind="document" only: which writer payload shape the JSON holds —
+    # the overlay's render dispatch (post → readonly textarea, carousel →
+    # slide stack).
+    doc_format: Literal["post", "carousel"] | None = None
+    # Declared frame for the media kinds (e.g. "9:16" for the stacked
+    # quote card) — display-layer truth, no runtime probing needed.
+    aspect: str | None = None
 
 
 class RecipeEntry(BaseModel):
@@ -483,14 +498,15 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             ),
         ],
         # 2026-08-24 harvest (write_post on demo-article.md, English). JSON
-        # payload — the overlay's Examples tab renders the content as a doc
-        # preview card (post kind = "image" per the ExampleOutput schema).
+        # payload — kind="document" (产物展示统一, 2026-08-27): the overlay
+        # fetches the JSON and renders the post as a readonly textarea.
         example_outputs=[
             ExampleOutput(
-                kind="image",
+                kind="document",
                 url=f"{_DEMO}/outputs/post-699d2254.json",
                 poster_url=None,
                 label_key="post_output",
+                doc_format="post",
             ),
         ],
     ),
@@ -521,8 +537,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             # caption_mode 走 Phase 1 chat 反问：bilingual / source_only /
             # target_only 三选一，默认值是 chat 的默认值而非 recipes 端的
             # 默认值（pre-LLM 闸门已撤，run.context.caption_mode 由 LLM 在
-            # task_book 落字）。layout_mode="stacked" 触发 chain 合成器；
-            # 由 chat 在 task_book 中按用户意图落字（bake-time override）。
+            # task_book 落字）。叠卡 = 卡本体（v3, 2026-08-27）：chain
+            # 长度 >= 2 即走叠卡合成器，无开关字段。
             TaskItem(tool="write_quotes", params={"language": "en", "count": 5})
         ],
         aspect="9:16",
@@ -559,6 +575,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 url=f"{_DEMO}/outputs/quote-card-chain-v9-72402480.png",
                 poster_url=None,
                 label_key="quotes_output",
+                aspect="9:16",
             ),
         ],
     ),
@@ -581,14 +598,14 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         ],
         # 2026-08-24 harvest (write_carousel on demo-article.md, count=6, EN).
         # Carousel has no render-side product (writer's 6 slides are JSON
-        # only); poster_url is None — the overlay's Examples tab renders
-        # the JSON slides as the preview.
+        # only) — kind="document", the overlay renders the slide stack.
         example_outputs=[
             ExampleOutput(
-                kind="image",
+                kind="document",
                 url=f"{_DEMO}/outputs/carousel-f14c251c.json",
                 poster_url=None,
                 label_key="carousel_output",
+                doc_format="carousel",
             ),
         ],
     ),
