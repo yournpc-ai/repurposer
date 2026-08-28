@@ -130,12 +130,11 @@ async def _mirror_render_node(
         )
 
 
-async def _mirror_superseded_node(output_id: UUID, project: Project) -> None:
+async def _mirror_superseded_node(output_id: UUID, lang: str) -> None:
     """Terminal mirror for a render DISCARDED as superseded (a morph re-pended
     the row mid-render): only the RUNNING step — the morph's fresh render step
     stays pending for the next claim. Best-effort, same as _mirror_render_node."""
     try:
-        lang = display_language(None, project.language)
         summary = "已被新的渲染取代" if lang.startswith("zh") else "Replaced by a newer render"
         async with AsyncSessionLocal() as db:
             await db.execute(
@@ -163,6 +162,11 @@ async def render_output(output_id: UUID) -> None:
     Assumes the output is already claimed (RENDERING). On success writes
     files.video/files.srt + COMPLETED; on any error writes FAILED with the
     message. Terminal state is mirrored onto the render workflow step when present.
+
+    Session discipline (D9, 2026-08-27): a SHORT session snapshots the row,
+    NO session is held across the render-service POST (up to 900s — a session
+    parked idle-in-transaction there invites lock pileups), and a fresh short
+    session lands the guarded terminal write.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -199,50 +203,54 @@ async def render_output(output_id: UUID) -> None:
                     output_id, "failed", user_line("render_failed", lang)
                 )
             return
+        # Snapshot everything the render + terminal write need as plain data —
+        # the ORM objects die with this session.
+        spec = _absolutize(copy.deepcopy(output.render_spec))
+        files = dict(output.files or {})
+        project_id = output.project_id
 
-        try:
-            spec = _absolutize(copy.deepcopy(output.render_spec))
-            render_ts = int(time.time())
-            video_key = await get_output_path(
-                output.project_id, user_id, f"{output.id}-{render_ts}.mp4"
-            )
-            srt_key = await get_output_path(
-                output.project_id, user_id, f"{output.id}-{render_ts}.srt"
-            )
-            video_put_url = await presign_upload(
-                video_key, content_type="video/mp4", ttl=900
-            )
-            srt_put_url = await presign_upload(
-                srt_key, content_type="text/srt", ttl=900
-            )
-            payload = {
-                "spec": spec,
-                "outputs": {
-                    "video": {
-                        "key": video_key,
-                        "put_url": video_put_url,
-                        "content_type": "video/mp4",
-                    },
-                    "srt": {
-                        "key": srt_key,
-                        "put_url": srt_put_url,
-                        "content_type": "text/srt",
-                    },
+    old_video_key = files.get("video")
+    old_srt_key = files.get("srt")
+    try:
+        render_ts = int(time.time())
+        video_key = await get_output_path(
+            project_id, user_id, f"{output_id}-{render_ts}.mp4"
+        )
+        srt_key = await get_output_path(
+            project_id, user_id, f"{output_id}-{render_ts}.srt"
+        )
+        video_put_url = await presign_upload(
+            video_key, content_type="video/mp4", ttl=900
+        )
+        srt_put_url = await presign_upload(
+            srt_key, content_type="text/srt", ttl=900
+        )
+        payload = {
+            "spec": spec,
+            "outputs": {
+                "video": {
+                    "key": video_key,
+                    "put_url": video_put_url,
+                    "content_type": "video/mp4",
                 },
-            }
-            async with httpx.AsyncClient(timeout=900) as client:
-                resp = await client.post(settings.render_url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
+                "srt": {
+                    "key": srt_key,
+                    "put_url": srt_put_url,
+                    "content_type": "text/srt",
+                },
+            },
+        }
+        async with httpx.AsyncClient(timeout=900) as client:
+            resp = await client.post(settings.render_url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
 
-            files = output.files or {}
-            old_video_key = files.get("video")
-            old_srt_key = files.get("srt")
-            # Guarded write (2026-08-15 morph/render race): a morph landing
-            # mid-render re-pends the row (RENDERING -> PENDING) with a fresh
-            # spec. The conditional UPDATE matches 0 rows then — this render's
-            # product is STALE and must be discarded, never clobber the row
-            # (the re-pend renders the fresh spec on a later claim).
+        # Guarded write (2026-08-15 morph/render race): a morph landing
+        # mid-render re-pends the row (RENDERING -> PENDING) with a fresh
+        # spec. The conditional UPDATE matches 0 rows then — this render's
+        # product is STALE and must be discarded, never clobber the row
+        # (the re-pend renders the fresh spec on a later claim).
+        async with AsyncSessionLocal() as db:
             claimed = await db.execute(
                 update(Output)
                 .where(
@@ -256,44 +264,45 @@ async def render_output(output_id: UUID) -> None:
                 )
             )
             await db.commit()
-            if claimed.rowcount == 0:
-                logger.info("render_superseded", output_id=str(output_id))
-                for orphan_key in (video_key, srt_key):
-                    try:
-                        await delete(orphan_key)
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "render_superseded_delete_failed",
-                            key=orphan_key,
-                            error=str(e),
-                        )
-                await _mirror_superseded_node(output_id, project)
-                return
-            await _mirror_render_node(output_id, "done")
+        if claimed.rowcount == 0:
+            logger.info("render_superseded", output_id=str(output_id))
+            for orphan_key in (video_key, srt_key):
+                try:
+                    await delete(orphan_key)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "render_superseded_delete_failed",
+                        key=orphan_key,
+                        error=str(e),
+                    )
+            await _mirror_superseded_node(output_id, lang)
+            return
+        await _mirror_render_node(output_id, "done")
 
-            # Best-effort cleanup of the previous render's objects. Only bare
-            # keys are deletable; legacy /api/v1 paths and absolute URLs are
-            # skipped (deleting them would be a no-op anyway).
-            for old_key in (old_video_key, old_srt_key):
-                if old_key and not old_key.startswith(("http://", "https://", "/")):
-                    try:
-                        await delete(old_key)
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "render_old_output_delete_failed",
-                            key=old_key,
-                            error=str(e),
-                        )
+        # Best-effort cleanup of the previous render's objects. Only bare
+        # keys are deletable; legacy /api/v1 paths and absolute URLs are
+        # skipped (deleting them would be a no-op anyway).
+        for old_key in (old_video_key, old_srt_key):
+            if old_key and not old_key.startswith(("http://", "https://", "/")):
+                try:
+                    await delete(old_key)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "render_old_output_delete_failed",
+                        key=old_key,
+                        error=str(e),
+                    )
 
-            logger.info(
-                "output_rendered",
-                output_id=str(output_id),
-                video=output_url(output.files.get("video")),
-            )
-        except Exception as e:  # noqa: BLE001 — record any failure on the row
-            logger.error("render_output_failed", output_id=str(output_id), error=str(e))
-            # Same guard as the success path: a mid-render morph owns the row
-            # now — the stale failure must not clobber its re-pend.
+        logger.info(
+            "output_rendered",
+            output_id=str(output_id),
+            video=output_url(data["video"]),
+        )
+    except Exception as e:  # noqa: BLE001 — record any failure on the row
+        logger.error("render_output_failed", output_id=str(output_id), error=str(e))
+        # Same guard as the success path: a mid-render morph owns the row
+        # now — the stale failure must not clobber its re-pend.
+        async with AsyncSessionLocal() as db:
             failed = await db.execute(
                 update(Output)
                 .where(
@@ -306,7 +315,7 @@ async def render_output(output_id: UUID) -> None:
                 )
             )
             await db.commit()
-            if failed.rowcount:
-                await _mirror_render_node(
-                    output_id, "failed", user_line("render_failed", lang)
-                )
+        if failed.rowcount:
+            await _mirror_render_node(
+                output_id, "failed", user_line("render_failed", lang)
+            )

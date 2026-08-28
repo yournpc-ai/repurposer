@@ -10,38 +10,57 @@ repair round inside ``Agent.call`` (ADR-039 P3) — no blind retries here.
 """
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
+import hashlib
 import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import Agent, MAX_CHARS_PER_TEXT
+from app.agents.base import MAX_CHARS_PER_TEXT, Agent
 from app.agents.contexts import _generation_context
+from app.memory.brand import brand_from_block, resolve_brand_block
 from app.models.schemas import (
+    ClipPayload,
     DerivativeType,
     GenerationContext,
     MaterialUnderstanding,
+    RenderStatus,
     Storyboard,
     validate_derivative_content,
     validate_output_payload,
 )
-from app.models.tables import Output, Project, WorkflowStep, WorkflowRun
-from app.pipeline.graph import NODE_KINDS, NodeBase, TRANSCRIPT, estimate_mechanical, token_bounds
-from app.pipeline.images import _save_quote_card_image
-from app.pipeline.step_context import _count_words
+from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
+from app.pipeline.clip_spec import build_quote_card_spec, build_stacked_quote_card_spec
+from app.pipeline.quote_card_stack import (
+    ChainCaption,
+    composite_chain_quote_card,
+    extract_video_frames,
+)
+from app.pipeline.edges import _load_director_outputs
+from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
+from app.pipeline.morph import _render_step_label
+from app.pipeline.step_context import _count_words, _list_assets
 from app.pipeline.step_display import (
     _fill_summary,
     _node_slot,
+    _pop_spec_field,
     _set_stage,
     slot_tag,
     ui_lang_of,
 )
-from app.pipeline.edges import _load_director_outputs
 from app.platform.project_context import collect_asset_texts, resolve_persona
+from app.providers.storage import output_url, save_output, stream_url
+from app.models.schemas import AssetType
 
 logger = structlog.get_logger()
+
+# Chain-card duration (RECIPES §4.6.2): the composite PNG holds for this long
+# under the Ken-Burns zoom — one constant feeds both the ClipSpec's
+# ``duration_s`` and the Output payload's ``duration``.
+_QUOTE_CARD_CHAIN_DURATION_S = 6.0
 
 
 def derivative_output_types() -> frozenset[str]:
@@ -523,12 +542,15 @@ class DerivativeWriterNode(NodeBase):
         derivative_type = self.derivative_type
         ctx = run.context or {}
         # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
-        # once — pop it (reassign = SQLAlchemy-tracked) so a later targeted
-        # regen never eats stale feedback.
+        # once — pop it so a later targeted regen never eats stale feedback.
+        # The row write goes through _pop_spec_field's own session (D9,
+        # 2026-08-28): an ORM assignment here would dirty the Session-2 node,
+        # and the next autoflush would lock this row for the rest of the run
+        # — deadlocking this runner's own display writers.
         spec = dict(node.spec or {})
         feedback = spec.pop("feedback", None)
         if feedback is not None:
-            node.spec = spec
+            await _pop_spec_field(node.id, "feedback")
         slot = _node_slot(node, ctx, derivative_type.value)
         target_id = node.spec.get("target_id")
         # Language resolves per slot first, then the node's targeted language,

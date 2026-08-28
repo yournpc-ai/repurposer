@@ -1033,3 +1033,32 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **AI 不自动降级，保留 chat 主动 set_title**：本 ADR 默认 AI 自动降级——chat 主动是补充入口；不反对 chat 里说"加标题卡开场"。
 
 **Related**: ADR-047 §5（被本条整节翻案）/ ADR-041（评审在 chat、渲染进 canvas 的哲学基底）/ ADR-035（可操作画布永拒不变）/ ADR-040（chat 唯一发射路径不变）/ ADR-039（节点对象化 + 估价 = fold，渲染前用户可见是估价而非视频预览）/ ADR-001（hook_gate 落地 commit a867112 作为机制退役的前置基线，其上 4 bug 修复为本 ADR 落地时的清理参考）
+
+## ADR-050: 会话不跨长等待——计量内存累积 + 渲染会话收窄 + runner 禁污 Session-2 节点 + DEFERRABLE FK（D9 死锁族）
+
+**Status**: Decided (2026-08-27；根因补刀 2026-08-28)
+
+**Context**: quote-cards v3 e2e 连跑把 dev worker 反复卡成永久 wedge。pg 取证（pg_stat_activity / pg_locks / pageinspect 逐层下钻）最终定位三个同族病灶，共享一个形状——**runner 的 Session 2 持有 `workflow_steps` 行锁横跨 LLM 等待，行内第二个写者等它，而它等第二个写者**（应用级自死锁）：① 计量 `record_usage` 每次 LLM 调用另开 session UPDATE 本 step 行；② 渲染 `render_output` 持 session 横跨最长 900s 渲染 POST；③ **质量打回重跑时 feedback-pop 走 `node.spec = spec` ORM 赋值**——Session-2 node 变脏，下一次 autoflush（outputs INSERT 时）锁本 step 行至 run 尾，runner 自己的 display writer（`_fill_summary`，own-session jsonb_set）等自己的事务——pageinspect tuple 版本对（xmin/xmax）实锤。verify bounce 路径是触发点：只有 attempt≥2（带 feedback）才脏节点，这解释了"首跑绿、连跑 wedge"的观察史。
+
+**Decision**:
+
+1. **计量改内存累积（`app/metering.py`）**：`bind_workflow_step` 绑定 contextvar 内存台账；`record_usage` / `record_media_usage` 只改内存、**零 SQL**。`execute_step`（orchestrator.py）在执行尾段用 `merge_accrued_cost` 归并一次写入——成功 / Suspend / QualityBounce / 瞬时重试 / 失败五个终态分支全部记账（每节点 N 次写 → 1 次写）。cost 形状 `{prompt_tokens, completion_tokens, fixed_cost, units?}` 不变；跨 attempt 累加（与旧 per-call 机制语义对齐）；空台账 → cost 保持 NULL（估价对账 SQL 继续忽略未计量节点）。**不加表、不加字段**。
+2. **render_output 会话收窄（`app/pipeline/rendering.py`）**：短 session 快照行数据（spec / files / project_id / user_id / lang）→ **无 session** 横跨渲染 POST → 新短 session 做 guarded 终态写入（morph 竞态守卫条件不变）。`_mirror_superseded_node` 签名由 `Project` 改收 `lang`。
+3. **runner 禁污 Session-2 节点（铁律）**：Session 2 内对 step 行的写只属于 execute_step 尾段结算；runner 中途要写 spec 一律走 `step_display` 的 own-session 原子写（`_pop_spec_field` jsonb `-` 减法 / `_set_*` jsonb_set）。两处 feedback-pop（`derivative_dispatch` / `clips/node`）已改 `_pop_spec_field`。
+4. **四条 runner-父行 FK 改 DEFERRABLE INITIALLY DEFERRED**（migration `c3a9e71f52d0`）：`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id`——Session 2 中途 INSERT 子行不再对父行持 KEY SHARE 至提交，父行写者（display writers / maybe_finalize / run 状态翻转）永不被 mid-run 锁窗口卡住。完整性不变，检查挪到 COMMIT。
+5. **DB 保险丝**：`ALTER ROLE <app_role> SET idle_in_transaction_session_timeout = '600s'`——任何环境（dev 已落地；**部署新环境时必做**，本条即部署说明）。保险丝是兜底不是许可。**120s 首日即被翻案**：Session 2 横跨 runner 的 LLM await 是保留设计，director_understand 一次调用 + schema 修复重试 ≈ 2 分钟纯等待，120s 把健康事务杀成 `connection is closed`——保险丝只防永久 wedge，10 分钟足以把灾难收敛为有界失败。
+6. **dev 脚本清理纪律**：FK DELETE 前先 terminate `idle in transaction` 超 15s 的他者 backends（`_e2e_quote_stacked.py` 等 harness 脚本同款片段；`pg_stat_activity.query` 全是参数化语句、无字面 id，项目级文本匹配不可行，dev 箱上 >15s idle-in-tx 即 wedge 类）。
+7. **execute_step 异常分支 node=None 守卫**：清理跑赢 worker 时（项目被删）三异常分支直接返回，不再 AttributeError。
+
+**明确不做**（用户拍板出闸）：runner Session 2 持有权重构（污节点已禁 + FK 锁窗口已关，死锁类整族消除，无须更大 blast radius）；`agent_calls` 台账（需求池 P1，第十一周）；verify bounce 路径本身（触发点随 ③ 修复消失）。
+
+**Rationale**: 死锁的根不是"session 持有太久"，而是"行内长等待期间存在第二个写者 + Session-2 行锁"。把第二个写者消灭（计量归并）、把 Session-2 的行锁窗口关到最小（禁污节点 + FK 延迟到 COMMIT）= 锁族整族死亡，且语义逐条对齐旧机制（累加记账 / NULL 纪律 / guarded 写 / feedback 只搭一轮）。
+
+**Alternatives（翻案条件随附）**:
+
+- **runner Session 2 也拆短**：本 ADR 出闸。**翻案条件**：出现新的"runner 执行期必须写同一行"的需求（先审视能否走 own-session 原子写或尾段归并）。
+- **计量入独立队列表再异步落账**：否决——无新表新字段（用户裁定），内存累积已满足所有消费方（RunResponse.cost = 序列化时聚合，无中途可见性需求）。
+- **display writers 加 lock_timeout 跳过**：否决——feedback-pop 修复后撞锁窗口已消失；跳过着会常态化丢失完成态 summary（输出型节点 summary 写在 outputs flush 之后）。
+- **保险丝 120s**：已翻案（见 Decision 5）。**再翻案条件**：观测证明 600s 仍误杀正常单步（届时先查该步为何纯等待这么久，而非再放宽）。
+
+**Related**: ADR-025（cost 计量账本机制——本条改写入路径不改账本形状）/ ADR-017（Postgres 即队列）/ ADR-039（队列与重试机制；execute_step 终态分支结构；质检打回 feedback 通道）/ MODULE_ARCHITECTURE §7.2（队列机制——本条为其补会话纪律）

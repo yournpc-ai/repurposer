@@ -13,6 +13,7 @@ Run-level semantics preserved from the retired run_generation:
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -31,7 +32,7 @@ from app.models.schemas import (
     WorkflowStatus,
 )
 from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
-from app.metering import bind_workflow_step
+from app.metering import bind_workflow_step, merge_accrued_cost
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
 from app.pipeline.morph import (
@@ -133,6 +134,13 @@ class TaskSpec(BaseModel):
     # follow it, never the material's language. None on legacy rows → the
     # display layer falls back to project/source language.
     ui_language: str | None = None
+    # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES
+    # §4.7): write_quotes / future caption-bearing recipes store the user's
+    # bilingual / source_only / target_only pick here so the pipeline (Phase
+    # 2 writer / Phase 3 Remotion) can lay out the right subtitle stack.
+    # None = the recipe doesn't need a caption mode, or the user hasn't
+    # been asked yet (the chat safety net's path).
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
 
 
 def first_task_language(tasks: list[TaskItem] | None) -> str | None:
@@ -876,15 +884,25 @@ async def execute_step(node_id: UUID) -> None:
                 run.status = WorkflowStatus.RUNNING
             await db.commit()
 
+        accrued: dict = {}
         try:
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
                 run = await db.get(WorkflowRun, node.run_id)
                 project = await db.get(Project, run.project_id)
                 executor = NODE_KINDS[node.kind]
-                with bind_workflow_step(node.id):
+                bound = bind_workflow_step(node.id)
+                # Same ledger object the runner's LLM/media calls accumulate
+                # into — readable after the with-block AND on raise (D9).
+                accrued = bound.accrued
+                with bound:
                     output_ids = await executor.run(db, run, node, project)
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
+                # D9: metering no longer UPDATEs this row per LLM call from a
+                # second session (that locked the row this session holds
+                # uncommitted — an application-level self-deadlock under node
+                # concurrency). One merge write bills the whole execution.
+                node.cost = merge_accrued_cost(node.cost, accrued)
                 if NODE_KINDS[node.kind].runtime_fanout:
                     # The render chain owns this node's terminal state (D2):
                     # back to pending so the render-status claim mirror moves it.
@@ -906,8 +924,13 @@ async def execute_step(node_id: UUID) -> None:
             # downstream nodes simply stay pending behind the waiting one.
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
+                if node is None:
+                    # Project deleted mid-flight (cleanup won the race) —
+                    # nothing left to settle.
+                    return
                 node.status = "waiting"
                 node.spec = {**(node.spec or {}), "suspend_payload": s.payload}
+                node.cost = merge_accrued_cost(node.cost, accrued)
                 run = await db.get(WorkflowRun, node.run_id)
                 if run is not None:
                     run.status = WorkflowStatus.WAITING_HUMAN
@@ -925,8 +948,13 @@ async def execute_step(node_id: UUID) -> None:
             # No cascade, no failure record, run stays open.
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
+                if node is None:
+                    # Project deleted mid-flight — nothing left to reset.
+                    return
                 node.status = "pending"
                 node.finished_at = None
+                # Bill the bounced verify attempt — its judge calls happened.
+                node.cost = merge_accrued_cost(node.cost, accrued)
                 executor = await db.get(WorkflowStep, q.executor_id)
                 if executor is not None and executor.status == "done":
                     executor.status = "pending"
@@ -984,6 +1012,10 @@ async def execute_step(node_id: UUID) -> None:
             logger.error("workflow_step_failed", node_id=str(node_id), error=str(e))
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
+                if node is None:
+                    # Project deleted mid-flight (cleanup won the race) —
+                    # nothing left to fail.
+                    return
                 # Step-level retry (agent-loop-upgrade W3): a TransientNodeError
                 # within the kind's retry budget resets the node to pending —
                 # the worker's next tick is the backoff, downstream is NOT
@@ -995,6 +1027,7 @@ async def execute_step(node_id: UUID) -> None:
                     node.status = "pending"
                     node.error = f"transient attempt {node.attempt}: {str(e)[:500]}"
                     node.finished_at = None
+                    node.cost = merge_accrued_cost(node.cost, accrued)
                     await db.commit()
                     logger.info(
                         "workflow_step_retry",
@@ -1017,6 +1050,8 @@ async def execute_step(node_id: UUID) -> None:
                     else user_error_line(e)
                 )
                 node.finished_at = datetime.now(UTC)
+                # Bill the failed attempt — its LLM/media calls happened.
+                node.cost = merge_accrued_cost(node.cost, accrued)
                 await db.commit()
                 # Morph-failure rescue: a failed in-place morph leaves its
                 # producer-suppressed targets at render_status NULL — the
@@ -1176,6 +1211,17 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             first_error = next((n.error for n in nodes if n.status == "failed"), None)
             run.status = WorkflowStatus.FAILED
             run.error = first_error or "All outputs failed"
+            # Failed runs must NOT leave the project stuck in PROCESSING
+            # (the frontend hides destructive ops while it's "live" — a run
+            # that won't recover keeps the user from deleting or retrying,
+            # and there's no auto-recovery path: the worker either restarts
+            # and resumes the PENDING node, or it doesn't). Drop back to
+            # DRAFT so the user can either retry (a new message) or clean
+            # up (delete) — the failed run stays in the run row for history.
+            project = await db.get(Project, run.project_id)
+            if project is not None and project.status == ProjectStatus.PROCESSING:
+                project.status = ProjectStatus.DRAFT
+                project.updated_at = datetime.now(UTC)
         else:
             run.status = WorkflowStatus.COMPLETED
             run.error = None

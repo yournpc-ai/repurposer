@@ -217,7 +217,12 @@ class WorkflowStep(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     run_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("workflow_runs.id", ondelete="CASCADE"),
+        # DEFERRED (D9, ADR-050): fan-out runners INSERT steps mid-run inside
+        # a long-lived Session 2; an immediate FK check would KEY-SHARE-lock
+        # the run row for the whole session and stall run-row updaters
+        # (maybe_finalize / status flips) into cross-session wedges. The check
+        # fires at COMMIT — same integrity, no mid-run lock window.
+        ForeignKey("workflow_runs.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
     kind = Column(String(50), nullable=False)
@@ -262,10 +267,19 @@ class Output(Base):
     __tablename__ = "outputs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    # DEFERRED on both parent FKs (D9, ADR-050): writers INSERT outputs inside
+    # a Session 2 that spans LLM awaits; immediate FK checks would
+    # KEY-SHARE-lock the project/step rows mid-run and deadlock the runner's
+    # own display writers (step_display / mirrors UPDATE the step row from
+    # their own sessions — the observed D9 wedge). Checks fire at COMMIT.
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+    )
     workflow_step_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("workflow_steps.id", ondelete="SET NULL"),
+        ForeignKey("workflow_steps.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"),
         nullable=True,
         index=True,
     )
@@ -326,7 +340,15 @@ class Operation(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     output_id = Column(UUID(as_uuid=True), ForeignKey("outputs.id"), nullable=False, index=True)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
+    # DEFERRED (D9, ADR-050): morph runners journal ops mid-run inside a long
+    # Session 2; keep the project row free of KEY-SHARE locks until COMMIT so
+    # project updaters (maybe_finalize's status flip) never stall on it.
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+        index=True,
+    )
     seq = Column(Integer, nullable=False)  # per-output monotonic; baseline = 0
     op = Column(String(50), nullable=False)  # registry-guarded (N-03)
     params = Column(JSONB, nullable=False, default=dict)

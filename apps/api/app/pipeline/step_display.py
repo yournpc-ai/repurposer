@@ -7,6 +7,13 @@ session: that session stays open across LLM calls, and holding a row lock on
 session. Direct ``node.spec`` assignment from a runner is a race for the same
 reason (execute_step's post-runner commit would flush the stale in-memory
 dict and clobber fields written meanwhile).
+
+The mirror discipline (D9, 2026-08-28): a runner must NEVER dirty the
+Session-2-loaded node (ORM attribute assignment) — the next autoflush locks
+the row for the rest of the run and the runner's own display writers below
+deadlock against their own session (the verify-bounce feedback-pop did
+exactly this until it moved to ``_pop_spec_field``). Session-2 writes to the
+step row belong to execute_step's final settle only.
 """
 
 from typing import Any
@@ -50,6 +57,22 @@ async def _set_spec_field(node_id: UUID, key: str, value: Any) -> None:
                     WorkflowStep.spec, pg_array([key]), func.to_jsonb(value), True
                 )
             )
+        )
+        await s.commit()
+
+
+async def _pop_spec_field(node_id: UUID, key: str) -> None:
+    """Remove one spec key in its own session (atomic jsonb ``-`` subtraction).
+
+    Built for the verify-bounce feedback-pop at runner start (D9, 2026-08-28):
+    that pop MUST NOT go through ORM assignment — dirtying the Session-2 node
+    makes the next autoflush lock the row for the rest of the run, and the
+    runner's own display writers then deadlock against their own session."""
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(WorkflowStep)
+            .where(WorkflowStep.id == node_id)
+            .values(spec=WorkflowStep.spec.op("-")(key))
         )
         await s.commit()
 

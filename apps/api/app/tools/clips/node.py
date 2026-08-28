@@ -42,6 +42,7 @@ from app.pipeline.step_context import (
 from app.pipeline.step_display import (
     _fill_summary,
     _node_slot,
+    _pop_spec_field,
     _set_stage,
     slot_tag,
     ui_lang_of,
@@ -171,12 +172,15 @@ class SelectClips(NodeBase):
         """
         ctx = run.context or {}
         # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
-        # once — pop it (reassign = SQLAlchemy-tracked) so a later targeted
-        # regen never eats stale feedback.
+        # once — pop it so a later targeted regen never eats stale feedback.
+        # The row write goes through _pop_spec_field's own session (D9,
+        # 2026-08-28): an ORM assignment here would dirty the Session-2 node,
+        # and the next autoflush would lock this row for the rest of the run
+        # — deadlocking this runner's own display writers.
         spec = dict(node.spec or {})
         feedback = spec.pop("feedback", None)
         if feedback is not None:
-            node.spec = spec
+            await _pop_spec_field(node.id, "feedback")
         slot = _node_slot(node, ctx, "clips")
         clip_count = (slot.count if slot else None) or self.count_default
         # Language resolves per slot first, then the task-book language.
