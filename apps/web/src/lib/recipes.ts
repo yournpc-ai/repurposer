@@ -33,10 +33,17 @@ export interface RecipePublic {
   flow: { key: string; detail_key?: string | null; fanout?: number | null }[]
   example_assets: { kind: string; url: string; label_key?: string | null }[]
   example_outputs: {
+    /** MediaKind of the baked artifact (产物展示统一, 2026-08-27):
+     * "video" | "image" | "audio" render as media; "document" is a JSON
+     * payload the overlay fetches and renders by `doc_format`. */
     kind: string
     url: string
     poster_url?: string | null
     label_key?: string | null
+    /** kind="document" only: which writer payload shape the JSON holds. */
+    doc_format?: "post" | "carousel" | null
+    /** Declared frame for media kinds (falls back to the card aspect). */
+    aspect?: string | null
   }[]
 }
 

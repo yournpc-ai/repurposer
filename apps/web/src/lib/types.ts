@@ -166,6 +166,10 @@ export interface Output {
   score: OutputScore | null
   quality: OutputQuality | null
   publishing: OutputPublishing
+  /** Server-derived display aspect (产物展示统一, 2026-08-27): "9:16" |
+   * "1:1" | "16:9" | arbitrary "W:H"; null = unknown/original frame —
+   * surfaces fall back to their default tier. Never probe when set. */
+  aspect?: string | null
   created_at: string
   updated_at: string | null
 }
