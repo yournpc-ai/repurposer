@@ -1,24 +1,36 @@
 """Chain quote card compositor (RECIPES §4.6.2, stacked = 卡本体).
 
-Builds the 9:16 stacked quote card: N caption strips (N=3..7, the writer's
-core-idea chain, setup → payoff) cascading down the canvas, each strip
-backed by a video frame grabbed at the entry's ``frame_at`` midpoint,
-with an optional speaker frame on top (``needs_speaker_frame``). The
-composite is one PNG — captions are baked in (no ``caption_track``), so
-the renderer just holds it for the configured duration with a subtle
-Ken-Burns (zoom_in 1.05).
+v3 形态对齐 (2026-08-28, D15 — TikTok 图文帖参考两张): the composite is a
+STATIC PNG in one of two forms, never the retired N-frame "帧墙" (形态 C):
+
+- **形态 A (人像型, ``needs_speaker_frame=True``)**: top speaker region
+  (1080×960, the CURATED frame — best face in the first quotable line's
+  span, YuNet-picked) + dark fade into the strip area + N caption strips
+  (semi-transparent black bodies, staggered ±40px) + attribution rails
+  (name / source two lines, horizontal, speaker region bottom-left).
+- **形态 B (全幅背景型, ``needs_speaker_frame=False``)**: one full-bleed
+  background (the curated frame cover-cropped to 1080×1920) dimmed 30%,
+  N caption lines centred straight down. No frame at all → the dark
+  branch (纯文字 strip, 学术椅型).
+
+The 帧卡 (frame card, §2.2) is the chain's per-entry standalone sibling:
+one frame + one caption block, independently shareable, and the composite's
+named parents on the results canvas (``source_ref.parents``).
 
 Pipeline:
 1. ``extract_video_frames(video_bytes, timecodes)`` — streaming PyAV
    grabber: seek to the keyframe before each target, decode until the
    target is reached, stop. Never a full-decode residency.
-2. ``composite_chain_quote_card(...)`` — PIL composite: strips overlap
-   (each upper strip covers the lower strip's top rows), captions drawn
-   with per-script sizing (CJK lines big / Latin lines small) and
-   per-script wrapping (CJK wraps per character, Latin on spaces).
+2. ``pick_curated_frame(video_bytes, start, end)`` — YuNet best-face
+   picker over a small sample of the first quotable line's span
+   (``providers/vision.py`` reuse, zero new engines); no faces → the
+   span's midpoint frame.
+3. ``composite_frame_card(...)`` / ``composite_chain_quote_card(...)`` —
+   PIL composites with per-script sizing (CJK lines big / Latin lines
+   small) and per-script wrapping (CJK per character, Latin on spaces).
 
-Caller (``_materialize_quote_card_outputs``) uploads the PNG to project
-storage and hands the URL to ``build_stacked_quote_card_spec``.
+Caller (``_materialize_quote_card_outputs``) uploads the PNGs to project
+storage and hands the composite URL to ``build_stacked_quote_card_spec``.
 """
 
 from __future__ import annotations
@@ -161,46 +173,50 @@ def _wrap_text(
 
 # ----- Composite --------------------------------------------------------------
 
-# Layout constants for the chain variant.
+# Layout constants (v3 forms A/B, 2026-08-28).
 CHAIN_CANVAS_W = 1080
 CHAIN_CANVAS_H = 1920
-CHAIN_SPEAKER_H = 960  # 50% of canvas when needs_speaker_frame
+CHAIN_SPEAKER_H = 960  # 形态 A speaker region (top 50%)
 CHAIN_BG = (10, 10, 14)
 CHAIN_PADDING_X = 60
-CHAIN_STRIP_OVERLAP_PX = 1260  # max cascade overlap (RECIPES §4.6.2)
-# Reviewed peek floor (2026-08-27): the visible window each back strip
-# keeps below the strip covering it. 220 = the reviewed N=3 full-canvas
-# value (v9 demo bake). The fixed 1260 overlap was tuned for the
-# full-canvas deck (S=1920 → peek 220@N3); with a speaker frame
-# (S=960) it drove the peek NEGATIVE and the cascade inverted
-# (text clipped under covering strips). The overlap now yields to
-# hold this floor — see composite_chain_quote_card.
-CHAIN_PEEK_MIN = 220
-# Caption anchor: the block ends this many px above the strip body's
-# bottom (the 80px tail stays until D17/P3 moves the overlay's example
-# label pill off the image — shell yields to image, not the reverse).
-# Tight cascades (peek < floor) relax it proportionally.
-CHAIN_BOTTOM_ANCHOR = 80
-CHAIN_BLOCK_GAP = 18  # primary ↔ secondary block gap (px)
 
-# Per-script caption sizing (D14, 2026-08-27): the font follows the LINE's
-# script, not the line's role — CJK lines are the visual mains (big), Latin
-# lines the secondaries (small). Bilingual strips draw both.
-CHAIN_CJK_FONT_MAX = 36
-CHAIN_CJK_FONT_MIN = 22
-CHAIN_CJK_RATIO = 0.10  # font size = strip_h * ratio, capped at MAX
+# 形态 A caption strips: semi-transparent black bodies staggered ±40px.
+STRIP_GAP_Y = 28
+STRIP_STAGGER = 40
+STRIP_ALPHA = 168
+STRIP_RADIUS = 28
+STRIP_PAD_X = 36
+STRIP_PAD_Y = 24
+STRIP_AREA_MARGIN = 32  # gap above the first / below the last strip
+
+# 形态 B: full-bleed background dimmed 30%, caption lines centred straight
+# down inside a vertical band.
+DIM_ALPHA = 77  # 30% black veil over the background frame
+BAND_TOP = 240
+BAND_BOTTOM = 200
+ENTRY_GAP = 56  # between chain entries (form B / frame card has one)
+
+# Attribution rails (横排版, D15): name line big + source line small, drawn
+# in 形态 A's speaker region bottom-left (and the frame card's top-left).
+ATTR_NAME_SIZE = 48
+ATTR_SOURCE_SIZE = 36
+ATTR_MARGIN_X = 56
+ATTR_MARGIN_Y = 40
+
+# Per-script caption sizing (D14): the font follows the LINE's script, not
+# the line's role — CJK lines are the visual mains (big), Latin lines the
+# secondaries (small). Bilingual strips draw both.
+CHAIN_CJK_FONT_MAX = 40
+CHAIN_CJK_FONT_MIN = 20
 CHAIN_CJK_LINE_GAP = 10
 CHAIN_LATIN_FONT_MAX = 32
-CHAIN_LATIN_FONT_MIN = 22
-CHAIN_LATIN_RATIO = 0.07
+CHAIN_LATIN_FONT_MIN = 20
 CHAIN_LATIN_LINE_GAP = 22
+CHAIN_BLOCK_GAP = 18  # primary ↔ secondary block gap (px)
 
-# Speaker label (poster-style text). Drawn ONCE at the top-left corner of
-# the canvas — no chip, no background, no rounded box; white text with a
-# subtle dark stroke, like a movie-poster credit line.
-SPEAKER_LABEL_FONT_SIZE = 40  # px — poster-credit size
-SPEAKER_LABEL_MARGIN_X = 44   # px from canvas left edge
-SPEAKER_LABEL_MARGIN_Y = 48   # px from canvas top edge
+# 形态 B / frame card type runs larger (full canvas, few strips).
+FORM_B_CJK_MAX = 56
+FORM_B_LATIN_MAX = 38
 
 
 def _crop_to_card(img: Image.Image, *, w: int, h: int) -> Image.Image:
@@ -231,14 +247,38 @@ def _crop_to_card(img: Image.Image, *, w: int, h: int) -> Image.Image:
     return canvas
 
 
+def _cover_crop(img: Image.Image, *, w: int, h: int) -> Image.Image:
+    """Fill (cover) the slot, center-cropping the overflow — the full-bleed
+    background form (形态 B / frame card). The product's own design choice,
+    not a display crop (RECIPES 永不裁剪 governs display shells)."""
+    src_w, src_h = img.size
+    scale = max(w / src_w, h / src_h)
+    new_w, new_h = int(round(src_w * scale)), int(round(src_h * scale))
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    x0 = (new_w - w) // 2
+    y0 = (new_h - h) // 2
+    return img.crop((x0, y0, x0 + w, y0 + h))
+
+
+def _split_attribution(attr: str) -> tuple[str, str | None]:
+    """Split an attribution string into (name, source) on the first
+    separator — the rails' two lines ("查理·芒格 | 伯克希尔副董事长")."""
+    for sep in ("|", "，", ",", "·", "——", "—", " - "):
+        if sep in attr:
+            head, tail = attr.split(sep, 1)
+            return head.strip(), (tail.strip() or None)
+    return attr.strip(), None
+
+
 @dataclass(frozen=True)
 class ChainCaption:
     """One caption strip entry (RECIPES §4.6.2 chain variant).
 
-    ``primary`` is the verbatim source-language sentence (the LLM's
-    pick from ``quotable_lines``). ``secondary`` is the alt translation
-    when ``caption_mode == "bilingual"`` — None for source_only /
-    target_only runs.
+    ``primary`` is the strip's main line — the verbatim source-language
+    sentence for bilingual / source_only, the translator's alt line for
+    target_only. ``secondary`` is the alt translation when
+    ``caption_mode == "bilingual"`` — None otherwise (双译本收窄, D5:
+    captions never mix the writer's ``quote`` draft with ``quote_alt``).
     """
 
     primary: str
@@ -297,102 +337,165 @@ def _measure_caption_block(
     return total
 
 
-def composite_chain_quote_card(
-    *,
-    speaker_frame: Image.Image | None,
-    chain: list[ChainCaption],
-    chain_frames: list[Image.Image | None] | None = None,
-    speaker_label: str | None = None,
-) -> bytes:
-    """Chain-variant composite (RECIPES §4.6.2).
+# ----- Curated frame (D15: 策展帧 — 治"中点帧表情差 + N 帧重复"两病) ----------
 
-    Layout:
 
-    - Canvas 1080×1920 (9:16), dark base.
-    - If ``speaker_frame`` is provided: it occupies the top half
-      (1080×960, letterbox-fit). Below it, N caption strips share the
-      bottom 960px; without one, strips fill the full 1920px.
-    - Each strip = one VIDEO FRAME as the card body (``chain_frames[i]``,
-      grabbed at the chain entry's ``frame_at`` midpoint). None holes or
-      a short list fall back to dark fill with caption-only (graceful
-      degrade for the no-video path).
-    - Strips overlap: each strip is ``vh`` tall and offset by
-      ``vh - overlap`` from the previous one, so the upper strip paints
-      over the lower strip's top rows — the stacked-cascade reading.
-      Drawing order is back-first (chain[N-1] at the canvas bottom) so
-      the front quote (chain[0]) lands visually on top.
+def _sharpness(img: Image.Image) -> float:
+    """Laplacian-variance blur score — higher = crisper. Tie-break only."""
+    import cv2  # lazy: heavy import
+    import numpy as np
 
-    Returns PNG bytes for the caller to upload. An empty chain returns
-    the plain dark canvas (graceful degradation).
+    gray = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+
+def pick_curated_frame(
+    video_bytes: bytes, start: float, end: float
+) -> Image.Image | None:
+    """Pick the best frame inside the first quotable line's span (D15).
+
+    The old design grabbed the span's MIDPOINT frame (often a bad
+    expression) and repeated near-identical adjacent frames down the
+    cascade. This samples a handful of frames across the span and picks
+    the one with the largest detected face (YuNet via
+    ``providers/vision.py`` — the engine is already vendored for
+    speaker_map/reframe, zero new deps), sharpness as the tie-break.
+    No faces anywhere → the span's midpoint frame (an honest fallback,
+    never a t=0 black/title frame — invalid spans are rejected by the
+    caller, never clamped).
+
+    CPU-bound (decode + detection) — async callers wrap in
+    ``asyncio.to_thread``. Returns None when no frame could be decoded.
     """
-    canvas = Image.new("RGB", (CHAIN_CANVAS_W, CHAIN_CANVAS_H), CHAIN_BG)
-    n = len(chain)
-    if n == 0:
-        buf = io.BytesIO()
-        canvas.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
+    import numpy as np
 
-    # Speaker frame slot (top half, when provided).
-    if speaker_frame is not None:
-        slot = _crop_to_card(speaker_frame, w=CHAIN_CANVAS_W, h=CHAIN_SPEAKER_H)
-        canvas.paste(slot, (0, 0))
-        strips_visible_total = CHAIN_CANVAS_H - CHAIN_SPEAKER_H
-    else:
-        strips_visible_total = CHAIN_CANVAS_H
+    from app.providers.vision import detect_faces
 
-    # Stack geometry: total content height = n*vh - (n-1)*overlap, solved
-    # for vh so the cascade fills the strip area exactly.
-    #
-    # The overlap yields to the peek floor (CHAIN_PEEK_MIN, 2026-08-27):
-    # the fixed 1260 was tuned for the full-canvas deck (S=1920 → peek
-    # 220@N3, 94@N7); with a speaker frame (S=960) it drove the peek
-    # NEGATIVE (stride < 0 — strips painted over each other's caption
-    # bands and the front strip's text landed off-canvas). peek =
-    # (S - overlap)/n, so clamping overlap ≤ S - n*PEEK_MIN holds the
-    # reviewed floor in every regime; S < n*PEEK_MIN degrades to flat
-    # tiles (overlap 0, peek = S/n).
-    overlap_px = min(
-        CHAIN_STRIP_OVERLAP_PX,
-        max(0, strips_visible_total - n * CHAIN_PEEK_MIN),
-    )
-    vh = max(
-        80,
-        (strips_visible_total + (n - 1) * overlap_px) // n,
-    )
-    strip_h = vh
-    peek_px = vh - overlap_px
+    if end <= start:
+        return None
+    span = end - start
+    samples = [start + span * f for f in (0.15, 0.35, 0.5, 0.65, 0.85)]
+    try:
+        frames = extract_video_frames(video_bytes, samples)
+    except ValueError:
+        return None
+    best: Image.Image | None = None
+    best_key: tuple[float, float] = (-1.0, 0.0)
+    for img in frames:
+        if img is None:
+            continue
+        arr = np.array(img.convert("RGB"))[:, :, ::-1]  # RGB → BGR
+        faces = detect_faces(arr, (640, 640))
+        if not faces:
+            continue
+        area = max(f.bbox[2] * f.bbox[3] for f in faces)
+        key = (area, _sharpness(img))
+        if key > best_key:
+            best_key = key
+            best = img
+    if best is not None:
+        return best
+    # No face in any sample — the span's midpoint frame.
+    try:
+        mid = extract_video_frames(video_bytes, [(start + end) / 2])
+    except ValueError:
+        return None
+    return next((f for f in mid if f is not None), None)
 
-    # Caption budget: a strip's text must live inside its visible
-    # window — the FRONT strip shows its whole body (vh), back strips
-    # keep only their bottom ``peek_px`` rows (everything above is
-    # painted over by the covering strip). The 80px tail anchor relaxes
-    # when the cascade is tighter than the reviewed floor.
-    anchor = (
-        CHAIN_BOTTOM_ANCHOR if peek_px >= CHAIN_PEEK_MIN else max(16, peek_px // 4)
-    )
-    budgets = [
-        max(40, (vh if i == 0 else peek_px) - anchor) for i in range(n)
-    ]
 
-    # Cascade-wide font fit: nominal sizes scale with vh (the per-card
-    # body height), capped — then step down until EVERY strip's caption
-    # block fits ITS window budget (front strip keeps the roomiest
-    # window, so a long back-strip caption alone drags the type down).
-    # Line caps tighten only at the floor sizes. The final clip is
-    # _wrap_text's ellipsis, never a paint-over.
-    size_cjk = max(
-        CHAIN_CJK_FONT_MIN, min(CHAIN_CJK_FONT_MAX, int(vh * CHAIN_CJK_RATIO))
+# ----- Text drawing -----------------------------------------------------------
+
+
+def _draw_text_line(
+    draw: ImageDraw.ImageDraw,
+    *,
+    cx: int,
+    y: int,
+    line: str,
+    font: ImageFont.FreeTypeFont,
+    fill: tuple[int, int, int] = (255, 255, 255),
+    stroke: bool = True,
+) -> None:
+    """One horizontally-centred text line, with a subtle dark stroke so it
+    reads against any underlying frame (movie-poster credit style)."""
+    bbox = draw.textbbox((0, 0), line, font=font)
+    text_w = bbox[2] - bbox[0]
+    x = cx - text_w // 2
+    if stroke:
+        for offset in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            draw.text(
+                (x + offset[0], y + offset[1]),
+                line,
+                font=font,
+                fill=(0, 0, 0),
+            )
+    draw.text((x, y), line, font=font, fill=fill)
+
+
+def _draw_caption_block(
+    draw: ImageDraw.ImageDraw,
+    *,
+    cx: int,
+    y: int,
+    cap: ChainCaption,
+    font_cjk: ImageFont.FreeTypeFont,
+    font_latin: ImageFont.FreeTypeFont,
+    inner_w: int,
+    max_primary: int,
+    max_secondary: int,
+) -> int:
+    """Draw one entry's primary (+ secondary) lines centred at ``cx``,
+    starting at ``y``. Returns the block's total height in px."""
+    lines_p, font_p, lh_p = _layout_caption_line(
+        cap.primary,
+        max_lines=max_primary,
+        font_cjk=font_cjk,
+        font_latin=font_latin,
+        inner_w=inner_w,
     )
-    size_latin = max(
-        CHAIN_LATIN_FONT_MIN,
-        min(CHAIN_LATIN_FONT_MAX, int(vh * CHAIN_LATIN_RATIO)),
-    )
-    inner_w = CHAIN_CANVAS_W - 2 * CHAIN_PADDING_X
-    max_primary, max_secondary = 3, 2
+    for line in lines_p:
+        _draw_text_line(draw, cx=cx, y=y, line=line, font=font_p)
+        y += lh_p
+    if cap.secondary:
+        y += CHAIN_BLOCK_GAP
+        lines_s, font_s, lh_s = _layout_caption_line(
+            cap.secondary,
+            max_lines=max_secondary,
+            font_cjk=font_cjk,
+            font_latin=font_latin,
+            inner_w=inner_w,
+        )
+        for line in lines_s:
+            _draw_text_line(
+                draw, cx=cx, y=y, line=line, font=font_s, fill=(224, 224, 224)
+            )
+            y += lh_s
+        return lh_p * len(lines_p) + CHAIN_BLOCK_GAP + lh_s * len(lines_s)
+    return lh_p * len(lines_p)
+
+
+def _fit_fonts(
+    caps: list[ChainCaption],
+    *,
+    inner_w: int,
+    budget: int,
+    cjk_max: int,
+    latin_max: int,
+    gap_per_entry: int = 0,
+    max_primary: int = 3,
+    max_secondary: int = 2,
+    strip_overhead: int = 0,
+) -> tuple[ImageFont.FreeTypeFont, ImageFont.FreeTypeFont, int, int]:
+    """Cascade-wide font fit: step the per-script sizes down until every
+    entry's caption block (+ per-entry gap + strip body overhead) fits the
+    shared height ``budget``. Line caps tighten only at the floor sizes;
+    the final clip is ``_wrap_text``'s ellipsis, never a paint-over.
+    Returns (font_cjk, font_latin, max_primary, max_secondary)."""
+    size_cjk, size_latin = cjk_max, latin_max
     while True:
         font_cjk = _load_font(size_cjk)
         font_latin = _load_font(size_latin)
-        if all(
+        total = sum(
             _measure_caption_block(
                 cap,
                 font_cjk=font_cjk,
@@ -401,9 +504,11 @@ def composite_chain_quote_card(
                 max_primary=max_primary,
                 max_secondary=max_secondary,
             )
-            <= budgets[i]
-            for i, cap in enumerate(chain)
-        ):
+            + gap_per_entry
+            + strip_overhead
+            for cap in caps
+        )
+        if total <= budget:
             break
         if size_cjk > CHAIN_CJK_FONT_MIN or size_latin > CHAIN_LATIN_FONT_MIN:
             size_cjk = max(CHAIN_CJK_FONT_MIN, size_cjk - 2)
@@ -414,164 +519,298 @@ def composite_chain_quote_card(
             max_primary -= 1
         else:
             break
+    return font_cjk, font_latin, max_primary, max_secondary
 
+
+def _draw_attribution_rails(
+    draw: ImageDraw.ImageDraw,
+    *,
+    x: int,
+    y_bottom: int,
+    attribution: str,
+) -> None:
+    """身份 rails 横排版 (D15): name line (48) + source line (36), stacked
+    upward from ``y_bottom`` at the speaker region's bottom-left — white
+    text with a dark stroke, poster-credit style. P2 ships the horizontal
+    form; the vertical CJK rails of the reference stay a separate eval."""
+    name, source = _split_attribution(attribution)
+    y = y_bottom
+    if source:
+        font_s = _load_font(ATTR_SOURCE_SIZE)
+        draw.text(
+            (x, y - ATTR_SOURCE_SIZE),
+            source,
+            font=font_s,
+            fill=(224, 224, 224),
+            stroke_width=1,
+            stroke_fill=(0, 0, 0),
+        )
+        y = y - ATTR_SOURCE_SIZE - 14
+    font_n = _load_font(ATTR_NAME_SIZE)
+    draw.text(
+        (x, y - ATTR_NAME_SIZE),
+        name,
+        font=font_n,
+        fill=(255, 255, 255),
+        stroke_width=1,
+        stroke_fill=(0, 0, 0),
+    )
+
+
+def _bottom_fade(canvas: Image.Image, *, y0: int, y1: int) -> None:
+    """Paint a transparent→CHAIN_BG vertical fade over [y0, y1) — 形态 A's
+    speaker region dissolves into the strip area instead of a hard cut."""
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    span = max(1, y1 - y0)
+    for i in range(span):
+        alpha = int(255 * (i / span) ** 1.5)
+        draw.line(
+            [(0, y0 + i), (canvas.width, y0 + i)],
+            fill=(CHAIN_BG[0], CHAIN_BG[1], CHAIN_BG[2], alpha),
+        )
+
+
+def _dim(canvas: Image.Image, alpha: int = DIM_ALPHA) -> None:
+    """Flatten a black veil over the whole canvas (形态 B / frame card's
+    30% darken — text stays readable over a busy frame)."""
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, alpha))
+    canvas.paste(Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB"))
+
+
+# ----- Frame card (§2.2: per-entry standalone sibling) -------------------------
+
+
+def composite_frame_card(
+    *,
+    frame: Image.Image | None,
+    caption: ChainCaption,
+    attribution: str | None = None,
+) -> bytes:
+    """One 1080×1920 single-quote card: the entry's frame full-bleed
+    (cover-crop) dimmed 30%, its caption block anchored in the lower
+    third, attribution rails top-left. ``frame=None`` → the dark
+    text-only card (no-material / photo-less path). Independently
+    shareable — and the composite's named parent on the canvas.
+    """
+    canvas = Image.new("RGB", (CHAIN_CANVAS_W, CHAIN_CANVAS_H), CHAIN_BG)
+    if frame is not None:
+        canvas.paste(_cover_crop(frame, w=CHAIN_CANVAS_W, h=CHAIN_CANVAS_H), (0, 0))
+        _dim(canvas)
+
+    inner_w = CHAIN_CANVAS_W - 2 * CHAIN_PADDING_X
+    band = CHAIN_CANVAS_H // 3  # lower-third anchor
+    font_cjk, font_latin, max_p, max_s = _fit_fonts(
+        [caption],
+        inner_w=inner_w,
+        budget=band,
+        cjk_max=FORM_B_CJK_MAX,
+        latin_max=FORM_B_LATIN_MAX,
+        max_primary=4,
+        max_secondary=3,
+    )
+    block_h = _measure_caption_block(
+        caption,
+        font_cjk=font_cjk,
+        font_latin=font_latin,
+        inner_w=inner_w,
+        max_primary=max_p,
+        max_secondary=max_s,
+    )
     draw = ImageDraw.Draw(canvas)
-    speaker_offset = CHAIN_SPEAKER_H if speaker_frame is not None else 0
-    frames_supplied = chain_frames or []
-    # Drawing order: BACK first (chain[N-1], canvas bottom), FRONT last
-    # (chain[0], canvas top) — the later draw paints over the previous
-    # card's overlap zone, so the front of the stack sits at the top.
-    for i in reversed(range(n)):
-        cap = chain[i]
-        y_top = speaker_offset + i * (vh - overlap_px)
-        card_w = CHAIN_CANVAS_W
-        x_offset = 0
-        card_body = (
-            frames_supplied[i]
-            if i < len(frames_supplied) and frames_supplied[i] is not None
-            else None
+    y = CHAIN_CANVAS_H - BAND_BOTTOM - block_h
+    _draw_caption_block(
+        draw,
+        cx=CHAIN_CANVAS_W // 2,
+        y=y,
+        cap=caption,
+        font_cjk=font_cjk,
+        font_latin=font_latin,
+        inner_w=inner_w,
+        max_primary=max_p,
+        max_secondary=max_s,
+    )
+    if attribution:
+        rails_y = ATTR_MARGIN_Y + ATTR_NAME_SIZE + 14 + ATTR_SOURCE_SIZE
+        _draw_attribution_rails(
+            draw, x=ATTR_MARGIN_X, y_bottom=rails_y, attribution=attribution
         )
-        if card_body is not None:
-            body = _crop_to_card(card_body, w=card_w, h=strip_h)
-            canvas.paste(body, (x_offset, y_top))
-        else:
-            # Always paste SOMETHING — the strip's top overlap rows must
-            # cover the previous strip's body, or it bleeds through and
-            # the cascade reads as a single tall card.
-            canvas.paste(
-                Image.new("RGB", (card_w, strip_h), CHAIN_BG),
-                (x_offset, y_top),
-            )
-        _draw_caption_strip(
-            draw,
-            y_top,
-            vh,
-            card_w,
-            x_offset,
-            cap.primary,
-            cap.secondary,
-            font_cjk,
-            font_latin,
-            anchor=anchor,
-            max_primary=max_primary,
-            max_secondary=max_secondary,
-        )
-
-    # Speaker label — drawn last so it sits above every card body and
-    # caption strip, anchoring the speaker's identity across the cascade.
-    if speaker_label:
-        _draw_speaker_label(draw, speaker_label)
-
     buf = io.BytesIO()
     canvas.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
 
 
-def _draw_speaker_label(
-    draw: ImageDraw.ImageDraw,
-    label: str,
-) -> None:
-    """Top-left speaker attribution — poster-style text: no chip, no
-    rounded box, no background fill, just white text with a subtle dark
-    stroke so it reads against any underlying card body."""
-    font = _load_font(SPEAKER_LABEL_FONT_SIZE)
-    text_x = SPEAKER_LABEL_MARGIN_X
-    text_y = SPEAKER_LABEL_MARGIN_Y
-    # Subtle dark stroke for legibility against bright video frames
-    # (matches the per-card caption stroke pattern).
-    for offset in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        draw.text(
-            (text_x + offset[0], text_y + offset[1]),
-            label,
-            font=font,
-            fill=(0, 0, 0, 220),
-        )
-    draw.text((text_x, text_y), label, font=font, fill=(255, 255, 255, 255))
+# ----- Chain composite (v3 forms A/B) ------------------------------------------
 
 
-def _draw_caption_strip(
-    draw: ImageDraw.ImageDraw,
-    y_top: int,
-    vh: int,
-    card_w: int,
-    x_offset: int,
-    primary: str,
-    secondary: str | None,
-    font_cjk: ImageFont.FreeTypeFont,
-    font_latin: ImageFont.FreeTypeFont,
+def composite_chain_quote_card(
     *,
-    anchor: int,
-    max_primary: int,
-    max_secondary: int,
-) -> None:
-    """One chain caption strip: primary line on top, alt line below,
-    anchored near the BOTTOM of the card body so the body extends above
-    the text — each card reads as a "card" with body on top.
+    chain: list[ChainCaption],
+    curated_frame: Image.Image | None,
+    speaker_form: bool,
+    attribution: str | None = None,
+) -> bytes:
+    """Chain composite (RECIPES §4.6.2 v3, D15 形态对齐).
 
-    The fonts and line caps arrive pre-fitted (the composite's
-    cascade-wide budget loop): every strip's block lands inside its
-    visible window, so a covering strip never paints over text.
+    - ``speaker_form=True`` → 形态 A (人像型): the curated frame fills the
+      top 1080×960 (letterbox), fades into the strip area; N caption
+      strips (semi-transparent black bodies, staggered ±40px) stack
+      below; attribution rails ride the speaker region's bottom-left.
+    - ``speaker_form=False`` → 形态 B (全幅背景型): the curated frame
+      cover-crops full-bleed, dimmed 30%; N caption lines centre
+      straight down. ``curated_frame=None`` → the dark branch (纯文字
+      叠卡, 学术椅型).
+
+    Returns PNG bytes. An empty chain returns the plain dark canvas
+    (graceful degradation).
     """
-    if not primary:
-        return
+    canvas = Image.new("RGB", (CHAIN_CANVAS_W, CHAIN_CANVAS_H), CHAIN_BG)
+    n = len(chain)
+    if n == 0:
+        buf = io.BytesIO()
+        canvas.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
 
-    inner_w = card_w - 2 * CHAIN_PADDING_X
+    if speaker_form and curated_frame is not None:
+        return _composite_form_a(canvas, chain, curated_frame, attribution)
+    return _composite_form_b(canvas, chain, curated_frame, attribution)
 
-    primary_lines, font_p, lh_p = _layout_caption_line(
-        primary,
-        max_lines=max_primary,
-        font_cjk=font_cjk,
-        font_latin=font_latin,
+
+def _composite_form_a(
+    canvas: Image.Image,
+    chain: list[ChainCaption],
+    curated_frame: Image.Image,
+    attribution: str | None,
+) -> bytes:
+    """形态 A (人像型) — see composite_chain_quote_card."""
+    slot = _crop_to_card(curated_frame, w=CHAIN_CANVAS_W, h=CHAIN_SPEAKER_H)
+    canvas.paste(slot, (0, 0))
+    _bottom_fade(canvas, y0=CHAIN_SPEAKER_H - 200, y1=CHAIN_SPEAKER_H + 60)
+
+    inner_w = CHAIN_CANVAS_W - 2 * (CHAIN_PADDING_X + STRIP_PAD_X)
+    strip_w = CHAIN_CANVAS_W - 2 * CHAIN_PADDING_X
+    area_top = CHAIN_SPEAKER_H + STRIP_AREA_MARGIN
+    area_bottom = CHAIN_CANVAS_H - STRIP_AREA_MARGIN
+    budget = area_bottom - area_top
+    font_cjk, font_latin, max_p, max_s = _fit_fonts(
+        chain,
         inner_w=inner_w,
+        budget=budget,
+        cjk_max=CHAIN_CJK_FONT_MAX,
+        latin_max=CHAIN_LATIN_FONT_MAX,
+        gap_per_entry=STRIP_GAP_Y,
+        strip_overhead=2 * STRIP_PAD_Y,
     )
-    secondary_lines: list[str] = []
-    font_s = font_latin
-    lh_s = 0
-    if secondary:
-        secondary_lines, font_s, lh_s = _layout_caption_line(
-            secondary,
-            max_lines=max_secondary,
+
+    # Strip bodies = one RGBA overlay (rounded semi-transparent rects),
+    # text drawn after the composite so it stays crisp.
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    y = area_top
+    blocks: list[tuple[int, int, int, ChainCaption]] = []  # (x, y, h, cap)
+    for i, cap in enumerate(chain):
+        block_h = _measure_caption_block(
+            cap,
             font_cjk=font_cjk,
             font_latin=font_latin,
             inner_w=inner_w,
+            max_primary=max_p,
+            max_secondary=max_s,
         )
-
-    # Vertical layout — caption block near the BOTTOM of the card body.
-    gap = CHAIN_BLOCK_GAP if secondary_lines else 0
-    block_total = lh_p * len(primary_lines) + gap + lh_s * len(secondary_lines)
-    # Anchor: caption block ends ``anchor`` px above the bottom of the
-    # card body.
-    y_text = y_top + vh - block_total - anchor
-
-    # Primary
-    for line in primary_lines:
-        bbox = draw.textbbox((0, 0), line, font=font_p)
-        text_w = bbox[2] - bbox[0]
-        x_text = x_offset + (card_w - text_w) // 2
-        # Subtle dark stroke for legibility on the frame body
-        for offset in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            draw.text(
-                (x_text + offset[0], y_text),
-                line,
-                font=font_p,
-                fill=(0, 0, 0, 200),
-            )
-        draw.text((x_text, y_text), line, font=font_p, fill=(255, 255, 255, 255))
-        y_text += lh_p
-
-    y_text += gap
-
-    # Secondary (alt translation)
-    for line in secondary_lines:
-        bbox = draw.textbbox((0, 0), line, font=font_s)
-        text_w = bbox[2] - bbox[0]
-        x_text = x_offset + (card_w - text_w) // 2
-        draw.text(
-            (x_text, y_text),
-            line,
-            font=font_s,
-            fill=(220, 220, 220, 230),
+        strip_h = block_h + 2 * STRIP_PAD_Y
+        x = CHAIN_PADDING_X + (STRIP_STAGGER if i % 2 else -STRIP_STAGGER)
+        x = max(16, min(x, CHAIN_CANVAS_W - strip_w - 16))
+        od.rounded_rectangle(
+            [x, y, x + strip_w, y + strip_h],
+            radius=STRIP_RADIUS,
+            fill=(0, 0, 0, STRIP_ALPHA),
         )
-        y_text += lh_s
+        blocks.append((x, y, strip_h, cap))
+        y += strip_h + STRIP_GAP_Y
+    composed = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+    canvas.paste(composed)
 
-    # No hairline separator — the gap between strips is the separator.
+    draw = ImageDraw.Draw(canvas)
+    for x, y, strip_h, cap in blocks:
+        _draw_caption_block(
+            draw,
+            cx=x + strip_w // 2,
+            y=y + STRIP_PAD_Y,
+            cap=cap,
+            font_cjk=font_cjk,
+            font_latin=font_latin,
+            inner_w=inner_w,
+            max_primary=max_p,
+            max_secondary=max_s,
+        )
+    if attribution:
+        _draw_attribution_rails(
+            draw,
+            x=ATTR_MARGIN_X,
+            y_bottom=CHAIN_SPEAKER_H - ATTR_MARGIN_Y,
+            attribution=attribution,
+        )
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _composite_form_b(
+    canvas: Image.Image,
+    chain: list[ChainCaption],
+    curated_frame: Image.Image | None,
+    attribution: str | None,
+) -> bytes:
+    """形态 B (全幅背景型) — see composite_chain_quote_card. No frame →
+    the dark branch (纯文字叠卡)."""
+    if curated_frame is not None:
+        canvas.paste(
+            _cover_crop(curated_frame, w=CHAIN_CANVAS_W, h=CHAIN_CANVAS_H), (0, 0)
+        )
+        _dim(canvas)
+
+    inner_w = CHAIN_CANVAS_W - 2 * CHAIN_PADDING_X
+    budget = CHAIN_CANVAS_H - BAND_TOP - BAND_BOTTOM
+    font_cjk, font_latin, max_p, max_s = _fit_fonts(
+        chain,
+        inner_w=inner_w,
+        budget=budget,
+        cjk_max=FORM_B_CJK_MAX,
+        latin_max=FORM_B_LATIN_MAX,
+        gap_per_entry=ENTRY_GAP,
+    )
+    total = sum(
+        _measure_caption_block(
+            cap,
+            font_cjk=font_cjk,
+            font_latin=font_latin,
+            inner_w=inner_w,
+            max_primary=max_p,
+            max_secondary=max_s,
+        )
+        for cap in chain
+    ) + ENTRY_GAP * (len(chain) - 1)
+    draw = ImageDraw.Draw(canvas)
+    y = BAND_TOP + max(0, (budget - total) // 2)
+    for cap in chain:
+        y += _draw_caption_block(
+            draw,
+            cx=CHAIN_CANVAS_W // 2,
+            y=y,
+            cap=cap,
+            font_cjk=font_cjk,
+            font_latin=font_latin,
+            inner_w=inner_w,
+            max_primary=max_p,
+            max_secondary=max_s,
+        )
+        y += ENTRY_GAP
+    if attribution:
+        _draw_attribution_rails(
+            draw,
+            x=ATTR_MARGIN_X,
+            y_bottom=CHAIN_CANVAS_H - ATTR_MARGIN_Y,
+            attribution=attribution,
+        )
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()

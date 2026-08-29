@@ -1,42 +1,72 @@
-"""Bake the chain-quote-cards recipe demo (RECIPES §4.6.2 chain variant,
-2026-08-25) by running the LIVE pipeline against xy_2.mp4 (long talk),
-letting the chain materializer bake a single 9:16 composite PNG:
+"""Bake the quote-cards v3 example matrix (RECIPES §4.6.2 + 简报 §3 P3):
+four static composite PNGs + one curated stage photo, content-addressed
+into the protected demo/ tree, replacing the retired 形态 C (frame-wall)
+v9 example.
 
-- N caption strips (N=3..7, dynamic — the writer picks how many
-  sentences are needed to express the core idea), tight cascade with
-  minimal empty space between strips (RECIPES §4.6.2 chain variant).
-- Optional speaker face on top half when ``needs_speaker_frame`` is
-  true (image #35 Charlie Munger style); otherwise pure text strips
-  (image #34 学术椅 style).
+The matrix (宽槽三路径 × 两形态 — one tile per cell the overlay shows):
 
-The script seeds one bake-time override (posture matches
-``bake_quote_contrast.py``):
+1. **形态 A / Speaker layout** — the VIDEO run's real chain (the writer
+   picks the quotes, the translator fills ``quote_alt``) composed with
+   the curated stage photo as the speaker region (``image_bytes=[stage]``
+   + ``speaker_form=True``) — the flagship "keynote + best event photo"
+   combo. The photo guarantees a strong speaker region; the production
+   span-pick is at the mercy of wherever chain[0] lands (xy_2's quoted
+   windows are slide-heavy, which is why the writer's verdict on this
+   video is usually False).
+2. **形态 B / Full-bleed layout** — the same video chain composed
+   ``speaker_form=False`` with the video bytes: full-bleed dimmed frame
+   + centred lines.
+3. **照片底 / Photo + transcript** — the TEXT run's real chain
+   (demo-article.md) composed with the stage photo.
+4. **纯文稿 / Transcript only** — the same text chain with no images at
+   all → the dark branch (never clamped).
 
-1. ``intent.caption_mode = "bilingual"`` — exercises the alt-translation
-   path: each chain strip draws the primary line + the smaller alt
-   line below (the translator agent runs once per chain entry, in
-   parallel — see ``WriteQuotes._translate_quote_alts``).
+Tiles are PINNED BY CONSTRUCTION — the compositor IS the product path,
+only the form choice is pinned; the writer's ``needs_speaker_frame``
+verdict is printed for information but never awaited (a demo matrix
+cannot ride on LLM mood).
 
-叠卡是默认路径（v3, 2026-08-27）：chain 长度 >= 2 即走叠卡合成器，
-无需 layout 开关。
+The stage photo = whole-talk YuNet best-face sweep + a face-anchored
+9:8 landscape crop (xy_2 is wide-stage material; users crop their event
+photos too). Same engine/scoring as the production span pick — max face
+area, sharpness tie-break — but denser and unbound from any quote
+window: it stands in for the user's best event photo, an INPUT asset.
 
-Inputs:
-- ``demo/uploads/xy_2.mp4`` (60s talk snippet, dense verbatim)
+Harvested chains are also saved as ``chain-*.json`` so a re-compose
+(e.g. a different crop) never needs a pipeline re-run.
 
-Output:
-- ``demo/outputs/quote-card-chain-<md5_8>.mp4`` (the rendered 9:16
-  composite)
-- Updates ``recipes.py`` ``quote-cards`` entry's ``example_outputs``
-  with the new content-hashed URL.
+Attribution rails: the scaffold persona/event are what the writer puts
+on the card (it reads them verbatim) — "Prof. Xu / Future Tech Summit",
+never bake-scaffolding names.
 
-Prereqs: dev.sh is running (api + worker + render service). Render
-service needs HTTPS_PROXY/HTTP_PROXY env (else TOS PUT times out,
-see memory repurposer-render-proxy-trap).
+主产物 = 静态 PNG（v3 §2.6：MP4 是 motion 衍生品，永不上卡面）——
+示例集零 MP4。
+
+**No 63MB re-upload**: the video already lives at
+``demo/uploads/xy_2.mp4`` (public, content-stable). The bake downloads
+it once, ASRs inline (same provider code the worker runs — the upload
+journey is UX plumbing, not product), and fixtures the Asset row at
+COMPLETED. Direct TOS PUTs from this dev box are throttled to a stall
+(WriteTimeout) and the local proxy drops long bodies (ReadError) —
+fixture-in-place is deterministic and minutes faster.
+
+Each run is followed by a family-count assertion (verify-bounce sweep
+regression smoke — 2026-08-28 root-fix in derivative_dispatch: a bounce
+re-runs the SAME WorkflowStep row and its prior products must die):
+exactly one quotes row + one chain composite per project.
+
+Usage:
+    uv run python scripts/bake_quote_chain.py          # full matrix
+    uv run python scripts/bake_quote_chain.py --keep   # skip FK cleanup
+
+Prereqs: worker running (dev.sh) for the two create_run chains; the ASR
+model cache warm (any prior video upload warmed it).
 """
 import argparse
 import asyncio
 import hashlib
 import io
+import json
 import sys
 import time
 from pathlib import Path
@@ -50,6 +80,12 @@ from sqlalchemy import delete, select, text  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
+from app.models.schemas import (  # noqa: E402
+    AssetStatus,
+    AssetType,
+    ProjectStatus,
+    WorkflowStatus,
+)
 from app.models.tables import (  # noqa: E402
     Asset,
     Output,
@@ -60,25 +96,38 @@ from app.models.tables import (  # noqa: E402
     WorkflowRun,
     WorkflowStep,
 )
-from app.platform.auth import create_access_token  # noqa: E402
-from app.providers.storage import _get_s3_client, public_url, resolve_stored_url  # noqa: E402
+from app.pipeline.derivative_dispatch import (  # noqa: E402
+    _chain_captions,
+    _compose_chain_pngs,
+)
+from app.pipeline.orchestrator import TaskSpec, create_run  # noqa: E402
+from app.pipeline.quote_card_stack import _sharpness, extract_video_frames  # noqa: E402
+from app.providers.storage import _get_s3_client, public_url  # noqa: E402
 
 _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 SOURCE_VIDEO_URL = f"{_DEMO}/uploads/xy_2.mp4"
-SOURCE_VIDEO_KEY = "demo/uploads/xy_2.mp4"
-PREFIX = "demo/outputs"
+ARTICLE_URL = f"{_DEMO}/uploads/demo-article.md"
+ARTICLE_KEY = "demo/uploads/demo-article.md"
+OUT_PREFIX = "demo/outputs"
+UPLOAD_PREFIX = "demo/uploads"
 IMMUTABLE = "public, max-age=31536000, immutable"
 BAKE_EMAIL = "bake-quote@local"
-TIMEOUT_S = 900  # ASR + LLM chain (translator fan-out) + render
-BASE = "http://127.0.0.1:8000/api/v1"
+TIMEOUT_S = 900  # LLM chain (understand → plan → write + translator fan-out)
+
+# On-card attribution rails (the writer reads persona name + event name
+# verbatim) — presentable, never bake-scaffolding names.
+PERSONA_NAME = "Prof. Xu"
+EVENT_NAME = "Future Tech Summit"
+
+OUT_DIR = Path("/tmp/p3-quote-examples")
 
 
 def _digest(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()[:8]
 
 
-async def _put_demo(stem: str, suffix: str, data: bytes, content_type: str) -> tuple[str, str]:
-    key = f"{PREFIX}/{stem}-{_digest(data)}{suffix}"
+async def _put_demo(prefix: str, stem: str, suffix: str, data: bytes, content_type: str) -> str:
+    key = f"{prefix}/{stem}-{_digest(data)}{suffix}"
     client = _get_s3_client()
     await asyncio.to_thread(
         client.put_object,
@@ -90,32 +139,11 @@ async def _put_demo(stem: str, suffix: str, data: bytes, content_type: str) -> t
     )
     url = public_url(key)
     assert url is not None
-    return url, key
+    print(f"  baked {key}", flush=True)
+    return url
 
 
-def _first_frame_jpeg(mp4: bytes) -> bytes | None:
-    try:
-        import av  # type: ignore
-    except ImportError:
-        return None
-    try:
-        container = av.open(io.BytesIO(mp4))
-    except Exception:
-        return None
-    try:
-        stream = container.streams.video[0]
-        container.seek(0)
-        for frame in container.decode(stream):
-            img = frame.to_image()
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=82)
-            return buf.getvalue()
-    except Exception:
-        return None
-    return None
-
-
-async def _setup_user_token() -> tuple[str, str]:
+async def _setup_user() -> User:
     async with AsyncSessionLocal() as db:
         user = (
             await db.execute(select(User).where(User.email == BAKE_EMAIL).limit(1))
@@ -126,152 +154,220 @@ async def _setup_user_token() -> tuple[str, str]:
             ).scalar_one_or_none()
             if user is None:
                 raise SystemExit("no users in dev DB — seed one via /auth/email first")
-        return str(user.id), create_access_token(user.id)
+        return user
 
 
-async def _download_source() -> bytes:
-    async with httpx.AsyncClient(timeout=300) as c:
-        r = await c.get(SOURCE_VIDEO_URL, follow_redirects=True)
-        if r.status_code != 200:
-            raise SystemExit(f"download {SOURCE_VIDEO_URL}: HTTP {r.status_code}")
-        return r.content
-
-
-async def _upload_asset(client: httpx.AsyncClient, pid: str, mp4: bytes) -> str:
-    r = await client.post(
-        f"/projects/{pid}/assets/upload-url",
-        json={"filename": "xy_2.mp4", "content_type": "video/mp4"},
+async def _mk_scaffold(db, user: User, title: str) -> Project:
+    persona = Persona(
+        user_id=user.id,
+        name=PERSONA_NAME,
+        language="en",
+        sentence_style="Short, punchy spoken-word sentences.",
+        emotional_tone="rational",
     )
-    if r.status_code != 200:
-        raise SystemExit(f"upload-url: {r.text}")
-    info = r.json()
-    put = await client.put(
-        info["upload_url"],
-        content=mp4,
-        headers={"Content-Type": "video/mp4"},
-        # 63MB through the throttled proxy can take minutes — the client-wide
-        # 120s (chat polling) is too tight for this one PUT.
-        timeout=httpx.Timeout(900, connect=30),
+    db.add(persona)
+    await db.flush()
+    project = Project(
+        user_id=user.id,
+        # alt 推导锚点: project.language=zh → EN 源的双语副行确定性落 ZH。
+        title=f"bake quote-cards v3 {title} {int(time.time())}",
+        language="zh",
+        status=ProjectStatus.DRAFT,
+        persona_id=persona.id,
+        event_name=EVENT_NAME,
     )
-    if put.status_code not in (200, 204):
-        raise SystemExit(f"TOS PUT: HTTP {put.status_code}: {put.text[:200]}")
-    r = await client.post(
-        f"/projects/{pid}/assets",
-        json={"key": info["key"], "type": "video", "title": "xy_2.mp4"},
-    )
-    if r.status_code != 201:
-        raise SystemExit(f"create asset: {r.text}")
-    return r.json()["id"]
+    db.add(project)
+    await db.flush()
+    return project
 
 
-async def _wait_asr(client: httpx.AsyncClient, pid: str, asset_id: str) -> None:
-    deadline = time.time() + TIMEOUT_S
-    while time.time() < deadline:
-        r = await client.get(f"/projects/{pid}/assets/{asset_id}")
-        if r.status_code == 200:
-            a = r.json()
-            st = a.get("processing_status")
-            if st == "completed":
-                print(f"  ASR completed · duration={a.get('duration_seconds')}s", flush=True)
-                return
-            if st == "failed":
-                raise SystemExit(f"ASR failed: {a}")
-        await asyncio.sleep(5)
-    raise SystemExit("ASR timed out")
+async def _asr_inline(mp4: bytes) -> dict:
+    """ASR the downloaded video bytes in-process — the worker's own
+    provider (``providers/asr.transcribe``, faster-whisper), same result
+    shape the ASR processor stamps on the asset. The upload+worker journey
+    is UX plumbing; the product path starts at the Asset row."""
+    import tempfile
+
+    from app.providers.asr import transcribe
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+        f.write(mp4)
+        tmp = Path(f.name)
+    try:
+        print("  ASR inline (faster-whisper)…", flush=True)
+        return await asyncio.to_thread(transcribe, tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
-async def _chat_and_start(client: httpx.AsyncClient, pid: str) -> str:
-    """Drive the chat path to a task_book dock and start the run with
-    ``caption_mode = "bilingual"``.
+async def _run_quotes(project: Project) -> WorkflowRun:
+    """Start the write_quotes chain on the scaffolded project and wait.
 
-    Flow mirrors ``bake_quote_stacked.py``: turn 1 docks a choice,
-    answer it, the answer endpoint docks the next question (task_book)
-    in ``follow_up``. Answer task_book with ``start`` + the bake-time
-    caption_mode override baked into ``intent`` (叠卡是默认路径,
-    v3 — no layout seed needed).
+    create_run is THE ONLY WorkflowRun birthplace — the chat Start answer
+    funnels here too, so a bake that drives it exercises the same product
+    path (the chat dock is UX, not product). caption_mode=bilingual is the
+    bake's one pinned input (the dock's answer); alt language is NOT
+    pinned — it derives from the stamped source + project locale (§2.3).
     """
-    r = await client.post("/chat", json={"project_id": pid, "message": "做一张金句卡。"})
-    if r.status_code != 201:
-        raise SystemExit(f"chat turn 1: {r.text}")
-    msg = r.json().get("assistant_message") or {}
-    q = msg.get("question") or {}
+    async with AsyncSessionLocal() as db:
+        run = await create_run(
+            db,
+            project,
+            TaskSpec(
+                tasks=[{"tool": "write_quotes", "params": {"language": "en", "count": 5}}],
+                target_language="en",
+                ui_language="zh",
+                caption_mode="bilingual",
+                instruction=(
+                    "Pick the sharpest lines and stack them into one bilingual "
+                    "quote card (EN source line + ZH alt line on the same strip)."
+                ),
+            ),
+        )
+        project.status = ProjectStatus.PROCESSING
+        await db.commit()
+        run_id = run.id
+    print(f"  run {run_id}", flush=True)
 
-    if q.get("kind") != "choice":
-        raise SystemExit(f"turn 1 expected choice dock, got: {q}")
-
-    opts = q.get("options") or []
-    pick = next(
-        (o["id"] for o in opts if "bilingual" in o.get("id", "")),
-        opts[0]["id"] if opts else None,
-    )
-    if pick is None:
-        raise SystemExit(f"choice dock had no options: {q}")
-    r = await client.post(
-        f"/chat/messages/{msg['id']}/answer",
-        json={"kind": "option", "option_id": pick},
-    )
-    if r.status_code not in (200, 201):
-        raise SystemExit(f"answer choice: {r.text}")
-    follow_up = (r.json().get("follow_up") or {})
-    q2 = follow_up.get("question") or {}
-    if q2.get("kind") != "task_book":
-        raise SystemExit(f"after choice, expected task_book follow_up, got: {q2}")
-    qid = follow_up["id"]
-
-    pi = ((await client.get(f"/projects/{pid}/results")).json().get("pending_intent") or {})
-    intent = dict(pi.get("intent") or {})
-    if not intent.get("tasks"):
-        raise SystemExit(f"pending_intent has no tasks — was task_book committed? pi={pi}")
-    intent["caption_mode"] = "bilingual"
-    payload = {"kind": "start", "intent": intent}
-    r = await client.post(f"/chat/messages/{qid}/answer", json=payload)
-    if r.status_code not in (200, 201):
-        raise SystemExit(f"answer start: {r.text}")
-    answered = (r.json().get("answered_question") or {})
-    run_id = answered.get("workflow_run_id")
-    if not run_id:
-        raise SystemExit(f"no run_id in answer response: {answered}")
-    return run_id
-
-
-async def _wait_run_done(client: httpx.AsyncClient, pid: str) -> None:
+    seen: dict[str, str] = {}
     deadline = time.time() + TIMEOUT_S
     while time.time() < deadline:
-        r = await client.get(f"/projects/{pid}/runs")
-        if r.status_code == 200 and r.json():
-            last = r.json()[0]
-            if last.get("status") in ("completed", "failed"):
-                if last["status"] == "failed":
-                    raise SystemExit(f"run failed: {last}")
-                return
+        async with AsyncSessionLocal() as s:
+            run = await s.get(WorkflowRun, run_id)
+            steps = (
+                await s.execute(
+                    select(WorkflowStep)
+                    .where(WorkflowStep.run_id == run_id)
+                    .order_by(WorkflowStep.seq)
+                )
+            ).scalars().all()
+            for x in steps:
+                key = f"{x.seq}:{x.kind}"
+                if seen.get(key) != x.status:
+                    seen[key] = x.status
+                    print(f"  step {x.seq} {x.kind}: {x.status}", flush=True)
+            if run.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED):
+                if run.status == WorkflowStatus.FAILED:
+                    raise SystemExit(f"run FAILED: {run.error}")
+                return run
         await asyncio.sleep(5)
     raise SystemExit("run timed out")
 
 
-async def _wait_clip_rendered(client: httpx.AsyncClient, pid: str) -> dict:
-    deadline = time.time() + TIMEOUT_S
-    while time.time() < deadline:
-        r = await client.get(f"/projects/{pid}/results")
-        if r.status_code == 200:
-            outputs = (r.json() or {}).get("outputs") or []
-            for o in outputs:
-                if o.get("type") == "clip":
-                    rs = o.get("render_status")
-                    if rs == "completed" and (o.get("files") or {}).get("video"):
-                        return o
-                    if rs == "failed":
-                        raise SystemExit(f"render failed: {o}")
-        await asyncio.sleep(5)
-    raise SystemExit("render timed out")
+async def _harvest_quotes(project_id) -> tuple[list[dict], bool, str | None]:
+    """The writer's chain product: quotes list + speaker-frame verdict +
+    core idea — read off the quotes Output row's payload."""
+    async with AsyncSessionLocal() as db:
+        row = (
+            await db.execute(
+                select(Output)
+                .where(Output.project_id == project_id, Output.type == "quotes")
+                .order_by(Output.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise SystemExit("no quotes Output — did the writer run?")
+        payload = row.payload or {}
+        quotes = payload.get("quotes") or []
+        if len(quotes) < 2:
+            raise SystemExit(f"chain too short for the cascade card: {len(quotes)}")
+        return (
+            quotes,
+            bool(payload.get("needs_speaker_frame")),
+            payload.get("core_idea"),
+        )
 
 
-async def _terminate_project_backends(project_id: str) -> None:
-    """D9 cleanup guard, dev-harness rule: terminate any OTHER session parked
-    ``idle in transaction`` for >15s before the FK deletes below — a wedged or
-    abandoned runner session would otherwise block them. (pg_stat_activity.query
-    carries parameterized SQL, so project-id text matching can't identify the
-    culprits; on a dev box at cleanup time, a >15s idle-in-transaction session
-    is precisely the wedge class this guard exists for.)"""
+async def _assert_single_family(project_id) -> None:
+    """Bounce-sweep regression smoke (2026-08-28 root-fix): however many
+    times verify bounced the writer, exactly ONE quotes row + ONE chain
+    composite may survive on the project."""
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(select(Output).where(Output.project_id == project_id))
+        ).scalars().all()
+    quotes_rows = [o for o in rows if o.type == "quotes"]
+    composites = [
+        o
+        for o in rows
+        if o.type == "quote_frame" and (o.source_ref or {}).get("quote_chain")
+    ]
+    frames = [
+        o
+        for o in rows
+        if o.type == "quote_frame" and not (o.source_ref or {}).get("quote_chain")
+    ]
+    clips = [o for o in rows if o.type == "clip"]
+    print(
+        f"  family: quotes={len(quotes_rows)} composite={len(composites)} "
+        f"frames={len(frames)} clips={len(clips)}",
+        flush=True,
+    )
+    if len(quotes_rows) != 1 or len(composites) != 1:
+        raise SystemExit(
+            f"family stacked across bounces: quotes={len(quotes_rows)} "
+            f"composite={len(composites)} — sweep regression"
+        )
+
+
+def _curate_stage_photo(mp4: bytes, duration: float | None):
+    """The user's-best-event-photo stand-in: a whole-talk YuNet best-face
+    sweep, then a face-anchored 9:8 landscape crop around the winner.
+    xy_2 is wide-stage material (best face ≈ 27px) — the raw frame leaves
+    the speaker thumbnail-small, and users crop their event photos too.
+    Same engine/scoring as the production span pick (max face area,
+    sharpness tie-break), denser and unbound from any quote window — this
+    photo is an INPUT asset. CPU-bound; call via to_thread. Returns a
+    1080×960 PIL image (the composite's speaker-region frame)."""
+    import numpy as np
+    from PIL import Image
+
+    from app.providers.vision import detect_faces
+
+    dur = float(duration) if duration and duration > 30 else 300.0
+    lo, hi = dur * 0.03, dur * 0.97
+    timecodes = [lo + (hi - lo) * i / 23 for i in range(24)]
+    try:
+        frames = extract_video_frames(mp4, timecodes)
+    except ValueError as exc:
+        raise SystemExit(f"stage sweep decode failed: {exc}") from exc
+    best = None
+    best_face = None
+    best_key = (-1.0, 0.0)
+    best_t = 0.0
+    for t, img in zip(timecodes, frames):
+        if img is None:
+            continue
+        arr = np.array(img.convert("RGB"))[:, :, ::-1]  # RGB → BGR
+        faces = detect_faces(arr, (640, 640))
+        if not faces:
+            continue
+        face = max(faces, key=lambda f: f.bbox[2] * f.bbox[3])
+        area = face.bbox[2] * face.bbox[3]
+        key = (area, _sharpness(img))
+        if key > best_key:
+            best_key, best, best_face, best_t = key, img, face, t
+    if best is None or best_face is None:
+        raise SystemExit("no face in any sweep frame — cannot bake the stage photo")
+    x, y, w, _h = (float(v) for v in best_face.bbox)
+    fw, fh = best.size
+    win_w = min(fw, max(int(w * 16), 320))
+    win_h = win_w * 8 // 9
+    x0 = min(max(int(x + w / 2 - win_w * 0.55), 0), fw - win_w)
+    y0 = min(max(int(y - win_h * 0.25), 0), fh - win_h)
+    crop = best.crop((x0, y0, x0 + win_w, y0 + win_h))
+    print(
+        f"  stage photo: t={best_t:.1f}s · face {int(best_key[0])}px² @ "
+        f"({int(x)},{int(y)}) · crop ({x0},{y0})+{win_w}x{win_h}",
+        flush=True,
+    )
+    return crop.resize((1080, 960), Image.LANCZOS)
+
+
+async def _terminate_stale_backends() -> None:
+    """D9 cleanup guard: terminate OTHER sessions parked idle-in-transaction
+    >15s before the FK deletes (a wedged runner session would block them)."""
     async with AsyncSessionLocal() as db:
         rows = (
             await db.execute(
@@ -287,13 +383,13 @@ async def _terminate_project_backends(project_id: str) -> None:
             await db.execute(text("SELECT pg_terminate_backend(:p)"), {"p": bpid})
             print(f"  terminated stale backend pid={bpid} (idle-in-tx {age})", flush=True)
     if rows:
-        await asyncio.sleep(1)  # let terminated backends actually exit
+        await asyncio.sleep(1)
 
 
-async def _cleanup(project_id: str) -> None:
-    await _terminate_project_backends(project_id)
+async def _cleanup(project_id) -> None:
     async with AsyncSessionLocal() as db:
         await db.execute(delete(Publication).where(Publication.project_id == project_id))
+        await db.execute(delete(Output).where(Output.project_id == project_id))
         await db.execute(
             delete(WorkflowStep).where(
                 WorkflowStep.run_id.in_(
@@ -301,7 +397,6 @@ async def _cleanup(project_id: str) -> None:
                 )
             )
         )
-        await db.execute(delete(Output).where(Output.project_id == project_id))
         await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
         await db.execute(delete(Asset).where(Asset.project_id == project_id))
         persona_id = (
@@ -312,70 +407,175 @@ async def _cleanup(project_id: str) -> None:
         if persona_id:
             await db.execute(delete(Persona).where(Persona.id == persona_id))
             await db.commit()
-    print("cleanup done", flush=True)
 
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--keep", action="store_true", help="Skip FK cleanup at the end")
+    parser.add_argument("--keep", action="store_true", help="skip FK cleanup")
     args = parser.parse_args()
 
-    user_id, token = await _setup_user_token()
-    print(f"BAKE user: {user_id}", flush=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    user = await _setup_user()
+    print(f"BAKE user: {user.id}", flush=True)
 
-    mp4 = await _download_source()
-    print(f"downloaded source: {len(mp4)} bytes", flush=True)
+    async with httpx.AsyncClient(timeout=300) as c:
+        mp4 = (await c.get(SOURCE_VIDEO_URL, follow_redirects=True)).content
+        article = (await c.get(ARTICLE_URL, follow_redirects=True)).text
+    if len(mp4) < 100_000 or len(article) < 100:
+        raise SystemExit("demo sources look wrong — check the demo/ bucket")
+    print(f"sources: xy_2.mp4 {len(mp4)}B · demo-article.md {len(article)}B", flush=True)
 
-    headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient(base_url=BASE, headers=headers, timeout=120) as client:
-        r = await client.post(
-            "/projects",
-            json={"title": f"bake quote-cards chain {int(time.time())}", "event_name": "TED Test"},
+    project_ids: list = []
+    try:
+        # ---------- Phase 1: video live run → chain ----------
+        print("\n== Phase 1: video live run (xy_2.mp4, bilingual EN/ZH) ==", flush=True)
+        asr = await _asr_inline(mp4)
+        duration = asr.get("duration")
+        async with AsyncSessionLocal() as db:
+            project = await _mk_scaffold(db, user, "video")
+            db.add(
+                Asset(
+                    user_id=user.id,
+                    project_id=project.id,
+                    type=AssetType.VIDEO,
+                    # The demo object doubles as the asset body — public,
+                    # content-stable, zero re-upload (see module docstring).
+                    file_url="demo/uploads/xy_2.mp4",
+                    title="xy_2.mp4",
+                    extracted_text=asr["transcript"],
+                    duration_seconds=int(duration) if duration else None,
+                    meta={"words": asr["words"], "language": asr["language"]},
+                    processing_status=AssetStatus.COMPLETED,
+                )
+            )
+            await db.commit()
+            pid = project.id
+        project_ids.append(pid)
+        print(f"project: {pid} · ASR {len(asr['words'])} words · lang={asr['language']}", flush=True)
+        await _run_quotes(project)
+        await _assert_single_family(pid)
+        quotes, verdict, _idea = await _harvest_quotes(pid)
+        print(
+            f"chain: {len(quotes)} entries · writer verdict "
+            f"needs_speaker_frame={verdict} (informational — tiles pinned "
+            "by construction)",
+            flush=True,
         )
-        if r.status_code != 201:
-            raise SystemExit(f"project: {r.text}")
-        pid = r.json()["id"]
-        print(f"project: {pid}", flush=True)
+        attribution = str(quotes[0].get("attribution") or "") or None
+        captions = _chain_captions(quotes, "bilingual")
+        # Chain JSON rides along so a re-compose (e.g. a different stage
+        # crop) never needs a pipeline re-run.
+        (OUT_DIR / "chain-video.json").write_text(
+            json.dumps({"quotes": quotes, "attribution": attribution},
+                       ensure_ascii=False, indent=2)
+        )
 
-        try:
-            asset_id = await _upload_asset(client, pid, mp4)
-            print(f"asset: {asset_id}", flush=True)
-            print("waiting for ASR…", flush=True)
-            await _wait_asr(client, pid, asset_id)
+        # ---------- Phase 2: 策展舞台照（全片最佳脸 = 用户最佳活动照替身） ----------
+        print("\n== Phase 2: curated stage photo (whole-talk sweep) ==", flush=True)
+        stage = await asyncio.to_thread(_curate_stage_photo, mp4, duration)
+        buf = io.BytesIO()
+        stage.save(buf, format="JPEG", quality=85)
+        stage_jpg = buf.getvalue()
+        (OUT_DIR / "stage-photo.jpg").write_bytes(stage_jpg)
 
-            run_id = await _chat_and_start(client, pid)
-            print(f"run started: {run_id}", flush=True)
-            await _wait_run_done(client, pid)
-            print("run completed; waiting for render…", flush=True)
-            clip = await _wait_clip_rendered(client, pid)
+        # ---------- Phase 3: 形态 A（照片人像区）+ 形态 B（全幅） ----------
+        print("\n== Phase 3: compose 形态 A / 形态 B (video chain) ==", flush=True)
+        _, form_a = await asyncio.to_thread(
+            _compose_chain_pngs,
+            video_bytes=None,
+            image_bytes=[stage_jpg],
+            chain=quotes,
+            captions=captions,
+            speaker_form=True,
+            attribution=attribution,
+        )
+        _, form_b = await asyncio.to_thread(
+            _compose_chain_pngs,
+            video_bytes=mp4,
+            image_bytes=[],
+            chain=quotes,
+            captions=captions,
+            speaker_form=False,
+            attribution=attribution,
+        )
+        (OUT_DIR / "formA.png").write_bytes(form_a)
+        (OUT_DIR / "formB.png").write_bytes(form_b)
 
-            video_url = resolve_stored_url(clip["files"]["video"]) or clip["files"]["video"]
-            print(f"rendered clip: {video_url}", flush=True)
+        # ---------- Phase 4: text live run → 照片底 / 纯文稿 ----------
+        print("\n== Phase 4: transcript live run (demo-article.md) ==", flush=True)
+        async with AsyncSessionLocal() as db:
+            tproject = await _mk_scaffold(db, user, "text")
+            db.add(
+                Asset(
+                    user_id=user.id,
+                    project_id=tproject.id,
+                    type=AssetType.TRANSCRIPT,
+                    file_url=ARTICLE_KEY,
+                    title="demo-article.md",
+                    extracted_text=article,
+                    # The bake KNOWS the article is English and stamps it —
+                    # production transcript language stamping is a follow-up
+                    # (PROGRESS 需求池); _project_source_language reads it.
+                    meta={"language": "en"},
+                    processing_status=AssetStatus.COMPLETED,
+                )
+            )
+            await db.commit()
+            tpid = tproject.id
+        project_ids.append(tpid)
+        print(f"project: {tpid}", flush=True)
+        await _run_quotes(tproject)
+        await _assert_single_family(tpid)
+        tquotes, _tverdict, _ = await _harvest_quotes(tpid)
+        print(f"text chain: {len(tquotes)} entries", flush=True)
+        tattr = str(tquotes[0].get("attribution") or "") or None
+        tcaps = _chain_captions(tquotes, "bilingual")
+        (OUT_DIR / "chain-text.json").write_text(
+            json.dumps({"quotes": tquotes, "attribution": tattr},
+                       ensure_ascii=False, indent=2)
+        )
+        _, photo_png = await asyncio.to_thread(
+            _compose_chain_pngs,
+            video_bytes=None,
+            image_bytes=[stage_jpg],
+            chain=tquotes,
+            captions=tcaps,
+            speaker_form=True,
+            attribution=tattr,
+        )
+        _, text_png = await asyncio.to_thread(
+            _compose_chain_pngs,
+            video_bytes=None,
+            image_bytes=[],
+            chain=tquotes,
+            captions=tcaps,
+            speaker_form=True,
+            attribution=tattr,
+        )
+        (OUT_DIR / "photo.png").write_bytes(photo_png)
+        (OUT_DIR / "text.png").write_bytes(text_png)
 
-            async with httpx.AsyncClient(timeout=300) as c:
-                r = await c.get(video_url)
-                rendered = r.content
-            print(f"downloaded rendered MP4: {len(rendered)} bytes", flush=True)
-            url_mp4, key_mp4 = await _put_demo("quote-card-chain", ".mp4", rendered, "video/mp4")
-            poster = _first_frame_jpeg(rendered)
-            url_jpg: str | None = None
-            key_jpg: str | None = None
-            if poster is not None:
-                url_jpg, key_jpg = await _put_demo("quote-card-chain-poster", ".jpg", poster, "image/jpeg")
-            print(f"baked MP4: {url_mp4}", flush=True)
-            if url_jpg:
-                print(f"baked poster: {url_jpg}", flush=True)
+        # ---------- Phase 5: 内容寻址入 demo/ ----------
+        print("\n== Phase 5: upload demo/ (content-addressed) ==", flush=True)
+        url_a = await _put_demo(OUT_PREFIX, "quote-card-v3-formA", ".png", form_a, "image/png")
+        url_b = await _put_demo(OUT_PREFIX, "quote-card-v3-formB", ".png", form_b, "image/png")
+        url_photo = await _put_demo(OUT_PREFIX, "quote-card-v3-photo", ".png", photo_png, "image/png")
+        url_text = await _put_demo(OUT_PREFIX, "quote-card-v3-text", ".png", text_png, "image/png")
+        url_stage = await _put_demo(UPLOAD_PREFIX, "xy_2-stage", ".jpg", stage_jpg, "image/jpeg")
 
-            print("\n=== BAKED ===", flush=True)
-            print(f"video_url = {url_mp4!r}", flush=True)
-            if url_jpg:
-                print(f"poster_url = {url_jpg!r}", flush=True)
-            else:
-                print("poster_url = None,", flush=True)
-            print(f"label_key = 'quotes_output'", flush=True)
-        finally:
-            if not args.keep:
-                await _cleanup(pid)
+        print("\n=== BAKED — recipes.py stanza ===", flush=True)
+        print(f"formA  = {url_a!r}", flush=True)
+        print(f"formB  = {url_b!r}", flush=True)
+        print(f"photo  = {url_photo!r}", flush=True)
+        print(f"text   = {url_text!r}", flush=True)
+        print(f"stage  = {url_stage!r}", flush=True)
+    finally:
+        if not args.keep:
+            print("\ncleanup…", flush=True)
+            await _terminate_stale_backends()
+            for one in project_ids:
+                await _cleanup(one)
+            print("cleanup done", flush=True)
 
 
 if __name__ == "__main__":

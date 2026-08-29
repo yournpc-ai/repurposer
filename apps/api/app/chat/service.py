@@ -81,7 +81,11 @@ from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
 from app.pipeline.assets import create_transcript_asset_from_text
-from app.pipeline.derivative_dispatch import DerivativeWriterNode
+from app.pipeline.derivative_dispatch import (
+    DerivativeWriterNode,
+    _project_source_language,
+    derive_quote_alt_language,
+)
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.providers.llm.minimax import MiniMaxError
 from app.tools import ToolRejected, validate_task_list
@@ -222,6 +226,7 @@ async def _create_run_from_tasks(
     project: Project,
     tasks: list[TaskItem],
     summary: str,
+    caption_mode: str | None = None,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace."""
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
@@ -234,6 +239,7 @@ async def _create_run_from_tasks(
             target_language=first_task_language(tasks) or project.language or "en",
             instruction=summary,
             scope="full",
+            caption_mode=caption_mode,
         ),
     )
     return run.id
@@ -306,6 +312,33 @@ def _needs_caption_mode_question(tasks: list) -> bool:
         isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
         and t.tool == "write_quotes"
         for t in tasks
+    )
+
+
+async def _caption_choice_is_meaningful(
+    db: AsyncSession, project: Project, tasks: list
+) -> bool:
+    """§2.3/D4 (2026-08-28): is there a DISTINCT second language to offer?
+
+    Bilingual/target-only only make sense when an alt language exists that
+    differs from the source material's language. Derivation order (same as
+    the run-time path): the task's own target language (user-named) → the
+    project/UI locale. When every candidate equals the source, the choice
+    question would be theatre — skip it and let the caller stamp
+    ``source_only``.
+    """
+    source = await _project_source_language(db, project)
+    task_language = next(
+        (
+            (t.params or {}).get("language")
+            for t in tasks
+            if getattr(t, "tool", None) == "write_quotes"
+        ),
+        None,
+    )
+    return (
+        derive_quote_alt_language(source, task_language, project.language)
+        is not None
     )
 
 
@@ -1483,20 +1516,26 @@ async def _plan_turn(
         and _detect_caption_mode(intent.specific_instruction or "") is None
         and not _has_resolved_caption_mode(project)
     ):
-        caption_question = _build_caption_mode_question(text)
-        stashed_intent = intent.model_dump(mode="json")
-        assistant_message, bailed_run_ids = await _dock_question(
-            db,
-            conversation_id,
-            caption_question.question,
-            AskPayload(
-                kind="choice",
-                options=caption_question.options,
-                allow_freeform=caption_question.allow_freeform,
-            ),
-            intent=stashed_intent,
-        )
-        return assistant_message, None, None, bailed_run_ids
+        if await _caption_choice_is_meaningful(db, project, intent.tasks):
+            caption_question = _build_caption_mode_question(text)
+            stashed_intent = intent.model_dump(mode="json")
+            assistant_message, bailed_run_ids = await _dock_question(
+                db,
+                conversation_id,
+                caption_question.question,
+                AskPayload(
+                    kind="choice",
+                    options=caption_question.options,
+                    allow_freeform=caption_question.allow_freeform,
+                ),
+                intent=stashed_intent,
+            )
+            return assistant_message, None, None, bailed_run_ids
+        # §2.3/D4 (2026-08-28): no distinct alt language exists (the source
+        # material's language equals every candidate) — bilingual would
+        # print one language twice. Skip the question entirely and stamp
+        # source_only; the run falls through to the task-book dock.
+        intent = intent.model_copy(update={"caption_mode": "source_only"})
     # Caption-mode keyword auto-classification (Phase 1 plan-path fix,
     # 2026-08-25, RECIPES §4.7): when the user prompt carries an
     # unambiguous bilingual keyword ("双语" / "bilingual" / "中英对照" /
@@ -1696,18 +1735,21 @@ async def _propose_turn(
         # a caption mode, dock the bilingual/source/target choice BEFORE
         # letting the run start — the answer rides run.context.caption_mode
         # downstream (write_quotes Phase 2 reads it, Remotion Phase 3 layouts
-        # off it). Three escape hatches: the LLM already set caption_mode on
-        # the intent, the user prompt carries an unambiguous keyword, or the
-        # stored pending_intent already locked the choice from an earlier
-        # answer (so a follow-up refinement turn doesn't re-ask).
+        # off it). Escape hatches on THIS path: the user prompt carries an
+        # unambiguous keyword, or the stored pending_intent already locked
+        # the choice from an earlier answer (so a follow-up refinement turn
+        # doesn't re-ask). The plan path's third hatch (LLM-set caption_mode
+        # on InferredIntent) does not exist here — TaskListProposal carries
+        # no intent, the chat intent agent has no caption_mode field to set.
+        # (2026-08-29 root-fix: this condition previously READ
+        # ``proposal.intent.*`` — a field that has never existed on
+        # TaskListProposal — so every write_quotes chat proposal 500'd
+        # before the question could dock.)
         isinstance(proposal, TaskListProposal)
         and _needs_caption_mode_question(proposal.tasks)
-        and proposal.intent.caption_mode is None
         and _detect_caption_mode(text) is None
-        and _detect_caption_mode(
-            (proposal.intent.specific_instruction or "")
-        ) is None
         and not _has_resolved_caption_mode(project)
+        and await _caption_choice_is_meaningful(db, project, proposal.tasks)
     ):
         caption_question = _build_caption_mode_question(text)
         # The original TaskListProposal's dump is stashed on the docked
@@ -1730,29 +1772,35 @@ async def _propose_turn(
             intent=stashed_proposal,
         )
     else:
-        # Caption-mode keyword auto-classification (Phase 1, 2026-08-25,
-        # RECIPES §4.7): if the user prompt carries an unambiguous bilingual
-        # keyword, the run starts with caption_mode stamped — no question
-        # docked, the run lands with the right value. The chat path's elif
-        # above already skipped the question for this case; we now mirror
-        # the plan path's auto-stamp on the run's TaskSpec.
-        keyword_mode = _detect_caption_mode(text)
-        if (
-            keyword_mode is not None
-            and isinstance(proposal, TaskListProposal)
-            and proposal.intent is not None
-            and proposal.intent.caption_mode is None
+        # Caption-mode resolution for the immediate run (2026-08-29
+        # root-fix): the chat path's proposal carries no intent — the mode
+        # is derived here and rides TaskSpec.caption_mode → run.context
+        # end-to-end. Keyword in the user's own text wins (mirrors the plan
+        # path's auto-stamp); with no keyword and no DISTINCT alt language
+        # the question would be theatre (§2.3/D4), so the run is stamped
+        # source_only. A previously resolved choice (pending_intent) is
+        # left untouched — the user has spoken.
+        # (Replaces two blocks that READ ``proposal.intent.*`` — a field
+        # that never existed on TaskListProposal: the §2.3/D4 narrowing was
+        # unreachable dead code, and the keyword block 500'd on ANY
+        # task_list proposal carrying a bilingual keyword.)
+        caption_mode: str | None = None
+        if isinstance(proposal, TaskListProposal) and _needs_caption_mode_question(
+            proposal.tasks
         ):
-            proposal = proposal.model_copy(
-                update={
-                    "intent": proposal.intent.model_copy(
-                        update={"caption_mode": keyword_mode}
-                    )
-                }
-            )
+            caption_mode = _detect_caption_mode(text)
+            if (
+                caption_mode is None
+                and not _has_resolved_caption_mode(project)
+                and not await _caption_choice_is_meaningful(
+                    db, project, proposal.tasks
+                )
+            ):
+                caption_mode = "source_only"
         try:
             run_id = await _create_run_from_tasks(
-                db, project, proposal.tasks, proposal.summary
+                db, project, proposal.tasks, proposal.summary,
+                caption_mode=caption_mode,
             )
             assistant_content = proposal.summary
         except ValueError as e:

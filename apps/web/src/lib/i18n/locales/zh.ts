@@ -447,7 +447,13 @@ const zh: Resources = {
       dub_es: "西语配音",
       // 文本族示例卡标签（2026-08-24 烘焙落桶后消费）。
       post_output: "帖子样例",
-      quotes_output: "金句卡样例",
+      // quote-cards v3 示例矩阵（2026-08-28 P3 烘焙）：形态 A/B × 宽槽
+      // 三路径，一瓦片一条已验证输入路径。
+      quotes_form_a: "人像型",
+      quotes_form_b: "全幅背景型",
+      quotes_photo: "照片+文稿",
+      quotes_text: "纯文稿",
+      demo_stage_photo: "策展舞台照",
       carousel_output: "轮播样例",
     },
     inspect: {
@@ -507,12 +513,14 @@ const zh: Resources = {
       // 2026-08-27 v3（ADR-048 第 7 条）：叠卡就是金句卡本体——承诺句写
       // 叠卡这道菜，不再写"一句话"单卡（单句图归 chat 能力，不上卡面）。
       // 模板保留双语默认 + chat 字幕模式（Phase 1）。
+      // 2026-08-28 P2 宽槽：三条素材路径——录像、照片+文稿、纯文稿（深色
+      // 文字叠卡）。输入文案点齐三路径，槽位保持可空。
       title: "金句卡",
       promise:
         "挑出最亮的几句话，叠成一张可以直接发的金句卡。",
-      inputScenario: "适用：讲座录像 · 访谈",
-      inputTitle: "讲座录像",
-      inputHint: "上传一段真人讲话视频——我们挑出最亮的几句话，叠成一张金句卡。",
+      inputScenario: "适用：讲座录像 · 访谈 · 文字稿",
+      inputTitle: "讲座录像、照片或文字稿",
+      inputHint: "上传一段讲话视频、照片配文字稿，或只给文字——我们挑出最亮的几句话，叠成一张金句卡。",
       // 双语 CN+EN 默认例子（用户红线 2026-08-25 §1.6）：真实双语用
       // 户就这么打字——短、直接、点名形态。
       promptTemplate:
@@ -902,6 +910,7 @@ const zh: Resources = {
       clips: "视频片段",
       post: "社交长文",
       quotes: "金句卡",
+      quoteFrame: "帧卡",
       carousel: "轮播图",
       article: "长文章",
     },
@@ -909,6 +918,7 @@ const zh: Resources = {
       clips: "尚未生成视频片段。",
       post: "尚未生成社交长文。",
       quotes: "尚未生成金句卡。",
+      quoteFrame: "尚未生成帧卡。",
       carousel: "尚未生成轮播图。",
       article: "尚未生成长文章。",
     },

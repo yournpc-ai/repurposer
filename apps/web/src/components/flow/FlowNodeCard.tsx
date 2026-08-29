@@ -462,6 +462,7 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
   clip: Clapperboard,
   post: FileText,
   quotes: Quote,
+  quote_frame: ImageIcon,
   carousel: Images,
   article: Newspaper,
 }
@@ -525,14 +526,14 @@ function ProductCard({
   const [muted, setMuted] = useState(true)
   // Media facts for the toolbar, read off the loaded media (real pixels).
   const [dims, setDims] = useState<string | null>(null)
-  // The thumb keeps the clip's own frame (2026-08-14 三档画幅 on the canvas):
-  // the node's height was already sized for this aspect in runFlow — the
-  // strip here mirrors it exactly, and the poster letterboxes (black) rather
-  // than crops if its own ratio ever disagrees.
-  const clipAspect =
-    output.type === "clip"
-      ? ((output.render_spec as { aspect?: string } | null)?.aspect ?? null)
-      : null
+  // The thumb keeps the product's own frame (2026-08-14 三档画幅 on the
+  // canvas): the node's height was already sized for this aspect in runFlow
+  // — the strip here mirrors it exactly, and the poster letterboxes (black)
+  // rather than crops if its own ratio ever disagrees. The aspect is the
+  // SERVER-DERIVED display aspect (产物展示统一: render_spec → payload →
+  // null) — quote_frame pins "9:16" on its payload, clips derive from the
+  // render spec; never probe client-side when it's set.
+  const clipAspect = output.aspect ?? null
   const thumbPx = (clipAspect && PRODUCT_THUMB_PX[clipAspect]) || PRODUCT_THUMB_DEFAULT_PX
   // Render state projects onto the card in place (D6 修订): a failed render
   // is the CARD turning failed — never a separate node hanging off the
@@ -551,7 +552,7 @@ function ProductCard({
   const canDownload =
     output.type === "clip"
       ? hasVideo
-      : output.type === "quotes"
+      : output.type === "quotes" || output.type === "quote_frame"
         ? !!output.files.image
         : true
   const actions: { action: FlowOutputAction; Icon: typeof Download; label: string }[] = []

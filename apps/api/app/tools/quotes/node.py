@@ -11,6 +11,7 @@ and the alt translation goes through the existing ``translator`` agent
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from app.agents.registry import translator
@@ -44,7 +45,9 @@ class WriteQuotes(DerivativeWriterNode):
                             # ids to match, not N free compositions.
     writer = quotes_writer
     completion_bounds = (100, 800)  # count cards of one-liners
-    images_per_run = 0  # 2026-08-25 Phase 2: no PNG — Phase 3 ships the video card
+    images_per_run = 0  # Chain PNGs are materialized as quote_frame/clip
+                        # Output rows by _materialize_quote_card_outputs
+                        # (P3, 2026-08-28) — not via the stills path.
 
     async def _enrich_quote_cards(
         self,
@@ -52,6 +55,8 @@ class WriteQuotes(DerivativeWriterNode):
         understanding,
         target_language: str,
         caption_mode: str | None,
+        source_language: str | None = None,
+        alt_language: str | None = None,
     ) -> dict[str, Any]:
         """Runner-side post-processing for the chain variant (RECIPES
         §4.6.2, 2026-08-25).
@@ -64,8 +69,12 @@ class WriteQuotes(DerivativeWriterNode):
            ``understanding.quotable_lines[id]``.
         2. **Verbatim enforcement**: snap ``quote_source`` to the picked
            line's text when the writer left it empty.
-        3. **Alt translation** when ``caption_mode == "bilingual"`` — the
-           translator agent runs per chain entry.
+        3. **Alt translation** (§2.3/D4, 2026-08-28) — the translator
+           agent runs per chain entry, INTO THE DERIVED LANGUAGE:
+           bilingual → ``alt_language`` (the dispatcher-derived second
+           caption language — user-named target → project locale → run
+           target, first ≠ source); target_only → ``target_language``
+           when it differs from the source; source_only → no call.
         4. **Chain normalization**: dedupe accidental repeats (writer
            sometimes picks the same id twice when picking blind); trim
            to the count band by clipping overlong chains at the tail
@@ -109,10 +118,11 @@ class WriteQuotes(DerivativeWriterNode):
                 q.setdefault("frame_at", None)
             normalized.append(q)
         # Band ceiling — clip overlong chains at the tail (keep writer's
-        # top-7 picks). No floor: a short chain ships as-is (N=1 routes
+        # top picks; None count_limits = unbounded, the registry's own
+        # convention). No floor: a short chain ships as-is (N=1 routes
         # to the single-card path in the materializer).
-        if len(normalized) > 7:
-            normalized = normalized[:7]
+        if self.count_limits is not None and len(normalized) > self.count_limits[1]:
+            normalized = normalized[: self.count_limits[1]]
         content["quotes"] = normalized
 
         # core_idea / needs_speaker_frame ride verbatim from the LLM
@@ -120,10 +130,21 @@ class WriteQuotes(DerivativeWriterNode):
         content.setdefault("core_idea", None)
         content.setdefault("needs_speaker_frame", False)
 
-        # Alt translation (Phase 2 bilingual branch — runs for every
-        # chain entry).
-        if caption_mode == "bilingual" and normalized:
-            await self._translate_quote_alts(content, target_language)
+        # Alt translation (§2.3/D4, 2026-08-28 — one translation product
+        # per entry, into the DERIVED language; never two on screen):
+        # bilingual → alt_language (the dispatcher already narrowed to
+        # source_only when no distinct alt exists); target_only →
+        # target_language when ≠ source; source_only → no call.
+        translate_into: str | None = None
+        if caption_mode == "bilingual":
+            translate_into = alt_language
+        elif caption_mode == "target_only":
+            src = (source_language or "").strip().lower()
+            tgt = (target_language or "").strip().lower()
+            if tgt and tgt != src:
+                translate_into = target_language
+        if translate_into and normalized:
+            await self._translate_quote_alts(content, translate_into)
         return content
 
     async def _translate_quote_alts(
@@ -135,8 +156,6 @@ class WriteQuotes(DerivativeWriterNode):
         parallel — one LLM call per quote, batched by the agent's
         per-call fan-out. Falls back to None on failure (the card still
         renders with the main caption only)."""
-        import asyncio  # local import keeps cold-start path lean
-
         quotes = content.get("quotes", [])
         if not quotes:
             return
@@ -190,5 +209,7 @@ class WriteQuotes(DerivativeWriterNode):
             understanding=understanding,
             target_language=context.target_language,
             caption_mode=getattr(context, "caption_mode", None),
+            source_language=getattr(context, "source_language", None),
+            alt_language=getattr(context, "quote_alt_language", None),
         )
         return validate_derivative_content(self.derivative_type, content)

@@ -86,6 +86,7 @@ from app.models.tables import (  # noqa: E402
     Message,
     Operation,
     Output,
+    Project,
     User,
     WorkflowRun,
     WorkflowStep,
@@ -282,6 +283,29 @@ async def seed_completed_run(pid: str) -> None:
             )
         )
         await db.commit()
+
+
+async def set_project_language(pid: str, language: str) -> None:
+    """Pin the project's locale — the caption gate's alt-language candidate
+    (S49) derives off it."""
+    async with AsyncSessionLocal() as db:
+        project = await db.get(Project, uuid.UUID(pid))
+        project.language = language
+        await db.commit()
+
+
+async def wait_run_terminal(run_id: str, timeout: float = 90.0) -> str:
+    """Poll a run to a terminal state (fixture runs fail fast at preprocess —
+    scenario/ bytes never exist). Stray-run retry loops (S49) must settle a
+    wrong-tool run before the next turn, or the active-run guard eats it."""
+    terminal = {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}
+    for _ in range(int(timeout / 2)):
+        async with AsyncSessionLocal() as db:
+            run = await db.get(WorkflowRun, uuid.UUID(run_id))
+            if run is not None and run.status in terminal:
+                return str(run.status)
+        await asyncio.sleep(2)
+    return "TIMEOUT"
 
 
 async def seed_completed_run_with_dub_step(pid: str) -> str:
@@ -536,6 +560,31 @@ async def project_assets(pid: str) -> list[dict]:
 
 def is_task_book_dock(msg: dict) -> bool:
     return bool(msg.get("question")) and msg["question"].get("kind") == "task_book" and not msg.get("answer")
+
+
+async def answer_caption_gate(ctx: Ctx, turn1: dict) -> dict:
+    """Phase 1 caption gate (2026-08-25, S1 precedent): a chain carrying
+    write_quotes docks the caption_mode choice BEFORE the task book. When
+    turn1 docked it, answer bilingual and re-wrap the follow_up in turn1's
+    shape so the caller's task_book assertions work unchanged; no-op
+    otherwise. (2026-08-29: extracted for S11/S14/S21 — chains that grew
+    write_quotes under the default plan must walk the same 3-turn path.)
+    """
+    q1 = turn1["assistant_message"].get("question")
+    if q1 is not None and q1.get("kind") == "choice" and any(
+        o.get("id", "").startswith("caption_mode_") for o in q1.get("options", [])
+    ):
+        ans = await ctx.answer(
+            turn1["assistant_message"]["id"],
+            {"kind": "option", "option_id": "caption_mode_bilingual"},
+        )
+        check(ans.status_code in (200, 201), "caption_mode answer accepted", ans.text)
+        turn1 = {
+            "assistant_message": ans.json().get("follow_up") or {},
+            "run_id": None,
+            "answered_question": ans.json().get("answered_question"),
+        }
+    return turn1
 
 
 def no_task_book_dock(msg: dict) -> bool:
@@ -1004,6 +1053,7 @@ async def s11_clips_without_media_escape(ctx: Ctx) -> None:
     # clips，dock 出文本书。出生地的 422 是它的镜像兜底——用户面板手加
     # clips 行是触达它的真实路径（也是 recipe 时代 S11 的考纲，不变）。
     turn1 = await ctx.chat(pid, "Turn my talk into LinkedIn posts, quote cards and an article.")
+    turn1 = await answer_caption_gate(ctx, turn1)  # write_quotes 链 → caption 先问
     check(is_task_book_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     book = (await ctx.results(pid)).get("pending_intent")
@@ -1066,6 +1116,7 @@ async def s12_declared_material_promotes(ctx: Ctx) -> None:
     )
 
     turn1 = await ctx.chat(pid, f"这是我的文字稿：{material}")
+    turn1 = await answer_caption_gate(ctx, turn1)  # write_quotes 链 → caption 先问
     check(is_task_book_dock(turn1["assistant_message"]),
           "declared material docks a task book", turn1["assistant_message"])
     assets = await project_assets(pid)
@@ -1120,6 +1171,7 @@ async def s14_bare_pasted_content_promotes(ctx: Ctx) -> None:
     )
 
     turn1 = await ctx.chat(pid, material)
+    turn1 = await answer_caption_gate(ctx, turn1)  # write_quotes 链 → caption 先问
     check(is_task_book_dock(turn1["assistant_message"]),
           "bare pasted content docks a task book", turn1["assistant_message"])
     assets = await project_assets(pid)
@@ -1150,6 +1202,7 @@ async def s21_lost_and_empty_handed(ctx: Ctx) -> None:
         "places where the review process actually breaks down."
     )
     turn2 = await ctx.chat(pid, material)
+    turn2 = await answer_caption_gate(ctx, turn2)  # write_quotes 链 → caption 先问
     check(is_task_book_dock(turn2["assistant_message"]),
           "pasted content docks a task book", turn2["assistant_message"])
     assets = await project_assets(pid)
@@ -1204,6 +1257,82 @@ async def s48_text_writer_without_material(ctx: Ctx) -> None:
     check(await count_runs(pid) == 1,
           "exactly one run was born from the no-material book",
           await count_runs(pid))
+
+
+async def s49_chat_path_caption_gate(ctx: Ctx) -> None:
+    """S49 续聊 caption 闸门（2026-08-29 root-fix 回归座）：_propose_turn 的
+    caption gate 曾读取 TaskListProposal 上从不存在的 ``intent`` 字段——
+    续聊提 write_quotes 必 500，caption 选择问题从未成功 dock；keyword 块
+    对任何 task_list + 双语关键词同样 500。修复后两条都走通：
+
+    A) 有独立第二语言（项目 de / 素材 en）→ caption 选择先 dock（不起
+       run），回答后 replay 出任务书，选中的 mode 钉进 pending_intent；
+    B) 无独立第二语言（项目 en / 素材 en）→ 不问，run 直接带
+       run.context.caption_mode == "source_only"（§2.3/D4）。
+
+    LLM 判定有抖动（"make a quote card" 可能回反问或提别的链——两者都
+    正确地跳过 caption 闸门），两部各给 3 次尝试直到 write_quotes 落地。
+    """
+    material = "Some keynote transcript about the future of embodied intelligence."
+
+    # A) distinct alt language exists → dock first, answer, task book follows.
+    pid = await ctx.new_project("S49-A chat caption dock")
+    await set_project_language(pid, "de")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+                     extracted_text=material, meta={"language": "en"})
+    await seed_completed_run(pid)
+    docked: dict | None = None
+    for prompt in ("make a quote card from the video",
+                   "pull the sharpest quotes from my keynote into quote cards",
+                   "the quote cards, please"):
+        turn = await ctx.chat(pid, prompt)
+        q = turn["assistant_message"].get("question")
+        if q and q.get("kind") == "choice" and any(
+            o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
+        ):
+            docked = turn
+            break
+        rid = turn.get("run_id")
+        if rid:  # a non-quotes run started (the gate correctly skipped it)
+            await wait_run_terminal(rid)
+    check(docked is not None,
+          "A: the caption question docks for a chat-path quote-cards ask")
+    check(docked.get("run_id") is None, "A: no run before the answer", docked)
+    ans = await ctx.answer(docked["assistant_message"]["id"],
+                           {"kind": "option", "option_id": "caption_mode_bilingual"})
+    check(ans.status_code in (200, 201), "A: caption answer accepted", ans.text)
+    follow = ans.json().get("follow_up") or {}
+    check(is_task_book_dock(follow),
+          "A: the answer replays the stashed proposal into a task book", follow)
+    book = await pending_book(ctx, pid)
+    check(((book or {}).get("intent") or {}).get("caption_mode") == "bilingual",
+          "A: the picked mode rides pending_intent end-to-end", book)
+
+    # B) no distinct alt (en/en) → no question; source_only rides run.context.
+    pid_b = await ctx.new_project("S49-B chat caption source_only")
+    await set_project_language(pid_b, "en")
+    await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+                     extracted_text=material, meta={"language": "en"})
+    await seed_completed_run(pid_b)
+    mode: str | None = None
+    tools_seen: list = []
+    for prompt in ("make a quote card from the video",
+                   "pull the sharpest quotes from my keynote into quote cards",
+                   "the quote cards, please"):
+        turn = await ctx.chat(pid_b, prompt)
+        rid = turn.get("run_id")
+        if rid is None:
+            continue  # ask-back — nudge again
+        runs = await ctx.client.get(f"/projects/{pid_b}/runs")
+        born = next((r for r in runs.json() if r.get("id") == rid), None) or {}
+        run_ctx = born.get("context") or {}
+        tools_seen = [t.get("tool") for t in run_ctx.get("tasks") or []]
+        if "write_quotes" in tools_seen:
+            mode = run_ctx.get("caption_mode")
+            break
+        await wait_run_terminal(rid)  # non-quotes run — settle, then retry
+    check(mode is not None, "B: no write_quotes run after 3 turns", tools_seen)
+    check(mode == "source_only", "B: run.context.caption_mode", mode)
 
 
 # ---- Scenarios: 契约（dock 生命周期 / answer 端点 / 重建） --------------------
@@ -2240,6 +2369,7 @@ SCENARIOS = {
     "S14": s14_bare_pasted_content_promotes,
     "S21": s21_lost_and_empty_handed,
     "S48": s48_text_writer_without_material,
+    "S49": s49_chat_path_caption_gate,
     # 契约（dock 生命周期 / answer 端点 / 重建 / 附件）
     "S23": s23_task_book_bail_and_reopen,
     "S24": s24_autonomy_review_rides_to_run,

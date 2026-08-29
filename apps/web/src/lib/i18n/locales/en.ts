@@ -454,7 +454,13 @@ const en = {
       dub_es: "Spanish dub",
       // Post-bake labels for the text-tribe cards (2026-08-24 bake landing).
       post_output: "Post example",
-      quotes_output: "Quote cards example",
+      // quote-cards v3 example matrix (2026-08-28 P3 bake): 形态 A/B ×
+      // the three wide-slot paths — each tile one verified input path.
+      quotes_form_a: "Speaker layout",
+      quotes_form_b: "Full-bleed layout",
+      quotes_photo: "Photo + transcript",
+      quotes_text: "Transcript only",
+      demo_stage_photo: "Curated stage photo",
       carousel_output: "Carousel example",
     },
     // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
@@ -526,12 +532,15 @@ const en = {
       // single card (single-quote images are a chat capability, not the
       // card face). Templates keep the bilingual default + chat-driven
       // caption_mode (Phase 1).
+      // 2026-08-28 P2 宽槽: three material paths — a recording, photos +
+      // a transcript, or a transcript alone (the dark text stack). The
+      // input copy names all three, the slot stays optional.
       title: "Quote cards",
       promise:
         "The sharpest lines of your talk, stacked into one ready-to-post quote card.",
-      inputScenario: "For: talk recordings · interviews",
-      inputTitle: "Talk recording",
-      inputHint: "Upload a video of someone speaking — we'll stack the sharpest lines into one card.",
+      inputScenario: "For: talk recordings · interviews · transcripts",
+      inputTitle: "Talk recording, photos, or transcript",
+      inputHint: "Upload a talk video, photos with a transcript, or text alone — we'll stack the sharpest lines into one card.",
       // Bilingual CN+EN default example (per brief 2026-08-25 §1.6):
       // real bilingual users type this — short, direct, names the format.
       promptTemplate:
@@ -927,6 +936,7 @@ const en = {
       clips: "Clips",
       post: "Post",
       quotes: "Quotes",
+      quoteFrame: "Quote frame",
       carousel: "Carousel",
       article: "Article",
     },
@@ -934,6 +944,7 @@ const en = {
       clips: "No clips generated yet.",
       post: "No posts generated yet.",
       quotes: "No quote cards generated yet.",
+      quoteFrame: "No quote frames generated yet.",
       carousel: "No carousel generated yet.",
       article: "No articles generated yet.",
     },

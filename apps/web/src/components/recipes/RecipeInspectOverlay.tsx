@@ -173,11 +173,12 @@ export function RecipeInspectOverlay({
   // chain server-side (ADR-038) — the overlay carries no persona picker; the
   // recipe's identity stays in this overlay (配方 = 提示词).
   // The recipe's required input slots are the launch gate (input_slots is
-  // the card's declared blank): a required type with no staged file blocks
-  // the send with a toast — same posture as the composer's empty prompt.
+  // the card's declared blank): a required slot with no staged file blocks
+  // the send with a toast — same posture as the composer's empty prompt. A
+  // wide slot (any_of) passes when ANY ONE accepted kind is covered.
   const handleLaunch = () => {
     const uncovered = card.input_slots.some(
-      (slot) => slot.required && !files.some((f) => slotCoversFile(slot.type, f))
+      (slot) => slot.required && !files.some((f) => slotCoversFile(slot, f))
     )
     if (uncovered) {
       toast.error(
@@ -660,7 +661,11 @@ function ExampleCard({
 
       {/* The label pill's white veil only works over media (dark imagery);
           on the document tile's light muted fill it washes out — there the
-          label is plain meta text directly on the tile (fill-first). */}
+          label is plain meta text directly on the tile (fill-first).
+          D17 (2026-08-28): the veil pill is hover-only — a permanent pill
+          covers the product image's own bottom-edge content (形态 B 身份
+          rails sit bottom-left); the shell yields to the picture, never
+          the reverse. */}
       {kind === "transcript" ||
       kind === "slides" ||
       kind === "audio" ? (
@@ -668,7 +673,7 @@ function ExampleCard({
           {label}
         </span>
       ) : (
-        <span className="absolute bottom-2 left-2 rounded-md bg-white/15 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
+        <span className="absolute bottom-2 left-2 rounded-md bg-white/15 px-2 py-0.5 text-xs text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
           {label}
         </span>
       )}

@@ -1047,7 +1047,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. **runner 禁污 Session-2 节点（铁律）**：Session 2 内对 step 行的写只属于 execute_step 尾段结算；runner 中途要写 spec 一律走 `step_display` 的 own-session 原子写（`_pop_spec_field` jsonb `-` 减法 / `_set_*` jsonb_set）。两处 feedback-pop（`derivative_dispatch` / `clips/node`）已改 `_pop_spec_field`。
 4. **四条 runner-父行 FK 改 DEFERRABLE INITIALLY DEFERRED**（migration `c3a9e71f52d0`）：`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id`——Session 2 中途 INSERT 子行不再对父行持 KEY SHARE 至提交，父行写者（display writers / maybe_finalize / run 状态翻转）永不被 mid-run 锁窗口卡住。完整性不变，检查挪到 COMMIT。
 5. **DB 保险丝**：`ALTER ROLE <app_role> SET idle_in_transaction_session_timeout = '600s'`——任何环境（dev 已落地；**部署新环境时必做**，本条即部署说明）。保险丝是兜底不是许可。**120s 首日即被翻案**：Session 2 横跨 runner 的 LLM await 是保留设计，director_understand 一次调用 + schema 修复重试 ≈ 2 分钟纯等待，120s 把健康事务杀成 `connection is closed`——保险丝只防永久 wedge，10 分钟足以把灾难收敛为有界失败。
-6. **dev 脚本清理纪律**：FK DELETE 前先 terminate `idle in transaction` 超 15s 的他者 backends（`_e2e_quote_stacked.py` 等 harness 脚本同款片段；`pg_stat_activity.query` 全是参数化语句、无字面 id，项目级文本匹配不可行，dev 箱上 >15s idle-in-tx 即 wedge 类）。
+6. **dev 脚本清理纪律**：FK DELETE 前先 terminate `idle in transaction` 超 15s 的他者 backends（`bake_quote_chain.py` / `accept_quote_card_family.py` 等脚本同款片段；`pg_stat_activity.query` 全是参数化语句、无字面 id，项目级文本匹配不可行，dev 箱上 >15s idle-in-tx 即 wedge 类）。
 7. **execute_step 异常分支 node=None 守卫**：清理跑赢 worker 时（项目被删）三异常分支直接返回，不再 AttributeError。
 
 **明确不做**（用户拍板出闸）：runner Session 2 持有权重构（污节点已禁 + FK 锁窗口已关，死锁类整族消除，无须更大 blast radius）；`agent_calls` 台账（需求池 P1，第十一周）；verify bounce 路径本身（触发点随 ③ 修复消失）。

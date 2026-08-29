@@ -17,6 +17,7 @@ import { PostCard } from "@/components/results/PostCard"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
 import { PublishDialog } from "@/components/publish/PublishDialog"
 import { QuotesCard } from "@/components/results/QuotesCard"
+import { QuoteFrameCard } from "@/components/results/QuoteFrameCard"
 import {
   ResultsTabs,
   type ResultsTab,
@@ -155,6 +156,9 @@ const TAB_TO_RETRY_TOOL: Record<ResultsTab, string> = {
   clips: "select_clips",
   post: "write_post",
   quotes: "write_quotes",
+  // Frame cards ride the quotes chain — a quoteFrame retry replays
+  // write_quotes, which re-materializes the frame/composite siblings.
+  quoteFrame: "write_quotes",
   carousel: "write_carousel",
   article: "write_article",
 }
@@ -629,6 +633,7 @@ function ProjectDetailPage() {
   const clips = outputs.filter((o) => o.type === "clip")
   const posts = outputs.filter((o) => o.type === "post")
   const quotes = outputs.filter((o) => o.type === "quotes")
+  const quoteFrames = outputs.filter((o) => o.type === "quote_frame")
   const carousels = outputs.filter((o) => o.type === "carousel")
   const articles = outputs.filter((o) => o.type === "article")
 
@@ -650,6 +655,7 @@ function ProjectDetailPage() {
     clips: clips.length,
     post: posts.length,
     quotes: quotes.length,
+    quoteFrame: quoteFrames.length,
     carousel: carousels.length,
     article: articles.length,
   }
@@ -766,6 +772,22 @@ function ProjectDetailPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {quotes.map((o) => (
               <QuotesCard key={o.id} output={o} onRegenerate={fetchResults} />
+            ))}
+          </div>
+        )
+      case "quoteFrame":
+        // Frame cards are byproducts of the quotes chain — the running /
+        // failed state lives on the quotes tab; this tab is products-only.
+        if (quoteFrames.length === 0 && isOutputRunning("quotes")) {
+          return renderSkeletons("quoteFrame")
+        }
+        if (quoteFrames.length === 0) {
+          return <EmptyState text={t("results.empty.quoteFrame")} />
+        }
+        return (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {quoteFrames.map((o) => (
+              <QuoteFrameCard key={o.id} output={o} />
             ))}
           </div>
         )

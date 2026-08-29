@@ -55,6 +55,7 @@ const PRODUCT_TYPE_LABEL_KEY: Record<string, string> = {
   clip: "results.tabs.clips",
   post: "results.tabs.post",
   quotes: "results.tabs.quotes",
+  quote_frame: "results.tabs.quoteFrame",
   carousel: "results.tabs.carousel",
   article: "results.tabs.article",
 }
@@ -330,6 +331,7 @@ export function runFlowGraph(
   const products = [...outputs]
     .filter((o) => o.type in PRODUCT_TYPE_LABEL_KEY)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const productIds = new Set(products.map((o) => o.id))
   // Top pick: the batch's highest-scored clip gets the accent badge — the
   // same triage rule the old results grid used (score → what to post first).
   const topClipScore = Math.max(
@@ -393,11 +395,11 @@ export function runFlowGraph(
         output.type === "clip" &&
         topClipScore > 0 &&
         output.score?.value === topClipScore,
-      size: productNodeSize(
-        output.type === "clip"
-          ? ((output.render_spec as { aspect?: string } | null)?.aspect ?? null)
-          : null,
-      ),
+      // Node frame = the server-derived display aspect (产物展示统一:
+      // render_spec.aspect → payload.aspect → null). quote_frame payload
+      // pins "9:16"; "original" whole-source rows normalize to null and
+      // take the default tier until media reports real pixels.
+      size: productNodeSize(output.aspect ?? null),
       tourTargets: output.id === tourOutputId,
       order: i,
     })
@@ -410,6 +412,19 @@ export function runFlowGraph(
         to: id,
         semantic: "lineage",
       })
+    }
+    // Derivation lineage (quote-cards §2.2, 2026-08-28): source_ref.parents
+    // names the outputs THIS one derives from — the chain composite's frame
+    // cards (N→1) and the motion clip's composite. Server-resolved like
+    // workflow_step_id; unknown parents (outside this payload) drop.
+    for (const parentId of output.source_ref?.parents ?? []) {
+      if (productIds.has(parentId)) {
+        rawEdges.push({
+          from: `output:${parentId}`,
+          to: id,
+          semantic: "lineage",
+        })
+      }
     }
   })
 

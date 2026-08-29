@@ -39,7 +39,7 @@ Soon pill with the bake landing).
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.schemas import TaskItem
 
@@ -47,12 +47,31 @@ from app.models.schemas import TaskItem
 class InputSlot(BaseModel):
     """输入槽位 (input_slots): the typed blank a recipe leaves for the user
     ("needs a talk video"). Display-hint layer — the clips-media gate at
-    ``create_run`` remains the enforcement floor."""
+    ``create_run`` remains the enforcement floor.
+
+    宽槽 (any_of, quote-cards P2, 2026-08-28, ADR-048 合成类宽槽任选+可空):
+    a slot may accept ANY ONE of several material kinds — ``type`` and
+    ``any_of`` are mutually exclusive; the coverage check passes when the
+    project's assets cover at least one listed kind."""
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["video", "audio", "images", "slides", "transcript"]
+    type: Literal["video", "audio", "images", "slides", "transcript"] | None = None
+    any_of: list[Literal["video", "audio", "images", "slides", "transcript"]] | None = None
     required: bool = True
+
+    @model_validator(mode="after")
+    def _type_xor_any_of(self) -> "InputSlot":
+        if (self.type is None) == (self.any_of is None):
+            raise ValueError("InputSlot: exactly one of type / any_of")
+        return self
+
+    @property
+    def accepted_types(self) -> list[str]:
+        """Every material kind this slot accepts (narrow slot = one)."""
+        if self.type is not None:
+            return [self.type]
+        return list(self.any_of or [])
 
 
 class FlowStep(BaseModel):
@@ -512,14 +531,12 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     ),
     "quote-cards": RecipeEntry(
         status="live",
-        # 2026-08-25 Phase 2→4 重设计：quote-cards 不再是 LLM 自由发挥的
-        # 1:1 PNG——它是 ASR+Remotion 真管线短视频（9:16 单条金句）。素材
-        # 必传：video（OffthreadVideo 渲染底，quote 那段原声+画面+ASR 字幕
-        # 一次成型）。transcript 槽不列——ASR 在 chain 内由 video 自动
-        # 派生文字稿 + 词级时间戳 → 驱动 understanding.quotable_lines 候选
-        # → runner 据此 snap 时间戳；用户无需重复上传文字稿。用户红线：
-        # quote 必须有源素材绑定。images 作为未来 image 源 fallback（Phase
-        # 4 之后看真实需求再立）。
+        # 2026-08-28 P2 宽槽 (简报 §2.5, ADR-048 合成类宽槽任选+可空):
+        # 三路径任选——录像（视频底+ASR 自动派生文稿）/ 照片+文稿（照片底
+        # strip）/ 纯文稿（深色文字叠卡）。required=False：copy-writer
+        # 无素材也能起草（2026-08-24 lift），缺的只是帧底。运行时路径在
+        # derivative_dispatch._build_quote_chain_artifacts：video → 策展
+        # 帧+逐条取帧；无 video 有 images → 照片底；全无 → 形态 B 深色。
         #
         # Chain variant (2026-08-25, RECIPES §4.6.2): count is now the
         # writer's HINT, not a hard pin — the writer picks how many
@@ -529,7 +546,7 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         # renders ALL chain entries as ONE composite PNG (cascade of
         # caption strips), not N separate cards.
         input_slots=[
-            InputSlot(type="video", required=True),
+            InputSlot(any_of=["video", "images", "transcript"], required=False),
         ],
         tasks=[
             # count=5: chain midpoint — the writer judges actual N (3..7).
@@ -544,37 +561,62 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         aspect="9:16",
         tags=["text-output", "captions"],
         flow=[FlowStep(key="write_quotes")],
-        # 2026-08-25 Phase 4 + chain variant: example_assets 跟 recipes
-        # §7.1 对账——demo 源是 xy_2.mp4（单人 TED 风 talk，60s 截屏
-        # 960×960，ASR 词级时间戳很密），跟实际 baked 流水线一致：writer
-        # 选自 understanding.quotable_lines（来自这一段 ASR），runner 据此
-        # snap 时间戳并生成 frame_at。video 必传（卡片承诺的视觉底 = 真人
-        # 说话帧），transcript 由 ASR 在 chain 内补（资产侧不必显式传文字稿）。
+        # v3 形态矩阵（2026-08-28 P3 烘焙，scripts/bake_quote_chain.py）：
+        # 宽槽三路径的原素材面 = xy_2.mp4（WFT 峰会 keynote，960×960 方屏
+        # 宽幅舞台录像，ASR 词级时间戳密）+ 策展舞台照（全片 YuNet 最佳
+        # 脸 + 人脸锚定 9:8 裁切——用户"最佳活动照"替身，形态 A 人像区
+        # 来源）+ demo-article.md（同场 keynote 文字稿——照片+文稿 /
+        # 纯文稿路径的文字源）。
         example_assets=[
             ExampleAsset(
                 kind="video",
                 url=f"{_DEMO}/uploads/xy_2.mp4",
                 label_key="demo_keynote",
             ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/xy_2-stage-72eb3b7b.jpg",
+                label_key="demo_stage_photo",
+            ),
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
         ],
-        # 2026-08-25 Phase 4 + chain variant bake landed: 9:16 视频金
-        # 句卡 (xy_2.mp4 → 流水线渲染 → quote-card-chain-*.mp4).
-        # writer 判 N=3 句（落在 3..7 band 内），每条 chain entry = 一
-        # 张真实视频帧（PyAV 在 frame_at 时刻抓）+ 烤在上面的双语字幕。
-        # 几何 = v2 y-stack (overlap=200px, y_top=i*(vh-overlap)) +
-        # v3 宽度金字塔（CHAIN_CARD_WIDTH_FACTOR=0.92，顶部最窄、底部
-        # 最宽 → 在 overlap 区两侧露出下条边沿，sticky-note cascade
-        # 视觉）。绘制顺序 reversed（chain[N-1] 先画在画布底部=z 最
-        # 小=back；chain[0] 最后画在画布顶部=z 最大=front），视觉上
-        # 后画盖前画。needs_speaker_frame 没启用（纯帧卡 cascade）。
-        # stills kind spec + zoom_in 1.05 渲染 4s 9:16 MP4。Examples
-        # tab 显示这条视频。
+        # 四张示例 = 叠卡合成器的真实产物（compositor IS the product
+        # path，形态按构造钉，链条全部来自真管线 create_run）：形态 B =
+        # 视频链全幅压暗（居中行整句 wrap）；形态 A = 视频链 + 舞台照人
+        # 像区（错位半透条，行长走设计帽）；照片底 = 文稿链 + 舞台照；
+        # 纯文稿 = 暗底。示例集零 MP4（v3 §2.6：MP4 是 motion 衍生品，
+        # 永不上卡面）。
         example_outputs=[
             ExampleOutput(
                 kind="image",
-                url=f"{_DEMO}/outputs/quote-card-chain-v9-72402480.png",
+                url=f"{_DEMO}/outputs/quote-card-v3-formB-ef678e34.png",
                 poster_url=None,
-                label_key="quotes_output",
+                label_key="quotes_form_b",
+                aspect="9:16",
+            ),
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/quote-card-v3-formA-bf03e518.png",
+                poster_url=None,
+                label_key="quotes_form_a",
+                aspect="9:16",
+            ),
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/quote-card-v3-photo-37e64219.png",
+                poster_url=None,
+                label_key="quotes_photo",
+                aspect="9:16",
+            ),
+            ExampleOutput(
+                kind="image",
+                url=f"{_DEMO}/outputs/quote-card-v3-text-bcf787a9.png",
+                poster_url=None,
+                label_key="quotes_text",
                 aspect="9:16",
             ),
         ],

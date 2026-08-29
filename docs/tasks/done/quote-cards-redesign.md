@@ -1,6 +1,6 @@
 # quote-cards 配方 v3——叠卡本体 + 帧卡 Output 化 + 宽槽三路径
 
-> Status: 🚧 施工中（2026-08-25 初版拍板并落地 Phase 1–4 + chain variant；**2026-08-27 v3 修订拍板**：叠卡 = 卡本体，legacy fan-out 与 `layout_mode` 退役，帧卡 Output 化，宽槽三路径；画廊 v3 母决策 = ADR-048）
+> Status: ✅ 已落地（2026-08-25 初版拍板并落地 Phase 1–4 + chain variant；2026-08-27 v3 修订拍板：叠卡 = 卡本体，legacy fan-out 与 `layout_mode` 退役，帧卡 Output 化，宽槽三路径；画廊 v3 母决策 = ADR-048；2026-08-28 P1 欠账清零 + P2 帧卡 Output 化 + **P3 烘焙与清场全绿收官**——形态 A/B × 三路径示例矩阵烘焙入 demo/（v9 形态 C 对象退役删除）、示例 tab hover-only veil pill（D17）、`_phase*` 探针清场 14 件、verify bounce 家族堆叠根修、accept 闸全绿）
 > 依据：ADR-016（clip-spec 契约）/ ADR-040（配方 = 提示词）/ ADR-044（轨道模型）/ ADR-048 v3（三轴模型 + 两类卡输入规则）/ RECIPES §4.6
 > 前置读：`docs/RENDERING.md`、`docs/RECIPES.md` §4/§4.6/§7、`docs/DECISIONS.md` ADR-048
 

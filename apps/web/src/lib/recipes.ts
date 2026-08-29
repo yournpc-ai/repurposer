@@ -18,6 +18,15 @@
 
 import { apiFetch } from "@/lib/api"
 
+/** 输入槽位 (InputSlot, 全栈同名): a narrow slot carries ``type``; a wide
+ * slot (宽槽, quote-cards P2, 2026-08-28) carries ``any_of`` — the launch
+ * gate passes when staged files cover AT LEAST ONE accepted kind. */
+export interface RecipeInputSlot {
+  type?: string | null
+  any_of?: string[] | null
+  required: boolean
+}
+
 /** Public card shape served by `GET /api/v1/recipes` (same name, same shape
  * as the backend `RecipePublic`, NAMING §1). */
 export interface RecipePublic {
@@ -25,7 +34,7 @@ export interface RecipePublic {
   /** RECIPES §10: ``"reserved"`` cards occupy a grid seat with a Soon
    * pill; the click path is gated on ``"live"``. */
   status: "live" | "reserved"
-  input_slots: { type: string; required: boolean }[]
+  input_slots: RecipeInputSlot[]
   aspect: string
   /** Shared `recipes.tags.*` i18n keys. */
   tags: string[]
@@ -49,9 +58,15 @@ export interface RecipePublic {
 
 /** Does a staged file cover a required input slot? The launch gate reads
  * this (a recipe's required blank must be filled before send — same posture
- * as the composer's prompt-required toast). Mirrors inferAssetType's MIME
- * families; slides travel as deck files (pdf/ppt). */
-export function slotCoversFile(slotType: string, file: File): boolean {
+ * as the composer's prompt-required toast). A wide slot (``any_of``) passes
+ * when the file covers ANY ONE accepted kind (任一覆盖即过). Mirrors
+ * inferAssetType's MIME families; slides travel as deck files (pdf/ppt). */
+export function slotCoversFile(slot: RecipeInputSlot, file: File): boolean {
+  const accepted = slot.type ? [slot.type] : (slot.any_of ?? [])
+  return accepted.some((type) => fileCoversSlotType(type, file))
+}
+
+function fileCoversSlotType(slotType: string, file: File): boolean {
   switch (slotType) {
     case "video":
       return file.type.startsWith("video/")
@@ -62,7 +77,7 @@ export function slotCoversFile(slotType: string, file: File): boolean {
       // card folds the 课件 scenario in), so a deck file covers the visual
       // slot too — the card's inputHint ("photos or a slide deck") is the
       // truth, and the server-side media gate already accepts deck-only.
-      return file.type.startsWith("image/") || slotCoversFile("slides", file)
+      return file.type.startsWith("image/") || fileCoversSlotType("slides", file)
     case "slides":
       return (
         file.type === "application/pdf" ||

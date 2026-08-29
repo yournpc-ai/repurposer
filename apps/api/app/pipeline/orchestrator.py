@@ -1430,7 +1430,7 @@ def assert_runners_registered() -> None:
     for recipe_id, entry in RECIPE_REGISTRY.items():
         if not entry.flow:
             continue
-        input_types = {s.type for s in entry.input_slots}
+        input_types = {t for s in entry.input_slots for t in s.accepted_types}
         add_stills = _recipe_adds_stills(input_types)
         # The recipe's declared inputs answer what `_materialize_profile`
         # answers from real assets at the birthplace: a recording → media;

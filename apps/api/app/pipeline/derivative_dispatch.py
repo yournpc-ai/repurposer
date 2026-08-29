@@ -13,7 +13,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import asyncio
 import hashlib
+import io
 import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select
@@ -27,6 +29,7 @@ from app.models.schemas import (
     DerivativeType,
     GenerationContext,
     MaterialUnderstanding,
+    QuoteFrame,
     RenderStatus,
     Storyboard,
     validate_derivative_content,
@@ -37,7 +40,9 @@ from app.pipeline.clip_spec import build_quote_card_spec, build_stacked_quote_ca
 from app.pipeline.quote_card_stack import (
     ChainCaption,
     composite_chain_quote_card,
+    composite_frame_card,
     extract_video_frames,
+    pick_curated_frame,
 )
 from app.pipeline.edges import _load_director_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
@@ -101,130 +106,306 @@ class CopyWriterParams(BaseModel):
     )
 
 
-async def _build_stacked_quote_spec(
-    project: Project,
-    source_video: Asset,
-    chain: list[dict[str, Any]],
-    needs_speaker_frame: bool,
+def derive_quote_alt_language(
+    source_language: str | None, *candidates: str | None
+) -> str | None:
+    """quote-cards §2.3/D4: the SECOND caption language for bilingual mode.
+
+    Candidates in priority order (user-named target → project/UI locale →
+    run target_language); the first set value that differs from the source
+    wins. None = no distinct alt exists → bilingual would print the same
+    language twice → the caption gate is skipped (chat/service.py) and the
+    run stamps ``source_only``.
+    """
+    src = (source_language or "").strip().lower()
+    for cand in candidates:
+        lang = (cand or "").strip().lower()
+        if lang and lang != src:
+            return lang
+    return None
+
+
+async def _project_source_language(
+    db: AsyncSession, project: Project
+) -> str | None:
+    """The run's source language: the first AV asset's ASR-detected
+    ``meta.language`` (the ASR processor stamps it), else a TRANSCRIPT
+    asset's stamped ``meta.language`` (text processors don't stamp it yet —
+    only assets created with an explicit language carry one), else the
+    project's own language. None only when all are unset."""
+    assets = await _list_assets(db, project.id)
+    for a in assets:
+        if a.type in (AssetType.VIDEO, AssetType.AUDIO, AssetType.TRANSCRIPT):
+            lang = (a.meta or {}).get("language")
+            if lang:
+                return str(lang)
+    return project.language or None
+
+
+def _chain_captions(
+    chain: list[dict[str, Any]], caption_mode: str | None
+) -> list[ChainCaption]:
+    """Chain entries → caption blocks (D5 双译本收窄, 2026-08-28).
+
+    The secondary line is ALWAYS ``quote_alt`` (the translator's product)
+    and only in bilingual mode; the writer's own ``quote`` is hook/metadata
+    and never a second on-screen translation. target_only promotes the alt
+    translation to the single primary line (fallback: the source line).
+    """
+    captions: list[ChainCaption] = []
+    for q in chain:
+        src = (q.get("quote_source") or q.get("quote") or "").strip()
+        alt = (q.get("quote_alt") or "").strip() or None
+        if caption_mode == "target_only":
+            captions.append(ChainCaption(primary=alt or src))
+        elif caption_mode == "bilingual":
+            captions.append(ChainCaption(primary=src, secondary=alt))
+        else:  # source_only / undecided
+            captions.append(ChainCaption(primary=src))
+    return captions
+
+
+def _entry_span(q: dict[str, Any]) -> tuple[float, float] | None:
+    """The entry's video span for curated-frame picking: its snapped
+    [source_start, source_end], else a ±2s window around a valid
+    ``frame_at``. None = no usable time-bind (never clamped to 0.0)."""
+    try:
+        start = q.get("source_start")
+        end = q.get("source_end")
+        if start is not None and end is not None and float(end) > float(start):
+            return float(start), float(end)
+        frame_at = q.get("frame_at")
+        if frame_at is not None and float(frame_at) >= 0:
+            return max(0.0, float(frame_at) - 2.0), float(frame_at) + 2.0
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _entry_frame_at(q: dict[str, Any]) -> float | None:
+    """The entry's frame-grab timecode; invalid/missing → None (the entry
+    renders frame-less — invalid values are SKIPPED, never clamped to 0.0,
+    D15)."""
+    try:
+        frame_at = q.get("frame_at")
+        if frame_at is not None and float(frame_at) >= 0:
+            return float(frame_at)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+async def _download_bytes(url: str | None) -> bytes | None:
+    """Stream a storage URL to bytes; any failure → None (graceful degrade —
+    the chain still renders text/photo/dark paths)."""
+    if not url:
+        return None
+    import httpx  # local — heavy import only on this path
+
+    try:
+        async with httpx.AsyncClient(timeout=300) as c:
+            r = await c.get(url, follow_redirects=True)
+            return r.content if r.status_code == 200 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _open_image(data: bytes) -> Any | None:
+    """bytes → a loaded PIL Image; None on any decode failure."""
+    from PIL import Image  # local — CPU section only
+
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        return img.convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _compose_chain_pngs(
     *,
+    video_bytes: bytes | None,
+    image_bytes: list[bytes],
+    chain: list[dict[str, Any]],
+    captions: list[ChainCaption],
+    speaker_form: bool,
+    attribution: str | None,
+) -> tuple[list[bytes], bytes]:
+    """CPU section (runs in a thread): curated frame + per-entry frame-card
+    PNGs + the form A/B composite PNG (D15).
+
+    Curated frame = YuNet best-face pick inside the FIRST entry's span
+    (``pick_curated_frame``); photo path → the first image; else None →
+    the composite's form B dark branch. Per-entry frames: valid
+    ``frame_at`` grabs only (invalid skipped, never clamped); photo path
+    cycles the uploaded images; else None → that entry's frame card
+    renders dark.
+    """
+    curated = None
+    if video_bytes:
+        span = _entry_span(chain[0])
+        if span:
+            curated = pick_curated_frame(video_bytes, span[0], span[1])
+    photos = [img for img in (_open_image(b) for b in image_bytes) if img is not None]
+    if curated is None and photos:
+        curated = photos[0]
+
+    entry_frames: list[Any] = []
+    if video_bytes:
+        times = [_entry_frame_at(q) for q in chain]
+        valid = [t for t in times if t is not None]
+        grabbed: list[Any] = []
+        if valid:
+            try:
+                grabbed = extract_video_frames(video_bytes, valid)
+            except Exception:  # noqa: BLE001
+                grabbed = []
+        it = iter(grabbed)
+        entry_frames = [next(it, None) if t is not None else None for t in times]
+    elif photos:
+        entry_frames = [photos[i % len(photos)] for i in range(len(chain))]
+    else:
+        entry_frames = [None] * len(chain)
+
+    frame_pngs = [
+        composite_frame_card(frame=frame, caption=cap, attribution=attribution)
+        for frame, cap in zip(entry_frames, captions, strict=True)
+    ]
+    composite_png = composite_chain_quote_card(
+        chain=captions,
+        curated_frame=curated,
+        speaker_form=speaker_form,
+        attribution=attribution,
+    )
+    return frame_pngs, composite_png
+
+
+async def _build_quote_chain_artifacts(
+    project: Project,
+    *,
+    chain: list[dict[str, Any]],
+    captions: list[ChainCaption],
+    needs_speaker_frame: bool,
+    attribution: str | None,
+    source_video: Asset | None,
+    images: list[Asset],
     target_language: str,
     brand: Any,
     brand_ref: Any,
     duration_s: float = _QUOTE_CARD_CHAIN_DURATION_S,
-) -> tuple[Any | None, str | None]:
-    """Chain-variant materializer (RECIPES §4.6.2 chain variant, 2026-08-25).
+) -> tuple[list[str], str | None, Any | None, str | None]:
+    """Chain materializer (§2.2 + §2.6, 2026-08-28).
 
-    The writer emits a chain of N quote entries (N=3..7) plus a
-    ``needs_speaker_frame`` flag. This builds the 9:16 cascade PNG:
+    Produces the chain's three artifact families:
 
-    1. Build ``ChainCaption`` list — primary text from
-       ``quote_source`` (verbatim) + secondary text from ``quote_alt``
-       (alt translation, only when ``caption_mode="bilingual"``).
-    2. Stream the source video from TOS.
-    3. PyAV-grab frames: one per chain entry at its ``frame_at``
-       midpoint + one extra speaker frame (the chain's first entry's
-       frame) when ``needs_speaker_frame``.
-    4. PIL composite (``composite_chain_quote_card``).
-    5. Upload to PROJECT storage (``save_output`` — user products live in
-       the project scope; ``demo/`` is the recipe-display bake reserve,
-       D3 2026-08-27).
-    6. ``build_stacked_quote_card_spec`` wraps the URL in a stills
-       ClipSpec.
+    1. N frame-card PNGs (one per entry: its frame + its caption block)
+       → uploaded to project storage, URLs returned in order.
+    2. The form A/B composite PNG → uploaded, URL returned.
+    3. The motion clip-spec (Ken-Burns zoom on the composite) — ONLY
+       when an anchor asset exists (video else first photo; a pure-text
+       chain gets no MP4 — the composite card IS the product, the MP4
+       is never the main promise).
 
-    Returns ``(spec, error_or_None)`` — graceful-degrade: any missing
-    input returns ``(None, reason)``. The chain with all entries
-    missing ``frame_at`` (no source video material) renders as a pure
-    text chain (no speaker frame, all caption strips on dark canvas).
+    Returns ``(frame_card_urls, composite_url, spec_or_None, error)`` —
+    graceful-degrade: composite failure → ``(urls, None, None, reason)``.
+    All user products go through ``save_output`` project scope (D3:
+    never the demo/ display reserve).
     """
     if not chain:
-        return None, "stacked: empty chain"
+        return [], None, None, "chain: empty"
 
-    # Build ChainCaption list — primary from quote_source (verbatim),
-    # secondary from quote_alt (when present). caption_mode="bilingual"
-    # is the path where quote_alt gets populated; for source_only /
-    # target_only the runner doesn't fill alt, so secondary stays None.
-    captions: list[ChainCaption] = []
-    frame_at_seconds: list[float] = []
-    for q in chain:
-        primary = (q.get("quote_source") or q.get("quote") or "").strip()
-        secondary = (q.get("quote_alt") or "").strip() or None
-        captions.append(ChainCaption(primary=primary, secondary=secondary))
-        frame_at = q.get("frame_at")
-        try:
-            frame_at_seconds.append(float(frame_at) if frame_at is not None else -1.0)
-        except (TypeError, ValueError):
-            frame_at_seconds.append(-1.0)
-
-    # Stream the source video from TOS via the storage seam (one
-    # download — the chain entries may share or span the whole video).
-    video_url = stream_url(source_video.file_url)
-    if not video_url:
-        # No video: render the chain as text-only (no speaker frame,
-        # no chain frames — just the caption strips). The chain
-        # compositor handles missing frames by skipping the speaker
-        # frame entirely.
-        video_bytes: bytes | None = None
-    else:
-        import httpx  # local — heavy import only on this path
-
-        try:
-            async with httpx.AsyncClient(timeout=300) as c:
-                r = await c.get(video_url, follow_redirects=True)
-                if r.status_code != 200:
-                    video_bytes = None
-                else:
-                    video_bytes = r.content
-        except Exception:  # noqa: BLE001
-            video_bytes = None
-
-    speaker_frame_img = None
-    chain_frames: list[Any] = []
-    if video_bytes and any(t >= 0 for t in frame_at_seconds):
-        # Each chain entry's body = a VIDEO FRAME grabbed at the entry's
-        # ``frame_at`` midpoint (RECIPES §4.6.2: "这几句话的帧截图下来
-        # 做字幕"). The first entry's frame is ALSO the speaker face
-        # when needs_speaker_frame is true — same visual, two roles.
-        valid_ts = [t if t >= 0 else 0.0 for t in frame_at_seconds]
-        try:
-            chain_frames = extract_video_frames(video_bytes, valid_ts)
-        except Exception:  # noqa: BLE001
-            chain_frames = []
-        if needs_speaker_frame and chain_frames:
-            speaker_frame_img = chain_frames[0]
-
-    # Composite — speaker frame optional (top half), each chain entry
-    # becomes one frame card stacked with overlap (image #37 visual
-    # reference: "下条被上条压住一段，露出底下一条"). When the chain
-    # has more entries than frames, the back-of-stack strips fall
-    # back to dark fill (graceful degrade).
-    png = composite_chain_quote_card(
-        speaker_frame=speaker_frame_img,
-        chain=captions,
-        chain_frames=chain_frames,
+    video_bytes = await _download_bytes(
+        stream_url(source_video.file_url) if source_video and source_video.file_url else None
     )
+    image_bytes: list[bytes] = []
+    if not video_bytes:
+        for asset in images[:4]:  # cap downloads — the path cycles them anyway
+            data = await _download_bytes(
+                stream_url(asset.file_url) if asset.file_url else None
+            )
+            if data:
+                image_bytes.append(data)
 
-    # Upload to project storage under a content-hashed key (D3: project
-    # scope, never the demo/ display reserve).
-    digest = hashlib.md5(png).hexdigest()[:8]
     try:
-        key = await save_output(
-            project.id, project.user_id, f"quote-chain-{digest}.png", png
+        frame_pngs, composite_png = await asyncio.to_thread(
+            _compose_chain_pngs,
+            video_bytes=video_bytes,
+            image_bytes=image_bytes,
+            chain=chain,
+            captions=captions,
+            speaker_form=needs_speaker_frame,
+            attribution=attribution,
         )
     except Exception as exc:  # noqa: BLE001
-        return None, f"stacked: composite upload failed ({type(exc).__name__}: {exc})"
+        return [], None, None, f"chain: compose failed ({type(exc).__name__}: {exc})"
+
+    frame_urls: list[str] = []
+    for i, png in enumerate(frame_pngs):
+        digest = hashlib.md5(png).hexdigest()[:8]
+        try:
+            key = await save_output(
+                project.id, project.user_id, f"quote-frame-{digest}.png", png
+            )
+        except Exception as exc:  # noqa: BLE001
+            return frame_urls, None, None, (
+                f"chain: frame {i} upload failed ({type(exc).__name__}: {exc})"
+            )
+        url = output_url(key)
+        if not url:
+            return frame_urls, None, None, "chain: output_url returned None"
+        frame_urls.append(url)
+
+    digest = hashlib.md5(composite_png).hexdigest()[:8]
+    try:
+        key = await save_output(
+            project.id, project.user_id, f"quote-chain-{digest}.png", composite_png
+        )
+    except Exception as exc:  # noqa: BLE001
+        return frame_urls, None, None, (
+            f"chain: composite upload failed ({type(exc).__name__}: {exc})"
+        )
     composite_url = output_url(key)
     if not composite_url:
-        return None, "stacked: output_url returned None"
+        return frame_urls, None, None, "chain: output_url returned None"
 
-    spec = build_stacked_quote_card_spec(
-        composite_image_url=composite_url,
-        asset_id=source_video.id,
-        duration_s=duration_s,
-        target_language=target_language,
-        brand=brand,
-        brand_ref=brand_ref,
+    anchor_asset = source_video or (images[0] if images else None)
+    spec = None
+    if anchor_asset is not None:
+        spec = build_stacked_quote_card_spec(
+            composite_image_url=composite_url,
+            asset_id=anchor_asset.id,
+            duration_s=duration_s,
+            target_language=target_language,
+            brand=brand,
+            brand_ref=brand_ref,
+        )
+    return frame_urls, composite_url, spec, None
+
+
+def _add_render_step(
+    db: AsyncSession,
+    *,
+    run: WorkflowRun,
+    node: WorkflowStep,
+    output_id: UUID,
+    label: str | None,
+) -> None:
+    """Render fan-out: the render worker picks the output row by
+    ``render_status=PENDING``; the WorkflowStep is the UI progress mirror
+    (mirrors select_clips's contract verbatim)."""
+    db.add(
+        WorkflowStep(
+            run_id=run.id,
+            kind="render",
+            status="pending",
+            seq=int(node.seq) + 1,
+            inputs=[str(node.id)],
+            spec={
+                "output_id": str(output_id),
+                **({"summary": label} if label else {}),
+            },
+        )
     )
-    return spec, None
 
 
 async def _materialize_quote_card_outputs(
@@ -238,28 +419,33 @@ async def _materialize_quote_card_outputs(
     target_language: str,
     source_language: str | None,
     caption_mode: str | None,
+    quote_alt_language: str | None = None,
     needs_speaker_frame: bool = False,
     core_idea: str | None = None,
 ) -> list[UUID]:
-    """Quote-cards → sibling "clip" Outputs (RECIPES §4.6.2).
+    """Quote-cards → quote_frame image Outputs + optional motion clip (§2.2).
 
-    叠卡 = 金句卡本体 (v3, 2026-08-27, ADR-048 第 7 条): the writer emits
-    ONE chain of N quote entries (N=3..7, setup → payoff) — ``len >= 2``
-    builds ONE composite cascade PNG (one clip Output + one render step).
-    A chain of 1 builds the single quote card via ``build_quote_card_spec``
-    (the same dish, N=1). The legacy per-quote fan-out is retired — the
-    chain is one argument; splitting it into single cards was argument
-    confetti.
+    叠卡 = 金句卡本体 (v3, ADR-048 第 7 条) + 帧卡 Output 化 (P2,
+    2026-08-28): a chain of N≥2 entries materializes as
 
-    Returns the list of new Output ids. Drops silently when the source
-    video is missing or the picked quote has no time-bind (graceful
-    degrade — recipe registry gates these upstream, but the runner never
-    fails on a single bad card).
+    - N frame-card ``quote_frame`` Outputs (one per entry: its frame +
+      its caption block, ``files.image``) — independently shareable;
+    - ONE composite ``quote_frame`` Output (the form A/B cascade PNG)
+      whose ``source_ref.parents`` names the frame cards — the canvas
+      draws the N→1 lineage off ``parents``;
+    - ONE motion ``clip`` Output (Ken-Burns MP4 on the composite) as a
+      CHILD of the composite (``parents=[composite_id]``) — only when an
+      anchor asset exists (video else photo); never the main promise.
+
+    N=1 keeps the single video card via ``build_quote_card_spec`` when a
+    source video exists; otherwise a single frame card (photo or dark
+    text-only — the no-video paths no longer drop the dish).
+
+    Returns the list of new Output ids. The composite IS the dish: when
+    it fails the whole chain drops (``quote_card_chain_drop`` warning,
+    empty list) — frame cards without their stack are orphan strips and
+    are never served standalone, so no partial family is materialized.
     """
-    # Phase 4 recipe wiring lands the language on run.context; chat may also
-    # have stamped it. The ASR-detected source lang lives on the video's
-    # asset.meta["language"] (set by the ASR processor) — fall back through
-    # the chain when upstream didn't expose it.
     assets = await _list_assets(db, project.id)
     source_video: Asset | None = next(
         (
@@ -270,23 +456,25 @@ async def _materialize_quote_card_outputs(
         ),
         None,
     )
+    images: list[Asset] = [
+        a for a in assets if a.type == AssetType.IMAGE and a.file_url
+    ]
     if source_video is None:
-        logger.warning(
+        logger.info(
             "quote_card_no_video_source",
             project_id=str(project.id),
             workflow_step_id=str(node.id),
+            images=len(images),
         )
-        return []
 
     # Source language: prefer the explicit arg (chat may have stamped it on
     # run.context), else the ASR-detected language on the source asset's
     # meta block, else the project's default language.
-    resolved_source_lang = (
-        source_language
-        or (source_video.meta or {}).get("language")
-        or project.language
-        or "en"
-    )
+    resolved_source_lang = source_language
+    if not resolved_source_lang and source_video is not None:
+        resolved_source_lang = (source_video.meta or {}).get("language")
+    if not resolved_source_lang:
+        resolved_source_lang = project.language or "en"
 
     brand_cfg, _ = await resolve_brand_block(db, persona)
     brand = brand_from_block(brand_cfg)
@@ -304,7 +492,6 @@ async def _materialize_quote_card_outputs(
     music_mood = str(brand_cfg.get("musicMood") or "calm")
 
     created_ids: list[UUID] = []
-    max_seq = int(node.seq)
     # Localized label via the runtime registry (matches select_clips / morph
     # paths — the label follows the run's pinned UI language). None when no
     # render_cls is registered or no project is attached (spec["summary"]
@@ -314,20 +501,24 @@ async def _materialize_quote_card_outputs(
     if not quotes:
         return []
 
-    # ----- 叠卡本体 (chain length >= 2, RECIPES §4.6.2 v3) ------------
-    # The whole chain is ONE card: ONE composite PNG, ONE clip Output,
-    # ONE render step.
+    # ----- 叠卡本体 (chain length >= 2, §2.2 frame cards + composite) ----
     if len(quotes) >= 2:
-        spec, err = await _build_stacked_quote_spec(
+        captions = _chain_captions(quotes, caption_mode)
+        anchor = quotes[0]
+        attribution = str(anchor.get("attribution") or "") or None
+        frame_urls, composite_url, spec, err = await _build_quote_chain_artifacts(
             project,
-            source_video,
             chain=quotes,
+            captions=captions,
             needs_speaker_frame=needs_speaker_frame,
+            attribution=attribution,
+            source_video=source_video,
+            images=images,
             target_language=target_language,
             brand=brand,
             brand_ref=brand_ref,
         )
-        if spec is None:
+        if composite_url is None:
             logger.warning(
                 "quote_card_chain_drop",
                 project_id=str(project.id),
@@ -336,129 +527,221 @@ async def _materialize_quote_card_outputs(
             )
             await db.flush()
             return []
-        # Build the canonical hook/attribution for the chain — the first
-        # entry is the anchor (the writer picked it as setup → payoff; we
-        # keep the first sentence as the canonical line for the canvas
-        # card heading).
-        anchor = quotes[0]
-        spec_dict = spec.model_dump(mode="json")
-        clip_output = Output(
+
+        # N frame-card Outputs — the composite's named parents.
+        frame_ids: list[UUID] = []
+        for i, (q, url) in enumerate(zip(quotes, frame_urls, strict=True)):
+            frame_output = Output(
+                project_id=project.id,
+                workflow_step_id=node.id,
+                type="quote_frame",
+                language=target_language,
+                provenance="real",
+                payload=QuoteFrame(
+                    quote=captions[i].primary,
+                    attribution=str(q.get("attribution") or ""),
+                    aspect="9:16",
+                ).model_dump(mode="json"),
+                files={"image": url},
+                source_ref={
+                    "quote_frame": True,
+                    "quote_index": i,
+                    "quotable_line_id": q.get("quotable_line_id"),
+                    **(
+                        {"asset_id": str(source_video.id)}
+                        if source_video is not None
+                        else {}
+                    ),
+                },
+            )
+            db.add(frame_output)
+            await db.flush()
+            frame_ids.append(frame_output.id)
+            created_ids.append(frame_output.id)
+
+        # The composite — one image Output, parents = the frame cards.
+        composite_output = Output(
             project_id=project.id,
             workflow_step_id=node.id,
-            type="clip",
+            type="quote_frame",
             language=target_language,
             provenance="real",
-            payload=ClipPayload(
-                hook=str(anchor.get("quote", "")),
-                title_options=(
-                    [str(anchor.get("attribution", ""))]
-                    if anchor.get("attribution")
-                    else []
-                ),
-                music_mood=music_mood,
-                duration=int(_QUOTE_CARD_CHAIN_DURATION_S),
+            payload=QuoteFrame(
+                quote=str(core_idea or anchor.get("quote") or ""),
+                attribution=str(anchor.get("attribution") or ""),
+                aspect="9:16",
             ).model_dump(mode="json"),
+            files={"image": composite_url},
             source_ref={
                 "quote_card": True,
                 "quote_chain": True,
                 "chain_length": len(quotes),
                 "needs_speaker_frame": needs_speaker_frame,
+                "parents": [str(fid) for fid in frame_ids],
+                "quotable_line_ids": [q.get("quotable_line_id") for q in quotes],
                 "core_idea": core_idea,
-                "asset_id": str(source_video.id),
-                "quotable_line_ids": [
-                    q.get("quotable_line_id") for q in quotes
-                ],
+                **(
+                    {"asset_id": str(source_video.id)}
+                    if source_video is not None
+                    else {}
+                ),
             },
-            render_spec=spec_dict,
-            render_status=RenderStatus.PENDING,
         )
-        db.add(clip_output)
+        db.add(composite_output)
         await db.flush()
-        created_ids.append(clip_output.id)
+        created_ids.append(composite_output.id)
 
-        db.add(
-            WorkflowStep(
-                run_id=run.id,
-                kind="render",
-                status="pending",
-                seq=max_seq + 1,
-                inputs=[str(node.id)],
-                spec={
-                    "output_id": str(clip_output.id),
-                    **({"summary": label} if label else {}),
+        # The motion MP4 — a CHILD of the composite, never the main
+        # promise. Only when an anchor asset exists (a pure-text chain
+        # ships the cards alone).
+        if spec is not None:
+            clip_output = Output(
+                project_id=project.id,
+                workflow_step_id=node.id,
+                type="clip",
+                language=target_language,
+                provenance="real",
+                payload=ClipPayload(
+                    hook=str(anchor.get("quote", "")),
+                    title_options=(
+                        [str(anchor.get("attribution", ""))]
+                        if anchor.get("attribution")
+                        else []
+                    ),
+                    music_mood=music_mood,
+                    duration=int(_QUOTE_CARD_CHAIN_DURATION_S),
+                ).model_dump(mode="json"),
+                source_ref={
+                    "quote_card": True,
+                    "quote_chain": True,
+                    "chain_length": len(quotes),
+                    "parents": [str(composite_output.id)],
+                    **(
+                        {"asset_id": str(source_video.id)}
+                        if source_video is not None
+                        else {}
+                    ),
                 },
+                render_spec=spec.model_dump(mode="json"),
+                render_status=RenderStatus.PENDING,
             )
-        )
-        await db.flush()
+            db.add(clip_output)
+            await db.flush()
+            created_ids.append(clip_output.id)
+
+            _add_render_step(
+                db, run=run, node=node, output_id=clip_output.id, label=label
+            )
+            await db.flush()
         return created_ids
 
     # ----- N=1: the same dish as a single card -------------------------
     quote = quotes[0]
-    spec = build_quote_card_spec(
-        source_video,
-        quote,
-        target_language=target_language,
-        source_language=str(resolved_source_lang),
-        caption_mode=caption_mode,
-        brand=brand,
-        brand_ref=brand_ref,
-        aspect="9:16",
-        caption_style_preset=cap_style,
-        caption_position=cap_pos,
+    if source_video is not None:
+        spec = build_quote_card_spec(
+            source_video,
+            quote,
+            target_language=target_language,
+            source_language=str(resolved_source_lang),
+            caption_mode=caption_mode,
+            brand=brand,
+            brand_ref=brand_ref,
+            aspect="9:16",
+            caption_style_preset=cap_style,
+            caption_position=cap_pos,
+            alt_language=quote_alt_language,
+        )
+        # spec=None = the quote lacks a time-bind — fall through to the
+        # frame card below instead of dropping the dish.
+        if spec is not None:
+            spec_dict = spec.model_dump(mode="json")
+            clip_output = Output(
+                project_id=project.id,
+                workflow_step_id=node.id,
+                type="clip",
+                language=target_language,
+                # Real — the kept video span IS the user's real footage. The
+                # caption text overlay is text, not synthesized visual; matches
+                # select_clips's provenance="real" semantics (slice-of-real).
+                provenance="real",
+                payload=ClipPayload(
+                    hook=str(quote.get("quote", "")),
+                    title_options=[str(quote.get("attribution", ""))] if quote.get("attribution") else [],
+                    music_mood=music_mood,
+                    duration=int((quote.get("source_end") or 0) - (quote.get("source_start") or 0)),
+                ).model_dump(mode="json"),
+                source_ref={
+                    "quote_card": True,
+                    "quote_index": 1,
+                    "asset_id": str(source_video.id),
+                    "start_seconds": quote.get("source_start"),
+                    "end_seconds": quote.get("source_end"),
+                    "quotable_line_id": quote.get("quotable_line_id"),
+                },
+                render_spec=spec_dict,
+                render_status=RenderStatus.PENDING,
+            )
+            db.add(clip_output)
+            await db.flush()
+            created_ids.append(clip_output.id)
+
+            _add_render_step(
+                db, run=run, node=node, output_id=clip_output.id, label=label
+            )
+            await db.flush()
+            return created_ids
+
+    # N=1 without a usable source video — one frame card (photo when the
+    # project has images, else the dark text-only card). 纯文稿路径不再
+    # 掉卡 (P2 宽槽, 2026-08-28).
+    captions = _chain_captions([quote], caption_mode)
+    photo_bytes = await _download_bytes(
+        stream_url(images[0].file_url) if images else None
     )
-    if spec is None:
-        # Quote lacks a time-bind (image-source fallback path) — the quotes
-        # output row still carries the writer's text; the canvas shows the
-        # text without a video card sibling.
+    frame_img = _open_image(photo_bytes) if photo_bytes else None
+    png = await asyncio.to_thread(
+        composite_frame_card,
+        frame=frame_img,
+        caption=captions[0],
+        attribution=str(quote.get("attribution") or "") or None,
+    )
+    digest = hashlib.md5(png).hexdigest()[:8]
+    try:
+        key = await save_output(
+            project.id, project.user_id, f"quote-frame-{digest}.png", png
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "quote_card_frame_drop",
+            project_id=str(project.id),
+            workflow_step_id=str(node.id),
+            reason=f"upload failed ({type(exc).__name__}: {exc})",
+        )
         return []
-    spec_dict = spec.model_dump(mode="json")
-    clip_output = Output(
+    url = output_url(key)
+    if not url:
+        return []
+    frame_output = Output(
         project_id=project.id,
         workflow_step_id=node.id,
-        type="clip",
+        type="quote_frame",
         language=target_language,
-        # Real — the kept video span IS the user's real footage. The
-        # caption text overlay is text, not synthesized visual; matches
-        # select_clips's provenance="real" semantics (slice-of-real).
         provenance="real",
-        payload=ClipPayload(
-            hook=str(quote.get("quote", "")),
-            title_options=[str(quote.get("attribution", ""))] if quote.get("attribution") else [],
-            music_mood=music_mood,
-            duration=int(quote.get("source_end", 0) - quote.get("source_start", 0)) or 0,
+        payload=QuoteFrame(
+            quote=captions[0].primary,
+            attribution=str(quote.get("attribution") or ""),
+            aspect="9:16",
         ).model_dump(mode="json"),
+        files={"image": url},
         source_ref={
-            "quote_card": True,
+            "quote_frame": True,
             "quote_index": 1,
-            "asset_id": str(source_video.id),
-            "start_seconds": quote.get("source_start"),
-            "end_seconds": quote.get("source_end"),
             "quotable_line_id": quote.get("quotable_line_id"),
         },
-        render_spec=spec_dict,
-        render_status=RenderStatus.PENDING,
     )
-    db.add(clip_output)
+    db.add(frame_output)
     await db.flush()
-    created_ids.append(clip_output.id)
-
-    # Render fan-out: the render worker picks the output row by
-    # render_status=PENDING; the WorkflowStep is the UI progress mirror
-    # (mirrors select_clips's contract verbatim).
-    db.add(
-        WorkflowStep(
-            run_id=run.id,
-            kind="render",
-            status="pending",
-            seq=max_seq + 1,
-            inputs=[str(node.id)],
-            spec={
-                "output_id": str(clip_output.id),
-                **({"summary": label} if label else {}),
-            },
-        )
-    )
-    await db.flush()
+    created_ids.append(frame_output.id)
     return created_ids
 
 
@@ -572,6 +855,25 @@ class DerivativeWriterNode(NodeBase):
         # to call the translator for quote_alt. None for chains that don't
         # produce captions (write_post / write_carousel / write_article).
         generation_context.caption_mode = ctx.get("caption_mode")
+        # quote-cards §2.3/D4 (2026-08-28): resolve the run's language pair
+        # once — the translator (quotes enrich) reads quote_alt_language,
+        # the materializer reads source_language, and the bilingual →
+        # source_only narrowing (no distinct alt language exists) is
+        # stamped HERE so every downstream consumer agrees.
+        if derivative_type == DerivativeType.QUOTES:
+            resolved_source = ctx.get("source_language") or await _project_source_language(
+                db, project
+            )
+            alt_language = derive_quote_alt_language(
+                resolved_source,
+                target_language,
+                project.language,
+                ctx.get("target_language"),
+            )
+            generation_context.source_language = resolved_source
+            generation_context.quote_alt_language = alt_language
+            if generation_context.caption_mode == "bilingual" and alt_language is None:
+                generation_context.caption_mode = "source_only"
         understanding, storyboard = await _load_director_outputs(db, node)
 
         # Narrow the storyboard to THIS slot: same-type sibling slots (e.g. an
@@ -609,8 +911,10 @@ class DerivativeWriterNode(NodeBase):
 
         # Idempotency, sibling-safe (per-slot fan-out): same-type outputs produced
         # by THIS run's same-kind nodes are their own slots' products — only prior
-        # products (other runs' steps, or step-less rows) are cleared. Two sibling
-        # write_post nodes can therefore never delete each other's output.
+        # products (other runs' steps, step-less rows, or THIS step's own prior
+        # attempt — a verify bounce re-runs the same WorkflowStep row, and its
+        # products are stale by definition) are cleared. Two sibling write_post
+        # nodes can therefore never delete each other's output.
         sibling_step_ids = (
             select(WorkflowStep.id)
             .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
@@ -622,10 +926,36 @@ class DerivativeWriterNode(NodeBase):
                 Output.type == derivative_type.value,
                 or_(
                     Output.workflow_step_id.is_(None),
+                    Output.workflow_step_id == node.id,
                     Output.workflow_step_id.notin_(sibling_step_ids),
                 ),
             )
         )
+        if derivative_type == DerivativeType.QUOTES:
+            # quote-cards §2.2 byproducts (frame cards + the motion clip)
+            # die with their producer: a quotes re-run replaces the whole
+            # family. Scope = rows produced by write_quotes steps OUTSIDE
+            # this run, plus THIS step's own prior attempt (a verify bounce
+            # re-runs the same step row — without this clause, bounced
+            # families stacked on the canvas, 2026-08-28 root-fix).
+            # select_clips' own clip rows are never touched (their
+            # workflow_step_id belongs to a different kind).
+            quotes_step_ids = (
+                select(WorkflowStep.id)
+                .where(WorkflowStep.kind == "write_quotes")
+                .scalar_subquery()
+            )
+            await db.execute(
+                delete(Output).where(
+                    Output.project_id == project.id,
+                    Output.type.in_(["quote_frame", "clip"]),
+                    Output.workflow_step_id.in_(quotes_step_ids),
+                    or_(
+                        Output.workflow_step_id == node.id,
+                        Output.workflow_step_id.notin_(sibling_step_ids),
+                    ),
+                )
+            )
 
         output = Output(
             project_id=project.id,
@@ -662,8 +992,9 @@ class DerivativeWriterNode(NodeBase):
                     persona=persona,
                     quotes=quotes,
                     target_language=target_language,
-                    source_language=(ctx.get("source_language") or None),
-                    caption_mode=ctx.get("caption_mode"),
+                    source_language=generation_context.source_language,
+                    caption_mode=generation_context.caption_mode,
+                    quote_alt_language=generation_context.quote_alt_language,
                     needs_speaker_frame=needs_speaker_frame,
                     core_idea=(
                         content.get("core_idea") if isinstance(content, dict) else None

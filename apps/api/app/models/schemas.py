@@ -1187,6 +1187,24 @@ class Quotes(BaseModel):
     quotes: list[Quote] = Field(default_factory=list)
 
 
+class QuoteFrame(BaseModel):
+    """Frame-card image payload (quote-cards §2.2, 2026-08-28).
+
+    A quote_frame is an IMAGE product (PNG on ``files.image``), never a
+    render job — the frame card (one chain entry: curated frame + single
+    caption block) and the chain composite (N strips, forms A/B) share
+    the type; ``source_ref.quote_chain`` distinguishes the composite and
+    ``source_ref.parents`` names its frame-card parents. ``aspect`` feeds
+    OutputResponse._derive_aspect for canvas node sizing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    quote: str = ""
+    attribution: str = ""
+    aspect: str | None = None
+
+
 class CarouselSlide(BaseModel):
     """One slide of a social carousel (a swipeable narrative)."""
 
@@ -1510,6 +1528,17 @@ class GenerationContext(BaseModel):
     # caption work). Threaded from run.context.caption_mode by the
     # derivative dispatch.
     caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
+    # 2026-08-28 P2 (quote-cards §2.3): the run's resolved language pair.
+    # ``source_language`` = the ASR-detected language of the source
+    # material (asset.meta["language"], project.language fallback);
+    # ``quote_alt_language`` = the derived SECOND caption language for
+    # bilingual mode (derive_quote_alt_language — user-named target →
+    # project/UI locale → run target, first that ≠ source; None when no
+    # distinct alt exists, in which case bilingual is meaningless and the
+    # gate stamps source_only). Threaded by DerivativeWriterNode.run so
+    # the quotes enrich step never re-derives.
+    source_language: str | None = None
+    quote_alt_language: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1848,6 +1877,7 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "clip": ClipPayload,
     "post": Post,
     "quotes": Quotes,
+    "quote_frame": QuoteFrame,
     "carousel": CarouselResponse,
     "article": Article,
     "material_understanding": MaterialUnderstanding,

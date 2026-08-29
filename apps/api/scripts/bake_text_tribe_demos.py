@@ -1,22 +1,18 @@
-"""Bake the text-tribe recipe demos (social-post / quote-cards / carousel)
-through the REAL pipeline (2026-08-24 三卡点亮批).
+"""Bake the text-tribe recipe demos (social-post / carousel) through the
+REAL pipeline (2026-08-24 三卡点亮批; 2026-08-28 收窄：quote-cards 由
+``bake_quote_chain.py`` 的 v3 形态矩阵烘焙接管——叠卡本体后示例是
+compositor 的合成 PNG 家族，不再是 writer PNG 海报).
 
-Each card is one writer tool (write_post / write_quotes / write_carousel)
-driven off the same source — demo/uploads/demo-article.md — and harvests
-the writer's Output row into demo/outputs with content-hashed keys. The
-quote-card additionally bakes the writer's first PNG (the run-time
-`_save_quote_card_image` lands under the project's own output prefix —
-the bake re-uploads it to the protected demo/ tree so the card points to
-the shared demo/ root).
+Each card is one writer tool (write_post / write_carousel) driven off the
+same source — demo/uploads/demo-article.md — and harvests the writer's
+Output row into demo/outputs with content-hashed keys.
 
 Each bake creates its own Project + Persona + Asset, runs the writer
-through the live pipeline (worker does the LLM call + image generation),
-then cleans up its scaffolding in FK order (the persistent BAKE_EMAIL
-user is shared).
+through the live pipeline (worker does the LLM call), then cleans up its
+scaffolding in FK order (the persistent BAKE_EMAIL user is shared).
 
 Usage:
     uv run python scripts/bake_text_tribe_demos.py social-post
-    uv run python scripts/bake_text_tribe_demos.py quote-cards
     uv run python scripts/bake_text_tribe_demos.py carousel
     uv run python scripts/bake_text_tribe_demos.py all
     uv run python scripts/bake_text_tribe_demos.py <card> --harvest <project_id>
@@ -59,7 +55,7 @@ from app.models.tables import (  # noqa: E402
     WorkflowStep,
 )
 from app.pipeline.orchestrator import TaskSpec, create_run  # noqa: E402
-from app.providers.storage import _get_s3_client, public_url, read  # noqa: E402
+from app.providers.storage import _get_s3_client, public_url  # noqa: E402
 from app.config import settings  # noqa: E402
 
 _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
@@ -84,20 +80,6 @@ CARDS = {
         "output_stem": "post",
         "label_key": "post_output",
         "kind": "image",  # overlay preview tile — JSON payload reads as a doc preview
-        "needs_poster": False,
-    },
-    "quote-cards": {
-        "tool": "write_quotes",
-        "tool_params": {"language": "en", "count": 4},
-        "instruction": (
-            "Pull 4 shareable quote cards from my keynote — hook first, "
-            "each standalone."
-        ),
-        "language": "en",
-        "output_stem": "quotes",
-        "label_key": "quotes_output",
-        "kind": "image",
-        "needs_poster": True,  # the writer's first-card PNG
     },
     "carousel": {
         "tool": "write_carousel",
@@ -110,7 +92,6 @@ CARDS = {
         "output_stem": "carousel",
         "label_key": "carousel_output",
         "kind": "image",
-        "needs_poster": False,
     },
 }
 
@@ -186,10 +167,10 @@ async def _cleanup(db, project_id) -> None:
 
 
 async def _harvest(db, project, card: str, keep: bool) -> None:
-    """Read the writer's Output row, upload JSON to demo/outputs (and the
-    quote-card PNG when present), print the recipes.py ExampleOutput line."""
+    """Read the writer's Output row, upload the payload JSON to
+    demo/outputs, print the recipes.py ExampleOutput line."""
     cfg = CARDS[card]
-    output_type = cfg["tool"].replace("write_", "")  # post / quotes / carousel
+    output_type = cfg["tool"].replace("write_", "")  # post / carousel
     async with AsyncSessionLocal() as s:
         outputs = (
             await s.execute(
@@ -217,34 +198,9 @@ async def _harvest(db, project, card: str, keep: bool) -> None:
     url = await _put_demo(cfg["output_stem"], ".json", json_bytes, "application/json")
     print(f"harvested JSON {len(json_bytes)} bytes from output {out.id}", flush=True)
 
-    poster_url: str | None = None
-    if cfg["needs_poster"]:
-        # files.image is the public URL (output_url() wraps the key at write
-        # time, N-30 storage seam); read() needs a bare key — strip the
-        # public URL prefix.
-        raw_image = (out.files or {}).get("image")
-        if not raw_image:
-            raise SystemExit(
-                f"quote-cards needs the writer's first-card PNG, but output "
-                f"{out.id} has no files.image — image generation failed"
-            )
-        public_prefix = (settings.s3_public_url or "").rstrip("/") + "/"
-        image_key = raw_image[len(public_prefix):] if raw_image.startswith(public_prefix) else raw_image
-        # The writer's PNG was saved to the project's output prefix (not
-        # demo/) — copy it under demo/outputs/<stem>-poster-<hash>.png so
-        # the gallery card points at the shared demo root (the recipe
-        # asset layer).
-        png = await read(image_key)
-        (tmp / f"{cfg['output_stem']}-poster.png").write_bytes(png)
-        poster_url = await _put_demo(
-            f"{cfg['output_stem']}-poster", ".png", png, "image/png"
-        )
-        print(f"harvested PNG {len(png)} bytes from {image_key}", flush=True)
-
     print("\n--- recipes.py example_outputs ---")
-    poster_field = f'poster_url="{poster_url}", ' if poster_url else ""
     print(
-        f'ExampleOutput(kind="{cfg["kind"]}", url="{url}", {poster_field}'
+        f'ExampleOutput(kind="{cfg["kind"]}", url="{url}", '
         f'label_key="{cfg["label_key"]}"),'
     )
     print(f"\nlocal copy: {tmp}")

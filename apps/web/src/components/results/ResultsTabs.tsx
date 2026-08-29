@@ -6,6 +6,7 @@ export type ResultsTab =
   | "clips"
   | "post"
   | "quotes"
+  | "quoteFrame"
   | "carousel"
   | "article"
 
@@ -22,6 +23,7 @@ const TABS: { key: ResultsTab; labelKey: string }[] = [
   { key: "clips", labelKey: "results.tabs.clips" },
   { key: "post", labelKey: "results.tabs.post" },
   { key: "quotes", labelKey: "results.tabs.quotes" },
+  { key: "quoteFrame", labelKey: "results.tabs.quoteFrame" },
   { key: "carousel", labelKey: "results.tabs.carousel" },
   { key: "article", labelKey: "results.tabs.article" },
 ]

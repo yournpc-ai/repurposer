@@ -49,6 +49,7 @@
 | 最优轮回退 | best-not-last | 逐轮独立评分（同一检查矩阵），回归轮恢复 `spec.rounds` 快照里的最优早轮（新 id 重插 / targeted run 原位回滚），"末轮即最终"被禁 | 不是版本树（只存轮快照，无分支语义） |
 | 钩子预览闸 | hook preview gate（`pipeline/hook_gate.py`，kind `hook_gate` + `release_renders`） | 期 4 落地的产品面新闸（§2.5）：review 档 + 单条纯 select_clips 链（无 modifier）编译注入 `select_clips → verify → hook_gate → release_renders`；select_clips 抑制渲染扇出（render_status NULL），闸渲染每条 ≤5s 低清钩子预览（渲染服务黑盒 `preview` 参数，ADR-016 不破）落 `files.hook_preview`，dock 提问（`AskPayload.previews`）挂起；确认（默认，TTL 自动放行）/ 调整（dock 内联换图锚 `swap_hook_shot` + 调尾切点 `set_trim`，走用户可调 ops 端点）/ 降级（标题卡开场 = set_title ops，期 3 升级同机构）三路径；弃做 = 级联跳过 release，短片留 spec 不渲染 | 不是全量预览闸（每变体全预览 = 评审疲劳）；预览不是契约变体——黑盒内部参数 |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
+| 帧卡 | `quote_frame`（output type） | 金句链的逐条产物 PNG（帧底/照片底/深色底 + 单条字幕块）与链合成卡共用的产物 type（quote-cards §2.2）；合成卡以 `source_ref.quote_chain` 标记、以 `source_ref.parents` 指认帧卡父级；**图片产物**——无 render_spec、无渲染管线，zh 界面词「帧卡」 | 不是 render 任务；不是 quotes 行（quotes = 写手文本产物，帧卡 = 烘焙图） |
 | 导演 | director | 素材理解 + 分镜表的产出者（两步走，N-17） | — |
 | 精修 | refine | Edit / Chat / Regenerate 三角的统称 | — |
 | 提及 | mention | 对话中的 @ 实体引用 | 不是 reference、不是 entity |
@@ -89,6 +90,8 @@
 | 提及注册表 | `MENTION_REGISTRY` | 前端提及类型注册表（icon / i18n / 候选源）；picker 与 chip 只读注册表，新类型 = 一条注册项 | 不是 switch 分支、不是插件系统 |
 | 配方注册表 | `RECIPE_REGISTRY` | 服务端配方静态注册表（随代码部署）：卡面数据（input_slots / status / tags）+ 示例素材/成片 + flow 图 + 预设工具链（`tasks`——启动对账自检的声明形态，不进请求路径，配方 = 提示词，ADR-040/043） | 不是前端数据文件、不是表 |
 | 输入槽位 | `input_slots` | 配方的类型化素材要求（素材类型 + 是否必填）；发射区 Input 小节（前端）+ 启动自检输入画像（服务端）双消费者 | 不是上传组件 |
+| 宽槽 | `any_of`（`InputSlot.any_of`） | 输入槽位的任选形态（quote-cards P2，ADR-048 合成类宽槽任选+可空）：所列素材类型**任一覆盖即过**；与 `type` 互斥（窄槽），`accepted_types` 是全栈统一读取口 | 不是多槽并列；不是类型数组裸写 |
+| 父级指认 | `parents`（`source_ref.parents`） | 产物→产物的 N→1 派生指针（quote-cards §2.2）：链合成卡指认其帧卡父级、动效 MP4 指认合成卡；画布血缘边的服务器事实源 | 1→1 派生仍走 `derived_from_output_id`（fork 族），两词不混 |
 | 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
 | 依赖边 | dependency edge | FlowView 边语义之二：step 间工艺顺序（step `inputs`） | 不是血缘边 |

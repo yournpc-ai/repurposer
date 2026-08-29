@@ -381,6 +381,7 @@ def build_quote_card_spec(
     aspect: str = "9:16",
     caption_style_preset: str = "clean-bottom",
     caption_position: Any = None,
+    alt_language: str | None = None,
 ) -> ClipSpec | None:
     """Build a 9:16 quote-card clip-spec from a Quote + the source video.
 
@@ -464,13 +465,19 @@ def build_quote_card_spec(
     # directly so the renderer has a single cue to render as the main
     # line. None / unspecified defaults to bilingual if the runner filled
     # quote_alt, else source_only.
+    #
+    # D5 双译本收窄 (2026-08-28): the on-screen translation is ALWAYS
+    # ``quote_alt`` (the translator's product) — the writer's own ``quote``
+    # is hook/metadata and never a second translation on screen; when the
+    # translation is missing the card degrades to the source line, never
+    # to the writer's re-composition.
     main_text = (
         quote.get("quote_source")
         or quote.get("quote")
         or ""
     )
     if caption_mode == "target_only":
-        caption_track_text = quote.get("quote") or main_text
+        caption_track_text = quote.get("quote_alt") or main_text
         caption_lang = target_language
         translation_track = []
     elif caption_mode in ("bilingual", "source_only"):
@@ -484,7 +491,11 @@ def build_quote_card_spec(
                         start=start,
                         end=end,
                         text=str(alt),
-                        lang=target_language,
+                        # §2.3/D4: the alt line's language is the DERIVED
+                        # second language (user target → project locale →
+                        # run target, first ≠ source), not blindly the
+                        # output's target language.
+                        lang=alt_language or target_language,
                     )
                 ]
                 if alt

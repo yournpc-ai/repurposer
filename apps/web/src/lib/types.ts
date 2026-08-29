@@ -99,6 +99,10 @@ export interface OutputPayload {
   title?: string
   // quotes
   quotes?: { quote: string; attribution: string }[]
+  // quote_frame (single card: quote + attribution mirror the baked PNG's
+  // text; aspect pin feeds the server-derived Output.aspect)
+  quote?: string
+  attribution?: string
   // carousel
   slides?: { title: string; body?: string }[]
   // article extras
@@ -118,6 +122,15 @@ export interface OutputSourceRef {
   start_seconds?: number | null
   end_seconds?: number | null
   asset_id?: string | null
+  /** Lineage (quote-cards §2.2, 2026-08-28): parent Output ids this
+   * product derives from — the chain composite names its frame cards,
+   * the motion clip names the composite. The flow canvas draws N→1
+   * lineage edges off this. */
+  parents?: string[]
+  /** quote_frame / quote_chain markers ride source_ref verbatim — the
+   * canvas distinguishes the composite (quote_chain) from frame cards. */
+  quote_frame?: boolean
+  quote_chain?: boolean
 }
 
 export interface OutputPublishing {
