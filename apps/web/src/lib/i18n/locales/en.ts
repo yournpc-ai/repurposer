@@ -398,7 +398,7 @@ const en = {
     // per-modality assignment, read-only — no selectable rows while each
     // modality has exactly one provider.
     modelsRows: {
-      copy: "Copy",
+      copy: "Writing",
       voice: "Voice",
       captions: "Captions",
       music: "Music",

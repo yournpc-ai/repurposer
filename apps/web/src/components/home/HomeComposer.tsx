@@ -379,10 +379,10 @@ export function HomeComposer({
                           variant="ghost"
                           size="icon"
                           aria-label={t("composer.assets")}
-                          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                           tabIndex={dockP > 0.5 ? 0 : -1}
                         >
-                          <Paperclip className="size-5" />
+                          <Paperclip className="size-4.5" />
                         </Button>
                       }
                     />
@@ -455,9 +455,14 @@ export function HomeComposer({
             function tooltip, completely STATELESS — no count, no Auto/name
             value text; the selection is read inside each frosted panel (the
             staged files themselves also ride the chips band, unchanged).
-            The pr-12 reserves the send anchor's space. No model control
-            (2026-08-22): the pipeline assigns models per modality, so the
-            composer can't decide — or honestly display — the final model. */}
+            The pr-12 reserves the send anchor's space. The ghost circle
+            buttons mirror Lovart's measured anatomy: 32px button (h-8 w-8)
+            + 18px glyph (size-4.5) — one register below the 36px send
+            anchor. The left group's -ml-[7px] pulls the first one 7px left
+            so its GLYPH's left edge lands on the editor text's left edge
+            (the 18px glyph centers inside the 32px button with a 7px
+            offset — without the bleed the icons read indented under the
+            text). */}
         <InputGroupAddon
           align="block-end"
           className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
@@ -465,7 +470,7 @@ export function HomeComposer({
           onClick={focusEditor}
         >
           <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-1">
+            <div className="-ml-[7px] flex items-center gap-1">
               <Popover open={assetsOpen} onOpenChange={setAssetsOpen}>
                 <Tooltip>
                   <TooltipTrigger
@@ -476,10 +481,10 @@ export function HomeComposer({
                             variant="ghost"
                             size="icon"
                             aria-label={t("composer.assets")}
-                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                             data-tour="composer-assets"
                           >
-                            <Paperclip className="size-5" />
+                            <Paperclip className="size-4.5" />
                           </Button>
                         }
                       />
@@ -502,10 +507,10 @@ export function HomeComposer({
                             variant="ghost"
                             size="icon"
                             aria-label={t("composer.persona")}
-                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                             data-tour="composer-persona"
                           >
-                            <User className="size-5" />
+                            <User className="size-4.5" />
                           </Button>
                         }
                       />
@@ -544,9 +549,9 @@ export function HomeComposer({
                           variant="ghost"
                           size="icon"
                           aria-label={t("composer.models")}
-                          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                         >
-                          <Box className="size-5" />
+                          <Box className="size-4.5" />
                         </Button>
                       }
                     />

@@ -232,10 +232,15 @@ function Home() {
               {t("recipes.sectionTitle")}
             </h2>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {/* Tour step 4 anchors the FIFTH card (row-2 lead on lg): the
+                  tour's scrollIntoView block:"center" then centers it, so the
+                  grid fills the viewport under the docked composer bar at ANY
+                  screen height — anchoring card 0 over-scrolled (2026-08-31
+                  user ruling). Fewer than 5 cards → the step auto-skips. */}
               {cards.map((card, index) => (
                 <div
                   key={card.id}
-                  data-tour={index === 0 ? "home-recipes" : undefined}
+                  data-tour={index === 4 ? "home-recipes" : undefined}
                 >
                   <RecipeCardView
                     card={card}

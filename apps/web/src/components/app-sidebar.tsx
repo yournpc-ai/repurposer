@@ -90,19 +90,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
-      {/* The rail's 60px logo strip (py-4) — there is no global top bar
-          (ADR-046 D5); utilities live in the account console, and the
-          notification bell floats at the content area's top-right. */}
-      <SidebarHeader className="gap-3 p-3 py-4 group-data-[state=collapsed]:items-center">
-        <div className="flex w-full items-center justify-between group-data-[state=collapsed]:justify-center">
-          <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
+      {/* Header renders ONLY in the expanded (mobile off-canvas) form: logo
+          lockup + toggle. The collapsed PC rail carries no header — there,
+          the LogoMark is the first member of the content stack below, one
+          group with the menu (Lovart nav-bar-next-top anatomy, 2026-08-31).
+          There is no global top bar (ADR-046 D5); utilities live in the
+          account console, and the notification bell floats at the content
+          area's top-right. */}
+      <SidebarHeader className="gap-3 p-3 py-4 group-data-[state=collapsed]:md:hidden">
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-2">
             <LogoMark />
             <span className="font-semibold tracking-tight">Repurposer</span>
           </div>
-          {/* PC collapsed rail: the toggle is retired (PC stays icon-only,
-              2026-08-02) — the LogoMark takes its slot. Mobile keeps the
-              toggle below; its off-canvas logic is untouched. */}
-          <LogoMark className="hidden group-data-[state=collapsed]:md:block" />
           <Button
             variant="ghost"
             size="icon"
@@ -116,10 +116,14 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="gap-4 px-2">
-        {/* Nav items top-align right under the header in both forms — only
-            the user footer is pinned to the bottom (2026-08-30 ruling; the
-            collapsed rail's vertical centering is retired). */}
+      <SidebarContent className="gap-4 px-2 group-data-[state=collapsed]:gap-5 group-data-[state=collapsed]:pt-4">
+        {/* Collapsed rail = ONE top stack (Lovart nav-bar-next-top anatomy
+            2026-08-31, container 36×216 exactly): LogoMark (36px, the rail
+            register) as first member, stack gap-5 (20px) down to the menu
+            group, menu items internally gap-1 (40px pitch). The logo is NOT
+            a separate header group. Nav items top-align under it — only the
+            user footer is pinned to the bottom (2026-08-30 ruling). */}
+        <LogoMark className="hidden self-center group-data-[state=collapsed]:md:grid" />
         <SidebarGroup className="px-0 py-0">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
