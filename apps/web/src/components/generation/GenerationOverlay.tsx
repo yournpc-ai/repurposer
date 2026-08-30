@@ -136,6 +136,11 @@ export interface InferredIntent {
   answer: string | null
   tasks: TaskItem[]
   specific_instruction: string | null
+  /** Caption-language policy for captioned chains (write_quotes / clips),
+   * answered via the dock's caption question. The panel never edits it —
+   * it only round-trips so Start doesn't drop the user's choice (the
+   * server treats a missing mode as "not mentioned", never "retracted"). */
+  caption_mode?: "bilingual" | "source_only" | "target_only" | null
 }
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
@@ -321,6 +326,8 @@ export function normalizeIntent(raw: unknown): InferredIntent {
     answer: (data.answer as string | null) ?? null,
     tasks,
     specific_instruction: (data.specific_instruction as string | null) ?? null,
+    caption_mode:
+      (data.caption_mode as InferredIntent["caption_mode"]) ?? null,
   }
 }
 
@@ -1860,6 +1867,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 target_language?: string
                 dub_languages?: string[]
                 caption_languages?: string[]
+                caption_mode?: "bilingual" | "source_only" | "target_only" | null
                 aspect?: "9:16" | "1:1" | "16:9" | null
                 caption_bilingual?: boolean
                 instruction?: string | null
@@ -1881,6 +1889,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   language: runCtx.target_language,
                   dub_languages: runCtx.dub_languages,
                   caption_languages: runCtx.caption_languages,
+                  caption_mode: runCtx.caption_mode,
                   aspect: runCtx.aspect,
                   caption_bilingual: runCtx.caption_bilingual,
                   specific_instruction: runCtx.instruction,

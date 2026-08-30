@@ -393,9 +393,11 @@ def build_quote_card_spec(
     of frame).
 
     Returns ``None`` when the source has no ASR words OR the quote lacks a
-    time-bind (no ``source_start``/``source_end``). The image-source fallback
-    (no source video) is a future follow-up — for now the recipe requires
-    video + transcript (Phase 4 recipe registry hard-enforces both).
+    time-bind (no ``source_start``/``source_end``). ``None`` is not an
+    error: the dispatcher falls back to a still frame card (P2 wide slot,
+    2026-08-28 — the recipe accepts ``any_of=["video","images","transcript"]``,
+    so a photo-bottom or dark text-only card ships when no usable video
+    span exists; see ``_materialize_quote_card_outputs``).
 
     The kept span = the ASR-cued window of the picked line, padded by
     ``_QUOTE_CARD_PRE_PAD_S`` / ``_QUOTE_CARD_POST_PAD_S`` for breathing room

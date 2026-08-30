@@ -1334,6 +1334,71 @@ async def s49_chat_path_caption_gate(ctx: Ctx) -> None:
     check(mode is not None, "B: no write_quotes run after 3 turns", tools_seen)
     check(mode == "source_only", "B: run.context.caption_mode", mode)
 
+    # C) 答 → 追问 → Start（2026-08-29 追问丢答 root-fix 回归座）：the
+    # answered mode must survive a refinement turn between the answer and
+    # Start — the plan path overwrites pending_intent wholesale with the
+    # fresh verdict (caption_mode=None whenever the turn doesn't re-mention
+    # it), which used to drop the answer on the floor: the run started
+    # single-language and the NEXT turn re-asked the already-answered
+    # question. Now the stash is inherited (fresh LLM-set > fresh keyword
+    # > stashed answer).
+    pid_c = await ctx.new_project("S49-C caption answer survives refinement")
+    await set_project_language(pid_c, "de")
+    await seed_asset(pid_c, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+                     extracted_text=material, meta={"language": "en"})
+    docked_c: dict | None = None
+    for prompt in ("make quote cards from the video",
+                   "pull the keynote's sharpest quotes into cards",
+                   "the quote cards, please"):
+        turn = await ctx.chat(pid_c, prompt)
+        q = turn["assistant_message"].get("question")
+        if q and q.get("kind") == "choice" and any(
+            o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
+        ):
+            docked_c = turn
+            break
+    check(docked_c is not None,
+          "C: the caption question docks on the plan path")
+    ans = await ctx.answer(docked_c["assistant_message"]["id"],
+                           {"kind": "option", "option_id": "caption_mode_bilingual"})
+    check(ans.status_code in (200, 201), "C: caption answer accepted", ans.text)
+    book_qid: str | None = None
+    reasked: dict | None = None
+    for nudge in ("make it 3 cards instead",
+                  "change that to 3 quote cards",
+                  "actually, only 3 cards"):  # 修订措辞 — 散文确认会绕过追问路径
+        turn = await ctx.chat(pid_c, nudge)
+        q = turn["assistant_message"].get("question")
+        if q and any(o.get("id", "").startswith("caption_mode_")
+                     for o in q.get("options", [])):
+            reasked = q  # the bug: the answered question is re-asked
+            break
+        book = await pending_book(ctx, pid_c)
+        check(((book or {}).get("intent") or {}).get("caption_mode") == "bilingual",
+              "C: the refinement turn keeps the answered caption_mode", book)
+        if is_task_book_dock(turn["assistant_message"]):
+            book_qid = turn["assistant_message"]["id"]
+            break
+    check(reasked is None, "C: the answered question is never re-asked", reasked)
+    check(book_qid is not None, "C: a task book docks after the refinement")
+    # Start THROUGH THE PANEL: the frontend's normalize strips fields it
+    # doesn't edit, so its Start payload carries the book's intent minus
+    # caption_mode — the server must inherit the answered mode from the
+    # stored pending intent ("not mentioned" ≠ "retracted", 2026-08-29).
+    book = await pending_book(ctx, pid_c)
+    panel_intent = dict((book or {}).get("intent") or {})
+    check(bool(panel_intent), "C: pending book carries an intent", book)
+    panel_intent.pop("caption_mode", None)
+    res = await ctx.answer(book_qid, {"kind": "start", "intent": panel_intent})
+    check(res.status_code == 200, "C: task book start accepted", res.text)
+    rid_c = res.json()["answered_question"].get("workflow_run_id")
+    check(rid_c, "C: run id on the answered book", res.json())
+    runs = await ctx.client.get(f"/projects/{pid_c}/runs")
+    born_c = next((r for r in runs.json() if r.get("id") == rid_c), None) or {}
+    check((born_c.get("context") or {}).get("caption_mode") == "bilingual",
+          "C: run.context.caption_mode survives answer → refine → Start",
+          born_c.get("context"))
+
 
 # ---- Scenarios: 契约（dock 生命周期 / answer 端点 / 重建） --------------------
 

@@ -29,6 +29,8 @@ vertical stack of caption strips:
 
 Each selected sentence comes from the **Quotable Lines** list below — pick
 by id, the runner snaps the timestamp and asset location off the picked row.
+When the list is empty (no source material attached), compose the chain from
+the persona's expertise and the user's instruction instead.
 
 ## Material Understanding
 
@@ -96,7 +98,7 @@ Please output only valid JSON:
     {
       "quote": "sentence text in target_language (mirror of the picked id's text)",
       "attribution": "Persona Name | Event",
-      "quotable_line_id": <int, the id from the list above>
+      "quotable_line_id": <int, the id from the list above; null when the list is empty>
     }
     // ... N entries, N matches how many sentences the core idea needs
   ]
@@ -107,5 +109,8 @@ Requirements:
   by topic complexity; you may emit fewer than {{ count }} if the topic
   reads tight, but never more than {{ count }})
 - Use {{ context.target_language }} language for the output
-- ALWAYS set `quotable_line_id` to the row you picked (the runner rejects null)
+- Set `quotable_line_id` to the id of the row you picked; when the Quotable
+  Lines list is empty (no source material), set it to null — the runner
+  tolerates null and renders a text card without a snapped timestamp.
+  Never invent an id.
 - Output JSON only

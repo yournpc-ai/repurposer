@@ -43,7 +43,7 @@ export function ArticleCard({ output, onRegenerate }: ArticleCardProps) {
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between">
-        <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
+        <Badge variant="outline" className="rounded-md">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}

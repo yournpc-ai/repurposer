@@ -394,16 +394,48 @@ def _recover_caption_mode_from_answer(message: Message) -> str | None:
     return None
 
 
+def _resolved_caption_mode(project: Project) -> str | None:
+    """The answered caption mode stashed on the pending intent, if any.
+
+    The answer fast path writes it onto ``pending_intent.intent.caption_mode``
+    and every consumption site (plan-turn overwrite, propose-turn run) must
+    INHERIT it — a fresh verdict's ``caption_mode=None`` is "not mentioned
+    this turn", never "the user retracted the answer".
+    """
+    pending = project.pending_intent if isinstance(project.pending_intent, dict) else None
+    if not pending:
+        return None
+    intent = pending.get("intent") or {}
+    mode = intent.get("caption_mode")
+    return str(mode) if mode else None
+
+
 def _has_resolved_caption_mode(project: Project) -> bool:
     """A caption-mode question was already answered and the answer is
     reflected in the stored pending_intent — the next plan turn re-uses it
     instead of re-docking the question (the user has spoken). Mirrors the
     pending_intent's role for the task book (CHAT_ARCH §3)."""
-    pending = project.pending_intent if isinstance(project.pending_intent, dict) else None
-    if not pending:
-        return False
-    intent = pending.get("intent") or {}
-    return bool(intent.get("caption_mode"))
+    return _resolved_caption_mode(project) is not None
+
+
+async def _derive_chat_caption_mode(
+    db: AsyncSession, project: Project, tasks: list, text: str
+) -> str | None:
+    """The propose path's caption-mode derivation for an immediate run:
+    fresh keyword > stashed answer > source_only when no distinct alt
+    language exists (§2.3/D4 — the question would be theatre). Returns
+    None when the chain carries no captioned task.
+
+    The single funnel for every chat-path run birth (2026-08-29): the
+    main dispatch AND both LLM-repair re-dispatches — a repaired
+    task_list is the same run birth and must not lose the mode (the
+    repair sites used to call ``_create_run_from_tasks`` bare)."""
+    if not _needs_caption_mode_question(tasks):
+        return None
+    mode = _detect_caption_mode(text) or _resolved_caption_mode(project)
+    if mode is None and not await _caption_choice_is_meaningful(db, project, tasks):
+        mode = "source_only"
+    return mode
 
 
 def _is_caption_mode_question(question: AskPayload) -> bool:
@@ -1015,6 +1047,20 @@ async def answer_question(
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
             intent = data.intent or pending.intent
+            # caption_mode is intent metadata the review panel never edits —
+            # a panel-submitted intent without it (client-side normalize may
+            # strip fields it doesn't know) says "not mentioned", never
+            # "retracted". Inherit the answered mode from the stored pending
+            # intent (2026-08-29 — the same doctrine as the plan-turn
+            # overwrite fix; without it, answer→Start via the PANEL dropped
+            # the mode even though answer→Start via prose kept it).
+            if (
+                intent.caption_mode is None
+                and pending.intent.caption_mode is not None
+            ):
+                intent = intent.model_copy(
+                    update={"caption_mode": pending.intent.caption_mode}
+                )
             tasks = list(intent.tasks)
             if not tasks:
                 raise HTTPException(
@@ -1546,6 +1592,18 @@ async def _plan_turn(
     keyword_mode = _detect_caption_mode(text)
     if keyword_mode is not None and intent.caption_mode is None:
         intent = intent.model_copy(update={"caption_mode": keyword_mode})
+    # Inherit the answered caption mode before the overwrite below
+    # (2026-08-29 追问丢答 root-fix): this write replaces the stored
+    # pending_intent wholesale, and the fresh verdict's caption_mode is
+    # None on any refinement turn that doesn't re-mention it — without
+    # the inherit, "answer bilingual → 改成 5 张 → Start" landed a run
+    # with no caption_mode (single-language cards) and the NEXT turn
+    # re-asked the already-answered question. Precedence: fresh LLM-set
+    # > fresh keyword > stashed answer.
+    if intent.caption_mode is None:
+        stashed_mode = _resolved_caption_mode(project)
+        if stashed_mode is not None:
+            intent = intent.model_copy(update={"caption_mode": stashed_mode})
     project.pending_intent = PendingIntent(
         prompt=prompt,
         intent=intent,
@@ -1666,7 +1724,12 @@ async def _propose_turn(
                     repaired = True
                 elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
                     run_id = await _create_run_from_tasks(
-                        db, project, retry.proposal.tasks, retry.proposal.summary
+                        db, project, retry.proposal.tasks, retry.proposal.summary,
+                        # A repaired task_list is the same run birth — the
+                        # caption mode rides the shared funnel (2026-08-29).
+                        caption_mode=await _derive_chat_caption_mode(
+                            db, project, retry.proposal.tasks, text
+                        ),
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -1775,28 +1838,18 @@ async def _propose_turn(
         # Caption-mode resolution for the immediate run (2026-08-29
         # root-fix): the chat path's proposal carries no intent — the mode
         # is derived here and rides TaskSpec.caption_mode → run.context
-        # end-to-end. Keyword in the user's own text wins (mirrors the plan
-        # path's auto-stamp); with no keyword and no DISTINCT alt language
-        # the question would be theatre (§2.3/D4), so the run is stamped
-        # source_only. A previously resolved choice (pending_intent) is
-        # left untouched — the user has spoken.
+        # end-to-end. The derivation lives in _derive_chat_caption_mode
+        # (keyword > stashed answer > source_only-if-no-distinct-alt) so
+        # the main dispatch and the repair re-dispatches share one funnel.
         # (Replaces two blocks that READ ``proposal.intent.*`` — a field
         # that never existed on TaskListProposal: the §2.3/D4 narrowing was
         # unreachable dead code, and the keyword block 500'd on ANY
         # task_list proposal carrying a bilingual keyword.)
         caption_mode: str | None = None
-        if isinstance(proposal, TaskListProposal) and _needs_caption_mode_question(
-            proposal.tasks
-        ):
-            caption_mode = _detect_caption_mode(text)
-            if (
-                caption_mode is None
-                and not _has_resolved_caption_mode(project)
-                and not await _caption_choice_is_meaningful(
-                    db, project, proposal.tasks
-                )
-            ):
-                caption_mode = "source_only"
+        if isinstance(proposal, TaskListProposal):
+            caption_mode = await _derive_chat_caption_mode(
+                db, project, proposal.tasks, text
+            )
         try:
             run_id = await _create_run_from_tasks(
                 db, project, proposal.tasks, proposal.summary,
@@ -1841,7 +1894,12 @@ async def _propose_turn(
                     and retry.proposal.tasks
                 ):
                     run_id = await _create_run_from_tasks(
-                        db, project, retry.proposal.tasks, retry.proposal.summary
+                        db, project, retry.proposal.tasks, retry.proposal.summary,
+                        # A repaired task_list is the same run birth — the
+                        # caption mode rides the shared funnel (2026-08-29).
+                        caption_mode=await _derive_chat_caption_mode(
+                            db, project, retry.proposal.tasks, text
+                        ),
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary

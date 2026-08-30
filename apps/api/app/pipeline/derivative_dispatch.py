@@ -672,7 +672,11 @@ async def _materialize_quote_card_outputs(
                 ).model_dump(mode="json"),
                 source_ref={
                     "quote_card": True,
-                    "quote_index": 1,
+                    # 0-based chain position — the N≥2 frame cards write
+                    # their enumerate index; N=1 is position 0 of its chain
+                    # of one (2026-08-29 基址统一: future per-quote
+                    # refinement addresses by this field, one base only).
+                    "quote_index": 0,
                     "asset_id": str(source_video.id),
                     "start_seconds": quote.get("source_start"),
                     "end_seconds": quote.get("source_end"),
@@ -691,14 +695,33 @@ async def _materialize_quote_card_outputs(
             await db.flush()
             return created_ids
 
-    # N=1 without a usable source video — one frame card (photo when the
-    # project has images, else the dark text-only card). 纯文稿路径不再
-    # 掉卡 (P2 宽槽, 2026-08-28).
+    # N=1 without a usable spec — one frame card. Frame priority mirrors
+    # the chain path (2026-08-29 N=1/N≥2 对齐): the quote's own ``frame_at``
+    # grab from the source video first, then the project's photos, else the
+    # dark text-only card. 纯文稿路径不再掉卡 (P2 宽槽, 2026-08-28).
     captions = _chain_captions([quote], caption_mode)
-    photo_bytes = await _download_bytes(
-        stream_url(images[0].file_url) if images else None
-    )
-    frame_img = _open_image(photo_bytes) if photo_bytes else None
+    frame_img = None
+    frame_from_video = False
+    if source_video is not None:
+        at = _entry_frame_at(quote)
+        if at is not None:
+            video_bytes = await _download_bytes(
+                stream_url(source_video.file_url) if source_video.file_url else None
+            )
+            if video_bytes:
+                try:
+                    grabbed = await asyncio.to_thread(
+                        extract_video_frames, video_bytes, [at]
+                    )
+                    frame_img = grabbed[0] if grabbed else None
+                    frame_from_video = frame_img is not None
+                except Exception:  # noqa: BLE001
+                    frame_img = None  # photo / dark fallbacks absorb the hole
+    if frame_img is None:
+        photo_bytes = await _download_bytes(
+            stream_url(images[0].file_url) if images else None
+        )
+        frame_img = _open_image(photo_bytes) if photo_bytes else None
     png = await asyncio.to_thread(
         composite_frame_card,
         frame=frame_img,
@@ -735,14 +758,77 @@ async def _materialize_quote_card_outputs(
         files={"image": url},
         source_ref={
             "quote_frame": True,
-            "quote_index": 1,
+            # 0-based — same addressing contract as the chain family above.
+            "quote_index": 0,
             "quotable_line_id": quote.get("quotable_line_id"),
+            # Lineage parity with the chain frames (they always carry it).
+            **({"asset_id": str(source_video.id)} if frame_from_video else {}),
         },
     )
     db.add(frame_output)
     await db.flush()
     created_ids.append(frame_output.id)
     return created_ids
+
+
+async def _sweep_stale_derivative_outputs(
+    db: AsyncSession,
+    *,
+    run: WorkflowRun,
+    node: WorkflowStep,
+    project: Project,
+    derivative_type: DerivativeType,
+) -> None:
+    """Idempotency sweep, sibling-safe (per-slot fan-out).
+
+    Same-type outputs produced by THIS run's same-kind nodes are their own
+    slots' products — only prior products (other runs' steps, step-less
+    rows, or THIS step's own prior attempt — a verify bounce re-runs the
+    same WorkflowStep row, and its products are stale by definition) are
+    cleared. Two sibling write_post nodes can therefore never delete each
+    other's output.
+
+    quote-cards §2.2 byproducts (frame cards + the motion clip) die with
+    their producer: a quotes re-run replaces the whole family. Scope =
+    rows produced by write_quotes steps OUTSIDE this run, plus THIS step's
+    own prior attempt (without the same-step clause, bounced families
+    stacked on the canvas, 2026-08-28 root-fix). select_clips' own clip
+    rows are never touched (their workflow_step_id belongs to a different
+    kind). Exercised LLM-free by scripts/accept_quote_card_family.py §7.
+    """
+    sibling_step_ids = (
+        select(WorkflowStep.id)
+        .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
+        .scalar_subquery()
+    )
+    await db.execute(
+        delete(Output).where(
+            Output.project_id == project.id,
+            Output.type == derivative_type.value,
+            or_(
+                Output.workflow_step_id.is_(None),
+                Output.workflow_step_id == node.id,
+                Output.workflow_step_id.notin_(sibling_step_ids),
+            ),
+        )
+    )
+    if derivative_type == DerivativeType.QUOTES:
+        quotes_step_ids = (
+            select(WorkflowStep.id)
+            .where(WorkflowStep.kind == "write_quotes")
+            .scalar_subquery()
+        )
+        await db.execute(
+            delete(Output).where(
+                Output.project_id == project.id,
+                Output.type.in_(["quote_frame", "clip"]),
+                Output.workflow_step_id.in_(quotes_step_ids),
+                or_(
+                    Output.workflow_step_id == node.id,
+                    Output.workflow_step_id.notin_(sibling_step_ids),
+                ),
+            )
+        )
 
 
 class DerivativeWriterNode(NodeBase):
@@ -909,53 +995,13 @@ class DerivativeWriterNode(NodeBase):
             )
             return [output.id]
 
-        # Idempotency, sibling-safe (per-slot fan-out): same-type outputs produced
-        # by THIS run's same-kind nodes are their own slots' products — only prior
-        # products (other runs' steps, step-less rows, or THIS step's own prior
-        # attempt — a verify bounce re-runs the same WorkflowStep row, and its
-        # products are stale by definition) are cleared. Two sibling write_post
-        # nodes can therefore never delete each other's output.
-        sibling_step_ids = (
-            select(WorkflowStep.id)
-            .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
-            .scalar_subquery()
+        # Idempotency, sibling-safe (per-slot fan-out): only prior products
+        # (other runs' steps, step-less rows, or THIS step's own prior
+        # attempt — a verify bounce re-runs the same WorkflowStep row) are
+        # cleared; sibling same-kind nodes never delete each other's output.
+        await _sweep_stale_derivative_outputs(
+            db, run=run, node=node, project=project, derivative_type=derivative_type
         )
-        await db.execute(
-            delete(Output).where(
-                Output.project_id == project.id,
-                Output.type == derivative_type.value,
-                or_(
-                    Output.workflow_step_id.is_(None),
-                    Output.workflow_step_id == node.id,
-                    Output.workflow_step_id.notin_(sibling_step_ids),
-                ),
-            )
-        )
-        if derivative_type == DerivativeType.QUOTES:
-            # quote-cards §2.2 byproducts (frame cards + the motion clip)
-            # die with their producer: a quotes re-run replaces the whole
-            # family. Scope = rows produced by write_quotes steps OUTSIDE
-            # this run, plus THIS step's own prior attempt (a verify bounce
-            # re-runs the same step row — without this clause, bounced
-            # families stacked on the canvas, 2026-08-28 root-fix).
-            # select_clips' own clip rows are never touched (their
-            # workflow_step_id belongs to a different kind).
-            quotes_step_ids = (
-                select(WorkflowStep.id)
-                .where(WorkflowStep.kind == "write_quotes")
-                .scalar_subquery()
-            )
-            await db.execute(
-                delete(Output).where(
-                    Output.project_id == project.id,
-                    Output.type.in_(["quote_frame", "clip"]),
-                    Output.workflow_step_id.in_(quotes_step_ids),
-                    or_(
-                        Output.workflow_step_id == node.id,
-                        Output.workflow_step_id.notin_(sibling_step_ids),
-                    ),
-                )
-            )
 
         output = Output(
             project_id=project.id,

@@ -17,6 +17,10 @@ fixtures and saves the produced PNGs for visual inspection:
      (target_only → caption = quote_alt, D5).
   6. **alt 推导**: derive_quote_alt_language + _caption_choice_is_meaningful
      (EN source + ZH locale → alt=zh meaningful; all-EN → skip).
+  7. **verify bounce 幂等扫除**: _sweep_stale_derivative_outputs — same-step
+     re-run products + other runs' write_quotes rows die; sibling fan-out
+     (a second write_quotes step in the same run) and select_clips' own
+     clip rows survive; the re-run materializes a fresh family.
 
 Products land in project storage scope (never demo/). Fixture rows are
 cleaned FK-safe at the end (outputs → steps → runs → assets → project →
@@ -48,10 +52,11 @@ from app.models.tables import (
 )
 from app.pipeline.derivative_dispatch import (
     _materialize_quote_card_outputs,
+    _sweep_stale_derivative_outputs,
     derive_quote_alt_language,
 )
 from app.chat.service import _caption_choice_is_meaningful
-from app.models.schemas import TaskItem
+from app.models.schemas import DerivativeType, TaskItem
 from app.providers.storage import save
 
 OUT_DIR = Path("/tmp/p2-quote-frames")
@@ -367,8 +372,103 @@ async def main():
         await db.flush()
         ok("_caption_choice_is_meaningful: 双语有意义 / 全同语跳过 ✓")
 
+        # ---------- 7. verify bounce 幂等扫除 ----------
+        project, persona = await _mk_project(db, user, "P2 bounce")
+        await _mk_video(db, project, user)
+        run, step = await _mk_run_step(db, project, {
+            "caption_mode": "bilingual", "target_language": "zh", "source_language": "en",
+        })
+        # The prior attempt's writer row (type=quotes, THIS step).
+        prior_quotes = Output(
+            id=uuid.uuid4(), project_id=project.id, workflow_step_id=step.id,
+            type="quotes", language="zh", provenance="generated", payload={},
+        )
+        db.add(prior_quotes)
+        # Sibling fan-out: a SECOND write_quotes step in the same run with
+        # its own products (per-slot outputs — must survive the sweep).
+        sibling_step = WorkflowStep(
+            id=uuid.uuid4(), run_id=run.id, kind="write_quotes",
+            status="done", seq=2, inputs=[], spec={},
+        )
+        db.add(sibling_step)
+        # An older run's write_quotes step (stale by definition — swept).
+        old_run = WorkflowRun(
+            id=uuid.uuid4(), project_id=project.id, status="completed", context={},
+        )
+        db.add(old_run)
+        await db.flush()
+        old_step = WorkflowStep(
+            id=uuid.uuid4(), run_id=old_run.id, kind="write_quotes",
+            status="done", seq=1, inputs=[], spec={},
+        )
+        db.add(old_step)
+        # select_clips' own clip row — a different kind, never touched.
+        clips_step = WorkflowStep(
+            id=uuid.uuid4(), run_id=run.id, kind="select_clips",
+            status="done", seq=3, inputs=[], spec={},
+        )
+        db.add(clips_step)
+        await db.flush()
+        sibling_qf = Output(
+            id=uuid.uuid4(), project_id=project.id, workflow_step_id=sibling_step.id,
+            type="quote_frame", language="zh", provenance="real", payload={}, files={},
+        )
+        sibling_quotes = Output(
+            id=uuid.uuid4(), project_id=project.id, workflow_step_id=sibling_step.id,
+            type="quotes", language="zh", provenance="generated", payload={},
+        )
+        stale_qf = Output(
+            id=uuid.uuid4(), project_id=project.id, workflow_step_id=old_step.id,
+            type="quote_frame", language="zh", provenance="real", payload={}, files={},
+        )
+        clips_clip = Output(
+            id=uuid.uuid4(), project_id=project.id, workflow_step_id=clips_step.id,
+            type="clip", language="zh", provenance="real", payload={},
+        )
+        for o in (sibling_qf, sibling_quotes, stale_qf, clips_clip):
+            db.add(o)
+        await db.commit()
+        first_ids = await _materialize_quote_card_outputs(
+            db=db, run=run, node=step, project=project, persona=persona,
+            quotes=[dict(q) for q in CHAIN],
+            target_language="zh", source_language="en",
+            caption_mode="bilingual", quote_alt_language="zh",
+            needs_speaker_frame=True, core_idea="AI makes teachers better.",
+        )
+        await db.commit()
+        if len(first_ids) != 5:
+            fail(f"bounce: first materialize expected 5, got {len(first_ids)}")
+        # --- the bounce: the same step row re-runs; sweep, then re-materialize ---
+        await _sweep_stale_derivative_outputs(
+            db, run=run, node=step, project=project,
+            derivative_type=DerivativeType.QUOTES,
+        )
+        await db.commit()
+        alive = {str(o.id) for o in await _outputs(db, project)}
+        for dead in [str(i) for i in first_ids] + [str(prior_quotes.id), str(stale_qf.id)]:
+            if dead in alive:
+                fail("bounce: same-step / other-run product survived the sweep", dead)
+        for kept in (str(sibling_qf.id), str(sibling_quotes.id), str(clips_clip.id)):
+            if kept not in alive:
+                fail("bounce: sibling fan-out / select_clips row wrongly swept", kept)
+        ok("bounce 扫除: 同 step + 他 run 产物死；兄弟 fan-out + select_clips 行存活 ✓")
+        second_ids = await _materialize_quote_card_outputs(
+            db=db, run=run, node=step, project=project, persona=persona,
+            quotes=[dict(q) for q in CHAIN],
+            target_language="zh", source_language="en",
+            caption_mode="bilingual", quote_alt_language="zh",
+            needs_speaker_frame=True, core_idea="AI makes teachers better.",
+        )
+        await db.commit()
+        if len(second_ids) != 5:
+            fail(f"bounce: re-materialize expected 5, got {len(second_ids)}")
+        if set(second_ids) & set(first_ids):
+            fail("bounce: re-materialized family reused prior attempt ids")
+        ok("bounce 重跑: 新家族 5 件全新 id（幂等无叠卡）✓")
+        pf, persona_f = project.id, persona.id
+
         # ---------- cleanup (FK 序) ----------
-        for pid, persona_id in ((pa, persona_a), (pb, persona_b), (pc, persona_c), (pd_, persona_d), (pe, persona_e)):
+        for pid, persona_id in ((pa, persona_a), (pb, persona_b), (pc, persona_c), (pd_, persona_d), (pe, persona_e), (pf, persona_f)):
             await db.execute(delete(Output).where(Output.project_id == pid))
             runs = (await db.execute(select(WorkflowRun.id).where(WorkflowRun.project_id == pid))).scalars().all()
             await db.execute(delete(WorkflowStep).where(WorkflowStep.run_id.in_(runs)))

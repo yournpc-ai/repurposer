@@ -19,6 +19,7 @@ from app.models.schemas import (
     ChatRequest,
     DubRequest,
     FeedbackRequest,
+    FocusRef,
     OutputResponse,
     RenderStatus,
     TranslateCaptionsRequest,
@@ -27,6 +28,7 @@ from app.models.schemas import (
 from app.models.tables import Output, Project, User
 from app.tools.captions.procedure import translate_caption_track
 from app.chat.service import chat
+from app.agents.contexts import _output_one_liner
 from app.operations.service import apply_precomputed
 from app.pipeline.images import generate_clip_cover_image
 from app.platform.project_context import (
@@ -420,14 +422,31 @@ async def regenerate_output(
             detail="Project not found",
         )
 
+    # The fallback message lands in the MAIN project conversation's history
+    # as the user's own turn (asset-scoped chats are retired, ADR-041 D8) —
+    # localize it like every other server-composed user-facing line.
+    zh = (current_ui_language() or "en").startswith("zh")
+    type_label = (
+        {"clip": "视频", "quotes": "金句卡", "post": "帖子",
+         "carousel": "轮播", "article": "文章"}.get(output.type, output.type)
+        if zh else output.type
+    )
     result = await chat(
         db,
         UUID(str(current_user.id)),
         ChatRequest(
             project_id=UUID(str(project.id)),
-            asset_id=output_id,
-            asset_type="clip" if output.type == "clip" else "derivative",
-            message=data.instruction or f"Regenerate this {output.type}",
+            message=data.instruction or (
+                f"重做这个{type_label}" if zh else f"Regenerate this {output.type}"
+            ),
+            # Asset-scoped conversations are retired (ADR-041 D8): the card's
+            # Regenerate click IS the pointing gesture, so the output rides as
+            # the turn's focus — the intent rule "an instruction naming no
+            # other target resolves to the focus output" does the addressing.
+            focus_output=FocusRef(
+                id=output_id,
+                label=_output_one_liner(output) or output.type,
+            ),
         ),
     )
 

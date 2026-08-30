@@ -85,7 +85,7 @@ export function QuotesCard({ output, onRegenerate }: QuotesCardProps) {
       )}
 
       <div className="flex items-center justify-between p-3">
-        <Badge variant="outline">{output.language?.toUpperCase()}</Badge>
+        <Badge variant="outline" className="rounded-md">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
           onDownload={imageUrl ? handleDownload : undefined}
           onRegenerate={handleRegenerate}
