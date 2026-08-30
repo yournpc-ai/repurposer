@@ -117,12 +117,10 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="gap-4 px-2">
-        {/* Collapsed rail: `my-auto` vertically centers the few nav icons
-            between header and footer (auto margins absorb the free space
-            and degrade to top-aligned when space runs out — safer than
-            justify-center, which clips the top in overflow containers).
-            Expanded stays conventionally top-aligned. */}
-        <SidebarGroup className="px-0 py-0 group-data-[state=collapsed]:my-auto">
+        {/* Nav items top-align right under the header in both forms — only
+            the user footer is pinned to the bottom (2026-08-30 ruling; the
+            collapsed rail's vertical centering is retired). */}
+        <SidebarGroup className="px-0 py-0">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {navItems.map((item) => (

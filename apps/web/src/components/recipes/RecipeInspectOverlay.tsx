@@ -351,7 +351,7 @@ export function RecipeInspectOverlay({
                     setPrompt(e.target.value)
                   }}
                   disabled={launching}
-                  placeholder={t("home.pastePlaceholder")}
+                  placeholder={t("recipes.inspect.promptPlaceholder")}
                   className="min-h-0 w-full flex-1 resize-none self-stretch bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>

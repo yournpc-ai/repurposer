@@ -41,7 +41,7 @@
 | `LANDING.md` | 落地页叙事工作文档：现状结构 + 叙事立场（单助手）+ 待拍板（hero 四方向）+ 迭代清单（含六幕叙事骨架，缓做） | 活跃（2026-08-19 建） | 动落地页结构/hero/叙事前 |
 | `API.md` | API 参考 | 活跃（2026-08-18 全面对齐路由） | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
-| `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + MiniMax Design 走查（界面工艺清单 + Skills 仓库解剖）+ Agent Skills 规范生态（Mastra/Agno 文档证据，`agent-skills-spec.md`）+ 渲染技术调研 + dsh 架构调研（agent harness 对照，采纳项已分流 PROGRESS/NAMING/AGENT_ARCH）+ **craft 解剖证据表（`craft-anatomy-2026-08-22.md`——产物质量线期 0 产出，四卡 × 真素材三源测量，期 2/3 施工顺序由它决定）** | 原始素材层 | 引用证据时 |
+| `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + **Lovart 落地页走查（`lovart-landing.md`——hero 任务轮播 + 滚动驱动「输入→prompt→输出」demo 幕，着陆叙事证据）** + MiniMax Design 走查（界面工艺清单 + Skills 仓库解剖）+ Agent Skills 规范生态（Mastra/Agno 文档证据，`agent-skills-spec.md`）+ 渲染技术调研 + dsh 架构调研（agent harness 对照，采纳项已分流 PROGRESS/NAMING/AGENT_ARCH）+ **craft 解剖证据表（`craft-anatomy-2026-08-22.md`——产物质量线期 0 产出，四卡 × 真素材三源测量，期 2/3 施工顺序由它决定）** | 原始素材层 | 引用证据时 |
 | `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `tasks/done/`（历史记录，不再维护） | 活跃 | 开工对应功能前必读 |
 
 ## 已规划的文档（尚未撰写）

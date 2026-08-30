@@ -1,7 +1,7 @@
 "use client"
 
 import { useTranslation } from "react-i18next"
-import { Maximize2, Wand2 } from "lucide-react"
+import { Maximize2 } from "lucide-react"
 
 import { recipeCovers } from "@/components/recipes/covers"
 import type { RecipePublic } from "@/lib/recipes"
@@ -14,14 +14,15 @@ import type { RecipePublic } from "@/lib/recipes"
  * only (currentColor + opacity), and the same `transform-box: fill-box`
  * CSS keyframes that drive the v2 demo (`docs/tasks/recipe-gallery-v2-covers.html`).
  *
- * Hover state machine (MiniMax anatomy, second pass 2026-08-23):
+ * Hover state machine (MiniMax anatomy, second pass 2026-08-23; Remix pill
+ * retired 2026-08-31 — the whole card is clickable (cursor-pointer) and the
+ * expand icon already affords the overlay, so the centered pill only
+ * occluded the schematic, which IS the card face):
  *   rest  = the schematic (static, no chrome) — title + promise + input
  *           row always readable under the tile;
  *   hover = the schematic plays its process animation (see styles.css
- *           `rc-*` keyframes, gated by `.group:hover`); a white stadium
- *           Remix pill (`Wand2` + label) centers, an expand icon-button
- *           sits top-right — both open the same inspect overlay (no
- *           quick-launch, ADR-040);
+ *           `rc-*` keyframes, gated by `.group:hover`); an expand
+ *           icon-button sits top-right — the tile stays uncovered;
  *   click = the RecipeInspectOverlay (the ONLY launch path).
  *
  * Color law: the cover's `text-foreground` color governs the schematic;
@@ -54,9 +55,12 @@ export function RecipeCard({
         live ? "cursor-pointer" : ""
       }`}
     >
-      {/* The tile — bg-inset well, no ring, no shadow (fill-first, ADR-046).
+      {/* The tile — bg-card RAISED surface on the gray page (light 0.96 →
+          white 1.0, dark 0.12 → 0.21 panel; the elevation fill step, ADR-046),
+          no ring, no shadow. 2026-08-31 user ruling: the covers go white now
+          that the page itself carries the gray underlay (was bg-inset well).
           16:10 carries the schematic; the inline SVG is the only content. */}
-      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-inset text-foreground">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground">
         {Cover ? (
           <Cover />
         ) : (
@@ -65,38 +69,26 @@ export function RecipeCard({
           </div>
         )}
 
-        {/* Hover chrome — stadium Remix pill centered, expand icon
-            top-right. Both open the overlay (ADR-040). Kept off the card
-            at rest (the schematic IS the card face). Reserved cards stay
-            non-launchable: no hover chrome, no click. */}
+        {/* Hover chrome — ONLY the expand icon top-right (2026-08-31 user
+            ruling: cursor-pointer + this affordance express clickability;
+            the retired centered Remix pill occluded the schematic, which IS
+            the card face). Opens the same overlay as the card click
+            (ADR-040). Reserved cards stay non-launchable: no chrome, no
+            click. The chip uses the bg-accent token step on the white
+            tile. */}
         {live && (
-          <>
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-hidden
-              onClick={(e) => {
-                e.stopPropagation()
-                onInspect(card)
-              }}
-              className="pointer-events-none absolute left-1/2 top-1/2 flex h-9 -translate-x-1/2 -translate-y-1/2 scale-95 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-medium text-black opacity-0 transition-all duration-200 hover:bg-white group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
-            >
-              <Wand2 className="h-4 w-4" />
-              {t("recipes.remix")}
-            </button>
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={t("recipes.expand")}
-              onClick={(e) => {
-                e.stopPropagation()
-                onInspect(card)
-              }}
-              className="pointer-events-none absolute right-2.5 top-2.5 flex h-8 w-8 scale-90 items-center justify-center rounded-md bg-white/15 text-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-            </button>
-          </>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t("recipes.expand")}
+            onClick={(e) => {
+              e.stopPropagation()
+              onInspect(card)
+            }}
+            className="pointer-events-none absolute right-2.5 top-2.5 flex h-8 w-8 scale-90 items-center justify-center rounded-md bg-accent text-foreground opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 

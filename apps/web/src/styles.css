@@ -665,3 +665,46 @@ body {
   color: var(--muted-foreground);
   pointer-events: none;
 }
+
+/* Composer rotating placeholder (Lovart-style: fixed prefix + cycling
+   example prompt, 2026-08-30; rolling window per user ruling 2026-08-31 —
+   the first pass was a blink-swap): per cycle the outgoing line rolls up
+   and out while the incoming rolls in from below — same direction, same
+   duration, same easing — so the motion reads as one continuous scroll.
+   The outgoing span is absolutely positioned (the incoming owns the line
+   box) and stays mounted invisible until the next cycle re-keys it.
+   Reduced motion: no animation, the outgoing line is hidden — plain swap. */
+@keyframes placeholder-roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes placeholder-roll-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.6em);
+  }
+}
+.placeholder-roll-in {
+  animation: placeholder-roll-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.placeholder-roll-out {
+  animation: placeholder-roll-out 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .placeholder-roll-in {
+    animation: none;
+  }
+  .placeholder-roll-out {
+    display: none;
+  }
+}

@@ -46,8 +46,16 @@ const zh: Resources = {
   },
   home: {
     newChat: "新对话",
-    brandTagline: "你的自媒体Agent团队",
-    pastePlaceholder: "说说你想做什么…",
+    brandTagline: "懂你的自媒体Agent，帮你搞定一切",
+    // Composer placeholder：固定前缀 + 三条最常见 prompt 在前缀后轮换
+    // （Lovart 式轮换 placeholder，2026-08-30）。后缀保持简短，钉顶条里
+    // 不超一行。
+    placeholderPrefix: "让 Repurposer ",
+    placeholderPrompts: [
+      "把我的演讲变成一周的 LinkedIn 帖子",
+      "把这期播客做成一套金句卡",
+      "把我的 keynote 配音成法语和德语",
+    ],
     selectPersona: "人设",
     generating: "正在分析素材并生成内容，可能需要一会儿…",
     noPromptError: "先说说想做什么",
@@ -98,7 +106,7 @@ const zh: Resources = {
       },
     },
     signIn: "登录",
-    openStudio: "进入工作室",
+    openStudio: "免费开始",
     heroTitle1: "你讲完了",
     heroTitle2: "剩下的交给我们",
     heroSubtitle:
@@ -383,8 +391,27 @@ const zh: Resources = {
     persona: "人设",
     autoGenerate: "自动",
     assets: "素材",
-    optional: "可选",
-    assetsCount: "{{count}} 个文件",
+    models: "模型",
+    // 诚实 Auto 面板（2026-08-30）：每行都是 pipeline 真实的分模态分配，
+    // 只读——每个模态只有一个 provider 时没有可选行。
+    modelsRows: {
+      copy: "文案",
+      voice: "配音",
+      captions: "字幕",
+      music: "音乐",
+    },
+    modelsNames: {
+      copy: "MiniMax M3",
+      voice: "MiniMax speech-2.6-hd",
+      captions: "Whisper",
+      music: "MiniMax music-2.6",
+    },
+    modelsDescs: {
+      copy: "任务书、写作与改写",
+      voice: "声纹克隆与多语言配音",
+      captions: "自托管 · 词级时间戳",
+      music: "AI 生成曲库 · 按氛围匹配",
+    },
     personaAutoDesc: "从本次素材自动建立或匹配画像",
     voiceBound: "声纹已克隆",
     voiceMissing: "未克隆声纹",
@@ -399,7 +426,6 @@ const zh: Resources = {
   recipes: {
     sectionTitle: "汲取灵感，化为己作",
     soon: "即将推出",
-    remix: "再创作",
     expand: "放大预览",
     mute: "关闭预览声音",
     unmute: "播放预览声音",
@@ -468,6 +494,7 @@ const zh: Resources = {
       dropzone: "上传或拖放文件",
       requiredMissing: "先上传素材：{{input}}",
       promptTitle: "示例提示词",
+      promptPlaceholder: "说说你想做什么…",
       send: "生成",
     },
     "multilingual-subs": {

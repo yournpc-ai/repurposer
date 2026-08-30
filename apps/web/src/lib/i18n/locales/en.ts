@@ -44,8 +44,16 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    brandTagline: "Your social media agent team",
-    pastePlaceholder: "What do you want to make?",
+    brandTagline: "The social media agent that gets you and gets the job done",
+    // Composer placeholder: fixed prefix + three most-common prompts cycling
+    // behind it (Lovart-style rotating placeholder, 2026-08-30). Keep the
+    // suffixes short enough to stay one line in the docked bar.
+    placeholderPrefix: "Ask Repurposer to ",
+    placeholderPrompts: [
+      "turn my talk into a week of LinkedIn posts",
+      "make quote cards from this podcast episode",
+      "dub my keynote into French and German",
+    ],
     selectPersona: "Persona",
     generating: "Analyzing your material and generating content, this can take a moment…",
     noPromptError: "Say what you want to make first",
@@ -96,7 +104,7 @@ const en = {
       },
     },
     signIn: "Sign in",
-    openStudio: "Open studio",
+    openStudio: "Start repurposing",
     heroTitle1: "You did the talking",
     heroTitle2: "We do the rest",
     heroSubtitle:
@@ -385,8 +393,28 @@ const en = {
     persona: "Persona",
     autoGenerate: "Auto",
     assets: "Assets",
-    optional: "Optional",
-    assetsCount: "{{count}} files",
+    models: "Models",
+    // Honest Auto panel (2026-08-30): every row is the pipeline's REAL
+    // per-modality assignment, read-only — no selectable rows while each
+    // modality has exactly one provider.
+    modelsRows: {
+      copy: "Copy",
+      voice: "Voice",
+      captions: "Captions",
+      music: "Music",
+    },
+    modelsNames: {
+      copy: "MiniMax M3",
+      voice: "MiniMax speech-2.6-hd",
+      captions: "Whisper",
+      music: "MiniMax music-2.6",
+    },
+    modelsDescs: {
+      copy: "Planning, writing, and revisions",
+      voice: "Voice cloning + multilingual dubbing",
+      captions: "Self-hosted · word-level timestamps",
+      music: "AI-generated library · matched by mood",
+    },
     personaAutoDesc: "Build or match a persona from this upload",
     voiceBound: "Voice cloned",
     voiceMissing: "No voice clone",
@@ -401,7 +429,6 @@ const en = {
   recipes: {
     sectionTitle: "Get inspired. Then make it yours",
     soon: "Soon",
-    remix: "Remix",
     expand: "Expand preview",
     mute: "Mute preview sound",
     unmute: "Play preview sound",
@@ -480,6 +507,7 @@ const en = {
       dropzone: "Upload or drag & drop files",
       requiredMissing: "Add the material first: {{input}}",
       promptTitle: "Example prompt",
+      promptPlaceholder: "What do you want to make?",
       send: "Generate",
     },
     "multilingual-subs": {

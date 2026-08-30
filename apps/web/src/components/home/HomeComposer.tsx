@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUp, Paperclip, User } from "lucide-react"
+import { ArrowUp, Box, Paperclip, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
@@ -13,9 +13,9 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AssetChips } from "@/components/home/AssetChips"
 import { AssetsPanel } from "@/components/home/AssetsPanel"
+import { ModelsPanel } from "@/components/home/ModelsPanel"
 import {
   PersonaPanel,
   type PersonaPickerEntry,
@@ -27,6 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type Persona = PersonaPickerEntry
 
@@ -125,6 +126,9 @@ const SEND_BAR_ANCHOR = 10 // (56 − 36) / 2 — centered in the bar
 const BAR_SEND_RESERVE = 54 // 10 anchor + 36 send + 8 gap — bar input's right reserve
 const ATTACH_PAD_X = 12 // bar: the attach glyph's center mirrors the send's
 const ATTACH_MAX_W = 96
+/** Rotating placeholder cadence (Lovart-style): the fixed prefix stays, the
+ * example prompt behind it cycles every this-many ms. */
+const PLACEHOLDER_ROTATE_MS = 3500
 
 export function HomeComposer({
   personas,
@@ -144,6 +148,7 @@ export function HomeComposer({
   const [files, setFiles] = useState<File[]>([])
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [personaOpen, setPersonaOpen] = useState(false)
+  const [modelsOpen, setModelsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
   // First-visit teaching: open the composer tour once per tour version. Read
@@ -224,10 +229,37 @@ export function HomeComposer({
       onSent: () => editorRef.current?.clear(),
     })
 
-  const selectedPersona =
-    personaId === AUTO_GENERATE
-      ? undefined
-      : personas.find((p) => p.id === personaId)
+  // Rotating placeholder (Lovart-style, 2026-08-30): a fixed prefix
+  // ("Ask Repurposer to …") with the three most-common prompts cycling
+  // behind it — teaching by example, inside the placeholder (the tour stays
+  // the how-to surface). Rendered as an overlay (React-rendered, so it can
+  // animate — the CSS attr() placeholder can't); visible ONLY while the
+  // editor is empty. The cycle runs on an interval gated on emptiness; SSR
+  // and the first paint show example 0. The transition is a ROLLING WINDOW
+  // (2026-08-31 user ruling — the first pass was a blink-swap): the outgoing
+  // prompt rolls up and out while the incoming rolls in from below, same
+  // direction, so the motion reads as one continuous scroll; `prev` keeps
+  // the outgoing line mounted for the animation.
+  const placeholderPrompts = t("home.placeholderPrompts", {
+    returnObjects: true,
+  }) as string[]
+  const promptEmpty = prompt.trim() === "" && mentions.length === 0
+  const [placeholderRoll, setPlaceholderRoll] = useState<{
+    idx: number
+    prev: number | null
+  }>({ idx: 0, prev: null })
+  useEffect(() => {
+    if (!promptEmpty || placeholderPrompts.length < 2) return
+    const id = window.setInterval(
+      () =>
+        setPlaceholderRoll(({ idx }) => ({
+          idx: (idx + 1) % placeholderPrompts.length,
+          prev: idx,
+        })),
+      PLACEHOLDER_ROTATE_MS,
+    )
+    return () => window.clearInterval(id)
+  }, [promptEmpty, placeholderPrompts.length])
 
   // Composer teaching tour: built per render from the static config so a
   // language switch re-labels the steps (Tour reads via ref).
@@ -251,12 +283,12 @@ export function HomeComposer({
   }
   // One-place law: the Assets panel IS the chips band's expanded form —
   // while it's open the band folds away, so the file list lives in exactly
-  // one place (the pill's count stays as the anchor). The fold interpolates
-  // maxHeight AND the one-sided padding in the same style object: a flex
-  // item's padding SURVIVES max-height:0 (border-box does not clip it — the
-  // old "clips its padding for free" belief leaked pt-5/pb-3 into the docked
-  // bar, 2026-08-21 headless probe), so static padding classes on a fold
-  // addon are banned; the padding must ride the interpolation.
+  // one place. The fold interpolates maxHeight AND the one-sided padding in
+  // the same style object: a flex item's padding SURVIVES max-height:0
+  // (border-box does not clip it — the old "clips its padding for free"
+  // belief leaked pt-5/pb-3 into the docked bar, 2026-08-21 headless probe),
+  // so static padding classes on a fold addon are banned; the padding must
+  // ride the interpolation.
   const chipsOpen = files.length > 0 && !assetsOpen
   const chipsStyle: CSSProperties = {
     maxHeight: chipsOpen ? (1 - dockP) * CHIPS_MAX_H : 0,
@@ -316,8 +348,8 @@ export function HomeComposer({
     >
         {/* Block-start — staged asset chips. Always rendered (keeps the
             container h-auto), folds to zero when empty / docked / the Assets
-            panel is open; the attach button's count carries the awareness
-            into the bar. */}
+            panel is open (the icon buttons are stateless — in the docked bar
+            the files simply ride no display, per the 2026-08-30 ruling). */}
         <InputGroupAddon
           align="block-start"
           className="min-h-0 overflow-hidden px-5 py-0 font-normal"
@@ -334,24 +366,30 @@ export function HomeComposer({
           <div className="flex-none overflow-hidden" style={attachStyle}>
             {/* MiniMax-standard one-line layout: attach on the left. Opens
                 DOWNWARD here (side="bottom") — docked at the viewport's top,
-                a side="top" panel would leave the screen. */}
+                a side="top" panel would leave the screen. Pure circle icon +
+                function tooltip, stateless (2026-08-30 icon-button ruling):
+                the staged files themselves live in the panel. */}
             <Popover>
-              <PopoverTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t("composer.assets")}
-                    className="h-9 gap-1 rounded-full px-2 text-xs font-normal"
-                    tabIndex={dockP > 0.5 ? 0 : -1}
-                  >
-                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                    {files.length > 0 ? (
-                      <span className="text-foreground">{files.length}</span>
-                    ) : null}
-                  </Button>
-                }
-              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("composer.assets")}
+                          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                          tabIndex={dockP > 0.5 ? 0 : -1}
+                        >
+                          <Paperclip className="size-5" />
+                        </Button>
+                      }
+                    />
+                  }
+                />
+                <TooltipContent side="bottom">{t("composer.assets")}</TooltipContent>
+              </Tooltip>
               <PopoverContent side="bottom" align="start" className="w-80">
                 <AssetsPanel files={files} onAdd={addFiles} onRemove={removeFile} />
               </PopoverContent>
@@ -364,9 +402,41 @@ export function HomeComposer({
             onClick={focusEditor}
             onFocus={onFocus}
           >
+            {/* Rotating placeholder overlay — pointer-events-none so clicks
+                land on the band's focus handler. Padding mirrors the band's
+                (the morph interpolation), so the text sits exactly where the
+                editor's first line is; overflow-hidden clips whatever the
+                one-line docked bar can't show. The suffix is a rolling
+                window: per cycle the outgoing line (absolute, so layout
+                follows the incoming) rolls up-out while the incoming rolls
+                in from below — styles.css `.placeholder-roll-*`. */}
+            {promptEmpty && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden text-base break-words whitespace-pre-wrap text-muted-foreground"
+                style={{ padding: editorBandStyle.padding }}
+              >
+                <span>{t("home.placeholderPrefix")}</span>
+                <span className="relative inline-block whitespace-nowrap">
+                  {placeholderRoll.prev !== null && (
+                    <span
+                      key={`out-${placeholderRoll.prev}`}
+                      className="placeholder-roll-out absolute left-0 top-0"
+                    >
+                      {placeholderPrompts[placeholderRoll.prev]}
+                    </span>
+                  )}
+                  <span
+                    key={`in-${placeholderRoll.idx}`}
+                    className="placeholder-roll-in inline-block"
+                  >
+                    {placeholderPrompts[placeholderRoll.idx]}
+                  </span>
+                </span>
+              </div>
+            )}
             <MentionEditor
               ref={editorRef}
-              placeholder={t("home.pastePlaceholder")}
               disabled={isGenerating}
               mentionContext={mentionContext}
               className="p-0"
@@ -381,89 +451,114 @@ export function HomeComposer({
 
         {/* Block-end — the control row (folds away into the bar; send is NOT
             here — it's the absolute anchor below so it survives the fold).
-            Pill value state law: rest value in meta-foreground, set value in
-            foreground — that single color step is the whole state change (no
-            fills, no accent color). The pr-12 reserves the send anchor's
-            space. No model control (2026-08-22): the pipeline assigns models
-            per modality, so the composer can't decide — or honestly display —
-            the final model. */}
+            Lovart-style pure circle icon buttons (2026-08-30 ruling): icon +
+            function tooltip, completely STATELESS — no count, no Auto/name
+            value text; the selection is read inside each frosted panel (the
+            staged files themselves also ride the chips band, unchanged).
+            The pr-12 reserves the send anchor's space. No model control
+            (2026-08-22): the pipeline assigns models per modality, so the
+            composer can't decide — or honestly display — the final model. */}
         <InputGroupAddon
           align="block-end"
           className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
           style={controlRowStyle}
           onClick={focusEditor}
         >
-          <div className="flex items-center gap-1">
-            <Popover open={assetsOpen} onOpenChange={setAssetsOpen}>
-              <PopoverTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
-                    data-tour="composer-assets"
-                  >
-                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{t("composer.assets")}</span>
-                    <span className={files.length > 0 ? "text-foreground" : "text-meta-foreground"}>
-                      ·{" "}
-                      {files.length > 0
-                        ? t("composer.assetsCount", { count: files.length })
-                        : t("composer.optional")}
-                    </span>
-                  </Button>
-                }
-              />
-              <PopoverContent side="bottom" align="start" className="w-80">
-                <AssetsPanel files={files} onAdd={addFiles} onRemove={removeFile} />
-              </PopoverContent>
-            </Popover>
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Popover open={assetsOpen} onOpenChange={setAssetsOpen}>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("composer.assets")}
+                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                            data-tour="composer-assets"
+                          >
+                            <Paperclip className="size-5" />
+                          </Button>
+                        }
+                      />
+                    }
+                  />
+                  <TooltipContent side="top">{t("composer.assets")}</TooltipContent>
+                </Tooltip>
+                <PopoverContent side="bottom" align="start" className="w-80">
+                  <AssetsPanel files={files} onAdd={addFiles} onRemove={removeFile} />
+                </PopoverContent>
+              </Popover>
 
-            <Popover open={personaOpen} onOpenChange={setPersonaOpen}>
-              <PopoverTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 gap-1.5 rounded-md px-2 text-xs font-normal"
-                    data-tour="composer-persona"
-                  >
-                    {selectedPersona ? (
-                      <Avatar className="h-4 w-4">
-                        {selectedPersona.avatar_url ? (
-                          <AvatarImage
-                            src={selectedPersona.avatar_url}
-                            alt={selectedPersona.name}
-                          />
-                        ) : null}
-                        <AvatarFallback className="text-[8px]">
-                          {selectedPersona.name.slice(0, 1)}
-                        </AvatarFallback>
-                      </Avatar>
-                    ) : (
-                      <User className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                    <span>{t("composer.persona")}</span>
-                    <span
-                      className={`max-w-28 truncate ${selectedPersona ? "text-foreground" : "text-meta-foreground"}`}
-                    >
-                      · {selectedPersona ? selectedPersona.name : t("composer.autoGenerate")}
-                    </span>
-                  </Button>
-                }
-              />
-              <PopoverContent side="bottom" align="start" className="w-88">
-                <PersonaPanel
-                  personas={personas}
-                  value={personaId}
-                  autoValue={AUTO_GENERATE}
-                  onSelect={(id) => {
-                    setPersonaId(id)
-                    setPersonaOpen(false)
-                  }}
+              <Popover open={personaOpen} onOpenChange={setPersonaOpen}>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("composer.persona")}
+                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                            data-tour="composer-persona"
+                          >
+                            <User className="size-5" />
+                          </Button>
+                        }
+                      />
+                    }
+                  />
+                  <TooltipContent side="top">{t("composer.persona")}</TooltipContent>
+                </Tooltip>
+                <PopoverContent side="bottom" align="start" className="w-88">
+                  <PersonaPanel
+                    personas={personas}
+                    value={personaId}
+                    autoValue={AUTO_GENERATE}
+                    onSelect={(id) => {
+                      setPersonaId(id)
+                      setPersonaOpen(false)
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Models — the honest Auto panel (user-ruled 2026-08-30): the
+                pipeline assigns models per modality and there is exactly one
+                provider per modality, so this is a READ-ONLY display of the
+                real assignments — no selectable rows, no fake SKU shelf.
+                `mr-3` holds it off the absolutely-anchored send button
+                (measured gap was 0px — the circles touched, 2026-08-31). */}
+            <div className="mr-3">
+            <Popover open={modelsOpen} onOpenChange={setModelsOpen}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("composer.models")}
+                          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                        >
+                          <Box className="size-5" />
+                        </Button>
+                      }
+                    />
+                  }
                 />
+                <TooltipContent side="top">{t("composer.models")}</TooltipContent>
+              </Tooltip>
+              <PopoverContent side="bottom" align="end" className="w-88">
+                <ModelsPanel />
               </PopoverContent>
             </Popover>
+            </div>
           </div>
 
         </InputGroupAddon>
@@ -482,7 +577,7 @@ export function HomeComposer({
           {isGenerating ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           ) : (
-            <ArrowUp className="h-4 w-4" />
+            <ArrowUp className="size-5" />
           )}
         </Button>
     </InputGroup>
