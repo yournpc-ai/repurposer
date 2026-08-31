@@ -66,6 +66,14 @@ export interface FlowNode {
    * node and flips the main display. Items without their own media render
    * as a text tile. */
   variants?: { label: string; sub?: string; thumbUrl?: string | null }[]
+  /** Text-product outputs (post / article): a preview of the generated text
+   * rendered inside the card, since these types have no baked image/video.
+   * The node itself becomes the readable text card (Gamma/Tome-style). */
+  textContent?: {
+    title: string | null
+    body: string
+    hashtags: string[]
+  }
   /** The batch's recommended pick (score triage) — adapter-computed. */
   topPick?: boolean
   /** Size override (pure-math layout stays measurement-free): the results

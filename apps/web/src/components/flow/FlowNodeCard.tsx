@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronDown,
@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import { BrandLoader } from "@/components/BrandLoader"
 import {
@@ -31,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { toAbsoluteUrl } from "@/lib/api"
+import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 import { BIRTH_STAGGER_MS, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
@@ -380,47 +381,33 @@ function ThumbCard({
 
 function StepCard({ node }: { node: FlowNode }) {
   return (
-    <div className="flex h-full w-full items-center gap-2.5 rounded-md bg-card px-3 py-2 ring-foreground/10 ring-1">
+    <div className="flex h-full w-full items-center gap-2 rounded-md bg-card px-2.5 py-1.5 ring-foreground/10 ring-1">
       {node.status ? (
         <StatusBadge status={node.status} />
       ) : (
         <span className="h-5 w-5 shrink-0 rounded-full bg-muted" />
       )}
-      {/* Labels wrap to two lines (the pill is sized for it) — a truncated
-          "…" node is never acceptable. Detail stays a one-line tag. */}
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 text-sm leading-snug">{node.label}</p>
+        <p className="truncate text-xs leading-snug">{node.label}</p>
         {node.detail && (
-          <p className="truncate text-xs leading-tight text-muted-foreground">{node.detail}</p>
+          <p className="truncate text-[10px] leading-tight text-muted-foreground">{node.detail}</p>
         )}
       </div>
     </div>
   )
 }
 
-/** The 过程脊 group node (ADR-041 D6): the folded middle steps as ONE
- * container — muted fill reads as a group, not a step (fill-first, no
- * ring); click expands in place. It never carries a toolbar (D5: process
- * nodes never do). */
+/** The 过程脊 group node (ADR-041 D6): a thin tunnel, not a main node.
+ * Process verbs fold here; it never carries a toolbar or status badge. */
 function SpineCard({ node }: { node: FlowNode }) {
   return (
-    <div className="flex h-full w-full items-center gap-2.5 rounded-md bg-muted px-3 py-2">
-      {node.status ? (
-        <StatusBadge status={node.status} />
-      ) : (
-        <span className="h-5 w-5 shrink-0 rounded-full bg-card" />
-      )}
-      <Waypoints className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm leading-snug">{node.label}</p>
-        {node.detail && (
-          <p className="truncate text-xs leading-tight text-muted-foreground">{node.detail}</p>
-        )}
-      </div>
+    <div className="flex h-full w-full items-center justify-center gap-1.5 rounded-full bg-muted px-3 text-xs text-muted-foreground ring-1 ring-foreground/5">
+      <Waypoints className="h-3 w-3 shrink-0" />
+      <span className="truncate">{node.detail}</span>
       {node.expanded ? (
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <ChevronDown className="h-3 w-3 shrink-0" />
       ) : (
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <ChevronRight className="h-3 w-3 shrink-0" />
       )}
     </div>
   )
@@ -440,7 +427,8 @@ function ArtifactCard({ node }: { node: FlowNode }) {
     <div className="dock-surface flex h-full w-full flex-col gap-2 rounded-xl p-4 ring-foreground/10 ring-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-meta text-[11px]">{node.label}</p>
-        {node.status && node.status !== "pending" && (
+        {/* Plan 是任务承诺，不是执行步骤，不显示完成态 icon (ADR-041 D6)。 */}
+        {node.artifact !== "plan" && node.status && node.status !== "pending" && (
           <StatusBadge status={node.status} />
         )}
       </div>
@@ -467,6 +455,195 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
   article: Newspaper,
 }
 
+function TextProductCard({
+  node,
+  selected,
+  onOutputAction,
+}: {
+  node: FlowNode
+  selected: boolean
+  onOutputAction?: FlowCardData["onOutputAction"]
+}) {
+  const { t } = useTranslation()
+  const output = node.output
+  const tc = node.textContent
+  const title = tc?.title ?? null
+  const body = tc?.body ?? ""
+  const hashtags = tc?.hashtags ?? []
+  const clipped = hashtags.length > 3 ? [...hashtags.slice(0, 3), "..."] : hashtags
+  const typeIcon = output ? PRODUCT_TYPE_ICON[output.type] ?? FileText : FileText
+  const actions: { action: FlowOutputAction; Icon: typeof Download; label: string }[] = [
+    { action: "download", Icon: Download, label: t("results.canvas.download") },
+    { action: "delete", Icon: Trash2, label: t("common.delete") },
+  ]
+  const menuItems: { action: string; label: string }[] = [
+    { action: "open", label: t("results.canvas.open") },
+    { action: "focus", label: t("results.canvas.focusNode") },
+  ]
+  const handleBarAction = (action: string) => {
+    if (output) onOutputAction?.(output.id, action as FlowOutputAction)
+  }
+
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(body)
+  const [saving, setSaving] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    setDraft(body)
+  }, [body])
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      const len = textareaRef.current.value.length
+      textareaRef.current.setSelectionRange(len, len)
+    }
+  }, [editing])
+
+  // React Flow's canvas zoom/pan attaches native wheel listeners to the pane,
+  // so a React synthetic stopPropagation is not enough — we must stop the
+  // native event from bubbling up out of the textarea while editing.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el || !editing) return
+    const stopWheel = (e: WheelEvent) => {
+      e.stopPropagation()
+    }
+    el.addEventListener("wheel", stopWheel, { passive: true })
+    return () => el.removeEventListener("wheel", stopWheel)
+  }, [editing])
+
+  const save = async () => {
+    if (!output || draft === body) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    try {
+      const nextPayload: Record<string, unknown> = { ...(output.payload ?? {}) }
+      if (output.type === "article") {
+        nextPayload.title = title ?? ""
+        nextPayload.content = draft
+      } else {
+        nextPayload.content = draft
+      }
+      const nextPublishing: Record<string, unknown> = { ...(output.publishing ?? {}) }
+      if (title !== null) nextPublishing.title = title
+      if (hashtags.length > 0) nextPublishing.hashtags = hashtags
+      const res = await apiPut(`/api/v1/outputs/${output.id}`, {
+        payload: nextPayload,
+        publishing: nextPublishing,
+      })
+      if (res.ok) {
+        // Optimistically update the in-memory output so the canvas reflects
+        // the edit before the next poll/refetch.
+        if (output.type === "article") {
+          output.payload.title = title ?? ""
+        }
+        output.payload.content = draft
+      } else {
+        setDraft(body)
+      }
+    } catch {
+      setDraft(body)
+      toast.error(t("common.requestFailed"))
+    } finally {
+      setSaving(false)
+      setEditing(false)
+    }
+  }
+
+  const cancel = () => {
+    setDraft(body)
+    setEditing(false)
+  }
+
+  const handleRootClick = (e: React.MouseEvent) => {
+    // Editing the text area should not select the node — the canvas's
+    // onNodeClick handler would otherwise steal focus from the textarea.
+    if (editing) e.stopPropagation()
+  }
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // Let the textarea scroll itself; don't bubble to the canvas zoom/pan.
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
+  const contentClass =
+    "h-full w-full overflow-y-auto rounded-lg px-3 py-3 text-left text-xs leading-relaxed"
+
+  return (
+    <div className="group/text relative flex h-full w-full flex-col" onClick={handleRootClick}>
+      <NodeCaption label={node.label} Icon={typeIcon} />
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1",
+          selected ? "ring-2 ring-foreground/40" : "ring-foreground/10",
+        )}
+      >
+        {editing ? (
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            onWheel={handleWheel}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault()
+                cancel()
+              } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault()
+                save()
+              }
+            }}
+            disabled={saving}
+            className={cn(
+              contentClass,
+              "resize-none bg-transparent outline-none",
+            )}
+            style={{ scrollbarWidth: "thin", overscrollBehavior: "contain" }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className={cn(contentClass, "cursor-text")}
+            style={{ scrollbarWidth: "thin" }}
+          >
+            {title ? (
+              <p className="mb-1 line-clamp-1 text-sm font-medium leading-snug">{title}</p>
+            ) : null}
+            <p
+              className={cn(
+                "whitespace-pre-wrap",
+                title ? "line-clamp-[6]" : "line-clamp-[7]",
+              )}
+            >
+              {body}
+            </p>
+            {clipped.length > 0 ? (
+              <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">
+                {clipped.map((h) => `#${h}`).join(" ")}
+              </p>
+            ) : null}
+          </button>
+        )}
+      </div>
+      <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
+        <MediaToolbar
+          info={node.detail ? [node.detail] : []}
+          actions={actions}
+          menuItems={menuItems}
+          moreLabel={t("results.canvas.more")}
+          onAction={handleBarAction}
+        />
+      </div>
+    </div>
+  )
+}
 /** The output node's product-card skin (ADR-041 D5 — the node IS the card),
  * 2026-08-15 anatomy (figma-style, the reference canvas's node language;
  * 08-16 走查修订):
@@ -855,6 +1032,12 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         <SpineCard node={node} />
       ) : node.kind === "artifact" ? (
         <ArtifactCard node={node} />
+      ) : node.kind === "output" && node.textContent ? (
+        <TextProductCard
+          node={node}
+          selected={selected}
+          onOutputAction={onOutputAction}
+        />
       ) : node.kind === "output" ? (
         <ProductCard
           node={node}

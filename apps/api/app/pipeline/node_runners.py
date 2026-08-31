@@ -677,6 +677,45 @@ class DirectorPlan(NodeBase):
     def canvas_group(self, node):
         return "plan"
 
+    def canvas_text(self, node):
+        """Plan 卡正文 = 人话任务书摘要（不是内部工序 summary）。"""
+        spec = node.spec or {}
+        if spec.get("plan_summary"):
+            return spec["plan_summary"]
+        task_book = spec.get("task_book") or {}
+        slots = [IntentSlot.model_validate(s) for s in task_book.get("slots", [])]
+        return self._plan_summary(slots, task_book.get("target_language", "en"))
+
+    @staticmethod
+    def _plan_summary(slots: list[IntentSlot], target_language: str) -> str | None:
+        if not slots:
+            return None
+        from collections import Counter
+
+        counts = Counter(s.type for s in slots)
+        zh = target_language.startswith("zh")
+        type_labels = {
+            "post": "LinkedIn 帖子" if zh else "LinkedIn post",
+            "quotes": "名言卡" if zh else "quotes card",
+            "carousel": "轮播图" if zh else "carousel",
+            "article": "文章" if zh else "article",
+            "clip": "片段" if zh else "clip",
+        }
+        lang_labels = {
+            "en": "English",
+            "zh": "中文",
+            "de": "Deutsch",
+            "fr": "Français",
+            "es": "Español",
+            "it": "Italiano",
+        }
+        parts = []
+        for slot_type, count in counts.items():
+            label = type_labels.get(slot_type, slot_type)
+            parts.append(f"{count} {label}" if count > 1 else f"1 {label}")
+        parts.append(lang_labels.get(target_language, target_language.upper()))
+        return " · ".join(parts)
+
     def estimate(self, ctx: dict) -> dict | None:
         """One call: prompt = the upstream understanding (≤ 2500 completion
         tokens) + task book + persona/tone context; completion = the
@@ -802,6 +841,10 @@ class DirectorPlan(NodeBase):
         await db.flush()
         assets = await _list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
+        # 任务书摘要落 spec，供 canvas_text 投影到 plan 节点。
+        plan_summary = self._plan_summary(intent_slots, ctx.get("target_language", "en"))
+        if plan_summary:
+            node.spec = {**(node.spec or {}), "plan_summary": plan_summary, "task_book": task_book}
         await _set_summary(
             node.id,
             f"规划了 {len(storyboard.slots)} 个槽位 · "

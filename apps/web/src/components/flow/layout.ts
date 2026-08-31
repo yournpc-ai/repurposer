@@ -7,8 +7,10 @@ import type { FlowEdge, FlowNode, FlowNodeKind } from "./types"
 export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: number }> = {
   asset: { width: 128, height: 216 },
   output: { width: 128, height: 216 },
-  step: { width: 192, height: 72 },
-  spine: { width: 192, height: 72 },
+  /** 展开后的过程脊 step pills：小尺寸，不抢产物节点视觉权重。 */
+  step: { width: 144, height: 48 },
+  /** 过程脊：细隧道，不是主节点 (ADR-041 D6 修订)。 */
+  spine: { width: 96, height: 32 },
   /** Artifact nodes (D6 修订; 2026-08-19 收窄后 = 任务书玻璃文本节点, the
    * FLORA text-node form): the three-section anatomy (type + status / body
    * copy / spec line) sized generously for reading — a six-line relaxed
@@ -53,6 +55,22 @@ export function productNodeSize(aspect?: string | null): { width: number; height
   }
 }
 
+/** Text-product card size (post / article, no baked media): the card is the
+ * readable text container — width matches the product lane, height is a
+ * function of preview line count so the canvas stays compact but legible.
+ * Budgets mirror FlowNodeCard's real chrome: caption = 26px, body padding
+ * = 24px (top+bottom), toolbar band = 44px, plus the text body height. */
+export function textProductNodeSize(lineCount: number): { width: number; height: number } {
+  const clamped = Math.max(2, Math.min(lineCount, 8))
+  const lineHeight = 18 // text-xs leading-relaxed ≈ 18px per line
+  const titleHeight = 22 // title line if present
+  const bodyHeight = clamped * lineHeight
+  const hashtagsHeight = 20 // one-row hashtag band
+  return {
+    width: 280,
+    height: 26 + 12 + titleHeight + bodyHeight + hashtagsHeight + 12 + 44,
+  }
+}
 /** Source video asset node (results canvas): the media plays inline, so the
  * frame is landscape and wide enough to watch (280 = the product lane);
  * the caption band rides above and the toolbar band below (both included in

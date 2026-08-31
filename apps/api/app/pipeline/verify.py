@@ -117,6 +117,9 @@ class Verify(NodeBase):
     task_name = "Check quality"
     task_name_zh = "质检"
     agents = (verify_judge,)
+    # 质检是产物的属性，不是图上的独立节点 (ADR-041 D6 修订):
+    # 通过时安静投影到产物卡，失败时产物卡变红/带徽章。
+    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """Free for the deterministic matrix; the quotes judge adds one small

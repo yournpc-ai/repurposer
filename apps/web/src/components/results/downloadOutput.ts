@@ -40,11 +40,11 @@ export function downloadOutput(output: Output): void {
     text = [content, hashtags.join(" ")].filter(Boolean).join("\n\n")
   }
   if (!text) return
-  const blob = new Blob([text], { type: "text/markdown" })
+  const blob = new Blob([text], { type: "text/plain" })
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
-  a.download = `${output.type}-${output.id}.md`
+  a.download = `${output.type}-${output.id}.txt`
   document.body.appendChild(a)
   a.click()
   a.remove()

@@ -3,7 +3,7 @@ import type { TFunction } from "i18next"
 import { toAbsoluteUrl } from "@/lib/api"
 import type { Output, WorkflowStep } from "@/lib/types"
 
-import { ASSET_TOOLBAR_PX, productNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
+import { ASSET_TOOLBAR_PX, productNodeSize, textProductNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
 import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
@@ -249,13 +249,8 @@ export function runFlowGraph(
       artifact: key,
       label: t(`results.canvas.artifact.${type}`, { defaultValue: type }),
       body: bodyMember.canvas_text ?? bodyMember.summary ?? undefined,
-      // The plan card's second line = what the understanding found in the
-      // material ("11 arguments · 10 quotes").
-      detail:
-        key === "plan"
-          ? (sorted.find((s) => s.kind === "director_understand")?.summary ??
-            undefined)
-          : undefined,
+      // Plan 卡只展示任务书摘要 (body)，不展示内部工序 summary。
+      detail: undefined,
       status: aggregateStatus(sorted),
       anchorStepId: anchor.id,
       order: sorted[0].seq,
@@ -365,7 +360,31 @@ export function runFlowGraph(
               thumbUrl: null,
             }))
           : undefined
-    // The whole-source materialization reads as "Video", not "Clips"
+const TEXT_PRODUCT_TYPES = new Set(["post", "article"])
+
+function textContentFromOutput(output: Output): FlowNode["textContent"] | undefined {
+  if (!TEXT_PRODUCT_TYPES.has(output.type)) return undefined
+  const title = output.publishing.title ?? output.payload.title ?? null
+  const body = output.payload.content ?? ""
+  const hashtags = output.publishing.hashtags ?? output.payload.hashtags ?? []
+  if (!title && !body && hashtags.length === 0) return undefined
+  return { title, body, hashtags }
+}
+
+function textProductLineCount(output: Output): number {
+  const tc = textContentFromOutput(output)
+  if (!tc) return 0
+  // Estimate visible lines from the body at the card's text width (~248px,
+  // text-xs). A rough heuristic: ~55 chars per line for Latin, ~35 for CJK.
+  const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(tc.body)
+  const charsPerLine = cjk ? 35 : 55
+  const bodyLines = Math.max(1, Math.ceil(tc.body.length / charsPerLine))
+  const titleLines = tc.title ? 1 : 0
+  // We count title + body, then clamp to the 2–8 preview range.
+  return Math.min(8, Math.max(2, titleLines + bodyLines))
+}
+    const textContent = textContentFromOutput(output)
+    const textLines = textContent ? textProductLineCount(output) : 0
     // (2026-08-17 走查拍板): the run's only excerpt vocabulary belongs to
     // real excerpts — materialize_source stamps segment.id="full" and the
     // fork family (translate / dub) carries the same source_ref downstream.
@@ -391,6 +410,7 @@ export function runFlowGraph(
       output,
       prompt: prompt ?? null,
       variants,
+      textContent,
       topPick:
         output.type === "clip" &&
         topClipScore > 0 &&
@@ -398,8 +418,13 @@ export function runFlowGraph(
       // Node frame = the server-derived display aspect (产物展示统一:
       // render_spec.aspect → payload.aspect → null). quote_frame payload
       // pins "9:16"; "original" whole-source rows normalize to null and
-      // take the default tier until media reports real pixels.
-      size: productNodeSize(output.aspect ?? null),
+      // take the default tier until media reports real pixels. Text products
+      // (post / article) have no aspect — the card is sized by preview line
+      // count instead.
+      size:
+        textContent && textLines > 0
+          ? textProductNodeSize(textLines)
+          : productNodeSize(output.aspect ?? null),
       tourTargets: output.id === tourOutputId,
       order: i,
     })
