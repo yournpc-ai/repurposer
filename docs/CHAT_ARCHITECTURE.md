@@ -8,7 +8,7 @@
 > - 拓扑约束用 `requires`（输入校验）+ `after`（顺序约束）表达（AGENT_ARCH §4  NodeBase）。
 > - `synthesize_talk_video` 已登记未实装（seat 座位，不可派发；归 R2，见 RECIPES §8）。
 > - 提及系统 = 双端注册表架构（前端 `MENTION_REGISTRY` + 服务端解析注册表，方针 MENTIONS §4）；配方不是 mention——配方 = 提示词（ADR-040）：发射的全部行为载荷 = 预填模板原文，无 `recipe_id` transport、无服务端播种，plan path 与 composer 完全同径（chat 修订永远赢）。
-> - SSE 统一由 GenerationOverlay 打勾流消费（`useRunEvents` / fetch-event-source；processing 项目开 `?overlay=run` attach 模式）；step 状态枚举含 `waiting`（HITL/suspend-resume，§8.5）。
+> - SSE 统一由项目页 dock 打勾流消费（`useRunEvents` / fetch-event-source；2026-08-31 ADR-051：`?overlay=` 路由参数与 fullscreen 壳退役，项目页永远画布+dock，processing 项目直达项目页即 attach 活 run）；step 状态枚举含 `waiting`（HITL/suspend-resume，§8.5）。
 
 ## 1. 定位与三条原则
 
@@ -20,7 +20,7 @@ task list（LLM 提议）→ compile_graph 校验/排序/补默认（代码裁�
 
 1. **LLM 提议，代码裁决**。LLM 只出"干什么"（task list），拓扑正确性（skill 是否存在、顺序是否合法、参数默认值）全部归 `compile_graph`。LLM 永不直接写 node spec。
 2. **轮内一次调用，轮间才是循环**。每条用户消息 = intent agent 单次调用（信道 = JSON-in-prompt 约定，非原生工具协议）→ task list → 编译 → 跑。不做 ReAct 式多步推理；"循环"只发生在对话轮次之间。
-3. **composer = chat 的第一条消息**。composer 发送 = 建项目 + 上传素材 → 跳转 `?overlay=chat`，草稿作为第一条 `POST /chat` 消息发出（mentions + `persona_id` 随行）；空指令由前端本地拦截（toast）——compile_graph 只有技能链一种入口，full scope 无 tasks 直接拒生。
+3. **composer = chat 的第一条消息**。composer 发送 = 建项目 + 上传素材 → 直达项目页画布+dock（2026-08-31 ADR-051：`?overlay=chat` 路由参数退役），草稿经 router state 交付 dock 作为第一条 `POST /chat` 消息发出（mentions + `persona_id` 随行）；空指令由前端本地拦截（toast）——compile_graph 只有技能链一种入口，full scope 无 tasks 直接拒生。
 
 ## 2. 一次对话指令的完整生命
 
@@ -224,18 +224,18 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 
-**前端实现**：`useRunEvents` hook 统一消费这条流，接 GenerationOverlay 打勾流（全屏对话：计划卡 HITL 确认 → 步骤逐行亮起（shimmer 标记进行中）→ 终态 toast + 结果页 refetch）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
+**前端实现**：`useRunEvents` hook 统一消费这条流，接项目页 dock 打勾流（2026-08-31 ADR-051：fullscreen 壳退役、dock 壳唯一形态；计划卡 HITL 确认 → **折叠打勾**——默认折叠一行：shimmer 状态行 + 当前步名，点击展开步骤日志 → 终态 toast + 结果页 refetch；run 期画布活：占位产物卡 run 开始即物化〔derived preview 投影〕、产物落地原地填充）。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
 
-**进度面**：进度 UI 只留打勾流一处。`processing` 项目卡片链接 `/projects/$id?overlay=run`：GenerationOverlay 以 `initialRunId` attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。results 页裸访（无 overlay 参数）只有内联进度：tab 运行指示、骨架卡片、clip 卡渲染 spinner。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时 overlay 中途卸载。
+**进度面**：进度 UI 只留打勾流一处（ADR-051 浓缩为默认折叠一行，展开才见步骤日志——形态变了，唯一进度面不变）。`processing` 项目卡片直达 `/projects/$id`（`?overlay=run` 退役）：项目页 dock 自动 attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）显示 transcribing/queued 占位行。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时打勾态中途卸载。
 
-**计划确认的持久化与恢复**：plan path 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（字段 = prompt / intent / reasons / persona_id / derived 预览；answer 回合不写，免得覆盖用户在确认的计划），run 启动时清除（answer kind=start）。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并链接 `/projects/$id?overlay=chat`，results 页无 run 时显示"继续设置"CTA——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。
+**计划确认的持久化与恢复**：plan path 的 generate 回合把未确认的任务书 + 原始 prompt 写到 `projects.pending_intent`（字段 = prompt / intent / reasons / persona_id / derived 预览；answer 回合不写，免得覆盖用户在确认的计划），run 启动时清除（answer kind=start）。`draft` 项目 ⟺ 待确认：项目卡片显示"待确认"并直达 `/projects/$id`（`?overlay=chat` 退役），项目页无 run 时 dock 呈现"继续设置"任务书——两处都能精确复活同一份计划（跨设备；卡片上的手动微调不入库，恢复的是最近一次推理版）。
 
 ### 8.5 QuestionDock 与 question/answer（ask 原语，期 1/3 已落）
 
 > **消息列表是"已决"的历史，输入框上方是"待决"的现在。**
 
 - **一行两态**：`messages.question` JSONB（typed payload：`{kind: task_book|choice|confirm, options, allow_freeform, estimate}`）+ `messages.answer` JSONB nullable（**NULL = 待决**，宪法 §4）；`content` 存问题人话原文（自然进 LLM 上下文历史）。
-- **停靠法则**：待决问题永远停靠 input 正上方的 **QuestionDock**（✓ + 问句 + estimate? + 按钮组含 bail）；**同一时间最多一个待决**——新题落库前旧题 auto-bail（`answer.text="superseded"` 机器标记）。回答瞬间坍缩成 **QA 双层消息**入档（`QaPair`）。
+- **停靠法则**：待决问题永远停靠 input 正上方的 **QuestionDock**（问句 + estimate? + 按钮组含 bail；**2026-08-31 ADR-051 形态切换**：choice 待决时 dock 整体变形——输入行与免责行隐藏，容器 = 问题行〔去 ✓——待决不是已完成；加 × 关闭 = bail 通道〕+ 选项行 + **尾行铅笔手输入**〔Enter 提交 freeform〕，形态切换时容器与消息流边界明确区分；回答后坍缩回基础形态）；**同一时间最多一个待决**——新题落库前旧题 auto-bail（`answer.text="superseded"` 机器标记）。回答瞬间坍缩成 **QA 双层消息**入档（`QaPair`）。
 - **待决重建零内存态**：`latest_pending_question` = 会话最新未答 question 的行查询（Mastra `listSuspendedRuns` 同款），GET `/chat/conversation` 带 `pending_question`——刷新/跨设备 dock 复活免费。
 - **answer 端点即恢复**：`POST /chat/messages/{id}/answer` 写答案即解除阻塞（不显式命名 resume）。task_book 分派：bail → 清 pending_intent 回 draft（prompt 已 seed 进会话，可重开）；`start`（一等 answer kind）→ 从 pending_intent 起 run 并写 `workflow_run_id`。choice 分派（期 3）：记录后续聊——响应 `AnswerResponse{answered_question, follow_up}`（与 `ChatResponse.answered_question` 同角色同名，B2），option 答案回填 label 进 `answer.text`。重复回答 409。`/generate` 路径丢弃未答的 task_book 问题行（`discard_unanswered_task_book`——run 起于未答即无 QA 交互，问题行直接删除，档案不留伪造 QA 对；真正的确认仍走 answer_question 入档）。
 - **plan path 回合形态（B1/B4 + G-1，2026-08-04 自 /intent 迁入）**：dock 任务书 = `ChatResponse.assistant_message` 携带 pending task_book question 行；answer 回合的答复落普通消息行且**不覆盖 stored 任务书**；原话确认（G-1：PlanAgent 判 `start`）复用 answer kind=start 路径起 run，`ChatResponse` 携带 `run_id` + `answered_question`（dock 的 autonomy 档随 `ChatRequest.autonomy` 透传不丢档——打字确认与 dock Start 同待遇）；无可启动对象时 re-dock 存量书或降级 plan，同样不覆盖 stored 任务书。`needs_clarification` 布尔已摘除（`reasons.length > 0` 可推导，存量行读取容忍）。修订发累积 prompt 做推理（服务端拼装），每轮用户原文各自入档。

@@ -786,10 +786,10 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 1. **结果画布 = 桌面/iPad 默认中心**：项目页收官态 = FlowView 渲染当前 run 拓扑 + 最新产物（真节点真边，output 节点 = 产物卡：媒体内联自播（视频静音循环）/ 分数+top-pick / 磨砂操作条（下载/发布，hover 放大开大屏））。多 tab 结果页与"结果网格为默认中心"退役；网格重构件降级为移动端列表渲染件复用。
-2. **进度不进图**：打勾流是唯一进度面（run 进度图排产撤销）；收官转场 = 遮罩淡出 + 消息区上收 + 画布按 `seq` 编译序诞生回放——动画 = 真实事件投影不变；输入组全程零位移；断线重连 / 历史打开直接呈现终态不播回放。
-3. **底部 dock（2026-08-13 修订：一体容器 + 灰行入流）**：chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（同一消息机器内脏不动）。dock 只有两态——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在**同一磨砂容器内**向上生长（容器独占圆角与玻璃，子件全方；摘要卡条 / 焦点 chip / 三态机退役）；**agent 发声（新回复落流）历史必自动展开——焦点设置不撑开历史（2026-08-16 走查修订：chip 即反馈，焦点灰行照旧入流，点卡开详情 modal 时历史乱弹是 jump-scare）**；点画布空白 = 回中性（历史收起 + 焦点清除，pane 级事件，节点点击不触发）。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap、焦点事件）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。一个输入组三停靠位：首页 composer / overlay 底排 / 结果 dock。
+2. **进度不进图**（2026-08-31 ADR-051 收窄为「**步骤叙事**不进图」）：打勾流是唯一步骤叙事进度面（run 进度图排产撤销）——ADR-051 起浓缩为默认折叠的一行（Claude Code 式：运行中 shimmer 状态行 + 当前步名，点击展开步骤日志，收官 recap 聚合照旧）；**产物占位/填充 = 图的内容不是进度**（derived preview 确定性投影，run 开始即物化、产物落地原地填充）；收官转场 = 遮罩淡出 + 消息区上收 + 画布按 `seq` 编译序诞生回放——动画 = 真实事件投影不变；输入组全程零位移；断线重连 / 历史打开直接呈现终态不播回放。
+3. **底部 dock（2026-08-13 修订：一体容器 + 灰行入流）**：chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（同一消息机器内脏不动）。dock 只有两态——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在**同一磨砂容器内**向上生长（容器独占圆角与玻璃，子件全方；摘要卡条 / 焦点 chip / 三态机退役）；**agent 发声（新回复落流）历史必自动展开——焦点设置不撑开历史（2026-08-16 走查修订：chip 即反馈，焦点灰行照旧入流，点卡开详情 modal 时历史乱弹是 jump-scare）**；点画布空白 = 回中性（历史收起 + 焦点清除，pane 级事件，节点点击不触发）。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap、焦点事件）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。一个输入组停靠位（2026-08-31 ADR-051 修订）：首页 composer / 结果 dock（原第三停靠位 overlay 底排随 fullscreen 壳退役）。
 4. **产物节点 toolbar 合法化，边界说死**（2026-08-17 走查修订：节点解剖统一）：单击 = detail modal 旧逻辑原样，publish modal 保留；过程节点永无 toolbar；toolbar 装图操作（运行 / 接线）永久禁区。**节点解剖 = caption 恒为类型 icon + 类型名（左上，右槽恒空）+ 媒体区 + 卡下磨砂工具条**：一切信息位（语言 / 分辨率 / 时长 / 画幅）住工具条左区——时长住条内、永不作为视频浮层角标（媒体角标只剩 score），分辨率从媒体元素实读（`onLoadedMetadata` / `naturalWidth`），不立硬编码表；divider 隔信息位与动作位（下载 / 删除 = 条内仅有的两个动作），删除右侧"⋯"开二级菜单（发布 / 打开 / 在对话中指认），菜单带层级故同走雾面玻璃；**工具条宽度不限、信息永不省略**（08-17 三轮走查拍板）——条随内容自然撑开、卡下居中对称悬出，截断/省略号/title 兜底全部撤销（此前 max-w-full 卡宽 + 信息无 overflow-hidden 的组合曾让文字穿透 flex 序与图标层叠）；**产物卡 lane 208 → 280 同轮放大**（9:16 → 498 媒体高，源视频素材节点同宽 280）。素材节点同解剖（文件名 / 时长 / 分辨率 + 下载 / 删除 + ⋯ 重处理），动作归 surface 所有；删除产物 = `DELETE /outputs/{id}`（连存储对象一起清，fork 派生行不陪葬）。ChatModal / AssetChatModal 退役——产物对话归 dock + 焦点注入；工作面"舞台 / 检视器"页面区方案取消（detail modal 保留使检视器冗余）。
-5. **密度三档 + 渲染单元**（2026-08-12 修订；2026-08-19 名词节点收窄）：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 名词密度（素材 + 任务书文本节点 + 产物主角）；run 期无图。**画布渲染单元 ≠ 执行单元**：step 全量落库（成本 / 重跑 / 血缘靠它），画布按节点类自描述聚合渲染——`canvas_key` 同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书，dock-surface 雾面玻璃文本节点，对应 FLORA 文本节点形态）；**过程动词永不上图**（select_clips / dub / add_music 授予全移除，translate_clip 08-15 先例推广——每个动词都是其产物的属性），无键折"过程脊"组节点（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step），`canvas_hidden`（render；prelude——preprocess/persona_bootstrap，2026-08-19 二轮 R1：plan 的上游与下游折进同一脊会使可见图成环、任务书沉进产物列，prelude 改 hidden 后资产喂边走下游兜底到任务书）永不上图、状态原地投影到产物卡（失败/渲染中 = 卡的原地态，不是独立节点）。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。判定任一节点只问："它是名词吗？"——动词一律折脊。
+5. **密度三档 + 渲染单元**（2026-08-12 修订；2026-08-19 名词节点收窄）：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 名词密度（素材 + 任务书文本节点 + 产物主角）；~~run 期无图~~（2026-08-31 ADR-051 翻案：fullscreen 壳退役后 run 期画布活——占位卡 run 开始即物化 + 折叠打勾随行）。**画布渲染单元 ≠ 执行单元**：step 全量落库（成本 / 重跑 / 血缘靠它），画布按节点类自描述聚合渲染——`canvas_key` 同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书，dock-surface 雾面玻璃文本节点，对应 FLORA 文本节点形态）；**过程动词永不上图**（select_clips / dub / add_music 授予全移除，translate_clip 08-15 先例推广——每个动词都是其产物的属性），无键折"过程脊"组节点（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step），`canvas_hidden`（render；prelude——preprocess/persona_bootstrap，2026-08-19 二轮 R1：plan 的上游与下游折进同一脊会使可见图成环、任务书沉进产物列，prelude 改 hidden 后资产喂边走下游兜底到任务书）永不上图、状态原地投影到产物卡（失败/渲染中 = 卡的原地态，不是独立节点）。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。判定任一节点只问："它是名词吗？"——动词一律折脊。
 6. **导航门禁修订**（修订 ADR-036 补记 1）：缩放 = 导航不是编辑——配方卡说明书锁 fit；结果画布开放 pan / zoom（minimap 退役：稀疏小图无导航价值）；拓扑编辑手势任何面物理缺席。
 7. **移动端 = UI in chat**：不渲染 canvas（< iPad 宽度）；对话沉底与桌面 dock 同心智；一回合一张 RunCard（卡头血缘摘要行 + 可展开过程脊 + 产物缩略条 + chips）；点缩略图进全屏查看器（家族滑动 + 底部迷你输入条）；点卡即焦点免 @。卡片种类注册表制：计划 / 操作 / 结果三型。
 8. **焦点 = 一次性消费 + 落库**（2026-08-13 修订 N-36「不落库」）：画布点选产物 → 下一轮 chat 携带 `focus_output {id,label}`（context 一行不变），发送即消费（再改再点，点画布空白即清，失败回滚即还）；**焦点持久化在用户消息上**（`messages.focus_output`）——历史回读时该消息上方渲染焦点前缀灰行，刷新后流不撒谎。
@@ -1062,3 +1062,36 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **保险丝 120s**：已翻案（见 Decision 5）。**再翻案条件**：观测证明 600s 仍误杀正常单步（届时先查该步为何纯等待这么久，而非再放宽）。
 
 **Related**: ADR-025（cost 计量账本机制——本条改写入路径不改账本形状）/ ADR-017（Postgres 即队列）/ ADR-039（队列与重试机制；execute_step 终态分支结构；质检打回 feedback 通道）/ MODULE_ARCHITECTURE §7.2（队列机制——本条为其补会话纪律）
+
+## ADR-051: FLORA 对齐——画布优先路由（overlay 概念退役）+ 折叠打勾增量感 + 节点交互升级 + 提问 dock 形态切换
+
+**Status**: Decided (2026-08-31，用户拍板；施工排期 PROGRESS W7 头部 08-31~09-01)
+
+**Context**: 2026-08-31 用户以真实案例项目对照 FLORA 工作台完整走查，五处差距浮出：① 点阵太淡（1px/20% 在白画布上几乎不可见，FLORA 的点阵明显可读）；② 免责行位置/文案学了一半（位置不常驻、文案自造）；③ 提问选项 UI 差距——FLORA 是选项 1/2/3 + 尾行铅笔手输（整个 dock 变形、原输入行隐藏），我们是保留原输入行 + placeholder 换 "Something else"；④ run 节点生命周期交互（节点出生即有最终尺寸 → running 动画 → 结果填充 → hover tooltip + 磨砂 prompt 框可编辑 → 重跑 → 变体分页 1 of N → 详情面板陈列模型事实）是"让用户一步一步进行下去"的关键手感，我们的 run 期缺增量感（产物只在 output 行落地时凭空出现，占位机制缺席）；⑤ 中间节点噪音（"1 step" 过程脊）。架构判断（用户认可）：**物种差异不是架构缺陷**——FLORA node = 单次生成单元，我们 run = 编译批量 DAG 共享一份 director plan；但增量感与节点交互是真实差距，交互模式必须升级。路由层：`?overlay=` 参数是 fullscreen overlay 时代的遗留产物——项目页本应永远画布+dock。用户拍板原话要点：**打勾流不动只浓缩**（折叠型 Claude Code 式——对方一样有 "Running node" 打勾，浓缩即对齐）；**overlay 概念整个去掉**，进来就是画布+dock；**chat 与意图识别毫无变化**；hover prompt 框要学习（心智负担更少，是更正确的交互）；变体分页同批做；**ADR 都可以破，禁令「图面模型名永禁」也可以破**——破法见 Decision 5（事实展示解禁，SKU 货架永禁不动）。
+
+**Decision**:
+
+1. **画布优先路由（overlay 概念退役）**：`/projects/$id` 永远 = 画布 + 底部 dock——`?overlay=chat` / `?overlay=run` 路由参数与 GenerationOverlay 的 fullscreen 壳一并退役，dock 壳成为唯一 chat 外壳。composer 发送 = 建项目 + 上传素材 → **直达项目页画布+dock**，草稿经 router state 交付 dock 发出首条 `POST /chat`（消息机器零变化，去掉的只是壳）。processing 项目卡片 / 待确认 CTA / 继续设置 / tours 的 overlay 引用全部清改为直达项目页——dock 按项目态自呈现（待确认 = 任务书 dock；活 run = 折叠打勾 + 活画布）。断线重连 / 历史打开直接呈现终态不变（ADR-041 D2）。**ADR-036 补记 3 的诞生编排保留**：收官转场 reveal 照旧；本条补的是 run 期的活画布（原 D2/D5「run 期无图」随 fullscreen 壳退役而废）。
+2. **打勾流浓缩 + 占位物化（增量感两件）**：打勾流仍是唯一**步骤叙事**进度面（ADR-041 D2 精神不变）——形态浓缩为默认折叠的一行（Claude Code 式：运行中 = shimmer 状态行 + 当前步名，点击展开步骤日志，收官 = recap 聚合行照旧）。同时 run 期画布活起来：**占位产物卡在 run 开始即物化**——derived preview（ADR-043 编译期干跑）已知产物花名册 + 画幅，`productNodeSize(aspect)` 让占位卡出生即占最终位置与尺寸，产物落地即原地填充（画幅未知取默认档）。**ADR-041 D2「进度不进图」范围收窄为「步骤叙事不进图」**：步骤清单永不上图不变；产物占位/填充是图的**内容**（确定性派生投影），不是进度剧场——禁令 #4「禁假进度」不破（占位 roster 必须来自编译期干跑，禁虚构产物）。
+3. **提问 dock 形态切换**：choice 待决时 dock 整体变形——输入行（attach + MentionEditor + history + send）与免责行**隐藏**；容器 = 问题行（去掉 ✓——待决不是已完成；加 × 关闭 = bail 通道）+ 选项行（字母徽章映射不动）+ **尾行铅笔手输入**（Enter 提交自由文本；确定性字母/序号/原文 autoResume 映射不变，零 LLM）。形态切换时 dock 与消息流有明确边界区分（容器边界，不靠阴影）。回答坍缩回基础形态、QA 双层入档不变（CHAT_ARCH §8.5 停靠法则不动）。
+4. **节点交互升级（hover prompt 框 + 变体分页 + 脊收编）**：hover 产物卡 → tooltip + 磨砂 prompt 框，展示**该产物自己的 spec**（runFlow 产物节点的全局 run `prompt` 逐卡重复退役——改 per-product spec：fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 框可编辑 → 发送 = 带焦点预钉的修订回合，**骑 `POST /chat` 唯一通道，永不开新执行通道**。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。**脊收编**：折叠步 ≤1 时过程脊不成节点（边经既有祖先投影规则解析，零新投影规则）。
+5. **模型名禁令修订（事实展示解禁）**：「禁图面模型名 / 技术黑话」（简报 `tasks/results-canvas.md` #10；代码注释里作 #12）修订为——**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**（禁令精神不动）；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」裁定不变），本条只解禁事实陈列。
+6. **点阵与免责行**：`dot-grid` 配方调大调显（一个配方 home + 结果画布共用，两面专用纪律不变）；dock 基础形态在输入区上方常驻免责行，en 原文 = "Repurposer is AI and can make mistakes. Check important info."（zh 镜像「Repurposer 是 AI，可能出错。重要信息请核对。」）——dock 形态切换（提问等）时随输入行一起隐藏。占位卡带 @ mention 教学文案（功能性，非营销）。
+
+**Consequences**:
+
+- ADR-041 修订：D2「进度不进图」收窄为「步骤叙事不进图」（产物占位/填充 = 图内容）；「run 期无图」（D2/D5）随 fullscreen 壳退役；D5 产物卡的 run 级 `prompt` 字段改 per-product spec；fullscreen overlay 壳退役，dock = 唯一 chat 外壳（「一个输入组三停靠位」改两停靠位：首页 composer / 结果 dock）。
+- ADR-035 / ADR-036 不变：只读基座不破——hover prompt 框是卡面浮层不是图编辑；拓扑编辑手势任何面物理缺席（#12 本义）不变；可操作画布永拒不变。
+- chat 与意图识别**零变化**：PlanAgent / ChatIntentAgent / 四态契约 / plan path / QuestionDock 数据层（question/answer JSONB、autoResume、停靠法则）全部不动——本批改的是渲染壳与投影层，不是消息机器。
+- 服务端增量很小：占位物化吃 derived preview（ADR-043 现成干跑）；per-product spec 从编译图 slot 参数投影（outputs.py 序列化增量）；变体分页吃 Operation Model 快照（ADR-032 现成）。无新表、无新执行通道。
+- CHAT_ARCH §8（进度面 / 前端实现 / composer 条）、CLAUDE.md（composer 契约）同步修订。
+- 排期：W7 头部插入 2 个工作日（08-31~09-01），原计划整体顺延 2 工作日，go/no-go 10-23 → **10-27**，仍早于已批回退位 10-30，不触发新拍板（PROGRESS §2/§3 同步）。
+- 简报 `docs/tasks/flora-parity.md`（验收标准 + Prohibited Behaviors + 两天切分）。
+
+**Alternatives（翻案条件随附）**:
+
+- **FLORA 式每节点一 workflow**（节点 = 单次生成单元，图随生成增量生长）：否决——我们的 run = 编译批量 DAG 共享 director plan，物种差异是设计选择不是欠债；增量感由占位物化 + 折叠打勾兑现，不换执行模型。**翻案条件**：真实用户在走查中持续把「一个产物一个格子」误认为可单独运行的单元并试图连线。
+- **保留 fullscreen 壳作为 run 期可选视图**：否决——双壳 = 两套进度面悖论复发（ADR-041 D2 当初砍掉它的理由不变）；活画布 + 折叠打勾已覆盖其全部正当场景。
+- **hover prompt 框直接改图（就地重跑，不经 chat）**：否决——违反 chat 唯一意图面与「改动在 chat」（ADR-041 D5）；prompt 框发送 = 修订回合的发射快捷位，执行通道不变。
+
+**Related**: ADR-041（本条修订其 D2/D5 与外壳条款）/ ADR-035（可操作画布永拒不变）/ ADR-036（只读基座不变）/ ADR-043（derived preview = 占位物化数据源）/ ADR-032（Operation Model 快照 = 变体分页数据源）/ ADR-039（agent 层零变化）/ ADR-040（chat 唯一发射路径）/ 简报 `docs/tasks/results-canvas.md` #10（模型名禁令本条修订）；施工简报 `docs/tasks/flora-parity.md`；证据 = 用户 FLORA 工作台走查（2026-08-31）

@@ -19,7 +19,7 @@
 - **字幕现状**：`caption_style_preset` 枚举 6 值（`clean-bottom`/`karaoke-highlight`/`fade-in`/`pop-in`/`slide-up`/`stacking`）——堆叠字幕已收编落地：`stacking = {layout:"stack", entrance:"fade-in", maxLines:5}`（前行驻留、向下累积），`Clip.tsx` 已渲染 stack 布局（preview=render 双端生效）。
 - **crop 是 clip 级静态值** `ClipCrop{x,y,scale}`，无时序；ASR = faster-whisper（词级时间戳，**无 diarization**）。
 - **`packages/clip` 是 editor preview 与 render service 的同源组件**——渲染分支加一处，preview=render 双端自动生效。
-- **任务书 = 技能链（ADR-043）**：请求层唯一语法 = task list（`tasks[{skill, params}]`），产物 = 编译图的派生投影（`derived` 预览行）；chat plan path 接受 `prior_intent`（整链 JSON 随行，chat 修订永远赢——无合并机器）；`pending_intent` + `?overlay=chat` 恢复管道在。
+- **任务书 = 技能链（ADR-043）**：请求层唯一语法 = task list（`tasks[{skill, params}]`），产物 = 编译图的派生投影（`derived` 预览行）；chat plan path 接受 `prior_intent`（整链 JSON 随行，chat 修订永远赢——无合并机器）；`pending_intent` + 项目页 dock 恢复管道在（`?overlay=chat` 路由参数 2026-08-31 ADR-051 退役——draft 项目直达 `/projects/$id` 即复活任务书）。
 - **composer = prompt-only**（instruction + persona_id），意图识别全在管线。
 - **文字稿+照片场景已有 Ready 简报**：`docs/tasks/synthetic-talk-video.md`（`voice_gen`/`synth_visual` 节点设计，声纹 TTS 回配 ASR 时间戳，下游零感知）。
 - **demo talk 素材**：`demo/` 前缀是 reset_db 保护区（永不擦除）；配方演示资产内容寻址入桶（哈希 URL 固化在 `apps/web/src/lib/recipes.assets.ts`）。

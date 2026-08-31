@@ -435,8 +435,8 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 4. Click send
    ├── Frontend calls POST /projects to create the Project (persona_id 随建项目)
    ├── Frontend uploads materials（upload-url → 直传对象存储 → POST /projects/{id}/assets 登记）
-   └── Frontend navigates to /projects/{id}?overlay=chat，草稿经 router state 交接
-5. Overlay chat 把草稿作为首条 POST /chat 消息发出（mentions + persona_id 随行）
+   └── Frontend navigates to /projects/{id}（画布 + chat dock；`?overlay=` 路由参数 2026-08-31 ADR-051 退役），草稿经 router state 交接
+5. 项目 dock 把草稿作为首条 POST /chat 消息发出（mentions + persona_id 随行）
    ├── Plan path 从消息推断任务书（技能链），计划确认 dock 呈现
    └── 用户确认任务书后才创建 run（/generate 对无确认任务书的 full-scope 请求直接 422）
 6. System processes asynchronously
