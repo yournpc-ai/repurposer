@@ -681,7 +681,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **缩放 = 导航，不是编辑**：ADR-035 第 2 条永久拒绝的是编辑手势（拖节点/接线/删加节点——拓扑唯一来源仍是 `compile_graph`）；缩放/平移/fit 是导航能力，**基座持有、按面门禁开放**：配方卡说明书（有界策展小图）fit-first 锁缩放；结果画布与血缘板开放 pan/zoom（2026-08-11 ADR-041 重划；minimap 退役——稀疏小图无导航价值）。
 2. **引擎定 `@xyflow/react`**：缩放进基座后，pan/zoom/pinch/minimap/命中坐标换算正是手写最坑、最值得买的代码类——手绘分层方案在动工前作废（零沉没成本）。布局仍自算（确定性分层 + append-only 保序，库只做摆位与视口，不引 dagre——"chat 加节点，图只长不晃"论据不变）。交互白名单：`nodesDraggable=false` / `nodesConnectable=false` **常锁**（拓扑编辑手势物理缺席不变）。动工前置核查：React 19 兼容版本 / SSR client-only 挂载 / Tailwind v4 样式共存。
-3. **过渡动画愿景（用户拍板："连线、node 的诞生、布局都有 transition，用户会感觉到优雅"）**：三层，每层都投影真实事件——**诞生编排**（结果画布揭幕时按 `seq` 编译序逐节点入场 + 边描画，是把真实编译顺序用缓动时间轴回放，不是剧场）；**状态动画**（running 脉冲 / 边流动指向待执行子节点，SSE 驱动）；**生长动画**（chat 拓扑编辑产生新节点时，新节点诞生 + 边描画）。禁令 #9 不破：动画永远是真实事件（编译序/状态迁移/真实生长）的投影，禁假进度；`prefers-reduced-motion` 降级为即时呈现；断线重连/历史打开不播诞生回放（只有会话内亲见收官才播）。
+3. **过渡动画愿景（用户拍板："连线、node 的诞生、布局都有 transition，用户会感觉到优雅"）**：每层动画都投影真实事件——**诞生编排**（2026-09-01 ADR-051 定稿形态：画布挂载期间出生的节点——占位物化 / 产物原位填充 / 修订生长——按编译序 `BIRTH_STAGGER_MS` 交错入场 + 边描画，是把真实编译顺序用缓动时间轴回放，不是剧场；fullscreen 时代的「收官整图回放」与「生长动画」在占位世界统一为这一条生长驱动规则）；**状态动画**（running 脉冲 / 边流动指向待执行子节点，SSE 驱动；running 占位卡带 FLORA 左→右填充擦除——纯 CSS 缓动封顶 96%，不声称分数，落地产物是唯一 100%）。禁令 #9 不破：动画永远是真实事件（编译序/状态迁移/真实生长）的投影，禁假进度；`prefers-reduced-motion` 降级为即时呈现；刷新/断线重连/历史打开直出终帧——水合首帧永不重播。
 
 ## ADR-037: 身份模块正名——Speaker 退役、人设（Persona）扶正，IP 留在承诺层
 
@@ -796,7 +796,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 9. **复核门**：小白复述测试周五（08-14）照跑——裁决问题从"血缘板是否升正"改为"结果画布是否转正"；不过则结果网格回退为默认中心（组件不删），canvas 降为检视入口，零浪费。
 
 **Consequences**:
-- ADR-036 修订：第 3 条（run 进度图升正排产）退役为"结果画布"；补记 1 缩放门禁按面重划；补记 3 诞生编排触发时机从"run 启动"改为"收官揭幕回放"。FlowView 消费面 = 配方流程图 / 结果画布 /（复核中的）血缘板。
+- ADR-036 修订：第 3 条（run 进度图升正排产）退役为"结果画布"；补记 1 缩放门禁按面重划；补记 3 诞生编排定稿 = 生长驱动（画布挂载期间新生节点按编译序入场，水合首帧直出；2026-09-01 ADR-051 拍板，fullscreen 时代的「run 启动」「收官揭幕回放」两种触发一并退役）。FlowView 消费面 = 配方流程图 / 结果画布 /（复核中的）血缘板。
 - results-workspace 简报退役（中央区状态机 / 六屏 / 工作面三区被本条吸收改写；chips 双级派生 / 翻译两层 / Before-After / 焦点注入沿入新简报）；其 D5「配方身份贯穿三站」条款正式退役——ADR-040 后服务端永不见配方身份：打勾流皮肤用节点友好名、chips 按焦点产物派生，均不需要配方身份（本条同时关闭 ADR-040 的未决带出）。
 - 结果页 tour 锚点随画布重锚（`data-tour="results-*"` 挂产物节点卡）。
 - 移动端本期保留现有结果列表兜底；RunCard 增强排第三周。
@@ -1071,7 +1071,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 
-1. **画布优先路由（overlay 概念退役）**：`/projects/$id` 永远 = 画布 + 底部 dock——`?overlay=chat` / `?overlay=run` 路由参数与 GenerationOverlay 的 fullscreen 壳一并退役，dock 壳成为唯一 chat 外壳。composer 发送 = 建项目 + 上传素材 → **直达项目页画布+dock**，草稿经 router state 交付 dock 发出首条 `POST /chat`（消息机器零变化，去掉的只是壳）。processing 项目卡片 / 待确认 CTA / 继续设置 / tours 的 overlay 引用全部清改为直达项目页——dock 按项目态自呈现（待确认 = 任务书 dock；活 run = 折叠打勾 + 活画布）。断线重连 / 历史打开直接呈现终态不变（ADR-041 D2）。**ADR-036 补记 3 的诞生编排保留**：收官转场 reveal 照旧；本条补的是 run 期的活画布（原 D2/D5「run 期无图」随 fullscreen 壳退役而废）。
+1. **画布优先路由（overlay 概念退役）**：`/projects/$id` 永远 = 画布 + 底部 dock——`?overlay=chat` / `?overlay=run` 路由参数与 GenerationOverlay 的 fullscreen 壳一并退役，dock 壳成为唯一 chat 外壳。composer 发送 = 建项目 + 上传素材 → **直达项目页画布+dock**，草稿经 router state 交付 dock 发出首条 `POST /chat`（消息机器零变化，去掉的只是壳）。processing 项目卡片 / 待确认 CTA / 继续设置 / tours 的 overlay 引用全部清改为直达项目页——dock 按项目态自呈现（待确认 = 任务书 dock；活 run = 折叠打勾 + 活画布）。断线重连 / 历史打开直接呈现终态不变（ADR-041 D2）。**诞生编排定稿（2026-09-01 用户拍板，FLORA 对照核对）**：fullscreen 时代的「收官整图回放」不复活——占位世界里 reveal 与 ADR-036 生长动画统一为**生长驱动诞生**：画布挂载期间出生的节点（run 开始占位物化 / 产物原位填充 = 收官节拍 / 修订生长）按编译序 `BIRTH_STAGGER_MS` 交错入场 + 边描画；running 占位卡带 FLORA 填充擦除（纯 CSS 封顶 96%）；水合首帧（刷新/重连/历史）永不重播。配套缝：dock 起跑（Start 钮 / 散文确认 / 修订 run）即经 `onRunStarted` 通知页面 refetch——页面 SSE 从第一拍挂上，run 期活画布即时渲染（confirm 起跑路径原先把占位/填充全攒到 terminal 才出现，本批终审捉出并根修）。
 2. **打勾流浓缩 + 占位物化（增量感两件）**：打勾流仍是唯一**步骤叙事**进度面（ADR-041 D2 精神不变）——形态浓缩为默认折叠的一行（Claude Code 式：运行中 = shimmer 状态行 + 当前步名，点击展开步骤日志，收官 = recap 聚合行照旧）。同时 run 期画布活起来：**占位产物卡在 run 开始即物化**——derived preview（ADR-043 编译期干跑）已知产物花名册 + 画幅，`productNodeSize(aspect)` 让占位卡出生即占最终位置与尺寸，产物落地即原地填充（画幅未知取默认档）。**ADR-041 D2「进度不进图」范围收窄为「步骤叙事不进图」**：步骤清单永不上图不变；产物占位/填充是图的**内容**（确定性派生投影），不是进度剧场——禁令 #4「禁假进度」不破（占位 roster 必须来自编译期干跑，禁虚构产物）。
 3. **提问 dock 形态切换**：choice 待决时 dock 整体变形——输入行（attach + MentionEditor + history + send）与免责行**隐藏**；容器 = 问题行（去掉 ✓——待决不是已完成；加 × 关闭 = bail 通道）+ 选项行（字母徽章映射不动）+ **尾行铅笔手输入**（Enter 提交自由文本；确定性字母/序号/原文 autoResume 映射不变，零 LLM）。形态切换时 dock 与消息流有明确边界区分（容器边界，不靠阴影）。回答坍缩回基础形态、QA 双层入档不变（CHAT_ARCH §8.5 停靠法则不动）。
 4. **节点交互升级（hover prompt 框 + 变体分页 + 脊收编）**：hover 产物卡 → tooltip + 磨砂 prompt 框，展示**该产物自己的 spec**（runFlow 产物节点的全局 run `prompt` 逐卡重复退役——改 per-product spec：fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 框可编辑 → 发送 = 带焦点预钉的修订回合，**骑 `POST /chat` 唯一通道，永不开新执行通道**。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。**脊收编**：折叠步 ≤1 时过程脊不成节点（边经既有祖先投影规则解析，零新投影规则）。

@@ -7,7 +7,7 @@
 
 ## 0. Context
 
-配方卡 R1 落地时 Remix 交互被停用（`RECIPE_REMIX_ENABLED = false`，2026-07-31）：配方状态是 composer 的**不可见 prop**，选过的卡跨发送残留，污染了后续普通发送。同期竞品对照实验结论：ElevenLabs 把配方做成全屏模态框（第二条派发面），Agent Opus 把配方做成 composer 内的可见 mention chip（唯一入口走正常流）。裁决采 Opus 形态——与我们"composer = chat 的第一条消息 / 意图识别归管线"的架构同构，且审阅面板（`?overlay=intent` 逐槽行）原生承担"承诺确定性呈现"，模态框是多余容器。
+配方卡 R1 落地时 Remix 交互被停用（`RECIPE_REMIX_ENABLED = false`，2026-07-31）：配方状态是 composer 的**不可见 prop**，选过的卡跨发送残留，污染了后续普通发送。同期竞品对照实验结论：ElevenLabs 把配方做成全屏模态框（第二条派发面），Agent Opus 把配方做成 composer 内的可见 mention chip（唯一入口走正常流）。裁决采 Opus 形态——与我们"composer = chat 的第一条消息 / 意图识别归管线"的架构同构，且任务书确认 dock（逐槽行；ADR-051 后 = 项目页唯一确认面，`?overlay=` 路由概念已退役）原生承担"承诺确定性呈现"，模态框是多余容器。
 
 本期三件事：① **提及注册表架构**（双端：前端 `MENTION_REGISTRY` + 服务端解析注册表），recipe 为第一注册成员，后续 @asset/@output 等只填注册项；② **配方注册表服务端化**——配方结构数据（任务书钉 + 输入槽位）从"前端数据文件"升为服务端静态注册表 + 公开只读端点，钉死（pin）唯一发生地收归服务端；③ **chip 形态复亮 Remix**——chip 三律（可见 / 发送即消费 / × 即删）结构性消除旧事故，删除全部 parked 机械。
 
@@ -16,7 +16,7 @@
 - **mention 契约与列已在**：`ChatMention`（`schemas.py:147-159`，`type: Literal["asset","output","transcript_segment","workflow_step"]` + `id` + `label`，`extra="forbid"`）；列 `messages.mentions` JSONB（`tables.py:382`，server_default `[]`）。**type 枚举不含 `recipe`。**
 - **mention 的上下文注入已通用**：`_build_context`（`chat/service.py:355-358`）把任意 mention 渲染为 `Mentions (definite references): - {type} id=.. label=..` 行进 intent prompt——**上下文富化效果对任何类型已免费**，这是注册表"效果族"之一的现成座位。
 - **chat 请求链路已带 mentions**：`ChatRequest.mentions`（`schemas.py:271`）→ `service.py:1154` 持久化进消息行 → `:1226` 进 `_propose_turn`。**前端 chat 输入尚无 mention 任何痕迹**（grep 无命中）。
-- **/intent 钉死机械在跑**：`projects.py:328-338`——`prior.outputs` 经 `merge_explicit_slots` pin-merge，`prior.dub_languages` 有钉规则；pin 后写 `pending_intent`，`?overlay=intent` 审阅面板逐槽行呈现。**prior 目前由前端 composer 构造发送（要消灭的客户端钉）。**
+- **/intent 钉死机械在跑**：`projects.py:328-338`——`prior.outputs` 经 `merge_explicit_slots` pin-merge，`prior.dub_languages` 有钉规则；pin 后写 `pending_intent`，任务书 dock 逐槽行呈现（ADR-051：`?overlay=` 审阅面板已随 fullscreen 壳退役）。**prior 目前由前端 composer 构造发送（要消灭的客户端钉）。**
 - **compile_graph dub 扇出在跑**（`orchestrator.py:239-255`）：任务书带 `dub_languages` → clips 节点后逐语言 fork dub 节点。
 - **出生地约束集中在 `create_run`**：clips-media 门 / SLOT_COUNT_LIMITS 在 `create_run` 内拒绝（ValueError → 422 / chat 反问兜底）——配方派发自动继承，无需新门禁。
 - **前端 parked 机械全清单**（本期删除）：`recipes.ts:24` `RECIPE_REMIX_ENABLED=false` 及全卡 Soon 注释；`HomeComposer.tsx` `recipe` prop（`:72`/`:98`）、prefill effect（`:116-125`）、prior 载荷（`:249-260`）；`_app.home.tsx:29` `recipe` state 与 `:91` `onSelect={setRecipe}`。`RecipeCard.tsx` 的 `live = RECIPE_REMIX_ENABLED && status==="live"` 门。
@@ -98,7 +98,7 @@ resolve_recipe_mentions(mentions) -> RecipeEntry | None
 - 组件：`MentionChip`（chip 本体）、`MentionPicker`（@ 触发的 Popover 候选列表，键盘导航；overlay-surface 纪律）——两组件只读 `MENTION_REGISTRY`，composer 与 chat 输入共用。
 - **点卡 = 检视 overlay**（2026-08-10 修订）：`RecipeCard` 的本体点击与 hover Remix 按钮同开配方检视 overlay，chip + `promptTemplate` 预填由 overlay 发射区携带（纯文本预填，可见可改，不是状态）；composer 回填路径退役，composer 侧只留 @ 手选——同一 mention、同一终点。`RECIPE_REMIX_ENABLED` 闸与全部 parked 机械删除（§1 清单）。
 - chat 输入：同一 chip + picker；发送走既有 `ChatRequest.mentions`；用户消息泡渲染 mention chip 行（持久化记录，刷新可重放）。
-- 发送后：composer 路径 → `?overlay=intent` 审阅面板（逐槽行确定性呈现承诺）→ Start → 打勾流；chat 路径 → task_book dock → Start → 打勾流。**两表面共用确认面与打勾流，零新进度 UI。**
+- 发送后：composer 路径与 chat 路径同一终点——草稿经首条 `POST /chat` 送达，task_book dock（逐槽行确定性呈现承诺）→ Start → 折叠打勾流（ADR-051：`?overlay=intent` 审阅面板已退役，dock = 唯一确认面）。**两表面共用确认面与打勾流，零新进度 UI。**
 
 ### 2.5 可扩展性证明（后续 @ 类型的注册路径）
 

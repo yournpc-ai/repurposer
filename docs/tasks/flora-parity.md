@@ -69,7 +69,7 @@ FLORA 走查暴露的五处差距与我们的答案（拍板逐条对应）：
 ## 4. 风险与注意
 
 - **attach 模式 latch 的替代**：fullscreen 壳退役后，原 `?overlay=run` 的 attachRunId latch 机构需在项目页内重建（活 run 时 dock 自动进入打勾态）——注意页面自身 SSE refetch 把 run 翻成 completed 时打勾态中途卸载的老坑（CHAT_ARCH §8 进度面段的原话教训）。
-- **占位卡与诞生编排的关系**：witnessed run 的收官 reveal（编译序回放）照旧；占位物化是 run **期**行为，reveal 是**收官**行为——两者共用 `BIRTH_STAGGER_MS` 常量族，禁各起时钟。
+- **占位卡与诞生编排的关系（2026-09-01 用户拍板定稿）**：reveal 不是独立的收官行为——占位世界里诞生 = **生长驱动**：占位物化 / 产物原位填充 / 修订生长共用同一条规则（画布挂载期间新生节点按编译序 `BIRTH_STAGGER_MS` 交错诞生 + 边描画），水合首帧（刷新/重连/历史）直出零动画；running 占位卡带 FLORA 左→右填充擦除（纯 CSS 缓动封顶 96%，不声称分数——禁令 #4 禁假进度不破）。物化与诞生共用 `BIRTH_STAGGER_MS` 常量族，禁各起时钟。配套：dock 起跑经 `onRunStarted` 通知页面 refetch，页面 SSE 从 run 第一拍挂上（终审捉出的 confirm 起跑路径缺口，同批根修）。
 - **per-product spec 的数据源**：fork 派生行的 spec 来自编译图 slot 参数（服务端投影），前端永不拼装（投影层纪律同血缘边 #11）。
 - **变体分页的"版本"定义**：= 同一产物的 Operation Model 快照链 + fork 家族兄妹；quotes/carousel 既有的 items 变体切换器（`variants` 字段）是**条目**切换不是**版本**切换，两者不同槽——禁把版本分页器与条目切换器合并成一个控件。
 - **改 pipeline 代码必重启常驻 worker**（铁律）；占位序列化动 outputs.py 属 pipeline 面。
