@@ -1,4 +1,5 @@
 import { BaseEdge, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react"
+import { useRef } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -39,7 +40,14 @@ export function FlowEdge({
     targetY,
     targetPosition,
   })
-  const draw = data?.drawDelay != null
+  // Same latch as the node card's: the surface clears the birth delay on
+  // its next commit — the draw class must outlive the dashed-march keyframe
+  // (a follow-up frame must not cut it), and a continuously-applied class
+  // never replays.
+  const drawLatchRef = useRef<number | null>(null)
+  if (data?.drawDelay != null) drawLatchRef.current = data.drawDelay
+  const drawDelay = drawLatchRef.current
+  const draw = drawDelay != null
   return (
     <>
       <BaseEdge
@@ -50,14 +58,14 @@ export function FlowEdge({
           data?.semantic === "lineage" ? "flow-edge-lineage" : "flow-edge-dependency",
           draw && "flow-edge-born",
         )}
-        style={draw ? { animationDelay: `${data?.drawDelay ?? 0}ms` } : undefined}
+        style={draw ? { animationDelay: `${drawDelay}ms` } : undefined}
       />
       {data?.active && (
         <path
           d={path}
           pathLength={100}
           className={cn("flow-edge-packet", draw && "flow-edge-packet-born")}
-          style={draw ? { animationDelay: `${data?.drawDelay ?? 0}ms` } : undefined}
+          style={draw ? { animationDelay: `${drawDelay}ms` } : undefined}
         />
       )}
     </>

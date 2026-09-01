@@ -1,8 +1,10 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { useEffect, useRef, useState } from "react"
 import {
+  ArrowUp,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clapperboard,
   Download,
@@ -53,8 +55,16 @@ export interface FlowCardData extends Record<string, unknown> {
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
   /** Asset-toolbar dispatch (2026-08-17) — the surface owns asset actions. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
-  /** Media expand dispatch — the surface opens the lightbox for the node. */
-  onExpandMedia?: (nodeId: string) => void
+  /** Media expand dispatch — the surface opens the lightbox for the node.
+   * `outputId` overrides the node's own row when the version pager has the
+   * card displaying a fork-family sibling (the lightbox must show what the
+   * card shows). */
+  onExpandMedia?: (nodeId: string, outputId?: string) => void
+  /** Revision-turn dispatch (ADR-051 F — hover prompt 框): the edited spec
+   * text rides the surface's chat channel with this output pinned as focus.
+   * The output id is the DISPLAYED family member's (the revision targets
+   * the version the user is looking at). */
+  onRevise?: (outputId: string, text: string) => void
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -459,10 +469,12 @@ function TextProductCard({
   node,
   selected,
   onOutputAction,
+  onRevise,
 }: {
   node: FlowNode
   selected: boolean
   onOutputAction?: FlowCardData["onOutputAction"]
+  onRevise?: FlowCardData["onRevise"]
 }) {
   const { t } = useTranslation()
   const output = node.output
@@ -631,6 +643,15 @@ function TextProductCard({
             ) : null}
           </button>
         )}
+        {!editing ? (
+          <ReviseHoverBar
+            specPrompt={node.specPrompt}
+            group="text"
+            onRevise={
+              onRevise && output ? (text) => onRevise(output.id, text) : undefined
+            }
+          />
+        ) : null}
       </div>
       <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
         <MediaToolbar
@@ -644,6 +665,73 @@ function TextProductCard({
     </div>
   )
 }
+/** The hover prompt 框 (ADR-051 F): one frosted bar revealed over the card's
+ * bottom on hover, prefilled with the product's OWN spec (server-projected
+ * slot/params — never a frontend assembly). Editing it into any revision
+ * ask and sending rides the chat revision channel with the product pinned
+ * as focus (prohibition #1: zero new execution channel — never an in-place
+ * rerun button). Hover-only reveal: touch keeps the ⋯ menu's focus path. */
+function ReviseHoverBar({
+  specPrompt,
+  group,
+  onRevise,
+}: {
+  specPrompt?: string | null
+  /** The reveal group's name ("product" / "text") — matches the card root's
+   * `group/{name}` class. */
+  group: string
+  onRevise?: (text: string) => void
+}) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(specPrompt ?? "")
+  // Re-seed when the displayed product changes (a family flip / a refetch).
+  useEffect(() => setDraft(specPrompt ?? ""), [specPrompt])
+  if (!onRevise) return null
+  const send = () => {
+    const text = draft.trim()
+    if (!text) return
+    onRevise(text)
+    setDraft(specPrompt ?? "")
+  }
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-2 bottom-2 z-10 opacity-0 transition-opacity",
+        `group-hover/${group}:opacity-100`,
+      )}
+    >
+      <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-lg p-1 ring-1 ring-foreground/10">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              send()
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          placeholder={t("results.canvas.revisePlaceholder")}
+          aria-label={t("results.canvas.reviseTooltip")}
+          className="h-7 min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="button"
+          title={t("results.canvas.reviseSend")}
+          aria-label={t("results.canvas.reviseSend")}
+          onClick={(e) => {
+            e.stopPropagation()
+            send()
+          }}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background transition-opacity hover:opacity-80"
+        >
+          <ArrowUp className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** The output node's product-card skin (ADR-041 D5 — the node IS the card),
  * 2026-08-15 anatomy (figma-style, the reference canvas's node language;
  * 08-16 走查修订):
@@ -668,16 +756,26 @@ function ProductCard({
   onOutputAction,
   onExpandMedia,
   onAssetAction,
+  onRevise,
 }: {
   node: FlowNode
   selected: boolean
   onOutputAction?: FlowCardData["onOutputAction"]
   onExpandMedia?: FlowCardData["onExpandMedia"]
   onAssetAction?: FlowCardData["onAssetAction"]
+  onRevise?: FlowCardData["onRevise"]
 }) {
   const { t } = useTranslation()
-  const output = node.output
-  if (!output)
+  const nodeOutput = node.output
+  // Fork-family pager (ADR-051 F2 — 变体分页): the card's display AND its
+  // action target flip among the family's REAL rows (each keeps its own
+  // media — a morph version shares its row's current media, so it can never
+  // be a pager entry). The node's own row is the default member; `displayId`
+  // survives refetches (ids are stable) and a member leaving the visible set
+  // falls back to the node's own row.
+  const family = node.familyOutputs ?? []
+  const [displayId, setDisplayId] = useState<string | null>(null)
+  if (!nodeOutput)
     return (
       <ThumbCard
         node={node}
@@ -685,6 +783,19 @@ function ProductCard({
         onAssetAction={onAssetAction}
       />
     )
+  const output =
+    (displayId ? family.find((o) => o.id === displayId) : null) ?? nodeOutput
+  const flipped = output.id !== nodeOutput.id
+  const shownIdx = Math.max(0, family.findIndex((o) => o.id === output.id))
+  const flip = (delta: number) => {
+    const next = family[shownIdx + delta]
+    if (next) setDisplayId(next.id === nodeOutput.id ? null : next.id)
+  }
+  // The SHOWN member's thumb (the node's own thumbUrl only describes its own
+  // row) — hoisted above the menu/expand gates that read it.
+  const shownThumbUrl = toAbsoluteUrl(
+    output.files.image ?? output.publishing.cover_image_url ?? null,
+  )
 
   const score = typeof output.score?.value === "number" ? output.score.value : null
   // 质检裁决 (期 3): needs_human rides the media's bottom-right corner —
@@ -749,7 +860,7 @@ function ProductCard({
     ...(output.type === "clip" && hasVideo
       ? [{ action: "publish", label: t("results.canvas.publish") }]
       : []),
-    ...(hasVideo || node.thumbUrl
+    ...(hasVideo || shownThumbUrl
       ? [{ action: "open", label: t("results.canvas.open") }]
       : []),
     { action: "focus", label: t("results.canvas.focusNode") },
@@ -778,12 +889,14 @@ function ProductCard({
 
   // Multi-item outputs (quotes = N cards, carousel = N slides): the hover
   // switcher flips the main display between the node's variants; items
-  // without their own baked media render as text tiles.
-  const variants = node.variants ?? []
+  // without their own baked media render as text tiles. The switcher
+  // describes the node's OWN row — a version-pager flip to a sibling hides
+  // it (its variants don't describe the sibling).
+  const variants = flipped ? [] : (node.variants ?? [])
   const [variantIndex, setVariantIndex] = useState(0)
   const activeVariant = variants[variantIndex] ?? variants[0]
   const mediaThumb =
-    variants.length > 0 ? (activeVariant?.thumbUrl ?? null) : node.thumbUrl
+    variants.length > 0 ? (activeVariant?.thumbUrl ?? null) : shownThumbUrl
 
   return (
     <div className="group/product relative flex h-full w-full flex-col">
@@ -833,7 +946,7 @@ function ProductCard({
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1",
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1",
           selected ? "ring-2 ring-foreground/40" : "ring-foreground/10",
         )}
       >
@@ -937,11 +1050,11 @@ function ProductCard({
               {t("results.qualityNeedsReview")}
             </span>
           )}
-          {(hasVideo || node.thumbUrl) && !renderActive && onExpandMedia ? (
+          {(hasVideo || shownThumbUrl) && !renderActive && onExpandMedia ? (
             <MediaHoverButton
               className="left-2 top-2"
               label={t("results.canvas.expand")}
-              onClick={() => onExpandMedia(node.id)}
+              onClick={() => onExpandMedia(node.id, flipped ? output.id : undefined)}
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </MediaHoverButton>
@@ -961,13 +1074,15 @@ function ProductCard({
           )}
         </div>
 
-        {/* The padded interaction area: the run's prompt (read-only — the
-            edit channel is the chat dock, which the node click focuses). A
-            failed render speaks here in place (retry = the chat dock, D8). */}
+        {/* The padded interaction area: the product's OWN spec (ADR-051 F —
+            the per-card global-prompt repetition retired into this). Read-
+            only at rest; the hover prompt 框 is the edit + send affordance
+            (the chat revision channel). A failed render speaks here in
+            place (retry = the chat dock, D8). */}
         <div className="flex min-h-0 flex-1 flex-col gap-1 p-3">
-          {node.prompt ? (
-            <p title={node.prompt} className="line-clamp-2 text-xs leading-snug">
-              {node.prompt}
+          {output.spec_prompt ? (
+            <p title={output.spec_prompt} className="line-clamp-2 text-xs leading-snug">
+              {output.spec_prompt}
             </p>
           ) : null}
           {renderFailed ? (
@@ -976,17 +1091,60 @@ function ProductCard({
             </p>
           ) : null}
         </div>
+        <ReviseHoverBar
+          specPrompt={output.spec_prompt}
+          group="product"
+          onRevise={onRevise ? (text) => onRevise(output.id, text) : undefined}
+        />
       </div>
 
       {/* The always-on action band under the card — the shared MediaToolbar
           (2026-08-17 走查拍板, Lovart 解剖): media facts left, divider,
           download / publish / delete, and node business in the ⋯ menu. The
           band is reserved even while a render leaves it quiet — geometry
-          never shifts. */}
+          never shifts. The version pager (ADR-051 F2) rides the same band
+          when the fork family has ≥2 members — a separate pill, NEVER
+          merged with the hover items switcher (条目切换 ≠ 版本切换). */}
       <div
         data-tour={node.tourTargets ? "results-menu" : undefined}
-        className="flex h-[44px] shrink-0 items-start justify-center pt-2"
+        className="flex h-[44px] shrink-0 items-start justify-center gap-2 pt-2"
       >
+        {family.length > 1 && (
+          <div className="dock-surface flex items-center gap-0.5 rounded-lg p-1 ring-1 ring-foreground/10">
+            <button
+              type="button"
+              aria-label={t("results.canvas.versionPrev")}
+              title={t("results.canvas.versionPrev")}
+              disabled={shownIdx <= 0}
+              onClick={(e) => {
+                e.stopPropagation()
+                flip(-1)
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="px-1 text-[11px] whitespace-nowrap tabular-nums text-muted-foreground">
+              {t("results.canvas.versionOf", {
+                current: shownIdx + 1,
+                total: family.length,
+              })}
+            </span>
+            <button
+              type="button"
+              aria-label={t("results.canvas.versionNext")}
+              title={t("results.canvas.versionNext")}
+              disabled={shownIdx >= family.length - 1}
+              onClick={(e) => {
+                e.stopPropagation()
+                flip(1)
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <MediaToolbar
           info={barInfo}
           actions={renderActive ? [] : actions}
@@ -999,12 +1157,83 @@ function ProductCard({
   )
 }
 
+/** The placeholder slot card (ADR-051 B — 占位物化): a live run's promised
+ * product, born at its final size and position — the same band anatomy as
+ * the product card (caption / card / reserved toolbar band) so the fill
+ * swap is pixel-stable. Quiet by law: no status badge, no pulse, no
+ * actions (the step narrative lives in the dock's folded checklist). The
+ * ONE living signal is the FLORA wipe (2026-09-01 拍板): while the
+ * producing step runs, a quiet wash fills the card left→right (纯 CSS
+ * ease-out, caps at 96% — 假进度禁令不破: it never claims a fraction, the
+ * landing output is the only 100%). The body carries the functional
+ * teaching line (@-mention to revise); the toolbar band shows the slot's
+ * KNOWN facts only (language / pinned aspect — never invented). */
+function PlaceholderCard({ node }: { node: FlowNode }) {
+  const { t } = useTranslation()
+  const ph = node.placeholder
+  if (!ph) return null
+  const TypeIcon = PRODUCT_TYPE_ICON[ph.type] ?? Clapperboard
+  const isText = ph.type === "post" || ph.type === "article"
+  const running = node.status === "running"
+  const thumbPx = (ph.aspect && PRODUCT_THUMB_PX[ph.aspect]) || PRODUCT_THUMB_DEFAULT_PX
+  const info: string[] = []
+  if (ph.language) {
+    info.push(t(`languages.${ph.language}`, { defaultValue: ph.language }))
+  }
+  if (!isText && ph.aspect) info.push(ph.aspect)
+  const hint = (
+    <p className="line-clamp-3 text-xs leading-snug text-muted-foreground">
+      {t("results.canvas.placeholderHint")}
+    </p>
+  )
+  return (
+    <div className="flex h-full w-full flex-col">
+      <NodeCaption label={node.label} Icon={TypeIcon} />
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
+        {running && <span aria-hidden className="placeholder-wipe" />}
+        {isText ? (
+          <div className="flex min-h-0 flex-1 flex-col p-3">{hint}</div>
+        ) : (
+          <>
+            <div
+              className="flex shrink-0 items-center justify-center bg-muted"
+              style={{ height: thumbPx }}
+            >
+              <TypeIcon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-1 p-3">{hint}</div>
+          </>
+        )}
+      </div>
+      <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
+        {info.length > 0 && (
+          <MediaToolbar
+            info={info}
+            actions={[]}
+            menuItems={[]}
+            moreLabel={t("results.canvas.more")}
+            onAction={() => {}}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** The one node card renderer — three skins (asset/output thumbs, step pill;
  * the output skin grows into the product card when the node carries a
  * product row). Birth choreography: `flow-node-born` keyframe staggered by
  * `bornIndex` (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, onOutputAction, onExpandMedia, onAssetAction } = data
+  const { node, bornIndex, selected, onOutputAction, onExpandMedia, onAssetAction, onRevise } = data
+  // Latch the birth frame: the surface drops bornIndex on the next commit
+  // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
+  // the 420ms keyframe — the class must outlive the animation. A class that
+  // stays continuously applied never replays; a remount (the node left the
+  // graph and returned) starts a fresh latch.
+  const bornLatchRef = useRef<number | undefined>(undefined)
+  if (bornIndex !== undefined) bornLatchRef.current = bornIndex
+  const born = bornLatchRef.current
   // The product card is a composite (caption + card + action band) — its
   // selected ring hugs the CARD, not the node box; every other skin is a
   // single box and takes the ring on the root.
@@ -1013,13 +1242,18 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
     <div
       className={cn(
         "h-full w-full cursor-pointer rounded-md text-foreground transition-colors",
-        node.status === "pending" && "opacity-50",
+        // A placeholder slot has no row to open — the click would be a lie.
+        node.placeholder && "cursor-default",
+        // Placeholders are exempt from the status chrome: a promised slot
+        // never dims, and its running signal is the FLORA wipe inside the
+        // card (one living signal per card — pulse + wipe would fight).
+        node.status === "pending" && !node.placeholder && "opacity-50",
         node.status === "skipped" && "opacity-40",
-        node.status === "running" && "flow-node-running",
-        bornIndex !== undefined && "flow-node-born",
+        node.status === "running" && !node.placeholder && "flow-node-running",
+        born !== undefined && "flow-node-born",
         selected && !isProduct && "rounded-md ring-2 ring-foreground/40",
       )}
-      style={bornIndex !== undefined ? { animationDelay: `${bornIndex * BIRTH_STAGGER_MS}ms` } : undefined}
+      style={born !== undefined ? { animationDelay: `${born * BIRTH_STAGGER_MS}ms` } : undefined}
     >
       <Handle
         type="target"
@@ -1032,11 +1266,14 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         <SpineCard node={node} />
       ) : node.kind === "artifact" ? (
         <ArtifactCard node={node} />
+      ) : node.kind === "output" && node.placeholder ? (
+        <PlaceholderCard node={node} />
       ) : node.kind === "output" && node.textContent ? (
         <TextProductCard
           node={node}
           selected={selected}
           onOutputAction={onOutputAction}
+          onRevise={onRevise}
         />
       ) : node.kind === "output" ? (
         <ProductCard
@@ -1045,6 +1282,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onOutputAction={onOutputAction}
           onExpandMedia={onExpandMedia}
           onAssetAction={onAssetAction}
+          onRevise={onRevise}
         />
       ) : (
         <ThumbCard

@@ -71,6 +71,11 @@ export function textProductNodeSize(lineCount: number): { width: number; height:
     height: 26 + 12 + titleHeight + bodyHeight + hashtagsHeight + 12 + 44,
   }
 }
+
+/** Placeholder text-product cards (ADR-051 B) have no content to count —
+ * the mid-clamp line count is the honest middle estimate (the card re-sizes
+ * when the real text lands, same as any content-sized card). */
+export const PLACEHOLDER_TEXT_LINES = 4
 /** Source video asset node (results canvas): the media plays inline, so the
  * frame is landscape and wide enough to watch (280 = the product lane);
  * the caption band rides above and the toolbar band below (both included in

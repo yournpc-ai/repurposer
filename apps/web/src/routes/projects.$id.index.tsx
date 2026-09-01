@@ -28,10 +28,9 @@ import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
 
-import type { IntentSlot, Output, WorkflowStep, Project } from "@/lib/types"
+import type { IntentSlot, Output, PlaceholderRow, WorkflowStep, Project } from "@/lib/types"
 
 /** A clip counts as tour-ready once its MP4 exists and no render is in
  * flight — the same condition ClipCard uses to leave its rendering state. */
@@ -131,6 +130,8 @@ interface ProjectResults {
   latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
   pending_intent?: PendingIntent | null
+  /** Live run's placeholder roster (ADR-051 B — server-projected). */
+  placeholders?: PlaceholderRow[]
 }
 
 /** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
@@ -172,11 +173,10 @@ function ProjectDetailPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
-  // overlay=chat is the canonical conversation surface; "intent" is the
-  // retired spelling (pre unification) — tolerated on read.
-  const search = Route.useSearch() as { overlay?: "chat" | "intent" | "run" }
-  // The composer hands its draft over via router state: the overlay chat
-  // sends it as the first /chat message (intent-surface-unification W2).
+  // The composer hands its draft over via router state: the chat dock sends
+  // it as the first /chat message (intent-surface-unification W2). The page
+  // is ALWAYS canvas + dock (ADR-051) — the ?overlay= route params and the
+  // fullscreen shell are retired; project state drives the dock's form.
   const firstMessage = (
     location.state as {
       firstMessage?: {
@@ -204,22 +204,18 @@ function ProjectDetailPage() {
     []
   )
 
-  // ── Results canvas (ADR-041) ─────────────────────────────────────────
-  // Desktop (≥768px = iPad up, D1/D10): the terminal state is the results
-  // canvas + the chat dock; mobile keeps the list world (prohibition #13).
+  // ── Results canvas (ADR-041; ADR-051 画布优先) ───────────────────────
+  // Desktop (≥768px = iPad up, D1/D10): the page is ALWAYS the canvas + the
+  // chat dock — pre-run assets, the live run's projection, and the terminal
+  // frame all render on it; mobile keeps the list world (prohibition #13).
   const isMobile = useIsMobile()
-  const reducedMotion = useReducedMotion()
   const overlayRef = useRef<GenerationOverlayHandle>(null)
-  /** The latest COMPLETED run snapshot — the canvas's data source. The
+  /** The latest COMPLETED run snapshot — the canvas's terminal frame. The
    * sticky copy survives a later refinement run going active/failed (D9:
    * the canvas shows the current run + latest products); the live value
    * takes precedence the moment it exists, so the dock mounts in one pass
    * (no effect lag on refresh). */
   const [stickyCompletedRun, setStickyCompletedRun] = useState<WorkflowRun | null>(null)
-  /** Birth-replay gate (prohibition #5): set only when THIS page session
-   * watched the run go live → terminal; every other entry renders the
-   * final frame instantly. */
-  const [witnessedRunId, setWitnessedRunId] = useState<string | null>(null)
   const [canvasAssets, setCanvasAssets] = useState<RunFlowAsset[]>([])
 
   // ── Product actions (ADR-041 D5/D8) ──────────────────────────────────
@@ -246,6 +242,7 @@ function ProjectDetailPage() {
   // Canvas assets carry titles/file urls (the /results asset list is a
   // lightweight status view) — the full asset endpoint, fetched once per
   // project and after every asset action (delete / reprocess).
+  const [canvasAssetsReady, setCanvasAssetsReady] = useState(false)
   const fetchCanvasAssets = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
@@ -254,6 +251,8 @@ function ProjectDetailPage() {
       if (res.ok) setCanvasAssets((await res.json()) as RunFlowAsset[])
     } catch {
       /* the canvas keeps the last asset set */
+    } finally {
+      setCanvasAssetsReady(true)
     }
   }, [projectId])
 
@@ -275,44 +274,11 @@ function ProjectDetailPage() {
   const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
   const sseActive = runActive && sse.steps.length > 0
 
-  // Attach-mode overlay (?overlay=run): latch the run id once an active run
-  // is seen, and keep the overlay mounted on it until IT navigates away.
-  // Gating the render on live `runActive` would unmount the overlay mid-flow
-  // the moment this page's own SSE refetch flips the run to completed —
-  // before the overlay's terminal handler can play the收官转场.
-  const [attachRunId, setAttachRunId] = useState<string | null>(null)
-  const attachableRunId = runActive && latestRun ? latestRun.id : null
+  // The completed-run snapshot (D9): a live completed run takes precedence;
+  // the sticky copy keeps the canvas's terminal frame up while a later
+  // refinement run is active/failed.
   useEffect(() => {
-    if (search.overlay === "run" && attachableRunId) {
-      setAttachRunId(attachableRunId)
-    }
-  }, [search.overlay, attachableRunId])
-  const closeAttachOverlay = () => {
-    setAttachRunId(null)
-    navigate({
-      to: "/projects/$id",
-      params: { id: projectId },
-      replace: true,
-    })
-  }
-
-  // The completed-run snapshot + the witnessed flag (page-side detection:
-  // this session saw the SAME run go active → completed — e.g. the attach
-  // flow, where the page's own SSE refetch beats the overlay's hand-off).
-  const prevRunRef = useRef<{ id: string; status: string } | null>(null)
-  useEffect(() => {
-    if (!latestRun) return
-    const prev = prevRunRef.current
-    if (latestRun.status === "completed") {
-      setStickyCompletedRun(latestRun)
-      if (
-        prev?.id === latestRun.id &&
-        (prev.status === "pending" || prev.status === "running")
-      ) {
-        setWitnessedRunId(latestRun.id)
-      }
-    }
-    prevRunRef.current = { id: latestRun.id, status: latestRun.status }
+    if (latestRun?.status === "completed") setStickyCompletedRun(latestRun)
   }, [latestRun])
 
   // Cross-project navigation (same route, new params — no remount): every
@@ -320,12 +286,11 @@ function ProjectDetailPage() {
   // would bleed into the new page while its results load.
   useEffect(() => {
     setStickyCompletedRun(null)
-    setWitnessedRunId(null)
     setCanvasAssets([])
+    setCanvasAssetsReady(false)
     setDetailOutput(null)
     setPublishOutput(null)
     setFocusedOutputId(null)
-    prevRunRef.current = null
   }, [projectId])
 
   // Re-point the modal/focus state at the freshest rows after every refetch
@@ -410,55 +375,42 @@ function ProjectDetailPage() {
     overlayRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
   }, [])
 
+  // Hover prompt 框 send (ADR-051 F): the card's revision ask rides the
+  // dock's chat channel with the product pinned as the one-shot focus
+  // (zero new execution channel — the ask is a plain chat turn).
+  const handleRevise = useCallback((output: Output, text: string) => {
+    overlayRef.current?.sendRevision(text, {
+      id: output.id,
+      label: outputMentionLabel(
+        output,
+        t(`chat.derivativeTypes.${output.type}`, {
+          defaultValue: t("results.tabs.clips"),
+        }),
+      ),
+    })
+  }, [t])
+
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
-
-
-  // Desktop results phase (ADR-041 D1): the canvas + the dock. Mobile and
-  // pre-completion states fall through to their own surfaces below.
-  const resultsPhase = !isMobile && completedRun != null
-  const choreograph =
-    !reducedMotion && witnessedRunId != null && completedRun?.id === witnessedRunId
-
-  /** The overlay's completion hand-off: refetch (the canvas data lands),
-   * mark the witnessed replay, and on mobile keep the legacy hand-off back
-   * to the list (the desktop overlay plays the collapse into the dock). */
-  const handleOverlayComplete = async (completedRunId: string | null) => {
+  /** The dock's completion hand-off: refetch so the canvas / list world
+   * shows the landed products. (The page's own SSE also refetches — this
+   * covers the dock's watcher beating it.) */
+  const handleOverlayComplete = async () => {
     await fetchResults()
-    if (completedRunId) setWitnessedRunId(completedRunId)
-    if (isMobile) {
-      setAttachRunId(null)
-      navigate({
-        to: "/projects/$id",
-        params: { id: projectId },
-        replace: true,
-      })
-    } else if (search.overlay === "chat") {
-      // The fullscreen chat shell collapsed into the dock — the overlay is no
-      // longer open, so the URL must stop saying it is (navigate without
-      // `search` clears the params). A stale ?overlay=chat would keep
-      // chatSearchOpen true and permanently gate off the results tour on the
-      // fresh-generation path.
-      navigate({
-        to: "/projects/$id",
-        params: { id: projectId },
-        replace: true,
-      })
-    }
   }
 
-  // First-visit results tour. Fires whenever a ready clip exists and the
-  // chat overlay is closed — no matter how the user got here (fresh
-  // generation or straight from the projects list). Seen flag is its own
-  // localStorage key. Anchors: the canvas's first ready product node on
-  // desktop (ADR-041 — data-tour="results-*" live on the output card), the
-  // clip card in the mobile list world.
+  // First-visit results tour. Fires whenever a ready clip exists and no run
+  // is live — no matter how the user got here (fresh generation or straight
+  // from the projects list). Seen flag is its own localStorage key.
+  // Anchors: the canvas's first ready product node on desktop (ADR-041 —
+  // data-tour="results-*" live on the output card), the clip card in the
+  // mobile list world.
   useEffect(() => {
     if (resultsTourCheckedRef.current) return
     if (loading || !results) return
-    if (search.overlay) return
-    if (!isMobile && !resultsPhase) return
+    if (runActive) return
+    if (!isMobile && !completedRun) return
     if (!results.outputs.some(isClipReady)) return
     resultsTourCheckedRef.current = true
     try {
@@ -483,7 +435,7 @@ function ProjectDetailPage() {
         setResultsTourOpen(true)
       }
     }, 100)
-  }, [loading, results, search.overlay, activeTab, isMobile, resultsPhase])
+  }, [loading, results, runActive, activeTab, isMobile, completedRun])
 
   const markResultsTourSeen = () => {
     try {
@@ -667,6 +619,16 @@ function ProjectDetailPage() {
     ])
   )
 
+  // The shown tab is always clamped INTO the visible set (终审 P1-2): the
+  // auto-select effect only knows NODE_KIND_TO_TAB, so a run whose first
+  // task is unmapped (revise_script — every hover-框 revision's tool)
+  // leaves activeTab pointing at a tab that isn't rendered — the list
+  // world then shows the wrong empty state under a one-tab bar. Derived,
+  // never written back: the user's own clicks always land in the set.
+  const shownTab: ResultsTab = visibleTabs.includes(activeTab)
+    ? activeTab
+    : (visibleTabs[0] ?? "clips")
+
   const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
   const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
 
@@ -722,7 +684,7 @@ function ProjectDetailPage() {
   }
 
   const renderTabContent = () => {
-    switch (activeTab) {
+    switch (shownTab) {
       case "clips":
         if (isOutputFailed("clips")) return renderFailed("clips")
         if (clips.length === 0 && isOutputRunning("clips")) {
@@ -824,13 +786,12 @@ function ProjectDetailPage() {
     }
   }
 
-  // ── The one overlay instance (ADR-041 D4) ────────────────────────────
-  // chat search = the planning/conversation surface; attach = watching a
-  // live run; resultsPhase = the results dock. One mounted instance parks
-  // across all three — the input group is never remounted between them.
-  const chatSearchOpen = search.overlay === "chat" || search.overlay === "intent"
-  const attachOpen = search.overlay === "run" && attachRunId != null && latestRun != null
-  const overlayMounted = chatSearchOpen || attachOpen || resultsPhase
+  // ── The one chat dock (ADR-051) ──────────────────────────────────────
+  // The page is ALWAYS canvas (desktop) / list world (mobile) + the chat
+  // dock — project state drives the dock's form: a parked task book docks
+  // the confirm panel, a live run attaches the step flow, a completed run
+  // lands on the results conversation. One mounted instance across all
+  // forms — the input group is never remounted between them.
 
   /** The dock's plan-summary line, rebuilt from the completed run's context
    * (the same read-tolerance shape the attach flow uses); a run with no
@@ -845,7 +806,7 @@ function ProjectDetailPage() {
       })
     : undefined
 
-  const overlayInitialIntent = attachOpen
+  const overlayInitialIntent = runActive
     ? normalizeIntent({
         tasks: runTasks.length ? runTasks : [{ tool: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
@@ -856,19 +817,19 @@ function ProjectDetailPage() {
         // book the panel edits and Start answers with, never the stale
         // completed run's).
         normalizeIntent(pendingIntent.intent)
-      : resultsPhase
+      : completedRun
         ? completedRunIntent
         : undefined
 
   return (
-    // Fullscreen canvas world (ADR-041 全屏化): this route lives OUTSIDE the
-    // _app layout — no sidebar / header / title block. Floating chrome: the
-    // project menu (top-left) + the canvas's own zoom pill (top-right,
-    // FlowView `controls`); the canvas fills the viewport, the chat dock
-    // parks at the bottom. The fullscreen planning overlay (z-50) naturally
-    // covers the chrome while it is open. App chrome (theme / language /
-    // notifications) lives in the studio shell — 2026-08-19 走查拍板,
-    // confirmed to cover MOBILE too (nearest entry = back to /projects).
+    // Fullscreen canvas world (ADR-041 全屏化; ADR-051 画布优先): this route
+    // lives OUTSIDE the _app layout — no sidebar / header / title block.
+    // Floating chrome: the project menu (top-left) + the canvas's own zoom
+    // pill (top-right, FlowView `controls`); the canvas fills the viewport,
+    // the chat dock floats at the bottom (click-through above itself). App
+    // chrome (theme / language / notifications) lives in the studio shell —
+    // 2026-08-19 走查拍板, confirmed to cover MOBILE too (nearest entry =
+    // back to /projects).
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
       <div className="absolute left-3 top-3 z-30 md:left-4 md:top-4">
         <ProjectMenu
@@ -888,23 +849,41 @@ function ProjectDetailPage() {
           inherited cluster (theme / language / notifications) left the
           fullscreen world — app chrome lives in the studio shell. */}
 
-      {resultsPhase && completedRun ? (
-        /* Results phase (ADR-041 D1): the canvas is FULL-BLEED — the dock
-           is a completely floating layer above it, never a layout
-           reservation (no safe-area padding: reserving space IS the
-           occlusion). A node passing under the dock is panned back into
-           view — the canvas is explore navigation. */
+      {!isMobile ? (
+        /* Canvas-first (ADR-051): the desktop page is ALWAYS the canvas —
+           pre-run it carries the source assets; a live run's spine / plan /
+           placeholder slots project onto it in place, products land as
+           in-place fills. The completion beat = the growth-driven birth
+           choreography (ADR-036 补记 3, FLORA-reconciled 2026-09-01): every
+           node born while the surface watches enters staggered in compile
+           order (placeholders materialize, fills birth in place), a running
+           placeholder carries the FLORA wipe, and the hydrated first frame
+           never replays. The canvas is FULL-BLEED — the dock is a
+           completely floating layer above it, never a layout reservation
+           (no safe-area padding: reserving space IS the occlusion). A node
+           passing under the dock is panned back into view — the canvas is
+           explore navigation. */
         <div className="min-h-0 flex-1">
           <ResultsCanvas
             className="h-full"
             assets={canvasAssets}
-            steps={completedRun.steps}
+            steps={latestRun?.steps ?? []}
             outputs={outputs}
-            prompt={prompt || completedRun.context?.instruction || null}
-            choreograph={choreograph}
+            placeholders={results?.placeholders ?? []}
+            prompt={prompt || latestRun?.context?.instruction || null}
+            // Birth baseline (ADR-036 补记 3): ready only when the initial
+            // /results AND /assets have both settled for THIS project —
+            // an early partial frame must not become the baseline (the
+            // rest of the graph would "birth" on a plain refresh), and a
+            // stale previous-project payload must not contaminate it.
+            baselineReady={
+              results?.project?.id === projectId && canvasAssetsReady
+            }
+            baselineKey={projectId}
             tourOutputId={resultsTourClipId}
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
+            onRevise={handleRevise}
             onAssetAction={handleAssetAction}
             onStepClick={handleStepClick}
             focusedOutputId={focusedOutputId}
@@ -916,146 +895,72 @@ function ProjectDetailPage() {
           />
         </div>
       ) : (
+        /* Mobile keeps the list world (prohibition #13 — no canvas below
+           iPad width); the same chat dock floats over it. pt-16 clears the
+           floating chrome; pb-36 keeps the last card above the dock. */
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {!latestRun || !isMobile ? (
-            /* Centered states: pending plan / desktop first-run failure /
-               desktop run-in-flight (D2 — progress never enters the graph). */
-            <div className="flex min-h-full items-center justify-center p-6">
-              <div className="w-full max-w-md">
-                {!latestRun ? (
-                  <div className="rounded-lg bg-muted p-8 text-center">
-                    <p className="font-medium">{t("results.pendingPlan.title")}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {pendingIntent
-                        ? t("results.pendingPlan.desc")
-                        : t("results.pendingPlan.descNoPlan")}
-                    </p>
-                    <Button
-                      className="mt-4"
-                      onClick={() =>
-                        navigate({
-                          to: "/projects/$id",
-                          params: { id: projectId },
-                          search: { overlay: "chat" },
-                        })
-                      }
-                    >
-                      {t("results.pendingPlan.cta")}
-                    </Button>
-                  </div>
-                ) : latestRun.status === "failed" ? (
-                  /* Desktop, first-run failure (no completed run yet): the
-                     retry channel is the conversation (D8 — chat is the only
-                     modification channel). */
-                  <div className="rounded-lg bg-muted p-8 text-center">
-                    <p className="text-sm text-destructive">
-                      {latestRun.error || t("results.retryFailed")}
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={() =>
-                        navigate({
-                          to: "/projects/$id",
-                          params: { id: projectId },
-                          search: { overlay: "chat" },
-                        })
-                      }
-                    >
-                      {t("results.failedPanel.cta")}
-                    </Button>
-                  </div>
-                ) : (
-                  /* Desktop, run in flight with no completed snapshot:
-                     progress belongs to the chat flow alone. */
-                  <div className="rounded-lg bg-muted p-8 text-center">
-                    <p className="font-medium">{t("results.runActive.title")}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {t("results.runActive.desc")}
-                    </p>
-                    <Button
-                      className="mt-4"
-                      onClick={() =>
-                        navigate({
-                          to: "/projects/$id",
-                          params: { id: projectId },
-                          search: { overlay: "run" },
-                        })
-                      }
-                    >
-                      {t("results.runActive.cta")}
-                    </Button>
-                  </div>
-                )}
-              </div>
+          <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-36 pt-16">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <ResultsTabs
+                active={shownTab}
+                onChange={setActiveTab}
+                counts={counts}
+                visible={visibleTabs}
+                running={runningTabs}
+                failed={failedTabs}
+              />
             </div>
-          ) : (
-            /* Mobile keeps the list world (prohibition #13 — no canvas below
-               iPad width); the conversation surface opens through the same
-               overlay entries as before. pt-16 clears the floating chrome. */
-            <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-8 pt-16">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <ResultsTabs
-                  active={activeTab}
-                  onChange={setActiveTab}
-                  counts={counts}
-                  visible={visibleTabs}
-                  running={runningTabs}
-                  failed={failedTabs}
-                />
-              </div>
-              <div>{renderTabContent()}</div>
-            </div>
-          )}
+            <div>{renderTabContent()}</div>
+          </div>
         </div>
       )}
 
-      {overlayMounted && (
-        <GenerationOverlay
-          // Remount per project — the message machine's state (run id,
-          // conversation, shell) belongs to one project only.
-          key={projectId}
-          ref={overlayRef}
-          projectId={projectId}
-          prompt={
-            firstMessage?.text ??
-            pendingIntent?.prompt ??
-            (attachOpen ? latestRun?.context?.instruction : null) ??
-            prompt ??
-            ""
-          }
-          firstMessage={
-            chatSearchOpen && firstMessage
-              ? {
-                  text: firstMessage.text,
-                  mentions: firstMessage.mentions ?? [],
-                  personaId: firstMessage.personaId,
-                }
-              : null
-          }
-          initialIntent={overlayInitialIntent}
-          initialDerived={pendingIntent?.derived}
-          initialRunId={
-            attachOpen
-              ? attachRunId
-              : resultsPhase && !pendingIntent
-                ? completedRun?.id
-                : undefined
-          }
-          initialShell={resultsPhase ? "dock" : "fullscreen"}
-          focusOutput={focusedOutputChip}
-          onFocusChange={(id) => setFocusedOutputId(id)}
-          completionMode={isMobile ? "navigate" : "dock"}
-          onClose={
-            attachOpen
-              ? closeAttachOverlay
-              : chatSearchOpen
-                ? () => navigate({ to: "/projects" })
-                : () => {}
-          }
-          onComplete={handleOverlayComplete}
-        />
-      )}
+      <GenerationOverlay
+        // Remount per project — the message machine's state (run id,
+        // conversation) belongs to one project only.
+        key={projectId}
+        ref={overlayRef}
+        projectId={projectId}
+        prompt={
+          firstMessage?.text ??
+          pendingIntent?.prompt ??
+          (runActive ? latestRun?.context?.instruction : null) ??
+          prompt ??
+          ""
+        }
+        firstMessage={
+          firstMessage
+            ? {
+                text: firstMessage.text,
+                mentions: firstMessage.mentions ?? [],
+                personaId: firstMessage.personaId,
+              }
+            : null
+        }
+        initialIntent={overlayInitialIntent}
+        initialDerived={pendingIntent?.derived}
+        initialRunId={
+          runActive
+            ? latestRun.id
+            : !pendingIntent && completedRun
+              ? completedRun.id
+              : undefined
+        }
+        focusOutput={focusedOutputChip}
+        onFocusChange={(id) => setFocusedOutputId(id)}
+        onComplete={handleOverlayComplete}
+        // A dock-started run (confirm / prose / 修订): refetch NOW — the
+        // fresh latest_run flips runActive, the page SSE attaches, and the
+        // run 期活画布 (placeholder materialization / wipe / fills) renders
+        // from the first beat instead of arriving whole at terminal. The
+        // assets endpoint rides along: a plan-turn can CREATE assets
+        // server-side (declared-material promotion) after the page's
+        // initial fetch — the canvas's source node comes from this list.
+        onRunStarted={() => {
+          void fetchResults()
+          void fetchCanvasAssets()
+        }}
+      />
 
       {detailOutput && (
         <ClipDetailModal

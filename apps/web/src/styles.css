@@ -105,25 +105,26 @@
   }
 }
 
-/* Dot grid — the workshop texture (ADR-046 附, 2026-08-21 拍板): TWO making
+/* Dot grid — the workshop texture (ADR-046 附, 2026-08-21 拍板; 调大调显
+ * 2026-08-31 ADR-051, FLORA 走查 #1: 1px/20% 几乎不可见): TWO making
  * surfaces only — the home page (this utility on the route root, which never
  * scrolls: content scrolls INSIDE it, so the grid stays fixed to the
  * viewport) and the results canvas (FlowView's own `dots` prop — same
- * recipe: muted-foreground 20% light / 18% dark, 1px dot, 26px gap). A
+ * recipe: muted-foreground 32% light / 30% dark, 1.5px dot, 26px gap). A
  * dotted third surface is a violation. */
 @utility dot-grid {
   background-image: radial-gradient(
     circle,
-    color-mix(in oklch, var(--muted-foreground) 20%, transparent) 1px,
-    transparent 1px
+    color-mix(in oklch, var(--muted-foreground) 32%, transparent) 1.5px,
+    transparent 1.5px
   );
   background-size: 26px 26px;
 
   @variant dark {
     background-image: radial-gradient(
       circle,
-      color-mix(in oklch, var(--muted-foreground) 18%, transparent) 1px,
-      transparent 1px
+      color-mix(in oklch, var(--muted-foreground) 30%, transparent) 1.5px,
+      transparent 1.5px
     );
   }
 }

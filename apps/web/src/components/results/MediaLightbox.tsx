@@ -3,11 +3,13 @@
 /** MediaLightbox — the canvas media nodes' expand target (2026-08-15, the
  * reference canvas's viewer anatomy): ONE frosted dialog — a scrollable
  * info column on the left (timestamp + download, the full prompt, the
- * derived-attribute chip grid), the media itself on the right. Serves both
- * product media (clip video / quote & carousel images — chips carry the
- * derived attributes: type / language / duration / aspect / score / source
- * range) and source assets (video / image — file meta chips). Never a model
- * name (prohibition #12): chips are product facts only. */
+ * derived-attribute chip grid, the model-facts section), the media itself
+ * on the right. Serves both product media (clip video / quote & carousel
+ * images — chips carry the derived attributes: type / language / duration /
+ * aspect / score / source range) and source assets (video / image — file
+ * meta chips). Model/provider names live ONLY here (ADR-051 H — this is
+ * the detail surface where 事实陈列 is allowed): a quiet facts section,
+ * never a selector (禁令2); the canvas caption stays model-free (#12). */
 
 import { useTranslation } from "react-i18next"
 import { Download, type LucideIcon } from "lucide-react"
@@ -39,6 +41,9 @@ export interface MediaLightboxData {
   prompt?: string | null
   /** Derived-attribute chips (type / language / duration / aspect / …). */
   chips?: MediaChip[]
+  /** Model/provider facts (ADR-051 H — 事实陈列 on the detail surface only):
+   * server-projected per product; the section renders when non-empty. */
+  modelFacts?: { modality: string; model: string }[] | null
   downloadName?: string
 }
 
@@ -105,6 +110,33 @@ export function MediaLightbox({
                       {label}
                     </span>
                   ))}
+                </div>
+              ) : null}
+
+              {/* Model facts (ADR-051 H — 详情面模型事实): quiet rows in the
+                  prompt-section anatomy (meta label + fact lines) — 事实陈列,
+                  never a selector. Modality labels ride the composer models
+                  panel's keys; model names are server-stamped DATA. */}
+              {data.modelFacts && data.modelFacts.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <span className="text-meta text-[11px]">
+                    {t("composer.models")}
+                  </span>
+                  <div className="flex flex-col gap-1.5">
+                    {data.modelFacts.map((fact) => (
+                      <div
+                        key={`${fact.modality}:${fact.model}`}
+                        className="flex items-baseline justify-between gap-3 text-xs"
+                      >
+                        <span className="text-muted-foreground">
+                          {t(`composer.modelsRows.${fact.modality}`, {
+                            defaultValue: fact.modality,
+                          })}
+                        </span>
+                        <span className="text-right">{fact.model}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>

@@ -976,26 +976,13 @@ const en = {
       carousel: "No carousel generated yet.",
       article: "No articles generated yet.",
     },
-    pendingPlan: {
-      title: "Your plan is waiting for confirmation",
-      desc: "The generation plan is ready — confirm it to start creating.",
-      descNoPlan: "No generation run yet — set one up with the assistant.",
-      cta: "Continue setup",
-    },
-    runActive: {
-      title: "Working on it",
-      desc: "Your content is being made — this usually takes a few minutes.",
-      cta: "View progress",
-    },
-    failedPanel: {
-      cta: "Retry in chat",
-    },
     dock: {
       history: "History",
       focus: "Working on: {{name}}",
-      // The dock's resident honesty line (2026-08-19, the FLORA FAUNA-line
-      // counterpart): one whisper line at the container's foot, always on.
-      honesty: "It can make mistakes — check important content.",
+      // The dock's resident disclaimer (ADR-051, 2026-08-31 — the FLORA
+      // FAUNA-line, VERBATIM per user ruling; docked above the input area
+      // in the base form, hidden with it on the question morph).
+      honesty: "Repurposer is AI and can make mistakes. Check important info.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens
@@ -1035,6 +1022,22 @@ const en = {
       expand: "Expand",
       mute: "Mute",
       unmute: "Unmute",
+      // Placeholder slot card (ADR-051 B — 占位物化): the functional
+      // teaching line on the quiet card — the @-mention revision channel.
+      placeholderHint:
+        "Lands here when it's ready — @-mention it in chat to revise.",
+      // Hover prompt 框 (ADR-051 F): the per-card revision bar, prefilled
+      // with the product's own spec — sending rides the chat channel with
+      // the product pinned as focus.
+      reviseTooltip: "Revise this product",
+      revisePlaceholder: "Ask for a change…",
+      reviseSend: "Send revision",
+      // Version pager (ADR-051 F2 — 变体分页): the fork-family flipper in
+      // the card's action band — a separate pill, never merged with the
+      // items switcher (variants = item switching ≠ version switching).
+      versionOf: "{{current}} of {{total}}",
+      versionPrev: "Previous version",
+      versionNext: "Next version",
     },
     // The media lightbox's info column (left of the media).
     lightbox: {
@@ -1183,7 +1186,6 @@ const en = {
   },
   generationOverlay: {
     title: "Generation plan",
-    backToProjects: "Projects",
     planProse:
       "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
     chainLabel: "Task chain",
@@ -1224,9 +1226,8 @@ const en = {
     instructionPlaceholder: "e.g. Focus on the Q&A section; make the first clip a strong hook.",
     confirmQuestion: "Start generation with this plan?",
     confirm: "Start generation",
-    leaveNote: "You can leave anytime — your plan is saved and you can continue from Projects.",
     starting: "Starting…",
-    startingLine: "I'm starting your generation — stay to refine it together, or close this and I'll finish in the background.",
+    startingLine: "I'm starting your generation — stay to refine it together, or leave and I'll finish in the background.",
     planUpdated: "Got it — I've updated the plan above.",
     chatPlaceholder: "Chat with Repurposer…",
     chatPlaceholderConfirm: "Ask me to adjust the plan…",
@@ -1241,9 +1242,7 @@ const en = {
       transcript: "Transcript",
       file: "File",
     },
-    continuesInBackground: "Generation continues in the background.",
     stopped: "Generation stopped.",
-    completed: "Generation completed",
     failed: "Generation failed",
   },
   questionDock: {
@@ -1253,6 +1252,7 @@ const en = {
       review: "Review",
     },
     bail: "Stop generation",
+    skip: "Skip question",
   },
   clipMenu: {
     more: "More actions",

@@ -12,7 +12,8 @@
  * fallback (stage hints / kind progressive) for the live narrative line. */
 
 import { useEffect, useState } from "react"
-import { Check, CircleHelp, ListChecks, Loader2, Minus, Square, X } from "lucide-react"
+import type { TFunction } from "i18next"
+import { Check, ChevronUp, CircleHelp, ListChecks, Loader2, Minus, Square, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
@@ -43,6 +44,28 @@ function formatElapsed(ms: number): string {
   return `${h}h ${m % 60}m`
 }
 
+/** The live narrative's step pick + progressive copy chain (shared by the
+ * full checklist's 碎碎念 line and the folded status row): the running step
+ * wins; a parked interrupt (review tier) has no running step and reads
+ * through the same chain ("waiting for your direction", not the queued
+ * fallback). Copy chain: the runner's stage hint → the kind's progressive
+ * form → the preset task name → the raw kind. */
+function runNarrative(
+  steps: WorkflowStep[],
+  t: TFunction,
+): { running: WorkflowStep | null; waiting: WorkflowStep | null; label: string | null } {
+  const running = steps.find((s) => s.status === "running") ?? null
+  const waiting = steps.find((s) => s.status === "waiting") ?? null
+  const step = running ?? waiting
+  const label = step
+    ? (step.stage ? t(`results.stepper.${step.stage}`, { defaultValue: "" }) : "") ||
+      t(`chat.stepKinds.${step.kind}`, { defaultValue: "" }) ||
+      step.summary ||
+      step.kind
+    : null
+  return { running, waiting, label }
+}
+
 export function RunTaskList({
   steps,
   title,
@@ -62,11 +85,7 @@ export function RunTaskList({
 }) {
   const { t } = useTranslation()
   const now = useNow(!terminal)
-  const running = steps.find((s) => s.status === "running") ?? null
-  // A parked interrupt (review tier) has no running step — the narrative
-  // line must say "waiting for your direction", not the queued fallback.
-  const waiting = steps.find((s) => s.status === "waiting") ?? null
-  const narrativeStep = running ?? waiting
+  const { running, label: narrativeLabel } = runNarrative(steps, t)
   const startedMs = runStartedAt ? Date.parse(runStartedAt) : null
   // The archive frame (mounting an already-terminal run) has no ticking
   // clock — the total reads off the last step's finish instead.
@@ -83,18 +102,6 @@ export function RunTaskList({
       ? formatElapsed(endMs - startedMs)
       : null
 
-  /** The narrative line's progressive copy: the stage hint the runner last
-   * wrote, else the kind's progressive form, else the preset task name. A
-   * waiting interrupt reads through the same chain (no stage — the kind's
-   * "waiting for your direction" copy carries it). */
-  const narrativeLabel = narrativeStep
-    ? (narrativeStep.stage
-        ? t(`results.stepper.${narrativeStep.stage}`, { defaultValue: "" })
-        : "") ||
-      t(`chat.stepKinds.${narrativeStep.kind}`, { defaultValue: "" }) ||
-      narrativeStep.summary ||
-      narrativeStep.kind
-    : null
   const runningMs = running?.started_at ? Date.parse(running.started_at) : null
   const stageElapsed =
     now != null && runningMs != null ? formatElapsed(now - runningMs) : null
@@ -172,5 +179,51 @@ function TaskRow({ step }: { step: WorkflowStep }) {
           : label}
       </MarkerContent>
     </Marker>
+  )
+}
+
+/** RunStatusRow — the folded 打勾 (ADR-051, the Claude Code collapsed form /
+ * FLORA "Running node…"): ONE shimmer status line docked above the input
+ * while a run is live and the history region is closed. Click = expand the
+ * step log — the history's RunTaskList is the ONLY checklist; this row
+ * never grows a second one. A square child of the dock's frosted container
+ * (D4 一体容器): no fill / rounding of its own. */
+export function RunStatusRow({
+  steps,
+  runStartedAt,
+  narrativeFallback,
+  onClick,
+}: {
+  steps: WorkflowStep[]
+  runStartedAt: string | null
+  /** What the line says when no step is running yet (assets processing /
+   * the run still queued) — the caller knows which. */
+  narrativeFallback: string
+  onClick: () => void
+}) {
+  const { t } = useTranslation()
+  const now = useNow(true)
+  const { running, waiting, label } = runNarrative(steps, t)
+  const startedMs = runStartedAt ? Date.parse(runStartedAt) : null
+  const elapsed =
+    now != null && startedMs != null ? formatElapsed(now - startedMs) : null
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={t("results.dock.history")}
+      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-muted-foreground hover:bg-accent/50"
+    >
+      {waiting && !running ? (
+        <CircleHelp className="h-3.5 w-3.5 shrink-0 text-primary" />
+      ) : (
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+      )}
+      <span className="shimmer min-w-0 flex-1 truncate">
+        {label ?? narrativeFallback}
+      </span>
+      {elapsed ? <span className="shrink-0 tabular-nums">{elapsed}</span> : null}
+      <ChevronUp className="h-3.5 w-3.5 shrink-0" />
+    </button>
   )
 }

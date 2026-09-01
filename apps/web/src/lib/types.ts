@@ -131,6 +131,10 @@ export interface OutputSourceRef {
    * canvas distinguishes the composite (quote_chain) from frame cards. */
   quote_frame?: boolean
   quote_chain?: boolean
+  /** Fork lineage (translate/dub "再来一版"): the output THIS row was
+   * derived from. The fork family it forms (ADR-051 F2 变体分页) is the
+   * version-pager's data — distinct from `parents` (sub-artifact lineage). */
+  derived_from_output_id?: string
 }
 
 export interface OutputPublishing {
@@ -183,11 +187,45 @@ export interface Output {
    * "1:1" | "16:9" | arbitrary "W:H"; null = unknown/original frame —
    * surfaces fall back to their default tier. Never probe when set. */
   aspect?: string | null
+  /** The product's own spec as a prompt-style line (ADR-051 F — hover
+   * prompt 框): composed server-side from the producing step's slot/params
+   * in the run's pinned ui_language; stamped only by /results. The card's
+   * hover 框 prefills with it; null = carried row (the 框 opens empty). */
+  spec_prompt?: string | null
+  /** The product's model/provider facts (ADR-051 H — 详情面模型事实):
+   * server-projected from the producing step's kind (a fact registry, never
+   * a selector); stamped only by /results. The lightbox info column is the
+   * display surface — the node caption never carries a model name. */
+  model_facts?: ModelFact[] | null
   created_at: string
   updated_at: string | null
 }
 
+/** One model/provider fact about a product (ADR-051 H): `modality` is the
+ * grouping key (copy / voice / captions / music — localized via the composer
+ * models panel's keys); `model` is the display name, DATA (a proper noun). */
+export interface ModelFact {
+  modality: string
+  model: string
+}
+
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
+
+/** One pending product slot of a LIVE run (ADR-051 B — 占位物化): the
+ * server-projected roster from the run's own compiled steps (never a
+ * frontend guess). A landed output fills its slot in place — matched by
+ * step_id, ordinal within the step. `whole` marks the whole-source clip
+ * (the "Video" card); `variant` marks a fork family ("subs" | "dub");
+ * `aspect` null = the surface's default tier (never a hardcoded fake). */
+export interface PlaceholderRow {
+  step_id: string
+  type: string
+  whole: boolean
+  count: number
+  language: string | null
+  variant: string | null
+  aspect: string | null
+}
 
 export type IntentSlotType = "clips" | "post" | "quotes" | "carousel" | "article"
 

@@ -114,6 +114,33 @@
   animation: flow-node-pulse 1.6s ease-in-out infinite;
 }
 
+/* ── Placeholder wipe (ADR-051, FLORA parity 2026-09-01 拍板) ────────── */
+
+/* A running placeholder fills left→right with a quiet foreground wash —
+ * the card's own run 期 projection. Pure CSS, zero clocks: ease-out growth
+ * front-loads the visible motion and CAPS at 96% (a long step just sits
+ * there — the fill never claims a fraction, so the 假进度禁令 holds; the
+ * landing output is the only 100%). transform scaleX keeps it on the
+ * compositor; the card's overflow-hidden clips the rounded corners. */
+@keyframes placeholder-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.96);
+  }
+}
+.placeholder-wipe {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  transform-origin: left center;
+  background: var(--foreground);
+  opacity: 0.07;
+  animation: placeholder-fill 40s cubic-bezier(0.08, 0.72, 0.24, 1) forwards;
+}
+
 /* ── Layout moves stay smooth (growth recenters, never jumps) ────────── */
 
 .react-flow__node {
@@ -136,6 +163,12 @@
   .flow-edge-packet-born,
   .flow-node-running {
     animation: none !important;
+  }
+  /* The wipe's growth is motion — reduced users get a static half-fill
+     marker (the running signal survives, the travel doesn't). */
+  .placeholder-wipe {
+    animation: none !important;
+    transform: scaleX(0.5);
   }
   .react-flow__node {
     transition: none !important;

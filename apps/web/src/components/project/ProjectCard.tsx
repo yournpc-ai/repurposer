@@ -69,16 +69,9 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
       <Link
         to="/projects/$id"
         params={{ id: project.id }}
-        // draft ⟺ plan never confirmed → resume the confirm chat; processing
-        // ⟺ a run is live → attach the chat overlay to it instead of landing
-        // on the bare results page.
-        search={
-          project.status === "draft"
-            ? { overlay: "chat" }
-            : project.status === "processing"
-              ? { overlay: "run" }
-              : {}
-        }
+        // The project page is always canvas + dock (ADR-051) — its own state
+        // drives the dock's form (draft ⟺ the parked task book docks the
+        // confirm panel; processing ⟺ the dock attaches to the live run).
         className="group flex flex-col gap-2"
       >
         {/* Full-bleed thumbnail — no card container, no inset padding: the

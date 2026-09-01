@@ -1,9 +1,9 @@
 import type { TFunction } from "i18next"
 
 import { toAbsoluteUrl } from "@/lib/api"
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { Output, PlaceholderRow, WorkflowStep } from "@/lib/types"
 
-import { ASSET_TOOLBAR_PX, productNodeSize, textProductNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
+import { ASSET_TOOLBAR_PX, PLACEHOLDER_TEXT_LINES, productNodeSize, textProductNodeSize, VIDEO_ASSET_NODE_SIZE } from "./layout"
 import type { FlowEdge, FlowNode, FlowNodeStatus } from "./types"
 
 /** RunFlowGraph adapter (ADR-036/041, 全栈同名 with the server graph): a
@@ -100,6 +100,11 @@ export function runFlowGraph(
     /** The run's prompt — displayed in every product card's interaction
      * area (spec on the body; changes happen in chat). */
     prompt?: string | null
+    /** The live run's placeholder roster (ADR-051 B — server-projected from
+     * the compiled steps; empty for terminal/absent runs): each row's slots
+     * render as quiet placeholder cards born at their final size/position;
+     * a landed output from the same step fills its slot in place. */
+    placeholders?: PlaceholderRow[]
     /** The node carrying the results tour's data-tour anchors (first ready
      * product, chosen by the surface). */
     tourOutputId?: string | null
@@ -113,7 +118,7 @@ export function runFlowGraph(
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const nodes: FlowNode[] = []
   const rawEdges: FlowEdge[] = []
-  const { assets, steps, outputs, prompt, tourOutputId, spineExpanded = false } = input
+  const { assets, steps, outputs, prompt, placeholders, tourOutputId, spineExpanded = false } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
   const byId = new Map(steps.map((s) => [s.id, s]))
@@ -172,6 +177,13 @@ export function runFlowGraph(
     }
   }
 
+  // 脊收编 (ADR-051 G — a fold of ≤1 step is noise, not a group): the lone
+  // folded step renders NO node; its edges resolve through the same ancestor
+  // projection as a canvas_hidden step (zero new rules), and the asset feed
+  // bridges DOWNSTREAM to its products (the R1 rule's natural conclusion —
+  // the absorbed step's products ARE the roots' first rendered descendants).
+  const spineAbsorbed = !spineExpanded && spineSteps.length <= 1
+
   // step id → rendered node id. A hidden step (render) resolves through its
   // own inputs to the first rendered ancestor — projection over the real
   // edge table, never invented lineage.
@@ -188,7 +200,7 @@ export function runFlowGraph(
     if (step) {
       if (step.canvas_key) {
         id = `artifact:${step.canvas_key}`
-      } else if (!step.canvas_hidden) {
+      } else if (!step.canvas_hidden && !spineAbsorbed) {
         id = spineExpanded ? `step:${step.id}` : SPINE_NODE_ID
       } else {
         for (const upstream of step.inputs ?? []) {
@@ -213,23 +225,26 @@ export function runFlowGraph(
    * up, so a naive resolve drops the 素材 feed and parks the 任务书 in the
    * assets' own column. The feed instead walks DOWNSTREAM (seq order, cycle
    * guard) to the first rendered descendant — the edge lands on the 任务书
-   * and the visible graph stays a DAG (素材→任务书→脊→产物). */
-  const resolveAssetFeedTarget = (
+   * and the visible graph stays a DAG (素材→任务书→脊→产物). 脊收编 (G)
+   * bridge: an absorbed step renders no node, so its PRODUCTS are the first
+   * rendered descendants — the feed lands 素材 → 产物 directly. */
+  const resolveAssetFeedTargets = (
     stepId: string,
     trail: Set<string> = new Set()
-  ): string | null => {
+  ): string[] => {
     const direct = resolveStepNode(stepId)
-    if (direct) return direct
-    if (trail.has(stepId)) return null
+    if (direct) return [direct]
+    if (trail.has(stepId)) return []
     trail.add(stepId)
+    const step = byId.get(stepId)
+    if (step && !step.canvas_hidden && !step.canvas_key) {
+      const produced = producedNodeIdsByStep.get(stepId)
+      if (produced && produced.length > 0) return produced
+    }
     const kids = [...(childrenOf.get(stepId) ?? [])].sort(
       (a, b) => (byId.get(a)?.seq ?? 0) - (byId.get(b)?.seq ?? 0)
     )
-    for (const kid of kids) {
-      const id = resolveAssetFeedTarget(kid, trail)
-      if (id) return id
-    }
-    return null
+    return kids.flatMap((kid) => resolveAssetFeedTargets(kid, trail))
   }
 
   // Artifact cards (D6 修订; 2026-08-19 名词节点收窄后只有 "plan"): body =
@@ -278,7 +293,7 @@ export function runFlowGraph(
         order: step.seq,
       })
     }
-  } else if (spineSteps.length > 0) {
+  } else if (!spineAbsorbed) {
     nodes.push({
       id: SPINE_NODE_ID,
       kind: "spine",
@@ -305,22 +320,17 @@ export function runFlowGraph(
     }
   }
 
-  // Source assets feed the root steps (the run's entry points) — process
-  // order, so the dependency semantic (recipe adapter precedent). A hidden
-  // root (the prelude) resolves DOWNSTREAM to its first rendered descendant
-  // (R1) — resolved here because the final pass only walks up.
-  const roots = steps.filter((s) => (s.inputs ?? []).length === 0)
-  for (const asset of assets) {
-    for (const root of roots) {
-      const target = resolveAssetFeedTarget(root.id)
-      if (!target) continue
-      rawEdges.push({
-        from: `asset:${asset.id}`,
-        to: target,
-        semantic: "dependency",
-      })
-    }
-  }
+  // The asset feed runs AFTER the roster below (the 脊收编 bridge lands on
+  // the absorbed step's product/placeholder nodes, which must exist first).
+
+  const TEXT_PRODUCT_TYPES = new Set(["post", "article"])
+
+  // (2026-08-17 走查拍板): the run's only excerpt vocabulary belongs to
+  // real excerpts — materialize_source stamps segment.id="full" and the
+  // fork family (translate / dub) carries the same source_ref downstream.
+  const isWholeSourceClip = (o: Output) =>
+    o.type === "clip" &&
+    (o.source_ref?.segment as { id?: string } | undefined)?.id === "full"
 
   // Products: newest-first payload → stable ascending order within a layer.
   const products = [...outputs]
@@ -335,8 +345,140 @@ export function runFlowGraph(
       .filter((o) => o.type === "clip")
       .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
   )
-  products.forEach((output, i) => {
+
+  // ── Placeholder roster merge (ADR-051 B — 占位物化) ────────────────────
+  // Products of THIS run's producing steps fill placeholder slots IN PLACE
+  // (the slot and its filler share the roster index, so the card never
+  // moves); everything else (earlier runs' rows, step-less rows) is carried
+  // and keeps plain created_at order ahead of the roster. A slot block's
+  // leftover products (runtime-decided families — the quote chain's frame
+  // cards and motion clip) append right behind their step's slots.
+  type RosterEntry =
+    | { kind: "output"; output: Output }
+    | { kind: "placeholder"; row: PlaceholderRow; ordinal: number }
+  const roster: RosterEntry[] = []
+  const rosterStepIds = new Set((placeholders ?? []).map((r) => r.step_id))
+  const productsByStep = new Map<string, Output[]>()
+  for (const output of products) {
+    if (output.workflow_step_id && rosterStepIds.has(output.workflow_step_id)) {
+      const group = productsByStep.get(output.workflow_step_id) ?? []
+      group.push(output)
+      productsByStep.set(output.workflow_step_id, group)
+    } else {
+      roster.push({ kind: "output", output })
+    }
+  }
+  for (const row of placeholders ?? []) {
+    const pool = productsByStep.get(row.step_id) ?? []
+    // Type-preferred fill: a slot consumes the pool's first output matching
+    // its vocabulary (clip slots respect the whole/excerpt split), falling
+    // back to plain ordinal when the family is runtime-decided (the quote
+    // chain materializes quote_frame rows under a "quotes" slot).
+    const take = (): Output | undefined => {
+      const matchIdx = pool.findIndex((o) =>
+        row.type === "clip"
+          ? o.type === "clip" && isWholeSourceClip(o) === row.whole
+          : o.type === row.type,
+      )
+      if (matchIdx >= 0) return pool.splice(matchIdx, 1)[0]
+      return pool.shift()
+    }
+    for (let ordinal = 0; ordinal < row.count; ordinal++) {
+      const filled = take()
+      roster.push(
+        filled
+          ? { kind: "output", output: filled }
+          : { kind: "placeholder", row, ordinal },
+      )
+    }
+    for (const sibling of pool) roster.push({ kind: "output", output: sibling })
+  }
+
+  // ── Fork family map (ADR-051 F2 — 变体分页) ────────────────────────────
+  // One family = every visible row connected through derived_from chains
+  // (translate/dub "再来一版" forks) — each member a REAL row with its own
+  // media. source_ref.parents (the quote chain's frames ↔ composite) is
+  // sub-artifact lineage, never a version family. Members are already in
+  // created_at order (products was sorted above).
+  const productById = new Map(products.map((o) => [o.id, o]))
+  const rootOf = (o: Output): string => {
+    const seen = new Set<string>([o.id])
+    let cur = o
+    while (cur.source_ref?.derived_from_output_id) {
+      const parentId = cur.source_ref.derived_from_output_id
+      if (seen.has(parentId)) break // cycle guard — never trust input
+      seen.add(parentId)
+      const parent = productById.get(parentId)
+      if (!parent) break // unknown parents (outside the payload) drop
+      cur = parent
+    }
+    return cur.id
+  }
+  const familyOf = new Map<string, Output[]>()
+  const familyGroups = new Map<string, Output[]>()
+  for (const o of products) {
+    const root = rootOf(o)
+    familyGroups.set(root, [...(familyGroups.get(root) ?? []), o])
+  }
+  for (const members of familyGroups.values()) {
+    if (members.length < 2) continue
+    for (const m of members) familyOf.set(m.id, members)
+  }
+
+  // step → its rendered product/placeholder node ids (the 脊收编 feed bridge
+  // — populated as the roster materializes the nodes).
+  const producedNodeIdsByStep = new Map<string, string[]>()
+  const markProduced = (stepId: string, nodeId: string) => {
+    producedNodeIdsByStep.set(stepId, [
+      ...(producedNodeIdsByStep.get(stepId) ?? []),
+      nodeId,
+    ])
+  }
+
+  roster.forEach((entry, i) => {
+    if (entry.kind === "placeholder") {
+      const { row, ordinal } = entry
+      const id = `placeholder:${row.step_id}:${ordinal}`
+      markProduced(row.step_id, id)
+      nodes.push({
+        id,
+        kind: "output",
+        label: row.whole
+          ? t("generationOverlay.assetTypes.video", { defaultValue: "Video" })
+          : t(PRODUCT_TYPE_LABEL_KEY[row.type], { defaultValue: row.type }),
+        detail: row.language
+          ? t(`languages.${row.language}`, { defaultValue: row.language })
+          : undefined,
+        // The producing step's own status — a running step gives the
+        // placeholder its FLORA wipe (the card's run 期 projection).
+        status: stepNodeStatus(byId.get(row.step_id)?.status ?? "pending"),
+        placeholder: {
+          stepId: row.step_id,
+          type: row.type,
+          whole: row.whole,
+          language: row.language,
+          variant: row.variant,
+          aspect: row.aspect,
+        },
+        size: TEXT_PRODUCT_TYPES.has(row.type)
+          ? textProductNodeSize(PLACEHOLDER_TEXT_LINES)
+          : productNodeSize(row.aspect),
+        order: i,
+      })
+      // Same lineage rule as a landed product — the edge's from-endpoint is
+      // identical across the fill swap (only the to-id re-keys).
+      if (stepIds.has(row.step_id)) {
+        rawEdges.push({
+          from: `step:${row.step_id}`,
+          to: id,
+          semantic: "lineage",
+        })
+      }
+      return
+    }
+    const output = entry.output
     const id = `output:${output.id}`
+    if (output.workflow_step_id) markProduced(output.workflow_step_id, id)
     const thumbUrl = toAbsoluteUrl(
       output.files.image ?? output.publishing.cover_image_url ?? null,
     )
@@ -360,8 +502,6 @@ export function runFlowGraph(
               thumbUrl: null,
             }))
           : undefined
-const TEXT_PRODUCT_TYPES = new Set(["post", "article"])
-
 function textContentFromOutput(output: Output): FlowNode["textContent"] | undefined {
   if (!TEXT_PRODUCT_TYPES.has(output.type)) return undefined
   const title = output.publishing.title ?? output.payload.title ?? null
@@ -385,12 +525,7 @@ function textProductLineCount(output: Output): number {
 }
     const textContent = textContentFromOutput(output)
     const textLines = textContent ? textProductLineCount(output) : 0
-    // (2026-08-17 走查拍板): the run's only excerpt vocabulary belongs to
-    // real excerpts — materialize_source stamps segment.id="full" and the
-    // fork family (translate / dub) carries the same source_ref downstream.
-    const wholeSource =
-      output.type === "clip" &&
-      (output.source_ref?.segment as { id?: string } | undefined)?.id === "full"
+    const wholeSource = isWholeSourceClip(output)
     nodes.push({
       id,
       kind: "output",
@@ -409,6 +544,8 @@ function textProductLineCount(output: Output): number {
       // reports its real pixels to the toolbar).
       output,
       prompt: prompt ?? null,
+      specPrompt: output.spec_prompt ?? null,
+      familyOutputs: familyOf.get(output.id),
       variants,
       textContent,
       topPick:
@@ -452,6 +589,25 @@ function textProductLineCount(output: Output): number {
       }
     }
   })
+
+  // Source assets feed the root steps (the run's entry points) — process
+  // order, so the dependency semantic (recipe adapter precedent). A hidden
+  // root (the prelude) resolves DOWNSTREAM to its first rendered descendant
+  // (R1) — resolved here because the final pass only walks up. Runs after
+  // the roster so the 脊收编 bridge can land on the absorbed step's
+  // product/placeholder nodes.
+  const roots = steps.filter((s) => (s.inputs ?? []).length === 0)
+  for (const asset of assets) {
+    for (const root of roots) {
+      for (const target of resolveAssetFeedTargets(root.id)) {
+        rawEdges.push({
+          from: `asset:${asset.id}`,
+          to: target,
+          semantic: "dependency",
+        })
+      }
+    }
+  }
 
   // Final pass: step endpoints resolve to their canvas node (artifact card /
   // spine / step pill when the spine is expanded; hidden steps walk to their

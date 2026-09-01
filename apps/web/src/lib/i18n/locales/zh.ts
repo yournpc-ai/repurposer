@@ -949,26 +949,12 @@ const zh: Resources = {
       carousel: "尚未生成轮播图。",
       article: "尚未生成长文章。",
     },
-    pendingPlan: {
-      title: "生成计划待确认",
-      desc: "计划已准备好，确认后即可开始生成。",
-      descNoPlan: "还没有生成计划——和助手聊一句就能开始。",
-      cta: "继续设置",
-    },
-    runActive: {
-      title: "正在制作",
-      desc: "内容正在生成，通常需要几分钟。",
-      cta: "查看进度",
-    },
-    failedPanel: {
-      cta: "在对话中重试",
-    },
     dock: {
       history: "历史记录",
       focus: "当前焦点：{{name}}",
-      // dock 常驻诚实说明行（2026-08-19，对应 FLORA 的 FAUNA 免责行）：容器底部
-      // 常驻一行耳语。zh 用代词「它」（NAMING N-25）。
-      honesty: "它可能出错——重要内容请核对。",
+      // dock 常驻免责行（ADR-051，2026-08-31 —— FLORA FAUNA 行逐字镜像，
+      // 用户拍板；基础形态钉在输入区上方，提问形态随输入行隐藏）。
+      honesty: "Repurposer 是 AI，可能出错。重要信息请核对。",
     },
     // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
     // 播，hover 放大开大屏；2026-08-16 走查拍板。）
@@ -1003,6 +989,18 @@ const zh: Resources = {
       expand: "展开",
       mute: "静音",
       unmute: "取消静音",
+      // 占位槽位卡（ADR-051 B——占位物化）：安静卡上的功能性教学行——@ 指认修订通道。
+      placeholderHint: "产物就绪后在此落地——在对话里 @ 它来修订。",
+      // 悬停 prompt 框（ADR-051 F）：每卡修订条，预填产物自身 spec——发送走
+      // chat 通道并把产物钉为本轮焦点。
+      reviseTooltip: "修订这个产物",
+      revisePlaceholder: "说一句要改什么…",
+      reviseSend: "发送修订",
+      // 版本分页（ADR-051 F2——变体分页）：卡底动作带的 fork 族翻页——独立的
+      // pill，永不与条目切换器合并（variants = 条目切换 ≠ 版本切换）。
+      versionOf: "{{current}} / {{total}}",
+      versionPrev: "上一版",
+      versionNext: "下一版",
     },
     // 媒体 lightbox 的信息栏（媒体左侧）。
     lightbox: {
@@ -1151,7 +1149,6 @@ const zh: Resources = {
   },
   generationOverlay: {
     title: "生成计划",
-    backToProjects: "项目",
     planProse:
       "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
     chainLabel: "任务链",
@@ -1190,9 +1187,8 @@ const zh: Resources = {
     instructionPlaceholder: "例如：重点保留问答环节；第一条切片要有悬念。",
     confirmQuestion: "按这个计划开始生成？",
     confirm: "开始生成",
-    leaveNote: "随时可以离开——计划已保存，之后可从项目列表继续。",
     starting: "启动中…",
-    startingLine: "我开始生成了——你可以继续和我聊，也可以关掉页面，它会在后台完成。",
+    startingLine: "我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成。",
     planUpdated: "好，我记下了——上面的计划已更新。",
     chatPlaceholder: "和 Repurposer 聊聊…",
     chatPlaceholderConfirm: "告诉我怎么调整计划…",
@@ -1207,9 +1203,7 @@ const zh: Resources = {
       transcript: "文字稿",
       file: "文件",
     },
-    continuesInBackground: "生成将在后台继续。",
     stopped: "已停止生成。",
-    completed: "生成完成",
     failed: "生成失败",
   },
   questionDock: {
@@ -1219,6 +1213,7 @@ const zh: Resources = {
       review: "审阅",
     },
     bail: "停止生成",
+    skip: "跳过问题",
   },
   clipMenu: {
     more: "更多操作",

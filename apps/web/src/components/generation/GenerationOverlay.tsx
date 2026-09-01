@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef, useImperativeHandle } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  ArrowLeft,
   ArrowUp,
   Check,
   ChevronDown,
@@ -47,7 +46,6 @@ import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamChat } from "@/lib/chat-stream"
 import { createTypewriter } from "@/lib/typewriter"
-import { useReducedMotion } from "@/lib/use-reduced-motion"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { BrandLoader } from "@/components/BrandLoader"
@@ -108,7 +106,7 @@ import {
   QuestionDock,
   type Autonomy,
 } from "@/components/chat/QuestionDock"
-import { RunTaskList } from "@/components/generation/RunTaskList"
+import { RunTaskList, RunStatusRow } from "@/components/generation/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
 
 const LANGUAGE_OPTIONS = [
@@ -490,10 +488,6 @@ interface GenerationOverlayProps {
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
-  /** The shell at mount (ADR-041 D4): "fullscreen" = the planning/progress
-   * surface; "dock" = the results-phase bottom dock over the canvas. The
-   * SAME message machine — only the outer shell differs. */
-  initialShell?: "fullscreen" | "dock"
   /** The canvas's focused product (ADR-041 D8 焦点注入): rendered as a gray
    * meta row in the flow (待发焦点尾行), carried on the next turn as
    * `focus_output` — one context line server-side AND persisted on the user
@@ -502,15 +496,14 @@ interface GenerationOverlayProps {
   /** Focus lifecycle: the overlay consumes the focus on send (null) and
    * restores it on a failed-turn rollback (the consumed id). */
   onFocusChange?: (outputId: string | null) => void
-  /** Where a witnessed completion lands (ADR-041 D3): "dock" = the desktop
-   * 收官转场 (fullscreen → dock); "navigate" = the mobile legacy hand-off
-   * (the page navigates back to the results list). */
-  completionMode?: "dock" | "navigate"
-  onClose: () => void
-  /** The run reached a terminal-success state while this overlay was
-   * watching. Awaited on the dock-capable path: the page refetches and
-   * mounts the (choreographed) canvas BEFORE the collapse starts. */
+  /** The run reached a terminal-success state while this dock was watching
+   * — the page refetches so the landed products show. */
   onComplete: (runId: string | null) => void | Promise<void>
+  /** A run STARTED while this dock was watching (Start button / prose
+   * confirmation / 修订 run) — the page refetches immediately so its own
+   * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
+   * from the first beat, not only at terminal. One-shot per run. */
+  onRunStarted?: (runId: string) => void | Promise<void>
 }
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
@@ -521,6 +514,12 @@ export interface GenerationOverlayHandle {
    * the @workflow_step 本面限定候选源, ADR-041 D8). No-op when the editor
    * isn't mounted. */
   insertMention: (mention: ChatMention) => void
+  /** Canvas hover prompt 框 (ADR-051 F): send a revision ask as a plain chat
+   * turn with the product pinned as the turn's focus (the bubble carries the
+   * focus prefix row as its permanent record). Zero new execution channel —
+   * it IS the dock's send path. No-op while a turn/run is in flight; a failed
+   * turn rolls the bubble back and returns the draft to the dock's input. */
+  sendRevision: (text: string, focus: { id: string; label: string }) => void
 }
 
 /** MetaRow — the gray system-layer row (一切入流, the Claude Code anatomy):
@@ -809,33 +808,43 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   initialIntent,
   initialDerived,
   initialRunId,
-  initialShell = "fullscreen",
   focusOutput = null,
   onFocusChange,
-  completionMode = "navigate",
-  onClose,
   onComplete,
+  onRunStarted,
 }, ref) {
   const { t } = useTranslation()
 
-  // Shell state machine (ADR-041 D3/D4): fullscreen (planning / progress) →
-  // collapsing (收官转场: backdrop fades + the message area retracts upward,
-  // the input group never moves) → dock (results-phase bottom dock over the
-  // canvas). Mount-time shell comes from the page's run data; the only
-  // post-mount transition is the witnessed completion below.
-  type Shell = "fullscreen" | "collapsing" | "dock"
-  const [shell, setShell] = useState<Shell>(
-    initialShell === "dock" ? "dock" : "fullscreen"
-  )
+  // The dock is the SOLE shell (ADR-051, 2026-08-31): the fullscreen /
+  // collapsing shells and the ?overlay= route modes are retired — the
+  // project page is always canvas + dock, and this message machine renders
+  // only as the bottom dock over it.
   /** History region (dock D4 修订 — 一体容器两态): the flow lives INSIDE the
    * input group's container, growing upward; closed = the input group alone
    * (the canvas owns the screen). Agent speech always raises it (#6). */
   const [historyOpen, setHistoryOpen] = useState(false)
-  const reducedMotion = useReducedMotion()
   useImperativeHandle(ref, () => ({
     closeHistory: () => setHistoryOpen(false),
     insertMention: (mention: ChatMention) =>
       editorRef.current?.insertMention(mention),
+    sendRevision: (text: string, focus: { id: string; label: string }) => {
+      const trimmed = text.trim()
+      if (!trimmed || chatBusy || isStarting) return
+      const rollbackId = crypto.randomUUID()
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: rollbackId,
+          role: "user",
+          content: trimmed,
+          focus,
+          at: new Date().toISOString(),
+        },
+      ])
+      // Your own send opens the flow — the reply lands there.
+      setHistoryOpen(true)
+      void sendChat(trimmed, { rollbackId, draft: trimmed, focus })
+    },
   }))
 
   const [phase, setPhase] = useState<Phase>(
@@ -938,6 +947,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   const abortRef = useRef<AbortController | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
+  const onRunStartedRef = useRef(onRunStarted)
+  onRunStartedRef.current = onRunStarted
 
   const { steps, status, terminal, summary, createdAt: runCreatedAt } = useRunEvents(runId)
   // Ref mirror: sendChat's async continuation must read the live terminal
@@ -1216,68 +1227,31 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }, [projectId])
 
-  // Witnessed-run tracking (declared BEFORE the terminal effect so a single
-  // SSE commit settles it first): only a run seen live (pending/running)
-  // may play the收官转场. A historical run arrives terminal in the first
-  // snapshot — straight to the dock, never a replay (prohibition #5).
-  const seenLiveRef = useRef(false)
-  useEffect(() => {
-    if (status === "pending" || status === "running") seenLiveRef.current = true
-  }, [status])
-
-  // Terminal: failure stays put — the failed step rows carry the humanized
-  // error in-flow (provider 错误人话化梯), no toast on top; success either
-  // plays the collapse into the dock (desktop, witnessed) or keeps the
-  // legacy hand-off (mobile navigates back to the results list).
+  // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
+  // the failed step rows carry the humanized error in-flow (provider 错误
+  // 人话化梯), no toast on top; success hands off to the page (refetch →
+  // the landed products show on the canvas) and the terminal recap raises
+  // the history region in place (the lastAgentKey mechanism below).
   useEffect(() => {
     if (!terminal) return
     if (status === "failed") {
       return
     }
-    if (!seenLiveRef.current) {
-      // Rehydrated history (refresh / direct entry / another device): the
-      // dock appears instantly — no toast, no replay.
-      if (completionMode === "dock") setShell("dock")
-      return
-    }
-    if (completionMode === "navigate") {
-      toast.success(t("generationOverlay.completed"))
-      onCompleteRef.current(runIdRef.current)
-      return
-    }
-    void (async () => {
-      // The page refetches + mounts the choreographed canvas underneath
-      // BEFORE the shell starts collapsing — the graph's birth replay and
-      // the backdrop fade overlap (D3).
-      await onCompleteRef.current(runIdRef.current)
-      // Only a fullscreen shell plays the collapse — a dock watching a
-      // refinement run finish just refreshes its summary in place.
-      if (shell !== "fullscreen") return
-      if (reducedMotion) {
-        setShell("dock")
-        return
-      }
-      setShell("collapsing")
-    })()
+    void onCompleteRef.current(runIdRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminal])
 
-  // The collapse is one CSS beat (backdrop fade + message-area retract,
-  // duration-500); then the dock takes over the bottom row.
-  useEffect(() => {
-    if (shell !== "collapsing") return
-    const timer = setTimeout(() => setShell("dock"), 560)
-    return () => clearTimeout(timer)
-  }, [shell])
-
   /** Shared landing for every path that starts a run (the dock's Start
    * button, a prose confirmation via /chat): the answered task book
-   * archives as QA, the dock clears, and the step flow takes over. */
+   * archives as QA, the dock clears, and the step flow takes over. The page
+   * is told at the same beat — its refetch flips runActive, attaches the
+   * page SSE, and the run 期活画布 renders from the first beat. */
   const landOnStartedRun = useCallback((runId: string, answered: QuestionMessage | null) => {
     setPendingQuestion(null)
     if (answered) setAnsweredQuestion(answered)
     setRunId(runId)
     setPhase("running")
+    void onRunStartedRef.current?.(runId)
   }, [])
 
   const handleStartGeneration = useCallback(async () => {
@@ -1340,6 +1314,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       const data = (await res.json()) as { run_id: string }
       setRunId(data.run_id)
       setPhase("running")
+      void onRunStartedRef.current?.(data.run_id)
     } catch (e) {
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
     } finally {
@@ -1350,7 +1325,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
 
-  /** Cancel = bail: a graceful exit back to draft (never an error toast). */
+  /** Cancel = bail: a graceful exit back to draft chat (never an error
+   * toast) — the dock never closes (it IS the page's chrome, ADR-051); the
+   * confirm panel settles away and the plain conversation takes over. */
   const handleCancel = useCallback(async () => {
     if (pendingQuestion) {
       await apiFetch(`/api/v1/chat/messages/${pendingQuestion.id}/answer`, {
@@ -1359,8 +1336,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         toast: false,
       }).catch(() => {})
     }
-    onClose()
-  }, [pendingQuestion, onClose])
+    setPendingQuestion(null)
+    setPhase("chat")
+  }, [pendingQuestion])
 
   const canStartGeneration = intent.tasks.length > 0
 
@@ -1938,10 +1916,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }
 
-  /** Interrupt bail (期 4): stop the parked run — the endpoint settles the
-   * node, skips the downstream and completes the run synchronously, so we
-   * archive the QA and leave quietly (never an error toast, #5). */
-  const handleInterruptBail = async () => {
+  /** Choice bail — the question line's × (ADR-051): a graceful exit, never
+   * an error toast (#5). For an interrupt (a run parked on the answer) the
+   * endpoint settles the node, skips the downstream and completes the run
+   * synchronously — the dock keeps watching in place (the terminal snapshot
+   * arrives over its own SSE); for a plain chat ask it just records the
+   * skip. */
+  const handleBailQuestion = async () => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
     try {
@@ -1951,13 +1932,33 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       )
       if (!res.ok) return
       const data = (await res.json()) as { answered_question: QuestionMessage }
+      const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
       pushQaArchive(data.answered_question)
-      toast.info(t("generationOverlay.stopped"))
-      onClose()
+      if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
       setAnswering(false)
     }
+  }
+
+  /** The choice dock's pencil row (ADR-051 形态切换): a freeform answer
+   * rides the SAME send channel as the chat input — the server's
+   * deterministic autoResume mapping resolves a letter/number/label hit
+   * (zero LLM), anything else records a freeform answer. */
+  const handleChoiceFreeform = (text: string) => {
+    if (chatBusy || isStarting) return
+    const rollbackId = crypto.randomUUID()
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: rollbackId,
+        role: "user",
+        content: text,
+        at: new Date().toISOString(),
+      },
+    ])
+    setHistoryOpen(true)
+    void sendChat(text, { rollbackId, draft: text })
   }
 
   /** Stop the in-flight assistant reply (aborts the fetch; the user's own
@@ -2022,28 +2023,17 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     })
   }
 
-  const handleClose = () => {
-    if (phase === "running" && !terminal) {
-      toast.info(t("generationOverlay.continuesInBackground"))
-    }
-    onClose()
-  }
-
-  // Esc mirrors the back pill (fullscreen); in the dock it closes the
-  // history region — the dock itself has no close (it IS the page's chrome).
+  // Esc closes the history region — the dock itself has no close (it IS the
+  // page's chrome; the fullscreen shell's back-pill/Esc close retired with
+  // it, ADR-051).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      if (shell === "dock") {
-        setHistoryOpen(false)
-        return
-      }
-      if (shell === "fullscreen") handleClose()
+      setHistoryOpen(false)
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, terminal, shell])
+  }, [])
 
   const sectionLabel = "text-sm font-medium text-foreground"
 
@@ -2073,9 +2063,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     return null
   }, [messages])
   const lastAgentKey =
-    shell === "dock"
-      ? (lastAssistant?.id ?? (terminal && summary ? `summary:${runId ?? "run"}` : null))
-      : null
+    lastAssistant?.id ?? (terminal && summary ? `summary:${runId ?? "run"}` : null)
   const lastAgentKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (!lastAgentKey) return
@@ -2817,38 +2805,38 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         </MessageScrollerProvider>
   )
 
-  // The choice dock and the input body are shared verbatim across the two
-  // bottom-row shells (fullscreen muted group / dock unified container) —
-  // the dock renders them as square children of ONE frosted container (D4
-  // 修订 一体容器); fullscreen keeps the joined muted pairing.
+  // The choice dock and the input body render as square children of the
+  // dock's ONE frosted container (D4 修订 一体容器) — the container owns all
+  // rounding and the frost. While a choice question is pending the dock
+  // MORPHS (ADR-051): the input row and the disclaimer hide, and the
+  // question (its options + the pencil freeform row) IS the dock.
   const choiceDock =
     phase !== "confirm" && pendingChoice ? (
       <QuestionDock
         kind="choice"
-        joined={shell !== "dock"}
-        plain={shell === "dock"}
+        plain
         question={pendingChoice.content ?? ""}
         options={pendingChoice.question?.options ?? []}
         estimate={pendingChoice.question?.estimate}
         onAnswer={handleChoiceAnswer}
         answering={answering}
-        onBail={
-          // Interrupt questions (a run parked on the answer) get the bail
-          // affordance; plain chat asks don't — their graceful exit is just
-          // typing the next message.
-          pendingChoice.workflow_run_id ? handleInterruptBail : undefined
+        onBail={handleBailQuestion}
+        bailLabel={
+          pendingChoice.workflow_run_id
+            ? t("questionDock.bail")
+            : t("questionDock.skip")
         }
+        onFreeform={handleChoiceFreeform}
+        freeformDisabled={chatBusy || isStarting}
       />
     ) : null
-  // The task-book confirm dock — one instance shared across the shells:
-  // fullscreen parks it above the muted input group (its own bg-muted
-  // card); the dock renders it as a square child of the ONE frosted
-  // container (plain — the container owns the chrome, D4 一体容器).
+  // The task-book confirm dock — a square child of the ONE frosted container
+  // (plain — the container owns the chrome, D4 一体容器).
   const taskBookDock =
     phase === "confirm" && intentReady && !chatBusy ? (
       <QuestionDock
         kind="task_book"
-        plain={shell === "dock"}
+        plain
         question={t("generationOverlay.confirmQuestion")}
         autonomy={autonomy}
         onAutonomyChange={setAutonomy}
@@ -2856,6 +2844,27 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         onCancel={handleCancel}
         starting={isStarting}
         startDisabled={!canStartGeneration || chatBusy}
+      />
+    ) : null
+  // The folded 打勾 (ADR-051): while a run is live and the history region is
+  // closed, ONE shimmer status line docks above the input (a pending choice
+  // question owns the dock instead). Click = expand the step log — it opens
+  // the history, whose RunTaskList stays the only checklist.
+  const runStatusRow =
+    phase === "running" && !terminal && !pendingChoice && !historyOpen ? (
+      <RunStatusRow
+        steps={steps}
+        runStartedAt={runCreatedAt}
+        narrativeFallback={
+          assets.some(
+            (a) =>
+              a.processing_status === "pending" ||
+              a.processing_status === "processing",
+          )
+            ? t("results.stepper.transcribing")
+            : t("results.stepper.queued")
+        }
+        onClick={() => setHistoryOpen(true)}
       />
     ) : null
   const inputBody = (
@@ -2950,36 +2959,29 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         <MentionEditor
           ref={editorRef}
           placeholder={
-            phase !== "confirm" &&
-            pendingChoice &&
-            (pendingChoice.question?.options?.length ?? 0) > 0 &&
-            pendingChoice.question?.allow_freeform !== false
-              ? t("chat.choicePlaceholder")
-              : phase === "confirm"
-                ? t("generationOverlay.chatPlaceholderConfirm")
-                : t("generationOverlay.chatPlaceholder")
+            phase === "confirm"
+              ? t("generationOverlay.chatPlaceholderConfirm")
+              : t("generationOverlay.chatPlaceholder")
           }
           mentionContext={mentionContext}
           onChange={handleEditorChange}
           onSubmit={handleSend}
           className="max-h-32 min-h-9 text-sm"
         />
-        {shell === "dock" && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label={t("results.dock.history")}
-            aria-pressed={historyOpen}
-            onClick={() => setHistoryOpen((v) => !v)}
-          >
-            {historyOpen ? (
-              <ChevronDown className="h-4.5 w-4.5" />
-            ) : (
-              <History className="h-4.5 w-4.5" />
-            )}
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          aria-label={t("results.dock.history")}
+          aria-pressed={historyOpen}
+          onClick={() => setHistoryOpen((v) => !v)}
+        >
+          {historyOpen ? (
+            <ChevronDown className="h-4.5 w-4.5" />
+          ) : (
+            <History className="h-4.5 w-4.5" />
+          )}
+        </Button>
         {chatBusy ? (
           <Button
             size="icon"
@@ -3010,128 +3012,55 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   )
 
   return (
-    // Dock shell = click-through by design (the canvas owns the screen): the
+    // The dock is click-through by design (the canvas owns the screen): the
     // root itself must be pointer-events-none too — without it the root box
     // is still the hit target and swallows every canvas hover/click even
-    // though all three children opt out individually. The bottom row's inner
-    // container re-enables events for the input group / summary / drawer.
-    <div
-      className={cn(
-        "fixed inset-0 z-50 flex flex-col",
-        shell === "dock" && "pointer-events-none"
-      )}
-    >      {/* Backdrop — a pure visual layer (always pointer-events-none):
-          opaque while fullscreen, fades away on the收官 frame (D3); in the
-          dock the shell is click-through and the canvas shows through. */}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-0 bg-background transition-opacity duration-500 motion-reduce:transition-none",
-          shell === "fullscreen" ? "opacity-100" : "opacity-0"
-        )}
-      />
+    // though all children opt out individually. The bottom row's inner
+    // container re-enables events for the input group / history / docks.
+    <div className="pointer-events-none fixed inset-0 z-50 flex flex-col">
+      {/* The center belongs to the canvas — an empty click-through spacer
+          keeps the bottom row parked at the foot. */}
+      <div className="min-h-0 flex-1" aria-hidden />
 
-      {/* Header band — the back pill owns a real strip, so scrolled content
-          structurally never enters its zone (a fade alone still lets text
-          slide under the pill). Fullscreen only: the dock has no close. */}
-      {shell === "fullscreen" && (
-        <div className="relative shrink-0 px-4 pt-4">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="h-9 gap-1.5 rounded-md px-3"
-            onClick={handleClose}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t("generationOverlay.backToProjects")}
-          </Button>
-        </div>
-      )}
-
-      {/* Chat region — fullscreen it hosts the flow; on the收官 frame the
-          flow retracts upward and fades (消息区上收); in the dock the
-          region is an empty click-through spacer (the canvas owns the
-          center). The REGION keeps its flex-1 slot throughout, so the
-          bottom input row never moves (D3: 输入组全程零位移). */}
-      {shell !== "dock" ? (
-        <div
-          className={cn(
-            "relative min-h-0 flex-1 transition-all duration-500 motion-reduce:transition-none",
-            shell === "collapsing" && "pointer-events-none -translate-y-4 opacity-0"
-          )}
-        >
-          {chatScroller}
-        </div>
-      ) : (
-        <div className="pointer-events-none min-h-0 flex-1" aria-hidden />
-      )}
-
-      {/* Bottom row — the input group's immutable slot across the three
-          parking spots (composer / overlay / dock): it never moves (D3).
-          The pending question docks directly above it (ask primitive): the
-          flow archives decisions, the dock holds the one still open. The
+      {/* Bottom row — the input group's immutable slot across its parking
+          spots (composer / project dock): it never moves. The pending
+          question docks directly above it (ask primitive): the flow
+          archives decisions, the dock holds the one still open. The
           task-book dock HIDES while a turn is in flight (a stale plan must
-          not be Start-able mid-revision); a choice dock JOINS the input
-          visually — the input IS the freeform "something else" row, its
-          placeholder already says so. The dock shell is ONE frosted
-          container (D4 修订 一体容器): the history region grows upward
-          inside it, and every child is square — the container owns all
-          rounding and the frost. */}
-      <div
-        className={cn(
-          "relative shrink-0 px-4 pb-5 pt-2",
-          shell === "dock" && "pointer-events-none"
-        )}
-      >
-        <div
-          className={cn(
-            "mx-auto w-full max-w-3xl",
-            shell === "dock" && "pointer-events-auto"
-          )}
-        >
-          {shell !== "dock" && taskBookDock}
+          not be Start-able mid-revision). The dock is ONE frosted container
+          (D4 修订 一体容器): the history region grows upward inside it, and
+          every child is square — the container owns all rounding and the
+          frost. */}
+      <div className="pointer-events-none relative shrink-0 px-4 pb-5 pt-2">
+        <div className="pointer-events-auto mx-auto w-full max-w-3xl">
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
-          {shell === "dock" ? (
-            /* The dock's one frosted container — dock-surface (2026-08-15
-               走查拍板): translucent enough that the canvas's dot grid reads
-               through the frost; hairline only, NO shadow — the dock is the
-               composer's third parking spot and inherits its hero-flat rule
-               (without the ring the glass edge dissolves into the canvas). */
-            <div className="dock-surface overflow-hidden rounded-xl ring-1 ring-foreground/10">
-              {historyOpen && (
-                <div className="h-[min(50vh,480px)]">{chatScroller}</div>
-              )}
-              {taskBookDock}
-              {choiceDock}
-              <div className="p-2">{inputBody}</div>
-              {/* The resident honesty line (2026-08-19, the FLORA FAUNA-line
-                  counterpart): one whisper row at the container's foot —
-                  always on, a square child like every other (D4 一体容器). */}
-              <p className="px-3 pb-1.5 text-center text-[11px] leading-tight text-meta-foreground">
+          {/* The dock's one frosted container — dock-surface (2026-08-15
+              走查拍板): translucent enough that the canvas's dot grid reads
+              through the frost; hairline only, NO shadow — the dock is the
+              composer's third parking spot and inherits its hero-flat rule
+              (without the ring the glass edge dissolves into the canvas). */}
+          <div className="dock-surface overflow-hidden rounded-xl ring-1 ring-foreground/10">
+            {historyOpen && (
+              <div className="h-[min(50vh,480px)]">{chatScroller}</div>
+            )}
+            {taskBookDock}
+            {choiceDock}
+            {runStatusRow}
+            {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
+                verbatim): docked directly above the input area in the base
+                form, hidden WITH the input row on the question morph. */}
+            {!pendingChoice && (
+              <p className="px-3 pt-1 text-center text-[11px] leading-tight text-meta-foreground">
                 {t("results.dock.honesty")}
               </p>
-            </div>
-          ) : (
-            <>
-              {choiceDock}
-              <div
-                className={cn(
-                  // Fullscreen keeps the solid muted fill it always had (it
-                  // sits over the opaque backdrop, and a joined QuestionDock
-                  // is bg-muted — the pair must read as one piece). A joined
-                  // choice dock drops the input's top rounding.
-                  "p-2",
-                  pendingChoice
-                    ? "rounded-b-lg bg-muted"
-                    : "rounded-lg bg-muted"
-                )}
-              >
-                {inputBody}
-              </div>
-            </>
-          )}
+            )}
+            {/* The input row morphs away while a choice question is pending
+                (ADR-051) — CSS-hidden, NOT unmounted: the editor keeps its
+                DOM-owned draft across the morph. */}
+            <div className={cn("p-2", pendingChoice && "hidden")}>{inputBody}</div>
+          </div>
         </div>
       </div>
     </div>

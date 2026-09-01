@@ -14,10 +14,11 @@ import type { ChatMention } from "@/lib/mentions"
  * useProjectLaunch — the composer's send mechanism, shared (2026-08-08, D6
  * 二次修订): **one launchpad, two parking spots**. HomeComposer and the recipe
  * inspect overlay's launch zone ride the SAME path: create an empty project →
- * upload staged files (direct-to-storage) → navigate to
- * `/projects/$id?overlay=chat` with the draft handed over via router state —
- * the overlay chat sends it as the first `/chat` message (mentions and the
- * persona choice ride along — the single identity payload, ADR-038).
+ * upload staged files (direct-to-storage) → navigate straight to
+ * `/projects/$id` (canvas + chat dock, ADR-051 — the ?overlay= route params
+ * are retired) with the draft handed over via router state — the dock sends
+ * it as the first `/chat` message (mentions and the persona choice ride
+ * along — the single identity payload, ADR-038).
  *
  * Boundaries (unchanged doctrine): the launcher never infers intent, never
  * builds a prior, never runs generation — intent recognition lives in the
@@ -127,13 +128,12 @@ export function useProjectLaunch() {
           )
 
           // Send consumes the draft (chip law ②) — the caller clears its
-          // editor/state, then we hand the draft to the overlay chat.
+          // editor/state, then we hand the draft to the project's chat dock.
           input.onSent?.()
 
           navigate({
             to: "/projects/$id",
             params: { id: project.id },
-            search: { overlay: "chat" },
             state: {
               firstMessage: {
                 text,

@@ -54,10 +54,39 @@ export interface FlowNode {
    * node IS the product card: score / top-pick / next-step live on it).
    * Absent on the recipe surface, whose output nodes stay compact thumbs. */
   output?: import("@/lib/types").Output
+  /** Placeholder slot of a live run (ADR-051 B — 占位物化): the node is a
+   * quiet placeholder card born at its final size/position; the real output
+   * landing from the same producing step fills the slot in place (same
+   * roster index, node id swaps placeholder:… → output:…). Carries the
+   * display facts the skin needs (type / whole / language / variant /
+   * aspect). The node's `status` mirrors the producing step — a running
+   * step gives the card its FLORA wipe (the run 期 fill projection); the
+   * step narrative still lives in the dock's folded checklist. */
+  placeholder?: {
+    stepId: string
+    type: string
+    whole: boolean
+    language?: string | null
+    variant?: string | null
+    aspect?: string | null
+  }
   /** The run's prompt, shown in the product card's padded interaction area
    * (results canvas, D5 anatomy: spec on the body — read-only; changes
    * happen in chat, never in place). */
   prompt?: string | null
+  /** The product's OWN spec as a prompt-style line (ADR-051 F — the per-
+   * card global-prompt display retired into this): the card body shows it
+   * at rest; the hover prompt 框 prefills with it (editable — sending rides
+   * the chat revision channel with the product pinned as focus). */
+  specPrompt?: string | null
+  /** Fork family (ADR-051 F2 — 变体分页): every visible row connected
+   * through source_ref.derived_from_output_id, created_at ascending — each
+   * a REAL row with its own media (morph versions share one row's current
+   * media, so they never become pager entries). Present only when the
+   * family has ≥2 members; the card's "1 of N" pager flips the display
+   * (and the action target) among members. Distinct slot from `variants`
+   * (items switcher) — the two never merge. */
+  familyOutputs?: import("@/lib/types").Output[]
   /** Video asset nodes (results canvas): the browser-playable URL — the
    * node renders an inline muted-loop <video>, never a file icon. */
   videoUrl?: string | null
@@ -141,8 +170,14 @@ export interface FlowViewProps {
    * absent the asset node renders NO toolbar (recipe manual surface). */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
   /** Media expand (results canvas): a node's hover expand icon / media
-   * click — the surface opens the media lightbox for the node. */
-  onExpandMedia?: (nodeId: string) => void
+   * click — the surface opens the media lightbox for the node. `outputId`
+   * names the displayed member when the version pager flipped the card
+   * (ADR-051 F2 — the lightbox follows the shown variant, not the row). */
+  onExpandMedia?: (nodeId: string, outputId?: string) => void
+  /** Hover prompt 框 send (ADR-051 F): the card reports the revision ask
+   * with the product pinned — the surface rides it into the chat revision
+   * channel (zero new execution channel, prohibition #1). */
+  onRevise?: (outputId: string, text: string) => void
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void
@@ -154,10 +189,13 @@ export interface FlowViewProps {
    * = fit / +) parked top-right. Explore surfaces only — a fit-locked
    * surface has no zoom business, so the prop is ignored there. */
   controls?: boolean
-  /** Birth choreography — nodes enter in compile order + edges draw on.
-   * Only for a run witnessed live in this session; rehydrated history
-   * renders instantly (ADR-036 补记 3). */
-  choreograph?: boolean
+  /** Birth choreography (ADR-036 补记 3, growth-driven since ADR-051): the
+   * ids of nodes that appeared while the surface was mounted (placeholder
+   * materialization, in-place fills, revision growth) — they enter staggered
+   * in compile order (BIRTH_STAGGER_MS), edges touching them draw on. The
+   * surface owns the witnessing (its first hydrated frame passes NOTHING —
+   * refresh / reconnect / history render instantly, 铁律). */
+  bornIds?: ReadonlySet<string>
   /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
    * frames behind member node clusters, naming the region. */
   groups?: FlowGroup[]

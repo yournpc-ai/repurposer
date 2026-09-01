@@ -111,12 +111,12 @@ function GroupFrames({
   groups,
   layout,
   sizes,
-  choreograph,
+  bornRanks,
 }: {
   groups: FlowGroup[]
   layout: ReturnType<typeof layoutFlow>
   sizes: Map<string, { width: number; height: number }>
-  choreograph: boolean
+  bornRanks: Map<string, number>
 }) {
   return (
     <ViewportPortal>
@@ -124,7 +124,7 @@ function GroupFrames({
         const members = group.nodeIds.flatMap((id) => {
           const pos = layout.positions.get(id)
           const size = sizes.get(id)
-          return pos && size ? [{ pos, size, born: layout.revealOrder.get(id) ?? 0 }] : []
+          return pos && size ? [{ pos, size, born: bornRanks.get(id) }] : []
         })
         if (members.length === 0) return null
         const minX = Math.min(...members.map((m) => m.pos.x)) - GROUP_PAD
@@ -133,16 +133,18 @@ function GroupFrames({
           Math.max(...members.map((m) => m.pos.x + m.size.width)) + GROUP_PAD
         const maxY =
           Math.max(...members.map((m) => m.pos.y + m.size.height)) + GROUP_PAD
+        // The frame enters with its newborn members (保留决定 2026-08-19 拍
+        // 板)——此路径未经验证，首个双用 surface 上线时必须抽帧核对框与成员
+        // 的入场同步。No newborn member = the frame renders instantly.
+        const bornMax = Math.max(...members.map((m) => m.born ?? -1))
+        const born = bornMax >= 0
         return (
           <div
             key={group.id}
             aria-hidden
             className={cn(
               "absolute rounded-3xl ring-foreground/10 ring-1",
-              // choreograph 同步入场（保留决定 2026-08-19 拍板）：尚未有
-              // surface 同时传 groups+choreograph——此路径未经验证，首个
-              // 双用 surface 上线时必须抽帧核对框与成员的入场同步。
-              choreograph && "flow-node-born",
+              born && "flow-node-born",
             )}
             style={{
               left: minX,
@@ -150,9 +152,7 @@ function GroupFrames({
               width: maxX - minX,
               height: maxY - minY,
               zIndex: -1,
-              ...(choreograph
-                ? { animationDelay: `${Math.max(...members.map((m) => m.born)) * BIRTH_STAGGER_MS}ms` }
-                : {}),
+              ...(born ? { animationDelay: `${bornMax * BIRTH_STAGGER_MS}ms` } : {}),
             }}
           >
             {group.label && (
@@ -226,10 +226,11 @@ export function FlowView({
   onOutputAction,
   onAssetAction,
   onExpandMedia,
+  onRevise,
   onPaneClick,
   navigation = "fit",
   controls = false,
-  choreograph = false,
+  bornIds,
   groups = [],
   dots = false,
   className,
@@ -240,9 +241,21 @@ export function FlowView({
   useEffect(() => setMounted(true), [])
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  const { rfNodes, rfEdges, layout, sizes } = useMemo(() => {
+  const { rfNodes, rfEdges, layout, sizes, bornRanks } = useMemo(() => {
     const layout = layoutFlow(nodes, edges)
     const sizes = new Map(nodes.map((n) => [n.id, flowNodeSize(n)]))
+    // Newborn ids → stagger ranks in compile order (the reveal order IS the
+    // slowed-down compile order). One batch births together; the delay gap
+    // between consecutive ranks is the shared BIRTH_STAGGER_MS quantum.
+    const bornRanks = new Map<string, number>()
+    if (bornIds && bornIds.size > 0) {
+      ;[...bornIds]
+        .sort(
+          (a, b) =>
+            (layout.revealOrder.get(a) ?? 0) - (layout.revealOrder.get(b) ?? 0),
+        )
+        .forEach((id, rank) => bornRanks.set(id, rank))
+    }
     const rfNodes: FlowCardNode[] = nodes.map((n) => ({
       id: n.id,
       type: "flowCard",
@@ -252,18 +265,21 @@ export function FlowView({
       style: flowNodeSize(n),
       data: {
         node: n,
-        bornIndex: choreograph ? layout.revealOrder.get(n.id) : undefined,
+        bornIndex: bornRanks.get(n.id),
         selected: n.id === selectedId,
         onOutputAction,
         onAssetAction,
         onExpandMedia,
+        onRevise,
       },
       draggable: false,
       connectable: false,
     }))
     const rfEdges: FlowEdgeType[] = edges.map((e) => {
-      const from = layout.revealOrder.get(e.from) ?? 0
-      const to = layout.revealOrder.get(e.to) ?? 0
+      // An edge draws once a born endpoint enters (delay = the later birth).
+      const from = bornRanks.get(e.from) ?? -1
+      const to = bornRanks.get(e.to) ?? -1
+      const bornAt = Math.max(from, to)
       return {
         id: `${e.from}->${e.to}`,
         source: e.from,
@@ -271,8 +287,7 @@ export function FlowView({
         type: "flow",
         data: {
           semantic: e.semantic,
-          // An edge draws once both endpoints have appeared.
-          drawDelay: choreograph ? Math.max(from, to) * BIRTH_STAGGER_MS + 240 : null,
+          drawDelay: bornAt >= 0 ? bornAt * BIRTH_STAGGER_MS + 240 : null,
           active:
             nodes.find((n) => n.id === e.to)?.status === "running" ||
             nodes.find((n) => n.id === e.from)?.status === "running",
@@ -281,8 +296,8 @@ export function FlowView({
         focusable: false,
       }
     })
-    return { rfNodes, rfEdges, layout, sizes }
-  }, [nodes, edges, selectedId, choreograph, onOutputAction, onAssetAction, onExpandMedia])
+    return { rfNodes, rfEdges, layout, sizes, bornRanks }
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onRevise])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />
@@ -318,12 +333,14 @@ export function FlowView({
         onPaneClick={onPaneClick}
       >
         {dots && (
+          // Same recipe as the home page's dot-grid utility (ADR-046 附;
+          // 调大调显 2026-08-31 ADR-051): 1.5px dot, 26px gap, 32%/30%.
           <Background
             variant={BackgroundVariant.Dots}
             gap={26}
-            size={1}
+            size={1.5}
             color="var(--muted-foreground)"
-            className="opacity-20 dark:opacity-[0.18]"
+            className="opacity-[0.32] dark:opacity-30"
           />
         )}
         {groups.length > 0 && (
@@ -331,7 +348,7 @@ export function FlowView({
             groups={groups}
             layout={layout}
             sizes={sizes}
-            choreograph={choreograph}
+            bornRanks={bornRanks}
           />
         )}
         <ViewportController
