@@ -19,6 +19,7 @@ from app.models.schemas import (
     ProjectStatus,
     ProjectUpdate,
     RunResponse,
+    WorkflowStatus,
 )
 from app.models.tables import (
     Asset,
@@ -41,7 +42,10 @@ from app.chat.service import (
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.outputs import (
     aggregate_step_cost,
+    compose_spec_prompt,
+    derive_placeholder_rows,
     list_visible_outputs,
+    model_facts_for,
     workflow_step_to_response,
     run_to_response,
     visible_outputs_stmt,
@@ -200,6 +204,40 @@ async def get_project_results(
         latest_run_resp.steps = [workflow_step_to_response(n) for n in nodes]
         latest_run_resp.cost = aggregate_step_cost(nodes)
 
+    # Placeholder roster (ADR-051 B — 占位物化): only while the latest run is
+    # non-terminal — a terminal run's unfilled slots vanish (the chat narrates
+    # the failure; the graph expresses products, never step progress).
+    placeholders: list[dict] = []
+    if latest_run is not None and latest_run.status in (
+        WorkflowStatus.PENDING,
+        WorkflowStatus.RUNNING,
+        WorkflowStatus.WAITING_HUMAN,
+    ):
+        placeholders = derive_placeholder_rows(nodes, outputs)
+
+    # Per-product spec prompts (ADR-051 F — hover prompt 框): the producing
+    # step's slot/params composed in the run's pinned ui_language, stamped
+    # only for outputs whose step is in this payload (carried rows stay None
+    # — the 框 falls back to its empty-revision form). Same stamp, the
+    # per-product model/provider facts (ADR-051 H — 详情面模型事实): the
+    # producing step's kind projected to its real model usage (a fact
+    # registry, never a selector).
+    if latest_run is not None:
+        ui_language = str((latest_run.context or {}).get("ui_language") or "en")
+        spec_by_step = {
+            str(n.id): compose_spec_prompt(n, ui_language) for n in nodes
+        }
+        kind_by_step = {str(n.id): n.kind for n in nodes}
+        for output in outputs:
+            if output.workflow_step_id is None:
+                continue
+            step_id = str(output.workflow_step_id)
+            prompt_text = spec_by_step.get(step_id)
+            if prompt_text:
+                output.spec_prompt = prompt_text
+            if step_id in kind_by_step:
+                output.model_facts = model_facts_for(kind_by_step[step_id], output)
+
     # Asset processing statuses power the overlay's pre-run placeholder (the
     # transcribing/parsing phase before the generation run's steps exist).
     assets_result = await db.execute(
@@ -214,6 +252,7 @@ async def get_project_results(
         "latest_run": latest_run_resp,
         "assets": assets,
         "pending_intent": project.pending_intent,
+        "placeholders": placeholders,
     }
 
 

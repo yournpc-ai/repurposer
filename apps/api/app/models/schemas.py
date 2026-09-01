@@ -2057,6 +2057,16 @@ class StepResponse(BaseModel):
     finished_at: datetime | None = None
 
 
+class ModelFact(BaseModel):
+    """One model/provider fact about a product (ADR-051 H). ``modality`` is
+    the UI's grouping key (copy / voice / captions / music — localized via
+    the composer models panel's keys); ``model`` is the display name, DATA
+    (a proper noun — locale-invariant)."""
+
+    modality: str
+    model: str
+
+
 class OutputResponse(BaseModel):
     """Unified product row (ADR-030): clips and derivatives became types.
 
@@ -2093,6 +2103,19 @@ class OutputResponse(BaseModel):
     # Chain-integrity hash of render_spec (ADR-032) — the client's base_hash
     # for operation batches. None when there is no render_spec.
     spec_hash: str | None = None
+    # Per-product spec prompt (ADR-051 F — hover prompt 框): the producing
+    # step's slot/params composed into a prompt-style line in the run's
+    # pinned ui_language. Stamped ONLY by the /results endpoint (the sole
+    # place outputs and their producing steps meet); None elsewhere and for
+    # carried rows whose step isn't in the payload.
+    spec_prompt: str | None = None
+    # Per-product model/provider facts (ADR-051 H — 详情面模型事实): the
+    # producing step's kind projected to its real model usage (one provider
+    # per modality today — a fact registry, never a selector / SKU shelf,
+    # 禁令2). Stamped ONLY by /results alongside spec_prompt; None elsewhere
+    # and for carried rows. Display-only — the node caption NEVER carries a
+    # model name (prohibition #12); the lightbox info column is the surface.
+    model_facts: list[ModelFact] | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -2342,6 +2365,28 @@ class ProjectAssetStatus(BaseModel):
     processing_error: str | None = None
 
 
+class PlaceholderRow(BaseModel):
+    """One pending product slot of a LIVE run (ADR-051 B — 占位物化).
+
+    Projected from the run's own step rows (the materialized compile — the
+    runtime form of ADR-043's dry-run, so the roster can never drift from
+    what will actually execute). One row per output-creating step, keyed by
+    ``step_id`` so a landed output fills its slot in place. ``type`` is the
+    user-facing output vocabulary (clip / post / quotes / carousel /
+    article); ``whole`` marks the whole-source clip (the "Video" card);
+    ``variant`` marks a fork family ("subs" / "dub"); ``aspect`` stays None
+    when unknown (the surface's default tier — never a hardcoded fake).
+    """
+
+    step_id: UUID
+    type: str
+    whole: bool = False
+    count: int = 1
+    language: str | None = None
+    variant: str | None = None
+    aspect: str | None = None
+
+
 class ProjectResultsResponse(BaseModel):
     """Aggregated results for the project detail/results page."""
 
@@ -2353,6 +2398,8 @@ class ProjectResultsResponse(BaseModel):
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_intent: PendingIntent | None = None
+    # Live-run placeholder roster (ADR-051 B) — empty for terminal/absent runs.
+    placeholders: list[PlaceholderRow] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

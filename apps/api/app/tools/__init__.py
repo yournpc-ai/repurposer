@@ -57,7 +57,7 @@ from app.tools.stills.node import AlignStills  # noqa: F401
 from app.pipeline.graph import NODE_KINDS
 
 
-class ToolRejected(Exception):
+class ToolRejected(ValueError):
     """A proposed task failed registry adjudication (unknown tool, bad
     params, or a registered-but-not-implemented tool). Carries the closest
     available tools so the caller can let the intent agent repair once."""
