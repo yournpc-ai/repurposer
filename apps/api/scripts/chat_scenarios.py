@@ -2475,6 +2475,51 @@ async def s50_merge_brief_source_matrix(ctx: Ctx) -> None:
     check(stored.audience.value is None, "the merge never mutates the stored input")
 
 
+async def s51_bare_wish_asks_topic(ctx: Ctx) -> None:
+    """S51 裸愿望 → 主题问（ADR-052 B2 D2-C1，ask 一等动作）：无素材无主题的
+    裸愿望先收到一词可答的主题问（slot + default_path 牙齿 + 账本-only 行），
+    答复回填 user-stated 并回 book path——不再收到空心书（验收 1）。
+
+    LLM 方差说明：router 判 ask 是设计行为（prompt 策略行）；若个别模型把
+    "I want a social post." 直接判 draft（writer 链无素材可起草，S48 的
+    lift 仍在），首段断言会红——那是 prompt 回归信号，不是 harness 松劲。
+    """
+    pid = await ctx.new_project("S51 bare wish asks topic")
+
+    turn1 = await ctx.chat(pid, "I want a social post.")
+    msg1 = turn1["assistant_message"]
+    check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
+    q1 = msg1.get("question") or {}
+    check(q1.get("kind") == "choice",
+          "the ONE question docks as a choice (never an empty book)", msg1)
+    check(q1.get("slot") == "topic",
+          "the deciding slot is the topic (一轮一问决定槽)", q1)
+    check(bool((q1.get("default_path") or "").strip()),
+          "the default path rides as the schema tooth (策略③)", q1)
+    options = q1.get("options") or []
+    check(2 <= len(options) <= 4,
+          "2-4 one-word-answerable options (策略②)", options)
+    check(q1.get("allow_freeform") is not False,
+          "freeform stays available", q1)
+    book1 = await pending_book(ctx, pid)
+    check(book1 is None or book1.get("intent") is None,
+          "no task book parks on an ask turn (ledger-only row or none)", book1)
+
+    # Answer the first option via the endpoint → slot backfills user-stated,
+    # the book path resumes on the enriched ledger.
+    ans = await ctx.answer(msg1["id"], {"kind": "option", "option_id": options[0]["id"]})
+    check(ans.status_code in (200, 201), "the ask answer is accepted", ans.text)
+    body = ans.json()
+    check(body.get("follow_up") is not None,
+          "the answer resumes the book path (a follow-up lands)", body)
+    brief = ((await pending_book(ctx, pid)) or {}).get("brief") or {}
+    topic = brief.get("topic") or {}
+    check(topic.get("value") == options[0]["label"],
+          "the picked option backfills the topic slot verbatim", topic)
+    check(topic.get("source") == "user-stated",
+          "the backfill is stamped user-stated (恒胜档)", topic)
+
+
 SCENARIOS = {
     # 首轮路由
     "S1": s1_vague_first_turn_then_prose_start,
@@ -2536,6 +2581,8 @@ SCENARIOS = {
     "S41": s41_repair_one_bounded_round,
     # brief 账本
     "S50": s50_merge_brief_source_matrix,
+    # ask 一等动作
+    "S51": s51_bare_wish_asks_topic,
     # 估价地基
     "S42": s42_quotation_foundation,
     "S45": s45_materialize_injection_matrix,

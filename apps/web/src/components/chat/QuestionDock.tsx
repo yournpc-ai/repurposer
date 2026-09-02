@@ -71,6 +71,10 @@ interface ChoiceDockProps {
   options: DockOption[]
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
   estimate?: string | null
+  /** 提问策略 ③'s schema tooth (ADR-052 B2): what happens when the user
+   * skips — rendered as the muted second line, so every question is
+   * visibly safe to skip. Empty = no line. */
+  defaultPath?: string
   onAnswer: (optionId: string) => void
   answering: boolean
   /** Bail affordance — the question line's × (ADR-051): for an interrupt
@@ -180,6 +184,7 @@ function ChoiceForm({
   question,
   options,
   estimate,
+  defaultPath,
   onAnswer,
   answering,
   onBail,
@@ -220,6 +225,11 @@ function ChoiceForm({
           </Button>
         ) : null}
       </div>
+      {defaultPath ? (
+        // 提问策略 ③ — the skip path is always visible (muted second line),
+        // so the user knows exactly what skipping means before they bail.
+        <p className="mt-1 text-xs text-muted-foreground">{defaultPath}</p>
+      ) : null}
       {options.length > 0 ? (
         // Full-width rows, not pills: long option labels must wrap inside
         // the card (the old button row let them bleed past the right edge).

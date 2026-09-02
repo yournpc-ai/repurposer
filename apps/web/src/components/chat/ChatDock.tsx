@@ -437,6 +437,9 @@ interface QuestionPayload {
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
   estimate?: string | null
+  /** 提问策略 ③'s schema tooth (ADR-052 B2) — the skip path, rendered as
+   * the dock's muted second line. */
+  default_path?: string
 }
 
 /** A question-carrying chat message (ask primitive): the dock's pending
@@ -2898,6 +2901,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         question={pendingChoice.content ?? ""}
         options={pendingChoice.question?.options ?? []}
         estimate={pendingChoice.question?.estimate}
+        defaultPath={pendingChoice.question?.default_path}
         onAnswer={handleChoiceAnswer}
         answering={answering}
         onBail={handleBailQuestion}

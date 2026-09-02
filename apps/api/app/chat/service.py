@@ -289,6 +289,27 @@ def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
     return merged
 
 
+def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
+    """ask 答复回填 (ADR-052 B2 D2-C1): the docked question's ledger slot
+    takes the user's answer as a user-stated value. Routed through
+    merge_brief (user-stated 恒胜 — never a 反向覆盖), never a direct write.
+    Creates the ledger-only row when none exists (defensive — the ask dock
+    normally wrote one)."""
+    stored = (
+        PendingBrief.model_validate(project.pending_brief)
+        if isinstance(project.pending_brief, dict)
+        else PendingBrief()
+    )
+    update = BriefLedger()
+    setattr(
+        update,
+        slot,
+        BriefSlot(value=value, source=BriefSlotSource.USER_STATED),
+    )
+    stored.brief = merge_brief(update, stored.brief)
+    project.pending_brief = stored.model_dump(mode="json")
+
+
 # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES §4.7):
 # the chat path asks the user to pick bilingual / source_only / target_only
 # when a `write_quotes` task is proposed without an explicit caption-mode
@@ -1093,6 +1114,11 @@ async def answer_question(
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
             intent = data.intent or pending.intent
+            if intent is None:
+                # Ledger-only row (ask-turn write) — no book was ever drafted.
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "No pending task book to start."
+                )
             # caption_mode is intent metadata the review panel never edits —
             # a panel-submitted intent without it (client-side normalize may
             # strip fields it doesn't know) says "not mentioned", never
@@ -1102,6 +1128,7 @@ async def answer_question(
             # the mode even though answer→Start via prose kept it).
             if (
                 intent.caption_mode is None
+                and pending.intent is not None
                 and pending.intent.caption_mode is not None
             ):
                 intent = intent.model_copy(
@@ -1177,9 +1204,25 @@ async def answer_question(
         project = await db.get(Project, conversation.project_id)
         say = data.text or option_label or ""
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
-        follow_up, _run_id, bailed_run_ids = await _propose_turn(
-            db, user_id, conversation, project, say, [], history[-6:]
-        )
+        if question.slot is not None and project is not None:
+            # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the ledger slot takes
+            # the answer user-stated, then the book path resumes on the
+            # enriched ledger — draft the (now-rooted) book or ask the next
+            # deciding slot. The answer text rides as the turn's message so
+            # the router sees it as the user's own words.
+            _backfill_brief_slot(project, question.slot, say)
+            follow_up, _run_id, _answered, bailed_run_ids = await _book_turn(
+                db,
+                user_id,
+                conversation,
+                project,
+                ChatRequest(project_id=project.id, message=say),
+                recent=history[-5:],
+            )
+        else:
+            follow_up, _run_id, bailed_run_ids = await _propose_turn(
+                db, user_id, conversation, project, say, [], history[-6:]
+            )
 
     await db.commit()
     if bailed_run_ids:
@@ -1490,10 +1533,25 @@ async def _book_turn(
         else:
             # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
             # clarifying question docks through the same 提问机器 the chat
-            # loop's shape C uses. The stored book stays untouched (the
-            # pending_brief row persists, the fresh verdict rides the
-            # question's intent stash). D2-C1 adds slot backfill +
-            # default_path teeth on top of this直通.
+            # loop's shape C uses — with the book-path handshake on the
+            # payload (slot → the answer backfills the ledger user-stated;
+            # default_path → the dock's muted second line). The brief merge
+            # lands as a ledger-only row: the stored book's intent is
+            # preserved verbatim (an ask never clobbers the book), and a
+            # fresh project's row carries intent=None (never startable).
+            project.pending_brief = PendingBrief(
+                prompt=prompt,
+                intent=stored.intent if stored else None,
+                brief=merge_brief(
+                    intent.brief, stored.brief if stored else BriefLedger()
+                ),
+                reasons=stored.reasons if stored else [],
+                persona_id=(
+                    request.persona_id
+                    or (stored.persona_id if stored else None)
+                ),
+                derived=stored.derived if stored else [],
+            ).model_dump(mode="json")
             assistant_message, bailed_run_ids = await _dock_question(
                 db,
                 conversation_id,
@@ -1502,6 +1560,8 @@ async def _book_turn(
                     kind="choice",
                     options=intent.ask.options,
                     allow_freeform=intent.ask.allow_freeform,
+                    slot=intent.ask.slot,
+                    default_path=intent.ask.default_path,
                 ),
                 intent=intent.model_dump(mode="json"),
             )
@@ -1536,7 +1596,11 @@ async def _book_turn(
         # the same transaction). The dock's autonomy tier rides the request —
         # a review-tier choice must survive a prose confirmation.
         pending_question = await latest_pending_question(db, conversation_id)
-        if is_pending_task_book(pending_question) and stored is not None:
+        if (
+            is_pending_task_book(pending_question)
+            and stored is not None
+            and stored.intent is not None
+        ):
             answered, _follow_up = await answer_question(
                 db, user_id, UUID(str(pending_question.id)),
                 # The review panel's edited book rides along (typed Start
@@ -1551,7 +1615,7 @@ async def _book_turn(
             # answer_question commits — the run, the answer and the cleared
             # pending brief land in one transaction.
             return answered, UUID(str(answered.workflow_run_id)), answered, []
-        if stored is not None:
+        if stored is not None and stored.intent is not None:
             # Nothing startable right now. Never overwrite a stored task book
             # with a start-action misfire's fields: re-dock the stored book
             # unchanged. Unless a run started concurrently — then the plan is
@@ -1764,7 +1828,9 @@ async def _propose_turn(
         # The chat surface only has the choice form — task_book questions
         # are raised solely by the book path and confirm is the
         # reserved cost-quote seat, so the agent's kind is adjudicated to
-        # choice (LLM proposes, code adjudicates).
+        # choice (LLM proposes, code adjudicates). default_path rides as
+        # the dock's muted line (提问策略 ③); slot stays None — a post-run
+        # question never backfills the brief (book-path handshake only).
         assistant_message, bailed_run_ids = await _dock_question(
             db,
             conversation_id,
@@ -1773,6 +1839,7 @@ async def _propose_turn(
                 kind="choice",
                 options=proposal.options,
                 allow_freeform=proposal.allow_freeform,
+                default_path=proposal.default_path,
             ),
             intent=proposal.model_dump(mode="json"),
         )
@@ -2113,6 +2180,20 @@ async def prepare_chat_turn(
                     answered_at=datetime.now(UTC),
                 ).model_dump(mode="json")
                 answered_question = pending
+            if (
+                answered_question is not None
+                and pending_payload.slot is not None
+                and project is not None
+                and answered_question.workflow_run_id is None
+            ):
+                # ask 一等动作的 autoResume 回填 (ADR-052 B2 D2-C1): same
+                # user-stated backfill as the answer endpoint — the book
+                # path dispatch below then re-judges on the enriched ledger.
+                _backfill_brief_slot(
+                    project,
+                    pending_payload.slot,
+                    (pending.answer or {}).get("text") or request.message,
+                )
             await db.flush()
 
     interrupt_reply: Message | None = None
@@ -2153,7 +2234,21 @@ async def prepare_chat_turn(
         if project is not None:
             if is_pending_task_book(pending):
                 book_path = True
-            elif not isinstance(project.pending_brief, dict):
+            elif (
+                answered_question is not None
+                and isinstance(answered_question.question, dict)
+                and answered_question.question.get("slot")
+            ):
+                # ask 一等动作的答复回 book path (D2-C1): the backfill already
+                # landed above — the book path re-judges on the enriched
+                # ledger (draft the rooted book, or ask the next slot).
+                book_path = True
+            elif (
+                not isinstance(project.pending_brief, dict)
+                or project.pending_brief.get("intent") is None
+            ):
+                # A ledger-only pending_brief row (an ask-turn write) keeps
+                # the pre-run probe — the project is still in its book phase.
                 has_runs = (
                     await db.execute(
                         select(WorkflowRun.id)

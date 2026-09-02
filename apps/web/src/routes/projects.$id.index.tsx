@@ -115,8 +115,9 @@ interface WorkflowRun {
 interface PendingBrief {
   prompt: string
   /** Task-shaped on the API (the server upgrades legacy flat/slot rows on
-   * read); typed loosely here and normalized at the overlay boundary. */
-  intent: unknown
+   * read); typed loosely here and normalized at the overlay boundary. Null
+   * on ledger-only rows (an ask-turn write — no book parked, ADR-052 B2). */
+  intent: unknown | null
   /** Why the book needs a human check — confirmation is `reasons.length > 0`
    * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
@@ -822,11 +823,12 @@ function ProjectDetailPage() {
         tasks: runTasks.length ? runTasks : [{ tool: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
       })
-    : pendingBrief
+    : pendingBrief?.intent
       ? // A parked task book always wins — it IS the live confirmation
         // surface (a refinement book parked from any device must be the
         // book the panel edits and Start answers with, never the stale
-        // completed run's).
+        // completed run's). A ledger-only row (intent null — an ask-turn
+        // write, ADR-052 B2) parks no book: fall through.
         normalizeIntent(pendingBrief.intent)
       : completedRun
         ? completedRunIntent

@@ -209,6 +209,15 @@ class AskPayload(BaseModel):
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
+    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief-ledger slot this
+    # question fills — the answer backfills it user-stated and the book path
+    # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
+    # None on every question that is not a brief ask (caption mode, direction
+    # interrupts, post-run shape C). ``default_path`` is the schema tooth of
+    # 提问策略 ③: what happens when the user skips — rendered as the dock's
+    # muted second line, so every question is visibly safe to skip.
+    slot: Literal["topic", "audience", "tone"] | None = None
+    default_path: str = ""
 
 
 class AnswerPayload(BaseModel):
@@ -369,6 +378,13 @@ class AskProposal(BaseModel):
     kind: Literal["choice", "task_book", "confirm"] = "choice"
     options: list[AskOption] = Field(default_factory=list)
     allow_freeform: bool = True
+    # ADR-052 B2 (ask 一等动作, the shared ask shape): ``slot`` names the
+    # brief-ledger slot this question fills (the pre-run router sets it; the
+    # chat loop's shape C leaves it null — post-run questions never backfill
+    # a brief). ``default_path`` is 提问策略 ③'s schema tooth: the skip
+    # path, rendered as the dock's muted second line.
+    slot: Literal["topic", "audience", "tone"] | None = None
+    default_path: str = ""
 
 
 class AnswerProposal(BaseModel):
@@ -900,7 +916,9 @@ class PendingBrief(BaseModel):
     Written by the chat book path on draft-action turns (an
     answer-action turn never overwrites the stored book), cleared once the
     run starts. Lets a user who left the book-confirmation chat resume it
-    exactly, from any device.
+    exactly, from any device. Ask-action turns write a ledger-only row
+    (``intent=None``): the merged brief persists while the ONE question is
+    docked, and the answer's backfill lands on it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -916,7 +934,10 @@ class PendingBrief(BaseModel):
         return data
 
     prompt: str = ""
-    intent: InferredIntent
+    # Null on ledger-only rows (ADR-052 B2: an ask-turn write — the brief
+    # merged, no book drafted yet). A row with intent=None is never startable
+    # and never re-docked as a task book.
+    intent: InferredIntent | None = None
     # brief 账本 (ADR-052 B2): the dialog's structured state — slots with
     # provenance, merged by code every book turn (merge_brief). The task
     # chain and derived preview above stay the book's own rows (原样).
