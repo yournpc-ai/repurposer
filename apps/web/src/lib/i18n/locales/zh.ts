@@ -434,8 +434,8 @@ const zh: Resources = {
       // 流程画布区域框的标注（2026-08-19 走查拍板）：框只包策展步骤（素材/产物
       // 在框外），署名就署自己——不用配方名（与 overlay 头部标题重复）。
       frameLabel: "策展步骤",
-      director_understand: "理解素材",
-      director_plan: "规划剪辑",
+      understand: "理解素材",
+      plan: "规划剪辑",
       align_stills: "按文字稿对齐照片",
       materialize_source: "整条视频就位",
       select_clips: "选出高光片段",
@@ -665,6 +665,9 @@ const zh: Resources = {
   projectMenu: {
     open: "项目菜单",
     backToProjects: "返回项目列表",
+    // 生成前左上角形态（2026-09-02 形态机）：首个 run 落地前菜单只是一个
+    // 返回 pill；完全体 ProjectMenu 随画布一起到来。
+    backShort: "项目",
   },
   personas: {
     title: "人设",
@@ -952,6 +955,10 @@ const zh: Resources = {
     dock: {
       history: "历史记录",
       focus: "当前焦点：{{name}}",
+      // hidden 态（2026-09-02 形态机）：用户手势把整个 dock 收成右下角
+      // logo 点；agent 发言 / 提问 / 焦点会唤回。
+      hide: "收起聊天",
+      show: "展开聊天",
       // dock 常驻免责行（ADR-051，2026-08-31 —— FLORA FAUNA 行逐字镜像，
       // 用户拍板；基础形态钉在输入区上方，提问形态随输入行隐藏）。
       honesty: "Repurposer 是 AI，可能出错。重要信息请核对。",
@@ -1010,7 +1017,7 @@ const zh: Resources = {
       transcribing: "正在转写你的媒体…",
       queued: "正在排队，马上开始…",
       analyze: "正在分析上传的素材…",
-      director_plan: "正在规划内容结构…",
+      plan: "正在规划内容结构…",
       prepare: "正在准备生成…",
       selecting_segments: "正在挑选高光片段…",
       building_specs: "正在组装片段…",
@@ -1084,9 +1091,9 @@ const zh: Resources = {
     stepKinds: {
       preprocess: "正在分析上传的素材…",
       persona_bootstrap: "正在准备你的人设…",
-      director_understand: "正在看懂你的素材…",
+      understand: "正在看懂你的素材…",
       interrupt: "等你选定方向…",
-      director_plan: "正在规划内容结构…",
+      plan: "正在规划内容结构…",
       select_clips: "正在生成你的短片…",
       revise_script: "正在撰写脚本…",
       render: "正在渲染视频…",
@@ -1151,8 +1158,6 @@ const zh: Resources = {
     title: "生成计划",
     planProse:
       "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
-    chainLabel: "任务链",
-    chainHint: "我将按顺序执行这些步骤——每行的数量、语言、角度都可在行内调整；切片需要视频、音频或图片素材。",
     addTask: "添加任务",
     tools: {
       translate_clip: "字幕版",
@@ -1160,7 +1165,13 @@ const zh: Resources = {
       remove_filler: "去口头禅",
       add_music: "背景音乐",
     },
-    derivedLabel: "你将得到",
+    focusNouns: {
+      clips: "切片",
+      post: "帖子",
+      quotes: "金句卡",
+      article: "文章",
+      carousel: "轮播图",
+    },
     derive: {
       video: "整条视频",
       clips: "视频片段",
@@ -1176,15 +1187,13 @@ const zh: Resources = {
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
-    identityEcho: "风格：{{persona}}",
-    identityPersonaAuto: "自动生成",
     removeSlot: "移除此任务",
-    slotFocusPlaceholder: "这些{{type}}优先讲什么内容（可选）",
+    slotFocusPlaceholder: "这条{{type}}要优先讲什么？（可选）",
+    slotFocusPlaceholderPlural: "这些{{type}}要优先讲什么？（可选）",
+    clipsNeedMedia: "需要视频、音频或图片素材——上传后即可解锁，或移除本行。",
     countDecrease: "减少",
     countIncrease: "增加",
-    instructionLabel: "重点 / 指令",
-    instructionHint: "对本次生成的自由指令——选段和写稿时 AI 会优先遵循。",
-    instructionPlaceholder: "例如：重点保留问答环节；第一条切片要有悬念。",
+    instructionPlaceholder: "本次生成还有别的要求吗？例如：切片控制在 45 秒内、不用话题标签。",
     confirmQuestion: "按这个计划开始生成？",
     confirm: "开始生成",
     starting: "启动中…",

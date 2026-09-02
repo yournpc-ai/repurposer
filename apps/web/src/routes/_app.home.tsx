@@ -46,7 +46,7 @@ function Home() {
   const [inspecting, setInspecting] = useState<RecipePublic | null>(null)
 
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
-  // NEVER scrolls — the dot grid it carries stays pinned to the viewport.
+  // NEVER scrolls.
   // ONE scrollport holds everything (stage spacer / hero+composer chrome /
   // gallery), no scrollbar (MiniMax parity — position sense comes from
   // motion, not chrome).
@@ -158,7 +158,7 @@ function Home() {
   }
 
   return (
-    <div className="h-svh dot-grid">
+    <div className="h-svh">
       <div ref={scrollRef} className="h-full overflow-y-auto no-scrollbar">
         {/* Rest offset — parks the hero+composer cluster center-stage. */}
         <div className="h-[28vh]" />
@@ -166,17 +166,20 @@ function Home() {
         {/* Hero + composer chrome — sticky: at rest the whole cluster sits
             center-stage in flow; scrolling docks it at the top (title
             persists smaller, composer morphs into the one-line explore bar).
-            The backdrop (page fill + the same dot grid, scroll-linked
-            opacity) keeps wider gallery cards from peeking beside the
-            narrower bar; generous clear space hangs below the docked bar (pb-14),
-            then the 32px bottom mask dissolves whatever passes. */}
+            The backdrop (page fill, scroll-linked opacity) keeps wider
+            gallery cards from peeking beside the narrower bar; the clear
+            space below the bar interpolates 48→56px with dockP (rest-state
+            gallery rhythm ↔ docked-bar protection, same pure-function
+            interpolation as every other morph — no clocks), then the 32px
+            bottom mask dissolves whatever passes. */}
         <div
           ref={chromeRef}
-          className="sticky top-0 z-20 px-4 pt-3 pb-14 [mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
+          className="sticky top-0 z-20 px-4 pt-3 [mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
+          style={{ paddingBottom: 48 + 8 * dockP }}
         >
           <div
             aria-hidden
-            className="absolute inset-0 -z-10 bg-background dot-grid"
+            className="absolute inset-0 -z-10 bg-background"
             style={{ opacity: dockP }}
           />
           <div className="mx-auto w-full max-w-3xl">
@@ -222,12 +225,12 @@ function Home() {
             (RECIPES §4: row 1 video sources, row 2 text/image sources).
             Every click opens the inspect overlay — the ONLY launch path
             (ADR-040). */}
-        <section className="flex flex-col items-center px-4 pt-3 pb-[max(64px,40vh)] sm:px-6 sm:pt-4">
+        <section className="flex flex-col items-center px-4 pb-[max(64px,40vh)] sm:px-6">
           <div className="w-full max-w-6xl">
             <h2
               ref={titleRef}
               style={titleStyle}
-              className="mb-6 overflow-hidden text-center text-base font-medium text-balance sm:text-lg md:text-xl"
+              className="mb-6 overflow-hidden text-center text-base text-balance text-muted-foreground sm:text-lg"
             >
               {t("recipes.sectionTitle")}
             </h2>

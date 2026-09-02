@@ -1,6 +1,7 @@
-import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ArrowLeft } from "lucide-react"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
 import { CarouselCard } from "@/components/results/CarouselCard"
@@ -9,7 +10,7 @@ import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { ClipDetailModal } from "@/components/results/ClipDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
-import { GenerationOverlay, normalizeIntent, tasksFromRunContext, type DerivedRow, type GenerationOverlayHandle } from "@/components/generation/GenerationOverlay"
+import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/components/flow/types"
 import type { RunFlowAsset } from "@/components/flow/runFlow"
@@ -29,6 +30,7 @@ import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
+import { cn } from "@/lib/utils"
 
 import type { IntentSlot, Output, PlaceholderRow, WorkflowStep, Project } from "@/lib/types"
 
@@ -110,7 +112,7 @@ interface WorkflowRun {
   updated_at: string | null
 }
 
-interface PendingIntent {
+interface PendingBrief {
   prompt: string
   /** Task-shaped on the API (the server upgrades legacy flat/slot rows on
    * read); typed loosely here and normalized at the overlay boundary. */
@@ -129,14 +131,14 @@ interface ProjectResults {
   outputs: Output[]
   latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
-  pending_intent?: PendingIntent | null
+  pending_brief?: PendingBrief | null
   /** Live run's placeholder roster (ADR-051 B — server-projected). */
   placeholders?: PlaceholderRow[]
 }
 
 /** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
  * chain's clip-side work (selection, whole-source materialization, the
- * transforms) lands on the clips tab; preprocess/persona/director/revise/
+ * transforms) lands on the clips tab; preprocess/persona/plan-prelude/revise/
  * render nodes drive the stepper, not a tab. */
 const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
   select_clips: "clips",
@@ -209,7 +211,7 @@ function ProjectDetailPage() {
   // chat dock — pre-run assets, the live run's projection, and the terminal
   // frame all render on it; mobile keeps the list world (prohibition #13).
   const isMobile = useIsMobile()
-  const overlayRef = useRef<GenerationOverlayHandle>(null)
+  const dockRef = useRef<ChatDockHandle>(null)
   /** The latest COMPLETED run snapshot — the canvas's terminal frame. The
    * sticky copy survives a later refinement run going active/failed (D9:
    * the canvas shows the current run + latest products); the live value
@@ -257,6 +259,15 @@ function ProjectDetailPage() {
   }, [projectId])
 
   const latestRun = results?.latest_run
+  // The page's two-form choreography driver (2026-09-02 形态机): has the
+  // project ever started a run? False = the pre-generation world (centered
+  // fullscreen chat + back pill, no canvas); the first run's arrival flips
+  // it true — the dock morphs full → dock, the canvas fades in, and the
+  // back pill crossfades into the full ProjectMenu, all on one beat. The
+  // loading/error early returns below guarantee this is settled at first
+  // render, so projects WITH runs mount straight in the dock world (the
+  // hydrated first frame never replays the morph).
+  const hasRuns = latestRun != null
 
   useEffect(() => {
     setLoading(true)
@@ -372,14 +383,14 @@ function ProjectDetailPage() {
   // 点过程节点 = @workflow_step 指认 (D8): the chip lands in the dock's
   // input — the mention rides the next turn as a definite reference.
   const handleStepClick = useCallback((stepId: string, label: string) => {
-    overlayRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
+    dockRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
   }, [])
 
   // Hover prompt 框 send (ADR-051 F): the card's revision ask rides the
   // dock's chat channel with the product pinned as the one-shot focus
   // (zero new execution channel — the ask is a plain chat turn).
   const handleRevise = useCallback((output: Output, text: string) => {
-    overlayRef.current?.sendRevision(text, {
+    dockRef.current?.sendRevision(text, {
       id: output.id,
       label: outputMentionLabel(
         output,
@@ -396,7 +407,7 @@ function ProjectDetailPage() {
   /** The dock's completion hand-off: refetch so the canvas / list world
    * shows the landed products. (The page's own SSE also refetches — this
    * covers the dock's watcher beating it.) */
-  const handleOverlayComplete = async () => {
+  const handleDockComplete = async () => {
     await fetchResults()
   }
 
@@ -578,7 +589,7 @@ function ProjectDetailPage() {
     )
   }
 
-  const { project, prompt, outputs, pending_intent: pendingIntent } = results
+  const { project, prompt, outputs, pending_brief: pendingBrief } = results
 
   // outputs holds the project's current products (targeted runs update in
   // place; full runs delete prior rows), so no per-run filtering is needed.
@@ -793,7 +804,7 @@ function ProjectDetailPage() {
   // lands on the results conversation. One mounted instance across all
   // forms — the input group is never remounted between them.
 
-  /** The dock's plan-summary line, rebuilt from the completed run's context
+  /** The dock's book-summary line, rebuilt from the completed run's context
    * (the same read-tolerance shape the attach flow uses); a run with no
    * recorded chain at all shows a bare clips row. */
   const completedRunTasks = tasksFromRunContext(completedRun?.context)
@@ -806,17 +817,17 @@ function ProjectDetailPage() {
       })
     : undefined
 
-  const overlayInitialIntent = runActive
+  const dockInitialIntent = runActive
     ? normalizeIntent({
         tasks: runTasks.length ? runTasks : [{ tool: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
       })
-    : pendingIntent
+    : pendingBrief
       ? // A parked task book always wins — it IS the live confirmation
         // surface (a refinement book parked from any device must be the
         // book the panel edits and Start answers with, never the stale
         // completed run's).
-        normalizeIntent(pendingIntent.intent)
+        normalizeIntent(pendingBrief.intent)
       : completedRun
         ? completedRunIntent
         : undefined
@@ -831,18 +842,56 @@ function ProjectDetailPage() {
     // 2026-08-19 走查拍板, confirmed to cover MOBILE too (nearest entry =
     // back to /projects).
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
-      <div className="absolute left-3 top-3 z-30 md:left-4 md:top-4">
-        <ProjectMenu
-          projectId={project.id}
-          title={project.title}
-          runActive={runActive}
-          onRenamed={(title) =>
-            setResults((prev) =>
-              prev ? { ...prev, project: { ...prev.project, title } } : prev
-            )
-          }
-          onDeleted={() => navigate({ to: "/projects" })}
-        />
+      {/* Top-left chrome — a TWO-FORM machine (2026-09-02 形态机, driven by
+          hasRuns): pre-generation it is a plain back pill (icon + Projects);
+          the first run's arrival crossfades it into the full ProjectMenu
+          (brand mark + title + ops). Both are stacked in one slot — the
+          active form in flow, the inactive one absolutely overlaid — so the
+          crossfade never shifts layout. z-[60]: above the ChatDock's z-50
+          root — in the full form its stage covers the page and would
+          otherwise swallow the pill's clicks. */}
+      <div className="absolute left-3 top-3 z-[60] md:left-4 md:top-4">
+        <div
+          className={cn(
+            "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
+            hasRuns
+              ? "opacity-100"
+              : "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
+          )}
+          aria-hidden={!hasRuns}
+        >
+          <ProjectMenu
+            projectId={project.id}
+            title={project.title}
+            runActive={runActive}
+            onRenamed={(title) =>
+              setResults((prev) =>
+                prev ? { ...prev, project: { ...prev.project, title } } : prev
+              )
+            }
+            onDeleted={() => navigate({ to: "/projects" })}
+          />
+        </div>
+        {/* The pre-generation form — mirrors the ProjectMenu pill anatomy
+            (dock-surface h-9 hairline frosted pill), one quiet hover fill. */}
+        <div
+          className={cn(
+            "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
+            hasRuns
+              ? "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
+              : "opacity-100"
+          )}
+          aria-hidden={hasRuns}
+        >
+          <Link
+            to="/projects"
+            tabIndex={hasRuns ? -1 : 0}
+            className="dock-surface flex h-9 items-center gap-1.5 rounded-md pl-2 pr-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("projectMenu.backShort")}
+          </Link>
+        </div>
       </div>
       {/* Top-right stays CANVAS chrome (2026-08-19 走查拍板): the zoom pill
           rides FlowView's `controls` prop inside the canvas; the home-
@@ -862,14 +911,31 @@ function ProjectDetailPage() {
            completely floating layer above it, never a layout reservation
            (no safe-area padding: reserving space IS the occlusion). A node
            passing under the dock is panned back into view — the canvas is
-           explore navigation. */
-        <div className="min-h-0 flex-1">
+           explore navigation. The whole canvas is gated on hasRuns (2026-09-02
+           形态机): pre-generation it is invisible + inert (the full-form chat
+           stage owns the page); the first run's arrival fades it in on the
+           same beat as the dock's morph. */
+        <div
+          className={cn(
+            "min-h-0 flex-1 transition-opacity duration-700 ease-out motion-reduce:transition-none",
+            !hasRuns && "pointer-events-none opacity-0"
+          )}
+        >
           <ResultsCanvas
             className="h-full"
             assets={canvasAssets}
             steps={latestRun?.steps ?? []}
             outputs={outputs}
             placeholders={results?.placeholders ?? []}
+            // Liveness (2026-09-02 用户拍板): non-terminal = alive — a run
+            // parked at WAITING_HUMAN keeps its promised slots' wipe and
+            // the edge packets flowing (waiting ⊆ running); only completed
+            // / failed stills the canvas.
+            runAlive={
+              latestRun != null &&
+              latestRun.status !== "completed" &&
+              latestRun.status !== "failed"
+            }
             prompt={prompt || latestRun?.context?.instruction || null}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /assets have both settled for THIS project —
@@ -889,7 +955,7 @@ function ProjectDetailPage() {
             focusedOutputId={focusedOutputId}
             onPaneClick={() => {
               // 点画布空白 = 回中性: history 收起 + 焦点清除 (D4/D8).
-              overlayRef.current?.closeHistory()
+              dockRef.current?.closeHistory()
               setFocusedOutputId(null)
             }}
           />
@@ -897,8 +963,15 @@ function ProjectDetailPage() {
       ) : (
         /* Mobile keeps the list world (prohibition #13 — no canvas below
            iPad width); the same chat dock floats over it. pt-16 clears the
-           floating chrome; pb-36 keeps the last card above the dock. */
-        <div className="min-h-0 flex-1 overflow-y-auto">
+           floating chrome; pb-36 keeps the last card above the dock. Same
+           hasRuns gate as the canvas — the list fades in with the first
+           run. */
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-700 ease-out motion-reduce:transition-none",
+            !hasRuns && "pointer-events-none opacity-0"
+          )}
+        >
           <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-36 pt-16">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <ResultsTabs
@@ -915,15 +988,22 @@ function ProjectDetailPage() {
         </div>
       )}
 
-      <GenerationOverlay
+      <ChatDock
         // Remount per project — the message machine's state (run id,
         // conversation) belongs to one project only.
         key={projectId}
-        ref={overlayRef}
+        ref={dockRef}
         projectId={projectId}
+        // The two-form machine (2026-09-02 形态机): pre-first-run the dock
+        // is the centered fullscreen chat; the first run's arrival morphs
+        // it to the bottom dock (the canvas fades in on the same beat).
+        // Projects WITH runs mount straight in "dock" — the loading gate
+        // above settles hasRuns before first render, so the hydrated first
+        // frame never replays the morph.
+        form={hasRuns ? "dock" : "full"}
         prompt={
           firstMessage?.text ??
-          pendingIntent?.prompt ??
+          pendingBrief?.prompt ??
           (runActive ? latestRun?.context?.instruction : null) ??
           prompt ??
           ""
@@ -937,23 +1017,24 @@ function ProjectDetailPage() {
               }
             : null
         }
-        initialIntent={overlayInitialIntent}
-        initialDerived={pendingIntent?.derived}
+        initialIntent={dockInitialIntent}
+        initialDerived={pendingBrief?.derived}
+        initialReasons={pendingBrief?.reasons}
         initialRunId={
           runActive
             ? latestRun.id
-            : !pendingIntent && completedRun
+            : !pendingBrief && completedRun
               ? completedRun.id
               : undefined
         }
         focusOutput={focusedOutputChip}
         onFocusChange={(id) => setFocusedOutputId(id)}
-        onComplete={handleOverlayComplete}
+        onComplete={handleDockComplete}
         // A dock-started run (confirm / prose / 修订): refetch NOW — the
         // fresh latest_run flips runActive, the page SSE attaches, and the
         // run 期活画布 (placeholder materialization / wipe / fills) renders
         // from the first beat instead of arriving whole at terminal. The
-        // assets endpoint rides along: a plan-turn can CREATE assets
+        // assets endpoint rides along: a book-turn can CREATE assets
         // server-side (declared-material promotion) after the page's
         // initial fetch — the canvas's source node comes from this list.
         onRunStarted={() => {

@@ -440,8 +440,8 @@ const en = {
       // so it names itself — never the recipe title (that duplicates the
       // overlay header).
       frameLabel: "Curated steps",
-      director_understand: "Understand the material",
-      director_plan: "Plan the edit",
+      understand: "Understand the material",
+      plan: "Plan the edit",
       align_stills: "Align photos to the script",
       materialize_source: "Prepare the full video",
       select_clips: "Select highlight segments",
@@ -691,6 +691,10 @@ const en = {
   projectMenu: {
     open: "Project menu",
     backToProjects: "Back to projects",
+    // The pre-generation top-left form (2026-09-02 形态机): before the first
+    // run the menu is just a back pill; the full ProjectMenu arrives with the
+    // canvas.
+    backShort: "Projects",
   },
   personas: {
     title: "Personas",
@@ -979,6 +983,11 @@ const en = {
     dock: {
       history: "History",
       focus: "Working on: {{name}}",
+      // The hidden state (2026-09-02 形态机): the user's gesture folds the
+      // dock to a bottom-right logo dot; agent speech / questions / focus
+      // recall it.
+      hide: "Hide chat",
+      show: "Show chat",
       // The dock's resident disclaimer (ADR-051, 2026-08-31 — the FLORA
       // FAUNA-line, VERBATIM per user ruling; docked above the input area
       // in the base form, hidden with it on the question morph).
@@ -1047,7 +1056,7 @@ const en = {
       transcribing: "Transcribing your media…",
       queued: "Queued, starting soon…",
       analyze: "Analyzing your uploads…",
-      director_plan: "Planning the content…",
+      plan: "Planning the content…",
       prepare: "Preparing generation…",
       selecting_segments: "Picking highlight moments…",
       building_specs: "Assembling your clips…",
@@ -1121,9 +1130,9 @@ const en = {
     stepKinds: {
       preprocess: "Analyzing your uploads…",
       persona_bootstrap: "Preparing your persona…",
-      director_understand: "Understanding your material…",
+      understand: "Understanding your material…",
       interrupt: "Waiting for your direction…",
-      director_plan: "Planning the content…",
+      plan: "Planning the content…",
       select_clips: "Generating your clips…",
       revise_script: "Writing the script…",
       render: "Rendering your video…",
@@ -1188,9 +1197,6 @@ const en = {
     title: "Generation plan",
     planProse:
       "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
-    chainLabel: "Task chain",
-    chainHint:
-      "The steps I'll run, in order — adjust the count, language, or angle on each row; clips need a video, audio, or image source.",
     addTask: "Add task",
     tools: {
       translate_clip: "Captioned version",
@@ -1198,7 +1204,13 @@ const en = {
       remove_filler: "Remove filler words",
       add_music: "Background music",
     },
-    derivedLabel: "What you'll get",
+    focusNouns: {
+      clips: "clips",
+      post: "post",
+      quotes: "quote cards",
+      article: "article",
+      carousel: "carousel",
+    },
     derive: {
       video: "Full video",
       clips: "Clips",
@@ -1214,16 +1226,14 @@ const en = {
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",
-    identityEcho: "Style: {{persona}}",
-    identityPersonaAuto: "auto-generated",
     removeSlot: "Remove this task",
-    slotFocusPlaceholder: "What these {{type}} should emphasize (optional)",
+    slotFocusPlaceholder: "What should this {{type}} emphasize? (optional)",
+    slotFocusPlaceholderPlural: "What should these {{type}} emphasize? (optional)",
+    clipsNeedMedia: "Needs a video, audio, or image source — upload to unlock, or remove this row.",
     countDecrease: "Decrease",
     countIncrease: "Increase",
-    instructionLabel: "Focus / instruction",
-    instructionHint:
-      "Free-form guidance for everything in this run — the AI follows it first when selecting and writing.",
-    instructionPlaceholder: "e.g. Focus on the Q&A section; make the first clip a strong hook.",
+    instructionPlaceholder:
+      "Anything else for this run? e.g. keep clips under 45s, no hashtags.",
     confirmQuestion: "Start generation with this plan?",
     confirm: "Start generation",
     starting: "Starting…",

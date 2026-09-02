@@ -96,7 +96,7 @@
 }
 
 /* No scrollbar — app-shell scrollports that must not show chrome at all
- * (the home gallery scroller: the dot grid is the frame, MiniMax parity).
+ * (the home gallery scroller, MiniMax parity).
  * Position sense comes from content motion, not a track. */
 @utility no-scrollbar {
   scrollbar-width: none;
@@ -105,29 +105,13 @@
   }
 }
 
-/* Dot grid — the workshop texture (ADR-046 附, 2026-08-21 拍板; 调大调显
- * 2026-08-31 ADR-051, FLORA 走查 #1: 1px/20% 几乎不可见): TWO making
- * surfaces only — the home page (this utility on the route root, which never
- * scrolls: content scrolls INSIDE it, so the grid stays fixed to the
- * viewport) and the results canvas (FlowView's own `dots` prop — same
- * recipe: muted-foreground 32% light / 30% dark, 1.5px dot, 26px gap). A
- * dotted third surface is a violation. */
-@utility dot-grid {
-  background-image: radial-gradient(
-    circle,
-    color-mix(in oklch, var(--muted-foreground) 32%, transparent) 1.5px,
-    transparent 1.5px
-  );
-  background-size: 26px 26px;
-
-  @variant dark {
-    background-image: radial-gradient(
-      circle,
-      color-mix(in oklch, var(--muted-foreground) 30%, transparent) 1.5px,
-      transparent 1.5px
-    );
-  }
-}
+/* Dot grid = the results-canvas SIGNATURE (ADR-046 附; home dropped it
+ * 2026-09-02, user-ruled — a fixed texture behind a non-pannable surface
+ * advertises an affordance that isn't there, and single-surface use makes
+ * the dots MEAN "you've entered the graph"). It lives in FlowView as
+ * react-flow's Background (32px gap + 2px dot + muted-foreground 32%/30%,
+ * FLORA's measured world constants) — there is NO CSS utility for it; any
+ * second dotted surface is a violation. */
 
 /*
  * Display typeface for the landing hero: SF Pro on Apple devices (what the
@@ -707,5 +691,29 @@ body {
   }
   .placeholder-roll-out {
     display: none;
+  }
+}
+
+/* The dock history layer's mount beat (2026-09-02 输入框独立层律): the
+   region is its own frosted layer above the standalone input group — one
+   fade + an 8px rise on open, the same ease-out register as the bottom
+   row's transitions. Unmount is a plain cut (symmetric with the close
+   gesture's immediacy); reduced motion swaps instantly. */
+@keyframes dock-history-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.dock-history-in {
+  animation: dock-history-in 300ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-history-in {
+    animation: none;
   }
 }

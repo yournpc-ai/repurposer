@@ -1,14 +1,20 @@
 "use client"
 
-/** GenerationOverlay — the post-composer conversation surface.
+/** ChatDock — the post-composer conversation surface (改名 2026-09-02, the
+ * "Overlay" legacy name retired with the fullscreen shell it described).
  *
- * Full-screen chat (Opus-style): the composer draft opens the conversation
- * (sent as the first /chat message on mount), the inferred task book arrives
- * as an editable plan card pinned in the flow, and confirming starts the run
- * — whose steps light up below. The bottom input is always live and every
- * turn goes through the same /chat endpoint (intent-surface-unification W2):
- * the server routes plan-path turns (task-book build / refine / confirm) and
- * chat-loop turns itself.
+ * The project's single chat shell (ADR-051), a TWO-FORM machine (2026-09-02
+ * 形态机): before the first run it is the centered fullscreen chat (the
+ * composer draft opens the conversation — sent as the first /chat message on
+ * mount — and the task book confirms here); the first run's arrival morphs
+ * it into the bottom dock over the canvas, whose steps light up in the flow.
+ * The dock form has three visibility states: collapsed (the resident input
+ * group), expanded (history grows upward in the same frosted container),
+ * hidden (a user gesture folds it to a bottom-right LogoMark dot — agent
+ * speech / a pending question / a canvas focus recalls it). The bottom input
+ * is always live and every turn goes through the same /chat endpoint
+ * (intent-surface-unification W2): the server routes book-path turns
+ * (task-book build / refine / confirm) and chat-loop turns itself.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef, useImperativeHandle } from "react"
@@ -49,6 +55,7 @@ import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { BrandLoader } from "@/components/BrandLoader"
+import { LogoMark } from "@/components/LogoMark"
 import {
   assetTypeKind,
   outputMentionLabel,
@@ -106,7 +113,7 @@ import {
   QuestionDock,
   type Autonomy,
 } from "@/components/chat/QuestionDock"
-import { RunTaskList, RunStatusRow } from "@/components/generation/RunTaskList"
+import { RunTaskList, RunStatusRow } from "@/components/chat/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
 
 const LANGUAGE_OPTIONS = [
@@ -121,7 +128,7 @@ const LANGUAGE_OPTIONS = [
 type Phase = "confirm" | "running" | "chat"
 
 /** One task in the plan chain (ADR-043 — the request layer's only grammar:
- * a registry tool + its params, the same shape the PlanAgent proposes and
+ * a registry tool + its params, the same shape the intent router proposes and
  * the chat loop adjudicates). Outputs are a derived projection of the
  * compiled chain, never a panel declaration. */
 export interface TaskItem {
@@ -167,6 +174,10 @@ const TOOL_META: Record<
     countDefault?: number
     /** focus input (param "focus") */
     focus?: boolean
+    /** lowercase noun for the focus placeholder ("this post" / "these clips") */
+    focusNounKey?: string
+    /** focus placeholder grammar: "these clips" vs "this post" */
+    focusPlural?: boolean
     /** bilingual toggle (param "bilingual") */
     bilingual?: boolean
   }
@@ -178,12 +189,15 @@ const TOOL_META: Record<
     countLimits: [1, 10],
     countDefault: 3,
     focus: true,
+    focusNounKey: "generationOverlay.focusNouns.clips",
+    focusPlural: true,
   },
   write_post: {
     Icon: FileText,
     labelKey: "results.tabs.post",
     langParam: "language",
     focus: true,
+    focusNounKey: "generationOverlay.focusNouns.post",
   },
   write_quotes: {
     Icon: Quote,
@@ -192,12 +206,15 @@ const TOOL_META: Record<
     countLimits: [1, 20],
     countDefault: 3,
     focus: true,
+    focusNounKey: "generationOverlay.focusNouns.quotes",
+    focusPlural: true,
   },
   write_article: {
     Icon: Newspaper,
     labelKey: "results.tabs.article",
     langParam: "language",
     focus: true,
+    focusNounKey: "generationOverlay.focusNouns.article",
   },
   write_carousel: {
     Icon: Images,
@@ -206,6 +223,8 @@ const TOOL_META: Record<
     countLimits: [2, 15],
     countDefault: 6,
     focus: true,
+    focusNounKey: "generationOverlay.focusNouns.carousel",
+    focusPlural: true,
   },
   translate_clip: {
     Icon: Languages,
@@ -276,7 +295,7 @@ function normalizeTasks(raw: unknown): TaskItem[] {
 
 /** outputs-grammar → task list (client-side read tolerance for legacy
  * run.context rows; the same conversion the server applies to stored
- * pending_intent books). */
+ * pending_brief books). */
 function legacyOutputsToTasks(data: Record<string, unknown>): TaskItem[] {
   const tasks: TaskItem[] = []
   const aspect = typeof data.aspect === "string" ? data.aspect : null
@@ -470,9 +489,18 @@ function assetFilename(fileUrl: string | null): string {
   return fileUrl.split("/").pop() || fileUrl
 }
 
-interface GenerationOverlayProps {
+interface ChatDockProps {
   projectId: string
   prompt: string
+  /** The dock's form (2026-09-02 两态形态机): "full" = the pre-generation
+   * centered fullscreen chat (the message stage fills the page above the
+   * input group); "dock" = the bottom dock over the canvas. The page drives
+   * it off `latestRun` — the first run's arrival morphs full → dock with a
+   * grid-rows collapse transition (the canvas fades in on the same beat).
+   * One message machine, pure layout forms — NOT the retired overlay route /
+   * second shell (ADR-051). Projects with runs mount straight in "dock"
+   * (the hydrated first frame never replays). */
+  form?: "full" | "dock"
   /** The composer's draft, handed over via router state: sent as the first
    * /chat message on mount (mentions + persona choice ride along). Null on
    * restored sessions — the conversation is already on the server. */
@@ -482,9 +510,12 @@ interface GenerationOverlayProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
-  /** The parked book's derived preview (ADR-043 — pending_intent.derived):
+  /** The parked book's derived preview (ADR-043 — pending_brief.derived):
    * the card's "you'll get" section on a restored session. */
   initialDerived?: DerivedRow[]
+  /** The parked book's soft-signal reasons (pending_brief.reasons) on a
+   * restored session — drives the clips row's no-media inline warning. */
+  initialReasons?: string[]
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
@@ -508,7 +539,7 @@ interface GenerationOverlayProps {
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
  * closes the history region and clears the focus). */
-export interface GenerationOverlayHandle {
+export interface ChatDockHandle {
   closeHistory: () => void
   /** Insert an @-mention chip into the input (results canvas node clicks —
    * the @workflow_step 本面限定候选源, ADR-041 D8). No-op when the editor
@@ -801,12 +832,14 @@ function PlanVersionChip({
   )
 }
 
-export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationOverlayProps>(function GenerationOverlay({
+export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatDock({
   projectId,
   prompt,
+  form = "dock",
   firstMessage,
   initialIntent,
   initialDerived,
+  initialReasons,
   initialRunId,
   focusOutput = null,
   onFocusChange,
@@ -815,14 +848,51 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
 }, ref) {
   const { t } = useTranslation()
 
-  // The dock is the SOLE shell (ADR-051, 2026-08-31): the fullscreen /
-  // collapsing shells and the ?overlay= route modes are retired — the
-  // project page is always canvas + dock, and this message machine renders
-  // only as the bottom dock over it.
-  /** History region (dock D4 修订 — 一体容器两态): the flow lives INSIDE the
-   * input group's container, growing upward; closed = the input group alone
-   * (the canvas owns the screen). Agent speech always raises it (#6). */
+  // The dock is the SOLE shell (ADR-051, 2026-08-31) with TWO layout forms
+  // (2026-09-02 形态机): before the project's first run it is the centered
+  // fullscreen chat (the message stage owns the page above the input group —
+  // the canvas has nothing to show yet); the first run's arrival morphs it
+  // into the bottom dock. Same message machine, same input group (immutable
+  // slot, zero displacement) — only the stage above it collapses.
+  const full = form === "full"
+  /** History region (dock D4 修订 — 一体容器两态): in the DOCK form the flow
+   * lives INSIDE the input group's container, growing upward; closed = the
+   * input group alone (the canvas owns the screen). Agent speech always
+   * raises it (#6). In the FULL form the stage is always on — this flag is
+   * inert, and it resets on the morph so the dock lands collapsed. */
   const [historyOpen, setHistoryOpen] = useState(false)
+  /** The third visibility state (2026-09-02 形态机): the user tucks the whole
+   * dock away to a LogoMark chip at the bottom-right — node-dense canvas
+   * reading and screenshot sharing need the unobstructed graph. Dock form
+   * only; recall triggers (agent speech / a docking question / a canvas
+   * focus) clear it, so the user can only ever hide a STATIC input group,
+   * never new information — prohibition #6 (the dock never goes silent)
+   * survives hiding. The live run's status row is deliberately NOT a recall
+   * trigger: the canvas wipe conveys liveness, and the completion recap is
+   * agent speech, which recalls on its own. */
+  const [dockHidden, setDockHidden] = useState(false)
+  /** History-raising funnel: every setHistoryOpen(true) also recalls the
+   * hidden dock — the two are independent (collapsed ≠ hidden) but no path
+   * may raise the history while the dock stays tucked away. */
+  const raiseHistory = useCallback(() => {
+    setDockHidden(false)
+    setHistoryOpen(true)
+  }, [])
+  // The stage's scroller stays mounted through the collapse transition
+  // (grid-rows 1fr → 0fr animates over 500ms) and unmounts right after —
+  // cutting it at the flip would freeze the content mid-collapse.
+  const [stageMounted, setStageMounted] = useState(full)
+  useEffect(() => {
+    if (full) {
+      setStageMounted(true)
+      // Back to the centered chat — the hidden state has no meaning there.
+      setDockHidden(false)
+      return
+    }
+    setHistoryOpen(false)
+    const id = setTimeout(() => setStageMounted(false), 550)
+    return () => clearTimeout(id)
+  }, [full])
   useImperativeHandle(ref, () => ({
     closeHistory: () => setHistoryOpen(false),
     insertMention: (mention: ChatMention) =>
@@ -842,7 +912,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         },
       ])
       // Your own send opens the flow — the reply lands there.
-      setHistoryOpen(true)
+      raiseHistory()
       void sendChat(trimmed, { rollbackId, draft: trimmed, focus })
     },
   }))
@@ -864,8 +934,16 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         }
   )
   /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
-   * get" projection — rides pending_intent.derived; refetched with the book. */
+   * get" projection — rides pending_brief.derived; refetched with the book. */
   const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
+  /** The docked book's soft-signal reasons (pending_brief.reasons) — the
+   * clips row's no-media inline warning reads `clips_without_media`. */
+  const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
+  /** The instruction box = the user's OWN supplement, always starting empty
+   * (2026-09-02 任务书瘦身): the LLM's distilled `specific_instruction` rides
+   * invisibly in the book (data layer untouched) and the supplement merges in
+   * when the book ships — inference bookkeeping is never UI copy. */
+  const [userInstruction, setUserInstruction] = useState("")
   // The plan card renders only once a real inference has landed (a restored
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
@@ -939,9 +1017,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Source materials shown as attachments on the opening prompt.
   const [assets, setAssets] = useState<ProjectAsset[]>([])
-  // Identity echo line (the persona's name — style + skin ride it, ADR-038)
-  // — resolved once.
-  const [identityPersona, setIdentityPersona] = useState<string | null>(null)
 
   const firstMessageSentRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -980,10 +1055,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }, [projectId])
 
-  /** The panel's task book + reasons live on the project (pending_intent) —
-   * refetched after every plan-path turn (first inference, refinements).
+  /** The panel's task book + reasons live on the project (pending_brief) —
+   * refetched after every book-path turn (first inference, refinements).
    * `derived` is the server-compiled preview riding the same row. */
-  const fetchPendingIntent = useCallback(async (): Promise<{
+  const fetchPendingBrief = useCallback(async (): Promise<{
     intent: unknown
     reasons?: string[]
     persona_id?: string | null
@@ -994,13 +1069,13 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         toast: false,
       })
       if (!res.ok) return null
-      const data = (await res.json()) as { pending_intent?: {
+      const data = (await res.json()) as { pending_brief?: {
         intent: unknown
         reasons?: string[]
         persona_id?: string | null
         derived?: DerivedRow[]
       } | null }
-      return data.pending_intent ?? null
+      return data.pending_brief ?? null
     } catch {
       return null
     }
@@ -1203,30 +1278,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     [assets, outputs, t],
   )
 
-  // Identity echo: resolve the persona name behind the project mount once —
-  // a read-only reassurance line, never a question (ask primitive §2.1).
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      apiFetch(`/api/v1/projects/${projectId}`, { toast: false })
-        .then((res) => (res.ok ? res.json() : null))
-        .catch(() => null),
-      apiFetch("/api/v1/personas", { toast: false })
-        .then((res) => (res.ok ? res.json() : []))
-        .catch(() => []),
-    ]).then(([project, personas]) => {
-      if (cancelled) return
-      setIdentityPersona(
-        (personas as { id: string; name: string }[]).find(
-          (p) => p.id === (project as { persona_id?: string } | null)?.persona_id
-        )?.name ?? null
-      )
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [projectId])
-
   // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
   // the failed step rows carry the humanized error in-flow (provider 错误
   // 人话化梯), no toast on top; success hands off to the page (refetch →
@@ -1274,7 +1325,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
           {
             method: "POST",
-            body: { kind: "start", autonomy, intent },
+            body: { kind: "start", autonomy, intent: withUserInstruction(intent) },
           },
         )
         if (!res.ok) {
@@ -1303,7 +1354,8 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         body: {
           tasks: intent.tasks,
           target_language: firstLang ?? "en",
-          instruction: intent.specific_instruction || prompt,
+          instruction:
+            withUserInstruction(intent).specific_instruction || prompt,
           autonomy,
         },
       })
@@ -1325,25 +1377,17 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     }
   }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
 
-  /** Cancel = bail: a graceful exit back to draft chat (never an error
-   * toast) — the dock never closes (it IS the page's chrome, ADR-051); the
-   * confirm panel settles away and the plain conversation takes over. */
-  const handleCancel = useCallback(async () => {
-    if (pendingQuestion) {
-      await apiFetch(`/api/v1/chat/messages/${pendingQuestion.id}/answer`, {
-        method: "POST",
-        body: { kind: "bail" },
-        toast: false,
-      }).catch(() => {})
-    }
-    setPendingQuestion(null)
-    setPhase("chat")
-  }, [pendingQuestion])
+  /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
+   * NON-blocking — the input group stays live below it, so "don't start" is
+   * said by not starting (chat revises, walking away keeps the plan honestly
+   * pending, /projects deletes). A negative action exists only where the
+   * question BLOCKS: the choice morph's × (hidden input row + bail stops a
+   * live run). No handler here — nothing to cancel. */
 
   const canStartGeneration = intent.tasks.length > 0
 
   // Chain edits (ADR-043): panel controls mutate the task list directly —
-  // the same data structure the PlanAgent proposes, so the edited chain
+  // the same data structure the intent router proposes, so the edited chain
   // rides the next refine turn as prior_intent and Start ships it verbatim.
   const updateTaskParams = (index: number, patch: Record<string, unknown>) =>
     setIntent((prev) => ({
@@ -1373,6 +1417,25 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       ...prev,
       tasks: prev.tasks.filter((_, i) => i !== index),
     }))
+
+  /** The book as it SHIPS: the user's instruction-box supplement merges after
+   * the LLM's distilled `specific_instruction` (which rides invisibly — the
+   * data layer is untouched; only the machine pre-fill left the UI). Applied
+   * at every ship point: the Start answer, a confirm-phase refine turn's
+   * prior_intent, and the legacy /generate fallback. */
+  const withUserInstruction = useCallback(
+    (book: InferredIntent): InferredIntent => {
+      const supplement = userInstruction.trim()
+      if (!supplement) return book
+      return {
+        ...book,
+        specific_instruction: [book.specific_instruction, supplement]
+          .filter(Boolean)
+          .join("\n"),
+      }
+    },
+    [userInstruction],
+  )
 
   const taskLabel = useCallback(
     (task: TaskItem) => {
@@ -1416,6 +1479,14 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       return label
     },
     [t]
+  )
+
+  /** The card's derived section (2026-09-02 收窄): materialize-family rows
+   * only — "Full video" is the chain rows' blind spot; everything else is
+   * a 1:1 restatement of a task row and never renders. */
+  const materializedRows = useMemo(
+    () => derived.filter((row) => row.type === "video"),
+    [derived],
   )
 
   /** Assets carried by a message bubble must not also hang under the opening
@@ -1578,10 +1649,15 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
-        const pending = await fetchPendingIntent()
+        const pending = await fetchPendingBrief()
         if (pending) {
           setIntent(normalizeIntent(pending.intent))
           setDerived(pending.derived ?? [])
+          setReasons(pending.reasons ?? [])
+          // A new book = a new turn: the box's previous supplement already
+          // rode the refine (merged into prior_intent), so it resets empty
+          // rather than double-accumulating into the next ship.
+          setUserInstruction("")
           setIntentReady(true)
           setPhase("confirm")
           // No "plan updated" filler line on refinements — the turn's own
@@ -1598,9 +1674,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
   }
 
   /** One endpoint for every turn (intent-surface-unification W2): the server
-   * routes plan-path turns (task-book build / refine / confirm) and
+   * routes book-path turns (task-book build / refine / confirm) and
    * chat-loop turns itself. The panel's current chain rides confirm-phase
-   * turns as prior_intent (the PlanAgent re-emits the full revised chain —
+   * turns as prior_intent (the intent router re-emits the full revised chain —
    * chat revisions always win); mentions / the persona choice ride only the
    * composer's first message.
    *
@@ -1695,7 +1771,10 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           attachments: opts?.attachments ?? [],
           focus_output: (opts?.focus ?? focusOutput) ?? undefined,
           persona_id: opts?.personaId,
-          prior_intent: phase === "confirm" && intentReady ? intent : undefined,
+          prior_intent:
+            phase === "confirm" && intentReady
+              ? withUserInstruction(intent)
+              : undefined,
           // Consumed only when this turn confirms the book by prose — the
           // dock's tier must survive a typed "looks good, start it".
           autonomy: phase === "confirm" ? autonomy : undefined,
@@ -1957,7 +2036,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         at: new Date().toISOString(),
       },
     ])
-    setHistoryOpen(true)
+    raiseHistory()
     void sendChat(text, { rollbackId, draft: text })
   }
 
@@ -2003,7 +2082,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
     if (sentFocus) onFocusChange?.(null)
     // Your own send opens the flow — the reply lands there.
-    setHistoryOpen(true)
+    raiseHistory()
     void sendChat(text, {
       rollbackId,
       draft: text,
@@ -2034,8 +2113,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
-
-  const sectionLabel = "text-sm font-medium text-foreground"
 
   // The answered task_book question's QA archive display (start via dock).
   const answeredDisplay = answeredQuestion?.answer
@@ -2071,9 +2148,23 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     if (lastAgentKeyRef.current !== lastAgentKey) {
       lastAgentKeyRef.current = lastAgentKey
     }
-    if (!first) setHistoryOpen(true)
+    if (!first) raiseHistory()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
+  // The remaining recall triggers (hidden-state law above): a docking
+  // question (choice / task_book) and a canvas focus pin are NEW information
+  // — the dock must surface for them even if the user tucked it away. A
+  // focus does not OPEN the history (2026-08-16 走查拍板 below), it only
+  // recalls the dock's input group.
+  useEffect(() => {
+    if (pendingChoice) setDockHidden(false)
+  }, [pendingChoice])
+  useEffect(() => {
+    if (phase === "confirm" && intentReady && !chatBusy) setDockHidden(false)
+  }, [phase, intentReady, chatBusy])
+  useEffect(() => {
+    if (focusOutput) setDockHidden(false)
+  }, [focusOutput])
   // Canvas focus does NOT pop the history (2026-08-16 走查拍板): the focus
   // chip shows in the input group and its gray row lands in the flow — that
   // is the acknowledgment; force-opening the history on every card click
@@ -2180,22 +2271,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
               survived only on top, looking like a cut-off
               shadow). Depth comes from bg contrast alone. */}
           <Card className="ring-0 bg-muted">
-            <div className="flex flex-col gap-7 p-6">
-              {/* No card header: the assistant's own message above (the
-                  streamed echo) IS the introduction — a printed title would
-                  say the same thing twice. */}
-              {/* Identity echo — one read-only line, never a
-                  question: whose style the run generates in (the
-                  skin follows the persona, ADR-038). */}
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Mic2 className="h-3.5 w-3.5" />
-                {t("generationOverlay.identityEcho", {
-                  persona:
-                    identityPersona ??
-                    t("generationOverlay.identityPersonaAuto"),
-                })}
-              </p>
-
+            <div className="flex flex-col gap-3 p-4">
+              {/* No card header, no section labels (2026-09-02 任务书瘦身):
+                  the assistant's own message above IS the introduction, and
+                  the rows explain themselves. The identity echo ("Style: …")
+                  retired into the prose — the card carries only the editable
+                  chain + the incremental derived preview. */}
               {/* The task chain (ADR-043) — one row per task, in execution
                   order. Outputs are the chain's derived projection (the
                   preview below), never a panel declaration: edits mutate
@@ -2203,14 +2284,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                   prior_intent. Same-tool siblings (e.g. an English and a
                   German post) are separate rows. */}
               <div className="flex flex-col gap-2">
-                <div className="flex flex-col gap-1">
-                  <span className={sectionLabel}>
-                    {t("generationOverlay.chainLabel")}
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    {t("generationOverlay.chainHint")}
-                  </p>
-                </div>
                 <div className="flex flex-col gap-2">
                   {intent.tasks.map((task, index) => {
                     const meta = TOOL_META[task.tool]
@@ -2348,12 +2421,26 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                               })
                             }
                             placeholder={t(
-                              "generationOverlay.slotFocusPlaceholder",
-                              { type: t(labelKey) }
+                              meta.focusPlural
+                                ? "generationOverlay.slotFocusPlaceholderPlural"
+                                : "generationOverlay.slotFocusPlaceholder",
+                              { type: t(meta.focusNounKey ?? meta.labelKey) }
                             )}
                             className="h-8 text-xs"
                           />
                         )}
+                        {/* No-media inline warning (2026-09-02 新增): the
+                            S11 signal used to live only in the prose + the
+                            Start 422 — the row itself now names the problem
+                            and the way out. Data = the book's soft-signal
+                            reasons (clips_without_media). */}
+                        {task.tool === "select_clips" &&
+                          reasons.includes("clips_without_media") && (
+                            <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                              <TriangleAlert className="h-3.5 w-3.5" />
+                              {t("generationOverlay.clipsNeedMedia")}
+                            </p>
+                          )}
                       </div>
                     )
                   })}
@@ -2396,63 +2483,40 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
                 </DropdownMenu>
               </div>
 
-              {/* Derived preview (ADR-043) — what the chain will MAKE,
-                  dry-run-compiled server-side at dock time. Read-only: the
-                  chain rows above are the editing surface. */}
-              {derived.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <span className={sectionLabel}>
-                    {t("generationOverlay.derivedLabel")}
-                  </span>
-                  <div className="flex flex-col gap-1.5 rounded-md bg-card p-3">
-                    {derived.map((row, i) => (
-                      <div key={i} className="flex items-center gap-1.5 text-sm">
-                        {row.variant === "dub" ? (
-                          <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : row.variant === "subs" ? (
-                          <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : row.type === "video" ? (
-                          <Video className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          (() => {
-                            const Meta =
-                              Object.values(TOOL_META).find(
-                                (m) => m.labelKey === `results.tabs.${row.type}`
-                              ) ?? TOOL_META.select_clips
-                            return (
-                              <Meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                            )
-                          })()
-                        )}
-                        <span>{derivedLabel(row)}</span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Derived preview (ADR-043, 2026-09-02 收窄) — only the
+                  materialize family earns rows: "Full video …" is the one
+                  fact the chain rows cannot say (materialize_source is
+                  compile-injected, never a chain task). Extraction / writer
+                  chains restate their rows 1:1, so the section stays hidden
+                  there. Read-only; no section label. */}
+              {materializedRows.length > 0 && (
+                <div className="flex flex-col gap-1.5 rounded-md bg-card p-3">
+                  {materializedRows.map((row, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-sm">
+                      {row.variant === "dub" ? (
+                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : row.variant === "subs" ? (
+                        <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <Video className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <span>{derivedLabel(row)}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* Instruction */}
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-col gap-1">
-                  <span className={sectionLabel}>
-                    {t("generationOverlay.instructionLabel")}
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    {t("generationOverlay.instructionHint")}
-                  </p>
-                </div>
-                <Textarea
-                  value={intent.specific_instruction || ""}
-                  onChange={(e) =>
-                    setIntent((prev) => ({
-                      ...prev,
-                      specific_instruction: e.target.value,
-                    }))
-                  }
-                  placeholder={t("generationOverlay.instructionPlaceholder")}
-                  className="min-h-[100px] resize-none text-sm"
-                />
-              </div>
+              {/* Instruction (2026-09-02 瘦身): a bare box that always opens
+                  EMPTY — the LLM's distilled instruction rides invisibly in
+                  the book (inference bookkeeping is never UI copy); this is
+                  the user's own supplement, merged in at ship time via
+                  withUserInstruction. No label — the placeholder explains. */}
+              <Textarea
+                value={userInstruction}
+                onChange={(e) => setUserInstruction(e.target.value)}
+                placeholder={t("generationOverlay.instructionPlaceholder")}
+                className="min-h-14 resize-none text-sm"
+              />
             </div>
           </Card>
         </div>
@@ -2465,7 +2529,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       The message machine itself is untouched — only the shell changes. */
   /** Step marker label — the same chain as RunCard: live summary →
    * friendly stage copy → kind fallback. */
-  /** One conversation message with its anchors: superseded plan-version
+  /** One conversation message with its anchors: superseded book-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
   const renderConversationMessage = (m: OverlayMessage) => (
@@ -2504,7 +2568,7 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
       </MessageScrollerItem>
       {planVersions.map((version, index) =>
         version.messageId === m.id ? (
-          <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
+          <MessageScrollerItem key={`${m.id}-book-v${index + 1}`}>
             <PlanVersionChip
               n={index + 1}
               book={version.book}
@@ -2547,7 +2611,15 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         >
           <MessageScroller className="h-full">
             <MessageScrollerViewport className="scroll-fade-y">
-              <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4">
+              {/* Full form: the stage sits under the floating top chrome
+                  (the ← Projects pill, ~56px) — extra headroom keeps the
+                  first row clear; the dock form hugs the card's top edge. */}
+              <MessageScrollerContent
+                className={cn(
+                  "mx-auto w-full max-w-3xl gap-8 px-4 pb-8",
+                  full ? "pt-16" : "pt-4",
+                )}
+              >
                 {/* Opening prompt */}
                 {prompt ? (
                   <MessageScrollerItem>
@@ -2805,11 +2877,12 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         </MessageScrollerProvider>
   )
 
-  // The choice dock and the input body render as square children of the
-  // dock's ONE frosted container (D4 修订 一体容器) — the container owns all
-  // rounding and the frost. While a choice question is pending the dock
-  // MORPHS (ADR-051): the input row and the disclaimer hide, and the
-  // question (its options + the pencil freeform row) IS the dock.
+  // The question docks render as chromeless content (plain) — the floating
+  // question pill in the bottom row owns the frost and rounding (2026-09-02
+  // 拆粘: they used to be square children of the ONE frosted container).
+  // While a choice question is pending the dock MORPHS (ADR-051): the input
+  // row and the disclaimer hide, and the pill (its options + the pencil
+  // freeform row) is all that remains.
   const choiceDock =
     phase !== "confirm" && pendingChoice ? (
       <QuestionDock
@@ -2830,8 +2903,9 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         freeformDisabled={chatBusy || isStarting}
       />
     ) : null
-  // The task-book confirm dock — a square child of the ONE frosted container
-  // (plain — the container owns the chrome, D4 一体容器).
+  // The task-book confirm dock — chromeless content for the question pill
+  // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
+  // Cancel (non-blocking question = no negative action, stadium 化同批).
   const taskBookDock =
     phase === "confirm" && intentReady && !chatBusy ? (
       <QuestionDock
@@ -2841,7 +2915,6 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
         autonomy={autonomy}
         onAutonomyChange={setAutonomy}
         onStart={handleStartGeneration}
-        onCancel={handleCancel}
         starting={isStarting}
         startDisabled={!canStartGeneration || chatBusy}
       />
@@ -2968,20 +3041,39 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
           onSubmit={handleSend}
           className="max-h-32 min-h-9 text-sm"
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          aria-label={t("results.dock.history")}
-          aria-pressed={historyOpen}
-          onClick={() => setHistoryOpen((v) => !v)}
-        >
-          {historyOpen ? (
-            <ChevronDown className="h-4.5 w-4.5" />
-          ) : (
-            <History className="h-4.5 w-4.5" />
-          )}
-        </Button>
+        {/* History toggle — dock form only: in the full form the stage IS
+            the history (always on), so the toggle has no meaning there. */}
+        {!full && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            aria-label={t("results.dock.history")}
+            aria-pressed={historyOpen}
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            {historyOpen ? (
+              <ChevronDown className="h-4.5 w-4.5" />
+            ) : (
+              <History className="h-4.5 w-4.5" />
+            )}
+          </Button>
+        )}
+        {/* Hide — dock form only: folds the whole dock to the bottom-right
+            LogoMark dot (the user's own gesture; every recall trigger above
+            brings it back). In the full form the chat IS the page — there
+            is nothing to hide to. */}
+        {!full && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            aria-label={t("results.dock.hide")}
+            onClick={() => setDockHidden(true)}
+          >
+            <Minus className="h-4.5 w-4.5" />
+          </Button>
+        )}
         {chatBusy ? (
           <Button
             size="icon"
@@ -3011,6 +3103,20 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     </>
   )
 
+  // The history slot's one condition (2026-09-02 拆粘): dock form + the
+  // stage's collapse latch finished + the region raised.
+  const historySlotOpen = !full && !stageMounted && historyOpen
+  // The input container's stadium form (2026-09-02, user-ruled — the FLORA
+  // Chat-bar anatomy): rounded-full is correct geometry ONLY on the truly
+  // collapsed one-row box. Any second band (run status shimmer / staged
+  // chips) morphs it back to rounded-xl — a stadium on multi-row content is
+  // broken geometry. The history region is NOT a band: it floats as its own
+  // frosted layer above (输入框独立层律, 同日用户拍板 — the input group is
+  // always a standalone layer, never fused with the message flow), so an
+  // open history no longer breaks the stadium. Radius transitions with the
+  // box.
+  const inputStadium = !runStatusRow && staged.length === 0
+
   return (
     // The dock is click-through by design (the canvas owns the screen): the
     // root itself must be pointer-events-none too — without it the root box
@@ -3018,50 +3124,145 @@ export const GenerationOverlay = forwardRef<GenerationOverlayHandle, GenerationO
     // though all children opt out individually. The bottom row's inner
     // container re-enables events for the input group / history / docks.
     <div className="pointer-events-none fixed inset-0 z-50 flex flex-col">
-      {/* The center belongs to the canvas — an empty click-through spacer
-          keeps the bottom row parked at the foot. */}
-      <div className="min-h-0 flex-1" aria-hidden />
+      {/* The message stage (two-form machine, 2026-09-02): the FULL form's
+          chat stage owns the center (grid row 1fr); the DOCK form collapses
+          the row to 0fr so the canvas owns the screen. The grid-template-rows
+          transition IS the full→dock morph — the container keeps flex-1 in
+          both forms, so the fr resolves to stable pixels and the bottom row
+          never moves. The scroller stays mounted through the collapse
+          (stageMounted, 550ms) and unmounts right after; cutting it at the
+          flip would freeze the content mid-collapse. */}
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 transition-[grid-template-rows] duration-500 ease-out motion-reduce:transition-none",
+          full
+            ? "pointer-events-auto grid-rows-[1fr]"
+            : "pointer-events-none grid-rows-[0fr]"
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {(full || stageMounted) && chatScroller}
+        </div>
+      </div>
 
       {/* Bottom row — the input group's immutable slot across its parking
-          spots (composer / project dock): it never moves. The pending
-          question docks directly above it (ask primitive): the flow
-          archives decisions, the dock holds the one still open. The
-          task-book dock HIDES while a turn is in flight (a stale plan must
-          not be Start-able mid-revision). The dock is ONE frosted container
-          (D4 修订 一体容器): the history region grows upward inside it, and
-          every child is square — the container owns all rounding and the
-          frost. */}
-      <div className="pointer-events-none relative shrink-0 px-4 pb-5 pt-2">
-        <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+          spots (composer / project dock): it never moves. 拆粘 (2026-09-02,
+          ADR-051 条款 8): the row is THREE detached registers — the pending
+          question floats as its own frosted pill above (decision), the
+          input container holds only the history region + the input group
+          (action), and the honesty line whispers below the container at
+          page level (the ChatGPT/FLORA pattern — it used to be glued
+          between the question and the input). The 停靠法则 survives: the
+          question pill is always visible regardless of how tall the plan
+          card scrolls. The task-book dock HIDES while a turn is in flight
+          (a stale plan must not be Start-able mid-revision). */}
+      <div
+        className={cn(
+          "pointer-events-none relative shrink-0 px-4 pb-5 pt-2 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+          dockHidden && "translate-y-3 opacity-0"
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto w-full max-w-3xl",
+            dockHidden ? "pointer-events-none" : "pointer-events-auto"
+          )}
+        >
           {phase === "confirm" && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
-          {/* The dock's one frosted container — dock-surface (2026-08-15
-              走查拍板): translucent enough that the canvas's dot grid reads
-              through the frost; hairline only, NO shadow — the dock is the
-              composer's third parking spot and inherits its hero-flat rule
-              (without the ring the glass edge dissolves into the canvas). */}
-          <div className="dock-surface overflow-hidden rounded-xl ring-1 ring-foreground/10">
-            {historyOpen && (
-              <div className="h-[min(50vh,480px)]">{chatScroller}</div>
+          {/* The history region — its OWN floating layer (2026-09-02 输入框
+              独立层律, user-ruled): the input group is always a standalone
+              layer, never fused with the message flow; the flow floats
+              above it in the same dock-surface frost + hairline family as
+              the question pill, growing upward from the input's top edge.
+              Dock form only: in the full form the stage above IS the
+              history. Gated on !stageMounted too: during the collapse latch
+              the stage still holds the scroller — the two slots must never
+              mount it at once. */}
+          {historySlotOpen && (
+            <div className="dock-surface dock-history-in mb-2.5 h-[min(50vh,480px)] overflow-hidden rounded-xl ring-1 ring-foreground/10">
+              {chatScroller}
+            </div>
+          )}
+          {/* The question pill — its own floating layer (拆粘): detached from
+              the input container with a small-but-clear gap (mb-2.5 = 10px,
+              user两轮裁定: 6px 太近、原型 12px 太大). rounded-xl both kinds
+              (user-ruled 2026-09-02: the STADIUM belongs to the collapsed
+              input group below, not to the question pill — a tall option
+              list in a capsule is broken geometry anyway). Same dock-surface
+              frost + hairline recipe. */}
+          {(taskBookDock || choiceDock) && (
+            <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
+              {taskBookDock}
+              {choiceDock}
+            </div>
+          )}
+          {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
+              the container owns ONLY the resident input row (+ the run
+              status shimmer / staged chips bands when present) — the
+              history region floats as its own layer above, the question as
+              its own pill. **Collapsed = stadium** (rounded-full 例外 #4 —
+              the FLORA Chat-bar anatomy): bare input row = rounded-full;
+              any second band (status shimmer / chips) morphs back to
+              rounded-xl, radius transitions with the box. dock-surface
+              (2026-08-15 走查拍板): translucent enough that the canvas's dot
+              grid reads through the frost; hairline only, NO shadow — the
+              dock is the composer's third parking spot and inherits its
+              hero-flat rule (without the ring the glass edge dissolves into
+              the canvas). During the choice morph with no status band the
+              container is empty — hide the whole box rather than leave a
+              frost sliver (the editor stays mounted inside, DOM-owned draft
+              intact). */}
+          <div
+            className={cn(
+              "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
+              inputStadium ? "rounded-full" : "rounded-xl",
+              pendingChoice && !runStatusRow && "hidden"
             )}
-            {taskBookDock}
-            {choiceDock}
+          >
             {runStatusRow}
-            {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
-                verbatim): docked directly above the input area in the base
-                form, hidden WITH the input row on the question morph. */}
-            {!pendingChoice && (
-              <p className="px-3 pt-1 text-center text-[11px] leading-tight text-meta-foreground">
-                {t("results.dock.honesty")}
-              </p>
-            )}
             {/* The input row morphs away while a choice question is pending
                 (ADR-051) — CSS-hidden, NOT unmounted: the editor keeps its
                 DOM-owned draft across the morph. */}
             <div className={cn("p-2", pendingChoice && "hidden")}>{inputBody}</div>
           </div>
+          {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
+              verbatim): a page-level whisper BELOW the input container
+              (2026-09-02 拆粘 — was glued between the question and the
+              input); hidden WITH the input row on the question morph. */}
+          {!pendingChoice && (
+            <p className="pt-1.5 text-center text-[11px] leading-tight text-meta-foreground">
+              {t("results.dock.honesty")}
+            </p>
+          )}
         </div>
+      </div>
+
+      {/* The hidden-state recall dot (2026-09-02): one true circular icon
+          button (the rounded-full exception family, same as send) riding the
+          dock-surface frost — bottom-right so it never collides with the
+          canvas's own top-right slot reservation. Crossfades in with a scale
+          pop on the same beat as the bottom row's exit. */}
+      <div
+        className={cn(
+          "absolute bottom-5 right-4 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+          dockHidden
+            ? "pointer-events-auto opacity-100 scale-100"
+            : "pointer-events-none opacity-0 scale-75"
+        )}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="dock-surface h-10 w-10 rounded-full ring-1 ring-foreground/10 hover:bg-accent"
+          aria-label={t("results.dock.show")}
+          aria-hidden={!dockHidden}
+          tabIndex={dockHidden ? 0 : -1}
+          onClick={() => setDockHidden(false)}
+        >
+          <LogoMark className="h-5 w-5" />
+        </Button>
       </div>
     </div>
   )

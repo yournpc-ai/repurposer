@@ -333,12 +333,19 @@ export function FlowView({
         onPaneClick={onPaneClick}
       >
         {dots && (
-          // Same recipe as the home page's dot-grid utility (ADR-046 附;
-          // 调大调显 2026-08-31 ADR-051): 1.5px dot, 26px gap, 32%/30%.
+          // The workshop dot grid — the canvas SIGNATURE, the only dotted
+          // surface (ADR-046 附; home dropped it 2026-09-02: a fixed texture
+          // behind a non-pannable surface advertises an affordance that
+          // isn't there — single-surface use makes the dots MEAN "you've
+          // entered the graph"). Recipe = FLORA's measured world constants:
+          // 32px gap, 2px dot (react-flow `size` is a DIAMETER),
+          // muted-foreground 32%/30%. Plain world-space — scales with zoom,
+          // no re-tiling, never re-add zoom compensation (an earlier
+          // zoom-invariant version was over-engineering and retired).
           <Background
             variant={BackgroundVariant.Dots}
-            gap={26}
-            size={1.5}
+            gap={32}
+            size={2}
             color="var(--muted-foreground)"
             className="opacity-[0.32] dark:opacity-30"
           />

@@ -60,12 +60,18 @@ const PRODUCT_TYPE_LABEL_KEY: Record<string, string> = {
   article: "results.tabs.article",
 }
 
-/** Step status → FlowView status. A parked interrupt (`waiting`) reads as
- * not-yet-done on the canvas — the ask lives in the chat dock, not the
- * graph (D2: progress never enters the graph). */
+/** Step status → FlowView status. Liveness is the canvas's one granularity
+ * (2026-09-02 用户拍板 — running ⊇ waiting): a parked interrupt (`waiting`)
+ * is ALIVE, so it maps to running — the spine/frontier keeps its pulse and
+ * the edges their packet while the run waits on the human. The ask itself
+ * still lives only in the chat dock (D2: question UI never enters the
+ * graph); the message flow keeps the finer waiting distinction (its
+ * CircleHelp row) — same step.status value, two surfaces, each honest at
+ * its own granularity. */
 function stepNodeStatus(status: string): FlowNodeStatus {
   switch (status) {
     case "running":
+    case "waiting":
       return "running"
     case "done":
       return "done"
@@ -105,6 +111,13 @@ export function runFlowGraph(
      * render as quiet placeholder cards born at their final size/position;
      * a landed output from the same step fills its slot in place. */
     placeholders?: PlaceholderRow[]
+    /** The run is non-terminal (pending / running / waiting_human —
+     * 2026-09-02 用户拍板: waiting ⊆ running for liveness). A promised
+     * placeholder whose producing step hasn't started yet still reads alive
+     * (the FLORA wipe + the edge packet) — the roster's presence already
+     * implies this server-side; the flag keeps a stale roster frame from
+     * glowing after the run settles. */
+    runAlive?: boolean
     /** The node carrying the results tour's data-tour anchors (first ready
      * product, chosen by the surface). */
     tourOutputId?: string | null
@@ -118,7 +131,7 @@ export function runFlowGraph(
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const nodes: FlowNode[] = []
   const rawEdges: FlowEdge[] = []
-  const { assets, steps, outputs, prompt, placeholders, tourOutputId, spineExpanded = false } = input
+  const { assets, steps, outputs, prompt, placeholders, runAlive = false, tourOutputId, spineExpanded = false } = input
 
   const stepIds = new Set(steps.map((s) => s.id))
   const byId = new Map(steps.map((s) => [s.id, s]))
@@ -450,8 +463,16 @@ export function runFlowGraph(
           ? t(`languages.${row.language}`, { defaultValue: row.language })
           : undefined,
         // The producing step's own status — a running step gives the
-        // placeholder its FLORA wipe (the card's run 期 projection).
-        status: stepNodeStatus(byId.get(row.step_id)?.status ?? "pending"),
+        // placeholder its FLORA wipe (the card's run 期 projection). A
+        // promised slot on an ALIVE run reads alive even before its step
+        // starts (2026-09-02 用户拍板): parked at the direction interrupt
+        // the run is waiting, not dead — the wipe keeps filling and the
+        // edge packet keeps flowing (never a fraction claim: the landing
+        // output is still the only 100%).
+        status: (() => {
+          const s = stepNodeStatus(byId.get(row.step_id)?.status ?? "pending")
+          return runAlive && s === "pending" ? "running" : s
+        })(),
         placeholder: {
           stepId: row.step_id,
           type: row.type,

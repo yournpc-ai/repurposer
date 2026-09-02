@@ -46,6 +46,10 @@ export interface ResultsCanvasProps {
    * render as quiet placeholder cards at their final position; landed
    * outputs fill them in place. Empty for terminal/absent runs. */
   placeholders?: PlaceholderRow[]
+  /** The run is non-terminal (pending / running / waiting_human) — a
+   * promised placeholder slot reads alive (wipe + edge packet) even before
+   * its producing step starts (2026-09-02 用户拍板: waiting ⊆ running). */
+  runAlive?: boolean
   /** The run's prompt — displayed in every product node's interaction area
    * (read-only; editing happens in the dock). */
   prompt?: string | null
@@ -87,6 +91,7 @@ export function ResultsCanvas({
   steps,
   outputs,
   placeholders,
+  runAlive = false,
   prompt = null,
   baselineReady,
   baselineKey,
@@ -105,8 +110,8 @@ export function ResultsCanvas({
   // full; only the surface's density flips).
   const [spineExpanded, setSpineExpanded] = useState(false)
   const { nodes, edges } = useMemo(
-    () => runFlowGraph({ assets, steps, outputs, placeholders, prompt, tourOutputId, spineExpanded }, t),
-    [assets, steps, outputs, placeholders, prompt, tourOutputId, spineExpanded, t]
+    () => runFlowGraph({ assets, steps, outputs, placeholders, runAlive, prompt, tourOutputId, spineExpanded }, t),
+    [assets, steps, outputs, placeholders, runAlive, prompt, tourOutputId, spineExpanded, t]
   )
 
   // ── Birth choreography (ADR-036 补记 3, growth-driven since ADR-051) ────

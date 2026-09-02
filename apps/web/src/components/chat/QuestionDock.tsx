@@ -54,16 +54,13 @@ interface TaskBookDockProps {
   autonomy: Autonomy
   onAutonomyChange: (next: Autonomy) => void
   onStart: () => void
-  /** Bail — a graceful exit (back to draft), never an error path. */
-  onCancel: () => void
   starting: boolean
   startDisabled?: boolean
   /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
    * when present; the slot is the layout reservation. */
   estimate?: string | null
-  /** Bare child of the dock shell's unified frosted container (D4 修订
-   * 一体容器): no fill / rounding / margin of its own — the container owns
-   * the chrome. */
+  /** Chromeless content for the floating question pill (2026-09-02 拆粘):
+   * no fill / rounding / margin of its own — the pill owns the chrome. */
   plain?: boolean
 }
 
@@ -87,8 +84,8 @@ interface ChoiceDockProps {
    * label autoResume mapping resolves it server-side, zero LLM). */
   onFreeform?: (text: string) => void
   freeformDisabled?: boolean
-  /** Bare child of the dock shell's unified container (D4 修订 一体容器):
-   * no fill / rounding / margin of its own — the container owns the chrome. */
+  /** Bare child of the floating question pill (2026-09-02 拆粘): no fill /
+   * rounding / margin of its own — the pill owns the chrome. */
   plain?: boolean
 }
 
@@ -101,7 +98,6 @@ function TaskBookForm({
   autonomy,
   onAutonomyChange,
   onStart,
-  onCancel,
   starting,
   startDisabled,
   estimate,
@@ -109,35 +105,27 @@ function TaskBookForm({
 }: TaskBookDockProps) {
   const { t } = useTranslation()
   return (
-    <div className={plain ? "px-4 py-3" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
-      {/* Top row: the confirm line (left) + the reserved credit slot
-          (right). Copy stays one line — the plan card above carries the
-          substance. */}
-      <div className="flex items-center justify-between gap-2">
+    // ONE row (2026-09-02 stadium 化): ✓ + confirm line … Start — the FLORA
+    // "Save & continue" pill anatomy. Cancel retired the same day: the pill
+    // is NON-blocking (the input group stays live below), so "don't start"
+    // is said by simply not starting — keep chatting (chat revision always
+    // wins), walk away (the plan stays honestly pending), or delete the
+    // project. A negative action earns its place only when the question
+    // BLOCKS the input (the choice morph's × keeps it: hidden input row +
+    // bailing stops a live paid run). Single-row content is also what makes
+    // the pill's rounded-full stadium correct geometry.
+    <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
+      <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate text-sm font-medium">{question}</span>
+          {estimate ? (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {estimate}
+            </span>
+          ) : null}
         </div>
-        {estimate ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {estimate}
-          </span>
-        ) : null}
-      </div>
-      {/* Bottom row: the actions — Cancel quiet on the left, Start solid on
-          the right (the one dark anchor, composer-bottom-row discipline).
-          Both at the action-row h-9; Start gets px-5 presence — this bar is
-          the confirm phase's single decision CTA, not a toolbar chip. */}
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <Button
-          variant="ghost"
-          onClick={onCancel}
-          disabled={starting}
-          className="h-9 px-3 text-muted-foreground"
-        >
-          {t("common.cancel")}
-        </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {SHOW_AUTONOMY_PICKER ? (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -166,6 +154,8 @@ function TaskBookForm({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
+          {/* Start = the pill's single decision CTA (composer-bottom-row
+              discipline: one solid anchor, h-9, px-5 presence). */}
           <Button
             disabled={startDisabled || starting}
             onClick={onStart}

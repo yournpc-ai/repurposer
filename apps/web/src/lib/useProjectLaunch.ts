@@ -22,7 +22,7 @@ import type { ChatMention } from "@/lib/mentions"
  *
  * Boundaries (unchanged doctrine): the launcher never infers intent, never
  * builds a prior, never runs generation — intent recognition lives in the
- * chat plan path. A recipe launch is just its prompt template (2026-08-11
+ * chat book path. A recipe launch is just its prompt template (2026-08-11
  * ruling — 配方 = 提示词): the card's identity stays in the frontend.
  * An overlay hosting this mechanism is NOT the rejected A-form;
  * the A-form is a modal that runs generation itself.
@@ -83,7 +83,7 @@ export function useProjectLaunch() {
           const project = (await projectRes.json()) as CreatedProject
 
           // Only real user files upload. A prompt-only send creates NO asset:
-          // pasted text is promoted server-side in the chat plan path when it
+          // pasted text is promoted server-side in the chat book path when it
           // IS the user's content (LLM-judged, never a length heuristic).
           await Promise.all(
             input.files.map(async (material) => {

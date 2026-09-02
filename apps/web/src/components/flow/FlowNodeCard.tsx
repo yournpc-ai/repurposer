@@ -1162,12 +1162,16 @@ function ProductCard({
  * the product card (caption / card / reserved toolbar band) so the fill
  * swap is pixel-stable. Quiet by law: no status badge, no pulse, no
  * actions (the step narrative lives in the dock's folded checklist). The
- * ONE living signal is the FLORA wipe (2026-09-01 拍板): while the
- * producing step runs, a quiet wash fills the card left→right (纯 CSS
- * ease-out, caps at 96% — 假进度禁令不破: it never claims a fraction, the
- * landing output is the only 100%). The body carries the functional
- * teaching line (@-mention to revise); the toolbar band shows the slot's
- * KNOWN facts only (language / pinned aspect — never invented). */
+ * ONE living signal is the FLORA wipe (2026-09-01 拍板): while the run is
+ * alive the quiet wash fills the card left→right (纯 CSS ease-out, caps at
+ * 96% — 假进度禁令不破: it never claims a fraction, the landing output is
+ * the only 100%). Liveness = runAlive (2026-09-02 用户拍板, running ⊇
+ * waiting): a promised slot keeps filling even before its producing step
+ * starts and while the run parks for a human — the canvas's granularity is
+ * alive/not-alive; the finer step narrative lives in the dock's folded
+ * checklist. The body carries the functional teaching line (@-mention to
+ * revise); the toolbar band shows the slot's KNOWN facts only (language /
+ * pinned aspect — never invented). */
 function PlaceholderCard({ node }: { node: FlowNode }) {
   const { t } = useTranslation()
   const ph = node.placeholder
