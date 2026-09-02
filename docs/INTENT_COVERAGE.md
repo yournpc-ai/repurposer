@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效；**2026-09-03 B2 brief 账本 + 出书门槛（ADR-052，简报 `tasks/dialog-workflow-b2-brief-ledger.md`）**：动作集四动作正名（generate→draft；**ask 一等动作**直通 dock 提问机器，payload 带 `slot` 握手 + `default_path` 牙齿——作答由 autoResume 回填账本 user-stated 并回 book path 重判，跳过 = 替身行走默认路径恢复出书）；**brief 账本**（topic/audience/tone/constraints/material_state 五槽位各带来源 + asked 簿，LLM 提议代码 merge，user-stated 恒胜）取代累积 prompt 成 book path 主状态，`pending.prompt` = 出生 prompt 冻结、`MAX_ACCUM_PROMPT_CHARS` 退役；**出书门槛**（draft 判定后的代码裁决）取代零素材反问网与 copy-writer lift 两补丁——无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记防重问），仍无根 → draft-from-persona dock（`draft_from_persona` reason + echo 散文声明），media-needing 链 ∧ 零素材 ∧ 桌上无书 → answer 素材引导永不 dock；harness 加 S50（merge_brief 来源矩阵）/ S51（裸愿望 → 主题问）/ S52（跳过 → draft-from-persona），S13/S48 断言改写归门槛）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -12,12 +12,12 @@
 | 表面 | 相位 | 用户输入去向 | 推理者 | 裁决 |
 |---|---|---|---|---|
 | 首页 composer | — | **无意图识别**——send = spinner 建空项目 + 上传素材 + 跳转详情（草稿经 router state 交接） | 无 | 无 |
-| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **book path** | intent router（三动作：generate / answer / start） | 代码：reasons 推导 + derived 预览 + dock task_book（无合并机器——面板手改整链 ride prior_intent，intent router 重提全链，ADR-043）；start 复用 answer kind=start 起 run |
+| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **book path** | intent router（四动作：draft / ask / answer / start） | 代码：reasons 推导 + derived 预览 + 出书门槛 + dock task_book（无合并机器——面板手改整链 ride prior_intent，intent router 重提全链，ADR-043）；start 复用 answer kind=start 起 run |
 | Overlay chat（项目） | 已有 run（running / results） | `POST /chat`（project scope） | chat_intent agent | 代码：四态裁决（task_list / edit_ops / ask / answer）+ autoResume |
 | 产物会话（dock + 焦点注入；ChatModal 已退役——ADR-041 / `tasks/results-canvas.md`） | 单产物 | `POST /chat`（project scope + 焦点 output 注入，永不进 book path） | chat_intent agent | 同上（焦点语境注入） |
 | 任意 dock | — | `POST /chat/messages/{id}/answer` | **无 LLM** | 代码：kind × question-kind 契约分派 |
 
-book path 进入条件（`chat()` 分派，service.py）：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_brief` 为空）。start/修订/answer 的判定归 intent router LLM——dock 中的任务书以 `presented_book`（整链 JSON）注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
+book path 进入条件（`prepare_chat_turn` 分派，service.py）：project scope 且（① 有 pending task_book question；② 刚回答了带 `slot` 的提问——autoResume 已回填账本槽位；③ 无任何 run 且 `pending_brief` 为空或是 ledger-only 行——ask 回合写入的行 `intent=None`，项目仍在出书相位）。start/修订/ask/answer 的判定归 intent router LLM——dock 中的任务书以 `presented_book`（整链 JSON）注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
 
 非文本路径（不经意图层）：dock 按钮（Start/Cancel/autonomy/选项）、面板手编任务书、retry 按钮（`/generate` 该类链 full run）、发布对话框、编辑器内操作。
 
@@ -49,12 +49,13 @@ book path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 |---|---|---|
 | G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → 前端自动 Start | ✅（S2） |
 | G 模糊（"帮我处理一下"） | /chat book path → dock + reasons → 面板确认 | ✅（S1） |
-| G 全迷失（"不知道做什么/从哪开始"） | /chat book path → dock（reasons 非空）或散文反问指路；永不裸跑、永不出无米书 | ✅（S17/S18/S21，2026-08-05；W4 升级为顾问姿态断言） |
+| G 全迷失（"不知道做什么/从哪开始"） | /chat book path → ask 主题问（一词可答 + 默认路径）或 dock（reasons 非空）；永不裸跑、永不出无根书（出书门槛代码兜底） | ✅（S17/S18/S21，2026-08-05；门槛兜底 2026-09-03） |
 | Q 能力（"你能做什么"） | /chat book path → answer（普通 assistant 消息） | ✅（S4） |
 | 空指令 | 前端本地拦截（toast） | ✅ |
 | 只要 clips 但无媒体 | intent router 排除 clips；绕过则出生地 422 | ✅ |
 | 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | book path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
-| G 无素材且未贴内容 | 拆为两路：copy-writer-only 链 → book path generate + dock（`text_without_material` 软信号 + echo 散文告知从 prompt + persona 起草）；链含 media-needing 工具 → intent router 自动 drop media 任务保留 writers + 解释，或 answer 反问引导 | ✅（S13 仅对 media-needing 路径；S48 新覆盖 writer-only 软信号，2026-08-24） |
+| G 无素材且未贴内容 | 出书门槛统一裁决（2026-09-03 折叠原两路补丁）：链含 media-needing 工具 ∧ material none ∧ 桌上无书 → answer 素材引导（上传或贴文），永不 dock；纯 writer 链不再特殊——topic 有根即 draft + dock（`text_without_material` 软信号保留），无根走 topic 问一轮 | ✅（S13 门槛断言改写；S48 writer 软信号，2026-09-03） |
+| G 无根（裸愿望："I want a social post." 无素材无主题） | 出书门槛：代码组装 topic 问一轮（choice dock，slot=topic，freeform 恒在，散文带默认路径）→ 作答回填账本 user-stated 重出 draft；跳过 / 问过仍无根 → draft-from-persona dock（`draft_from_persona` reason + echo 散文声明） | ✅（S51/S52，2026-09-03） |
 | 配方播种 clips 但无媒体 | dock 保留 clips + 警告，echo 散文主动解释（上传解锁或去 clips 开工）；Start 422 后手编去 clips 可起 | ✅（S11） |
 | Remix 配方后 revise 字段（"clips only needs 2"） | 配方=预设只铺第一版（不钉任何字段）→ 修订直达 docked 书 | ✅（S15，2026-08-05） |
 | S 闲聊 | /chat book path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |
@@ -65,9 +66,9 @@ book path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 |---|---|---|
 | G 修订链（"加条德语 post"） | /chat book path：面板手改 = 链结构直接编辑（与 LLM 提议同一数据结构），修订回合 LLM 带 presented 整链重提 → 新任务书 dock，旧 supersede；chat 恒胜是结构事实（无合并机器，ADR-043） | ✅（S3/S16） |
 | 面板手改 + chat 修订冲突 | 同一数据结构无合并面：chat 修订覆盖链行（"chat 就是在改 plan，没有什么是定死的"，2026-08-05） | ✅（S16） |
-| G 修订焦点/指令（"聚焦定价部分"） | 同上（累积 prompt = stored prompt + 本轮原文 服务端拼装） | ✅（S3） |
+| G 修订焦点/指令（"聚焦定价部分"） | 同上（brief 账本 = 累积状态：LLM 每轮提议全量更新，代码按来源优先级 merge，user-stated 恒胜；`pending.prompt` = 出生 prompt 冻结） | ✅（S3） |
 | Q 能力（"能发 TikTok 吗"） | /chat book path → answer，任务书不被动 | ✅ |
-| Q 计划（"为什么只有 3 条"） | /chat book path → LLM 判 answer（解释）或 generate（改成你要的数量） | ✅（LLM 判断，两可都算对） |
+| Q 计划（"为什么只有 3 条"） | /chat book path → LLM 判 answer（解释）或 draft（改成你要的数量） | ✅（LLM 判断，两可都算对） |
 | **C 确认（"好的开始吧"）** | /chat book path → intent router 判 start（`presented_book` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；读容忍硬化：`tasks:null` + presented_book 上下文） |
 | C 取消 | dock Cancel 按钮 → answer kind=bail → 清 pending_brief 回 draft | ✅（按钮；文本"算了"仍无 chat 路径——低频，登记待真实投诉） |
 | C 撤销自己上次修订 | 无 chat 命令（重说一遍反向修订 = 新修订）；面板上旧版本 chip 可展开只读快照并一键恢复（2026-08-05 版本条） | ✅（UI 恢复路径） |
@@ -127,8 +128,8 @@ book path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 按序生效，上一层失败落到下一层：
 
-1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。task_book 待决不参与（它的答案是 dock 按钮与 book path 修订/确认）。
-2. **book path（intent router 三动作）**：首次 / 待决任务书的项目级文本 → generate（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ answer（普通消息）/ start（answer kind=start 起 run）。
+1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。**带 `slot` 的提问（book-path ask）作答时额外回填账本槽位（user-stated）并直通 book path 重判**。task_book 待决不参与（它的答案是 dock 按钮与 book path 修订/确认）。
+2. **book path（intent router 四动作）**：首次 / 待决任务书的项目级文本 → draft（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ ask（一等动作：choice 直通 dock 提问机器，`slot` 握手 → 作答回填账本，`default_path` → dock 散文第二句；同槽位重问被代码翻回 draft——问环有界）/ answer（普通消息）/ start（answer kind=start 起 run）。**出书门槛（代码裁决，draft 判定后）**：无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记，问过不再问）；仍无根（或用户跳过提问）→ draft-from-persona dock（reasons 标记 + echo 散文声明）；media-needing 链 ∧ material none ∧ 桌上无书 → answer 素材引导，永不 dock。
 3. **chat_intent agent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + freeform 回落），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。
 4. **代码裁决**：registry 校验 skill/params（SkillRejected → 一次 repair_feedback 重试 → 再败则反问）；edit ops 校验（OpRejected → 提示）；出生地校验（requires / clips-media / count 边界 → 422 或反问）。
 5. **LLM 故障**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ chat loop 反问文案；book path 不兜底——provider 故障穿透到路由边界：JSON 502 / SSE 终帧 `turn.failed`，带 `user_error_line` 本地化行（明确不 dock 编造默认书：错误计划看着像真的，Start 会为它烧一次付费 run）；`tasks:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
@@ -154,13 +155,13 @@ book path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 ## 6. 测试矩阵（e2e 覆盖对照）
 
-**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空；S46 reframe 派发、S47 workflow_step 提及、S48 copy-writer 无素材软信号，2026-08-24）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
+**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空；S46 reframe 派发、S47 workflow_step 提及、S48 copy-writer 无素材软信号，2026-08-24；S50 merge_brief 来源矩阵、S51 ask 一等动作、S52 出书门槛，2026-09-03）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
 
 | 路径 | 覆盖 |
 |---|---|
 | 首次：模糊 dock + "开始吧"起 run + pending_brief 清空 | ✅ harness S1 |
 | 首次：精确 slots（clips×5 + post(de)）+ dock Start + run slots 一致 | ✅ harness S2 |
-| 修订循环：re-dock / supersede / 未修订任务存活（累积 prompt 重提全链）/ 确认起 run | ✅ harness S3 |
+| 修订循环：re-dock / supersede / 未修订任务存活（brief 账本重提全链）/ 确认起 run | ✅ harness S3 |
 | 能力提问纯 answer + 无书"start it"不死路不起 run | ✅ harness S4 |
 | 配方发射 = 模板原文（无 recipe_id 传输带；模板点名的产出与字幕语言全提取） | ✅ harness S5 |
 | 已有 run 项目不进 book path（回归） | ✅ harness S6 |
@@ -189,7 +190,10 @@ book path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | repair 有界重试：schema 拒 → 一轮修复带结构化回显，再拒即败无第三轮；transport 不修 | ✅ harness S41 |
 | 估价地基：flow 对账自检 + 报价 fold 单调性（子图 ≤ 全图、非负）+ NULL 语义 | ✅ harness S42 |
 | materialize 注入矩阵：media / stills 注入（stills 先 align_stills）、existing 空 inputs、无画像编译期拒绝、select_clips 在场不注入 | ✅ harness S45 |
-| copy-writer 解除硬门禁：无素材 + 写帖 → generate + dock 带 `text_without_material` reason + Start 起 run；media-needing 不夹带 | ✅ harness S48（2026-08-24） |
+| copy-writer 无素材软信号：无素材 + 写帖 → draft + dock 带 `text_without_material` reason + Start 起 run；media-needing 不夹带（原硬门禁 lift 已折进出书门槛） | ✅ harness S48（2026-08-24，门槛同车改写） |
+| ask 一等动作：裸愿望 → choice dock（slot=topic + default_path + 2-4 选项 + freeform 恒在）→ 作答回填账本 user-stated | ✅ harness S51 |
+| 跳过提问 = 默认路径：choice bail + slot → 替身行恢复 book path → draft-from-persona dock（reasons 标记 + asked 簿 + echo 散文） | ✅ harness S52 |
+| merge_brief 纯函数：来源优先级矩阵（user-stated 恒胜 / 重申恒胜 / inferred 可覆写）+ asked 簿永不吃 LLM 提议 | ✅ harness S50 |
 
 ---
 

@@ -28,19 +28,27 @@ from typing import Any
 
 from app.agents.base import StreamingAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
-from app.models.schemas import InferredIntent, IntentResult
+from app.models.schemas import BriefLedger, InferredIntent, IntentResult
 
 
 def _assemble_book_turn(
-    prompt: str,
+    message: str,
+    brief: BriefLedger | None = None,
     filename: str | None = None,
     presented_book: str | None = None,
     recent: list[str] | None = None,
     file_language: str | None = None,
     material_excerpt: str | None = None,
 ):
-    """Book-turn inputs.
+    """Book-turn inputs (ADR-052 B2 D2-C2 — the ledger is the state).
 
+    ``message``: this turn's own words — never an accumulated prompt (the
+    ledger carries the accumulated state; ``MAX_ACCUM_PROMPT_CHARS``'s
+    head/tail bookkeeping retired with the switch).
+    ``brief``: the code-merged ledger BEFORE this turn's proposal (material
+    state freshly stamped) — rendered as the ledger block: valued slots with
+    their source, the material line always, and the asked roll (the router
+    reads it for the root judgment and never re-asks an asked slot).
     ``presented_book``: one-line digest of the docked task book, when one is
     on the table — the start/revise verdict needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
@@ -55,9 +63,27 @@ def _assemble_book_turn(
     折中版 — the plan layer is no longer blind to what the material SAYS;
     mechanical slice, zero extra LLM).
     """
+    brief_lines: list[str] | None = None
+    if brief is not None:
+        lines = []
+        for name in ("topic", "audience", "tone"):
+            slot = getattr(brief, name)
+            if slot.value:
+                lines.append(f"- {name}: {slot.value} ({slot.source})")
+        if brief.constraints.value:
+            lines.append(
+                f"- constraints: {', '.join(brief.constraints.value)} "
+                f"({brief.constraints.source})"
+            )
+        # The material line always renders — the root judgment reads it.
+        lines.append(f"- material: {brief.material_state.value or 'none'}")
+        if brief.asked:
+            lines.append(f"- already asked: {', '.join(brief.asked)}")
+        brief_lines = lines
     return (
         {
-            "prompt": prompt,
+            "message": message,
+            "brief_lines": brief_lines,
             "filename": filename,
             "presented_book": presented_book,
             "recent": recent,

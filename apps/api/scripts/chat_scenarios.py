@@ -1130,13 +1130,14 @@ async def s12_declared_material_promotes(ctx: Ctx) -> None:
 
 
 async def s13_no_material_asks(ctx: Ctx) -> None:
-    """S13 零素材反问：媒体需请求 + 无素材 → ask-for-material 散文，无 dock 无 run。
+    """S13 零素材反问：媒体需请求 + 无素材 → 素材问散文，无 dock 无 run。
 
-    2026-08-27 修订（D8）：S13 回归媒体需路径本位——copy-writer 无素材
-    路径是 S48 的地盘。媒体需链（select_clips 等）+ 零素材 → 零素材安全
-    网把 draft 降为 answer + 反问散文。断言保持兼容：caption_mode
-    dock 可出现（LLM 若把请求读成 write_quotes 链），但 task_book /
-    run / pending_brief / 假资产永不落。
+    ADR-052 B2 D2-C2 修订：零素材安全网退役，逻辑折叠进出书门槛——
+    媒体需链 + 账本 material=none + 桌上无书 → 门槛判素材根缺失，散文反问
+    （_material_gate_text），永不 dock。断言保持兼容：caption_mode 或主题
+    问 dock 可出现（LLM 若把请求读成 write_quotes 链 / 判主题根缺失），但
+    task_book / run / 假资产永不落；pending_brief 允许 ledger-only 行
+    （intent=None 的账本行不是书）。
     """
     pid = await ctx.new_project("S13 no material asks")
 
@@ -1145,8 +1146,9 @@ async def s13_no_material_asks(ctx: Ctx) -> None:
     check(has_prose(turn1["assistant_message"]),
           "an ask-for-material reply lands", turn1["assistant_message"])
     # The default chain may dock a caption_mode choice (if the LLM reads
-    # the request as a write_quotes chain) — legal dock. task_book,
-    # however, never docks without material for a media-needing chain.
+    # the request as a write_quotes chain) or the gate's topic ask — both
+    # legal docks. task_book, however, never docks without material for a
+    # media-needing chain.
     question = turn1["assistant_message"].get("question")
     if question is not None:
         check(
@@ -1154,8 +1156,10 @@ async def s13_no_material_asks(ctx: Ctx) -> None:
             "no task_book docks without material",
             turn1["assistant_message"],
         )
-    check((await ctx.results(pid)).get("pending_brief") is None,
-          "no groundless book is persisted")
+    book = (await ctx.results(pid)).get("pending_brief")
+    check(book is None or book.get("intent") is None,
+          "no groundless book is persisted (a ledger-only row is not a book)",
+          book)
     check(await project_assets(pid) == [], "no fake asset was created")
 
 
@@ -1211,10 +1215,11 @@ async def s21_lost_and_empty_handed(ctx: Ctx) -> None:
 
 
 async def s48_text_writer_without_material(ctx: Ctx) -> None:
-    """S48 copy-writer 解除硬门禁（2026-08-24 lift）：无素材 + 写帖请求 →
-    draft 不再被反问（book path 软信号），dock 任务书带 text_without_material
-    reason，Start → 跑 → 出 post。镜像 S13 的"无素材→ask 反问"作为旧行为
-    文档；S48 断言新行为（"没米也下锅"，但 plan 落地 + 用户知情）。"""
+    """S48 copy-writer 解除硬门禁（2026-08-24 lift；ADR-052 B2 D2-C2 折叠进
+    出书门槛）：无素材 + 写帖请求带主题 → 主题根成立，draft 不再被反问
+    （门槛只看账本），dock 任务书带 text_without_material reason，Start →
+    跑 → 出 post。镜像 S13 的"媒体需+无素材→素材问"作为门槛另一支；S48
+    断言 writer 支（主题根在，"没米也下锅"，plan 落地 + 用户知情）。"""
     pid = await ctx.new_project("S48 text writer no material")
 
     # 无 media 上传、无粘贴——只有一句 prompt + topic。
@@ -2474,6 +2479,15 @@ async def s50_merge_brief_source_matrix(ctx: Ctx) -> None:
     merge_brief(ledger(audience=slot("CTOs", Src.INFERRED)), stored)
     check(stored.audience.value is None, "the merge never mutates the stored input")
 
+    # 7. The code-owned asked roll never lands from an LLM proposal (禁 LLM
+    #    簿记, D2-C2) — it rides only the stored side of the merge.
+    stored.asked = ["topic"]
+    upd = ledger()
+    upd.asked = ["audience"]
+    out = merge_brief(upd, stored)
+    check(out.asked == ["topic"],
+          "an LLM-proposed asked roll never lands (code-owned)", out.asked)
+
 
 async def s51_bare_wish_asks_topic(ctx: Ctx) -> None:
     """S51 裸愿望 → 主题问（ADR-052 B2 D2-C1，ask 一等动作）：无素材无主题的
@@ -2518,6 +2532,43 @@ async def s51_bare_wish_asks_topic(ctx: Ctx) -> None:
           "the picked option backfills the topic slot verbatim", topic)
     check(topic.get("source") == "user-stated",
           "the backfill is stamped user-stated (恒胜档)", topic)
+
+
+async def s52_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
+    """S52 问完一轮仍无根 → draft-from-persona 书（ADR-052 B2 D2-C2，验收③）：
+    裸愿望 → 主题问 → × 跳过（bail）→ 默认路径生效——出书门槛 dock
+    draft-from-persona 书（reason + 散文含默认路径声明），asked 簿记挡住
+    第二轮同槽问（问环有界）。
+
+    LLM 方差说明：跳过后 router 应判 draft（stand-in 行明示默认路径）；
+    若它再判 ask(topic)，asked 簿记把判词翻回 draft 走门槛——两种路径同
+    归宿，断言只看终点。"""
+    pid = await ctx.new_project("S52 skip ask drafts from persona")
+
+    turn1 = await ctx.chat(pid, "I want a social post.")
+    q1 = turn1["assistant_message"].get("question") or {}
+    check(q1.get("kind") == "choice" and q1.get("slot") == "topic",
+          "the topic ask docks first (S51's gate)", turn1["assistant_message"])
+
+    ans = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "bail"})
+    check(ans.status_code in (200, 201), "the skip is accepted", ans.text)
+    follow = ans.json().get("follow_up") or {}
+    check(is_task_book_dock(follow),
+          "skipping takes the default path — a task book docks", follow)
+    check(ans.json().get("answered_question") is not None,
+          "the skipped ask archives as answered", ans.json())
+
+    book = await pending_book(ctx, pid)
+    check(book is not None, "the draft-from-persona book persists", book)
+    reasons = (book or {}).get("reasons") or []
+    check("draft_from_persona" in reasons,
+          "the draft-from-persona reason rides the docked book", reasons)
+    asked = ((book or {}).get("brief") or {}).get("asked") or []
+    check("topic" in asked,
+          "the asked roll records the topic ask (the loop is bounded)", asked)
+    echo = ((book or {}).get("intent") or {}).get("answer") or ""
+    check("persona" in echo.lower() or "人设" in echo,
+          "the echo carries the default-path declaration (验收③)", echo)
 
 
 SCENARIOS = {
@@ -2583,6 +2634,8 @@ SCENARIOS = {
     "S50": s50_merge_brief_source_matrix,
     # ask 一等动作
     "S51": s51_bare_wish_asks_topic,
+    # 出书门槛
+    "S52": s52_skipped_topic_ask_drafts_from_persona,
     # 估价地基
     "S42": s42_quotation_foundation,
     "S45": s45_materialize_injection_matrix,

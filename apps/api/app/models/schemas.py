@@ -763,6 +763,12 @@ class BriefLedger(BaseModel):
     tone: BriefSlot[str] = Field(default_factory=BriefSlot)
     constraints: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
     material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
+    # Code-owned roll of the slots already asked once this book phase (一轮
+    # 一问决定槽， bounded: each slot asks at most once — the second rootless
+    # verdict docks the draft-from-persona book instead). merge_brief never
+    # reads it from the LLM's proposal (禁 LLM 簿记); code stamps it when the
+    # question docks.
+    asked: list[str] = Field(default_factory=list)
 
 
 class InferredIntent(BaseModel):

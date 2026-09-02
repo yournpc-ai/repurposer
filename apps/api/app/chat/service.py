@@ -99,10 +99,6 @@ logger = structlog.get_logger()
 MAX_MESSAGE_CHARS = 20_000
 MAX_ATTACHMENTS_PER_TURN = 5
 MAX_MENTIONS_PER_TURN = 10
-# Plan-accumulation prompt: keep the original intent (head) and the newest
-# refinements (tail); middle prose yields — those revisions already live in
-# the task book's slots.
-MAX_ACCUM_PROMPT_CHARS = 4_000
 
 _ASK_BACK_TEXT = (
     "I want to make sure I do the right thing — could you be more specific? "
@@ -111,14 +107,14 @@ _ASK_BACK_TEXT = (
 )
 
 
-def _ask_for_material_text(prompt: str) -> str:
-    """Server-composed ask-for-material reply (zero-material safety net).
-
-    The intent router is instructed to write this itself; this is the backstop
-    when it misfiles a material-less draft verdict. Language follows the
-    prompt — the book path's answer prose always speaks the user's language.
+def _material_gate_text(text: str) -> str:
+    """出书门槛·素材根 (ADR-052 B2 D2-C2): media-needing chain + ledger
+    material "none" + no book on the table — the missing root is the material
+    itself, so the reply asks for it and nothing docks (the retired
+    zero-material net's S13 outcome, folded into the gate). Language follows
+    the turn's text — the book path's prose always speaks the user's language.
     """
-    if _prefers_zh(prompt):
+    if _prefers_zh(text):
         return (
             "我还没有可以处理的素材。点输入框左侧的回形针上传视频、音频或图片，"
             "或者直接把文稿贴在对话里发给我——贴来的内容我会当作素材，"
@@ -129,6 +125,40 @@ def _ask_for_material_text(prompt: str) -> str:
         "image with the paperclip next to the input — or simply paste your "
         "text into the chat; pasted content is treated as your material, no "
         "special formatting needed."
+    )
+
+
+def _topic_gate_question(text: str) -> dict[str, str]:
+    """出书门槛·主题问 (D2-C2): the code-composed ONE topic ask for a rootless
+    draft verdict — the backstop for an LLM that drafted a bare wish. Freeform
+    only (options=[] — 策略②'s one-word options are the LLM's to source from
+    the persona / project context; code composes no fabricated choices)."""
+    if _prefers_zh(text):
+        return {
+            "question": "想做什么主题？一个词或一句话就行——比如「面向初创创始人的领导力」。",
+            "default_path": "跳过也可以——我会按你的人设风格先起草一版。",
+        }
+    return {
+        "question": (
+            "What topic should it be about? One word or phrase is enough — "
+            "e.g. 'leadership for first-time founders'."
+        ),
+        "default_path": "Skip it and I'll draft in your persona's style first.",
+    }
+
+
+def _draft_from_persona_echo(text: str) -> str:
+    """出书门槛·默认路径声明 (提问策略③ / 验收③): asked once and still
+    rootless, the docked draft-from-persona book's echo is code-composed —
+    a code-forced dock never borrows the LLM's voice for the declaration."""
+    if _prefers_zh(text):
+        return (
+            "我先按你的人设风格起草了这版——直接开始就行；"
+            "想换主题，一句话告诉我。"
+        )
+    return (
+        "I drafted this in your persona's style — start it as-is, or tell "
+        "me the topic in one line and I'll re-angle it."
     )
 
 
@@ -933,8 +963,13 @@ async def answer_question(
                            option id; autonomy/intent only exist on it)
     - choice + answer    → record, then continue the conversation: the pick
                            rides into the next intent turn (the QA pair is
-                           in context), the follow-up reply comes back here
-    - choice + bail      → record only (a graceful exit, never a failure)
+                           in context), the follow-up reply comes back here.
+                           A brief-ask (payload.slot) backfills the ledger
+                           user-stated and resumes the BOOK path
+    - choice + bail      → record only (a graceful exit, never a failure) —
+                           except a brief-ask bail, which TAKES the default
+                           path: the book path resumes and docks the
+                           draft-from-persona book (提问策略③)
     A choice question carrying ``workflow_run_id`` is a direction interrupt
     (期 4): the answer wakes the parked run (spec.answer → node back to
     pending → run back to RUNNING); bail settles the node done, cascade-
@@ -1224,6 +1259,30 @@ async def answer_question(
                 db, user_id, conversation, project, say, [], history[-6:]
             )
 
+    elif question.kind == "choice" and data.kind == "bail" and question.slot is not None:
+        # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default
+        # path — the book path resumes and the 出书门槛 docks the
+        # draft-from-persona book (the asked roll already bounds the loop).
+        # Nothing backfills; the stand-in line only feeds the inference (it
+        # is never persisted as a user message).
+        project = await db.get(Project, conversation.project_id)
+        if project is not None:
+            history = await list_conversation_messages(db, UUID(str(conversation.id)))
+            follow_up, _run_id, _answered, bailed_run_ids = await _book_turn(
+                db,
+                user_id,
+                conversation,
+                project,
+                ChatRequest(
+                    project_id=project.id,
+                    message=(
+                        "(The user skipped my question — take the default "
+                        "path and draft the task book.)"
+                    ),
+                ),
+                recent=history[-5:],
+            )
+
     await db.commit()
     if bailed_run_ids:
         # Bailed interrupts settle COMPLETED (never FAILED, #5); each
@@ -1295,9 +1354,13 @@ async def _book_turn(
     a bail). The intent router's four-action verdict dispatches:
 
     - draft  → three-way merge (panel prior / fresh inference) + reasons +
-               dock the (refined) task book
+               the 出书门槛 (the book docks only on a rooted brief: topic /
+               material / explicit grounded recipe — rootless asks the topic
+               once, then docks draft-from-persona) + dock
     - ask    → the ONE clarifying question docks through the 提问机器 (the
-               shared AskProposal shape; the stored book stays untouched)
+               shared AskProposal shape; the stored book stays untouched;
+               the asked roll bounds the loop — a re-asked slot falls
+               through to the draft gate)
     - answer → a plain assistant message; the stored book stays untouched
     - start  → the docked task book is answered kind=start (G-1 path: the
                run comes from the only birthplace, answer_question)
@@ -1326,20 +1389,11 @@ async def _book_turn(
         if isinstance(project.pending_brief, dict)
         else None
     )
-    # Refinement turns infer against the accumulated prompt (the stored book's
-    # prompt + this turn's own words); the archive already holds each turn as
-    # its own user message, so no dedup bookkeeping is needed here.
-    prompt = f"{stored.prompt}\n{text}" if stored and stored.prompt else text
-    if len(prompt) > MAX_ACCUM_PROMPT_CHARS:
-        # Long refinement histories: keep the original intent (head) and the
-        # newest refinements (tail) — middle prose yields. Nothing is lost
-        # for planning: accepted revisions are merged into the book's slots
-        # (merge_prior_slots), the prompt is only the intent's narrative.
-        prompt = (
-            prompt[: MAX_ACCUM_PROMPT_CHARS // 2].rstrip()
-            + "\n…\n"
-            + prompt[-MAX_ACCUM_PROMPT_CHARS // 2 :].lstrip()
-        )
+    # ADR-052 B2 D2-C2: the accumulated prompt narrative is retired — the
+    # brief ledger is the dialog's structured state (code-merged), and this
+    # turn's message is judged on its own words. The archive already holds
+    # each turn as its own user message; stored.prompt stays the birth
+    # prompt, frozen at the first dock (never re-accumulated).
 
     assets = list(
         (
@@ -1407,8 +1461,25 @@ async def _book_turn(
         if prior is not None and prior.tasks
         else None
     )
+    # The ledger the router reads (ADR-052 B2): the stored ledger with the
+    # material state freshly code-stamped (the router reads it for the root
+    # judgment, never proposes it). This turn's own proposal merges AFTER
+    # the call — LLM proposes, code decides.
+    has_text_material = await has_any_text_material(db, UUID(str(project.id)))
+    ledger_in = (stored.brief if stored else BriefLedger()).model_copy(deep=True)
+    ledger_in.material_state = BriefSlot(
+        value=(
+            "attached"
+            if any(a.file_url for a in assets)
+            else "pasted"
+            if has_text_material
+            else "none"
+        ),
+        source=BriefSlotSource.DEFAULT,
+    )
     infer_kwargs: dict[str, Any] = dict(
-        prompt=prompt,
+        message=text,
+        brief=ledger_in,
         filename=filename,
         presented_book=presented_book,
         recent=recent_lines or None,
@@ -1436,55 +1507,24 @@ async def _book_turn(
         )
         assets.append(material_asset)
 
-    # Zero-material safety net (same decision): a draft verdict with no
-    # assets at all and no declared material must not dock a groundless task
-    # book — degrade to the ask-for-material answer. Only when no book is
-    # already on the table (a pending book's refine/start is untouched).
-    # 2026-08-24 lift carve-out: when the chain is copy-writers alone
-    # (write_post / write_quotes / write_carousel / write_article) the
-    # draft comes from prompt + persona style, no material gate. Letting
-    # the book dock with the `text_without_material` reason (computed
-    # below from ``has_any_text_material``) is the designed soft signal —
-    # NOT a blocker. Mixed chains (writers + media-needing) are still
-    # defended here because the LLM is supposed to drop the media-needing
-    # rows in EXCEPTION 2; if it doesn't, this guard catches it.
-    # The "ask for material" backstop (RECIPES §4.6 S13 regression guard) is
-    # two-pronged:
-    #  1. A chain that mixes media-needing tasks with no attached file → ask
-    #     for material (clips / dub / subtitle work can't run without a source).
-    #  2. A vague, EXPLICITLY default proposal with no material → ask for
-    #     clarification ("what product exactly?").
-    # But the LLM's `tasks_explicit` flag is brittle: prompts like "make a
-    # quote card" or "write a post about leadership" name a specific recipe
-    # yet the LLM often defaults to `tasks_explicit=False`, which would
-    # short-circuit the no-material copy-writer lift. The carve-out: a
-    # PURE copy-writer chain (no media-needing task in the list) skips the
-    # `tasks_explicit` gate — the lift's own check downstream lets the
-    # copy-writer draft from prompt + persona style without source material.
-    def _zero_material_net(verdict: InferredIntent) -> bool:
-        """True when the zero-material safety net must downgrade this draft
-        verdict to an ask-for-material answer.
-
-        Recomputed from the verdict's CURRENT task list — the misfire flips
-        below (answer-misfire, start-misfire) re-apply the net AFTER the
-        chain-adjudication repair may have swapped ``intent.tasks``, so
-        pre-computed flags would judge the wrong chain (2026-08-28: the
-        answer-misfire flip let a clips×3 book dock with zero material —
-        S13 red; the flags must follow the chain being docked)."""
-        media_task = any(_needs_media(t.tool) for t in verdict.tasks)
-        only_writers = bool(verdict.tasks) and not media_task
-        return (
-            not assets
-            and material_asset is None
-            and (
-                media_task
-                or (not verdict.tasks_explicit and not only_writers)
-            )
-        )
-
-    if intent.action == "draft" and stored is None and _zero_material_net(intent):
-        intent.action = "answer"
-        intent.answer = _ask_for_material_text(prompt)
+    # brief 账本 (ADR-052 B2): the router's update proposal lands by source
+    # precedence, then the material state is code-stamped over it (attached =
+    # file assets; pasted = text-only material; else none). Every downstream
+    # decision — the ask-loop guard, the 出书门槛, the dock write — reads
+    # this ONE merged ledger (出书决策只看账本).
+    merged_brief = merge_brief(
+        intent.brief, stored.brief if stored else BriefLedger()
+    )
+    merged_brief.material_state = BriefSlot(
+        value=(
+            "attached"
+            if any(a.file_url for a in assets)
+            else "pasted"
+            if has_text_material or material_asset is not None
+            else "none"
+        ),
+        source=BriefSlotSource.DEFAULT,
+    )
 
     # Chain adjudication (ADR-043): the registry validates the proposed task
     # list — one bounded repair round on rejection (the funnel's reserved
@@ -1522,7 +1562,7 @@ async def _book_turn(
                     repair="failed",
                 )
                 intent.action = "answer"
-                intent.answer = _cannot_do_text(prompt)
+                intent.answer = _cannot_do_text(text)
 
     if intent.action == "ask":
         if intent.ask is None or not intent.ask.question.strip():
@@ -1530,6 +1570,12 @@ async def _book_turn(
             # to the answer machinery below (it repairs the book turn or
             # answers with the capability line; never an empty-book dock).
             intent.action = "answer"
+        elif intent.ask.slot is not None and intent.ask.slot in merged_brief.asked:
+            # The ask loop is bounded (一轮一问决定槽, each slot asks at most
+            # once): the router re-asked an already-asked slot — treat the
+            # turn as a draft verdict and let the 出书门槛 dock the
+            # draft-from-persona book instead of looping the question.
+            intent.action = "draft"
         else:
             # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
             # clarifying question docks through the same 提问机器 the chat
@@ -1539,12 +1585,14 @@ async def _book_turn(
             # lands as a ledger-only row: the stored book's intent is
             # preserved verbatim (an ask never clobbers the book), and a
             # fresh project's row carries intent=None (never startable).
+            if intent.ask.slot is not None:
+                merged_brief.asked = [*merged_brief.asked, intent.ask.slot]
             project.pending_brief = PendingBrief(
-                prompt=prompt,
+                # The birth prompt stays frozen (stored.prompt wins) — the
+                # accumulated narrative retired with the ledger switch.
+                prompt=stored.prompt if stored and stored.prompt else text,
                 intent=stored.intent if stored else None,
-                brief=merge_brief(
-                    intent.brief, stored.brief if stored else BriefLedger()
-                ),
+                brief=merged_brief,
                 reasons=stored.reasons if stored else [],
                 persona_id=(
                     request.persona_id
@@ -1572,21 +1620,13 @@ async def _book_turn(
     # An answer action without answer text is an LLM misfire — degrade to a
     # book turn (dock the book for confirmation) when a chain exists, else
     # answer with the capability line; never clobber the stored task book
-    # with an empty answer or dock an empty chain.
+    # with an empty answer or dock an empty chain. The 出书门槛 below judges
+    # every draft verdict AFTER the flips settle — one gate, no re-checks.
     if intent.action == "answer" and not intent.answer:
         if intent.tasks:
             intent.action = "draft"
-            # The zero-material net re-applies verbatim (S13, 2026-08-28):
-            # the net above ran while the action was still "answer" and
-            # skipped this verdict — without the re-check, an answer-misfire
-            # carrying a media-needing chain docks a groundless book with
-            # zero material (the exact hole the start-misfire branch below
-            # already closes; this is the missed sibling).
-            if stored is None and _zero_material_net(intent):
-                intent.action = "answer"
-                intent.answer = _ask_for_material_text(prompt)
         else:
-            intent.answer = _cannot_do_text(prompt)
+            intent.answer = _cannot_do_text(text)
 
     if intent.action == "start":
         # G-1: a prose confirmation ("looks good, start it") is not a
@@ -1633,16 +1673,78 @@ async def _book_turn(
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
             return question, None, None, bailed_run_ids
-        # Start-misfire → treat the turn as a fresh draft verdict: the
-        # zero-material safety net re-applies verbatim (the net above ran
-        # while the action was still "start" and skipped it). Without this
-        # a "start" verdict for a media-needing chain with nothing attached
-        # would dock a groundless book — the exact hole the net exists to
-        # close (D8, 2026-08-27).
+        # Start-misfire → treat the turn as a fresh draft verdict; the
+        # 出书门槛 below judges it (media without material / rootless), so a
+        # misfired "start" can never dock a groundless book either.
         intent.action = "draft"
-        if _zero_material_net(intent):
+
+    # 出书门槛 (ADR-052 B2 D2-C2 — the two retired patches folded into ONE
+    # ledger-driven strategy): a task book docks only when the brief has a
+    # root. The gate reads only the merged ledger + the adjudicated chain —
+    # the zero-material net and the no-material lift are gone as separate
+    # machinery; their outcomes survive as gate branches:
+    #  - media-needing chain with material "none" and no book on the table →
+    #    the missing root is the material itself: ask for it in prose, never
+    #    dock (S13's net, now ledger-driven);
+    #  - rootless (no topic / no material / no explicit grounded recipe) →
+    #    ask the topic once (the code backstop for an LLM that drafted a
+    #    bare wish), never docking an empty book;
+    #  - still rootless after the topic was already asked → dock the
+    #    draft-from-persona book with the default-path declaration (提问
+    #    策略③ — every question is safe to skip; skipping lands here).
+    if intent.action == "draft":
+        book_on_table = stored is not None and stored.intent is not None
+        media_blocked = (
+            not book_on_table
+            and merged_brief.material_state.value == "none"
+            and any(_needs_media(t.tool) for t in intent.tasks)
+        )
+        if media_blocked:
             intent.action = "answer"
-            intent.answer = _ask_for_material_text(prompt)
+            intent.answer = _material_gate_text(text)
+        else:
+            has_root = (
+                bool((merged_brief.topic.value or "").strip())
+                or merged_brief.material_state.value != "none"
+                or (
+                    intent.tasks_explicit
+                    and bool((intent.specific_instruction or "").strip())
+                )
+            )
+            if not has_root and "topic" not in merged_brief.asked:
+                merged_brief.asked = [*merged_brief.asked, "topic"]
+                project.pending_brief = PendingBrief(
+                    prompt=stored.prompt if stored and stored.prompt else text,
+                    intent=stored.intent if stored else None,
+                    brief=merged_brief,
+                    reasons=stored.reasons if stored else [],
+                    persona_id=(
+                        request.persona_id
+                        or (stored.persona_id if stored else None)
+                    ),
+                    derived=stored.derived if stored else [],
+                ).model_dump(mode="json")
+                topic_ask = _topic_gate_question(text)
+                assistant_message, bailed_run_ids = await _dock_question(
+                    db,
+                    conversation_id,
+                    topic_ask["question"],
+                    AskPayload(
+                        kind="choice",
+                        options=[],
+                        allow_freeform=True,
+                        slot="topic",
+                        default_path=topic_ask["default_path"],
+                    ),
+                    intent=intent.model_dump(mode="json"),
+                )
+                return assistant_message, None, None, bailed_run_ids
+            if not has_root:
+                # Asked once, still rootless → the default path docks: the
+                # chain is the LLM's (registry-adjudicated), the declaration
+                # is code (a code-forced dock never borrows the LLM's voice).
+                reasons = [*reasons, "draft_from_persona"]
+                intent.answer = _draft_from_persona_echo(text)
 
     if intent.action == "answer" and intent.answer:
         # Capability question: the reply lands as a plain assistant message
@@ -1742,18 +1844,23 @@ async def _book_turn(
         stashed_mode = _resolved_caption_mode(project)
         if stashed_mode is not None:
             intent = intent.model_copy(update={"caption_mode": stashed_mode})
+    # The birth prompt freezes at the first dock (stored.prompt wins on every
+    # later write) — the ledger is the accumulated state now, the prompt is
+    # only the book's birth narrative (Start's instruction fallback).
+    birth_prompt = stored.prompt if stored and stored.prompt else text
     project.pending_brief = PendingBrief(
-        prompt=prompt,
+        prompt=birth_prompt,
         intent=intent,
-        # brief 账本 (ADR-052 B2): code-side merge — the router's update
-        # proposal lands by source precedence, never wholesale (禁 LLM 合并).
-        brief=merge_brief(intent.brief, stored.brief if stored else BriefLedger()),
+        # brief 账本 (ADR-052 B2): the ONE merged ledger — the router's update
+        # landed by source precedence + the material state code-stamped
+        # upstream; the gate and the ask branch read this same object.
+        brief=merged_brief,
         reasons=reasons,
         persona_id=persona_id,
         derived=derived,
     ).model_dump(mode="json")
     bailed_run_ids = await sync_task_book_question(
-        db, user_id, project, intent, prompt, reasons=reasons, derived=derived
+        db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it

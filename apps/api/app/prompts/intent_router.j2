@@ -3,7 +3,11 @@ Recent conversation:
 {{ recent|join('\n') }}
 
 {% endif -%}
-User prompt: {{ prompt }}
+User message: {{ message }}
+{%- if brief_lines %}
+The brief ledger so far (code-merged state — a user-stated slot is the user's own words, a fixed fact; the asked line names slots already asked once — never ask those again):
+{{ brief_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}
