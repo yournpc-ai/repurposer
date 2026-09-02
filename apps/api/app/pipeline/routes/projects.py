@@ -251,7 +251,7 @@ async def get_project_results(
         "outputs": outputs,
         "latest_run": latest_run_resp,
         "assets": assets,
-        "pending_intent": project.pending_intent,
+        "pending_brief": project.pending_brief,
         "placeholders": placeholders,
     }
 
@@ -337,7 +337,7 @@ async def generate_content(
     if request.tasks is None and request.scope == "full":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Task book must be confirmed via the chat plan path first.",
+            detail="Task book must be confirmed via the chat book path first.",
         )
     instruction = request.instruction or "Generate content from the uploaded assets."
 
@@ -371,7 +371,7 @@ async def generate_content(
         ) from exc
     project.status = ProjectStatus.PROCESSING
     # The task book is confirmed now — drop the unconfirmed copy.
-    project.pending_intent = None
+    project.pending_brief = None
     # /generate starts the run without a human answer — discard the open
     # task_book question instead of archiving a fabricated QA pair.
     await discard_unanswered_task_book(db, UUID(str(current_user.id)), project_id)

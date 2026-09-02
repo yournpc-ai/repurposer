@@ -1,7 +1,7 @@
 """Incremental prose extraction from a streaming JSON verdict (chat SSE).
 
 The intent agents answer with one structured JSON verdict whose user-facing
-prose lives in a string field (``answer`` for the plan path's InferredIntent,
+prose lives in a string field (``answer`` for the book path's InferredIntent,
 ``text`` / ``summary`` for the chat loop's IntentResult). When the LLM call
 streams, the raw JSON arrives character by character; this extractor watches
 the accumulating stream and yields the prose field's *decoded* content as it

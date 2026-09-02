@@ -96,7 +96,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     never the request-scoped one: this app's BaseHTTPMiddleware stack closes
     yield-dependency sessions when the route returns, before the generator
     body is iterated (same reason the run-events stream opens AsyncSessionLocal
-    per poll). Raw LLM fragments feed the prose extractor (plan path previews
+    per poll). Raw LLM fragments feed the prose extractor (book path previews
     ``answer``, the chat loop previews ``text``/``summary``) and decoded prose
     lands in the queue as ``assistant.delta`` frames; fragments with no prose
     (reasoning, the <think> preamble, the verdict JSON tail) emit
@@ -121,7 +121,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
                 extractor = ProseDeltaExtractor(
-                    ("answer",) if prepared.plan_path else ("text", "summary")
+                    ("answer",) if prepared.book_path else ("text", "summary")
                 )
 
                 async def on_delta(fragment: str) -> None:

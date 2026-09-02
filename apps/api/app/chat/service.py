@@ -10,8 +10,8 @@ The public surface is intentionally tiny: ``chat()`` takes a user message,
 locates or creates the right conversation, assembles deterministic context,
 and lets the intent agent propose (CHAT_ARCH §3). It is the ONLY intent
 surface (intent-surface-unification W1): project-scope turns before the
-first run — or while a task book is pending — go through the plan path
-(``_plan_turn``: build / refine / confirm the task book via the PlanAgent);
+first run — or while a task book is pending — go through the book path
+(``_book_turn``: build / refine / confirm the task book via the intent router);
 everything else goes to the four-state proposer:
 
 - task_list (non-empty) → compile_graph mode② → a new WorkflowRun
@@ -49,7 +49,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contexts import _build_context
-from app.chat.intent import chat_intent_agent, plan_agent
+from app.chat.intent import chat_intent_agent, intent_router
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
@@ -63,7 +63,7 @@ from app.models.schemas import (
     ChatResponse,
     EditOpsProposal,
     InferredIntent,
-    PendingIntent,
+    PendingBrief,
     ProjectStatus,
     StartAnswerRequest,
     TaskItem,
@@ -111,9 +111,9 @@ _ASK_BACK_TEXT = (
 def _ask_for_material_text(prompt: str) -> str:
     """Server-composed ask-for-material reply (zero-material safety net).
 
-    The PlanAgent is instructed to write this itself; this is the backstop
+    The intent router is instructed to write this itself; this is the backstop
     when it misfiles a material-less generate verdict. Language follows the
-    prompt — the plan path's answer prose always speaks the user's language.
+    prompt — the book path's answer prose always speaks the user's language.
     """
     if _prefers_zh(prompt):
         return (
@@ -256,7 +256,7 @@ def _prefers_zh(text: str) -> bool:
 # when a `write_quotes` task is proposed without an explicit caption-mode
 # hint. Three layers of detection, in priority order:
 #
-#  1. LLM-set on InferredIntent.caption_mode (the plan agent recognises the
+#  1. LLM-set on InferredIntent.caption_mode (the intent router recognises the
 #     user's wording — "bilingual subtitles" / "中英双语字幕" — and sets it).
 #  2. Code-level keyword scan on the user prompt (defence-in-depth: the LLM
 #     may miss the phrasing, but a literal "bilingual"/"双语" is unambiguous).
@@ -395,14 +395,14 @@ def _recover_caption_mode_from_answer(message: Message) -> str | None:
 
 
 def _resolved_caption_mode(project: Project) -> str | None:
-    """The answered caption mode stashed on the pending intent, if any.
+    """The answered caption mode stashed on the pending brief, if any.
 
-    The answer fast path writes it onto ``pending_intent.intent.caption_mode``
-    and every consumption site (plan-turn overwrite, propose-turn run) must
+    The answer fast path writes it onto ``pending_brief.intent.caption_mode``
+    and every consumption site (book-turn overwrite, propose-turn run) must
     INHERIT it — a fresh verdict's ``caption_mode=None`` is "not mentioned
     this turn", never "the user retracted the answer".
     """
-    pending = project.pending_intent if isinstance(project.pending_intent, dict) else None
+    pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
     if not pending:
         return None
     intent = pending.get("intent") or {}
@@ -412,9 +412,9 @@ def _resolved_caption_mode(project: Project) -> str | None:
 
 def _has_resolved_caption_mode(project: Project) -> bool:
     """A caption-mode question was already answered and the answer is
-    reflected in the stored pending_intent — the next plan turn re-uses it
+    reflected in the stored pending_brief — the next book turn re-uses it
     instead of re-docking the question (the user has spoken). Mirrors the
-    pending_intent's role for the task book (CHAT_ARCH §3)."""
+    pending_brief's role for the task book (CHAT_ARCH §3)."""
     return _resolved_caption_mode(project) is not None
 
 
@@ -452,8 +452,8 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
     Two shapes ride the question's ``intent`` field:
       - ``TaskListProposal`` from ``_propose_turn`` (chat_intent_agent path;
         carries ``type="task_list"`` + ``tasks`` + ``summary``) — we wrap it
-        back into an InferredIntent, the same shape plan-path stores
-      - bare ``InferredIntent`` from ``_plan_turn`` (plan_agent path; first
+        back into an InferredIntent, the same shape book-path stores
+      - bare ``InferredIntent`` from ``_book_turn`` (intent_router path; first
         turn goes here) — used as-is, the LLM already gave us a complete intent
 
     Returns None when the stash is missing or unrecognized — the caller
@@ -470,7 +470,7 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
             return None
         return InferredIntent(tasks=tlp.tasks)
     if "tasks" in stashed and "action" in stashed:
-        # _plan_turn path: bare InferredIntent (the plan agent's verdict)
+        # _book_turn path: bare InferredIntent (the intent router's verdict)
         try:
             return InferredIntent.model_validate(stashed)
         except Exception:  # noqa: BLE001
@@ -485,8 +485,8 @@ async def _compute_book_reasons(
 ) -> list[str]:
     """Re-derive the soft-signal reasons for a docked task book (Phase 1
     answer path needs this — the caption_mode replay rebuilds the
-    PendingIntent from the stashed intent and the reasons computed in
-    _plan_turn are scoped to that function's stack).
+    PendingBrief from the stashed intent and the reasons computed in
+    _book_turn are scoped to that function's stack).
 
     Pure function over (db, project, intent) — the answer path passes the
     replay_intent (caption_mode already stamped) and the project, and gets
@@ -516,8 +516,8 @@ async def _compute_book_reasons(
 def _needs_media(tool: str) -> bool:
     """True iff a tool's node requires MEDIA or materializes source.
 
-    Hoisted out of _plan_turn (2026-08-25) so the answer path's
-    ``_compute_book_reasons`` and the plan path's carve-out can both
+    Hoisted out of _book_turn (2026-08-25) so the answer path's
+    ``_compute_book_reasons`` and the book path's carve-out can both
     call it. Registry-native: walks ``node.requires`` + ``node.after``
     rather than maintaining a parallel tool list (RECIPES §4.6).
     """
@@ -717,8 +717,8 @@ async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
 
 
 def _task_chain_digest(tasks: list) -> str:
-    """The chain's compact digest — fed to the PlanAgent as the presented
-    plan (it revises the WHOLE chain, so it must see every task + param) and
+    """The chain's compact digest — fed to the intent router as the presented
+    book (it revises the WHOLE chain, so it must see every task + param) and
     used as the summary fallback when no derived preview exists."""
     labels = []
     for task in tasks:
@@ -772,7 +772,7 @@ async def sync_task_book_question(
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
-    Called by the chat plan path on every inference (first call and
+    Called by the chat book path on every inference (first call and
     refinements alike): a fresh conversation first archives the original
     prompt, any still-open plan question is retired as superseded, and the
     new task book becomes the pending question. The needs_clarification
@@ -867,9 +867,9 @@ async def answer_question(
     The answer endpoint doubles as the resume mechanism (NAMING: answer =
     resume). Returns the answered question plus the assistant's follow-up
     when the answer continues the conversation. Dispatch by question kind:
-    - task_book + bail   → drop the pending intent (project stays a draft;
+    - task_book + bail   → drop the pending brief (project stays a draft;
                            the plan can be re-inferred from the prompt)
-    - task_book + start  → start the run from the persisted pending intent
+    - task_book + start  → start the run from the persisted pending brief
                            (kind "start" is the confirmation — no magic
                            option id; autonomy/intent only exist on it)
     - choice + answer    → record, then continue the conversation: the pick
@@ -947,8 +947,8 @@ async def answer_question(
     # Caption-mode fast path (Phase 1, 2026-08-25, RECIPES §4.7): the question
     # is one of ours when every option_id starts with ``caption_mode_``. The
     # user picked a mode, so we re-stitch the stashed intent (a TaskListProposal
-    # from _propose_turn, or a bare InferredIntent from _plan_turn's first
-    # turn) into an InferredIntent + PendingIntent and dock a task_book
+    # from _propose_turn, or a bare InferredIntent from _book_turn's first
+    # turn) into an InferredIntent + PendingBrief and dock a task_book
     # question — the user then confirms with Start like any normal generation.
     # Skipping _propose_turn here is intentional: the LLM would re-derive the
     # task list from the option label alone, which is the brittle 续聊 path.
@@ -973,13 +973,13 @@ async def answer_question(
                         db, UUID(str(project.id))
                     ) or ""
                     # The stashed InferredIntent already carries tasks +
-                    # specific_instruction (from the plan path) — keep them
+                    # specific_instruction (from the book path) — keep them
                     # verbatim, just stamp caption_mode. The chat path
                     # stashed a TaskListProposal (no specific_instruction) —
                     # synthesize one from the prompt so the downstream
                     # text-tribe agents see the user's intent. caption_mode
                     # itself rides the structured field end-to-end
-                    # (intent → PendingIntent → TaskSpec → run.context) —
+                    # (intent → PendingBrief → TaskSpec → run.context) —
                     # no machine marker in the prose.
                     if stashed_intent.specific_instruction:
                         replay_intent = stashed_intent.model_copy(
@@ -992,13 +992,13 @@ async def answer_question(
                                 "caption_mode": recovered_mode,
                             }
                         )
-                    project.pending_intent = PendingIntent(
+                    project.pending_brief = PendingBrief(
                         prompt=prompt_text,
                         intent=replay_intent,
                         reasons=await _compute_book_reasons(db, project, replay_intent),
                         persona_id=(
-                            project.pending_intent.get("persona_id")
-                            if isinstance(project.pending_intent, dict)
+                            project.pending_brief.get("persona_id")
+                            if isinstance(project.pending_brief, dict)
                             else None
                         ),
                         derived=[],
@@ -1008,7 +1008,7 @@ async def answer_question(
                     # here, but the contract is the same).
                     bailed_run_ids = await sync_task_book_question(
                         db, user_id, project, replay_intent, prompt_text,
-                        reasons=project.pending_intent["reasons"],
+                        reasons=project.pending_brief["reasons"],
                     )
                     follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
                     # Skip the 续聊 fallback below — the task book question is
@@ -1029,12 +1029,12 @@ async def answer_question(
             # Graceful exit: the unconfirmed task book is dropped, the project
             # stays a draft and the prompt stays in the conversation — the
             # setup can be reopened any time. Never a failure.
-            project.pending_intent = None
+            project.pending_brief = None
         else:
             # kind == "start" (the only other kind a task_book accepts).
             pending = (
-                PendingIntent.model_validate(project.pending_intent)
-                if isinstance(project.pending_intent, dict)
+                PendingBrief.model_validate(project.pending_brief)
+                if isinstance(project.pending_brief, dict)
                 else None
             )
             if pending is None:
@@ -1042,7 +1042,7 @@ async def answer_question(
                     status.HTTP_409_CONFLICT, "No pending task book to start."
                 )
             # The review panel's edited task book wins over the stored
-            # pending intent — panel edits must reach the run they confirm.
+            # pending brief — panel edits must reach the run they confirm.
             # Panel edits ARE task-list mutations (ADR-043): the same data
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
@@ -1051,7 +1051,7 @@ async def answer_question(
             # a panel-submitted intent without it (client-side normalize may
             # strip fields it doesn't know) says "not mentioned", never
             # "retracted". Inherit the answered mode from the stored pending
-            # intent (2026-08-29 — the same doctrine as the plan-turn
+            # intent (2026-08-29 — the same doctrine as the book-turn
             # overwrite fix; without it, answer→Start via the PANEL dropped
             # the mode even though answer→Start via prose kept it).
             if (
@@ -1108,7 +1108,7 @@ async def answer_question(
                 ) from exc
             project.status = ProjectStatus.PROCESSING
             # The task book is confirmed now — drop the unconfirmed copy.
-            project.pending_intent = None
+            project.pending_brief = None
             message.workflow_run_id = run.id
 
     elif question.kind == "choice" and message.workflow_run_id is not None:
@@ -1173,7 +1173,7 @@ async def seed_project_prompt(
     """Create the project-scoped conversation and store the original prompt.
 
     A no-op when the conversation already has messages — the first message
-    normally lands via the chat plan path, so /generate callers must not
+    normally lands via the chat book path, so /generate callers must not
     duplicate it.
     """
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
@@ -1188,7 +1188,7 @@ async def seed_project_prompt(
     return await _create_message(db, conversation_id, "user", prompt)
 
 
-async def _plan_turn(
+async def _book_turn(
     db: AsyncSession,
     user_id: UUID,
     conversation: Conversation,
@@ -1198,12 +1198,12 @@ async def _plan_turn(
     on_delta=None,
     on_reasoning=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
-    """Plan path (intent-surface-unification W1): build / refine / confirm
+    """Book path (intent-surface-unification W1): build / refine / confirm
     the task book inside the chat loop — the ONLY intent surface.
 
     Entered for project-scope turns while a task book is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
-    a bail). The PlanAgent's three-action verdict dispatches:
+    a bail). The intent router's three-action verdict dispatches:
 
     - generate → three-way merge (panel prior / fresh inference) + reasons +
       dock the (refined) task book
@@ -1231,8 +1231,8 @@ async def _plan_turn(
         )
 
     stored = (
-        PendingIntent.model_validate(project.pending_intent)
-        if isinstance(project.pending_intent, dict)
+        PendingBrief.model_validate(project.pending_brief)
+        if isinstance(project.pending_brief, dict)
         else None
     )
     # Refinement turns infer against the accumulated prompt (the stored book's
@@ -1282,16 +1282,16 @@ async def _plan_turn(
     if material_excerpt:
         material_excerpt = material_excerpt[:800]
 
-    # plan_agent provider failures propagate as MiniMaxError — no fabricated
+    # intent_router provider failures propagate as MiniMaxError — no fabricated
     # default book (2026-08-14 裁定: a wrong plan that looks real misleads,
     # and Start would spend a paid run on it); the route boundary turns it
-    # into a 502 with the localized provider line. The presented plan rides
+    # into a 502 with the localized provider line. The presented book rides
     # along so the
     # start/revise verdict sees what is actually being confirmed; the recent
     # rounds ride along so the material/content judgment sees what just
     # happened (G-7 — e.g. the assistant asked for source material and the
     # user then pastes it; same "feed the context, never make the model guess
-    # blind" precedent as presented_plan). on_delta (chat SSE) streams the raw
+    # blind" precedent as presented_book). on_delta (chat SSE) streams the raw
     # verdict fragments for the answer-prose preview; on_reasoning is a
     # liveness signal for the thinking indicator. None = today's one-shot call.
     recent_lines: list[str] = []
@@ -1305,13 +1305,13 @@ async def _plan_turn(
         recent_lines.append(line)
     # The presented chain (ADR-043): the panel's current task list when the
     # caller sends one (hand edits ride along), else the stored book's. The
-    # PlanAgent sees it as a JSON chain and re-emits the WHOLE refined chain
+    # The intent router sees it as a JSON chain and re-emits the WHOLE refined chain
     # — panel edits survive because the LLM preserves what the message does
     # not revise (chat revisions always win; the field-level merge machinery
     # died with the slots grammar).
     prior = request.prior_intent or (stored.intent if stored else None)
     # The LLM revises the exact chain, not a prose digest — ship the JSON.
-    presented_plan = (
+    presented_book = (
         json.dumps([t.model_dump(mode="json") for t in prior.tasks], ensure_ascii=False)
         if prior is not None and prior.tasks
         else None
@@ -1319,7 +1319,7 @@ async def _plan_turn(
     infer_kwargs: dict[str, Any] = dict(
         prompt=prompt,
         filename=filename,
-        presented_plan=presented_plan,
+        presented_book=presented_book,
         recent=recent_lines or None,
         # The transform-target rule's authoritative signal (同源语言护栏 —
         # the plan surface's only other language hint is the filename).
@@ -1327,11 +1327,11 @@ async def _plan_turn(
         material_excerpt=material_excerpt,
     )
     if on_delta is not None:
-        intent = await plan_agent.call_stream(
+        intent = await intent_router.call_stream(
             on_delta=on_delta, on_reasoning=on_reasoning, **infer_kwargs
         )
     else:
-        intent = await plan_agent.call(**infer_kwargs)
+        intent = await intent_router.call(**infer_kwargs)
 
     # Declared-material promotion (2026-08-05 手测决策): the user explicitly
     # said "this is my transcript/content" — the pasted text becomes a real
@@ -1406,7 +1406,7 @@ async def _plan_turn(
         except ToolRejected as first_error:
             repaired_intent: InferredIntent | None = None
             try:
-                retry = await plan_agent.call(
+                retry = await intent_router.call(
                     **infer_kwargs,
                     repair_feedback=(
                         f"{first_error} "
@@ -1436,7 +1436,7 @@ async def _plan_turn(
     reasons = await _compute_book_reasons(db, project, intent)
 
     # An answer action without answer text is an LLM misfire — degrade to a
-    # plan turn (dock the book for confirmation) when a chain exists, else
+    # book turn (dock the book for confirmation) when a chain exists, else
     # answer with the capability line; never clobber the stored task book
     # with an empty answer or dock an empty chain.
     if intent.action == "answer" and not intent.answer:
@@ -1458,7 +1458,7 @@ async def _plan_turn(
         # G-1: a prose confirmation ("looks good, start it") is not a
         # revision — it answers the docked task_book question with
         # kind=start, so the run still comes from the only birthplace
-        # (answer_question → create_run, which also clears pending_intent in
+        # (answer_question → create_run, which also clears pending_brief in
         # the same transaction). The dock's autonomy tier rides the request —
         # a review-tier choice must survive a prose confirmation.
         pending_question = await latest_pending_question(db, conversation_id)
@@ -1475,7 +1475,7 @@ async def _plan_turn(
                 ),
             )
             # answer_question commits — the run, the answer and the cleared
-            # pending intent land in one transaction.
+            # pending brief land in one transaction.
             return answered, UUID(str(answered.workflow_run_id)), answered, []
         if stored is not None:
             # Nothing startable right now. Never overwrite a stored task book
@@ -1518,8 +1518,8 @@ async def _plan_turn(
     # A turn that omits persona_id must not clobber the persona choice an
     # earlier turn made.
     persona_id = request.persona_id
-    if persona_id is None and isinstance(project.pending_intent, dict):
-        persona_id = project.pending_intent.get("persona_id")
+    if persona_id is None and isinstance(project.pending_brief, dict):
+        persona_id = project.pending_brief.get("persona_id")
 
     # Derived preview (ADR-043): dry-run the chain through compile_graph and
     # project what it will make — the plan card's "you'll get" section. A
@@ -1544,16 +1544,16 @@ async def _plan_turn(
             db, conversation_id, "assistant", active_line
         )
         return assistant_message, None, None, []
-    # Caption mode for captioned-video runs (Phase 1 plan-path fix,
-    # 2026-08-25, RECIPES §4.7): the plan_path is the FIRST-turn entry
+    # Caption mode for captioned-video runs (Phase 1 book-path fix,
+    # 2026-08-25, RECIPES §4.7): the book_path is the FIRST-turn entry
     # point for fresh projects — the chat path's elif alone leaves the very
     # first "make a quote card" prompt to dock a task_book without ever
     # asking which caption mode the user wants. Mirror the chat path's
     # three escape hatches (LLM-set / keyword / prior answer) and dock a
     # caption_mode choice before the task_book; the bare InferredIntent
     # rides the question's `intent` field, the answer path replays it
-    # verbatim back into PendingIntent (chat_path stashes a TaskListProposal,
-    # plan_path stashes an InferredIntent — both shapes handled).
+    # verbatim back into PendingBrief (chat_path stashes a TaskListProposal,
+    # book_path stashes an InferredIntent — both shapes handled).
     if (
         intent.action == "generate"
         and _needs_caption_mode_question(intent.tasks)
@@ -1582,7 +1582,7 @@ async def _plan_turn(
         # print one language twice. Skip the question entirely and stamp
         # source_only; the run falls through to the task-book dock.
         intent = intent.model_copy(update={"caption_mode": "source_only"})
-    # Caption-mode keyword auto-classification (Phase 1 plan-path fix,
+    # Caption-mode keyword auto-classification (Phase 1 book-path fix,
     # 2026-08-25, RECIPES §4.7): when the user prompt carries an
     # unambiguous bilingual keyword ("双语" / "bilingual" / "中英对照" /
     # "双语字幕" / "中英双语"), stamp intent.caption_mode="bilingual" so
@@ -1594,7 +1594,7 @@ async def _plan_turn(
         intent = intent.model_copy(update={"caption_mode": keyword_mode})
     # Inherit the answered caption mode before the overwrite below
     # (2026-08-29 追问丢答 root-fix): this write replaces the stored
-    # pending_intent wholesale, and the fresh verdict's caption_mode is
+    # pending_brief wholesale, and the fresh verdict's caption_mode is
     # None on any refinement turn that doesn't re-mention it — without
     # the inherit, "answer bilingual → 改成 5 张 → Start" landed a run
     # with no caption_mode (single-language cards) and the NEXT turn
@@ -1604,7 +1604,7 @@ async def _plan_turn(
         stashed_mode = _resolved_caption_mode(project)
         if stashed_mode is not None:
             intent = intent.model_copy(update={"caption_mode": stashed_mode})
-    project.pending_intent = PendingIntent(
+    project.pending_brief = PendingBrief(
         prompt=prompt,
         intent=intent,
         reasons=reasons,
@@ -1685,7 +1685,7 @@ async def _propose_turn(
     elif isinstance(proposal, AskProposal):
         # Ask 落库 (N-18): the structured ask becomes the docked question.
         # The chat surface only has the choice form — task_book questions
-        # are raised solely by the plan path and confirm is the
+        # are raised solely by the book path and confirm is the
         # reserved cost-quote seat, so the agent's kind is adjudicated to
         # choice (LLM proposes, code adjudicates).
         assistant_message, bailed_run_ids = await _dock_question(
@@ -1702,7 +1702,7 @@ async def _propose_turn(
     elif isinstance(proposal, AnswerProposal):
         # Direct answer (G-4, N-21): a purely informational reply lands as a
         # plain assistant message — no task, no run, no docked question
-        # (same archival shape as a plan-path answer turn, B1).
+        # (same archival shape as a book-path answer turn, B1).
         assistant_content = proposal.text
     elif isinstance(proposal, EditOpsProposal):
         # Operation Model wiring (ADR-032): validate against the registry
@@ -1799,9 +1799,9 @@ async def _propose_turn(
         # letting the run start — the answer rides run.context.caption_mode
         # downstream (write_quotes Phase 2 reads it, Remotion Phase 3 layouts
         # off it). Escape hatches on THIS path: the user prompt carries an
-        # unambiguous keyword, or the stored pending_intent already locked
+        # unambiguous keyword, or the stored pending_brief already locked
         # the choice from an earlier answer (so a follow-up refinement turn
-        # doesn't re-ask). The plan path's third hatch (LLM-set caption_mode
+        # doesn't re-ask). The book path's third hatch (LLM-set caption_mode
         # on InferredIntent) does not exist here — TaskListProposal carries
         # no intent, the chat intent agent has no caption_mode field to set.
         # (2026-08-29 root-fix: this condition previously READ
@@ -1817,11 +1817,11 @@ async def _propose_turn(
         caption_question = _build_caption_mode_question(text)
         # The original TaskListProposal's dump is stashed on the docked
         # question's `intent` field — the answer path replays it once the
-        # user picks a mode, rather than re-running the plan agent (the plan
+        # user picks a mode, rather than re-running the intent router (the plan
         # would otherwise re-enter the question-dock loop). The intent we
         # replay is a `TaskListProposal`-shaped dict (not an InferredIntent):
         # the resume code path below knows to convert it into an
-        # InferredIntent + PendingIntent + task_book dock.
+        # InferredIntent + PendingBrief + task_book dock.
         stashed_proposal = proposal.model_dump(mode="json")
         assistant_message, bailed_run_ids = await _dock_question(
             db,
@@ -1929,7 +1929,7 @@ class PreparedTurn:
     Everything decided before the LLM call: conversation, the persisted user
     message, a deterministically answered question (autoResume), the canned
     interrupt-resume reply when the turn needs no LLM at all, and the
-    plan-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
+    book-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
     streaming route can raise plain HTTP errors before the SSE response
     starts; phase 2 (``execute_chat_turn``) only runs the agent turn, commits
     once at the end, and assembles the response.
@@ -1943,7 +1943,7 @@ class PreparedTurn:
     history: list[Message]
     answered_question: Message | None
     interrupt_reply: Message | None
-    plan_path: bool
+    book_path: bool
 
 
 async def prepare_chat_turn(
@@ -2012,7 +2012,7 @@ async def prepare_chat_turn(
     # (letter / number / verbatim label) or freeform replies are allowed —
     # otherwise it's a new intent and the question stays pending. A pending
     # task_book (unconfirmed plan) never resumes here: its answers are the
-    # dock's Start/Cancel and plan-path refinements below.
+    # dock's Start/Cancel and book-path refinements below.
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
@@ -2039,7 +2039,7 @@ async def prepare_chat_turn(
             await db.flush()
 
     interrupt_reply: Message | None = None
-    plan_path = False
+    book_path = False
     if answered_question is not None and answered_question.workflow_run_id is not None:
         # Interrupt autoResume (期 4): a typed answer to the docked direction
         # question takes the same dispatch as the answer endpoint — wake the
@@ -2067,16 +2067,16 @@ async def prepare_chat_turn(
             else f"Direction locked: {decided}. Resuming the run.",
         )
     else:
-        # Plan path dispatch (intent-surface-unification W1): this endpoint is
-        # the ONLY intent surface. A turn goes to the plan path (task-book
-        # build / refine / confirm via the PlanAgent) while a task book is
+        # Book path dispatch (intent-surface-unification W1): this endpoint is
+        # the ONLY intent surface. A turn goes to the book path (task-book
+        # build / refine / confirm via the intent router) while a task book is
         # pending or before the project's first run; everything else goes to
         # the four-state proposer. (Conversations are project-scope only —
         # ADR-041 D8.)
         if project is not None:
             if is_pending_task_book(pending):
-                plan_path = True
-            elif not isinstance(project.pending_intent, dict):
+                book_path = True
+            elif not isinstance(project.pending_brief, dict):
                 has_runs = (
                     await db.execute(
                         select(WorkflowRun.id)
@@ -2084,7 +2084,7 @@ async def prepare_chat_turn(
                         .limit(1)
                     )
                 ).scalar_one_or_none()
-                plan_path = has_runs is None
+                book_path = has_runs is None
 
     return PreparedTurn(
         user_id=user_id,
@@ -2095,7 +2095,7 @@ async def prepare_chat_turn(
         history=history,
         answered_question=answered_question,
         interrupt_reply=interrupt_reply,
-        plan_path=plan_path,
+        book_path=book_path,
     )
 
 
@@ -2117,14 +2117,14 @@ async def execute_chat_turn(
         assistant_message = prepared.interrupt_reply
         run_id = None
         bailed_run_ids: list[UUID] = []
-    elif prepared.plan_path:
-        # The plan agent's context excludes this turn's own message (already
+    elif prepared.book_path:
+        # The intent router's context excludes this turn's own message (already
         # the prompt being judged); the latest few rounds before it are the
         # disambiguating conversation (G-7).
         recent = [
             m for m in prepared.history if m.id != prepared.user_message.id
         ][-5:]
-        assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
+        assistant_message, run_id, book_answered, bailed_run_ids = await _book_turn(
             db,
             prepared.user_id,
             prepared.conversation,
@@ -2134,8 +2134,8 @@ async def execute_chat_turn(
             on_delta=on_delta,
             on_reasoning=on_reasoning,
         )
-        if plan_answered is not None:
-            prepared.answered_question = plan_answered
+        if book_answered is not None:
+            prepared.answered_question = book_answered
     else:
         assistant_message, run_id, bailed_run_ids = await _propose_turn(
             db,

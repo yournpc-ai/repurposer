@@ -11,11 +11,11 @@ from app.operations.registry import OP_REGISTRY
 from app.tools import tool_catalog_lines
 
 
-def plan_agent_system() -> str:
-    """The task-book builder's system prompt (plan path).
+def intent_router_system() -> str:
+    """The task-book builder's system prompt (book path).
 
     revise_script is excluded from the catalog — it targets an EXISTING
-    output and the plan path runs before the project's first run, when none
+    output and the book path runs before the project's first run, when none
     exist."""
     return (
         "You are an intent parser for an AI content repurposing tool. "
@@ -83,20 +83,26 @@ def plan_agent_system() -> str:
         "the tool's capabilities and invites the user to upload or paste talk "
         "content. When action is 'generate', write the message that introduces "
         "the plan card — the card has no title of its own, this message IS "
-        "the introduction: 2-4 short sentences in the user's language that "
-        "(1) name what the source material is, when one is present (a talk, "
-        "a podcast episode, a meeting recording — judged from the user's own "
-        "words or the filename), (2) restate the plan you understood as a "
-        "natural paraphrase (the work, languages, counts the user named), and "
-        "(3) say the plan is below and invite review — check it, fix anything "
-        "wrong directly, then start. E.g. \"Got it — this is a keynote "
-        "recording, and you'd like highlight clips plus a French subtitled "
-        "version. My plan is below — check it, fix anything I got wrong, "
-        "then hit Start generation.\" / \"我知道了——这是一段演讲视频，要剪"
-        "成高光短片，再配一版法语字幕。下面是我的生成计划：检查一遍，有理解"
-        "不对的地方直接改掉，然后点击开始生成。\" Plain and warm, never a "
-        "stiff meta preamble (no literal 'Here's what I understood:', it "
-        "translates awkwardly). Set to null only when action is 'start'. "
+        "the introduction: AT MOST 2 short sentences in the user's language "
+        "(2026-09-02 任务书瘦身 — the old 2-4-sentence restatement said four "
+        "times what the card's rows already say once). Sentence 1: name what "
+        "the source material is, when one is present (a talk, a podcast "
+        "episode, a meeting recording — judged from the user's own words or "
+        "the filename), and the plan you understood as a natural paraphrase "
+        "(the work, languages, counts the user named). Sentence 2: what "
+        "'done' looks like + the single next step — the success definition "
+        "rides the prose, never a form field (顾问姿态 law 3). E.g. \"Got it "
+        "— highlight clips from your keynote plus a French subtitled "
+        "version. Done = the clips and the subtitled talk on your canvas — "
+        "check the plan, fix anything wrong right in it, then hit Start "
+        "generation.\" / \"我知道了——这是你的演讲视频，要剪成高光短片，再配"
+        "一版法语字幕。成了 = 短片和字幕版都在画布上——检查计划，有不对的直"
+        "接改，然后点击开始生成。\" Plain and warm: no greeting filler "
+        "('Sure —'), no stiff meta preamble (no literal 'Here's what I "
+        "understood:', it translates awkwardly), never a bookkeeping report "
+        "('no source material was provided' is inference bookkeeping, not "
+        "user copy — the EXCEPTION clauses below phrase the same fact as "
+        "advice). Set to null only when action is 'start'. "
         "EXCEPTION — media work without media: when no media file is "
         "attached but the plan keeps media-needing tasks (clips, subtitles, "
         "dubbing — e.g. a recipe card pinned them), the echo must ALSO tell "

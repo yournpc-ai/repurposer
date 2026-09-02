@@ -7,10 +7,10 @@ The model-facing prose lives one file over (``chat/prompts.py``, Mastra
 instructions.md-style same-site extraction); this module is declarations +
 turn assembly only.
 
-``plan_agent`` — the task-book builder (plan path, CHAT_ARCH §3): free-form
+``intent_router`` — the task-book builder (book path, CHAT_ARCH §3): free-form
 text → a structured task book (language/outputs/tone) plus the three-action
 verdict (generate / answer / start). Invoked only from the chat service's
-plan path — first-turn projects and pending-task-book refinement turns.
+book path — first-turn projects and pending-task-book refinement turns.
 Provider failures propagate as MiniMaxError: the route boundary answers 502
 with the localized provider line (2026-08-14 裁定 — a fabricated default
 book looks like a real plan and Start would spend a paid run on it; an
@@ -27,21 +27,21 @@ tool-calling-style call per turn, never a ReAct loop; the LLM proposes and
 from typing import Any
 
 from app.agents.base import StreamingAgent
-from app.chat.prompts import chat_intent_system, plan_agent_system
+from app.chat.prompts import chat_intent_system, intent_router_system
 from app.models.schemas import InferredIntent, IntentResult
 
 
-def _assemble_plan_turn(
+def _assemble_book_turn(
     prompt: str,
     filename: str | None = None,
-    presented_plan: str | None = None,
+    presented_book: str | None = None,
     recent: list[str] | None = None,
     file_language: str | None = None,
     material_excerpt: str | None = None,
 ):
-    """Plan-turn inputs.
+    """Book-turn inputs.
 
-    ``presented_plan``: one-line digest of the docked task book, when one is
+    ``presented_book``: one-line digest of the docked task book, when one is
     on the table — the start/revise verdict needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
     otherwise reads as "go generate").
@@ -59,7 +59,7 @@ def _assemble_plan_turn(
         {
             "prompt": prompt,
             "filename": filename,
-            "presented_plan": presented_plan,
+            "presented_book": presented_book,
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,
@@ -70,13 +70,13 @@ def _assemble_plan_turn(
 
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
-plan_agent: StreamingAgent[InferredIntent] = StreamingAgent(
-    name="plan",
-    prompt="plan_agent.j2",
+intent_router: StreamingAgent[InferredIntent] = StreamingAgent(
+    name="intent_router",
+    prompt="intent_router.j2",
     schema=InferredIntent,
-    system=plan_agent_system(),
+    system=intent_router_system(),
     temperature=0.2,
-    assemble=_assemble_plan_turn,
+    assemble=_assemble_book_turn,
 )
 
 

@@ -129,9 +129,9 @@ class Project(Base):
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
     # Unconfirmed task book + original prompt from /projects/{id}/intent
-    # (PendingIntent shape). Cleared when /generate starts the run; its
+    # (PendingBrief shape). Cleared when /generate starts the run; its
     # presence on a draft project is what "awaiting confirmation" means.
-    pending_intent = Column(JSON, nullable=True)
+    pending_brief = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -420,7 +420,7 @@ class Message(Base):
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
-    intent = Column(JSON(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py ChatIntentAgent)
+    intent = Column(JSON(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent)
     # One row, two states (ask primitive): ``question`` is the typed payload
     # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
     # pending questions live in the dock, answered ones archive as QA pairs.

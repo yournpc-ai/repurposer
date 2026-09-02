@@ -260,8 +260,8 @@ class StartAnswerRequest(BaseModel):
     # Autonomy tier carried into the run (dock toggle, §2.7); None = auto.
     autonomy: Literal["auto", "review"] | None = None
     # The review panel's edited task book (hand-edited slots marked explicit).
-    # Wins over the stored pending intent, so panel edits reach the run;
-    # None = use the stored pending intent.
+    # Wins over the stored pending brief, so panel edits reach the run;
+    # None = use the stored pending brief.
     intent: InferredIntent | None = None
 
 
@@ -358,7 +358,7 @@ class AskProposal(BaseModel):
     task_list / edit_ops, so the union gains a third state. The pre-N-18
     "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
     ask. ``kind`` carries the *use* (NAMING N-19): choice is the chat loop's
-    question; task_book is raised by the chat plan path, never by the
+    question; task_book is raised by the chat book path, never by the
     agent; confirm is the reserved seat for the cost quote (v3).
     """
 
@@ -378,7 +378,7 @@ class AnswerProposal(BaseModel):
     context carries the per-step status section, G-2), explanations of
     existing outputs, small talk. Nothing is dispatched, no run starts, no
     question docks: the text lands as a plain assistant message, the same
-    archival shape as a plan-path answer turn (B1). The boundary against
+    archival shape as a book-path answer turn (B1). The boundary against
     the other states is a prompt rule: work requests go to task_list /
     edit_ops, ambiguous readings go to ask — answer is never the lazy out.
     """
@@ -451,16 +451,16 @@ class ChatRequest(BaseModel):
     # persisted on the message):
     # The review panel's current task book (the user may have hand-edited the
     # chain). Panel edits ARE task-list mutations (ADR-043) — the panel's
-    # chain is shown to the PlanAgent as the presented plan and re-emitted
+    # chain is shown to the intent router as the presented book and re-emitted
     # whole on every revision, so hand edits survive unless the message
-    # revises them; None = the stored pending intent is presented, if any.
+    # revises them; None = the stored pending brief is presented, if any.
     prior_intent: "InferredIntent | None" = None
     # The composer's persona choice rides the first message; written into the
-    # pending intent only when the plan path docks a task book (a later turn
+    # pending brief only when the book path docks a task book (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
-    # the task book by prose (PlanAgent verdict "start"): a typed "looks
+    # the task book by prose (the intent router verdict "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.
     autonomy: Literal["auto", "review"] | None = None
 
@@ -588,7 +588,7 @@ class ToneSettings(BaseModel):
 class IntentSlot(BaseModel):
     """任务槽: one line of the task book — one requested output (request layer).
 
-    N-20 layering: the IntentSlot says WHAT the user wants; the director's
+    N-20 layering: the IntentSlot says WHAT the user wants; the planner's
     ``StoryboardSlot`` (派工层） says how the work is assigned. ``None`` fields
     mean "task-book default": count → the per-type default (clips 3 / quotes 3
     / carousel 6). Language is a per-slot property (2026-08-05 restructure —
@@ -640,7 +640,7 @@ class IntentSlot(BaseModel):
 
 _SLOT_TO_TOOL = {
     # Legacy outputs-grammar slot type → its producing tool (ADR-043 read
-    # tolerance for stored pending_intent rows — never written).
+    # tolerance for stored pending_brief rows — never written).
     "clips": "select_clips",
     "post": "write_post",
     "quotes": "write_quotes",
@@ -695,7 +695,7 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
 
 
 class InferredIntent(BaseModel):
-    """The PlanAgent's verdict: three actions + the proposed tool chain.
+    """The intent router's verdict: three actions + the proposed tool chain.
 
     ADR-043 (outputs → derive): the request layer carries NO output
     declarations — ``tasks`` is the only grammar (a registry tool + its
@@ -711,7 +711,7 @@ class InferredIntent(BaseModel):
         """Upgrade stored legacy books on read (never written): the pre-slot
         flat shape → slots, the slots/modifiers grammar → a task list; the
         retired keys (outputs / tone / the four book-level modifiers) are
-        stripped. Read tolerance for stored ``pending_intent`` rows only."""
+        stripped. Read tolerance for stored ``pending_brief`` rows only."""
         if not isinstance(data, dict):
             return data
         data = dict(data)
@@ -818,12 +818,12 @@ class InferredIntent(BaseModel):
     )
 
 
-class PendingIntent(BaseModel):
-    """Unconfirmed task book persisted on ``projects.pending_intent``.
+class PendingBrief(BaseModel):
+    """Unconfirmed task book persisted on ``projects.pending_brief``.
 
-    Written by the chat plan path on generate-action turns (an
+    Written by the chat book path on generate-action turns (an
     answer-action turn never overwrites the stored book), cleared once the
-    run starts. Lets a user who left the plan-confirmation chat resume it
+    run starts. Lets a user who left the book-confirmation chat resume it
     exactly, from any device.
     """
 
@@ -1542,7 +1542,7 @@ class GenerationContext(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Director two-step (RunPlan Phase 2): the retired single-pass ContentPlan is
+# Understand/Plan two-step (RunPlan Phase 2): the retired single-pass ContentPlan is
 # replaced by a material-scoped understanding (reusable via asset hash) and a
 # request-scoped storyboard (re-planned every run). docs/tasks/director-two-step.md
 # ---------------------------------------------------------------------------
@@ -1561,7 +1561,7 @@ class KeyArgument(BaseModel):
     # the display layer falls back to ``text``.
     text_en: str = ""
     text_zh: str = ""
-    # Free-text location marker — the director never sees word-level
+    # Free-text location marker — the planner never sees word-level
     # timestamps, so an honest text marker instead of fake seconds.
     position: str = ""
 
@@ -1672,7 +1672,7 @@ class VisualAnchor(BaseModel):
 
 
 class MaterialUnderstanding(BaseModel):
-    """素材理解: director step 1 — what the material says (material-scoped).
+    """素材理解: understand step — what the material says (material-scoped).
 
     Pure: built from source texts/media only — never persona, tone,
     instruction, or target language — so it stays reusable across runs,
@@ -1829,7 +1829,7 @@ class CoverageReport(BaseModel):
 
 
 class Storyboard(BaseModel):
-    """分镜表: director step 2 — request-scoped assignments (re-planned every run).
+    """分镜表: plan step — request-scoped assignments (re-planned every run).
 
     The LLM proposes only ``slots``; ``coverage`` is computed by the runner
     from valid argument_ids before persisting.
@@ -2249,9 +2249,9 @@ class GenerateResponse(BaseModel):
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
-    # The confirmed task chain (ADR-043 — the plan path's only grammar).
+    # The confirmed task chain (ADR-043 — the book path's only grammar).
     # Required for full-scope requests (422 otherwise — the task book is
-    # built and confirmed via the chat plan path); None only on targeted
+    # built and confirmed via the chat book path); None only on targeted
     # scopes (hook/clip/derivative/render re-run one node family off
     # target_id).
     tasks: list[TaskItem] | None = None
@@ -2397,7 +2397,7 @@ class ProjectResultsResponse(BaseModel):
     outputs: list[OutputResponse] = Field(default_factory=list)
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
-    pending_intent: PendingIntent | None = None
+    pending_brief: PendingBrief | None = None
     # Live-run placeholder roster (ADR-051 B) — empty for terminal/absent runs.
     placeholders: list[PlaceholderRow] = Field(default_factory=list)
 
