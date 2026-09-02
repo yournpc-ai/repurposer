@@ -137,7 +137,10 @@ export interface TaskItem {
 }
 
 export interface InferredIntent {
-  action: "generate" | "answer"
+  /** The intent router's four-action verdict (ADR-052 B2 — `generate`
+   * renamed to `draft`: it never generates, it drafts the task book). The
+   * panel round-trips the value; only `draft` books are ever editable. */
+  action: "draft" | "ask" | "answer" | "start"
   answer: string | null
   tasks: TaskItem[]
   specific_instruction: string | null
@@ -338,8 +341,12 @@ export function normalizeIntent(raw: unknown): InferredIntent {
   const tasks = Array.isArray(data.tasks)
     ? normalizeTasks(data.tasks)
     : legacyOutputsToTasks(data)
+  const action = data.action
   return {
-    action: data.action === "answer" ? "answer" : "generate",
+    action:
+      action === "answer" || action === "ask" || action === "start"
+        ? action
+        : "draft",
     answer: (data.answer as string | null) ?? null,
     tasks,
     specific_instruction: (data.specific_instruction as string | null) ?? null,
@@ -924,7 +931,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     initialIntent
       ? normalizeIntent(initialIntent)
       : {
-          action: "generate",
+          action: "draft",
           answer: null,
           tasks: ["write_post", "write_quotes", "write_article"].map((tool) => ({
             tool,

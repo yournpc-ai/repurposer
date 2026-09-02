@@ -750,12 +750,18 @@ class BriefLedger(BaseModel):
 
 
 class InferredIntent(BaseModel):
-    """The intent router's verdict: three actions + the proposed tool chain.
+    """The intent router's verdict: four actions + the proposed tool chain.
 
     ADR-043 (outputs → derive): the request layer carries NO output
     declarations — ``tasks`` is the only grammar (a registry tool + its
     params, the same shape the chat loop's task_list proposals use). Outputs
     are a derived projection of the compiled graph, never a request field.
+
+    ADR-052 B2 (action set): ``draft`` drafts/refines the task book (it never
+    generates — the retired ``generate`` name lied); ``ask`` asks ONE
+    clarifying question through the dock's 提问机器 (the shared AskProposal
+    shape, 案 A 双实例); ``answer`` is a purely informational reply;
+    ``start`` confirms the docked book.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -812,18 +818,27 @@ class InferredIntent(BaseModel):
             data.pop(retired, None)
         return data
 
-    action: Literal["generate", "answer", "start"] = Field(
-        default="generate",
+    action: Literal["ask", "draft", "answer", "start"] = Field(
+        default="draft",
         description=(
-            "Whether the user wants to generate content, is asking a question "
-            "about the tool's capabilities, or is confirming the proposed task "
-            "book ('start' — a prose 'looks good, go ahead' in the confirm "
-            "phase, not a revision)."
+            "Whether the user wants content drafted ('draft' — build/refine "
+            "the task book), is asking a question about the tool's "
+            "capabilities ('answer'), is confirming the proposed task book "
+            "('start' — a prose 'looks good, go ahead' in the confirm "
+            "phase, not a revision), or one missing answer most decides "
+            "quality and you must ask first ('ask')."
+        ),
+    )
+    ask: AskProposal | None = Field(
+        default=None,
+        description=(
+            "The ONE question when action is 'ask' — the shared ask shape "
+            "(2-4 one-word options + freeform). Null for every other action."
         ),
     )
     answer: str | None = Field(
         default=None,
-        description="Direct answer text when action is 'answer'. Null for generate.",
+        description="Direct answer text when action is 'answer'. Null for draft.",
     )
     material_text: str | None = Field(
         default=None,
@@ -831,7 +846,7 @@ class InferredIntent(BaseModel):
             "Verbatim source text the user explicitly declared as their own "
             "material ('this is my transcript: …', '这是我的文字稿：…'). Null "
             "when the user did not declare pasted text as source material — "
-            "a bare request is never material."
+            "a bare request is never material. Null for action='start'/'ask'."
         ),
     )
     tasks: list[TaskItem] = Field(
@@ -840,12 +855,12 @@ class InferredIntent(BaseModel):
             "The proposed tool chain — one task per piece of work, in "
             "execution order (e.g. an English and a German post = two "
             "write_post tasks; whole-video bilingual subtitles = one "
-            "translate_clip task). Empty for start/answer verdicts."
+            "translate_clip task). Empty for start/answer/ask verdicts."
         ),
     )
     specific_instruction: str | None = Field(
         default=None,
-        description="Free-form instruction distilled from the prompt.",
+        description="Free-form instruction distilled from the prompt. Null for 'answer'/'start'/'ask'.",
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     tasks_explicit: bool = Field(
@@ -882,7 +897,7 @@ class InferredIntent(BaseModel):
 class PendingBrief(BaseModel):
     """Unconfirmed task book persisted on ``projects.pending_brief``.
 
-    Written by the chat book path on generate-action turns (an
+    Written by the chat book path on draft-action turns (an
     answer-action turn never overwrites the stored book), cleared once the
     run starts. Lets a user who left the book-confirmation chat resume it
     exactly, from any device.

@@ -8,8 +8,8 @@ instructions.md-style same-site extraction); this module is declarations +
 turn assembly only.
 
 ``intent_router`` — the task-book builder (book path, CHAT_ARCH §3): free-form
-text → a structured task book (language/outputs/tone) plus the three-action
-verdict (generate / answer / start). Invoked only from the chat service's
+text → a structured task book (language/outputs/tone) plus the four-action
+verdict (draft / ask / answer / start). Invoked only from the chat service's
 book path — first-turn projects and pending-task-book refinement turns.
 Provider failures propagate as MiniMaxError: the route boundary answers 502
 with the localized provider line (2026-08-14 裁定 — a fabricated default
@@ -44,7 +44,7 @@ def _assemble_book_turn(
     ``presented_book``: one-line digest of the docked task book, when one is
     on the table — the start/revise verdict needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
-    otherwise reads as "go generate").
+    otherwise reads as "go draft it").
     ``recent``: the conversation's latest rounds (pre-formatted lines,
     current message excluded) — the material/content judgment needs to SEE
     what just happened (e.g. the assistant asking for source material), not

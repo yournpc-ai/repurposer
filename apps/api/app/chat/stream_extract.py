@@ -17,7 +17,7 @@ Design rules (pressure-tested 2026-08-04):
 - **Think-block skip**: an optional leading ``<think>…</think>`` preamble is
   discarded before structural scanning, so example JSON inside the model's
   reasoning can never trigger capture.
-- **Non-string values go dead**: ``"answer": null`` (generate/start verdicts)
+- **Non-string values go dead**: ``"answer": null`` (draft/start verdicts)
   latches the extractor off — zero deltas, the final envelope lands as one
   piece exactly like the non-streaming path.
 - **Any surprise goes dead**: malformed escapes, control characters, or

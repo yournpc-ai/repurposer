@@ -1134,7 +1134,7 @@ async def s13_no_material_asks(ctx: Ctx) -> None:
 
     2026-08-27 修订（D8）：S13 回归媒体需路径本位——copy-writer 无素材
     路径是 S48 的地盘。媒体需链（select_clips 等）+ 零素材 → 零素材安全
-    网把 generate 降为 answer + 反问散文。断言保持兼容：caption_mode
+    网把 draft 降为 answer + 反问散文。断言保持兼容：caption_mode
     dock 可出现（LLM 若把请求读成 write_quotes 链），但 task_book /
     run / pending_brief / 假资产永不落。
     """
@@ -1212,7 +1212,7 @@ async def s21_lost_and_empty_handed(ctx: Ctx) -> None:
 
 async def s48_text_writer_without_material(ctx: Ctx) -> None:
     """S48 copy-writer 解除硬门禁（2026-08-24 lift）：无素材 + 写帖请求 →
-    generate 不再被反问（book path 软信号），dock 任务书带 text_without_material
+    draft 不再被反问（book path 软信号），dock 任务书带 text_without_material
     reason，Start → 跑 → 出 post。镜像 S13 的"无素材→ask 反问"作为旧行为
     文档；S48 断言新行为（"没米也下锅"，但 plan 落地 + 用户知情）。"""
     pid = await ctx.new_project("S48 text writer no material")
@@ -1932,14 +1932,14 @@ async def s40_task_book_never_auto_resumes(ctx: Ctx) -> None:
 
 
 async def s9_sse_turn_streaming(ctx: Ctx) -> None:
-    """S9 SSE 回合：answer 流式（delta 拼接 == 信封散文）；generate 流计划复述（== intent.answer）。"""
+    """S9 SSE 回合：answer 流式（delta 拼接 == 信封散文）；draft 流计划复述（== intent.answer）。"""
     pid = await ctx.new_project("S9 sse streaming")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
 
     # Answer turn: prose previews stream, and concatenated deltas must equal
     # the envelope's persisted content (preview channel == source of truth).
     # The phrasing mirrors the system prompt's few-shot example verbatim —
-    # the answer/generate judgment is LLM variance, and the strict concat
+    # the answer/draft judgment is LLM variance, and the strict concat
     # assertion below needs the answer verdict to be near-deterministic.
     deltas, completed, failed = await ctx.chat_stream(pid, "what can you generate?")
     check(failed is None, "answer turn has no turn.failed", failed)
@@ -1950,19 +1950,19 @@ async def s9_sse_turn_streaming(ctx: Ctx) -> None:
           f"{''.join(deltas)!r} vs {content!r}")
     check(completed["run_id"] is None, "answer turn starts no run")
 
-    # Generate turn: the plan echo (intent.answer) streams as deltas and is
+    # Draft turn: the plan echo (intent.answer) streams as deltas and is
     # persisted in the pending brief; the dock rides the envelope.
     deltas, completed, failed = await ctx.chat_stream(
         pid, "Cut 3 highlight clips from my talk"
     )
-    check(failed is None, "generate turn has no turn.failed", failed)
-    check(completed is not None, "generate turn ends with turn.completed")
+    check(failed is None, "draft turn has no turn.failed", failed)
+    check(completed is not None, "draft turn ends with turn.completed")
     check(is_task_book_dock(completed["assistant_message"]),
-          "generate turn docks the task book via the envelope",
+          "draft turn docks the task book via the envelope",
           completed["assistant_message"])
     book = (await ctx.results(pid)).get("pending_brief")
     echo = (book["intent"].get("answer") or "")
-    check(len(deltas) > 0, "generate turn streams the plan echo")
+    check(len(deltas) > 0, "draft turn streams the plan echo")
     check("".join(deltas) == echo, "echo deltas == persisted intent.answer",
           f"{''.join(deltas)!r} vs {echo!r}")
 

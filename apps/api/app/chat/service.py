@@ -115,7 +115,7 @@ def _ask_for_material_text(prompt: str) -> str:
     """Server-composed ask-for-material reply (zero-material safety net).
 
     The intent router is instructed to write this itself; this is the backstop
-    when it misfiles a material-less generate verdict. Language follows the
+    when it misfiles a material-less draft verdict. Language follows the
     prompt — the book path's answer prose always speaks the user's language.
     """
     if _prefers_zh(prompt):
@@ -1249,18 +1249,20 @@ async def _book_turn(
 
     Entered for project-scope turns while a task book is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
-    a bail). The intent router's three-action verdict dispatches:
+    a bail). The intent router's four-action verdict dispatches:
 
-    - generate → three-way merge (panel prior / fresh inference) + reasons +
-      dock the (refined) task book
-    - answer   → a plain assistant message; the stored book stays untouched
-    - start    → the docked task book is answered kind=start (G-1 path: the
-                 run comes from the only birthplace, answer_question)
+    - draft  → three-way merge (panel prior / fresh inference) + reasons +
+               dock the (refined) task book
+    - ask    → the ONE clarifying question docks through the 提问机器 (the
+               shared AskProposal shape; the stored book stays untouched)
+    - answer → a plain assistant message; the stored book stays untouched
+    - start  → the docked task book is answered kind=start (G-1 path: the
+               run comes from the only birthplace, answer_question)
 
     Returns the assistant message (the docked/answered question row for
-    generate/start), the started run id, the answered task-book question (for
-    ChatResponse.answered_question), and cascade-bailed run ids. The caller
-    commits — except the start branch, where answer_question commits.
+    draft/ask/start), the started run id, the answered task-book question
+    (for ChatResponse.answered_question), and cascade-bailed run ids. The
+    caller commits — except the start branch, where answer_question commits.
     """
     conversation_id = UUID(str(conversation.id))
     text = request.message
@@ -1391,7 +1393,7 @@ async def _book_turn(
         )
         assets.append(material_asset)
 
-    # Zero-material safety net (same decision): a generate verdict with no
+    # Zero-material safety net (same decision): a draft verdict with no
     # assets at all and no declared material must not dock a groundless task
     # book — degrade to the ask-for-material answer. Only when no book is
     # already on the table (a pending book's refine/start is untouched).
@@ -1417,7 +1419,7 @@ async def _book_turn(
     # `tasks_explicit` gate — the lift's own check downstream lets the
     # copy-writer draft from prompt + persona style without source material.
     def _zero_material_net(verdict: InferredIntent) -> bool:
-        """True when the zero-material safety net must downgrade this generate
+        """True when the zero-material safety net must downgrade this draft
         verdict to an ask-for-material answer.
 
         Recomputed from the verdict's CURRENT task list — the misfire flips
@@ -1437,14 +1439,14 @@ async def _book_turn(
             )
         )
 
-    if intent.action == "generate" and stored is None and _zero_material_net(intent):
+    if intent.action == "draft" and stored is None and _zero_material_net(intent):
         intent.action = "answer"
         intent.answer = _ask_for_material_text(prompt)
 
     # Chain adjudication (ADR-043): the registry validates the proposed task
     # list — one bounded repair round on rejection (the funnel's reserved
     # kwarg), then degrade to an answer, never a docked broken book.
-    if intent.action == "generate":
+    if intent.action == "draft":
         try:
             validate_task_list(intent.tasks)
             if not intent.tasks:
@@ -1479,6 +1481,32 @@ async def _book_turn(
                 intent.action = "answer"
                 intent.answer = _cannot_do_text(prompt)
 
+    if intent.action == "ask":
+        if intent.ask is None or not intent.ask.question.strip():
+            # Ask-misfire: the verdict lacks its question payload — degrade
+            # to the answer machinery below (it repairs the book turn or
+            # answers with the capability line; never an empty-book dock).
+            intent.action = "answer"
+        else:
+            # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
+            # clarifying question docks through the same 提问机器 the chat
+            # loop's shape C uses. The stored book stays untouched (the
+            # pending_brief row persists, the fresh verdict rides the
+            # question's intent stash). D2-C1 adds slot backfill +
+            # default_path teeth on top of this直通.
+            assistant_message, bailed_run_ids = await _dock_question(
+                db,
+                conversation_id,
+                intent.ask.question,
+                AskPayload(
+                    kind="choice",
+                    options=intent.ask.options,
+                    allow_freeform=intent.ask.allow_freeform,
+                ),
+                intent=intent.model_dump(mode="json"),
+            )
+            return assistant_message, None, None, bailed_run_ids
+
     reasons = await _compute_book_reasons(db, project, intent)
 
     # An answer action without answer text is an LLM misfire — degrade to a
@@ -1487,7 +1515,7 @@ async def _book_turn(
     # with an empty answer or dock an empty chain.
     if intent.action == "answer" and not intent.answer:
         if intent.tasks:
-            intent.action = "generate"
+            intent.action = "draft"
             # The zero-material net re-applies verbatim (S13, 2026-08-28):
             # the net above ran while the action was still "answer" and
             # skipped this verdict — without the re-check, an answer-misfire
@@ -1541,13 +1569,13 @@ async def _book_turn(
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
             return question, None, None, bailed_run_ids
-        # Start-misfire → treat the turn as a fresh generate verdict: the
+        # Start-misfire → treat the turn as a fresh draft verdict: the
         # zero-material safety net re-applies verbatim (the net above ran
         # while the action was still "start" and skipped it). Without this
         # a "start" verdict for a media-needing chain with nothing attached
         # would dock a groundless book — the exact hole the net exists to
         # close (D8, 2026-08-27).
-        intent.action = "generate"
+        intent.action = "draft"
         if _zero_material_net(intent):
             intent.action = "answer"
             intent.answer = _ask_for_material_text(prompt)
@@ -1601,7 +1629,7 @@ async def _book_turn(
     # verbatim back into PendingBrief (chat_path stashes a TaskListProposal,
     # book_path stashes an InferredIntent — both shapes handled).
     if (
-        intent.action == "generate"
+        intent.action == "draft"
         and _needs_caption_mode_question(intent.tasks)
         and intent.caption_mode is None
         and _detect_caption_mode(text) is None
