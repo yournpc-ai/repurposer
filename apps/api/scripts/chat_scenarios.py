@@ -2403,6 +2403,78 @@ async def s45_materialize_injection_matrix(ctx: Ctx) -> None:
           "translate hangs off select_clips", tr.inputs)
 
 
+async def s50_merge_brief_source_matrix(ctx: Ctx) -> None:
+    """S50 brief 账本来源优先级三态矩阵（ADR-052 B2 D1-C1，进程内纯函数）：
+    user-stated 永不反向覆盖 / user 重申恒胜 / inferred 压 default /
+    default 永不压 inferred / no-opinion 槽永不落账 / 整账 None 原样返回。"""
+    del ctx  # in-process pure-function matrix — no API, no DB rows
+    from app.chat.service import merge_brief
+    from app.models.schemas import BriefLedger, BriefSlot, BriefSlotSource as Src
+
+    def ledger(**slots) -> BriefLedger:
+        return BriefLedger(**slots)
+
+    def slot(value, source) -> BriefSlot:
+        return BriefSlot(value=value, source=source)
+
+    # 1. user-stated survives inferred AND default proposals (永不反向覆盖).
+    stored = ledger(topic=slot("grid storage", Src.USER_STATED))
+    out = merge_brief(
+        ledger(
+            topic=slot("renewables", Src.INFERRED),
+            audience=slot("CTOs", Src.INFERRED),
+        ),
+        stored,
+    )
+    check(out.topic.value == "grid storage"
+          and out.topic.source == Src.USER_STATED,
+          "user-stated topic survives an inferred proposal", out.topic)
+    out = merge_brief(ledger(topic=slot("anything", Src.DEFAULT)), stored)
+    check(out.topic.value == "grid storage",
+          "user-stated topic survives a default proposal", out.topic)
+
+    # 2. The user re-stating a slot always wins (user-stated ≥ user-stated —
+    #    chat 修订恒胜).
+    out = merge_brief(ledger(topic=slot("renewables", Src.USER_STATED)), stored)
+    check(out.topic.value == "renewables"
+          and out.topic.source == Src.USER_STATED,
+          "a re-stated slot lands (the user spoke again)", out.topic)
+
+    # 3. inferred lands over an empty/default slot and over a default value;
+    #    default never lands over inferred.
+    stored = ledger(audience=slot("general public", Src.DEFAULT))
+    out = merge_brief(ledger(audience=slot("first-time founders", Src.INFERRED)), stored)
+    check(out.audience.value == "first-time founders"
+          and out.audience.source == Src.INFERRED,
+          "inferred outranks default", out.audience)
+    out = merge_brief(ledger(audience=slot("everyone", Src.DEFAULT)), out)
+    check(out.audience.value == "first-time founders",
+          "default never overwrites inferred", out.audience)
+
+    # 4. A no-opinion slot (value=None) never lands — stored survives; and
+    #    fresh inference re-lands over stale inference (same rank, latest wins).
+    out = merge_brief(
+        ledger(tone=BriefSlot(source=Src.INFERRED), topic=slot("new angle", Src.INFERRED)),
+        ledger(tone=slot("sharp", Src.USER_STATED), topic=slot("old angle", Src.INFERRED)),
+    )
+    check(out.tone.value == "sharp", "a None update never lands", out.tone)
+    check(out.topic.value == "new angle",
+          "same-rank updates land (fresh inference over stale)", out.topic)
+
+    # 5. constraints is one slot — the list rides as the value, same rules.
+    stored = ledger(constraints=slot(["keep it under 200 words"], Src.USER_STATED))
+    out = merge_brief(ledger(constraints=slot(["add hashtags"], Src.INFERRED)), stored)
+    check(out.constraints.value == ["keep it under 200 words"],
+          "user-stated constraints survive inference", out.constraints)
+
+    # 6. update=None returns the stored ledger (start/answer verdicts carry
+    #    no proposal); the merge never mutates the stored input in place.
+    stored = ledger(topic=slot("grid storage", Src.USER_STATED))
+    check(merge_brief(None, stored) is stored, "None update returns stored verbatim")
+    merge_brief(ledger(audience=slot("CTOs", Src.INFERRED)), stored)
+    check(stored.audience.value is None, "the merge never mutates the stored input")
+
+
 SCENARIOS = {
     # 首轮路由
     "S1": s1_vague_first_turn_then_prose_start,
@@ -2462,6 +2534,8 @@ SCENARIOS = {
     "S9": s9_sse_turn_streaming,
     # harness 漏斗
     "S41": s41_repair_one_bounded_round,
+    # brief 账本
+    "S50": s50_merge_brief_source_matrix,
     # 估价地基
     "S42": s42_quotation_foundation,
     "S45": s45_materialize_injection_matrix,

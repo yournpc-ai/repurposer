@@ -57,6 +57,9 @@ from app.models.schemas import (
     AskOption,
     AskPayload,
     AskProposal,
+    BriefLedger,
+    BriefSlot,
+    BriefSlotSource,
     ChatMention,
     ChatMessageResponse,
     ChatRequest,
@@ -249,6 +252,41 @@ def _prefers_zh(text: str) -> bool:
     """Language heuristic for server-composed reply lines — the CJK check
     rides the user's own words (the turn's text), not a stored setting."""
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
+
+
+# ---- brief 账本 (DIALOG_WORKFLOW §2.4, ADR-052 B2) ---------------------------
+
+_SOURCE_RANK: dict[BriefSlotSource, int] = {
+    BriefSlotSource.DEFAULT: 0,
+    BriefSlotSource.INFERRED: 1,
+    BriefSlotSource.USER_STATED: 2,
+}
+
+_LEDGER_SLOTS = ("topic", "audience", "tone", "constraints", "material_state")
+
+
+def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
+    """Ledger merge — pure (LLM proposes, code decides; 禁 LLM 合并槽位).
+
+    The router proposes a full update every book turn; code lands it per
+    slot by source precedence (user-stated > inferred > default):
+    - a no-opinion slot (value=None) never lands — the stored value survives;
+    - the update wins when its source ranks AT LEAST the stored source's —
+      so user-stated is never reverse-overwritten by inference or defaults
+      (含 repair 重试与 ask 答复回填), while the user re-stating a slot
+      (user-stated again) always wins — chat 修订恒胜.
+    """
+    if update is None:
+        return stored
+    merged = stored.model_copy(deep=True)
+    for field_name in _LEDGER_SLOTS:
+        proposed: BriefSlot = getattr(update, field_name)
+        if proposed is None or proposed.value is None:
+            continue
+        current: BriefSlot = getattr(merged, field_name)
+        if _SOURCE_RANK[proposed.source] >= _SOURCE_RANK[current.source]:
+            setattr(merged, field_name, proposed)
+    return merged
 
 
 # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES §4.7):
@@ -995,6 +1033,14 @@ async def answer_question(
                     project.pending_brief = PendingBrief(
                         prompt=prompt_text,
                         intent=replay_intent,
+                        # The ledger rides along verbatim — the caption answer
+                        # is not a book turn; no merge, just preservation.
+                        brief=(
+                            BriefLedger.model_validate(project.pending_brief["brief"])
+                            if isinstance(project.pending_brief, dict)
+                            and isinstance(project.pending_brief.get("brief"), dict)
+                            else BriefLedger()
+                        ),
                         reasons=await _compute_book_reasons(db, project, replay_intent),
                         persona_id=(
                             project.pending_brief.get("persona_id")
@@ -1607,6 +1653,9 @@ async def _book_turn(
     project.pending_brief = PendingBrief(
         prompt=prompt,
         intent=intent,
+        # brief 账本 (ADR-052 B2): code-side merge — the router's update
+        # proposal lands by source precedence, never wholesale (禁 LLM 合并).
+        brief=merge_brief(intent.brief, stored.brief if stored else BriefLedger()),
         reasons=reasons,
         persona_id=persona_id,
         derived=derived,

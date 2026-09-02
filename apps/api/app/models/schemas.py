@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -694,6 +694,61 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
     return tasks
 
 
+# ---------------------------------------------------------------------------
+# brief 账本（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
+# state. Five slots, each with provenance; the intent router proposes a full
+# update every book turn and code merges by source precedence (merge_brief —
+# LLM proposes, code decides; user-stated is never reverse-overwritten).
+# ---------------------------------------------------------------------------
+
+
+class BriefSlotSource(StrEnum):
+    """Provenance of one ledger slot's value (merge precedence: stated > inferred > default)."""
+
+    USER_STATED = "user-stated"
+    INFERRED = "inferred"
+    DEFAULT = "default"
+
+
+SlotT = TypeVar("SlotT")
+
+
+class BriefSlot(BaseModel, Generic[SlotT]):
+    """One ledger slot: a value plus its provenance.
+
+    ``value=None`` is the empty slot (stored) and the no-opinion update
+    (the router emits only slots it has a view on) — a None update never
+    lands in the merge.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: SlotT | None = None
+    source: BriefSlotSource = BriefSlotSource.DEFAULT
+
+
+MaterialState = Literal["none", "pasted", "attached"]
+
+
+class BriefLedger(BaseModel):
+    """The brief ledger: five slots + code-owned bookkeeping.
+
+    topic / audience / tone / constraints are the askable slots — the ask
+    strategy (一轮一问决定槽) targets the one whose answer most decides
+    quality. ``material_state`` is code-stamped at write time (assets with
+    files → attached; pasted text material → pasted; else none) — the router
+    READS it in the ledger block for the root judgment, never proposes it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: BriefSlot[str] = Field(default_factory=BriefSlot)
+    audience: BriefSlot[str] = Field(default_factory=BriefSlot)
+    tone: BriefSlot[str] = Field(default_factory=BriefSlot)
+    constraints: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
+    material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
+
+
 class InferredIntent(BaseModel):
     """The intent router's verdict: three actions + the proposed tool chain.
 
@@ -816,6 +871,12 @@ class InferredIntent(BaseModel):
             "target language only."
         ),
     )
+    # brief 账本 (ADR-052 B2): the router's full-update proposal for the
+    # ledger — emit only the slots you have a view on this turn, each with
+    # its source (user-stated ONLY when the user's own words literally state
+    # the value). Code merges by source precedence; a slot you leave out
+    # (or set null) keeps its stored value. Null for start/answer verdicts.
+    brief: BriefLedger | None = None
 
 
 class PendingBrief(BaseModel):
@@ -841,6 +902,10 @@ class PendingBrief(BaseModel):
 
     prompt: str = ""
     intent: InferredIntent
+    # brief 账本 (ADR-052 B2): the dialog's structured state — slots with
+    # provenance, merged by code every book turn (merge_brief). The task
+    # chain and derived preview above stay the book's own rows (原样).
+    brief: BriefLedger = Field(default_factory=BriefLedger)
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
     # Derived preview (ADR-043): the dry-run-compiled graph's user-facing
