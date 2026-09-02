@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
 > Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2，落地前代码仍读旧名）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-42）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5。
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-47）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，施工中——B1 已落 2026-09-03）**。
 
 ## 1. 叙事
 
@@ -78,7 +78,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 |---|---|
 | **任务书** `TaskSpec` | 意图归一：唯一请求语法 = 工具链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
 | **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
-| **导演** `director` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
+| **understand / plan** `understand` `plan` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
 | **机械** | "确定性工具"描述语（N-42 退役为子集属性）：无 LLM 决策的工具；providers/ 与确定性工具禁 import agents/LLM client（铁律迁址） |
 | **工具包** `tools/`（N-42 前 `skills/`） | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
@@ -98,7 +98,7 @@ class NodeBase:
     # —— 类属性声明 ——
     output_type: str | None = None      # 产出型节点的产物（outputs 可扩展的家）
     after: tuple[str, ...] = ()         # 拓扑约束
-    needs_director: bool = False        # 需要导演前奏（preprocess→persona∥understand→plan）
+    needs_plan_prelude: bool = False        # 需要 plan 前奏（preprocess→persona∥understand→plan）
     retries: int = 0                    # step 级瞬时重试预算
     requires: tuple[Requirement, ...] = ()  # 出生地门禁（media/transcript/persona_photo/voiceprint）
     # —— 方法（run 唯一必实现，其余有默认）——
@@ -125,16 +125,16 @@ class NodeBase:
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
 - "全败或无事"：run 只在全部生成节点 failed/skipped 时标 FAILED；render 节点镜像渲染链，永不 hold run。
 
-### 4.4 导演两步走（两次 LLM 调用，契约不变）
+### 4.4 understand/plan 两步走（两次 LLM 调用，契约不变）
 
-- **看懂素材**（`director_understand`）：产出素材理解（论点带位置/金句/主题/受众），素材级，`source_ref.asset_hash` 命中即复用（节点 `reuse()` 钩子的本例）；**自足契约**——产物必须足以支撑分任务。
-- **分任务**（`director_plan`）：吃素材理解 + 任务书 → 分镜表（论点→分镜槽位 + 覆盖报告），请求级，每 run 必重排。
+- **看懂素材**（`understand`）：产出素材理解（论点带位置/金句/主题/受众），素材级，`source_ref.asset_hash` 命中即复用（节点 `reuse()` 钩子的本例）；**自足契约**——产物必须足以支撑分任务。
+- **分任务**（`plan`）：吃素材理解 + 任务书 → 分镜表（论点→分镜槽位 + 覆盖报告），请求级，每 run 必重排。
 - **纯度纪律（签名化，见 §5.3）**：understand 不接收 persona/tone/instruction；plan 不读原稿。
 
 ### 4.5 节点分两类
 
 - **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`…）。
-- **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`director_understand`/`director_plan`/`checkpoint`/`render`），住 `pipeline/`。
+- **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
 
 ## 5. Harness 层：模型调用面
 
@@ -156,12 +156,12 @@ class Agent[OutT]:
 ### 5.2 三条纪律
 
 1. **修复带反馈**：schema/裁决失败 → 错误结构化回显 → **一轮**自修复 → 再败才算节点失败（走图的重试语义）。不带反馈的重试只是掷两次骰子。
-2. **兜底声明化**：静默降级是例外不是常态——合法先例 = PlanAgent 永不白屏（fallback 任务书可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
+2. **兜底声明化**：静默降级是例外不是常态——合法先例 = intent router 永不白屏（fallback 任务书可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
 3. **纯度签名化**：禁注规则在类型层不可表示——`understand.call(asset_texts, media)` 的签名里没有 persona 参数；比任何 prompt 警告都硬，签名即文档、评审即测试。
 
 ### 5.3 花名册与声明归属
 
-- `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（director 两实例 / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
+- `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（understand / plan / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
 - context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 任务书 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
@@ -192,7 +192,7 @@ tools/dub/           配音工具
 
 - **TOOL_REGISTRY 收编**：`tools/__init__.py` 汇总各包声明——提议空间 / 编译裁决 / 计量 / 展示同源；静态注册表随代码部署，不是插件系统（NAMING §5）。
 - **新增工具 = 加一个包 + 一行 import**：重试/校验/拓扑/计量/估价随声明免费获得；禁平行映射表与特判分支（CHAT_ARCH §4 延伸）。
-- **产出型工具**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，PlanAgent 当轮即知**（工具清单同源注入 prompt）。
+- **产出型工具**声明 `output_type`：产物类型词汇注册表派生（N-32）；请求层没有产物声明——用户看到的「你将得到」= 干跑编译的派生预览 `derived`（ADR-043）；**新增产物 = 一条注册项，intent router 当轮即知**（工具清单同源注入 prompt）。
 - 注册项准入过 NAMING §7/§8 评审。
 
 ## 8. 估价与计量
@@ -221,9 +221,9 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 - `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`tools/__init__.py` — TOOL_REGISTRY 收编
 - `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；N-42 前 `app/tools/`；通用件随消费方归位）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
-- `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / director 节点 / checkpoint / render）
+- `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / understand·plan 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
-- `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — plan / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
+- `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — intent_router / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
 - `app/providers/llm/minimax.py` — Model 单边界；`app/metering.py` — 计量
 - `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot（编译期投影 `spec.slot`，非请求层语法）/ 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）

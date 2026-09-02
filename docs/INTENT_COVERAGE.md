@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` plan path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 PlanAgent 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，plan_agent_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -12,12 +12,12 @@
 | 表面 | 相位 | 用户输入去向 | 推理者 | 裁决 |
 |---|---|---|---|---|
 | 首页 composer | — | **无意图识别**——send = spinner 建空项目 + 上传素材 + 跳转详情（草稿经 router state 交接） | 无 | 无 |
-| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **plan path** | PlanAgent（三动作：generate / answer / start） | 代码：reasons 推导 + derived 预览 + dock task_book（无合并机器——面板手改整链 ride prior_intent，PlanAgent 重提全链，ADR-043）；start 复用 answer kind=start 起 run |
-| Overlay chat（项目） | 已有 run（running / results） | `POST /chat`（project scope） | ChatIntentAgent | 代码：四态裁决（task_list / edit_ops / ask / answer）+ autoResume |
-| 产物会话（dock + 焦点注入；ChatModal 已退役——ADR-041 / `tasks/results-canvas.md`） | 单产物 | `POST /chat`（project scope + 焦点 output 注入，永不进 plan path） | ChatIntentAgent | 同上（焦点语境注入） |
+| Overlay chat（项目） | 首次 / 待决任务书 | `POST /chat`（project scope）→ **book path** | intent router（三动作：generate / answer / start） | 代码：reasons 推导 + derived 预览 + dock task_book（无合并机器——面板手改整链 ride prior_intent，intent router 重提全链，ADR-043）；start 复用 answer kind=start 起 run |
+| Overlay chat（项目） | 已有 run（running / results） | `POST /chat`（project scope） | chat_intent agent | 代码：四态裁决（task_list / edit_ops / ask / answer）+ autoResume |
+| 产物会话（dock + 焦点注入；ChatModal 已退役——ADR-041 / `tasks/results-canvas.md`） | 单产物 | `POST /chat`（project scope + 焦点 output 注入，永不进 book path） | chat_intent agent | 同上（焦点语境注入） |
 | 任意 dock | — | `POST /chat/messages/{id}/answer` | **无 LLM** | 代码：kind × question-kind 契约分派 |
 
-plan path 进入条件（`chat()` 分派，service.py）：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_intent` 为空）。start/修订/answer 的判定归 PlanAgent LLM——dock 中的任务书以 `presented_plan`（整链 JSON）注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
+book path 进入条件（`chat()` 分派，service.py）：project scope 且（有 pending task_book question）或（无任何 run 且 `pending_brief` 为空）。start/修订/answer 的判定归 intent router LLM——dock 中的任务书以 `presented_book`（整链 JSON）注入推断上下文，短确认（"开始吧"）才能看见自己在确认什么。
 
 非文本路径（不经意图层）：dock 按钮（Start/Cancel/autonomy/选项）、面板手编任务书、retry 按钮（`/generate` 该类链 full run）、发布对话框、编辑器内操作。
 
@@ -47,33 +47,33 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 明确（产出物+语言都说清） | /chat plan path → dock，reasons 空 → 前端自动 Start | ✅（S2） |
-| G 模糊（"帮我处理一下"） | /chat plan path → dock + reasons → 面板确认 | ✅（S1） |
-| G 全迷失（"不知道做什么/从哪开始"） | /chat plan path → dock（reasons 非空）或散文反问指路；永不裸跑、永不出无米书 | ✅（S17/S18/S21，2026-08-05；W4 升级为顾问姿态断言） |
-| Q 能力（"你能做什么"） | /chat plan path → answer（普通 assistant 消息） | ✅（S4） |
+| G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → 前端自动 Start | ✅（S2） |
+| G 模糊（"帮我处理一下"） | /chat book path → dock + reasons → 面板确认 | ✅（S1） |
+| G 全迷失（"不知道做什么/从哪开始"） | /chat book path → dock（reasons 非空）或散文反问指路；永不裸跑、永不出无米书 | ✅（S17/S18/S21，2026-08-05；W4 升级为顾问姿态断言） |
+| Q 能力（"你能做什么"） | /chat book path → answer（普通 assistant 消息） | ✅（S4） |
 | 空指令 | 前端本地拦截（toast） | ✅ |
-| 只要 clips 但无媒体 | PlanAgent 排除 clips；绕过则出生地 422 | ✅ |
-| 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | plan path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
-| G 无素材且未贴内容 | 拆为两路：copy-writer-only 链 → plan path generate + dock（`text_without_material` 软信号 + echo 散文告知从 prompt + persona 起草）；链含 media-needing 工具 → PlanAgent 自动 drop media 任务保留 writers + 解释，或 answer 反问引导 | ✅（S13 仅对 media-needing 路径；S48 新覆盖 writer-only 软信号，2026-08-24） |
+| 只要 clips 但无媒体 | intent router 排除 clips；绕过则出生地 422 | ✅ |
+| 贴文即素材（"这是我的文字稿：…" 或直接贴一段自己的内容） | book path 把内容升格为真正的 transcript 资产（`create_transcript_asset_from_text`；LLM 判断"这段话是内容还是请求"，禁长度启发式）→ dock | ✅（S12/S14，2026-08-05） |
+| G 无素材且未贴内容 | 拆为两路：copy-writer-only 链 → book path generate + dock（`text_without_material` 软信号 + echo 散文告知从 prompt + persona 起草）；链含 media-needing 工具 → intent router 自动 drop media 任务保留 writers + 解释，或 answer 反问引导 | ✅（S13 仅对 media-needing 路径；S48 新覆盖 writer-only 软信号，2026-08-24） |
 | 配方播种 clips 但无媒体 | dock 保留 clips + 警告，echo 散文主动解释（上传解锁或去 clips 开工）；Start 422 后手编去 clips 可起 | ✅（S11） |
 | Remix 配方后 revise 字段（"clips only needs 2"） | 配方=预设只铺第一版（不钉任何字段）→ 修订直达 docked 书 | ✅（S15，2026-08-05） |
-| S 闲聊 | /chat plan path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |
+| S 闲聊 | /chat book path → answer 或默认任务书 dock | 🚧（无专门拒绝形态，靠 LLM 判断力） |
 
 ### 3.1 待决任务书（任务书已 dock，未 Start——chat 的普通状态，不再是独立相位）
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 修订链（"加条德语 post"） | /chat plan path：面板手改 = 链结构直接编辑（与 LLM 提议同一数据结构），修订回合 LLM 带 presented 整链重提 → 新任务书 dock，旧 supersede；chat 恒胜是结构事实（无合并机器，ADR-043） | ✅（S3/S16） |
+| G 修订链（"加条德语 post"） | /chat book path：面板手改 = 链结构直接编辑（与 LLM 提议同一数据结构），修订回合 LLM 带 presented 整链重提 → 新任务书 dock，旧 supersede；chat 恒胜是结构事实（无合并机器，ADR-043） | ✅（S3/S16） |
 | 面板手改 + chat 修订冲突 | 同一数据结构无合并面：chat 修订覆盖链行（"chat 就是在改 plan，没有什么是定死的"，2026-08-05） | ✅（S16） |
 | G 修订焦点/指令（"聚焦定价部分"） | 同上（累积 prompt = stored prompt + 本轮原文 服务端拼装） | ✅（S3） |
-| Q 能力（"能发 TikTok 吗"） | /chat plan path → answer，任务书不被动 | ✅ |
-| Q 计划（"为什么只有 3 条"） | /chat plan path → LLM 判 answer（解释）或 generate（改成你要的数量） | ✅（LLM 判断，两可都算对） |
-| **C 确认（"好的开始吧"）** | /chat plan path → PlanAgent 判 start（`presented_plan` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；读容忍硬化：`tasks:null` + presented_plan 上下文） |
-| C 取消 | dock Cancel 按钮 → answer kind=bail → 清 pending_intent 回 draft | ✅（按钮；文本"算了"仍无 chat 路径——低频，登记待真实投诉） |
+| Q 能力（"能发 TikTok 吗"） | /chat book path → answer，任务书不被动 | ✅ |
+| Q 计划（"为什么只有 3 条"） | /chat book path → LLM 判 answer（解释）或 generate（改成你要的数量） | ✅（LLM 判断，两可都算对） |
+| **C 确认（"好的开始吧"）** | /chat book path → intent router 判 start（`presented_book` 注入，看得见在确认什么）→ answer kind=start 起 run | ✅（S1；读容忍硬化：`tasks:null` + presented_book 上下文） |
+| C 取消 | dock Cancel 按钮 → answer kind=bail → 清 pending_brief 回 draft | ✅（按钮；文本"算了"仍无 chat 路径——低频，登记待真实投诉） |
 | C 撤销自己上次修订 | 无 chat 命令（重说一遍反向修订 = 新修订）；面板上旧版本 chip 可展开只读快照并一键恢复（2026-08-05 版本条） | ✅（UI 恢复路径） |
-| E/T/M/S | /chat plan path → LLM 折算成任务书修订（如"配德语"→ dub_clip 任务）或 answer | 🚧（M 类改人设靠 answer 引导；chat 相位见 §3.3 M 行） |
+| E/T/M/S | /chat book path → LLM 折算成任务书修订（如"配德语"→ dub_clip 任务）或 answer | 🚧（M 类改人设靠 answer 引导；chat 相位见 §3.3 M 行） |
 | 手编面板后 Start | dock Start → answer kind=start（edited intent 优先于 stored） | ✅ |
-| recipe 发射（点配方卡） | /chat plan path——发射载荷 = 预填模板原文（配方 = 提示词，ADR-040），任务书从消息文案推断，与 composer 完全同径 | ✅（S5） |
+| recipe 发射（点配方卡） | /chat book path——发射载荷 = 预填模板原文（配方 = 提示词，ADR-040），任务书从消息文案推断，与 composer 完全同径 | ✅（S5） |
 
 ### 3.2 运行相位（run 在跑）
 
@@ -107,7 +107,7 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | **E 纠错（"这个词译错了，应该是 X"）** | /chat → revise_script 单点修；**无法"到处都改"** | 🚧（glossary 的对话入口——未来走 dispatch 注册表，不开新通道） |
 | **M 元信息（"换人设/换皮肤/换声音"）** | /chat → answer 导航文案（Personas 页面） | ✅（期 4 补四 G-6，answer 引导收编） |
 | M 目标语言改 | chat task_list（translate/write 新任务）折算 | ✅（产物级正解） |
-| 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（plan path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
+| 上传新素材 | overlay 输入组回形针：文件暂存为 chip（上传进度/失败重试/× 删除），随发送按钮随轮发出（`attachments` 随消息持久化，刷新重放）；attachment-only 发送合法（book path 以替身行推断，空文本不 autoResume checkpoint） | ✅（2026-08-05 手测修复；原"上传完自动发消息且无响应"缺陷退役） |
 | **G 再来一条同族 writer（"再写一条德语 post"/"also 4 quote cards about AI"），已有 project 未上新素材** | chat → task_list write_post(de) / write_quotes(count=4) 等；从 persona + instruction 起草，**永不**反问上传（2026-08-24 lift：copy-writer 不再被硬门禁要求素材） | ✅ |
 
 ### 3.4 产物会话（dock + 焦点注入；ChatModal / asset scope 已退役——ADR-041）
@@ -127,11 +127,11 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 按序生效，上一层失败落到下一层：
 
-1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。task_book 待决不参与（它的答案是 dock 按钮与 plan path 修订/确认）。
-2. **plan path（PlanAgent 三动作）**：首次 / 待决任务书的项目级文本 → generate（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ answer（普通消息）/ start（answer kind=start 起 run）。
-3. **ChatIntentAgent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + freeform 回落），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。
+1. **autoResume（零 LLM）**：choice 待决 + /chat 文本 → 字母/序号/原文命中 → option；否则 allow_freeform → freeform；否则进入 2。task_book 待决不参与（它的答案是 dock 按钮与 book path 修订/确认）。
+2. **book path（intent router 三动作）**：首次 / 待决任务书的项目级文本 → generate（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ answer（普通消息）/ start（answer kind=start 起 run）。
+3. **chat_intent agent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + freeform 回落），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。
 4. **代码裁决**：registry 校验 skill/params（SkillRejected → 一次 repair_feedback 重试 → 再败则反问）；edit ops 校验（OpRejected → 提示）；出生地校验（requires / clips-media / count 边界 → 422 或反问）。
-5. **LLM 故障**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ chat loop 反问文案；plan path 不兜底——provider 故障穿透到路由边界：JSON 502 / SSE 终帧 `turn.failed`，带 `user_error_line` 本地化行（明确不 dock 编造默认书：错误计划看着像真的，Start 会为它烧一次付费 run）；`tasks:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
+5. **LLM 故障**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ chat loop 反问文案；book path 不兜底——provider 故障穿透到路由边界：JSON 502 / SSE 终帧 `turn.failed`，带 `user_error_line` 本地化行（明确不 dock 编造默认书：错误计划看着像真的，Start 会为它烧一次付费 run）；`tasks:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
 6. **幂等与竞态**：单待决不变量（新题 supersede 旧题 + 级联 bail）；answer 409（重复回答）；落库去重（首条消息即会话种子）；过期扫描守护式 UPDATE（用户答案永远赢）。
 
 ---
@@ -140,8 +140,8 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | # | 缺口 | 影响 | 建议修法 | 量级 |
 |---|---|---|---|---|
-| ~~G-7~~ | ~~短贴文（~25 词开场白式）零素材首轮被判非素材~~ | ✅ **已修（2026-08-06）**：根因 = PlanAgent 上下文真空——`_messages` 只有累积 prompt + 文件名 + presented_plan，answer 轮后每条消息在真空里判（看不见"上一轮刚被要素材"），判不准按规则走 ask（迷失旅程反问死循环，S21 短贴文 fixture 3/3 复现）。修法 = **recent 对话注入**（`_plan_turn` 传最近 5 轮、`_messages` 加 "Recent conversation" 段）——只喂上下文不加倾向规则，素材/请求判定归 LLM 凭语境完成；同 08-04 presented_plan 硬化先例。S21 fixture 保持 25 词短贴文作回归 | — | — |
-| ~~G-1~~ | ~~确认相位文本"开始吧/可以了"被当成修订~~ | ✅ **已修**：action 加 `"start"` 座位，复用 answer kind=start 路径（presented_plan 注入 + `tasks:null` 读容忍硬化） | — | — |
+| ~~G-7~~ | ~~短贴文（~25 词开场白式）零素材首轮被判非素材~~ | ✅ **已修（2026-08-06）**：根因 = intent router 上下文真空——`_messages` 只有累积 prompt + 文件名 + presented_book，answer 轮后每条消息在真空里判（看不见"上一轮刚被要素材"），判不准按规则走 ask（迷失旅程反问死循环，S21 短贴文 fixture 3/3 复现）。修法 = **recent 对话注入**（`_plan_turn` 传最近 5 轮、`_messages` 加 "Recent conversation" 段）——只喂上下文不加倾向规则，素材/请求判定归 LLM 凭语境完成；同 08-04 presented_book 硬化先例。S21 fixture 保持 25 词短贴文作回归 | — | — |
+| ~~G-1~~ | ~~确认相位文本"开始吧/可以了"被当成修订~~ | ✅ **已修**：action 加 `"start"` 座位，复用 answer kind=start 路径（presented_book 注入 + `tasks:null` 读容忍硬化） | — | — |
 | ~~G-4~~ | ~~/chat 无 answer 形态~~ | ✅ **已修（期 4 补四）**：IntentProposal 第四态 `AnswerProposal`（N-21），纯信息直答落普通 assistant 消息 | — | — |
 | ~~G-2~~ | ~~进度询问无节点级数据~~ | ✅ **已修（期 4 补四）**：`_build_context` 注入 latest run steps 量化摘要（`_format_step_progress`，≤12 行） | — | — |
 | ~~G-5~~ | ~~发布意图在 chat 是死路~~ | ✅ **已修（期 4 补四）**：answer 引导文案（产物卡发布按钮）；远期 publish skill 仍依赖 Distribution 凭据 | — | — |
@@ -158,12 +158,12 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 
 | 路径 | 覆盖 |
 |---|---|
-| 首次：模糊 dock + "开始吧"起 run + pending_intent 清空 | ✅ harness S1 |
+| 首次：模糊 dock + "开始吧"起 run + pending_brief 清空 | ✅ harness S1 |
 | 首次：精确 slots（clips×5 + post(de)）+ dock Start + run slots 一致 | ✅ harness S2 |
 | 修订循环：re-dock / supersede / 未修订任务存活（累积 prompt 重提全链）/ 确认起 run | ✅ harness S3 |
 | 能力提问纯 answer + 无书"start it"不死路不起 run | ✅ harness S4 |
 | 配方发射 = 模板原文（无 recipe_id 传输带；模板点名的产出与字幕语言全提取） | ✅ harness S5 |
-| 已有 run 项目不进 plan path（回归） | ✅ harness S6 |
+| 已有 run 项目不进 book path（回归） | ✅ harness S6 |
 | 闲聊 / 发布引导 answer 形态 + run 数不变 | ✅ harness S7 |
 | 空项目列表不可见 → 首发消息可见 | ✅ harness S8 |
 | checkpoint 三答法（option 按钮 / 打字母 autoResume / 自由文本）+ 答题即唤醒 | ✅ harness S36 |
@@ -171,16 +171,16 @@ plan path 进入条件（`chat()` 分派，service.py）：project scope 且（�
 | checkpoint 多 run 级联：新题 supersede → 旧 run 收官 COMPLETED | ✅ harness S38 |
 | checkpoint 过期：TTL 扫描默认项 auto-answer（expired 标记）+ 续跑 | ✅ harness S39 |
 | autoResume 边界：空白 attachment-only 不答 checkpoint；task_book 不参与 autoResume | ✅ harness S36d / S40 |
-| ask 落库（ChatIntentAgent ask 提案 → dock choice） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
+| ask 落库（chat_intent agent ask 提案 → dock choice） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
 | 单待决 supersede（task_book re-dock / checkpoint 到题）+ 待决重建（pending_question） | ✅ harness S27 / S38 / S26 |
 | answer 端点契约：一行一答 409 / kind×question-kind 422 / autonomy 透传 run.context | ✅ harness S25 / S24（422 矩阵见 S11、S29、S35） |
 | 出生地 guards：clips-media 门 + count 边界（节点 `count_limits` 声明派生：clips 1-10 / quotes 1-20 / carousel 2-15） | ✅ harness S11 / S29 |
-| ChatIntentAgent 实分派：task_list 新 run / edit_ops operations 行（chat 血统 + message_id） | ✅ harness S31 / S32 |
-| G-1 started 联合 + task_book kind=start + pending_intent 清空 | ✅ harness S1（期 4 补四 e2e 的继承者） |
+| chat_intent agent 实分派：task_list 新 run / edit_ops operations 行（chat 血统 + message_id） | ✅ harness S31 / S32 |
+| G-1 started 联合 + task_book kind=start + pending_brief 清空 | ✅ harness S1（期 4 补四 e2e 的继承者） |
 | G-4 answer 形态（能力/发布问题：无 run、无 dock、run 数不变） | ✅ harness S4/S7 |
 | G-2 进度询问 answer 形态（节点级上下文注入，无新 run） | ✅ harness S33 |
 | G-6 元信息修改（品牌/说话人）answer 导航形态 | ✅ harness S34 |
-| 焦点注入：focus_output 随轮落库、不开新会话、不进 plan path；退役 asset scope 参数被 422 | ✅ harness S35 |
+| 焦点注入：focus_output 随轮落库、不开新会话、不进 book path；退役 asset scope 参数被 422 | ✅ harness S35 |
 | 附件：attachment-only 发送持久化 + 替身行推断不死路 | ✅ harness S30 |
 | task_book bail → 回 draft 可重开；QA 入档（superseded/start 标记） | ✅ harness S23 / S27 |
 | translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |

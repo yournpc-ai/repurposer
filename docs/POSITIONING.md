@@ -95,7 +95,7 @@ Positioning（定位 = 根，多实例）
 ## 7. 实施切分（四刀，排期见 PROGRESS §2 第六~八周）
 
 1. **概念刀**：`personas`→`positionings` 全栈改名（speakers→personas 先例同构，纯机械）+ 内容定位字段入表 + 定位页三分区 + `channel_accounts.positioning_id` + composer 身份控件随根改名；
-2. **定位对话化**：chat 诊断产出定位草案 + 确认环节（PlanAgent 扩展；诊断一轮封顶纪律不变）；
+2. **定位对话化**：chat 诊断产出定位草案 + 确认环节（intent router 扩展；诊断纪律随 ADR-052 判词 5 改写——每轮一问、每问可一词答）；
 3. **选题库**：`topics` 表 + 生命周期 + 选题 agent（roster 新声明，定位 × 素材挖矿）+ 选题卡 + 发射链；
 4. **回访 home + 素材上提**：定位面板 v1 + assets 归根。
 

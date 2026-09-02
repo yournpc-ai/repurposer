@@ -27,9 +27,9 @@
 └───────┬──────────────────────────────┬─────────────────────┘
         ▼                              ▼
 ┌───────────────────┐   ┌─────────── Pipeline ✅（RunPlan 内核）────────┐
-│ Operation Model ✅ │   │ 摄入/预处理（ASR）✅ │ 导演/agent 花名册 ✅    │
+│ Operation Model ✅ │   │ 摄入/预处理（ASR）✅ │ 两步/agent 花名册 ✅    │
 │ （操作日志层，      │   │ ┌── RunPlan 内核（施工图，ADR-028 ✅）───┐│
-│  三前端共用）      │   │ │ workflow_steps：导演两步/技能节点/质检节点   ││
+│  三前端共用）      │   │ │ workflow_steps：前奏两步/技能节点/质检节点   ││
 └─────────┬─────────┘   │ │ orchestrator 走图 · worker 认领节点       ││
           │             │ │ 链：clip 链 ✅/文案链 ✅/虚拟链 📋A-029   ││
           │             │ └───────────────────────────────────────────┘│
@@ -68,7 +68,7 @@
       ▼
 ┌────────────────────────────────────────────────────────┐
 │ Memory / Context：persona（风格/策略/声音/皮肤）· 术语表    │
-│ 正向边：注入 director / chat / 分发调性（✅ 单向，规则 4）   │
+│ 正向边：注入 plan 前奏 / chat / 分发调性（✅ 单向，规则 4）  │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -118,12 +118,12 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
-| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（导演两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
+| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（understand/plan 两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（plan path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（plan_agent + chat_intent_agent，op 词汇注入）、`components/chat/`（RunCard/OpsCard/QuestionDock/QaPair/OutputChatCard）、`components/mentions/`（MentionEditor/MentionPicker/MentionChip）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（book path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（intent_router + chat_intent_agent，op 词汇注入）、`components/chat/`（RunCard/OpsCard/QuestionDock/QaPair/OutputChatCard）、`components/mentions/`（MentionEditor/MentionPicker/MentionChip）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/_app.projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第十一周联调） |
-| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 director prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
+| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
 | **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第十一周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
@@ -177,7 +177,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 1. **耗时任务一律走队列**：模块间触发重活（重生成/渲染/未来的发布）= 写一行 pending 记录（WorkflowRun 经 `orchestrator.create_run` / `outputs.render_status` / 未来的 Publication），由 worker 的 `FOR UPDATE SKIP LOCKED` 认领。**禁止**跨模块直接调 service 函数执行重活，禁止 FastAPI BackgroundTasks。
 2. **读路径走 API 服务层**：模块间同步读数据经服务函数/路由，不跨域直写对方的表。
 3. **clip-spec 是 Pipeline ↔ 渲染的唯一契约**（ADR-016）：渲染服务不读 DB；Operation Model 的编辑也表达为 clip-spec diff，不引入第二个契约。
-4. **Memory 注入是单向的**：Memory 模块只暴露"注入载荷"（persona block / brand block / glossary），不知道谁在消费；消费者（director / chat / distribution）各自拉取。
+4. **Memory 注入是单向的**：Memory 模块只暴露"注入载荷"（persona block / brand block / glossary），不知道谁在消费；消费者（understand/plan / chat / distribution）各自拉取。
 5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `workflow_steps.cost`）；内容标识在 clip-spec 扩展字段与 Distribution 披露元数据两处落地，不分散到各模块自行实现。
 6. **内核重建接缝稳定**：模块内核可重建，只要表归属与通信规则不变，其他模块零感知——2026-07-22 实证：Pipeline 的 RunPlan（DAG）化后，Distribution / Memory / Editor GUI / Operation Model 全部零改动（缝 = 产物表与 clip-spec）。新内核设计必须守住既有接缝，不得以内核升级为借口移动缝。
 
@@ -202,7 +202,7 @@ apps/api/
 │   │   ├── routes/      # projects / assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
 │   │   ├── graph.py               # NodeBase 协议 + 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
-│   │   ├── node_runners.py        # 内部节点 crew（preprocess / director 节点 / checkpoint / render）
+│   │   ├── node_runners.py        # 内部节点 crew（preprocess / understand·plan / checkpoint / render）
 │   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手（step_context 兼估价事实装配 _estimate_facts）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
@@ -221,7 +221,7 @@ apps/api/
 │   │   ├── hook_gate.py         # 钩子预览闸双件（期 4）：hook_gate（逐条低清钩子预渲染 → dock 提问挂起，
 │   │   │                        #   确认/调整/降级三路径）+ release_renders（确认后补 pend + 渲染扇出）
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
-│   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：director/persona/
+│   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：understand·plan/persona/
 │   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
 │   │                    #   dub / filler / music / posts / quotes / reframe / revise / stills

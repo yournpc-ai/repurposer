@@ -238,7 +238,7 @@ transition（挂段进场边）
 | 主轨 | main track | `source` + `segments`，输出 = 数组序连接；唯一持剪辑语义（hidden/trim/reorder） | — |
 | 段 | `segment` | 主轨一行：`{id, asset_id?, url?, start, end, hidden, provenance?, transition}`；异源插入 = 带 asset_id 的段 | 不是 block（讨论期占位词，退役） |
 | 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption / translation / crop（关键帧采样器 = `sampleCrop` 双端逐值 parity） | 不参与叠放 |
-| 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举（`broll` / `text_callout` / `pip` / `motion_graphic`），z 序渲染，条目可带 `source_ref` 回放（PiP）与 `provenance`（ADR-026 必填） | 不是自由轨；不撞 UI 浮层（overlay 一词归 GenerationOverlay/overlay-surface，避让 N-27 同型撞车） |
+| 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举（`broll` / `text_callout` / `pip` / `motion_graphic`），z 序渲染，条目可带 `source_ref` 回放（PiP）与 `provenance`（ADR-026 必填） | 不是自由轨；不撞 UI 浮层（overlay 一词归 overlay-surface 浮层族〔组件 ChatDock 2026-09-02 改名后 "overlay" 只剩样式义〕，避让 N-27 同型撞车） |
 | 锚 | `anchor` | 层条目的语义挂接；输出时间派生不落库 | 不是时间码 |
 | 过渡 | `transition` | 段的进场边效果枚举（none/fade/dip），挂在段上随换序走 | 不是转场画廊（≤3 枚举封顶） |
 | 块轨 | block track | 单值轨，输出时间轴：music / dub / title / 头尾卡 | dub⇄原声互斥在注册表声明 |
