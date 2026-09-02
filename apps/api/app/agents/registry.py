@@ -1,6 +1,6 @@
 """Shared-crew registry (N-30/N-41): the agents every tool may draw on.
 
-``director_understand`` / ``director_plan`` (the director's two steps),
+``understand`` / ``plan`` (the plan prelude's two steps),
 ``persona`` (style extraction), ``translator`` (caption-line translation —
 the dub tool reuses it). Tool-private declarations live in each tool
 package's ``agents.py`` (clip writer, the four copy writers, reviser).
@@ -35,7 +35,7 @@ def _assemble_understand(
     word_axis: list[dict[str, Any]] | None = None,
     image_refs: list[dict[str, str]] | None = None,
 ):
-    """Director step 1 inputs — deliberately NO persona/tone/instruction:
+    """Understand node inputs — deliberately NO persona/tone/instruction:
     the understanding is material-scoped and reused across runs (asset-hash
     invalidation), so per-request values would poison reuse (purity is
     signature-enforced: there is no persona parameter to pass).
@@ -76,9 +76,9 @@ def _resolve_understanding(
     )
 
 
-director_understand: Agent[MaterialUnderstanding] = Agent(
-    name="director_understand",
-    prompt="director_understand.j2",
+understand: Agent[MaterialUnderstanding] = Agent(
+    name="understand",
+    prompt="understand.j2",
     schema=MaterialUnderstanding,
     system=(
         "You are a senior content strategist. You analyze source "
@@ -98,7 +98,7 @@ def _assemble_plan(
     task_book: dict[str, Any],
     count_defaults_text: str,
 ):
-    """Director step 2 inputs — the self-sufficiency contract: only the
+    """Plan node inputs — the self-sufficiency contract: only the
     understanding, the shared context, and the task book; never the raw
     sources. ``count_defaults_text`` is the registry-derived per-type count
     defaults line (N-32), supplied by the caller — the harness never imports
@@ -118,9 +118,9 @@ def _assemble_plan(
     )
 
 
-director_plan: Agent[Storyboard] = Agent(
-    name="director_plan",
-    prompt="director_plan.j2",
+plan: Agent[Storyboard] = Agent(
+    name="plan",
+    prompt="plan.j2",
     schema=Storyboard,
     system=(
         "You are a senior content strategist. You assign content "

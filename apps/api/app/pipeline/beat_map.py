@@ -1,6 +1,6 @@
 """Beat-map resolution — the code half of 理解层 v2 (期 1).
 
-The LLM (director_understand) writes only verbatim text anchors — opening
+The LLM (understand) writes only verbatim text anchors — opening
 ``marker`` words, full quotable ``text``, emphasized ``word`` — plus an
 optional coarse ``approx_start`` copied from the cue-line prefixes. This
 module snaps those anchors onto the ASR word axis and stamps the resolved

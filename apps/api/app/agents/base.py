@@ -17,11 +17,11 @@ never repaired here.
 
 Fallbacks are declared, never silent: ``media_text_fallback`` (multimodal →
 text-only degradation) and ``fallback`` (last-resort result builder — the
-plan agent's never-a-white-screen default task book is the precedent) are
+intent router's never-a-white-screen default task book is the precedent) are
 visible at the declaration; everything else raises.
 
 Purity is signature-enforced (ADR-039): an agent's inputs are its assemble
-function's parameter list — ``director_understand``'s assemble has no persona
+function's parameter list — ``understand``'s assemble has no persona
 parameter, so injecting one is a type error, not a prompt warning.
 
 The one sanctioned subclass is ``StreamingAgent`` (N-30) — the chat intent

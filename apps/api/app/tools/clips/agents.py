@@ -1,6 +1,6 @@
 """Clip writer — the clips tool's private agent declaration (N-30).
 
-Plans vertical clips from the shared GenerationContext, the director's
+Plans vertical clips from the shared GenerationContext, the understand node's
 MaterialUnderstanding (step 1), and its aggregate Storyboard slot (step 2):
 segment selection plus clip scripts in one call.
 """

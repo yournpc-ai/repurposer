@@ -298,7 +298,7 @@ def strip_null_params(params: dict | None) -> dict:
     """The proposal convention is "null = take the default" (the params field
     descriptions say so) — drop explicit nulls before schema validation so an
     optional-in-spirit field never dies on a strict-typed schema (2026-08-19:
-    a bare `count: null` sank ~half of recipe-template plan turns after the
+    a bare `count: null` sank ~half of recipe-template book turns after the
     repair round repeated it; the STORED book then 500'd the same way at
     compile time — every params-validation site goes through here)."""
     return {k: v for k, v in (params or {}).items() if v is not None}

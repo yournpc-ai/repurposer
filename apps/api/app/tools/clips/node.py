@@ -30,7 +30,7 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.pipeline.clip_spec import build_clip_spec
-from app.pipeline.edges import _load_director_outputs
+from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
@@ -127,7 +127,7 @@ class SelectClips(NodeBase):
     output_type = "clips"
     slot_label = "Clips"
     slot_label_zh = "切片"
-    needs_director = True
+    needs_plan_prelude = True
     requires = (MEDIA, TRANSCRIPT)
     produces_outputs = True
     count_default = 3
@@ -198,7 +198,7 @@ class SelectClips(NodeBase):
             run, project, persona, brand_music_id=brand_music_id
         )
         generation_context.target_language = target_language
-        understanding, storyboard = await _load_director_outputs(db, node)
+        understanding, storyboard = await _load_plan_prelude_outputs(db, node)
 
         # Render source selection (docs/VIDEO_EDITOR.md §4) — the shared
         # decision (materialize_source resolves the same way).

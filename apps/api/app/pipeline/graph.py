@@ -58,7 +58,7 @@ class _MediaRequirement(Requirement):
 
 async def media_missing(db: AsyncSession, project_id) -> bool:
     """The single renderable-media predicate (VIDEO / AUDIO / IMAGE / SLIDES
-    with bytes) — every consumer (birthplace ∀-check, chat plan-path
+    with bytes) — every consumer (birthplace ∀-check, chat book-path
     clarification reason) reads this one definition."""
     result = await db.execute(
         select(Asset.id)
@@ -174,7 +174,7 @@ class NodeBase:
     task_name: str | None = None
     task_name_zh: str | None = None
     after: tuple[str, ...] = ()  # topology constraint (modifier ordering)
-    needs_director: bool = False  # needs the director prelude (preprocess→persona∥understand→plan)
+    needs_plan_prelude: bool = False  # needs the plan prelude (preprocess→persona∥understand→plan)
     retries: int = 0  # step-level transient retry budget
     produces_outputs: bool = False  # counts as a generation node at run settle
     count_default: int | None = None  # slot count default (None = no count)
@@ -196,7 +196,7 @@ class NodeBase:
     # (the translate_clip 2026-08-15 precedent generalized — select_clips /
     # dub / add_music all folded). ``canvas_group`` returns the node's
     # artifact key; steps sharing a key within one run merge into ONE canvas
-    # node (director's understand+interrupt+plan = the single "plan" card).
+    # node (the prelude's understand+interrupt+plan = the single "plan" card).
     # None = fold into the 过程脊 group node (intervention = click the
     # product, or the expanded spine's step pill via @workflow_step).
     # ``canvas_hidden`` = never a node at all — the step's state projects
@@ -270,7 +270,7 @@ class NodeBase:
     async def reuse(self, *args: Any, **kwargs: Any) -> UUID | None:
         """Idempotent-reuse predicate (asset-hash class): a hit returns the
         earlier row's id — the node costs nothing; a miss falls through to
-        ``run``. First case: ``director_understand``."""
+        ``run``. First case: ``understand``."""
         return None
 
 

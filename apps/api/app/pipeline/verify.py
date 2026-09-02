@@ -298,7 +298,7 @@ class Verify(NodeBase):
         """
         understanding = None
         try:
-            plan_node = await _upstream_by_kind(db, executor, "director_plan")
+            plan_node = await _upstream_by_kind(db, executor, "plan")
             understanding = await _load_understanding(db, plan_node)
         except ValueError:
             logger.warning("verify_understanding_missing", executor_id=str(executor.id))

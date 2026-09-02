@@ -70,8 +70,8 @@ class TestCompileGraph:
         assert _kinds(nodes) == [
             "preprocess",
             "persona_bootstrap",
-            "director_understand",
-            "director_plan",
+            "understand",
+            "plan",
             "post_gen",
         ]
         plan = nodes[3]
@@ -83,9 +83,9 @@ class TestCompileGraph:
         assert _kinds(nodes) == [
             "preprocess",
             "persona_bootstrap",
-            "director_understand",
+            "understand",
             "checkpoint",
-            "director_plan",
+            "plan",
             "post_gen",
         ]
         checkpoint = nodes[3]
@@ -287,7 +287,7 @@ class _StubDb:
 def _plan_node(checkpoint: WorkflowStep | None) -> WorkflowStep:
     return WorkflowStep(
         id=uuid4(),
-        kind="director_plan",
+        kind="plan",
         inputs=[str(checkpoint.id)] if checkpoint else [],
     )
 

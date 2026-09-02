@@ -23,7 +23,7 @@ class SelectClipsParams(BaseModel):
         default=None,
         description="A short angle phrase when the user assigns the clips a "
         "theme (e.g. '切片剪定价争议' → 'pricing debate'). null = the "
-        "director picks the strongest moments.",
+        "the planner picks the strongest moments.",
     )
     aspect: Literal["9:16", "1:1", "16:9"] | None = Field(
         default=None,

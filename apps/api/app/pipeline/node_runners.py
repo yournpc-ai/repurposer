@@ -1,7 +1,7 @@
 """Internal node crew (ADR-039 P2 objectified): the non-tool kernel nodes.
 
-``preprocess`` / ``persona_bootstrap`` / ``director_understand`` /
-``director_plan`` / ``interrupt`` / ``render`` — these never enter the
+``preprocess`` / ``persona_bootstrap`` / ``understand`` /
+``plan`` / ``interrupt`` / ``render`` — these never enter the
 proposal space (CHAT_ARCH §4). Tool nodes live in their tool packages
 (``app/tools/<pkg>/node.py``); the full ``NODE_KINDS`` table self-populates
 as the registry door (``app/tools/__init__.py``) imports this module and the
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import _generation_context
-from app.agents.registry import director_plan, director_understand, persona
+from app.agents.registry import plan, understand, persona
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     EMOTIONAL_TONES,
@@ -99,7 +99,7 @@ def _all_copy_writers(run: WorkflowRun) -> bool:
 
     Registry-native (NODE_KINDS.get → isinstance DerivativeWriterNode) —
     same gate the chat safety net uses, single source of truth. An empty
-    task book returns False (we never know — be safe; Director layers run
+    task book returns False (we never know — be safe; Understand/Plan layers run
     as normal and either return a real understanding or hit the standard
     "no material" exception path)."""
     ctx = run.context if isinstance(run.context, dict) else {}
@@ -318,7 +318,7 @@ async def _materialize_understanding(
     """The one understand LLM call — the run's node and the upload-time warm
     share it (same blocks / word axis / image refs, same postprocess snapping)."""
     asset_media = await collect_asset_media(assets)
-    return await director_understand.call(
+    return await understand.call(
         source_blocks=build_source_blocks(assets),
         asset_media=asset_media,
         word_axis=word_axis_from_assets(assets),
@@ -387,11 +387,11 @@ async def warm_understanding(project_id: UUID) -> None:
         )
 
 
-class DirectorUnderstand(NodeBase):
-    kind = "director_understand"
+class Understand(NodeBase):
+    kind = "understand"
     task_name = "Understand material"
     task_name_zh = "看懂素材"
-    agents = (director_understand,)
+    agents = (understand,)
 
     def canvas_group(self, node):
         return "plan"
@@ -443,7 +443,7 @@ class DirectorUnderstand(NodeBase):
                     else f"Reused understanding · {len(cached.key_arguments)} arguments",
                 )
                 logger.info(
-                    "director_understand_reused",
+                    "understand_reused",
                     project_id=str(project.id),
                     output_id=str(latest.id),
                 )
@@ -453,18 +453,18 @@ class DirectorUnderstand(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        """Director step 1: material-scoped understanding, reused across runs.
+        """Understand node: material-scoped understanding, reused across runs.
 
         2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fourth gate):
         when the chain is all copy-writers the material is optional — the
         understanding would only re-summarize an absent source, so we
         materialize a STUB row (core_thesis="" + every list field empty) and
-        write it as a fresh non-reusable Output. The downstream ``director_plan``
+        write it as a fresh non-reusable Output. The downstream ``plan``
         and the four writer agents all handle the empty-shape understanding
         gracefully (their prompts' ``{% for %}`` loops degrade to nothing
-        rendered, and the slot-level fallback copy lights up). director_plan
+        rendered, and the slot-level fallback copy lights up). plan
         writes its own matching stub on the same gate, so the executor's
-        _load_director_outputs always returns a paired (understanding,
+        _load_plan_prelude_outputs always returns a paired (understanding,
         storyboard) tuple."""
         assets = await _list_assets(db, project.id)
 
@@ -499,7 +499,7 @@ class DirectorUnderstand(NodeBase):
                     else "Copy-writer run — material understanding skipped",
                 )
                 logger.info(
-                    "director_understand_copy_writer_stub",
+                    "understand_copy_writer_stub",
                     project_id=str(project.id),
                 )
                 return [row.id]
@@ -569,7 +569,7 @@ class Interrupt(NodeBase):
         Re-entry is queue-based: the answer endpoint writes ``spec.answer`` and
         flips the node back to pending; this runner then re-runs from the top,
         takes the answer branch below, and goes straight to done (its summary is
-        the chosen direction). director_plan reads the answer off this node's
+        the chosen direction). plan reads the answer off this node's
         spec — see ``_interrupt_direction``.
         """
         from app.chat.service import (  # deferred: import cycle
@@ -585,7 +585,7 @@ class Interrupt(NodeBase):
             # summary. The option's label from suspend_payload wins over
             # answer.text, which may be a machine marker ("expired" — the expiry
             # sweep's auto-answer) rather than a human label. The default option
-            # and freeform carry no argument id; director_plan re-derives the
+            # and freeform carry no argument id; plan re-derives the
             # semantics from spec.answer itself.
             options = (spec.get("suspend_payload") or {}).get("options") or []
             label: str | None = None
@@ -619,6 +619,23 @@ class Interrupt(NodeBase):
         focus_word = "聚焦：" if zh else "Focus: "
         default_label = "全场高光" if zh else "Full-talk highlights"
         arguments = understanding.key_arguments[:3]
+        if not arguments:
+            # 准入 (2026-09-02 用户拍板): zero key arguments → the option list
+            # is the default alone, and a one-option question has no branch —
+            # parking for it is pure friction (the writer-only stub
+            # understanding lands here: "Full-talk highlights" is clips
+            # vocabulary on a post book). Auto-resolve as the default option —
+            # the same spec.answer shape a human pick writes; with no
+            # suspend_payload the plan read falls through to None =
+            # the default direction (edges.py `_interrupt_direction`).
+            node.spec = {
+                **(node.spec or {}),
+                "answer": {"kind": "option", "option_id": "a"},
+            }
+            await _set_summary(
+                node.id, f"方向：{default_label}" if zh else f"Direction: {default_label}"
+            )
+            return []
         options = [
             AskOption(
                 id=chr(ord("a") + i),
@@ -668,11 +685,11 @@ class Interrupt(NodeBase):
         )
 
 
-class DirectorPlan(NodeBase):
-    kind = "director_plan"
+class Plan(NodeBase):
+    kind = "plan"
     task_name = "Plan content"
     task_name_zh = "规划内容"
-    agents = (director_plan,)
+    agents = (plan,)
 
     def canvas_group(self, node):
         return "plan"
@@ -680,14 +697,14 @@ class DirectorPlan(NodeBase):
     def canvas_text(self, node):
         """Plan 卡正文 = 人话任务书摘要（不是内部工序 summary）。"""
         spec = node.spec or {}
-        if spec.get("plan_summary"):
-            return spec["plan_summary"]
+        if spec.get("book_summary"):
+            return spec["book_summary"]
         task_book = spec.get("task_book") or {}
         slots = [IntentSlot.model_validate(s) for s in task_book.get("slots", [])]
-        return self._plan_summary(slots, task_book.get("target_language", "en"))
+        return self._book_summary(slots, task_book.get("target_language", "en"))
 
     @staticmethod
-    def _plan_summary(slots: list[IntentSlot], target_language: str) -> str | None:
+    def _book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
         if not slots:
             return None
         from collections import Counter
@@ -725,7 +742,7 @@ class DirectorPlan(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        """Director step 2: request-scoped storyboard, re-planned every run.
+        """Plan node: request-scoped storyboard, re-planned every run.
 
         Reads ONLY the upstream understanding (self-sufficiency contract) plus the
         task book and persona/tone context; coverage accountability is computed by
@@ -734,7 +751,7 @@ class DirectorPlan(NodeBase):
         by code after the LLM returns.
 
         2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fifth gate):
-        when the chain is all copy-writers and director_understand wrote a
+        when the chain is all copy-writers and understand wrote a
         stub understanding, the storyboard LLM has nothing to plan from
         either — same skip rule, paired stub Storyboard (empty slots, empty
         coverage). Executors handle the empty storyboard: ``find_slot``
@@ -766,7 +783,7 @@ class DirectorPlan(NodeBase):
                 else "Copy-writer run — storyboard skipped",
             )
             logger.info(
-                "director_plan_copy_writer_stub",
+                "plan_copy_writer_stub",
                 project_id=str(project.id),
             )
             return [row.id]
@@ -816,7 +833,7 @@ class DirectorPlan(NodeBase):
         persona_row = await resolve_persona(db, project)
         generation_context = _generation_context(run, project, persona_row)
 
-        storyboard = await director_plan.call(
+        storyboard = await plan.call(
             understanding=understanding,
             context=generation_context,
             task_book=task_book,
@@ -842,9 +859,9 @@ class DirectorPlan(NodeBase):
         assets = await _list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
         # 任务书摘要落 spec，供 canvas_text 投影到 plan 节点。
-        plan_summary = self._plan_summary(intent_slots, ctx.get("target_language", "en"))
-        if plan_summary:
-            node.spec = {**(node.spec or {}), "plan_summary": plan_summary, "task_book": task_book}
+        book_summary = self._book_summary(intent_slots, ctx.get("target_language", "en"))
+        if book_summary:
+            node.spec = {**(node.spec or {}), "book_summary": book_summary, "task_book": task_book}
         await _set_summary(
             node.id,
             f"规划了 {len(storyboard.slots)} 个槽位 · "

@@ -18,7 +18,7 @@ composer prefill. Static registry deployed with code — TOOL_REGISTRY 同款
 payload is the prefilled prompt template — the card's identity never crosses
 the wire (no ``recipe_id`` transport, no server-side seeding; MENTIONS §3).
 ``tasks`` stays server-only as the card's DECLARED compile shape (ADR-043 —
-the same task-list grammar the PlanAgent proposes): the startup self-check's
+the same task-list grammar the intent router proposes): the startup self-check's
 input (the orchestrator compiles this chain and reconciles flow keys ⊆ the
 compiled kinds, AGENT_ARCH §4.2); it never feeds a request path.
 
@@ -129,7 +129,7 @@ class RecipeEntry(BaseModel):
     """One registered recipe: a card awaiting material.
 
     ``tasks`` is the card's DECLARED compile shape (ADR-043 — a task list in
-    the PlanAgent's own grammar): the startup self-check compiles this chain
+    the intent router's own grammar): the startup self-check compiles this chain
     and reconciles the curated ``flow`` against it (AGENT_ARCH §4.2). It is
     never a request-path input: a launch's behavioral payload is the prompt
     template alone (2026-08-11 ruling — 配方 = 提示词).
@@ -363,8 +363,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         aspect="16:9",
         tags=["no-footage"],
         flow=[
-            FlowStep(key="director_understand"),
-            FlowStep(key="director_plan"),
+            FlowStep(key="understand"),
+            FlowStep(key="plan"),
             FlowStep(key="align_stills"),
             FlowStep(key="select_clips"),
             FlowStep(key="add_music"),
@@ -416,8 +416,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         aspect="9:16",
         tags=["auto-framing"],
         flow=[
-            FlowStep(key="director_understand"),
-            FlowStep(key="director_plan"),
+            FlowStep(key="understand"),
+            FlowStep(key="plan"),
             FlowStep(key="select_clips"),
             FlowStep(key="reframe_clip"),
             FlowStep(key="render"),
@@ -456,8 +456,8 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         aspect="9:16",
         tags=["auto-framing"],
         flow=[
-            FlowStep(key="director_understand"),
-            FlowStep(key="director_plan"),
+            FlowStep(key="understand"),
+            FlowStep(key="plan"),
             FlowStep(key="select_clips"),
             FlowStep(key="reframe_clip"),
             FlowStep(key="render"),

@@ -1,7 +1,7 @@
 """Writer tools' shared node base (ADR-039 P2).
 
 One body serves the four copy-writer nodes (post/quotes/carousel/article):
-resolve the node's slot + language, load the director artifacts, call the
+resolve the node's slot + language, load the plan-prelude artifacts, call the
 package's writer declaration, persist the output row. Each package's
 ``node.py`` declares a thin subclass (kind / output_type / slot_label /
 ``writer``) — the DerivativeType → writer map died with the outputs-registry
@@ -44,7 +44,7 @@ from app.pipeline.quote_card_stack import (
     extract_video_frames,
     pick_curated_frame,
 )
-from app.pipeline.edges import _load_director_outputs
+from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
 from app.pipeline.morph import _render_step_label
 from app.pipeline.step_context import _count_words, _list_assets
@@ -97,7 +97,7 @@ class CopyWriterParams(BaseModel):
         default=None,
         description="A short angle phrase when the user assigns this output "
         "a specific angle (e.g. 'the post should cover the pricing debate' "
-        "→ 'pricing debate'). null = the director picks the angle.",
+        "→ 'pricing debate'). null = the planner picks the angle.",
     )
     tone_override: str | None = Field(
         default=None,
@@ -836,17 +836,17 @@ class DerivativeWriterNode(NodeBase):
     thin subclass with its own ``writer`` (the tool-private agent)."""
 
     writer: Agent
-    needs_director = True
+    needs_plan_prelude = True
     # 2026-08-24 lift: copy-writers (write_post / write_quotes /
     # write_carousel / write_article) draft from the user prompt + persona
     # style alone when no source material is attached — the prior
     # ``(TRANSCRIPT,)`` gate hard-422ed "I have no material, write me a
     # post" requests, which was hostile to the common "just topic X" case.
-    # The gate moves to the prompt layer: PlanAgent recognizes the
+    # The gate moves to the prompt layer: the intent router recognizes the
     # no-material case and tells the user (in echo prose + soft reason)
     # that the draft comes from prompt + persona; if material shows up
-    # later, the next turn re-docks a richer book. needs_director stays
-    # True so the director's persona/style hand-off survives the empty
+    # later, the next turn re-docks a richer book. needs_plan_prelude stays
+    # True so the plan prelude's persona/style hand-off survives the empty
     # material_excerpt path.
     requires = ()
     produces_outputs = True
@@ -906,7 +906,7 @@ class DerivativeWriterNode(NodeBase):
 
         With ``spec.target_id`` set this is a targeted regeneration: the existing
         row is updated in place (its storyboard now comes from a real upstream
-        director_plan node — the fabricated-plan path is gone).
+        plan node — the fabricated-plan path is gone).
         """
         derivative_type = self.derivative_type
         ctx = run.context or {}
@@ -960,11 +960,11 @@ class DerivativeWriterNode(NodeBase):
             generation_context.quote_alt_language = alt_language
             if generation_context.caption_mode == "bilingual" and alt_language is None:
                 generation_context.caption_mode = "source_only"
-        understanding, storyboard = await _load_director_outputs(db, node)
+        understanding, storyboard = await _load_plan_prelude_outputs(db, node)
 
         # Narrow the storyboard to THIS slot: same-type sibling slots (e.g. an
         # English and a German post) are addressed by the slot's ordinal, which
-        # compile_graph and director_plan both derive from the canonical order.
+        # compile_graph and plan both derive from the canonical order.
         same_type = [s for s in storyboard.slots if s.slot == derivative_type.value]
         if same_type:
             slot_index = int((node.spec or {}).get("slot_index") or 0)

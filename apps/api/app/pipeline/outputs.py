@@ -2,7 +2,7 @@
 
 ``visible_outputs_stmt`` is THE filter every user-facing read path must use —
 results, library, export, and future MCP/gallery surfaces. Internal node
-artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the director's material_understanding
+artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the plan prelude's material_understanding
 / storyboard) are node bookkeeping, never user products, and must not leak
 into any listing.
 """

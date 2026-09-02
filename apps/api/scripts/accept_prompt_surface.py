@@ -1,5 +1,5 @@
 """Prompt-surface verification (08-21 gate, recipe-gallery v2): every
-recipe-card prefilled template → plan path → does the proposed task book
+recipe-card prefilled template → book path → does the proposed task book
 reliably include the card's expected node kinds?
 
 Mirrors the gallery (recipe-gallery-v2 brief §6): a fresh project with

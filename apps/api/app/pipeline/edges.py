@@ -2,7 +2,7 @@
 ``inputs`` edge list, storyboard/slot alignment, and coverage derivation.
 
 Upstreams are matched by kind, never by position — the full-run prelude fans
-out (persona_bootstrap ∥ director_understand), so input order is not a
+out (persona_bootstrap ∥ understand), so input order is not a
 stable contract.
 """
 
@@ -35,7 +35,7 @@ async def _load_understanding(
     db: AsyncSession, node: WorkflowStep
 ) -> MaterialUnderstanding:
     """Load the MaterialUnderstanding from this node's upstream
-    director_understand node (its output row may be a reused earlier one).
+    understand node (its output row may be a reused earlier one).
 
     The direction interrupt (期 4) sits transparently between plan/executor
     nodes and the understand node — upstreams are matched by kind, so the
@@ -48,29 +48,29 @@ async def _load_understanding(
         if upstream is None or str(upstream.id) in visited:
             continue
         visited.add(str(upstream.id))
-        if upstream.kind == "director_understand":
+        if upstream.kind == "understand":
             understand = upstream
         elif upstream.kind == "interrupt":
             frontier.extend(str(i) for i in (upstream.inputs or []))
     if understand is None:
-        raise ValueError(f"Node {node.id} ({node.kind}) has no upstream director_understand node")
+        raise ValueError(f"Node {node.id} ({node.kind}) has no upstream understand node")
     if not understand.output_refs:
-        raise ValueError("Upstream director_understand node has no output")
+        raise ValueError("Upstream understand node has no output")
     row = await db.get(Output, UUID(str(understand.output_refs[0])))
     if row is None or row.type != "material_understanding":
         raise ValueError("material_understanding output not found")
     return MaterialUnderstanding.model_validate(row.payload)
 
 
-async def _load_director_outputs(
+async def _load_plan_prelude_outputs(
     db: AsyncSession, node: WorkflowStep
 ) -> tuple[MaterialUnderstanding, Storyboard]:
-    """Load both director artifacts for an executor node (two upstream hops):
-    the storyboard from director_plan, the understanding from its upstream."""
-    plan_node = await _upstream_by_kind(db, node, "director_plan")
+    """Load both plan-prelude artifacts for an executor node (two upstream hops):
+    the storyboard from plan, the understanding from its upstream."""
+    plan_node = await _upstream_by_kind(db, node, "plan")
     understanding = await _load_understanding(db, plan_node)
     if not plan_node.output_refs:
-        raise ValueError("Upstream director_plan node has no storyboard output")
+        raise ValueError("Upstream plan node has no storyboard output")
     row = await db.get(Output, UUID(str(plan_node.output_refs[0])))
     if row is None or row.type != "storyboard":
         raise ValueError("storyboard output not found")
@@ -83,7 +83,7 @@ def _align_storyboard_slots(
     """Zip storyboard slots 1:1 onto the task slots (same type, in order).
 
     The task book's explicit fields (count/focus/tone_override) are binding —
-    code enforces them here so the director's remaining freedom is exactly
+    code enforces them here so the planner's remaining freedom is exactly
     the vacancies: argument_ids / quote_candidates / cta (and focus when the
     slot left it open). Same-type multi slots keep the canonical order both
     sides share (executor nodes find their slot by that ordinal).
@@ -114,7 +114,7 @@ async def _interrupt_direction(
     position): option → the chosen argument as a priority; freeform → the
     guidance text verbatim; the default option (no argument id) → None, the
     current behavior. Explicit slot focus stays binding — the priority order
-    is slot.focus > interrupt direction > director's own assignment (§2.5).
+    is slot.focus > interrupt direction > the planner's own assignment (§2.5).
     """
     for upstream_id in node.inputs or []:
         upstream = await db.get(WorkflowStep, UUID(str(upstream_id)))

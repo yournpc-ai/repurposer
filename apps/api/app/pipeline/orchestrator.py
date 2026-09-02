@@ -123,7 +123,7 @@ class TaskSpec(BaseModel):
     persona_id: str | None = None
     # Autonomy tier (intent-ask-primitive §2.7): stored verbatim on
     # run.context; the review tier inserts a direction interrupt between
-    # director_understand and director_plan on full runs (期 4).
+    # understand and plan on full runs (期 4).
     autonomy: str = "auto"
     scope: str = "full"
     operation: str = "regenerate"
@@ -198,17 +198,17 @@ def compile_graph(
     """Lower a task book into a node topology (pure, code-determined).
 
     Full scope: ``task.tasks`` (the tool chain, ADR-043) materializes via
-    ``_compile_task_list`` — generation tools share one deduped director
-    prelude (preprocess → persona_bootstrap ∥ director_understand →
-    director_plan); clip-spec consumers without select_clips get the
+    ``_compile_task_list`` — generation tools share one deduped planning
+    prelude (preprocess → persona_bootstrap ∥ understand →
+    plan); clip-spec consumers without select_clips get the
     compile-injected ``materialize_source`` (whole-source, no LLM picking).
     Targeted:   hook/clip -> [script];
-                derivative -> [director_understand -> director_plan -> X_gen];
+                derivative -> [understand -> plan -> X_gen];
                 render -> [render].
 
     ``add_stills_align`` (input profile, computed async at the birthplace):
     the no-recording combination — transcript + photos, no video/audio — gets
-    an ``align_stills`` node between director_plan and the clips node, so the
+    an ``align_stills`` node between plan and the clips node, so the
     stills branch renders with an estimated caption timeline (RECIPES §4.2).
     """
     if task.tasks is not None:
@@ -240,8 +240,8 @@ def compile_graph(
         if not target_type:
             raise ValueError(f"Cannot lower scope={scope} without a target type")
         return [
-            _NodeSpec("director_understand", 1),
-            _NodeSpec("director_plan", 2, inputs=[0], spec={"target_type": target_type}),
+            _NodeSpec("understand", 1),
+            _NodeSpec("plan", 2, inputs=[0], spec={"target_type": target_type}),
             _NodeSpec(
                 node_for_output(target_type).kind,
                 3,
@@ -277,9 +277,9 @@ def _compile_task_list(
     """Mode②: materialize an LLM-proposed task list into a standard graph.
 
     Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
-    and params; topology is derived here — generation tools that need a
-    director share one deduped prelude (preprocess → persona_bootstrap ∥
-    director_understand → director_plan); modifier tools (needs_director=
+    and params; topology is derived here — generation tools that need
+    planning share one deduped prelude (preprocess → persona_bootstrap ∥
+    understand → plan); modifier tools (needs_plan_prelude=
     False, e.g. remove_filler / add_music) hang off the clips node when one
     exists, else off the injected materialize_source (whole-source
     materialization, ADR-043), else get empty inputs (= act on the project's
@@ -305,12 +305,12 @@ def _compile_task_list(
         raise ValueError("The task list is empty — nothing to run.")
     nodes: list[_NodeSpec] = []
 
-    if any(NODE_KINDS[entry.name].needs_director for entry in entries):
+    if any(NODE_KINDS[entry.name].needs_plan_prelude for entry in entries):
         nodes.extend(
             [
                 _NodeSpec("preprocess", 1),
                 _NodeSpec("persona_bootstrap", 2, inputs=[0]),
-                _NodeSpec("director_understand", 3, inputs=[0]),
+                _NodeSpec("understand", 3, inputs=[0]),
             ]
         )
         if task.autonomy == "review":
@@ -322,10 +322,10 @@ def _compile_task_list(
             nodes.append(
                 _NodeSpec("interrupt", 4, inputs=[1, 2], spec={"for": "direction"})
             )
-            nodes.append(_NodeSpec("director_plan", 5, inputs=[3]))
+            nodes.append(_NodeSpec("plan", 5, inputs=[3]))
         else:
-            nodes.append(_NodeSpec("director_plan", 4, inputs=[1, 2]))
-    director_idx = len(nodes) - 1 if nodes else None
+            nodes.append(_NodeSpec("plan", 4, inputs=[1, 2]))
+    plan_idx = len(nodes) - 1 if nodes else None
 
     seq = 10
     skill_node_idx: dict[str, int] = {}
@@ -344,7 +344,7 @@ def _compile_task_list(
             # Handled by the input-profile injection below — the LLM naming
             # it explicitly changes nothing (idempotent runner).
             continue
-        if not node_cls.needs_director and not node_cls.produces_outputs:
+        if not node_cls.needs_plan_prelude and not node_cls.produces_outputs:
             modifiers.append((item, entry))
             continue
         params_dict = params.model_dump(mode="json", exclude_none=True) if params else {}
@@ -386,9 +386,9 @@ def _compile_task_list(
                 spec["summary"] = label
             if entry.name == "select_clips" and params_dict.get("aspect"):
                 spec["aspect"] = params_dict["aspect"]
-        inputs = [director_idx] if director_idx is not None else []
+        inputs = [plan_idx] if plan_idx is not None else []
         if entry.name == "select_clips" and add_stills_align:
-            align_inputs = [director_idx] if director_idx is not None else []
+            align_inputs = [plan_idx] if plan_idx is not None else []
             skill_node_idx["align_stills"] = len(nodes)
             nodes.append(_NodeSpec("align_stills", seq, inputs=align_inputs))
             seq += 1
@@ -407,7 +407,7 @@ def _compile_task_list(
     # anywhere — reject at compile, not mid-run.
     if modifiers and "select_clips" not in skill_node_idx:
         if materialize_profile in ("media", "stills"):
-            # Reuse the director prelude's preprocess when one exists.
+            # Reuse the plan prelude's preprocess when one exists.
             pre_idx = 0 if nodes and nodes[0].kind == "preprocess" else None
             if pre_idx is None:
                 pre_idx = len(nodes)
@@ -454,7 +454,7 @@ def _compile_task_list(
         seq += 1
 
     # 质检环 (期 3): one verify node trails every generation executor — the
-    # gate is the node's own declaration (needs_director + produces_outputs:
+    # gate is the node's own declaration (needs_plan_prelude + produces_outputs:
     # the writers and select_clips; revise_script / materialize_source /
     # modifiers / render never get one, old-brief §2.3 topology kept). The
     # snapshot copy keeps the loop off the appended verify nodes. A modifier
@@ -464,7 +464,7 @@ def _compile_task_list(
     # QualityBounce branch) so they re-apply to the repaired round.
     modifier_idxs = [
         i for i, ns in enumerate(nodes)
-        if (lambda c: not c.needs_director and not c.produces_outputs)(NODE_KINDS[ns.kind])
+        if (lambda c: not c.needs_plan_prelude and not c.produces_outputs)(NODE_KINDS[ns.kind])
     ]
 
     def _reaches(from_idx: int, target_idx: int) -> bool:
@@ -482,7 +482,7 @@ def _compile_task_list(
 
     for idx, ns in enumerate(list(nodes)):
         node_cls = NODE_KINDS[ns.kind]
-        if node_cls.needs_director and node_cls.produces_outputs:
+        if node_cls.needs_plan_prelude and node_cls.produces_outputs:
             downstream_mods = [m for m in modifier_idxs if _reaches(m, idx)]
             nodes.append(
                 _NodeSpec(
@@ -491,6 +491,23 @@ def _compile_task_list(
                 )
             )
             seq += 1
+
+    # 任务书兜底 (2026-09-02 用户拍板): stamp the compile-time task book on
+    # the plan node so the plan card's canvas_text fallback is born
+    # WITH the graph — while the run parks at the direction interrupt the
+    # plan card already reads the request's summary, never a transparent
+    # shell. The runtime stamp (book_summary + refined task_book) overwrites
+    # it when planning lands; both read the same generation-node spec.slot
+    # source, and _book_summary renders the two identically.
+    if plan_idx is not None:
+        book_slots = [
+            ns.spec["slot"] for ns in nodes if isinstance(ns.spec.get("slot"), dict)
+        ]
+        if book_slots:
+            nodes[plan_idx].spec["task_book"] = {
+                "slots": book_slots,
+                "target_language": task.target_language or "en",
+            }
 
     return nodes
 
@@ -993,7 +1010,7 @@ async def execute_step(node_id: UUID) -> None:
                         cls = NODE_KINDS.get(s.kind)
                         if (
                             cls is not None
-                            and not cls.needs_director
+                            and not cls.needs_plan_prelude
                             and not cls.produces_outputs
                             and not cls.runtime_fanout
                             and s.status == "done"
@@ -1248,7 +1265,7 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
     after the TTL (the leave-note promise: 离开不中断) — never a bail, never
     a permanent park. The answer carries the machine marker
     ``answer.text="expired"`` (same pattern as ``superseded``); the default
-    option has no argument id, so director_plan injects no direction —
+    option has no argument id, so plan injects no direction —
     exactly the auto-tier behavior. The message UPDATE is guarded by
     ``answer IS NULL``: a user answer racing the sweep always wins, and
     ``resume_waiting_interrupt`` is itself idempotent. Returns the number

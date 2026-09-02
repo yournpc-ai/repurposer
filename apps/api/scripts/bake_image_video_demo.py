@@ -54,7 +54,7 @@ PHOTO_URLS = [
 ]
 # file_url stores the storage KEY, never the public URL (collect_asset_media
 # downloads by key — a URL-shaped key HeadObject-404s, the first bake's
-# director_understand failure).
+# understand failure).
 ARTICLE_KEY = "demo/uploads/demo-article.md"
 PHOTO_KEYS = [
     "demo/uploads/teasers-photo-title.jpg",

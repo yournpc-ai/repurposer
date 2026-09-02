@@ -86,7 +86,7 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
 
     The predicate's single home is the MEDIA birthplace requirement
     (``graph.media_missing``); this helper keeps the project_id-shaped call
-    the chat plan path uses for the clips-needs-media clarification reason.
+    the chat book path uses for the clips-needs-media clarification reason.
     """
     return not await media_missing(db, project_id)
 
@@ -95,7 +95,7 @@ async def has_any_text_material(db: AsyncSession, project_id: UUID) -> bool:
     """Whether the project has any text-yielding source — transcript /
     past_material / media with extracted text / ASR'd word axis (2026-08-24).
 
-    Sibling of ``has_renderable_media``: the chat plan path's
+    Sibling of ``has_renderable_media``: the chat book path's
     ``text_without_material`` reason rides this predicate (the prior
     ``requires=(TRANSCRIPT,)`` gate hard-422ed legitimate "I have nothing,
     write me a post" requests). Mirrors ``_TranscriptRequirement.missing``
@@ -176,7 +176,7 @@ async def _extract_text_processor(asset: Asset, _prior: ProcessResult) -> Proces
 async def _slides_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
     """Slides: render PDF pages to images for stills backing.
 
-    The generation agents (content director / clip agent) read slide images
+    The generation agents (understand/plan / clip agents) read slide images
     directly, so we no longer extract OCR text here. Keep the page renders so
     they can be used as visual backing for stills/audiogram clips.
     """

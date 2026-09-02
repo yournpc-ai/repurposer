@@ -207,7 +207,7 @@ async def _guard_target_differs_from_source(
     """Same-language guard (2026-08-17 走查实修): a translate/dub whose target
     IS the source's language produces a same-language "translation" — the
     中英双语 farce where the bilingual pair came out 繁体+简体 with no English
-    anywhere (the PlanAgent had defaulted target_language to the prompt's own
+    anywhere (the intent router had defaulted target_language to the prompt's own
     language). Fail loud and name the fix — a silent same-language rewrite is
     the banned posture. Source-language truth: the asset's ASR-detected
     ``meta.language``, then the caption cues' lang. Raises plain ``ValueError``
