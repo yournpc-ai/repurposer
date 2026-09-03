@@ -750,7 +750,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 8. **actor 概念不采用**（评审中提出后否决）：非行业标准词；技能包构成即"谁执行"的答案。
 
 **Consequences**:
-- **行为零变化**：compile_graph 同输入同图、chat 四态/裁决/dock/checkpoint 不变、run 行为与渲染链不变；剧本 harness（S1–S40）为回归网，新增三断言（flow 对账自检 / 报价单调性 / repair 只一轮）。
+- **行为零变化**：compile_graph 同输入同图、chat 四态/裁决/dock/checkpoint 不变、run 行为与渲染链不变；剧本测试（S1–S40）为回归网，新增三断言（flow 对账自检 / 报价单调性 / repair 只一轮）。
 - **DX 目标**：加技能 = 加一个包；加 agent = 加一条声明；加产物 = 加一条注册项——"改 6 处"成为历史。
 - **分期（PROGRESS 第二周，与人设模块/闭环链三线并行）**：P1 模块归位（零变化）→ P2 NodeBase + outputs 派生 + kind 同名（含数据迁移）→ P3 harness 漏斗（Agent 归一 + repair 全员 + contexts 抽离）→ P4 估价遍历（地基同周落位，用户可见呈现并入第六周成本统计）。
 - **排期**：与人设模块、闭环链同周（08-09~08-14）三线并行收口，后续整体提前，go/no-go **10-02**（回退 10-09；以 PROGRESS 为准）。闭环链直接吃红利：RunFlowGraph 节点友好名 = `NodeBase.label` 派生，不另起平行表。
@@ -949,7 +949,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 2. **理解层 v2（节拍地图）**：`MaterialUnderstanding` 扩为素材级——climax/emphasis/quotables/topic boundaries/visual anchors/filler regions，上传时跑 + asset 级复用（汇合需求池「素材理解前移」）。铁律：词级时间戳确定性地基 LLM 永不覆写；**语义强调与声学强调分字段存储**（不一致本身是仲裁信号，预合并 = 自信地错且不可溯源）。
 3. **质检环（verify 节点升级）**：吸收旧简报期 3 传输机制（kind + QualityBounce），升级裁决语义——确定性优先（可测量项零 LLM）/ 逐轮独立打分 **best-not-last** / 字段白名单最小 diff 修复 / 首轮过即跳轮 / 双败升级 interrupt（复用既有机制；fidelity 类维持 needs_human 非阻塞徽章）。LLM judge 在纪律下引入（pairwise 冻结基线 / 样例锚定 / 证据先行 / 校准集）——旧简报"judge 单独评审"条款由此兑现。
 4. **重规划边（tool-loop 否决边界明文化）**：常备否决的对象 = **模型当编排者**（ReAct 式运行时决策），不翻案；**节点内有界环**（单目的、≤2 轮、结构化反馈、图调度进出）= 合法形态。质检失败的机械路由：修复所需信息不在理解层 schema / 超出单节点参数域 → 交还意图层重规划（汇合需求池 P1「执行中自适应重规划」）；retry 不中自动升级（schema 错误首 pass 常伪装成参数错误）。素材级不足走诚实降级（标题卡开场/换素材），**禁假造钩子**。
-5. **评审回 chat（2026-08-24 翻案）**：原"钩子预览闸"条款整节翻案——评审 AI 钩子质量走 chat 收敛（ADR-041），节拍方案（§1 beat plan）是 chat 评审的可寻址界面；渲染服务 `preview:{seconds}` 黑盒参数退役，AskPayload.previews / HookPreview / HookTrim / swap_hook_shot 全套删除，降级由 AI 自动 set_title 评估，详见 ADR-049。
+5. **评审回 chat（2026-08-24 翻案）**：原"钩子预览闸"条款整节翻案——评审 AI 钩子质量走 chat 收敛（ADR-041），节拍方案（§1 beat plan）是 chat 评审的可寻址界面；渲染服务 `preview:{seconds}` 黑盒参数退役，提问载荷 previews 字段 / HookPreview / HookTrim / swap_hook_shot 全套删除，降级由 AI 自动 set_title 评估，详见 ADR-049。
 6. **尺子先行**：施工顺序 = 解剖（craft 清单 + 四层归因证据表）→ 理解层 v2 → 剪辑师 → 质检环 → 节拍方案产品面（接 ADR-049 评审界面落位）。§2.1 craft 语法表全部数值 = 编辑部惯例先验，解剖校准前不作验收标准。
 
 **Rationale**: 质量的 80% 在隐性剪辑知识的形式化（外部评审收敛），而形式化的载体已有（指令包装配注入 + track 模型 + 词级时间戳/speaker_map/reframe 数据资产）；缺的是"谁做逐拍决定"的层与"谁检查"的环，不是地基。三源独立否决模型驱动编排翻案——DAG 的编译期估价/确定性执行正是有界环能安全存在的前提。外部评审全部结论 = 模式先验，解剖与台账产出自己的数据后校准。
@@ -1020,7 +1020,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **hook_gate / release_renders 节点退役**：`app/pipeline/hook_gate.py` 整文件删除；`orchestrator.py` §2.5 编译期注入块删除；`clips/node.py` 闸感抑制分支（`gated` 检查 + `_pend_suppressed_base_renders` 闸调用路径）删除——select_clips 正常扇出 render，render_status 走原 pending 路径。
 2. **渲染服务 `preview:{seconds}` 参数退役**：`apps/render/src/server.ts` 与 `render.ts` preview 分支删除——黑盒内部参数，无外部契约，直接删除。
-3. **AskPayload.previews / HookPreview / HookTrim 删除**：`app/models/schemas.py` 三类删除；前端 `QuestionDock.HookPreviewStrip` 删除（QuestionDock 回到纯 choice / task_book 二态）；`en.ts` / `zh.ts` `hookGate.*` 翻译键清尸。
+3. **提问载荷 previews 字段 / HookPreview / HookTrim 删除**：`app/models/schemas.py` 三处删除；前端 `QuestionDock.HookPreviewStrip` 删除（QuestionDock 回到纯 choice / task_book 二态）；`en.ts` / `zh.ts` `hookGate.*` 翻译键清尸。
 4. **swap_hook_shot op 退役**：`app/operations/registry.py` 注册删除；`SetTrimParams` / `set_trim` 保留（chat 评审调尾切点是 chat 评审的一部分）；渲染端 `packages/clip/src/types.ts` `image_shots` 字段保留（节拍方案仍消费）。
 5. **降级走 AI 自动 `set_title`**：质量差时 AI 评估钩子自动降级（标题卡开场）——不需要用户决策；保留 set_title op（运行期 AI 触发）。
 6. **节拍方案 = chat 评审界面**：beat plan 作为中间产物落到 Output.payload 或新表——chat 评审展开的卡片化形态（具体渲染位置下一期拍板，本 ADR 只拍板机制退役 + 节拍方案为评审界面）。
@@ -1075,7 +1075,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **画布优先路由（overlay 概念退役）**：`/projects/$id` 永远 = 画布 + 底部 dock——`?overlay=chat` / `?overlay=run` 路由参数与 GenerationOverlay 的 fullscreen 壳一并退役，dock 壳成为唯一 chat 外壳。composer 发送 = 建项目 + 上传素材 → **直达项目页画布+dock**，草稿经 router state 交付 dock 发出首条 `POST /chat`（消息机器零变化，去掉的只是壳）。processing 项目卡片 / 待确认 CTA / 继续设置 / tours 的 overlay 引用全部清改为直达项目页——dock 按项目态自呈现（待确认 = 任务书 dock；活 run = 折叠打勾 + 活画布）。断线重连 / 历史打开直接呈现终态不变（ADR-041 D2）。**诞生编排定稿（2026-09-01 用户拍板，FLORA 对照核对）**：fullscreen 时代的「收官整图回放」不复活——占位世界里 reveal 与 ADR-036 生长动画统一为**生长驱动诞生**：画布挂载期间出生的节点（run 开始占位物化 / 产物原位填充 = 收官节拍 / 修订生长）按编译序 `BIRTH_STAGGER_MS` 交错入场 + 边描画；running 占位卡带 FLORA 填充擦除（纯 CSS 封顶 96%）；水合首帧（刷新/重连/历史）永不重播。配套缝：dock 起跑（Start 钮 / 散文确认 / 修订 run）即经 `onRunStarted` 通知页面 refetch——页面 SSE 从第一拍挂上，run 期活画布即时渲染（confirm 起跑路径原先把占位/填充全攒到 terminal 才出现，本批终审捉出并根修）。
 2. **打勾流浓缩 + 占位物化（增量感两件）**：打勾流仍是唯一**步骤叙事**进度面（ADR-041 D2 精神不变）——形态浓缩为默认折叠的一行（Claude Code 式：运行中 = shimmer 状态行 + 当前步名，点击展开步骤日志，收官 = recap 聚合行照旧）。同时 run 期画布活起来：**占位产物卡在 run 开始即物化**——derived preview（ADR-043 编译期干跑）已知产物花名册 + 画幅，`productNodeSize(aspect)` 让占位卡出生即占最终位置与尺寸，产物落地即原地填充（画幅未知取默认档）。**ADR-041 D2「进度不进图」范围收窄为「步骤叙事不进图」**：步骤清单永不上图不变；产物占位/填充是图的**内容**（确定性派生投影），不是进度剧场——禁令 #4「禁假进度」不破（占位 roster 必须来自编译期干跑，禁虚构产物）。
-3. **提问 dock 形态切换**：choice 待决时 dock 整体变形——输入行（attach + MentionEditor + history + send）与免责行**隐藏**；问句 = 独立浮层 pill（2026-09-02 条款 8 拆粘：原「容器 = 问题行+选项行」的一体容器焊接作废）= 问题行（去掉 ✓——待决不是已完成；加 × 关闭 = bail 通道）+ 选项行（字母徽章映射不动）+ **尾行铅笔手输入**（Enter 提交自由文本；确定性字母/序号/原文 autoResume 映射不变，零 LLM）。形态切换时 pill 与消息流有明确边界区分（浮层边界，不靠阴影）。回答坍缩回基础形态、QA 双层入档不变（CHAT_ARCH §8.5 停靠法则不动）。
+3. **提问 dock 形态切换**：choice 待决时 dock 整体变形——输入行（attach + MentionEditor + history + send）与免责行**隐藏**；问句 = 独立浮层 pill（2026-09-02 条款 8 拆粘：原「容器 = 问题行+选项行」的一体容器焊接作废）= 问题行（去掉 ✓——待决不是已完成；加 × 关闭 = bail 通道）+ 选项行（字母徽章映射不动）+ **尾行铅笔手输入**（Enter 提交自由文本；确定性字母/序号/原文 autoResume 映射不变，零 LLM）。形态切换时 pill 与消息流有明确边界区分（浮层边界，不靠阴影）。回答坍缩回基础形态、已答问题双层入流不变（CHAT_ARCH §8.5 停靠法则不动）。
 4. **节点交互升级（hover prompt 框 + 变体分页 + 脊收编）**：hover 产物卡 → tooltip + 磨砂 prompt 框，展示**该产物自己的 spec**（runFlow 产物节点的全局 run `prompt` 逐卡重复退役——改 per-product spec：fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 框可编辑 → 发送 = 带焦点预钉的修订回合，**骑 `POST /chat` 唯一通道，永不开新执行通道**。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。**脊收编**：折叠步 ≤1 时过程脊不成节点（边经既有祖先投影规则解析，零新投影规则）。
 5. **模型名禁令修订（事实展示解禁）**：「禁图面模型名 / 技术黑话」（简报 `tasks/results-canvas.md` #10；代码注释里作 #12）修订为——**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**（禁令精神不动）；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」裁定不变），本条只解禁事实陈列。
 6. **点阵与免责行**：点阵配方调大调显（2026-09-02 起收窄为结果画布唯一签名面、home 摘除——最终配方 32px 网格 / 2px 点 / 32%·30%，FLORA 实测世界常量，ADR-046 附同批翻案）；dock 基础形态常驻免责行，en 原文 = "Repurposer is AI and can make mistakes. Check important info."（zh 镜像「Repurposer 是 AI，可能出错。重要信息请核对。」）——位置 = 输入组**下方**页面级耳语（2026-09-02 条款 8 拆粘：原「输入区上方、容器内」作废，它曾恰夹在问句与输入之间当胶水层），dock 形态切换（提问等）时随输入行一起隐藏。占位卡带 @ mention 教学文案（功能性，非营销）。

@@ -1365,7 +1365,7 @@ async def _book_turn(
                the 出书门槛 (the book docks only on a rooted brief: topic /
                material / explicit grounded recipe — rootless asks the topic
                once, then docks draft-from-persona) + dock
-    - ask    → the ONE clarifying question docks through the 提问机器 (the
+    - ask    → the ONE question docks through the 提问机器 (the
                shared QuestionProposal shape; the stored book stays untouched;
                the asked roll bounds the loop — a re-asked slot falls
                through to the draft gate)
@@ -1586,7 +1586,7 @@ async def _book_turn(
             intent.action = "draft"
         else:
             # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
-            # clarifying question docks through the same 提问机器 the chat
+            # question docks through the same 提问机器 the chat
             # loop's shape C uses — with the book-path handshake on the
             # payload (slot → the answer backfills the ledger user-stated;
             # default_path → the dock's muted second line). The brief merge

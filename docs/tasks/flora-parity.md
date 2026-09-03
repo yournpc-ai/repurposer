@@ -44,7 +44,7 @@ FLORA 走查暴露的五处差距与我们的答案（拍板逐条对应）：
 
 1. **路由**：全仓 grep `overlay=chat` / `overlay=run` 零命中；composer 发送直达 `/projects/$id` 画布+dock；processing 项目卡片 / 待确认 CTA 点进项目页即见对应 dock 形态（活 run / 任务书）；刷新 / 断线重连 / 跨设备直接呈现终态不播回放（ADR-041 D2 不破）。
 2. **折叠打勾**：活 run 时消息流只有一条折叠状态行（shimmer + 当前步名）；点击展开完整步骤日志（done ✓ / running spinner / pending 空心 / failed ✗ 人话全部保留）；收官 recap 聚合行照旧落档。
-3. **提问 dock**：choice 待决时输入行与免责行不可见；问题行无 ✓、有 ×（点击 = bail，与既有 bail 按钮同通道）；选项行字母徽章映射不变；尾行铅笔手输入 Enter 提交 freeform（autoResume 字母/序号/原文映射零 LLM 不变）；回答后坍缩回基础形态 + QA 双层入档不变。
+3. **提问 dock**：choice 待决时输入行与免责行不可见；问题行无 ✓、有 ×（点击 = bail，与既有 bail 按钮同通道）；选项行字母徽章映射不变；尾行铅笔手输入 Enter 提交 freeform（autoResume 字母/序号/原文映射零 LLM 不变）；回答后坍缩回基础形态 + 已答问题双层入流不变。
 4. **增量感**：review 档起 run → 占位产物卡立即出现在最终位置（尺寸 = 该产物画幅的最终尺寸）；产物落地原地填充无位移；折叠打勾行全程可见。
 5. **hover prompt 框**：hover 任意产物卡见其自己的 spec（fork 卡见其目标语言/参数，不再是全 run 全局 prompt）；编辑发送 = 修订回合进 chat 流（焦点灰行 + 历史展开照旧），服务端收到焦点钉住的目标。
 6. **变体分页**：对同一产物做修订/重跑后卡上出 1 of N 分页，翻页切换各版本展示（数据源 = Operation Model 快照）。

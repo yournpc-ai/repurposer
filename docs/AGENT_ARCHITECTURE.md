@@ -53,7 +53,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 |---|---|---|
 | Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop 只做意图治理，执行下沉 Graph；dsh loop 内含工具循环 |
 | Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 拓扑代码定（ADR-028）；dsh 反面 = 模型写编排脚本，永拒 |
-| Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | N-33 两义在案；我们漏斗固定，无插件拦截 |
+| Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | harness 单义 = 本调用面（N-48）；我们漏斗固定，无插件拦截 |
 | Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`）；政策开关座位在 PROGRESS 池 |
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
 | tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（禁 ReAct 不变，调用方 = 图） |
@@ -220,7 +220,7 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 10. 验收器
 
-- **剧本 harness**（test harness）：`chat_scenarios.py` S1–S45，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S41/S42）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+- **剧本测试**：`chat_scenarios.py` S1–S45，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S41/S42）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
 - e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
 

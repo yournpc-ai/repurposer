@@ -1,4 +1,4 @@
-# intent-ask-primitive 实施简报——ask 原语 + 任务书 slot 化 + 停靠确认 + 方向检查点
+# intent-ask-primitive 实施简报——提问机器 + 任务书 slot 化 + 停靠确认 + 方向检查点
 
 > Status: ✅ 期 1/2/3/4 全部落地（期 4 2026-07-30：Suspend/waiting + 方向检查点 + autonomy 生效 + bail 级联；**期 4 补四 2026-07-30：意图覆盖缺口清扫 G-1/G-4/G-2 + G-5/G-6 收编**）
 > 依据：CHAT_ARCH §3（IntentProposal 二态，N-14）/§8（pending_intent 持久化与恢复）；NAMING §5（新词族登记 + 翻案判例）；AGENT_ARCH §12.3；`docs/research/opusclip.md` §9（Agent Opus HITL 实证）；Mastra suspend-resume / HITL / agent-approval 官方文档（机制语义参照，非依赖候选）
@@ -159,7 +159,7 @@ API 面评审 B 组（形状债）+ C3 一次扫掉，e2e 13/13：
 - 数据模型一行两态：`messages.question` JSONB + `messages.answer` JSONB nullable（**NULL = 待决**，宪法 §4）；`content` 存问题人话原文（自然进 LLM 上下文历史）。
 - 待决重建零内存态：查会话最新未答 question（Mastra `listSuspendedRuns` 同款，靠消息行免费得到）。
 
-### 2.3 ask 原语（IntentProposal 第三态，翻案 N-14）
+### 2.3 提问机器（IntentProposal 第三态，翻案 N-14）
 
 ```jsonc
 {

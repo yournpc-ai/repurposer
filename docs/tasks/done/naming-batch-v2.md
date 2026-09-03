@@ -53,7 +53,7 @@
 ## 验证（全批总验收）
 
 1. `git stash` 零假设基线（③模型面 + ⑦切片各一轮对照）。
-2. S1–S46 剧本 harness 全跑绿；手工 create_run 真链（含 write_post 产物对照）。
+2. S1–S46 剧本测试 全跑绿；手工 create_run 真链（含 write_post 产物对照）。
 3. 启动自检（runner 注册一致性 + 节点→agent 引用 + 配方 flow 对账）+ 注册表自检（TOOL_REGISTRY / SKILL_REGISTRY 双表）。
 4. grep 门禁：无残留旧名（禁令 1 清单）；`providers/` 无 agents/LLM 决策层 import。
 5. `reset_db.py --yes` + 常驻 worker 重启 + dev 全链走查（composer → chat → 任务书 → run → 产物）。

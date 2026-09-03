@@ -32,7 +32,7 @@
 
 1. 全库 grep 旧标识符零命中（豁免：历史迁移文件、`docs/tasks/done/`、git 历史）。
 2. 每 commit：`uv run python -m compileall app` 绿 + `uv run python -c "import app.main"` 绿 + web `tsc` 绿。
-3. 批尾：chat_scenarios 全量绿（零假设 = 更名不影响任何剧本形态）；alembic `current == head`；手工 create_run 全链验证（剧本 harness 验证姿势 memory）。
+3. 批尾：chat_scenarios 全量绿（零假设 = 更名不影响任何剧本形态）；alembic `current == head`；手工 create_run 全链验证（剧本测试 验证姿势 memory）。
 4. 零行为变化举证：同一项目 dock 的任务书 / SSE 帧序列 / run 拓扑在 C1~C3 前后逐字节一致（除更名字段名本身）。
 
 ## 4. Prohibited Behaviors

@@ -120,7 +120,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 |---|---|---|---|
 | **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（understand/plan 两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
-| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（book path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（intent_router + chat_intent_agent，op 词汇注入）、`components/chat/`（RunCard/OpsCard/QuestionDock/QaPair/OutputChatCard）、`components/mentions/`（MentionEditor/MentionPicker/MentionChip）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
+| **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（book path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（intent_router + chat_intent_agent，op 词汇注入）、`components/chat/`（RunCard/QuestionDock/AnsweredQuestion/OutputChatCard）、`components/mentions/`（MentionEditor/MentionPicker/MentionChip）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/_app.projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第十一周联调） |
 | **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
@@ -159,7 +159,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | Agents（LLM 决策单元） | `app/agents/`（一个 Agent 类 + 声明实例，N-29/N-30） | 与 Mastra/Agno 同词 |
 | Tools（确定性执行） | `app/tools/`（机械） | 同名同物；禁 import agents/LLM client |
 | Skills（组合能力） | `app/skills/` 技能包 + SKILL_REGISTRY | = Mastra Skills 的登记处；技能一词一义（N-29），用户语言同词 |
-| Agent Harness（调用面脚手架） | `agents/base.py` 漏斗 + contexts 装配 + prompts | 装配/校验/修复一轮/计量/声明兜底；剧本 harness 是 test harness（N-33 限定） |
+| Agent Harness（调用面脚手架） | `agents/base.py` 漏斗 + contexts 装配 + prompts | 装配/校验/修复一轮/计量/声明兜底（harness 单义 = 本调用面，N-48） |
 | Workflows（编排图+执行） | RunPlan 内核（orchestrator + workflow_steps + worker 认领） | Workflow State=run 状态机；Suspend/Resume=step `waiting` 座位；Snapshots=spec/context；HITL=variant_pick gate（📋） |
 | workflow run（执行实例） | `workflow_runs` 表 | 行业标准全名（每 run 自带其编译出的 workflow=步骤图） |
 | Agent Runtime | `app/worker.py` | 执行进程 |

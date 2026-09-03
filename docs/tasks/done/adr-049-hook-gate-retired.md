@@ -74,7 +74,7 @@ ruff + 接线验证过。
 - `app/pipeline/orchestrator.py` §2.5 编译注入块（has_inplace_morph / pending_subs / pending_dubs 全段）
 - `app/tools/clips/node.py` gated 分支（释放闸感抑制，仅留 _later_inplace_morph_exists）
 - `app/pipeline/rendering.py` render_hook_preview 函数
-- `app/models/schemas.py` HookPreview / HookTrim / AskPayload.previews + OutputResponse.files 解析元组去掉 hook_preview
+- `app/models/schemas.py` HookPreview / HookTrim / 提问载荷 previews 字段 + OutputResponse.files 解析元组去掉 hook_preview
 - `app/operations/registry.py` SwapHookShotParams + _apply_swap_hook_shot + OP_REGISTRY 条目
 
 **渲染服务（apps/render）**

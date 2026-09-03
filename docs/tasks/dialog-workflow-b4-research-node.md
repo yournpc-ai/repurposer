@@ -55,7 +55,7 @@ agent 性合法化的唯一形态 = **有界 loop 节点**：NodeBase 子类，r
 3. writer 的 asset_texts 末尾带研究简报块（provenance 头行）；无 research 的 run 的 writer 输入逐字节不变。
 4. **降级诚实**（硬条）：DDG 全灭 / LLM 全灭时 run 仍 completed，research step done 且 brief 带 caveat 自述；research.run() 对研究侧失败零 raise。
 5. 循环有界：最多 max_iterations 次 agent 调用 + 末次强制关门；代码合成兜底零额外调用。
-6. S1~S52 无回归（剧本 harness 全绿，用户自跑）。
+6. S1~S52 无回归（剧本测试 全绿，用户自跑）。
 
 ## 6. Prohibited Behaviors
 

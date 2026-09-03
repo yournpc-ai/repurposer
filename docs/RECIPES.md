@@ -141,7 +141,7 @@ R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`alig
 ## 5. 声音层（裁决③④落档）
 
 - **家 = 人设块扩展**：声纹 = 人设属性（已决架构不变）；人设选择器加"系统音色"区——stock voices 以**系统音色**身份出现（如 Rachel · Confident，带试听），不伪装成人设（ADR-037 修订形态），与"👤 Anna（cloned ✓）"同列表分区。composer 维持两块不加 Audio 块（避免与人设职责重叠；Opus 的 Style/Assets/Audio 三块形态已评审未采纳）。
-- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用 ask 原语 choice 形态，`tasks/done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
+- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用提问机器的选项问形态，`tasks/done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
 - **stock 声来源**：MiniMax 系统音色（零克隆成本）。**待核实**：系统音色清单与多语言覆盖（EN/DE/FR/ES/IT/ZH 必须齐），核实结果回填本节与 R2 简报。
 - **后置**：语速调节、Pronunciation 纠正（归术语表线（PROGRESS 可选需求））。无声版（阅读节奏估算）已落地为 R2 交付本体（`align_stills`，§4.2）。
 
@@ -263,7 +263,7 @@ Recipe = {
 | `STRATEGY.md` §5 | 配方库定位来源；本文档是其实施架构，论证不复述 |
 | `PROGRESS.md` | 第 1–3 周排期含配方卡（第二周字幕卡点亮 R6 + 图文视频卡 slides 槽；分镜双子卡 authoring 延至第八周批次，§4.3） |
 | `tasks/synthetic-talk-video.md` | R2 修订点：voice_gen 先行、`synth_visual` 降可选增强、stock 兜底语义、人设块扩展 |
-| `tasks/done/intent-ask-primitive.md` | 声音换声复用 ask 原语 choice 形态（零新机制） |
+| `tasks/done/intent-ask-primitive.md` | 声音换声复用提问机器的选项问形态（零新机制） |
 | `CHAT_ARCHITECTURE.md` §4 | `reframe_clip` 准入评审；`set_caption_style` 枚举随 catalog 扩展 |
 | `VIDEO_EDITOR.md` | caption catalog 遵守 preset enum + CSS∩libass 纪律；分镜两步走契约见 `AGENT_ARCHITECTURE.md` §4（understand/plan 两步走） |
 | `AGENT_ARCHITECTURE.md` | `voice_gen`/`speaker_map` 节点的内部分析产物 + asset-hash 复用同款哲学 |

@@ -1,8 +1,8 @@
 # intent-surface-unification 实施简报——意图层单面化：chat 唯一入口
 
-> Status: ✅ 已落地（2026-08-03 立项，2026-08-04 完成）：W1–W7 全部代码 + 文档归位；剧本 harness S1–S8 全绿（真实 LLM，形态级断言）。**施工中两处硬化**（剧本暴露，超简报原范围）：① `InferredIntent` 读容忍 `outputs: null`——LLM 在 start/answer verdict 时惯于把 slots 置 null，此前校验失败被静默降级成默认 generate 任务书；② `presented_plan` 注入——dock 中任务书的一行摘要进 PlanAgent 上下文，裸"开始吧"接模糊首轮的 start 判定从 2/3 误判 → 3/3 稳定。**留用户手测**：composer → 跳转 → overlay 首条消息自动发出 → 任务书 dock → 手编/refine/Start 全链路 + 刷新/跨设备 dock 重建。
-> 依据：`docs/INTENT_COVERAGE.md`（现状矩阵）；`docs/CHAT_ARCHITECTURE.md`（task list 契约 / ask 原语）；`tasks/done/intent-ask-primitive.md`（G-1 start 路径）；`tasks/recipe-mention.md`（mention pin）
-> 用户裁决（2026-08-03）：① **意图识别只有 chat 一个入口**——composer 点发送 = spinner 建空项目 → 跳转详情 → overlay chat 接管，composer 自身不做任何意图识别；② **任务书确认保留**——pending task_book 从"独立 confirm 相位"降级为"chat 里有一个待决任务书"的普通状态；③ 意图三层模型（L1 用户画像 / L2 补全意图 / L3 歧义澄清）中 **L1 后置**（随需求再做），本期夯实 L2+L3；④ 验收 = **后端剧本 harness**（预设多轮对话、形态级断言），前端由用户手测；⑤ 风险清单全部处理（空项目垃圾 / 标题 / mention 时机 / Tour / 出生地校验 / 文档同步）
+> Status: ✅ 已落地（2026-08-03 立项，2026-08-04 完成）：W1–W7 全部代码 + 文档归位；剧本测试 S1–S8 全绿（真实 LLM，形态级断言）。**施工中两处硬化**（剧本暴露，超简报原范围）：① `InferredIntent` 读容忍 `outputs: null`——LLM 在 start/answer verdict 时惯于把 slots 置 null，此前校验失败被静默降级成默认 generate 任务书；② `presented_plan` 注入——dock 中任务书的一行摘要进 PlanAgent 上下文，裸"开始吧"接模糊首轮的 start 判定从 2/3 误判 → 3/3 稳定。**留用户手测**：composer → 跳转 → overlay 首条消息自动发出 → 任务书 dock → 手编/refine/Start 全链路 + 刷新/跨设备 dock 重建。
+> 依据：`docs/INTENT_COVERAGE.md`（现状矩阵）；`docs/CHAT_ARCHITECTURE.md`（task list 契约 / 提问机器）；`tasks/done/intent-ask-primitive.md`（G-1 start 路径）；`tasks/recipe-mention.md`（mention pin）
+> 用户裁决（2026-08-03）：① **意图识别只有 chat 一个入口**——composer 点发送 = spinner 建空项目 → 跳转详情 → overlay chat 接管，composer 自身不做任何意图识别；② **任务书确认保留**——pending task_book 从"独立 confirm 相位"降级为"chat 里有一个待决任务书"的普通状态；③ 意图三层模型（L1 用户画像 / L2 补全意图 / L3 歧义澄清）中 **L1 后置**（随需求再做），本期夯实 L2+L3；④ 验收 = **后端剧本测试**（预设多轮对话、形态级断言），前端由用户手测；⑤ 风险清单全部处理（空项目垃圾 / 标题 / mention 时机 / Tour / 出生地校验 / 文档同步）
 > 迁移：**零表迁移**——`project.pending_intent`、task_book question、`messages` 全部复用；仅 `ChatRequest` 加两个可选字段
 
 ## 0. Context
@@ -21,7 +21,7 @@
 - `ChatRequest` 已带 `mentions`（recipe chip 随首条消息进 chat 的通道现成）；缺 `prior_intent`（面板手编书的 pin-merge 输入）与 `brand_template_id`（composer 的品牌选择当前只流向 `/intent`）。
 - ComposerIntentAgent 的三动作 prompt（generate / answer / start，含"last line 裁决累积 prompt"规则）现成且经实战调优——**plan builder 保留整个 prompt 与 LLM 判定**，不改成代码侧确定性确认（多语言短确认的词典法太脆，且 plan builder 反正要被调用来区分修订/确认，不省调用）。
 - `list_projects`（projects.py:101）无过滤——空项目垃圾的拦截点。
-- `apps/api/scripts/` 只有运维脚本（reset_db / seed / migrate），无 e2e 设施——剧本 harness 新建。
+- `apps/api/scripts/` 只有运维脚本（reset_db / seed / migrate），无 e2e 设施——剧本测试 新建。
 
 ## 2. 设计论证
 
@@ -84,7 +84,7 @@ recipe mention：`resolve_recipe_mentions` 从 `/intent` 平移到 plan path，*
 
 ### 2.7 W7：文档同步（单事实源纪律）
 
-- `INTENT_COVERAGE.md`：§1 通道地图坍缩（四表面 → 一表面 + dock/answer 按钮面）；§3.0/§3.1 重写（首次/确认并入 chat 相位）；§4 兜底链 `/intent` 行改写；§6 测试矩阵指向剧本 harness
+- `INTENT_COVERAGE.md`：§1 通道地图坍缩（四表面 → 一表面 + dock/answer 按钮面）；§3.0/§3.1 重写（首次/确认并入 chat 相位）；§4 兜底链 `/intent` 行改写；§6 测试矩阵指向剧本测试
 - `CHAT_ARCHITECTURE.md`：plan path 入 §3（task_book 仍由系统 raise，N-18 不变）
 - `API.md`：`/intent`、`/infer-intent` 删除；`ChatRequest` 扩展字段
 - `CLAUDE.md`：composer 行为契约改写（composer 只建项目+发首条消息；意图识别唯一入口 = chat）
@@ -100,7 +100,7 @@ recipe mention：`resolve_recipe_mentions` 从 `/intent` 平移到 plan path，*
 | `app/pipeline/routes/projects.py` | W4：删 `/intent`；`list_projects` 空项目过滤 |
 | `app/chat/routes.py` | W4：删 `/infer-intent` |
 | `app/models/schemas.py` | W3：`ChatRequest` + `prior_intent` + `brand_template_id`；删 `ProjectIntent*` / `InferIntent*` |
-| `apps/api/scripts/chat_scenarios.py` | W6：新建剧本 harness |
+| `apps/api/scripts/chat_scenarios.py` | W6：新建剧本测试 |
 | `apps/web/src/components/home/HomeComposer.tsx` | W2：摘 `/intent` 调用；navigate 携带首条消息草稿 |
 | `apps/web/src/components/generation/GenerationOverlay.tsx` | W2：confirm 相位并入 chat dock；refine 改道 `/chat`；删 fallback `/intent` fetch |
 | i18n `en.ts` / `zh.ts` + Tour 配置 | W2：composer/overlay 文案同步（"send 后发生什么"变化） |
@@ -110,7 +110,7 @@ recipe mention：`resolve_recipe_mentions` 从 `/intent` 平移到 plan path，*
 
 - `PlanAgent`（任务书构建 agent）——ComposerIntentAgent 更名，职责不变：free-form 文本 → 任务书推断（三动作）。入 NAMING §2 词汇表；NAMING §5 同名审计结论更新为"chat 内部分工：ChatIntentAgent 路由 + PlanAgent 构建，入口唯一"。
 - `plan path`（plan 路径）——chat service 内分派分支名，沿用 chat loop 既有词汇，无新后缀。
-- `chat_scenarios.py`（剧本 harness）——scripts 运维脚本同族命名。
+- `chat_scenarios.py`（剧本测试）——scripts 运维脚本同族命名。
 - 无新表、无新列、无新包。
 
 ## 5. 验收

@@ -81,7 +81,7 @@
 2. 发射区把提示词语言改成"德语"→ 发送 → 用户点名赢配方默认（S5 语义沿新通道复绿）。
 3. composer @ picker 无配方项，只剩素材；旧项目历史消息里的 recipe chip 正常渲染。
 4. `POST /chat` 带 `recipe_id="unknown"` / reserved 卡 id → 422，提示含配方所需素材类型。
-5. 剧本 harness 全绿（S1–S40 无回归）；无配方发送（`recipe_id` 缺省）行为与现状逐字节一致。
+5. 剧本测试 全绿（S1–S40 无回归）；无配方发送（`recipe_id` 缺省）行为与现状逐字节一致。
 
 ## 6. Prohibited Behaviors
 

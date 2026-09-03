@@ -44,7 +44,7 @@ outputs 槽位语法（`IntentSlot` + `InferredIntent.outputs`）是「一场演
 - **preprocess 按 requires 入图**：节点 requires 含 TRANSCRIPT/MEDIA 而图中无 preprocess → 插入（今天 preprocess 只随 director 前奏捆绑）。
 - 纯变换链不进 director 前奏（无 needs_director 技能时 persona_bootstrap / understand / plan 全不入图——08-11「纯配音/翻译不提取人设」先例的编译化）。
 - translate/dub 的 `after` 声明吸收 `materialize_source`（注册项声明，无内核特判）。
-- 多视频素材 v1：取主视频（上传序第一）；多视频且无指认 → PlanAgent 反问（ask 原语复用）。
+- 多视频素材 v1：取主视频（上传序第一）；多视频且无指认 → PlanAgent 反问（提问机器复用）。
 
 **PlanAgent / plan path（`chat/intent.py` / `chat/service.py` / `schemas.py`）**
 - `InferredIntent` 换形：`outputs` / `outputs_explicit` / 簿级四修饰符退役 → `tasks: list[TaskItem]`（action/answer/material_text/specific_instruction/tone/confidence 不动）；plan_agent system prompt 重写——技能词汇与四态 loop 的 task_list 臂同源（注册表注入），媒体门禁规则保留（无 media 不出 select_clips/translate/dub），**删默认全家桶**（unclear → 最小链或反问）。
@@ -83,7 +83,7 @@ outputs 槽位语法（`IntentSlot` + `InferredIntent.outputs`）是「一场演
 
 | 期 | 内容 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|
-| 期 1 | 参数吸收 + materialize_source + 编译注入规则 + PlanAgent/服务换形 + 卡换形 + 配方预设换形 + director 图对齐 | **触发场景转正**：「给我的视频加中英双语字幕」+ 长视频 → 卡呈「整条视频 · 英字 + 中英双语」两行派生、无数量步进器 → Start → 单 run 出两条全长字幕视频，无剪辑；「一英一德两帖」双 language 参数不丢失；图文视频卡发射 = 整条轮播一条；存量 pending_intent 行升级后可 start；剧本 harness S1–S42 回归全绿 + 新增 S43+ 族（变换-only 链 / 双语 / 多版本 writer / 材料化注入 / legacy 升级） |
+| 期 1 | 参数吸收 + materialize_source + 编译注入规则 + PlanAgent/服务换形 + 卡换形 + 配方预设换形 + director 图对齐 | **触发场景转正**：「给我的视频加中英双语字幕」+ 长视频 → 卡呈「整条视频 · 英字 + 中英双语」两行派生、无数量步进器 → Start → 单 run 出两条全长字幕视频，无剪辑；「一英一德两帖」双 language 参数不丢失；图文视频卡发射 = 整条轮播一条；存量 pending_intent 行升级后可 start；剧本测试 S1–S42 回归全绿 + 新增 S43+ 族（变换-only 链 / 双语 / 多版本 writer / 材料化注入 / legacy 升级） |
 | 期 2 | mode① 清尸 + schema/词汇/doc 清扫 | 代码库 grep 无 `IntentSlot`（或仅派生 DTO）/ `merge_prior_slots` / `prior_intent`；CHAT_ARCH §3 与代码一致 |
 
 **运维铁律**（RECIPES §9.4）：改 pipeline 代码必重启常驻 worker；验证用手工 run 会被常驻 worker 抢跑，验后清数据。

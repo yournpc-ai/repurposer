@@ -630,7 +630,7 @@ Request:
 
 **Book path** (project scope, before the first run or while a task book is pending): the intent router builds / refines the task book. Response shapes by verdict — `generate`: `assistant_message` is the docked `task_book` question (the book itself is on `GET /projects/{id}/results` → `pending_brief`); `answer`: a plain informational reply; `start` (prose confirmation): the run starts — `run_id` is set and `answered_question` carries the settled task book.
 
-**Chat loop** (projects with runs): the assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can archive its QA pair.
+**Chat loop** (projects with runs): the assistant message carries the intent agent's four-state proposal (CHAT_ARCHITECTURE §3, N-18 + N-21): a non-empty `task_list` compiles into a new `WorkflowRun` (returned as `run_id`); `edit_ops` applies registry-validated ops to the target output; `ask` docks a typed question (`assistant_message.question`, never rendered in the flow); `answer` is a purely informational reply (capability / progress / explanation) as plain text — no run, no dock. `answered_question` carries the question this very message settled via deterministic autoResume (letter/number/label hit or freeform fallback), so the client can render the settled question in the flow.
 
 ### List Conversation Messages
 
@@ -644,7 +644,7 @@ GET /api/v1/chat/conversations/{id}/messages
 POST /api/v1/chat/messages/{id}/answer
 ```
 
-Answers a docked question (ask primitive) — writing the answer is what unblocks the pending decision: a task-book start begins the run, a choice answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the autonomy tier and the review panel's edited book), `option` / `freeform` (choice answers), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
+Answers a docked question (the question machine) — writing the answer is what unblocks the pending decision: a task-book start begins the run, an options answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the autonomy tier and the review panel's edited book), `option` / `freeform` (answers to options questions), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
 
 ## 11. Notifications
 

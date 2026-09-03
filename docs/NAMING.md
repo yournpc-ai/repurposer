@@ -41,13 +41,12 @@
 | 技能 | ——（营销泛词，无代码对应，N-42） | 用户文案里的泛能力修辞（"多语言字幕是我们的技能"✓）；**不是代码词**——UI 零命中证实非用户可操作对象；§1 同词纪律只约束用户可操作对象（配方/人设/任务书/产物/@mention），营销泛词豁免 | 代码里没有叫技能的模块（能力 = 工具；指令包 = `app/skills/`） |
 | 机械 | ——（退役为描述语，N-42） | "确定性工具"描述语：无 LLM 决策的工具子集（估价精确价的那个类）；不再是独立目录（原 `app/tools/` 拆 providers/ + 通用件随消费方） | 不再作独立座位词 |
 | 内部节点 | internal nodes | 非工具的内核 crew（住 `pipeline/`）：preprocess / persona_bootstrap / understand / plan / interrupt / render；例外：`materialize_source` 住 `tools/clips/`（复用 select_clips 的源决策函数，搬入 pipeline 会成 pipeline→tools 反向 import），以 `NodeBase.internal` 声明，自检豁免注册表席位（ADR-043） | 不进 TOOL_REGISTRY（interrupt 先例不变） |
-| 调用面 harness | harness | 模型调用面脚手架（N-33 限定）：Agent 漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底）+ contexts 装配 + prompts 模板 | 验收语境叫剧本 harness（test harness，两义行业并存） |
+| 调用面 harness | harness | 模型调用面脚手架：Agent 漏斗（装配→渲染→调用→校验→修复一轮→计量→声明兜底）+ contexts 装配 + prompts 模板 | harness 单义 = 本行（N-48）；测试脚本不叫 harness（那叫剧本测试） |
 | 估价 | `estimate` | 节点级估价函数（N-34）：机械精确价 / agent token 区间；**报价 = 图 fold**（全图 = 生成前总价，子图 = 修改单价）；`workflow_steps.estimate` 计划侧列与 `cost` 账簿侧对称 | 不是 `cost_hint`（三档已退役） |
 | 质检 | verify（节点 kind） | 单产物/全片质量校验节点（Phase 3） | 不是 eval（eval 是活动，verify 是节点） |
 | 质检环 | verify loop（`pipeline/verify.py`） | 期 3 落地的完整机制：executor 后挂 verify（`spec.for` = 产物类型；modifier 链尾部进 inputs，永远检终态）→ 确定性检查矩阵（quality.py，零 LLM）+ judge  advisory（§2.7 校准集落地前不作闸，cls="judge" 只进台账）→ 打回/回退/升级路由；裁决落 `outputs.quality`（`passed` / `needs_human` 非阻塞徽章） | 不是外挂流程——图内节点，attempt 预算是环的界 |
 | 打回 | `QualityBounce` | 质检环的有界环传输（ADR-047 节点内有界环）：verify 抛出 → execute_step 复位 executor+verify 为 pending（反馈骑 executor `spec.feedback`，runner 一次性弹出进 repair echo），下游已完成 modifier 一并复位重施；≤2 轮，成本落 executor 节点 | 不是 tool-loop；不是盲重试（反馈必带失败项+白名单纪律行） |
 | 最优轮回退 | best-not-last | 逐轮独立评分（同一检查矩阵），回归轮恢复 `spec.rounds` 快照里的最优早轮（新 id 重插 / targeted run 原位回滚），"末轮即最终"被禁 | 不是版本树（只存轮快照，无分支语义） |
-| 钩子预览闸 | hook preview gate（`pipeline/hook_gate.py`，kind `hook_gate` + `release_renders`） | 期 4 落地的产品面新闸（§2.5）：review 档 + 单条纯 select_clips 链（无 modifier）编译注入 `select_clips → verify → hook_gate → release_renders`；select_clips 抑制渲染扇出（render_status NULL），闸渲染每条 ≤5s 低清钩子预览（渲染服务黑盒 `preview` 参数，ADR-016 不破）落 `files.hook_preview`，dock 提问（`AskPayload.previews`）挂起；确认（默认，TTL 自动放行）/ 调整（dock 内联换图锚 `swap_hook_shot` + 调尾切点 `set_trim`，走用户可调 ops 端点）/ 降级（标题卡开场 = set_title ops，期 3 升级同机构）三路径；弃做 = 级联跳过 release，短片留 spec 不渲染 | 不是全量预览闸（每变体全预览 = 评审疲劳）；预览不是契约变体——黑盒内部参数 |
 | 产物 | `outputs` | 统一产物表；clip 是 type 之一 | 不是 clips/derivatives（已退役） |
 | 帧卡 | `quote_frame`（output type） | 金句链的逐条产物 PNG（帧底/照片底/深色底 + 单条字幕块）与链合成卡共用的产物 type（quote-cards §2.2）；合成卡以 `source_ref.quote_chain` 标记、以 `source_ref.parents` 指认帧卡父级；**图片产物**——无 render_spec、无渲染管线，zh 界面词「帧卡」 | 不是 render 任务；不是 quotes 行（quotes = 写手文本产物，帧卡 = 烘焙图） |
 | understand | `understand`（kind / 节点类 `Understand` / agent 实例 `understand`） | plan 前奏第一步：素材 → 素材理解（素材级，`source_ref.asset_hash` 命中即复用；N-44 正名，原 `director_understand`） | 不是角色（「导演」概念已退役——动词即节点） |
@@ -58,9 +57,8 @@
 | 操作 | `Operation` | 产物级编辑动作的记录（op + params + spec_after 快照），operations 表 | 不是 plan 级节点操作（归 RunPlan 小拓扑） |
 | 操作源 | `source` | operation 的发起来源：editor / chat / mcp / system（注册表） | — |
 | 结果卡 | `RunCard` | assistant 消息内嵌的 run 线性投影（步骤清单 + 产物卡片 + 聚合行） | 不是 DAG 画布 |
-| 操作卡 | `OpsCard` | assistant 消息内嵌的 edit ops 应用结果（op 清单 + 撤销） | — |
-| 提问 | `ask` | 提议态：IntentProposal 第三态（结构化提问，N-18；期 3 已落代码） | 不是 question——question 是落库态 |
-| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/choice/confirm + options/allow_freeform/estimate）；待决只在 dock，已决 QA 入档 | 不进消息流渲染 |
+| 提问 | `ask`（仅 router action 动词） | ask 的唯一座位 = router 动作动词（`InferredIntent.action="ask"` / IntentProposal 第三态 `type:"ask"`，N-18）；其 payload 类型 = `QuestionProposal` | 不是名词座位——机器名 = 提问机器；question 是落库态 |
+| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/question + options/allow_freeform/estimate，旧行读容忍升级只读不写）；待决只在 dock，已决坍缩入流 = answered question | 待决态不进消息流渲染 |
 | 回答 | `answer` | 一词两态同域：① 落库态 messages.answer JSONB（kind: option/freeform/bail/start + answered_at）——**用户**答复待决问题，NULL = 待决，answer 端点即恢复；② 提议态 `AnswerProposal`（IntentProposal 第四态，N-21）——**系统**对信息类提问的直答，落库为普通 assistant 消息 content（B1 同款），**不进 messages.answer** | — |
 | 弃做 | `bail` | 优雅退出一等公民：入口回 draft / checkpoint 下游级联 skipped；永不标 failed | 不是 cancel（cancel 是 UI 按钮词） |
 | 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
@@ -81,7 +79,7 @@
 | 路由器 | intent router（`intent_router`） | chat 边缘的意图路由（N-44 / ADR-052）：`plan_agent` / `chat_intent_agent` 的同概念正名——一个 router 两个相位 prompt（pre-run / post-run，相位 = 上下文参数）；ask 形状两相位共享（pre-run 不能提问的不对称根除）。业界坐标 = Anthropic routing 模式 / OpenAI SDK triage。**落地现状**：pre-run 相位实例已更名 `intent_router`（B1，2026-09-03）；post-run 相位实例仍名 `chat_intent_agent`——**物理形态已拍板 = 双实例保持**（2026-09-03，判词 DIALOG_WORKFLOW §8） | 不是 autonomy 义的 agent（永禁）；不是第二意图入口 |
 | brief 账本 | brief（`projects.pending_brief`） | 对话引擎的结构化状态（N-45 / ADR-052——更名已随 B1 落地 2026-09-03，原 `pending_intent`；槽位机制未实施 = B2）：槽位 topic / audience / tone / constraints[] / material_state + 任务链与 derived（原样）；**每槽带来源 user-stated > inferred > default，代码侧合并**（LLM proposes, code decides）；上下文工程主压缩件（累积 prompt 叙事降存档位） | 不是会话记忆（记忆层座位不变）；不是任务书（书 = 账本的渲染） |
 | 有界 loop 节点 | bounded loop node | agent 性的唯一合法座位（N-47 / ADR-052，**已拍板未实施**，B4 试点 = research 节点）：`NodeBase` 子类，内部 mini tool-loop（工具 = `app/tools/` 注册表）——三护栏：迭代上限（节点声明）/ 报价 = fold（上限 × 单次）/ 对外 = DAG 单节点（拓扑 / 占位 roster / SSE 无感）。业界同构 = LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component | 不是开放式 autonomy（永拒不变）；不是 tool-loop 解禁 |
-| 剧本验收 | `chat_scenarios.py` | 意图层验收 harness：预设多轮剧本对活 API 跑形态级断言（S1–S45，S22 退役留空），真实 LLM 不锁文案 | 不是测试套件（无测试套件纪律不变） |
+| 剧本测试 | `chat_scenarios.py` | scripts/ 下的剧本测试脚本：预设多轮剧本对活 API 跑形态级断言（S 编号，真实 LLM 不锁文案） | 不是测试套件（无测试套件纪律不变）；不叫 harness（harness 单义 = 调用面，N-48） |
 | 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `TOOL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
 | 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按节点类声明的 `retries` 预算（`NodeBase.retries`）复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
@@ -157,7 +155,6 @@
 | N-30 | Agent 归一：一个 Agent 类 + 声明实例 | 10 个 `xxx_agent` 类的真实差异只有 prompt 模板 / 输出 schema / 调用配置——**多样性是数据不是代码**。`agents/base.py` 一个 Agent 类（harness 漏斗：装配→渲染→调用→校验→修复一轮→计量→声明兜底）；工具私有声明住工具包，共享 crew（director/persona/translator）住 `agents/roster.py`；特殊子类仅流式。领域逻辑归 schema 校验 / 工具包工序（ClipPlans 时长钳制本已在 schema） | §1 |
 | N-31 | actor 概念提出后退役不采用 | actor 非世界级框架标准词（Mastra/Agno/LangGraph 词表 = Agent/Tool/Workflow/Node/Step；actor 属 actor-model 谱系）。工具包构成即"谁执行"的答案，不建分类字段；checkpoint 的"等人答"由节点自声明展示词，不立 taxonomy | §6 |
 | N-32 | outputs = 工具属性，注册表派生 | 产物类型 = 产出型工具的 `output_type` 属性：`IntentSlot.type` Literal 退役改 str + 注册表校验（§5 延伸到请求层）；`_OUTPUT_TO_NODE_KIND` / `_SKILL_TO_OUTPUT` / `KNOWN_OUTPUTS` / `SLOT_DEFAULT_COUNT` / `SLOT_COUNT_LIMITS` 五处散点全部注册表派生。**新增产物 = 一条注册项，agent 当轮即知**（intent_router prompt 产出类型清单同源注入） | §1、§5 |
-| N-33 | harness 词限定 | 行业两义并存：**agent harness** = 模型调用面脚手架（本系统，agents/base.py 漏斗 + contexts 装配 + prompts）；**test harness** = 测试器（剧本验收 harness S1–S45）。harness 单独出现 = 调用面；验收语境 = 剧本 harness | §1 |
 | N-34 | 估价函数 `estimate` 住节点；报价 = 图 fold | `cost_hint` 三档（cheap/moderate/expensive）退役 → `node.estimate(ctx)` 估价函数（机械精确价：TTS 按字符/render 按秒；agent token 区间）。报价 = 编译图逐节点求和：全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴。`workflow_steps.estimate` 增量列 = 计划侧成本，与 `cost` 账簿侧对称（施工图 = 计划+账簿一体的完整化）；actual 校准 estimate 闭环（§4 可空列纪律：NULL = 未估价） | §4、§5 |
 | N-35 | kind 与工具同名（N-42 前技能） | 工具包键即节点 kind（`dub`→`dub_clip`、`clips_pipeline`→`select_clips`、`post_gen`→`write_post`、`script`→`revise_script`，alembic 数据迁移）；`SkillEntry.node_kind` 映射字段退役（同物同名 §1，灭一处平行事实）；内部节点名不动 | §1 |
 | N-36 | asset scope 会话退役：ChatModal / AssetChatModal 删除，产物对话归 dock + 焦点注入 | 会话只剩 project scope——`ChatRequest.asset_id/asset_type` 删除（extra=forbid，旧调用 422），`Conversation.asset_id` 列留给历史行、新行恒 NULL；产物指认两通道 = @output mention（注册表参考族，确定性 id）+ `focus_output`（每轮携带 `{id,label}`，context 一行 + 落库为用户消息焦点前缀灰行）；随退役的还有 LLM 失败的 revise_script 猜测兜底——ask 反问是唯一失败形态（禁令 #7） | §1、ADR-041 D8 |
@@ -172,6 +169,8 @@
 | N-45 | `pending_intent` → `pending_brief`（brief 账本） | 对话引擎的结构化状态正名（ADR-052 判词 4——**更名已实施**（B1，2026-09-03），账本槽位机制 = B2 施工）：intent 是单轮推断产物，brief 是跨轮累积账本——槽位 topic / audience / tone / constraints[] / material_state，每槽带来源 user-stated > inferred > default，代码侧合并；字段 / 派生预览键 / 累积叙事随批换名 | §1 |
 | N-46 | 角色名 = 节点 display 属性，工艺叙事默认 | 工作流内部永远函数名（动词族零人格）；用户可见进行态叙事 = 节点声明上的可选展示属性（`task_name` 机制升级位）——默认**写工艺不写人**（「正在剪辑成片…」✓ /「剪辑师正在…」✗）；N-24 禁令对象 = assistant 的班子包装，步骤级工艺叙事是另一层；人形叙事 = 明确翻 N-24 的案（ADR-052 判词 7；**2026-09-03 用户拍板工艺叙事发稿**，人形版维持翻案门槛） | §1、§6 |
 | N-47 | 有界 loop 节点 = agent 性的唯一合法座位 | 编译期排不出拓扑的活（搜索 / 阅读）由 `NodeBase` 子类承接：内部 mini tool-loop（工具 = `app/tools/` 注册表）+ 三护栏（迭代上限 / 报价 = fold / 对外 = DAG 单节点）；业界同构 LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component；开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）永拒不变——常备否决清单只收编有界形态（ADR-052 判词 8） | §1、§6 |
+| N-48 | harness 单义 = 调用面 Agent 漏斗；「剧本 harness」→「剧本测试」（N-33 结案） | harness 行业两义（agent harness / test harness）当年登记并存是"登记歧义"而非杀歧义，防御性命名随 API 测试套件删除多年早到期。结案：harness 只指调用面漏斗（`agents/base.py` + contexts 装配 + prompts）；测试脚本就叫**剧本测试**（`scripts/chat_scenarios.py`），不配概念名——"测试套件"概念永禁复活（去方言批 `tasks/de-dialect-question-machine.md`） | §1、§6 |
+| N-49 | 提问机器词汇批：词根 question/answer，ask 只剩 action 动词一个座位 | 去方言批（简报 `tasks/de-dialect-question-machine.md`）：`AskPayload`→`QuestionPayload` / `AskProposal`→`QuestionProposal`（kind 字段删除——LLM 只产普通问题，task_book 恒由系统举起）/ `AskOption`→`Option` / kind 枚举收敛 `{task_book, question}`（语义分支只有"是不是任务书"一处，其余结算全走载荷握手字段：`workflow_run_id`→续跑 / `slot`→回填 / `caption_mode_` 前缀→恢复模式；旧行 "choice"/"confirm" 读容忍升级，只读不写）/ `QaPair`→`AnsweredQuestion`、`qaAnswerText`→`answeredQuestionText` / OpsCard 死码删除。**方言词永禁**入代码与文档：clarify / archive / receipt / eval / primitive | §1、§6 |
 
 ## 4. API 命名
 

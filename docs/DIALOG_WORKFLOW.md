@@ -1,6 +1,6 @@
 # Repurposer Dialog Workflow — 厚 Agent 蓝图
 
-> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief 账本+ask+出书门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；剧本 harness（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
+> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief 账本+ask+出书门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
 > 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；任务书字段契约归 ADR-043。
 
 ## 1. 蓝图一句话
@@ -114,10 +114,10 @@ router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON�
 | **B3 P1** ✅ 代码已落（2026-09-03，同上） | 任务书卡 = brief 渲染（槽位行 + 空框全删 + 确认 pill 改名 + 散文牙齿） | 卡面零空文本框；每个值有来源；不填任何东⻄直接 Start 的路径在卡上可读 |
 | **B4 research 试点** ✅ 代码已落（2026-09-03，同上） | 有界 loop 节点类型 + research 节点（工具：web search/fetch） | 三护栏成立；DAG/报价/占位无感；writer 收到 research brief |
 
-B1→B2→B3 顺序强依赖；B4 独立（2026-09-03 拍板「立即」——排期随批 09-09~09-10）。每批施工简报开做前落 `docs/tasks/`（flora-parity 先例）。B2~B4 三批代码同日落地（简报 `tasks/dialog-workflow-b*.md`），剧本 harness 与产品试用验证归用户。
+B1→B2→B3 顺序强依赖；B4 独立（2026-09-03 拍板「立即」——排期随批 09-09~09-10）。每批施工简报开做前落 `docs/tasks/`（flora-parity 先例）。B2~B4 三批代码同日落地（简报 `tasks/dialog-workflow-b*.md`），剧本测试 与产品试用验证归用户。
 
 ## 8. 悬案（待真实数据 / 后续拍板）
 
 1. **槽位优先级参数**：「问哪个槽」的顺序与「几轮问完出书」的阈值，初版按 §4.1 三条策略，真实对话数据回来再调。
 
-> 已关闭（2026-09-03 拍板）：research 试点排期（「立即」——B4 随批，PROGRESS W7）；人形叙事一判（工艺叙事发稿，人形 = 翻 N-24 维持门槛）；**router 两相位物理形态（案 A 双实例保持）**——`intent_router` + `chat_intent_agent` 各自声明，概念合一由本节与共享 `AskProposal` schema 承载：两声明的 schema / assemble / 动作集 / prompt 主体本就不共享，单实例相位参数化要以联合 schema（非法动作变可表示）+ assemble 纯度签名腐蚀 + `StreamingAgent` 漏斗手术为代价，且是未来唯一用户的 bespoke 机制；双实例下 prompt 迭代面物理隔离、第三件走「再声明一个实例」正典，A→B 可逆 B→A 贵。
+> 已关闭（2026-09-03 拍板）：research 试点排期（「立即」——B4 随批，PROGRESS W7）；人形叙事一判（工艺叙事发稿，人形 = 翻 N-24 维持门槛）；**router 两相位物理形态（案 A 双实例保持）**——`intent_router` + `chat_intent_agent` 各自声明，概念合一由本节与共享 `QuestionProposal` schema 承载：两声明的 schema / assemble / 动作集 / prompt 主体本就不共享，单实例相位参数化要以联合 schema（非法动作变可表示）+ assemble 纯度签名腐蚀 + `StreamingAgent` 漏斗手术为代价，且是未来唯一用户的 bespoke 机制；双实例下 prompt 迭代面物理隔离、第三件走「再声明一个实例」正典，A→B 可逆 B→A 贵。

@@ -301,7 +301,7 @@ class TaskListProposal(BaseModel):
     """Intent agent output, state A: run new tasks (→ compile_graph mode②).
 
     ``tasks=[]`` is the legal "ask back" state (CHAT_ARCH §7) — an ambiguous
-    instruction gets a clarifying reply in ``summary``, not a run.
+    instruction gets a plain reply in ``summary``, not a run.
     """
 
     model_config = ConfigDict(extra="forbid")

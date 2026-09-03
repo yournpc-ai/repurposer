@@ -8,7 +8,7 @@
 
 代码内核（RunPlan DAG + 注册表裁决 + chat 单入口）健康，但有系统性规范残留：skill 一词三义、产物类型散在 6+ 处、tools/ 混 LLM 调用、节点知识散在 4 个文件、xxx_agent ad-hoc 类群、harness 部件散落、`cost_hint` 报不了价（ADR-039 Context 八条）。本迭代是**规范级大迭代——内核流程不变，概念归位与模块重划**：技能叙事为架构主叙事，四层工程地图（Model / Harness / Graph / Loop）落为目录结构。
 
-**铁律：行为零变化**。compile_graph 同输入同图；chat 四态/裁决/dock/checkpoint 语义不变；runner 逻辑逐行平移；prompt 文案、template kwargs、温度、错误语义逐字节平移。剧本 harness（S1–S40）是回归网。
+**铁律：行为零变化**。compile_graph 同输入同图；chat 四态/裁决/dock/checkpoint 语义不变；runner 逻辑逐行平移；prompt 文案、template kwargs、温度、错误语义逐字节平移。剧本测试（S1–S40）是回归网。
 
 **DX 目标**：加技能 = 加一个包；加 agent = 加一条声明；加产物 = 加一条注册项。
 
@@ -57,7 +57,7 @@ app/pipeline/
 4. **pipeline/ 重划**：`node_runners.py` 拆出 `step_context.py` / `step_display.py` / `edges.py` / `morph.py` / `images.py`；技能 runner 迁各包 `node.py`（函数体逐行平移）；`node_runners.py` 只留内部 crew 六 runner；`registry.py` 收编全表 `STEP_RUNNERS`（内部 crew + 技能包节点），runner dotted path 全部指向新家；`_fill_summary` 对 SKILL_REGISTRY 的惰性 import 先例保留。
 5. **import 全量修正**（消费方清单见 §6）；`memory/routes.py`、`pipeline/routes/outputs.py`、`pipeline/routes/music.py` 调用形态同步换 `.call(...)` / 新模块路径。
 6. **grep 门禁**：`apps/api/scripts/check_gates.py`——扫描 `app/tools/*.py`，命中 `from app.agents` / `import app.agents` / `from app.clients` / `import app.clients` 即非零退出；P2 后扩"平行映射表"检查。
-7. **回归**：`uv run python scripts/check_gates.py` 绿；API + worker 启动自检（`assert_runners_registered`）过；真实 e2e 一跑（上传 → clips+post 生成 → chat 发起 dub_clip task_list → 完成）；剧本 harness 抽样 S1–S8 + 配音/翻译族全绿。
+7. **回归**：`uv run python scripts/check_gates.py` 绿；API + worker 启动自检（`assert_runners_registered`）过；真实 e2e 一跑（上传 → clips+post 生成 → chat 发起 dub_clip task_list → 完成）；剧本测试 抽样 S1–S8 + 配音/翻译族全绿。
 
 ### P2 NodeBase + outputs 派生 + kind 同名（08-11~08-12，含数据迁移）
 
@@ -82,11 +82,11 @@ app/pipeline/
 2. 各节点 `estimate(ctx)`：机械精确价（TTS 按字符 / render 按秒 / 克隆按次 / 图像按张）、agent token 区间（按 prompt 规模 + 输出 schema 给上下界）、checkpoint = 0。
 3. `create_run` 编译后逐节点估价写入 `estimate`（报价 = 图 fold 的存储侧）；actual（cost）与 estimate 偏差回归的查询形状落成。
 4. `SkillEntry.cost_hint` 三档退役；`messages.question` 的 `cost_hint` 字段保留 schema、估价供给切换为 estimate fold（dock 总价 / chat 单价 / 配方卡估价贴三面呈现 = 第六周消费面，不在本周）。
-5. 剧本 harness 新增三断言：flow 对账自检过 / 报价单调性（子图 ≤ 全图、非负）/ repair 只一轮。
+5. 剧本测试 新增三断言：flow 对账自检过 / 报价单调性（子图 ≤ 全图、非负）/ repair 只一轮。
 
 ## 4. 验收口径
 
-1. **每期完工定义**：剧本 harness（S1–S40 全集，真实 LLM）绿 + 门禁脚本绿 + 启动自检过；任一不过即未完工。
+1. **每期完工定义**：剧本测试（S1–S40 全集，真实 LLM）绿 + 门禁脚本绿 + 启动自检过；任一不过即未完工。
 2. **P1**：`app/agents/` 与 11 个技能包落位；`app/skills/*.py` 旧决策类文件全删；`grep -r "from app.skills.base\|skills.content_director\|skills.clip_agent…" app/` 无残留；真实 e2e（上传 → 生成 clips+post → chat 派发 dub/翻译/去口头禅 → 完成）行为与动工前逐点一致。
 3. **P2**：新增一种假想产物走查——加一条注册项（包 + output_type），PlanAgent prompt 当轮即知、`compile_graph` 裁决通过、出生地门禁生效，全程零散点改动（"改 6 处"成为历史的实证）；`workflow_steps` 存量 kind 全部新名。
 4. **P3**：全库无盲重试（grep `auto_retry`/`_with_retry` 无残留）；repair 一轮有剧本断言；chat service 无装配逻辑（`_build_context` 已迁）。

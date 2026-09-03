@@ -1,6 +1,6 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 harness 扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/QA 入档/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本 harness；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，harness 现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，harness 加 S48；S13 反问路径仅对 media-needing 工具生效；**2026-09-03 B2 brief 账本 + 出书门槛（ADR-052，简报 `tasks/dialog-workflow-b2-brief-ledger.md`）**：动作集四动作正名（generate→draft；**ask 一等动作**直通 dock 提问机器，payload 带 `slot` 握手 + `default_path` 牙齿——作答由 autoResume 回填账本 user-stated 并回 book path 重判，跳过 = 替身行走默认路径恢复出书）；**brief 账本**（topic/audience/tone/constraints/material_state 五槽位各带来源 + asked 簿，LLM 提议代码 merge，user-stated 恒胜）取代累积 prompt 成 book path 主状态，`pending.prompt` = 出生 prompt 冻结、`MAX_ACCUM_PROMPT_CHARS` 退役；**出书门槛**（draft 判定后的代码裁决）取代零素材反问网与 copy-writer lift 两补丁——无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记防重问），仍无根 → draft-from-persona dock（`draft_from_persona` reason + echo 散文声明），media-needing 链 ∧ 零素材 ∧ 桌上无书 → answer 素材引导永不 dock；harness 加 S50（merge_brief 来源矩阵）/ S51（裸愿望 → 主题问）/ S52（跳过 → draft-from-persona），S13/S48 断言改写归门槛）
+> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `tasks/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 剧本测试扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/已答问题入流/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本测试；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，剧本测试现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，剧本测试加 S48；S13 反问路径仅对 media-needing 工具生效；**2026-09-03 B2 brief 账本 + 出书门槛（ADR-052，简报 `tasks/dialog-workflow-b2-brief-ledger.md`）**：动作集四动作正名（generate→draft；**ask 一等动作**直通 dock 提问机器，payload 带 `slot` 握手 + `default_path` 牙齿——作答由 autoResume 回填账本 user-stated 并回 book path 重判，跳过 = 替身行走默认路径恢复出书）；**brief 账本**（topic/audience/tone/constraints/material_state 五槽位各带来源 + asked 簿，LLM 提议代码 merge，user-stated 恒胜）取代累积 prompt 成 book path 主状态，`pending.prompt` = 出生 prompt 冻结、`MAX_ACCUM_PROMPT_CHARS` 退役；**出书门槛**（draft 判定后的代码裁决）取代零素材反问网与 copy-writer lift 两补丁——无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记防重问），仍无根 → draft-from-persona dock（`draft_from_persona` reason + echo 散文声明），media-needing 链 ∧ 零素材 ∧ 桌上无书 → answer 素材引导永不 dock；剧本测试加 S50（merge_brief 来源矩阵）/ S51（裸愿望 → 主题问）/ S52（跳过 → draft-from-persona），S13/S48 断言改写归门槛）
 > 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
 > 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
 > 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `tasks/done/intent-ask-primitive.md` 与 `tasks/intent-surface-unification.md`。
@@ -155,45 +155,45 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 ## 6. 测试矩阵（e2e 覆盖对照）
 
-**剧本 harness**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空；S46 reframe 派发、S47 workflow_step 提及、S48 copy-writer 无素材软信号，2026-08-24；S50 merge_brief 来源矩阵、S51 ask 一等动作、S52 出书门槛，2026-09-03）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 本 harness。
+**剧本测试**：`apps/api/scripts/chat_scenarios.py`（2026-08-04 建，2026-08-06 扩编）——对活 API 跑预设多轮剧本，形态级断言（提案态 / dock / run 数 / 落库 / answer 契约 / checkpoint 状态机），真实 LLM 不锁文案。S1–S45 全绿（S22 随 recipe_id 传输带退役、编号留空；S46 reframe 派发、S47 workflow_step 提及、S48 copy-writer 无素材软信号，2026-08-24；S50 merge_brief 来源矩阵、S51 ask 一等动作、S52 出书门槛，2026-09-03）；迷失用户横切变体 S17–S21 散入五族（迷失是用户状态不是意图类别；`# W4 升级:` 注释 = 顾问姿态落地时要收紧的断言钩子）。checkpoint 族（S36–S39）seed parked run 手工行驱动，收官断言依赖 dev worker（answer 分支零 LLM）。**历史注**：本表早期引用的"期 N e2e / API 面 e2e"随 API 测试套件一并删除（漂移退役，见 CLAUDE.md Testing），现役唯一自动化验收 = 剧本测试。
 
 | 路径 | 覆盖 |
 |---|---|
-| 首次：模糊 dock + "开始吧"起 run + pending_brief 清空 | ✅ harness S1 |
-| 首次：精确 slots（clips×5 + post(de)）+ dock Start + run slots 一致 | ✅ harness S2 |
-| 修订循环：re-dock / supersede / 未修订任务存活（brief 账本重提全链）/ 确认起 run | ✅ harness S3 |
-| 能力提问纯 answer + 无书"start it"不死路不起 run | ✅ harness S4 |
-| 配方发射 = 模板原文（无 recipe_id 传输带；模板点名的产出与字幕语言全提取） | ✅ harness S5 |
-| 已有 run 项目不进 book path（回归） | ✅ harness S6 |
-| 闲聊 / 发布引导 answer 形态 + run 数不变 | ✅ harness S7 |
-| 空项目列表不可见 → 首发消息可见 | ✅ harness S8 |
-| checkpoint 三答法（option 按钮 / 打字母 autoResume / 自由文本）+ 答题即唤醒 | ✅ harness S36 |
-| checkpoint bail：节点 done(bailed) + 下游级联 skipped + COMPLETED（永不 failed） | ✅ harness S37 |
-| checkpoint 多 run 级联：新题 supersede → 旧 run 收官 COMPLETED | ✅ harness S38 |
-| checkpoint 过期：TTL 扫描默认项 auto-answer（expired 标记）+ 续跑 | ✅ harness S39 |
-| autoResume 边界：空白 attachment-only 不答 checkpoint；task_book 不参与 autoResume | ✅ harness S36d / S40 |
+| 首次：模糊 dock + "开始吧"起 run + pending_brief 清空 | ✅ S1 |
+| 首次：精确 slots（clips×5 + post(de)）+ dock Start + run slots 一致 | ✅ S2 |
+| 修订循环：re-dock / supersede / 未修订任务存活（brief 账本重提全链）/ 确认起 run | ✅ S3 |
+| 能力提问纯 answer + 无书"start it"不死路不起 run | ✅ S4 |
+| 配方发射 = 模板原文（无 recipe_id 传输带；模板点名的产出与字幕语言全提取） | ✅ S5 |
+| 已有 run 项目不进 book path（回归） | ✅ S6 |
+| 闲聊 / 发布引导 answer 形态 + run 数不变 | ✅ S7 |
+| 空项目列表不可见 → 首发消息可见 | ✅ S8 |
+| checkpoint 三答法（option 按钮 / 打字母 autoResume / 自由文本）+ 答题即唤醒 | ✅ S36 |
+| checkpoint bail：节点 done(bailed) + 下游级联 skipped + COMPLETED（永不 failed） | ✅ S37 |
+| checkpoint 多 run 级联：新题 supersede → 旧 run 收官 COMPLETED | ✅ S38 |
+| checkpoint 过期：TTL 扫描默认项 auto-answer（expired 标记）+ 续跑 | ✅ S39 |
+| autoResume 边界：空白 attachment-only 不答 checkpoint；task_book 不参与 autoResume | ✅ S36d / S40 |
 | ask 落库（chat_intent agent ask 提案 → dock choice） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
-| 单待决 supersede（task_book re-dock / checkpoint 到题）+ 待决重建（pending_question） | ✅ harness S27 / S38 / S26 |
-| answer 端点契约：一行一答 409 / kind×question-kind 422 / autonomy 透传 run.context | ✅ harness S25 / S24（422 矩阵见 S11、S29、S35） |
-| 出生地 guards：clips-media 门 + count 边界（节点 `count_limits` 声明派生：clips 1-10 / quotes 1-20 / carousel 2-15） | ✅ harness S11 / S29 |
-| chat_intent agent 实分派：task_list 新 run / edit_ops operations 行（chat 血统 + message_id） | ✅ harness S31 / S32 |
-| G-1 started 联合 + task_book kind=start + pending_brief 清空 | ✅ harness S1（期 4 补四 e2e 的继承者） |
-| G-4 answer 形态（能力/发布问题：无 run、无 dock、run 数不变） | ✅ harness S4/S7 |
-| G-2 进度询问 answer 形态（节点级上下文注入，无新 run） | ✅ harness S33 |
-| G-6 元信息修改（品牌/说话人）answer 导航形态 | ✅ harness S34 |
-| 焦点注入：focus_output 随轮落库、不开新会话、不进 book path；退役 asset scope 参数被 422 | ✅ harness S35 |
-| 附件：attachment-only 发送持久化 + 替身行推断不死路 | ✅ harness S30 |
-| task_book bail → 回 draft 可重开；QA 入档（superseded/start 标记） | ✅ harness S23 / S27 |
+| 单待决 supersede（task_book re-dock / checkpoint 到题）+ 待决重建（pending_question） | ✅ S27 / S38 / S26 |
+| answer 端点契约：一行一答 409 / kind×question-kind 422 / autonomy 透传 run.context | ✅ S25 / S24（422 矩阵见 S11、S29、S35） |
+| 出生地 guards：clips-media 门 + count 边界（节点 `count_limits` 声明派生：clips 1-10 / quotes 1-20 / carousel 2-15） | ✅ S11 / S29 |
+| chat_intent agent 实分派：task_list 新 run / edit_ops operations 行（chat 血统 + message_id） | ✅ S31 / S32 |
+| G-1 started 联合 + task_book kind=start + pending_brief 清空 | ✅ S1（期 4 补四 e2e 的继承者） |
+| G-4 answer 形态（能力/发布问题：无 run、无 dock、run 数不变） | ✅ S4/S7 |
+| G-2 进度询问 answer 形态（节点级上下文注入，无新 run） | ✅ S33 |
+| G-6 元信息修改（品牌/说话人）answer 导航形态 | ✅ S34 |
+| 焦点注入：focus_output 随轮落库、不开新会话、不进 book path；退役 asset scope 参数被 422 | ✅ S35 |
+| 附件：attachment-only 发送持久化 + 替身行推断不死路 | ✅ S30 |
+| task_book bail → 回 draft 可重开；已答问题入流（superseded/start 标记） | ✅ S23 / S27 |
 | translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |
-| 字幕归类："subtitle them in French" → translate_clip(fr/de) | ✅ harness S43 |
-| 整条视频字幕："给我的视频加中英双语字幕" → 变换技能单独成链 + materialize_source 注入 | ✅ harness S44 |
-| repair 有界重试：schema 拒 → 一轮修复带结构化回显，再拒即败无第三轮；transport 不修 | ✅ harness S41 |
-| 估价地基：flow 对账自检 + 报价 fold 单调性（子图 ≤ 全图、非负）+ NULL 语义 | ✅ harness S42 |
-| materialize 注入矩阵：media / stills 注入（stills 先 align_stills）、existing 空 inputs、无画像编译期拒绝、select_clips 在场不注入 | ✅ harness S45 |
-| copy-writer 无素材软信号：无素材 + 写帖 → draft + dock 带 `text_without_material` reason + Start 起 run；media-needing 不夹带（原硬门禁 lift 已折进出书门槛） | ✅ harness S48（2026-08-24，门槛同车改写） |
-| ask 一等动作：裸愿望 → choice dock（slot=topic + default_path + 2-4 选项 + freeform 恒在）→ 作答回填账本 user-stated | ✅ harness S51 |
-| 跳过提问 = 默认路径：choice bail + slot → 替身行恢复 book path → draft-from-persona dock（reasons 标记 + asked 簿 + echo 散文） | ✅ harness S52 |
-| merge_brief 纯函数：来源优先级矩阵（user-stated 恒胜 / 重申恒胜 / inferred 可覆写）+ asked 簿永不吃 LLM 提议 | ✅ harness S50 |
+| 字幕归类："subtitle them in French" → translate_clip(fr/de) | ✅ S43 |
+| 整条视频字幕："给我的视频加中英双语字幕" → 变换技能单独成链 + materialize_source 注入 | ✅ S44 |
+| repair 有界重试：schema 拒 → 一轮修复带结构化回显，再拒即败无第三轮；transport 不修 | ✅ S41 |
+| 估价地基：flow 对账自检 + 报价 fold 单调性（子图 ≤ 全图、非负）+ NULL 语义 | ✅ S42 |
+| materialize 注入矩阵：media / stills 注入（stills 先 align_stills）、existing 空 inputs、无画像编译期拒绝、select_clips 在场不注入 | ✅ S45 |
+| copy-writer 无素材软信号：无素材 + 写帖 → draft + dock 带 `text_without_material` reason + Start 起 run；media-needing 不夹带（原硬门禁 lift 已折进出书门槛） | ✅ S48（2026-08-24，门槛同车改写） |
+| ask 一等动作：裸愿望 → 选项问 dock（slot=topic + default_path + 2-4 选项 + freeform 恒在）→ 作答回填账本 user-stated | ✅ S51 |
+| 跳过提问 = 默认路径：选项问 bail + slot → 替身行恢复 book path → draft-from-persona dock（reasons 标记 + asked 簿 + echo 散文） | ✅ S52 |
+| merge_brief 纯函数：来源优先级矩阵（user-stated 恒胜 / 重申恒胜 / inferred 可覆写）+ asked 簿永不吃 LLM 提议 | ✅ S50 |
 
 ---
 
