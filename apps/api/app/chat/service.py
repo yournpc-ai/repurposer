@@ -78,6 +78,7 @@ from app.models.tables import (
     Conversation,
     Message,
     Output,
+    Persona,
     Project,
     WorkflowRun,
 )
@@ -91,6 +92,7 @@ from app.pipeline.derivative_dispatch import (
     derive_quote_alt_language,
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
+from app.platform.project_context import resolve_default_persona
 from app.providers.llm.minimax import MiniMaxError
 from app.tools import ToolRejected, validate_task_list
 
@@ -1485,9 +1487,28 @@ async def _book_turn(
         ),
         source=BriefSlotSource.DEFAULT,
     )
+    # Asking strategy ②'s pantry (C2): resolve the turn's persona so the
+    # router can source concrete one-word option values from it (explicit
+    # pick → the pending book's → the project mount → the user default —
+    # the same precedence resolve_run_persona stamps at start). Without
+    # this block the "2-4 concrete options" rule had no material and
+    # questions starved to bare text.
+    persona_id = (
+        request.persona_id
+        or (stored.persona_id if stored else None)
+        or project.persona_id
+    )
+    persona: Persona | None = None
+    if persona_id:
+        persona = (
+            await db.execute(select(Persona).where(Persona.id == persona_id))
+        ).scalar_one_or_none()
+    if persona is None:
+        persona = await resolve_default_persona(db, user_id)
     infer_kwargs: dict[str, Any] = dict(
         message=text,
         brief=ledger_in,
+        persona=persona,
         filename=filename,
         presented_book=presented_book,
         recent=recent_lines or None,

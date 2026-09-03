@@ -8,6 +8,10 @@ User message: {{ message }}
 The brief ledger so far (code-merged state — a user-stated slot is the user's own words, a fixed fact; the asked line names slots already asked once — never ask those again):
 {{ brief_lines|join('\n') }}
 {%- endif %}
+{%- if persona_lines %}
+The user's persona (identity memory — asking strategy ②'s pantry: source concrete one-word option values from here first, e.g. audience / domain terms; when nothing here fits the slot, asking with few or no options is legal):
+{{ persona_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}

@@ -29,11 +29,13 @@ from typing import Any
 from app.agents.base import StreamingAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.models.schemas import BriefLedger, InferredIntent, IntentResult
+from app.models.tables import Persona
 
 
 def _assemble_book_turn(
     message: str,
     brief: BriefLedger | None = None,
+    persona: Persona | None = None,
     filename: str | None = None,
     presented_book: str | None = None,
     recent: list[str] | None = None,
@@ -49,6 +51,11 @@ def _assemble_book_turn(
     state freshly stamped) — rendered as the ledger block: valued slots with
     their source, the material line always, and the asked roll (the router
     reads it for the root judgment and never re-asks an asked slot).
+    ``persona``: the turn's persona row (the caller resolves: explicit pick →
+    pending book's → project mount → user default) — rendered as a few
+    audience / identity / domain lines, asking strategy ②'s pantry: the
+    one-word option values come from here first (the C2 fix — the rule was
+    written but its pantry was never assembled, so options starved).
     ``presented_book``: one-line digest of the docked task book, when one is
     on the table — the start/revise verdict needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
@@ -80,10 +87,29 @@ def _assemble_book_turn(
         if brief.asked:
             lines.append(f"- already asked: {', '.join(brief.asked)}")
         brief_lines = lines
+    # Persona block (Memory 单向注入 — the consumer pulls): restrained on
+    # purpose — enough for strategy ② to pick concrete one-word options
+    # (audience / domain terms), NOT the whole identity card.
+    persona_lines: list[str] | None = None
+    if persona is not None:
+        lines = []
+        if persona.name:
+            lines.append(f"- name: {persona.name}")
+        if persona.title:
+            lines.append(f"- title: {persona.title}")
+        if persona.audience:
+            lines.append(f"- audience: {persona.audience}")
+        values = [str(v) for v in (persona.core_values or []) if v][:6]
+        if values:
+            lines.append(f"- core values: {', '.join(values)}")
+        if persona.emotional_tone:
+            lines.append(f"- tone: {persona.emotional_tone}")
+        persona_lines = lines or None
     return (
         {
             "message": message,
             "brief_lines": brief_lines,
+            "persona_lines": persona_lines,
             "filename": filename,
             "presented_book": presented_book,
             "recent": recent,
