@@ -29,13 +29,14 @@ from typing import Any
 from app.agents.base import StreamingAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.models.schemas import BriefLedger, InferredIntent, IntentResult
-from app.models.tables import Persona
+from app.models.tables import Message, Persona
 
 
 def _assemble_book_turn(
     message: str,
     brief: BriefLedger | None = None,
     persona: Persona | None = None,
+    pending_question: Message | None = None,
     filename: str | None = None,
     presented_book: str | None = None,
     recent: list[str] | None = None,
@@ -56,6 +57,12 @@ def _assemble_book_turn(
     audience / identity / domain lines, asking strategy ②'s pantry: the
     one-word option values come from here first (the C2 fix — the rule was
     written but its pantry was never assembled, so options starved).
+    ``pending_question``: the conversation's still-open plain question, when
+    one awaits (ADR-053 R2 插话支持) — rendered as the pending block so the
+    router judges THIS message against it first: a user-stated proposal for
+    the pending slot IS the answer (code settles the row), anything else is
+    an interjection (the question stays open, the reply gets the reminder
+    tail).
     ``presented_book``: one-line digest of the docked task book, when one is
     on the table — the start/revise verdict needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
@@ -105,11 +112,27 @@ def _assemble_book_turn(
         if persona.emotional_tone:
             lines.append(f"- tone: {persona.emotional_tone}")
         persona_lines = lines or None
+    pending_lines: list[str] | None = None
+    if pending_question is not None:
+        payload = pending_question.question or {}
+        lines = [f"- question: {pending_question.content or ''}"]
+        options = payload.get("options") or []
+        if options:
+            lines.append(
+                "- options: "
+                + "; ".join(f"{o.get('id')}) {o.get('label')}" for o in options)
+            )
+        if payload.get("slot"):
+            lines.append(f"- slot: {payload['slot']}")
+        if payload.get("default_path"):
+            lines.append(f"- if the user skips: {payload['default_path']}")
+        pending_lines = lines
     return (
         {
             "message": message,
             "brief_lines": brief_lines,
             "persona_lines": persona_lines,
+            "pending_lines": pending_lines,
             "filename": filename,
             "presented_book": presented_book,
             "recent": recent,

@@ -415,6 +415,16 @@ class IntentResult(BaseModel):
         return data
 
     proposal: IntentProposal
+    # 插话支持 (ADR-053 R2): when the context shows a pending question, the
+    # agent's judgment on whether THIS message settles it — judgment is the
+    # LLM's, settlement is code's (the retired autoResume freeform
+    # masking's honest successor). "answer" = the message IS the question's
+    # answer (code settles the row freeform; a parked interrupt's answer
+    # wakes its run); "skip" = an explicit decline (code settles it as a
+    # bail — the text question's only ×, since it docks no pill);
+    # "none" = an interjection (the question stays pending and the reply
+    # gets the code-composed reminder tail).
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
 class AnswerResponse(BaseModel):

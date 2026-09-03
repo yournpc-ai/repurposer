@@ -12,6 +12,10 @@ The brief ledger so far (code-merged state — a user-stated slot is the user's 
 The user's persona (identity memory — asking strategy ②'s pantry: source concrete one-word option values from here first, e.g. audience / domain terms; when nothing here fits the slot, asking with few or no options is legal):
 {{ persona_lines|join('\n') }}
 {%- endif %}
+{%- if pending_lines %}
+A question of yours is still awaiting the user's answer — judge THIS message against it first (if it supplies the pending slot's value, propose that slot with source 'user-stated' in your brief update; if it is an unrelated interjection, judge the message on its own merits and leave that slot alone — the question stays pending and the user gets a reminder):
+{{ pending_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}

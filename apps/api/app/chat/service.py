@@ -165,6 +165,20 @@ def _draft_from_persona_echo(text: str) -> str:
     )
 
 
+def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
+    """插话提醒尾 (ADR-053 R2): an interjection turn's reply ends with a
+    code-composed reminder — the still-pending question plus its default
+    path, in the turn's language (code-forced text, never the LLM's voice —
+    the draft-from-persona declaration's doctrine)."""
+    if _prefers_zh(text):
+        tail = f"\n\n（还在等你的回答：{question}"
+        tail += f"——{default_path}）" if default_path else "——一句话就行）"
+        return tail
+    tail = f"\n\n(Still waiting for your answer: {question}"
+    tail += f" — {default_path})" if default_path else " — one short line is enough)"
+    return tail
+
+
 
 def _edit_op_items(proposal: EditOpsProposal) -> list[dict]:
     """Normalize the LLM's tolerant EditOp shape into registry items.
@@ -1265,7 +1279,7 @@ async def answer_question(
                 recent=history[-5:],
             )
         else:
-            follow_up, _run_id, bailed_run_ids = await _propose_turn(
+            follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
                 db, user_id, conversation, project, say, [], history[-6:]
             )
 
@@ -1405,6 +1419,19 @@ async def _book_turn(
     # each turn as its own user message; stored.prompt stays the birth
     # prompt, frozen at the first dock (never re-accumulated).
 
+    # 插话支持 (ADR-053 R2): a still-open plain question rides the router's
+    # context explicitly (the pending block) — a user-stated proposal for
+    # ITS slot is the answer (code settles the row after the merge below),
+    # anything else is an interjection (the question stays open and the
+    # answer exit's reply gets the reminder tail). A pending task_book is
+    # this path's own confirmation target (G-1), never a judgment subject.
+    pending_q = await latest_pending_question(db, conversation_id)
+    if pending_q is not None and (
+        pending_q.workflow_run_id is not None
+        or (pending_q.question or {}).get("kind") != "question"
+    ):
+        pending_q = None
+
     assets = list(
         (
             await db.execute(
@@ -1509,6 +1536,7 @@ async def _book_turn(
         message=text,
         brief=ledger_in,
         persona=persona,
+        pending_question=pending_q,
         filename=filename,
         presented_book=presented_book,
         recent=recent_lines or None,
@@ -1554,6 +1582,34 @@ async def _book_turn(
         ),
         source=BriefSlotSource.DEFAULT,
     )
+
+    # 插话判定结算 (ADR-053 R2): the router saw the pending question in
+    # context; a user-stated proposal for ITS OWN slot is the answer —
+    # code settles the row (freeform, the user's stated value) and the
+    # enriched ledger drives the gate below. Anything else leaves the
+    # question pending (the answer exit's reply gets the reminder tail).
+    settled_pending: Message | None = None
+    if pending_q is not None:
+        p_slot = (pending_q.question or {}).get("slot")
+        proposed_slot = (
+            getattr(intent.brief, p_slot, None)
+            if p_slot and intent.brief is not None
+            else None
+        )
+        if (
+            proposed_slot is not None
+            and proposed_slot.source == BriefSlotSource.USER_STATED
+            and isinstance(proposed_slot.value, str)
+            and proposed_slot.value.strip()
+        ):
+            pending_q.answer = AnswerPayload(
+                kind="freeform",
+                text=proposed_slot.value.strip(),
+                answered_at=datetime.now(UTC),
+            ).model_dump(mode="json")
+            await db.flush()
+            settled_pending = pending_q
+            pending_q = None
 
     # Chain adjudication (ADR-043): the registry validates the proposed task
     # list — one bounded repair round on rejection (the funnel's reserved
@@ -1642,7 +1698,7 @@ async def _book_turn(
                 ),
                 intent=intent.model_dump(mode="json"),
             )
-            return assistant_message, None, None, bailed_run_ids
+            return assistant_message, None, settled_pending, bailed_run_ids
 
     reasons = await _compute_book_reasons(db, project, intent)
 
@@ -1694,7 +1750,7 @@ async def _book_turn(
                 assistant_message = await _create_message(
                     db, conversation_id, "assistant", active_line
                 )
-                return assistant_message, None, None, []
+                return assistant_message, None, settled_pending, []
             bailed_run_ids = await sync_task_book_question(
                 db, user_id, project, stored.intent, stored.prompt,
                 reasons=stored.reasons, derived=stored.derived,
@@ -1702,7 +1758,7 @@ async def _book_turn(
             )
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
-            return question, None, None, bailed_run_ids
+            return question, None, settled_pending, bailed_run_ids
         # Start-misfire → treat the turn as a fresh draft verdict; the
         # 出书门槛 below judges it (media without material / rootless), so a
         # misfired "start" can never dock a groundless book either.
@@ -1768,7 +1824,7 @@ async def _book_turn(
                     ),
                     intent=intent.model_dump(mode="json"),
                 )
-                return assistant_message, None, None, bailed_run_ids
+                return assistant_message, None, settled_pending, bailed_run_ids
             if not has_root:
                 # Asked once, still rootless → the default path docks: the
                 # chain is the LLM's (registry-adjudicated), the declaration
@@ -1779,11 +1835,21 @@ async def _book_turn(
     if intent.action == "answer" and intent.answer:
         # Capability question: the reply lands as a plain assistant message
         # and the stored task book stays untouched — an answer turn never
-        # overwrites the plan the user is confirming.
+        # overwrites the plan the user is confirming. When a question
+        # survived the turn unsettled (an interjection, ADR-053 R2), the
+        # reply ends with the code-composed reminder tail (the question +
+        # its default path — never the LLM's voice).
+        content = intent.answer
+        if pending_q is not None:
+            content += _reminder_tail(
+                text,
+                pending_q.content or "",
+                (pending_q.question or {}).get("default_path"),
+            )
         assistant_message = await _create_message(
-            db, conversation_id, "assistant", intent.answer
+            db, conversation_id, "assistant", content
         )
-        return assistant_message, None, None, []
+        return assistant_message, None, settled_pending, []
 
     # A turn that omits persona_id must not clobber the persona choice an
     # earlier turn made.
@@ -1813,7 +1879,7 @@ async def _book_turn(
         assistant_message = await _create_message(
             db, conversation_id, "assistant", active_line
         )
-        return assistant_message, None, None, []
+        return assistant_message, None, settled_pending, []
     # Caption mode for captioned-video runs (Phase 1 book-path fix,
     # 2026-08-25, RECIPES §4.7): the book_path is the FIRST-turn entry
     # point for fresh projects — the chat path's elif alone leaves the very
@@ -1846,7 +1912,7 @@ async def _book_turn(
                 ),
                 intent=stashed_intent,
             )
-            return assistant_message, None, None, bailed_run_ids
+            return assistant_message, None, settled_pending, bailed_run_ids
         # §2.3/D4 (2026-08-28): no distinct alt language exists (the source
         # material's language equals every candidate) — bilingual would
         # print one language twice. Skip the question entirely and stamp
@@ -1895,7 +1961,7 @@ async def _book_turn(
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it
-    return question, None, None, bailed_run_ids
+    return question, None, settled_pending, bailed_run_ids
 
 
 async def _propose_turn(
@@ -1909,25 +1975,38 @@ async def _propose_turn(
     focus_output_id: UUID | None = None,
     on_delta=None,
     on_reasoning=None,
-) -> tuple[Message, UUID | None, list[UUID]]:
+) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3):
     assemble context, single intent call, adjudicate, record the reply.
 
     Shared by ``chat()`` and the choice-answer continuation in
     ``answer_question`` (the answer endpoint doubles as resume). Returns the
-    assistant message, the dispatched run id if any, and the run ids whose
+    assistant message, the dispatched run id if any, the run ids whose
     parked interrupt was cascade-bailed when a new docked question
-    superseded it (finalized by the caller after its commit). Flush-only —
-    the caller commits.
+    superseded it (finalized by the caller after its commit), and the
+    pending question this turn settled by judgment (ADR-053 R2 — the
+    caller surfaces it as ChatResponse.answered_question so the client's
+    pill clears and the receipt lands). Flush-only — the caller commits.
     """
     conversation_id = UUID(str(conversation.id))
+    pending = (
+        await latest_pending_question(db, conversation_id) if project else None
+    )
+    # A pending task_book rides the context as before, but it is never a
+    # judgment subject on this path — its answers are the dock's Start /
+    # book-path turns (the same exclusion as prepare_chat_turn's
+    # autoResume); judged settlement and the reminder tail below apply to
+    # plain questions only.
+    pending_judgable = (
+        pending is not None and (pending.question or {}).get("kind") == "question"
+    )
     context = (
         await _build_context(
             db,
             project,
             recent,
             mentions,
-            await latest_pending_question(db, conversation_id),
+            pending,
             focus_output_id,
         )
         if project
@@ -1937,6 +2016,7 @@ async def _propose_turn(
     proposal: TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal | None = (
         None
     )
+    disposition = "none"
     try:
         if on_delta is not None:
             # Chat SSE: stream the verdict; raw fragments feed the prose
@@ -1949,6 +2029,7 @@ async def _propose_turn(
         else:
             result = await chat_intent_agent.call(message=text, context=context)
         proposal = result.proposal
+        disposition = result.pending_disposition
     except MiniMaxError:
         proposal = None
 
@@ -1956,6 +2037,59 @@ async def _propose_turn(
     bailed_run_ids: list[UUID] = []
     assistant_message: Message | None = None
     assistant_content: str | None = None
+    settled_question: Message | None = None
+
+    # 插话判定结算 (ADR-053 R2): the pending question rode the context and
+    # the envelope's disposition is the agent's judgment — settlement is
+    # code's (the retired autoResume masking's honest successor). A judged
+    # answer settles freeform — a parked interrupt's answer wakes its run
+    # (the wake IS the continuation, so the proposal is not dispatched on
+    # top); a judged skip settles bail (the text question's only ×); an
+    # interjection leaves the question open and the reply gets the
+    # code-composed reminder tail below.
+    if pending_judgable and proposal is not None and disposition == "answer":
+        pending.answer = AnswerPayload(
+            kind="freeform",
+            text=text,
+            answered_at=datetime.now(UTC),
+        ).model_dump(mode="json")
+        await db.flush()
+        settled_question = pending
+        pending = None
+        if settled_question.workflow_run_id is not None:
+            from app.pipeline.orchestrator import resume_waiting_interrupt
+
+            run = await db.get(WorkflowRun, settled_question.workflow_run_id)
+            if run is not None:
+                await resume_waiting_interrupt(db, run, settled_question.answer)
+            decided = (settled_question.answer or {}).get("text") or ""
+            # Same deterministic acknowledgment as the option-hit wake in
+            # prepare_chat_turn — display language follows the UI locale.
+            from app.ui_locale import current_ui_language
+
+            assistant_message = await _create_message(
+                db,
+                conversation_id,
+                "assistant",
+                f"方向已锁定：{decided}。继续生成。"
+                if (current_ui_language() or "").startswith("zh")
+                else f"Direction locked: {decided}. Resuming the run.",
+            )
+            return assistant_message, None, [], settled_question
+    elif pending_judgable and proposal is not None and disposition == "skip":
+        pending.answer = AnswerPayload(
+            kind="bail",
+            answered_at=datetime.now(UTC),
+        ).model_dump(mode="json")
+        await db.flush()
+        settled_question = pending
+        if pending.workflow_run_id is not None:
+            from app.pipeline.orchestrator import bail_waiting_interrupt
+
+            run = await db.get(WorkflowRun, pending.workflow_run_id)
+            if run is not None and await bail_waiting_interrupt(db, run) is not None:
+                bailed_run_ids.append(UUID(str(run.id)))
+        pending = None
 
     if proposal is None:
         # LLM failure: ask back — the only failure form (prohibition #7;
@@ -2200,7 +2334,21 @@ async def _propose_turn(
             workflow_run_id=run_id,
             intent=proposal.model_dump(mode="json") if proposal else None,
         )
-    return assistant_message, run_id, bailed_run_ids
+    # 插话提醒尾 (ADR-053 R2): the pre-turn question survived the turn
+    # unsettled and unsuperseded (an interjection) — the reply ends with
+    # the code-composed reminder: the question + its default path, in the
+    # turn's language.
+    if pending_judgable and pending is not None and assistant_message.question is None:
+        still_open = await latest_pending_question(db, conversation_id)
+        if still_open is not None and still_open.id == pending.id:
+            assistant_message.content = (
+                assistant_message.content or ""
+            ) + _reminder_tail(
+                text,
+                pending.content or "",
+                (pending.question or {}).get("default_path"),
+            )
+    return assistant_message, run_id, bailed_run_ids, settled_question
 
 
 @dataclass
@@ -2288,12 +2436,15 @@ async def prepare_chat_turn(
         ).scalars()
     )
 
-    # Deterministic autoResume (zero LLM): while a question is
-    # pending, the user's free text is its answer when it hits an option
-    # (letter / number / verbatim label) or freeform replies are allowed —
-    # otherwise it's a new intent and the question stays pending. A pending
-    # task_book (unconfirmed plan) never resumes here: its answers are the
-    # dock's Start/Cancel and book-path refinements below.
+    # Deterministic autoResume (zero LLM): while a question is pending,
+    # the user's free text settles it ONLY on an unambiguous option hit
+    # (letter / number / verbatim label — ADR-053: the "any text =
+    # freeform answer" masking is retired; every other message is judged
+    # by the intent router / chat intent agent in context, and only a
+    # judged answer settles the row — an interjection leaves it pending
+    # and the reply gets the reminder tail). A pending task_book
+    # (unconfirmed plan) never resumes here: its answers are the dock's
+    # Start and book-path refinements below.
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
@@ -2305,15 +2456,6 @@ async def prepare_chat_turn(
                     kind="option",
                     option_id=matched.id,
                     text=matched.label,
-                    answered_at=datetime.now(UTC),
-                ).model_dump(mode="json")
-                answered_question = pending
-            elif pending_payload.allow_freeform and request.message.strip():
-                # A blank attachment-only turn never answers a interrupt —
-                # the files ride the intent paths below instead.
-                pending.answer = AnswerPayload(
-                    kind="freeform",
-                    text=request.message,
                     answered_at=datetime.now(UTC),
                 ).model_dump(mode="json")
                 answered_question = pending
@@ -2446,7 +2588,7 @@ async def execute_chat_turn(
         if book_answered is not None:
             prepared.answered_question = book_answered
     else:
-        assistant_message, run_id, bailed_run_ids = await _propose_turn(
+        assistant_message, run_id, bailed_run_ids, chat_settled = await _propose_turn(
             db,
             prepared.user_id,
             prepared.conversation,
@@ -2458,6 +2600,11 @@ async def execute_chat_turn(
             on_delta=on_delta,
             on_reasoning=on_reasoning,
         )
+        if chat_settled is not None:
+            # 插话判定结算 (ADR-053 R2): the agent judged this very message
+            # the pending question's answer — surface the settled row so
+            # the client's pill clears and the receipt lands.
+            prepared.answered_question = chat_settled
 
     await db.commit()
     await finalize_bailed_runs(bailed_run_ids)
