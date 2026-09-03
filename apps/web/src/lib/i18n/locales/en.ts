@@ -1121,7 +1121,6 @@ const en = {
       set_caption_text: "Edit caption",
       restore_version: "Restore version",
     },
-    choicePlaceholder: "Something else…",
     derivativeTypes: {
       post: "Social post",
       quotes: "Quote card",

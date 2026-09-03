@@ -10,23 +10,21 @@
  *   on the bottom row. No reasons line — the agent's inference bookkeeping
  *   (chain_default / clip_count_default) is not user copy; the plan card
  *   above carries the substance and the streamed echo carries the caveats.
- * - question (ADR-051 形态切换): while an options question is pending the
- *   chat input row and the disclaimer HIDE — the dock IS the question: the
- *   question line (no ✓; the right-side × is the bail channel), its options
- *   as full-width ROWS (letter badges mirror the deterministic autoResume
- *   mapping — typing "a" picks option a; long labels wrap, never overflow),
- *   and the tail pencil row for a freeform answer (Enter submits through the
- *   same send channel as the chat input).
+ * - question (形态律 ADR-053 R1): the pill is NON-BLOCKING — it floats
+ *   above the LIVE input: the question line (the right-side × is the bail
+ *   channel), its options as full-width ROWS (letter badges mirror the
+ *   deterministic autoResume mapping — typing "a" in the input picks
+ *   option a; long labels wrap, never overflow), and the muted default-path
+ *   line. A freeform answer is just the input's own send — the pencil row
+ *   retired with the blocking morph (ADR-053).
  * Answering collapses the question into an answered-question block in the
  * flow.
  */
 
-import { useState } from "react"
-import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react"
+import { Check, ChevronDown, Loader2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,11 +82,6 @@ interface OptionDockProps {
   onBail?: () => void
   /** The ×'s aria-label — the caller knows the context (stop vs skip). */
   bailLabel?: string
-  /** 尾行铅笔手输入 (ADR-051): Enter submits a freeform answer through the
-   * same send channel as the chat input (the deterministic letter/number/
-   * label autoResume mapping resolves it server-side, zero LLM). */
-  onFreeform?: (text: string) => void
-  freeformDisabled?: boolean
   /** Bare child of the floating question pill (2026-09-02 拆粘): no fill /
    * rounding / margin of its own — the pill owns the chrome. */
   plain?: boolean
@@ -115,10 +108,12 @@ function TaskBookForm({
     // is NON-blocking (the input group stays live below), so "don't start"
     // is said by simply not starting — keep chatting (chat revision always
     // wins), walk away (the plan stays honestly pending), or delete the
-    // project. A negative action earns its place only when the question
-    // BLOCKS the input (the options question's × keeps it: hidden input row
-    // + bailing stops a live paid run). Single-row content is also what makes
-    // the pill's rounded-full stadium correct geometry.
+    // project. The options question's × stays (ADR-053): NOT because
+    // anything blocks the input (nothing ever does — the morph is
+    // demolished), but as the explicit skip — it takes the question's
+    // stated default path, and for an interrupt it stops a live paid run.
+    // Single-row content is also what makes the pill's rounded-full
+    // stadium correct geometry.
     <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -190,18 +185,9 @@ function OptionForm({
   answering,
   onBail,
   bailLabel,
-  onFreeform,
-  freeformDisabled,
   plain,
 }: OptionDockProps) {
   const { t } = useTranslation()
-  const [freeform, setFreeform] = useState("")
-  const submitFreeform = () => {
-    const text = freeform.trim()
-    if (!text || !onFreeform || freeformDisabled || answering) return
-    onFreeform(text)
-    setFreeform("")
-  }
   return (
     <div className={plain ? "px-4 py-3" : "mb-2 rounded-lg bg-muted px-4 py-3"}>
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
@@ -252,28 +238,6 @@ function OptionForm({
           {answering ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : null}
-        </div>
-      ) : null}
-      {/* 尾行铅笔手输入 (ADR-051) — Enter submits freeform through the same
-          send channel as the chat input; the server's deterministic
-          letter/number/label autoResume mapping is unchanged. */}
-      {onFreeform ? (
-        <div className="mt-2 flex items-center gap-2.5">
-          <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <Input
-            value={freeform}
-            onChange={(e) => setFreeform(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                submitFreeform()
-              }
-            }}
-            placeholder={t("chat.choicePlaceholder")}
-            aria-label={t("chat.choicePlaceholder")}
-            disabled={answering || freeformDisabled}
-            className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-          />
         </div>
       ) : null}
     </div>

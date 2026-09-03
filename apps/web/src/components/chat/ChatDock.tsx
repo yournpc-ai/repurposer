@@ -467,7 +467,6 @@ interface OverlayMessage {
 interface QuestionPayload {
   kind: "task_book" | "question"
   options?: { id: string; label: string }[]
-  allow_freeform?: boolean
   estimate?: string | null
   /** 提问策略 ③'s schema tooth (ADR-052 B2) — the skip path, rendered as
    * the dock's muted second line. */
@@ -533,6 +532,17 @@ function assetTypeIcon(type: string) {
 function assetFilename(fileUrl: string | null): string {
   if (!fileUrl) return ""
   return fileUrl.split("/").pop() || fileUrl
+}
+
+/** 形态律 (ADR-053 R1): a TEXT question (options-empty) never docks — it
+ * lives in the flow as a plain assistant message, so a refresh / revival
+ * fetch keeps nothing for the pill. Task books and options questions dock
+ * as before (the Start press answers the docked task_book row by id). */
+function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
+  return q &&
+    (q.question?.kind !== "question" || (q.question?.options?.length ?? 0) > 0)
+    ? q
+    : null
 }
 
 interface ChatDockProps {
@@ -1206,7 +1216,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     let cancelled = false
     fetchPendingQuestion().then((q) => {
       if (!cancelled) {
-        setPendingQuestion(q)
+        setPendingQuestion(dockWorthyQuestion(q))
       }
     })
     return () => {
@@ -1218,8 +1228,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the durable record — on open, rebuild the flow from them so a refresh or
   // another device no longer loses capability answers / past refinements.
   // The opening prompt renders from the prop (it carries the attachments),
-  // so its seeded row is skipped; a still-pending question docks above the
-  // input, never in the flow. Best-effort: the live flow works without it.
+  // so its seeded row is skipped. 形态律 (ADR-053 R1): a still-pending
+  // OPTIONS question docks above the input (the fetch effect holds it),
+  // never in the flow; a TEXT question (options-empty) IS a plain flow
+  // message, pending or answered. Best-effort: the live flow works without
+  // it.
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -1267,18 +1280,43 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               })),
             })
           } else if (m.question) {
+            const hasOptions = (m.question.options?.length ?? 0) > 0
             if (m.answer) {
-              const display = answeredQuestionText(m.answer, t, !!m.workflow_run_id)
+              if (m.question.kind === "task_book" || hasOptions) {
+                const display = answeredQuestionText(m.answer, t, !!m.workflow_run_id)
+                history.push({
+                  id: m.id,
+                  role: "assistant",
+                  content: "",
+                  at: m.created_at,
+                  qa: {
+                    question: m.content ?? "",
+                    answer: display.text,
+                    muted: display.muted,
+                  },
+                })
+              } else {
+                // 形态律 (ADR-053 R1): an options-empty question's receipt
+                // is the plain message pair — the question line stays a
+                // plain assistant message, no AnsweredQuestion block.
+                history.push({
+                  id: m.id,
+                  role: "assistant",
+                  content: m.content ?? "",
+                  runId: m.workflow_run_id,
+                  at: m.created_at,
+                })
+              }
+            } else if (m.question.kind === "question" && !hasOptions) {
+              // 形态律 (ADR-053 R1): a pending TEXT question never docks —
+              // it lives in the flow as a plain assistant message (only
+              // options questions raise the pill).
               history.push({
                 id: m.id,
                 role: "assistant",
-                content: "",
+                content: m.content ?? "",
+                runId: m.workflow_run_id,
                 at: m.created_at,
-                qa: {
-                  question: m.content ?? "",
-                  answer: display.text,
-                  muted: display.muted,
-                },
               })
             }
           } else {
@@ -1315,7 +1353,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (!steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
     let cancelled = false
     fetchPendingQuestion().then((q) => {
-      if (!cancelled && q) setPendingQuestion(q)
+      if (!cancelled) setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
     })
     return () => {
       cancelled = true
@@ -1331,7 +1369,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
     let cancelled = false
     fetchPendingQuestion().then((q) => {
-      if (!cancelled && !q) setPendingQuestion(null)
+      if (!cancelled && !dockWorthyQuestion(q)) setPendingQuestion(null)
     })
     return () => {
       cancelled = true
@@ -1714,9 +1752,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   /** An answered question collapses into the flow (提问机器: the flow keeps
    * settled decisions, the dock holds the open one).
-   * Reason keys (payload data) render localized as the block's detail line. */
+   * Reason keys (payload data) render localized as the block's detail line.
+   * 形态律 (ADR-053 R1): the AnsweredQuestion block exists only for
+   * options questions and task-book receipts — an options-empty plain
+   * question's receipt is the plain message pair (its question line already
+   * sits in the flow as a plain assistant message). */
   const pushAnsweredQuestion = (message: QuestionMessage) => {
     if (!message.answer) return
+    if (
+      message.question?.kind === "question" &&
+      (message.question?.options?.length ?? 0) === 0
+    ) {
+      return
+    }
     const display = answeredQuestionText(message.answer, t, !!message.workflow_run_id)
     pushMessage({
       role: "assistant",
@@ -1730,10 +1778,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     })
   }
 
-  /** The chat loop's reply: a pending question docks (never enters the
-   * flow, prohibited-behavior #2); anything else renders as prose + an
-   * optional RunCard. A docked task book also refetches the panel's plan.
-   * Starting is ALWAYS the user's explicit Start press — no auto-start. */
+  /** The chat loop's reply: a pending OPTIONS question docks (never enters
+   * the flow, prohibited-behavior #2); a pending TEXT question (no options)
+   * IS a plain conversation message (形态律 ADR-053 R1 — it stays in the
+   * flow; the pending row lives server-side and later turns bring the
+   * judged settlement / the reminder tail); anything else renders as prose
+   * + an optional RunCard. A docked task book also refetches the panel's
+   * plan. Starting is ALWAYS the user's explicit Start press — no
+   * auto-start. */
   const handleAssistantMessage = async (message: QuestionMessage) => {
     if (message.question && !message.answer) {
       if (
@@ -1746,6 +1798,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // to confirm; the run flow owns the surface now. (A TERMINAL run
         // does not trigger this guard: the dock's refinement books dock
         // normally — runId set ≠ run live.)
+        return
+      }
+      if (
+        message.question.kind === "question" &&
+        (message.question.options?.length ?? 0) === 0
+      ) {
+        // 形态律 (ADR-053 R1): a text question never docks — render it as a
+        // plain assistant message and leave the input live.
+        pushMessage({
+          role: "assistant",
+          content: message.content ?? "",
+          runId: message.workflow_run_id,
+        })
         return
       }
       setPendingQuestion(message)
@@ -1899,15 +1964,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         landOnStartedRun(data.run_id, data.answered_question ?? null)
         return
       }
-      // Deterministic autoResume settled the docked question with this very
-      // text — archive its QA pair before the assistant's continuation.
+      // This very text settled a pending question server-side — the
+      // deterministic autoResume option hit, or the judged settlement
+      // (插话支持 ADR-053 R2: the slot handshake / pending_disposition) —
+      // archive its answered block before the assistant's continuation.
       if (data.answered_question) {
         setPendingQuestion(null)
         pushAnsweredQuestion(data.answered_question)
       }
       const message = data.assistant_message
-      if (message.question && !message.answer) {
-        // A question docks (never enters the flow). The streamed echo bubble
+      const isTextQuestion =
+        message.question &&
+        !message.answer &&
+        message.question.kind === "question" &&
+        (message.question.options?.length ?? 0) === 0
+      if (message.question && !message.answer && !isTextQuestion) {
+        // An OPTIONS question / task book docks (a TEXT question IS the
+        // prose reply and lands below like one — 形态律 ADR-053 R1). The
+        // streamed echo bubble
         // STAYS in place (same key — never a remount); the superseded book
         // collapses into a version chip anchored after the echo bubble that
         // produced it — the same anchor the inline card occupied while the
@@ -2056,8 +2130,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               )
               landOnStartedRun(run.id, null)
             } else {
-              // Refresh while confirming: rebuild the dock + panel plan.
-              const q = await fetchPendingQuestion()
+              // Refresh while confirming: rebuild the dock + panel plan. A
+              // pending TEXT question needs no rebuild — the history replay
+              // already renders it as a plain flow message (形态律 R1).
+              const q = dockWorthyQuestion(await fetchPendingQuestion())
               if (q) await handleAssistantMessage(q)
             }
             return
@@ -2120,26 +2196,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } finally {
       setAnswering(false)
     }
-  }
-
-  /** The options dock's pencil row (ADR-051 形态切换): a freeform answer
-   * rides the SAME send channel as the chat input — the server's
-   * deterministic autoResume mapping resolves a letter/number/label hit
-   * (zero LLM), anything else records a freeform answer. */
-  const handleFreeformAnswer = (text: string) => {
-    if (chatBusy || isStarting) return
-    const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: rollbackId,
-        role: "user",
-        content: text,
-        at: new Date().toISOString(),
-      },
-    ])
-    raiseHistory()
-    void sendChat(text, { rollbackId, draft: text })
   }
 
   /** Stop the in-flight assistant reply (aborts the fetch; the user's own
@@ -2221,12 +2277,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     ? answeredQuestionText(answeredQuestion.answer, t, !!answeredQuestion.workflow_run_id)
     : null
 
-  // The dock's live form outside the confirm phase: a pending question
-  // from the chat loop (task_book docks only while confirming).
+  // The dock's live form outside the confirm phase: a pending OPTIONS
+  // question from the chat loop (task_book docks only while confirming; an
+  // options-empty text question never docks — 形态律 ADR-053 R1).
   const pillQuestion =
     pendingQuestion &&
     pendingQuestion.question?.kind === "question" &&
-    !pendingQuestion.answer
+    !pendingQuestion.answer &&
+    (pendingQuestion.question?.options?.length ?? 0) > 0
       ? pendingQuestion
       : null
 
@@ -3041,9 +3099,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The question docks render as chromeless content (plain) — the floating
   // question pill in the bottom row owns the frost and rounding (2026-09-02
   // 拆粘: they used to be square children of the ONE frosted container).
-  // While an options question is pending the dock MORPHS (ADR-051): the input
-  // row and the disclaimer hide, and the pill (its options + the pencil
-  // freeform row) is all that remains.
+  // 形态律 (ADR-053 R1): the pill is NON-BLOCKING — it floats above the
+  // LIVE input (the morph is demolished), so a freeform answer is just the
+  // input's own send; the pencil row is gone with the morph.
   const pillDock =
     phase !== "confirm" && pillQuestion ? (
       <QuestionDock
@@ -3061,8 +3119,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             ? t("questionDock.bail")
             : t("questionDock.skip")
         }
-        onFreeform={handleFreeformAnswer}
-        freeformDisabled={chatBusy || isStarting}
       />
     ) : null
   // The task-book confirm dock — chromeless content for the question pill
@@ -3082,11 +3138,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       />
     ) : null
   // The folded 打勾 (ADR-051): while a run is live and the history region is
-  // closed, ONE shimmer status line docks above the input (a pending question
-  // owns the dock instead). Click = expand the step log — it opens
-  // the history, whose RunTaskList stays the only checklist.
+  // closed, ONE shimmer status line docks above the input. A pending
+  // INTERRUPT question (workflow_run_id set) owns the dock instead — its
+  // pill carries the run's own ask; a non-interrupt options question is
+  // just another pill above the LIVE input (形态律 ADR-053 R1) and the
+  // shimmer keeps breathing under it. Click = expand the step log — it
+  // opens the history, whose RunTaskList stays the only checklist.
   const runStatusRow =
-    phase === "running" && !terminal && !pillQuestion && !historyOpen ? (
+    phase === "running" && !terminal && !pillQuestion?.workflow_run_id && !historyOpen ? (
       <RunStatusRow
         steps={steps}
         runStartedAt={runCreatedAt}
@@ -3372,32 +3431,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               grid reads through the frost; hairline only, NO shadow — the
               dock is the composer's third parking spot and inherits its
               hero-flat rule (without the ring the glass edge dissolves into
-              the canvas). During the question morph with no status band the
-              container is empty — hide the whole box rather than leave a
-              frost sliver (the editor stays mounted inside, DOM-owned draft
-              intact). */}
+              the canvas). 形态律 (ADR-053 R1): the input NEVER hides — a
+              pending question is non-blocking, the pill floats above the
+              live input (the blocking morph is demolished, never to
+              return). */}
           <div
             className={cn(
               "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
-              inputStadium ? "rounded-full" : "rounded-xl",
-              pillQuestion && !runStatusRow && "hidden"
+              inputStadium ? "rounded-full" : "rounded-xl"
             )}
           >
             {runStatusRow}
-            {/* The input row morphs away while an options question is pending
-                (ADR-051) — CSS-hidden, NOT unmounted: the editor keeps its
-                DOM-owned draft across the morph. */}
-            <div className={cn("p-2", pillQuestion && "hidden")}>{inputBody}</div>
+            <div className="p-2">{inputBody}</div>
           </div>
           {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
               verbatim): a page-level whisper BELOW the input container
               (2026-09-02 拆粘 — was glued between the question and the
-              input); hidden WITH the input row on the question morph. */}
-          {!pillQuestion && (
-            <p className="pt-1.5 text-center text-[11px] leading-tight text-meta-foreground">
-              {t("results.dock.honesty")}
-            </p>
-          )}
+              input); resident like the input (ADR-053 R1 — a pending
+              question never hides chrome). */}
+          <p className="pt-1.5 text-center text-[11px] leading-tight text-meta-foreground">
+            {t("results.dock.honesty")}
+          </p>
         </div>
       </div>
 

@@ -1082,7 +1082,6 @@ const zh: Resources = {
       set_caption_text: "修改字幕",
       restore_version: "恢复版本",
     },
-    choicePlaceholder: "其他想法…",
     derivativeTypes: {
       post: "社交帖子",
       quotes: "金句卡",
