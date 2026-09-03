@@ -58,7 +58,9 @@
 | 操作源 | `source` | operation 的发起来源：editor / chat / mcp / system（注册表） | — |
 | 结果卡 | `RunCard` | assistant 消息内嵌的 run 线性投影（步骤清单 + 产物卡片 + 聚合行） | 不是 DAG 画布 |
 | 提问 | `ask`（仅 router action 动词） | ask 的唯一座位 = router 动作动词（`InferredIntent.action="ask"` / IntentProposal 第三态 `type:"ask"`，N-18）；其 payload 类型 = `QuestionProposal` | 不是名词座位——机器名 = 提问机器；question 是落库态 |
-| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/question + options/allow_freeform/estimate，旧行读容忍升级只读不写）；待决只在 dock，已决坍缩入流 = answered question | 待决态不进消息流渲染 |
+| 问题 | `question` | 落库态：messages.question JSONB（kind: task_book/question + options/allow_freeform/estimate，旧行读容忍升级只读不写）；已决坍缩入流 = answered question | 待决渲染按形态律分流（下行），不再一律 dock |
+| 文字问 / 选项问 | —（渲染形态词，非 schema 字段） | 形态律（ADR-053 R1）：按 `options` 是否为空分流——文字问 = 普通对话消息（永不 dock，待决/已决都在流里）；选项问 = 输入框上方非阻塞 pill（待决只在 pill）。与 kind 无关 | 「形态切换」「morph」永不指提问形态（阻塞形态已拆除） |
+| 插话 | —（行为词） | 待决中与问题无关的用户消息（ADR-053 R2）：判定是 LLM 的（slot 握手 / `pending_disposition`），结算是代码的；插话回合回复接代码拼装**提醒尾**（双语固定句：原问题 + default_path） | 不是新意图态（信封字段，非第五提案态） |
 | 回答 | `answer` | 一词两态同域：① 落库态 messages.answer JSONB（kind: option/freeform/bail/start + answered_at）——**用户**答复待决问题，NULL = 待决，answer 端点即恢复；② 提议态 `AnswerProposal`（IntentProposal 第四态，N-21）——**系统**对信息类提问的直答，落库为普通 assistant 消息 content（B1 同款），**不进 messages.answer** | — |
 | 弃做 | `bail` | 优雅退出一等公民：入口回 draft / checkpoint 下游级联 skipped；永不标 failed | 不是 cancel（cancel 是 UI 按钮词） |
 | 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
@@ -171,6 +173,7 @@
 | N-47 | 有界 loop 节点 = agent 性的唯一合法座位 | 编译期排不出拓扑的活（搜索 / 阅读）由 `NodeBase` 子类承接：内部 mini tool-loop（工具 = `app/tools/` 注册表）+ 三护栏（迭代上限 / 报价 = fold / 对外 = DAG 单节点）；业界同构 LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component；开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）永拒不变——常备否决清单只收编有界形态（ADR-052 判词 8） | §1、§6 |
 | N-48 | harness 单义 = 调用面 Agent 漏斗；「剧本 harness」→「剧本测试」（N-33 结案） | harness 行业两义（agent harness / test harness）当年登记并存是"登记歧义"而非杀歧义，防御性命名随 API 测试套件删除多年早到期。结案：harness 只指调用面漏斗（`agents/base.py` + contexts 装配 + prompts）；测试脚本就叫**剧本测试**（`scripts/chat_scenarios.py`），不配概念名——"测试套件"概念永禁复活（去方言批 `tasks/de-dialect-question-machine.md`） | §1、§6 |
 | N-49 | 提问机器词汇批：词根 question/answer，ask 只剩 action 动词一个座位 | 去方言批（简报 `tasks/de-dialect-question-machine.md`）：`AskPayload`→`QuestionPayload` / `AskProposal`→`QuestionProposal`（kind 字段删除——LLM 只产普通问题，task_book 恒由系统举起）/ `AskOption`→`Option` / kind 枚举收敛 `{task_book, question}`（语义分支只有"是不是任务书"一处，其余结算全走载荷握手字段：`workflow_run_id`→续跑 / `slot`→回填 / `caption_mode_` 前缀→恢复模式；旧行 "choice"/"confirm" 读容忍升级，只读不写）/ `QaPair`→`AnsweredQuestion`、`qaAnswerText`→`answeredQuestionText` / OpsCard 死码删除。**方言词永禁**入代码与文档：clarify / archive / receipt / eval / primitive | §1、§6 |
+| N-50 | 形态律两词 = 文字问 / 选项问；插话 / 提醒尾；「形态切换」「morph」永禁指提问形态 | 提问机器形态律（ADR-053 R1）：问题按 `options` 是否为空分两形——**文字问**（options 空 = 普通对话消息）/ **选项问**（options 非空 = 非阻塞 pill），渲染分流与 kind 无关；**插话**（interjection）= 待决中与问题无关的用户消息（判定是 LLM 的——slot 握手 / `pending_disposition` 三态；结算是代码的）；**提醒尾** = 插话回合回复末尾代码拼装的双语固定句（原问题 + default_path，永不借 LLM 之声）。「形态切换」「morph」只许指 dock 两态形态机与 stadium 半径过渡——指提问形态 = 方言（阻塞形态已拆除，ADR-053） | §1、§6 |
 
 ## 4. API 命名
 

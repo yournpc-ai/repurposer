@@ -1065,7 +1065,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Related**: ADR-025（cost 计量账本机制——本条改写入路径不改账本形状）/ ADR-017（Postgres 即队列）/ ADR-039（队列与重试机制；execute_step 终态分支结构；质检打回 feedback 通道）/ MODULE_ARCHITECTURE §7.2（队列机制——本条为其补会话纪律）
 
-## ADR-051: FLORA 对齐——画布优先路由（overlay 概念退役）+ 折叠打勾增量感 + 节点交互升级 + 提问 dock 形态切换
+## ADR-051: FLORA 对齐——画布优先路由（overlay 概念退役）+ 折叠打勾增量感 + 节点交互升级 + 提问 dock 形态（形态切换条款 2026-09-04 翻案入 ADR-053）
 
 **Status**: Decided (2026-08-31，用户拍板；施工排期 PROGRESS W7 头部 08-31~09-01)
 
@@ -1075,12 +1075,12 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **画布优先路由（overlay 概念退役）**：`/projects/$id` 永远 = 画布 + 底部 dock——`?overlay=chat` / `?overlay=run` 路由参数与 GenerationOverlay 的 fullscreen 壳一并退役，dock 壳成为唯一 chat 外壳。composer 发送 = 建项目 + 上传素材 → **直达项目页画布+dock**，草稿经 router state 交付 dock 发出首条 `POST /chat`（消息机器零变化，去掉的只是壳）。processing 项目卡片 / 待确认 CTA / 继续设置 / tours 的 overlay 引用全部清改为直达项目页——dock 按项目态自呈现（待确认 = 任务书 dock；活 run = 折叠打勾 + 活画布）。断线重连 / 历史打开直接呈现终态不变（ADR-041 D2）。**诞生编排定稿（2026-09-01 用户拍板，FLORA 对照核对）**：fullscreen 时代的「收官整图回放」不复活——占位世界里 reveal 与 ADR-036 生长动画统一为**生长驱动诞生**：画布挂载期间出生的节点（run 开始占位物化 / 产物原位填充 = 收官节拍 / 修订生长）按编译序 `BIRTH_STAGGER_MS` 交错入场 + 边描画；running 占位卡带 FLORA 填充擦除（纯 CSS 封顶 96%）；水合首帧（刷新/重连/历史）永不重播。配套缝：dock 起跑（Start 钮 / 散文确认 / 修订 run）即经 `onRunStarted` 通知页面 refetch——页面 SSE 从第一拍挂上，run 期活画布即时渲染（confirm 起跑路径原先把占位/填充全攒到 terminal 才出现，本批终审捉出并根修）。
 2. **打勾流浓缩 + 占位物化（增量感两件）**：打勾流仍是唯一**步骤叙事**进度面（ADR-041 D2 精神不变）——形态浓缩为默认折叠的一行（Claude Code 式：运行中 = shimmer 状态行 + 当前步名，点击展开步骤日志，收官 = recap 聚合行照旧）。同时 run 期画布活起来：**占位产物卡在 run 开始即物化**——derived preview（ADR-043 编译期干跑）已知产物花名册 + 画幅，`productNodeSize(aspect)` 让占位卡出生即占最终位置与尺寸，产物落地即原地填充（画幅未知取默认档）。**ADR-041 D2「进度不进图」范围收窄为「步骤叙事不进图」**：步骤清单永不上图不变；产物占位/填充是图的**内容**（确定性派生投影），不是进度剧场——禁令 #4「禁假进度」不破（占位 roster 必须来自编译期干跑，禁虚构产物）。
-3. **提问 dock 形态切换**：choice 待决时 dock 整体变形——输入行（attach + MentionEditor + history + send）与免责行**隐藏**；问句 = 独立浮层 pill（2026-09-02 条款 8 拆粘：原「容器 = 问题行+选项行」的一体容器焊接作废）= 问题行（去掉 ✓——待决不是已完成；加 × 关闭 = bail 通道）+ 选项行（字母徽章映射不动）+ **尾行铅笔手输入**（Enter 提交自由文本；确定性字母/序号/原文 autoResume 映射不变，零 LLM）。形态切换时 pill 与消息流有明确边界区分（浮层边界，不靠阴影）。回答坍缩回基础形态、已答问题双层入流不变（CHAT_ARCH §8.5 停靠法则不动）。
+3. **提问 dock 形态（形态律，2026-09-04 由 ADR-053 R1 翻案本条）**：现行 = 渲染按 `options` 是否为空分流——文字问（options 空）= 普通对话消息，永不 dock；选项问 = 输入框上方**非阻塞**浮层 pill（问题行 + × + 选项行 + default_path 行；2026-09-02 条款 8 拆粘的浮层边界不动）。**输入框与免责行永不因提问隐藏**——本条原「阻塞 morph + 尾行铅笔手输入」拆除、永不回归；× = 显式跳过（取 default_path，interrupt 停活 run）。回答坍缩 / 已答问题入流 / 判定结算见 ADR-053 与 CHAT_ARCH §8.5。
 4. **节点交互升级（hover prompt 框 + 变体分页 + 脊收编）**：hover 产物卡 → tooltip + 磨砂 prompt 框，展示**该产物自己的 spec**（runFlow 产物节点的全局 run `prompt` 逐卡重复退役——改 per-product spec：fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 框可编辑 → 发送 = 带焦点预钉的修订回合，**骑 `POST /chat` 唯一通道，永不开新执行通道**。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。**脊收编**：折叠步 ≤1 时过程脊不成节点（边经既有祖先投影规则解析，零新投影规则）。
 5. **模型名禁令修订（事实展示解禁）**：「禁图面模型名 / 技术黑话」（简报 `tasks/results-canvas.md` #10；代码注释里作 #12）修订为——**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**（禁令精神不动）；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」裁定不变），本条只解禁事实陈列。
-6. **点阵与免责行**：点阵配方调大调显（2026-09-02 起收窄为结果画布唯一签名面、home 摘除——最终配方 32px 网格 / 2px 点 / 32%·30%，FLORA 实测世界常量，ADR-046 附同批翻案）；dock 基础形态常驻免责行，en 原文 = "Repurposer is AI and can make mistakes. Check important info."（zh 镜像「Repurposer 是 AI，可能出错。重要信息请核对。」）——位置 = 输入组**下方**页面级耳语（2026-09-02 条款 8 拆粘：原「输入区上方、容器内」作废，它曾恰夹在问句与输入之间当胶水层），dock 形态切换（提问等）时随输入行一起隐藏。占位卡带 @ mention 教学文案（功能性，非营销）。
+6. **点阵与免责行**：点阵配方调大调显（2026-09-02 起收窄为结果画布唯一签名面、home 摘除——最终配方 32px 网格 / 2px 点 / 32%·30%，FLORA 实测世界常量，ADR-046 附同批翻案）；dock 基础形态常驻免责行，en 原文 = "Repurposer is AI and can make mistakes. Check important info."（zh 镜像「Repurposer 是 AI，可能出错。重要信息请核对。」）——位置 = 输入组**下方**页面级耳语（2026-09-02 条款 8 拆粘：原「输入区上方、容器内」作废，它曾恰夹在问句与输入之间当胶水层）；提问不再隐藏任何 chrome（ADR-053 R1——原「形态切换时随输入行一起隐藏」作废），免责行与输入框同常驻。占位卡带 @ mention 教学文案（功能性，非营销）。
 7. **dock 两态形态机 + hidden 第三可见性态（2026-09-02 用户拍板）**：条款 1「项目页永远 = 画布 + 底部 dock」收窄为 run 落地后的终态——**首个 run 到达前**项目页 = 居中全屏 chat（full 形态：消息舞台占满页面上部，输入组同一台消息机器原地不动）+ 左上角仅「← Projects」返回 pill；首个 run 到达同一拍：chat 收拢变形为底部 dock（舞台 grid-rows 1fr→0fr 过渡 500ms，输入组零位移铁律不破）、画布淡入、返回 pill crossfade 成完全体 ProjectMenu。驱动 = 页面 `latestRun`（loading 闸保证主树首渲染即定态——带 run 项目直挂 dock 形态，水合首帧永不重播，诞生编排铁律同义）。**hidden 态**：dock 形态下用户手势（输入行 − 钮）把整个 dock 收成右下角 LogoMark 磨砂圆点——节点密集后要看完整画布、截图分享正在使用的产品，是正当场景（用户拍板原话：「别小看这个场景」）；唤回触发 = agent 发声 / 待决提问（choice / 任务书 dock）/ 画布焦点注入——用户只能藏起一个**静态输入组**，永远藏不住新信息（禁 dock 静默在 hidden 下存活）；活 run 状态行故意不作触发（画布擦除已传达活性，收官 recap 属 agent 发声自行唤回）。ADR-041「dock 只有两态」同批修订为三可见性态。**同批评审否决的 FLORA 形态**：右侧 full-height sheet（「同时看」形态——我们的节奏是一击切换，真实反馈再说）、右下浮动 panel、Queue 条（违反唯一进度面）、多 chat（项目单会话模型 ADR-041 D8）、窗口管理控件。**改名**：组件 GenerationOverlay → ChatDock（文件/类/handle/页面引用全栈同名，`components/generation/` 目录退役入 `components/chat/`；i18n 命名空间 `generationOverlay.*` 保留——消息键名不是产品概念）。
-8. **dock 拆粘（2026-09-02 用户拍板，HTML 原型三方案对比后定 A）**：一体容器把决策（问句）/ 行动（输入）/ 诚实（免责行）三职责零间距焊成一块，且免责行恰夹在决策节拍中间——修订为**三寄存分离**：① QuestionDock（task_book / choice）从容器拆出 = **独立浮层 pill** 悬在输入组上方，dock-surface 同款磨砂 + 发丝线；② 输入容器只装输入组（+打勾状态行 / chips 带）；历史区同批再拆（2026-09-02 续裁定，**输入框独立层律**）= 自有磨砂浮层悬于输入组上方——输入组恒为独立一层，永不与消息流融为一体（有画布 dock 曾与 full 形态分叉：full 的舞台天然分层、dock 把历史焊进输入容器——同批对齐；stadium 不再因历史打开变形，只有状态行 / chips 带第二带时才回 `rounded-xl`）；③ 免责行移到输入组**下方**页面级耳语（ChatGPT / FLORA 式——条款 6 的「输入区上方」同批作废，文案不变）。**choice morph 语义不变**：待决时输入行与免责行照旧隐藏，只是容器换成浮层 pill；**§8.5 停靠法则不动**——问句 pill 恒可见，不随计划卡滚走（用户走查原话痛点是「粘」，不是停靠）。**否决**：方案 B（只移免责行——问句+输入焊接还在，解一半）；方案 C（行动随卡进流——计划卡高时 Start 滚出视口，废停靠法则，原型面板实测可滚体验）。**同日两轮走查续裁定**：Ⓐ pill↔输入组间距 `mb-2.5`（10px——6px 太近、原型 12px 太大，两轮各否一头）；Ⓑ **task_book pill 单行化 + Cancel 退役**（负向动作只在提问**阻塞输入**时配存在：choice 的 × 保留——输入行被 morph 隐藏 + bail 停的是活 run；task_book pill 不阻塞，「不开始」用沉默表达——继续聊 = 修订、走开 = 计划如实待确认、/projects 可删；FLORA / ChatGPT 的非阻塞确认 pill 均无负向动作），Start 并入顶行成单行解剖（✓ + 问句 + Start）；Ⓒ **stadium 归坍缩态输入组，不归问句 pill**（同日第三轮纠正）：输入容器在真单行时（无历史区 / 无打勾状态行 / 无 chips 带）= **rounded-full stadium**（rounded-full 例外第 4 条，FLORA Chat-bar 解剖），出现第二带即随盒过渡回 `rounded-xl`；问句 pill 两种形态恒 `rounded-xl`。
+8. **dock 拆粘（2026-09-02 用户拍板，HTML 原型三方案对比后定 A）**：一体容器把决策（问句）/ 行动（输入）/ 诚实（免责行）三职责零间距焊成一块，且免责行恰夹在决策节拍中间——修订为**三寄存分离**：① QuestionDock（task_book / choice）从容器拆出 = **独立浮层 pill** 悬在输入组上方，dock-surface 同款磨砂 + 发丝线；② 输入容器只装输入组（+打勾状态行 / chips 带）；历史区同批再拆（2026-09-02 续裁定，**输入框独立层律**）= 自有磨砂浮层悬于输入组上方——输入组恒为独立一层，永不与消息流融为一体（有画布 dock 曾与 full 形态分叉：full 的舞台天然分层、dock 把历史焊进输入容器——同批对齐；stadium 不再因历史打开变形，只有状态行 / chips 带第二带时才回 `rounded-xl`）；③ 免责行移到输入组**下方**页面级耳语（ChatGPT / FLORA 式——条款 6 的「输入区上方」同批作废，文案不变）。**§8.5 停靠法则不动**——问句 pill 恒可见，不随计划卡滚走（用户走查原话痛点是「粘」，不是停靠；choice morph 2026-09-04 由 ADR-053 R1 拆除——pill 非阻塞、输入框恒活，本条原「待决时输入行与免责行照旧隐藏」作废）。**否决**：方案 B（只移免责行——问句+输入焊接还在，解一半）；方案 C（行动随卡进流——计划卡高时 Start 滚出视口，废停靠法则，原型面板实测可滚体验）。**同日两轮走查续裁定**：Ⓐ pill↔输入组间距 `mb-2.5`（10px——6px 太近、原型 12px 太大，两轮各否一头）；Ⓑ **task_book pill 单行化 + Cancel 退役**（非阻塞提问不配负向动作：task_book pill 不阻塞，「不开始」用沉默表达——继续聊 = 修订、走开 = 计划如实待确认、/projects 可删；FLORA / ChatGPT 的非阻塞确认 pill 均无负向动作；**选项问的 × 保留理由 2026-09-04 由 ADR-053 改写**——原「输入行被 morph 隐藏」的阻塞前提不存在了，× = 显式跳过取 default_path、interrupt 的 × 停活 run），Start 并入顶行成单行解剖（✓ + 问句 + Start）；Ⓒ **stadium 归坍缩态输入组，不归问句 pill**（同日第三轮纠正）：输入容器在真单行时（无历史区 / 无打勾状态行 / 无 chips 带）= **rounded-full stadium**（rounded-full 例外第 4 条，FLORA Chat-bar 解剖），出现第二带即随盒过渡回 `rounded-xl`；问句 pill 两种形态恒 `rounded-xl`。
 
 **Consequences**:
 
@@ -1132,3 +1132,32 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **人形角色叙事**（「剪辑师正在…」）：**2026-09-03 用户拍板否决**——工艺叙事发稿；人形版 = 翻 N-24，门槛维持。
 
 **Related**: `DIALOG_WORKFLOW.md`（概念母文档）/ ADR-039（判词 1 补记其 Agent 归一）/ ADR-043（任务书契约不变）/ ADR-047（有界环同构）/ ADR-051（提问 dock 形态 = ask 的渲染面）/ NAMING N-24（角色隐喻禁令——判词 7 划定其边界）/ NAMING N-43~N-47（更名判例）/ 证据 = 用户 Agent Opus 走查（2026-09-02）+ 业界框架词汇坐标（Anthropic《Building effective agents》/ LangGraph / AI SDK / Mastra / Agno / OpenAI SDK）
+
+## ADR-053: 提问机器形态律 + 插话支持——文字问对话形态 / 选项问非阻塞 pill / 判定结算与提醒尾 / 阻塞 morph 永禁
+
+**Status**: Decided (2026-09-04，随 C3 批落地；施工简报 `docs/tasks/de-dialect-question-machine.md`；规格同步 = CHAT_ARCH §8.5 + DIALOG_WORKFLOW §6)
+
+**Context**: C1 改名批收敛了提问机器的词汇，两处死结留着：① **ADR-051 形态切换把「待决」做成了阻塞**——选项问待决时输入行与免责行隐藏、尾行铅笔手输入顶替，等于每问一次就夺走主输入；文字问（options 空）被迫套同一 pill 形态，明明是普通对话却挂着 dock。② **autoResume 的「任意文本 = freeform 回答」是掩盖映射**——待决中用户说的任何话都被强记为答案，插话（"顺便问下进度"）被误记成回答、问题被吞。ADR-052 判词 5「每轮一问、每问可一词答」落地后，待决问题存在时用户照常说话是日常形态，系统必须判得清「这是回答 / 这是跳过 / 这是插话」。
+
+**Decision**:
+
+1. **形态律（R1）**：渲染按 `options` 是否为空分流，与 kind 无关——**文字问（options 空）= 普通对话消息**（入消息流，永不 dock；待决行住服务端，后续回合带来判定结算或提醒尾）；**选项问（options 非空）= 输入框上方的非阻塞 pill**。**输入框永不因提问隐藏**——阻塞 morph 与铅笔行同批拆除、永不回归（翻 ADR-051 条款 3；拆粘 / 单行 pill / stadium 部分不动）。**已答问题入档块（AnsweredQuestion）只对选项问与 task_book 回执**；文字问的回执 = 普通消息对（问答各自本就是一条消息）。
+2. **× 保留但改义**：不再是「阻塞态的出口」（阻塞态不存在了），而是**显式跳过**——取问题的 default_path；interrupt 的 × 停掉在跑的付费 run。文字问没有 ×（它不 dock）——它的跳过 = 判定 skip（下条）。
+3. **插话支持（R2）——判定是 LLM 的、结算是代码的**：待决问题显式进两相位上下文（book path 的 pending 块 / chat path 的 `_build_context` 既有通道）。book path 的回答信号 = **slot 握手**（router 把待决槽位的用户原话提案为 user-stated → 代码结算 freeform 并回填账本，无需新 schema）；chat path 的回答信号 = 信封 **`pending_disposition` 三态**（`answer` → 代码结算 freeform——interrupt 的判定回答唤醒 run + 确定性回执，提案不再叠加派发（唤醒即续跑）；`skip` → 结算 bail——文字问唯一的 ×；`none` = 插话 → 问题保持待决）——三态住信封，不是第五提案态。task_book 待决不参与任何判定结算（它的回答是 dock Start / book path 回合）。
+4. **提醒尾**：插话回合的回复末尾接**代码拼装的双语固定句式**（原问题 + default_path；`_prefers_zh` 按回合语言）——代码强制文本，永不借 LLM 之声（draft-from-persona 声明同教义）。
+5. **autoResume 收窄为唯选项命中**：「任意文本 = freeform 回答」掩盖映射退役；确定性结算只剩字母 / 序号 / 原文命中（零 LLM 不变），其余一律走判定。五处提问源（router ask / chat shape C / caption-mode 问 / 方向 interrupt / 零根主题文字问）同一结算语义。
+
+**Consequences**:
+
+- 待决问题不再改变任何 chrome 的可见性——dock 三可见性态（坍缩 / 展开 / 隐藏，ADR-051 条款 7）与提问正交；「用户只能藏起静态输入组」的律条不再被提问打破。
+- 判定结算行全部走既有 `ChatResponse.answered_question` 通道，前端零新管线；freeform 判定答案 = 用户原话全文。
+- `allow_freeform` schema 字段保留为「本题欢迎自由文本」的元数据（prompt 层对齐用），不再驱动任何强制映射。
+- interrupt 三应答不变（选项 / freeform / 默认过期），插话期间 run 保持 parked；`expire_stale_interrupts` TTL 语义不动；`runStatusRow` 只对 interrupt 问让位（非 interrupt 选项问的 pill 下方状态行照常呼吸）。
+
+**Alternatives（翻案条件随附）**:
+
+- **保留铅笔行作为「快捷回答」**：否决——输入框恒活后它就是同一发送通道的重复 UI，双通道必致语义漂移。**翻案条件**：无（结构性重复）。
+- **插话由代码关键词表判定**（"顺便" / "另外"等）：否决——关键词表是新的启发式方言；判定本就是 LLM 的活，代码只做结算。**翻案条件**：无。
+- **`pending_disposition` 做成第五提案态**：否决——判定对象是「这条消息与待决的关系」，与「这条消息要什么动作」正交；并入提案会污染四态判别式的每个分支。**翻案条件**：出现必须与提案联合判定的真实案例。
+
+**Related**: ADR-052（判词 5 提问策略——本条为其落地形态）/ ADR-051（条款 3 被本条翻案）/ ADR-041（dock 三可见性态不受提问影响）/ CHAT_ARCH §8.5（规格落点）/ DIALOG_WORKFLOW §6（不变量登记）/ NAMING N-49（提问机器词汇批）/ 简报 `docs/tasks/de-dialect-question-machine.md`
