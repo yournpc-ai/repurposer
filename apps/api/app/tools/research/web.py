@@ -18,6 +18,32 @@ import httpx
 
 DDG_HTML_URL = "https://html.duckduckgo.com/html/"
 
+# A search snippet is untrusted input: a hostile page could try to point the
+# agent's fetch at the box itself (cloud metadata, the API, localhost
+# services). The tool set is fixed and the loop is capped, but the fetch
+# side also refuses obviously-internal hosts outright — cheap, structural.
+_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _host_blocked(url: str) -> bool:
+    """Obviously-internal hosts (loopback / RFC1918 / link-local). The 172
+    private range is 172.16-172.31 — checked by octet, not prefix string,
+    so public 172.x hosts stay fetchable."""
+    host = (urlparse(url).hostname or "").lower()
+    if host in _BLOCKED_HOSTS or host.endswith(".local"):
+        return True
+    parts = host.split(".")
+    if len(parts) == 4 and all(p.isdigit() for p in parts):
+        first, second = int(parts[0]), int(parts[1])
+        return (
+            first == 10
+            or first == 127
+            or (first == 192 and second == 168)
+            or (first == 169 and second == 254)
+            or (first == 172 and 16 <= second <= 31)
+        )
+    return False
+
 _HEADERS = {
     # The HTML endpoint 403s default-script agents; a plain browser UA is
     # the documented workaround for the no-key form.
@@ -130,13 +156,21 @@ class _TextExtractor(HTMLParser):
 
 
 async def fetch_text(url: str, *, max_chars: int = FETCH_TEXT_CAP) -> str:
-    """One page → its readable text (capped); empty on any failure."""
+    """One page → its readable text (capped); empty on any failure.
+
+    Internal hosts refuse outright (empty) — the agent's URL picks are
+    untrusted input, and following redirects stays on (a public URL
+    redirecting inward dies at the response's final host check below)."""
+    if _host_blocked(url):
+        return ""
     try:
         async with httpx.AsyncClient(
             timeout=20.0, follow_redirects=True, trust_env=True
         ) as client:
             resp = await client.get(url, headers=_HEADERS)
         if resp.status_code != 200:
+            return ""
+        if _host_blocked(str(resp.url)):
             return ""
         content_type = resp.headers.get("content-type", "")
         if "text/html" not in content_type and "text/plain" not in content_type:
