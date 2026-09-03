@@ -858,6 +858,7 @@ async def sync_task_book_question(
     prompt: str,
     reasons: list[str] | None = None,
     derived: list[dict] | None = None,
+    brief: BriefLedger | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -867,8 +868,10 @@ async def sync_task_book_question(
     new task book becomes the pending question. The needs_clarification
     ``reasons`` ride in the question's human text (data, localized at render)
     so the archive and the LLM context record WHY confirmation was asked.
-    Returns the run ids whose parked interrupt was cascade-bailed by the
-    supersede (finalized by the caller after its commit). Flush-only.
+    ``brief`` (ADR-052 B3) stamps the merged ledger into the question payload
+    — the plan card renders the agent's own understanding from it, never a
+    blank form. Returns the run ids whose parked interrupt was cascade-bailed
+    by the supersede (finalized by the caller after its commit). Flush-only.
     """
     conversation = await _get_or_create_project_conversation(
         db, user_id, UUID(str(project.id))
@@ -892,7 +895,7 @@ async def sync_task_book_question(
         db,
         conversation_id,
         content,
-        AskPayload(kind="task_book", reasons=reasons or []),
+        AskPayload(kind="task_book", reasons=reasons or [], brief=brief),
     )
     return bailed_run_ids
 
@@ -1086,17 +1089,18 @@ async def answer_question(
                                 "caption_mode": recovered_mode,
                             }
                         )
+                    # The ledger rides along verbatim — the caption answer
+                    # is not a book turn; no merge, just preservation.
+                    preserved_brief = (
+                        BriefLedger.model_validate(project.pending_brief["brief"])
+                        if isinstance(project.pending_brief, dict)
+                        and isinstance(project.pending_brief.get("brief"), dict)
+                        else BriefLedger()
+                    )
                     project.pending_brief = PendingBrief(
                         prompt=prompt_text,
                         intent=replay_intent,
-                        # The ledger rides along verbatim — the caption answer
-                        # is not a book turn; no merge, just preservation.
-                        brief=(
-                            BriefLedger.model_validate(project.pending_brief["brief"])
-                            if isinstance(project.pending_brief, dict)
-                            and isinstance(project.pending_brief.get("brief"), dict)
-                            else BriefLedger()
-                        ),
+                        brief=preserved_brief,
                         reasons=await _compute_book_reasons(db, project, replay_intent),
                         persona_id=(
                             project.pending_brief.get("persona_id")
@@ -1111,6 +1115,7 @@ async def answer_question(
                     bailed_run_ids = await sync_task_book_question(
                         db, user_id, project, replay_intent, prompt_text,
                         reasons=project.pending_brief["reasons"],
+                        brief=preserved_brief,
                     )
                     follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
                     # Skip the 续聊 fallback below — the task book question is
@@ -1669,6 +1674,7 @@ async def _book_turn(
             bailed_run_ids = await sync_task_book_question(
                 db, user_id, project, stored.intent, stored.prompt,
                 reasons=stored.reasons, derived=stored.derived,
+                brief=stored.brief,
             )
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
@@ -1860,7 +1866,8 @@ async def _book_turn(
         derived=derived,
     ).model_dump(mode="json")
     bailed_run_ids = await sync_task_book_question(
-        db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived
+        db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived,
+        brief=merged_brief,
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it

@@ -2533,6 +2533,19 @@ async def s51_bare_wish_asks_topic(ctx: Ctx) -> None:
     check(topic.get("source") == "user-stated",
           "the backfill is stamped user-stated (恒胜档)", topic)
 
+    # 预填评审卡 (ADR-052 B3): the follow-up docks the task book with the
+    # merged brief stamped INTO the question payload — the plan card renders
+    # the ledger (有值显示 + provenance), never blank form fields.
+    follow = body.get("follow_up") or {}
+    fq = follow.get("question") or {}
+    check(fq.get("kind") == "task_book",
+          "the answer's follow-up docks the task book (root now exists)", follow)
+    ftopic = (fq.get("brief") or {}).get("topic") or {}
+    check(ftopic.get("value") == options[0]["label"],
+          "the docked task_book stamps the merged brief into the payload", ftopic)
+    check(ftopic.get("source") == "user-stated",
+          "the stamped slot keeps its user-stated provenance", ftopic)
+
 
 async def s52_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
     """S52 问完一轮仍无根 → draft-from-persona 书（ADR-052 B2 D2-C2，验收③）：

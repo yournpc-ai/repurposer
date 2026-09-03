@@ -188,38 +188,6 @@ class AskOption(BaseModel):
     label: str
 
 
-class AskPayload(BaseModel):
-    """The typed ``question`` payload on a message (ask primitive).
-
-    The mechanism words live here — ``kind`` carries the *use* (task book
-    confirmation, a choice, a cost quote later), never combined with the
-    mechanism (NAMING: use × mechanism combos are banned). ``content`` on the
-    message row keeps the question's human text.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["task_book", "choice", "confirm"]
-    options: list[AskOption] = Field(default_factory=list)
-    allow_freeform: bool = True
-    # The stored cost-quote seat. Its supply is code, never the LLM: the
-    # estimate fold (N-34) — wired in with the week-6 presentation (dock
-    # total / chat unit price); NULL until then.
-    estimate: str | None = None
-    # task_book only: the needs_clarification reason KEYS (data, localized at
-    # render — never baked into `content`, which is user-facing prose).
-    reasons: list[str] = Field(default_factory=list)
-    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief-ledger slot this
-    # question fills — the answer backfills it user-stated and the book path
-    # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
-    # None on every question that is not a brief ask (caption mode, direction
-    # interrupts, post-run shape C). ``default_path`` is the schema tooth of
-    # 提问策略 ③: what happens when the user skips — rendered as the dock's
-    # muted second line, so every question is visibly safe to skip.
-    slot: Literal["topic", "audience", "tone"] | None = None
-    default_path: str = ""
-
-
 class AnswerPayload(BaseModel):
     """The typed ``answer`` payload on a message.
 
@@ -913,6 +881,44 @@ class InferredIntent(BaseModel):
     # its source (user-stated ONLY when the user's own words literally state
     # the value). Code merges by source precedence; a slot you leave out
     # (or set null) keeps its stored value. Null for start/answer verdicts.
+    brief: BriefLedger | None = None
+
+
+class AskPayload(BaseModel):
+    """The typed ``question`` payload on a message (ask primitive).
+
+    The mechanism words live here — ``kind`` carries the *use* (task book
+    confirmation, a choice, a cost quote later), never combined with the
+    mechanism (NAMING: use × mechanism combos are banned). ``content`` on the
+    message row keeps the question's human text. Defined after the brief
+    family: the task_book form stamps the merged ledger (B3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["task_book", "choice", "confirm"]
+    options: list[AskOption] = Field(default_factory=list)
+    allow_freeform: bool = True
+    # The stored cost-quote seat. Its supply is code, never the LLM: the
+    # estimate fold (N-34) — wired in with the week-6 presentation (dock
+    # total / chat unit price); NULL until then.
+    estimate: str | None = None
+    # task_book only: the needs_clarification reason KEYS (data, localized at
+    # render — never baked into `content`, which is user-facing prose).
+    reasons: list[str] = Field(default_factory=list)
+    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief-ledger slot this
+    # question fills — the answer backfills it user-stated and the book path
+    # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
+    # None on every question that is not a brief ask (caption mode, direction
+    # interrupts, post-run shape C). ``default_path`` is the schema tooth of
+    # 提问策略 ③: what happens when the user skips — rendered as the dock's
+    # muted second line, so every question is visibly safe to skip.
+    slot: Literal["topic", "audience", "tone"] | None = None
+    default_path: str = ""
+    # 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
+    # dock time, so the plan card renders the agent's OWN understanding
+    # (valued slots with provenance) instead of blank form fields. Frozen
+    # with the question row; every re-dock stamps the fresh merge.
     brief: BriefLedger | None = None
 
 

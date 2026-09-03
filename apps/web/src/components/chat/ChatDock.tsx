@@ -72,7 +72,6 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -164,7 +163,9 @@ export interface DerivedRow {
 
 /** Per-tool card anatomy (which controls a chain row gets). The label keys
  * reuse the results-tabs vocabulary for the five output tools; transforms
- * get their own words under generationOverlay.tools.*. */
+ * get their own words under generationOverlay.tools.*. (ADR-052 B3: the
+ * per-row focus input retired — the card renders the brief ledger instead;
+ * params.focus stays a legal chat-set param, just never a blank UI box.) */
 const TOOL_META: Record<
   string,
   {
@@ -175,12 +176,6 @@ const TOOL_META: Record<
     /** count stepper bounds + the default shown when the param is unset */
     countLimits?: [number, number]
     countDefault?: number
-    /** focus input (param "focus") */
-    focus?: boolean
-    /** lowercase noun for the focus placeholder ("this post" / "these clips") */
-    focusNounKey?: string
-    /** focus placeholder grammar: "these clips" vs "this post" */
-    focusPlural?: boolean
     /** bilingual toggle (param "bilingual") */
     bilingual?: boolean
   }
@@ -191,16 +186,11 @@ const TOOL_META: Record<
     langParam: "language",
     countLimits: [1, 10],
     countDefault: 3,
-    focus: true,
-    focusNounKey: "generationOverlay.focusNouns.clips",
-    focusPlural: true,
   },
   write_post: {
     Icon: FileText,
     labelKey: "results.tabs.post",
     langParam: "language",
-    focus: true,
-    focusNounKey: "generationOverlay.focusNouns.post",
   },
   write_quotes: {
     Icon: Quote,
@@ -208,16 +198,11 @@ const TOOL_META: Record<
     langParam: "language",
     countLimits: [1, 20],
     countDefault: 3,
-    focus: true,
-    focusNounKey: "generationOverlay.focusNouns.quotes",
-    focusPlural: true,
   },
   write_article: {
     Icon: Newspaper,
     labelKey: "results.tabs.article",
     langParam: "language",
-    focus: true,
-    focusNounKey: "generationOverlay.focusNouns.article",
   },
   write_carousel: {
     Icon: Images,
@@ -225,9 +210,6 @@ const TOOL_META: Record<
     langParam: "language",
     countLimits: [2, 15],
     countDefault: 6,
-    focus: true,
-    focusNounKey: "generationOverlay.focusNouns.carousel",
-    focusPlural: true,
   },
   translate_clip: {
     Icon: Languages,
@@ -364,6 +346,56 @@ export function tasksFromRunContext(ctx: unknown): TaskItem[] {
     : legacyOutputsToTasks(data)
 }
 
+// ---------------------------------------------------------------------------
+// brief 账本 (ADR-052 B2/B3): the dialog engine's structured state, mirrored
+// from the API. The plan card renders the ledger's valued slots (the agent's
+// own understanding) instead of blank form fields; an inferred slot value is
+// clickable and its edit rides the normal chat send channel (chat is the one
+// and only revision channel — the click-to-edit is its shorthand).
+// ---------------------------------------------------------------------------
+
+type BriefSlotSource = "user-stated" | "inferred" | "default"
+
+interface BriefSlot<T> {
+  value: T | null
+  source: BriefSlotSource
+}
+
+/** The slots the plan card renders. `material_state` is code-stamped
+ * server-side (none/pasted/attached); the card shows it only when material
+ * exists. `constraints` and the code-owned `asked` roll stay off the card. */
+interface BriefLedger {
+  topic: BriefSlot<string>
+  audience: BriefSlot<string>
+  tone: BriefSlot<string>
+  material_state: BriefSlot<"none" | "pasted" | "attached">
+}
+
+function normalizeBriefSlot<T>(raw: unknown): BriefSlot<T> {
+  const data = (raw ?? {}) as Record<string, unknown>
+  const source = data.source
+  return {
+    value: (data.value as T | null) ?? null,
+    source:
+      source === "user-stated" || source === "inferred" ? source : "default",
+  }
+}
+
+/** Tolerate a missing/partial brief payload (old question rows pre-B3 carry
+ * no `brief` key — read tolerance only, never written back). */
+export function normalizeBrief(raw: unknown): BriefLedger | null {
+  if (!raw || typeof raw !== "object") return null
+  const data = raw as Record<string, unknown>
+  return {
+    topic: normalizeBriefSlot<string>(data.topic),
+    audience: normalizeBriefSlot<string>(data.audience),
+    tone: normalizeBriefSlot<string>(data.tone),
+    material_state: normalizeBriefSlot<"none" | "pasted" | "attached">(
+      data.material_state
+    ),
+  }
+}
+
 /** Tolerate both run.context slot shapes (outputs = derive, ADR-043): slot
  * objects pass through; legacy flat rows (string outputs + flat counts)
  * upgrade to bare slots. Internal to the legacy→tasks upgrader — read
@@ -440,6 +472,10 @@ interface QuestionPayload {
   /** 提问策略 ③'s schema tooth (ADR-052 B2) — the skip path, rendered as
    * the dock's muted second line. */
   default_path?: string
+  /** 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
+   * dock time; the plan card renders its valued slots. Absent on question
+   * rows from before B3 (normalizeBrief tolerates). */
+  brief?: unknown
 }
 
 /** A question-carrying chat message (ask primitive): the dock's pending
@@ -520,6 +556,10 @@ interface ChatDockProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
+  /** The parked book's merged brief ledger (pending_brief.brief) on a restored
+   * session — the plan card's slot rows (预填评审卡, ADR-052 B3). Live turns
+   * refresh it from the docked question's payload, not this prop. */
+  initialBrief?: unknown
   /** The parked book's derived preview (ADR-043 — pending_brief.derived):
    * the card's "you'll get" section on a restored session. */
   initialDerived?: DerivedRow[]
@@ -561,6 +601,73 @@ export interface ChatDockHandle {
    * it IS the dock's send path. No-op while a turn/run is in flight; a failed
    * turn rolls the bubble back and returns the draft to the dock's input. */
   sendRevision: (text: string, focus: { id: string; label: string }) => void
+}
+
+/** 预填评审卡 slot row (ADR-052 B3): one valued brief-ledger slot. A
+ * user-stated value is settled prose (the user's own words); an
+ * inferred/default proposal carries a dashed underline and opens an inline
+ * editor — Enter commits the new value as a real chat message (chat is the
+ * one and only revision channel; this row is its shorthand), Esc or blur
+ * cancels. Zero chrome: no buttons, no placeholder, no empty state. */
+function BriefSlotRow({
+  label,
+  value,
+  editable,
+  onCommit,
+}: {
+  label: string
+  value: string
+  editable: boolean
+  onCommit: (value: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      {editing ? (
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            // IME composition (zh input): Enter confirms the candidate, not
+            // the edit — let it through untouched.
+            if (e.nativeEvent.isComposing) return
+            if (e.key === "Enter") {
+              e.preventDefault()
+              const next = draft.trim()
+              setEditing(false)
+              if (next && next !== value) onCommit(next)
+            } else if (e.key === "Escape") {
+              setEditing(false)
+              setDraft(value)
+            }
+          }}
+          // Blur CANCELS, never commits — the commit is a real chat send,
+          // so an accidental click-away must not fire it.
+          onBlur={() => {
+            setEditing(false)
+            setDraft(value)
+          }}
+          className="h-7 flex-1 text-sm"
+        />
+      ) : editable ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(value)
+            setEditing(true)
+          }}
+          className="cursor-text text-left underline decoration-muted-foreground/50 decoration-dashed underline-offset-4 hover:decoration-foreground"
+        >
+          {value}
+        </button>
+      ) : (
+        <span>{value}</span>
+      )}
+    </div>
+  )
 }
 
 /** MetaRow — the gray system-layer row (一切入流, the Claude Code anatomy):
@@ -848,6 +955,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   form = "dock",
   firstMessage,
   initialIntent,
+  initialBrief,
   initialDerived,
   initialReasons,
   initialRunId,
@@ -946,14 +1054,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
    * get" projection — rides pending_brief.derived; refetched with the book. */
   const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
+  /** The merged brief ledger (预填评审卡, ADR-052 B3): the plan card's slot
+   * rows. Initial load reads pending_brief.brief; every live turn re-stamps
+   * it from the docked question's payload (turn-fresh single channel). */
+  const [brief, setBrief] = useState<BriefLedger | null>(() =>
+    normalizeBrief(initialBrief)
+  )
   /** The docked book's soft-signal reasons (pending_brief.reasons) — the
    * clips row's no-media inline warning reads `clips_without_media`. */
   const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
-  /** The instruction box = the user's OWN supplement, always starting empty
-   * (2026-09-02 任务书瘦身): the LLM's distilled `specific_instruction` rides
-   * invisibly in the book (data layer untouched) and the supplement merges in
-   * when the book ships — inference bookkeeping is never UI copy. */
-  const [userInstruction, setUserInstruction] = useState("")
   // The plan card renders only once a real inference has landed (a restored
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
@@ -1070,6 +1179,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * `derived` is the server-compiled preview riding the same row. */
   const fetchPendingBrief = useCallback(async (): Promise<{
     intent: unknown
+    brief?: unknown
     reasons?: string[]
     persona_id?: string | null
     derived?: DerivedRow[]
@@ -1081,6 +1191,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (!res.ok) return null
       const data = (await res.json()) as { pending_brief?: {
         intent: unknown
+        brief?: unknown
         reasons?: string[]
         persona_id?: string | null
         derived?: DerivedRow[]
@@ -1335,7 +1446,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
           {
             method: "POST",
-            body: { kind: "start", autonomy, intent: withUserInstruction(intent) },
+            body: { kind: "start", autonomy, intent },
           },
         )
         if (!res.ok) {
@@ -1364,8 +1475,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         body: {
           tasks: intent.tasks,
           target_language: firstLang ?? "en",
-          instruction:
-            withUserInstruction(intent).specific_instruction || prompt,
+          instruction: intent.specific_instruction || prompt,
           autonomy,
         },
       })
@@ -1427,25 +1537,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       ...prev,
       tasks: prev.tasks.filter((_, i) => i !== index),
     }))
-
-  /** The book as it SHIPS: the user's instruction-box supplement merges after
-   * the LLM's distilled `specific_instruction` (which rides invisibly — the
-   * data layer is untouched; only the machine pre-fill left the UI). Applied
-   * at every ship point: the Start answer, a confirm-phase refine turn's
-   * prior_intent, and the legacy /generate fallback. */
-  const withUserInstruction = useCallback(
-    (book: InferredIntent): InferredIntent => {
-      const supplement = userInstruction.trim()
-      if (!supplement) return book
-      return {
-        ...book,
-        specific_instruction: [book.specific_instruction, supplement]
-          .filter(Boolean)
-          .join("\n"),
-      }
-    },
-    [userInstruction],
-  )
 
   const taskLabel = useCallback(
     (task: TaskItem) => {
@@ -1659,15 +1750,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
+        // 预填评审卡 (B3): the question payload's brief is the turn-fresh
+        // stamp (frozen with the question row at dock time); the refetched
+        // pending_brief row is the fallback for rows docked before B3.
+        const questionBrief = normalizeBrief(message.question.brief)
         const pending = await fetchPendingBrief()
         if (pending) {
           setIntent(normalizeIntent(pending.intent))
+          setBrief(questionBrief ?? normalizeBrief(pending.brief))
           setDerived(pending.derived ?? [])
           setReasons(pending.reasons ?? [])
-          // A new book = a new turn: the box's previous supplement already
-          // rode the refine (merged into prior_intent), so it resets empty
-          // rather than double-accumulating into the next ship.
-          setUserInstruction("")
           setIntentReady(true)
           setPhase("confirm")
           // No "plan updated" filler line on refinements — the turn's own
@@ -1783,7 +1875,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           persona_id: opts?.personaId,
           prior_intent:
             phase === "confirm" && intentReady
-              ? withUserInstruction(intent)
+              ? intent
               : undefined,
           // Consumed only when this turn confirms the book by prose — the
           // dock's tier must survive a typed "looks good, start it".
@@ -2252,6 +2344,68 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [messages, runStartAt],
   )
 
+  /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
+   * send — the composed statement (「受众：X」 / "Audience: X") rides the one
+   * and only revision channel; the router merges it user-stated and the
+   * re-docked book carries the fresh ledger. No slot-update endpoint —
+   * prohibited-behavior: 禁第二修订通道. */
+  const sendSlotEdit = (slot: "topic" | "audience" | "tone", value: string) => {
+    if (chatBusy || isStarting) return
+    const text = t(`generationOverlay.slotEditMessages.${slot}`, { value })
+    const rollbackId = crypto.randomUUID()
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: rollbackId,
+        role: "user",
+        content: text,
+        at: new Date().toISOString(),
+      },
+    ])
+    raiseHistory()
+    void sendChat(text, { rollbackId, draft: text })
+  }
+
+  /** 预填评审卡 slot rows (B3): valued slots ONLY — an empty slot renders
+   * nothing, never a "not set" placeholder (prohibited: 禁空槽位渲染).
+   * Material shows only when real material exists (attached / pasted —
+   * code-stamped fact, never editable); topic / audience / tone are
+   * clickable proposals unless the user's own words stated them. */
+  const briefSlotRows = useMemo(() => {
+    if (!brief) return []
+    const rows: {
+      slot: "topic" | "audience" | "tone" | "material"
+      label: string
+      value: string
+      editable: boolean
+    }[] = []
+    const push = (
+      slot: "topic" | "audience" | "tone",
+      label: string,
+      s: BriefSlot<string>
+    ) => {
+      if (!s.value) return
+      rows.push({ slot, label, value: s.value, editable: s.source !== "user-stated" })
+    }
+    push("topic", t("generationOverlay.slotAbout"), brief.topic)
+    push("audience", t("generationOverlay.slotFor"), brief.audience)
+    push("tone", t("generationOverlay.slotTone"), brief.tone)
+    const material = brief.material_state.value
+    if (material && material !== "none") {
+      rows.push({
+        slot: "material",
+        label: t("generationOverlay.slotMaterial"),
+        value: t(
+          material === "pasted"
+            ? "generationOverlay.slotMaterialPasted"
+            : "generationOverlay.slotMaterialAttached"
+        ),
+        editable: false,
+      })
+    }
+    return rows
+  }, [brief, t])
+
   // Plan-card placement (2026-08-06 in-flight rework): settled → pinned
   // bottom-most (order-10); while a chat turn is in flight → inline at its
   // echo anchor in the message loop (above the new user bubble + thinking
@@ -2287,6 +2441,32 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   the rows explain themselves. The identity echo ("Style: …")
                   retired into the prose — the card carries only the editable
                   chain + the incremental derived preview. */}
+              {/* 预填评审卡 (ADR-052 B3): the card TOP renders the agent's
+                  OWN understanding — the merged brief ledger's valued slots
+                  (有值显示，无值不显示；零空框). The review is recognition,
+                  not creation: inferred values are one click from a chat
+                  revision, user-stated values are settled prose. */}
+              {briefSlotRows.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {briefSlotRows.map((row) => (
+                    <BriefSlotRow
+                      key={row.slot}
+                      label={row.label}
+                      value={row.value}
+                      editable={row.editable}
+                      onCommit={(v) =>
+                        row.slot !== "material" && sendSlotEdit(row.slot, v)
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+              {/* 默认路径声明 (schema 牙齿, ADR-052 B3): the fixed anatomy
+                  line — what "just hit Start" means. Structure guarantees it
+                  is always here; it never depends on the LLM's memory. */}
+              <p className="text-xs text-muted-foreground">
+                {t("generationOverlay.defaultPathLine")}
+              </p>
               {/* The task chain (ADR-043) — one row per task, in execution
                   order. Outputs are the chain's derived projection (the
                   preview below), never a panel declaration: edits mutate
@@ -2422,23 +2602,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                             )}
                           </div>
                         </div>
-                        {meta.focus && (
-                          <Input
-                            value={(task.params.focus as string | undefined) ?? ""}
-                            onChange={(e) =>
-                              updateTaskParams(index, {
-                                focus: e.target.value || null,
-                              })
-                            }
-                            placeholder={t(
-                              meta.focusPlural
-                                ? "generationOverlay.slotFocusPlaceholderPlural"
-                                : "generationOverlay.slotFocusPlaceholder",
-                              { type: t(meta.focusNounKey ?? meta.labelKey) }
-                            )}
-                            className="h-8 text-xs"
-                          />
-                        )}
                         {/* No-media inline warning (2026-09-02 新增): the
                             S11 signal used to live only in the prose + the
                             Start 422 — the row itself now names the problem
@@ -2515,18 +2678,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   ))}
                 </div>
               )}
-
-              {/* Instruction (2026-09-02 瘦身): a bare box that always opens
-                  EMPTY — the LLM's distilled instruction rides invisibly in
-                  the book (inference bookkeeping is never UI copy); this is
-                  the user's own supplement, merged in at ship time via
-                  withUserInstruction. No label — the placeholder explains. */}
-              <Textarea
-                value={userInstruction}
-                onChange={(e) => setUserInstruction(e.target.value)}
-                placeholder={t("generationOverlay.instructionPlaceholder")}
-                className="min-h-14 resize-none text-sm"
-              />
             </div>
           </Card>
         </div>

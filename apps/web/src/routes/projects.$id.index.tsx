@@ -118,6 +118,9 @@ interface PendingBrief {
    * read); typed loosely here and normalized at the overlay boundary. Null
    * on ledger-only rows (an ask-turn write — no book parked, ADR-052 B2). */
   intent: unknown | null
+  /** The merged brief ledger (预填评审卡, ADR-052 B3) — the plan card's
+   * slot rows; typed loosely here and normalized at the dock boundary. */
+  brief?: unknown
   /** Why the book needs a human check — confirmation is `reasons.length > 0`
    * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
@@ -1020,6 +1023,7 @@ function ProjectDetailPage() {
             : null
         }
         initialIntent={dockInitialIntent}
+        initialBrief={pendingBrief?.brief}
         initialDerived={pendingBrief?.derived}
         initialReasons={pendingBrief?.reasons}
         initialRunId={
