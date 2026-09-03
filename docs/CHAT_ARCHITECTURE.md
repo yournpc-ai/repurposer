@@ -124,7 +124,7 @@ book path 的推理者是 **intent router**（四动作 verdict，ADR-052 B2）�
 3. **成功定义随任务书**：dock 的计划摘要携带"什么叫成了"（本批产物的验收口径），schema / overlay 同改，结果页对照呈现。
 4. **按素材画像推荐配方**：输入画像命中某张 live 卡时主动说"照这张卡做"（读 `RECIPE_REGISTRY` 公开面；reserved 卡永不推荐——点亮纪律不变，RECIPES §8）。
 
-验收：迷失用户横切变体 S17–S21（`scripts/chat_scenarios.py`，散入路由/咨询/修订/边界/素材五族而非独立成块——迷失是用户状态，不是意图类别；S1–S16 不得回归）。
+验收：迷失用户横切（`scripts/chat_scenarios.py` S1/S2——裸愿望 → 主题问 → 作答 / 跳过 → draft-from-persona 书；迷失是用户状态不是意图类别，出书门槛主径即迷失主径。2026-09-04 浓缩后原 S17–S21 横切变体退役归此）。
 
 ## 4. Skill Registry 初集
 

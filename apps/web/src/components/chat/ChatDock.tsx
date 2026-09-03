@@ -1296,8 +1296,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   },
                 })
               } else {
-                // 形态律 (ADR-053 R1): an options-empty question's receipt
-                // is the plain message pair — the question line stays a
+                // 形态律 (ADR-053 R1): an options-empty question's answered
+                // form is the plain message pair — the question line stays a
                 // plain assistant message, no AnsweredQuestion block.
                 history.push({
                   id: m.id,
@@ -1475,8 +1475,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setIsStarting(true)
     try {
       if (pendingQuestion) {
-        // Ask primitive: Start IS the answer to the docked task_book
-        // question — one call answers, starts the run, and archives the QA.
+        // 提问机器: Start IS the answer to the docked task_book
+        // question — one call answers, starts the run, and settles the row.
         // "start" is a first-class answer kind (no magic option id); the
         // panel's edited task book rides along so hand edits (slots marked
         // explicit) reach the run instead of the stale stored intent.
@@ -1754,9 +1754,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * settled decisions, the dock holds the open one).
    * Reason keys (payload data) render localized as the block's detail line.
    * 形态律 (ADR-053 R1): the AnsweredQuestion block exists only for
-   * options questions and task-book receipts — an options-empty plain
-   * question's receipt is the plain message pair (its question line already
-   * sits in the flow as a plain assistant message). */
+   * options questions and answered task books — an options-empty plain
+   * question's answered form is the plain message pair (its question line
+   * already sits in the flow as a plain assistant message). */
   const pushAnsweredQuestion = (message: QuestionMessage) => {
     if (!message.answer) return
     if (

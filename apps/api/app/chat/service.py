@@ -1986,7 +1986,7 @@ async def _propose_turn(
     superseded it (finalized by the caller after its commit), and the
     pending question this turn settled by judgment (ADR-053 R2 — the
     caller surfaces it as ChatResponse.answered_question so the client's
-    pill clears and the receipt lands). Flush-only — the caller commits.
+    pill clears and the AnsweredQuestion block lands). Flush-only — the caller commits.
     """
     conversation_id = UUID(str(conversation.id))
     pending = (
@@ -2603,7 +2603,7 @@ async def execute_chat_turn(
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message
             # the pending question's answer — surface the settled row so
-            # the client's pill clears and the receipt lands.
+            # the client's pill clears and the AnsweredQuestion block lands.
             prepared.answered_question = chat_settled
 
     await db.commit()
