@@ -1061,6 +1061,7 @@ const en = {
       selecting_segments: "Picking highlight moments…",
       building_specs: "Assembling your clips…",
       writing_copy: "Writing your copy…",
+      researching: "Researching the topic…",
       generating_image: "Generating quote card images…",
       ready_to_render: "About to start rendering…",
       removing_fillers: "Removing filler words…",

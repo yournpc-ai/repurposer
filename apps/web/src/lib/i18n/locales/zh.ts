@@ -1022,6 +1022,7 @@ const zh: Resources = {
       selecting_segments: "正在挑选高光片段…",
       building_specs: "正在组装片段…",
       writing_copy: "正在撰写文案…",
+      researching: "正在调研…",
       generating_image: "正在生成金句卡图片…",
       ready_to_render: "即将开始渲染…",
       removing_fillers: "正在去除口头禅…",

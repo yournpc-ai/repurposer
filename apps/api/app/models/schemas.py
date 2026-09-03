@@ -1812,6 +1812,55 @@ class MaterialUnderstanding(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Research brief (ADR-052 B4, DIALOG_WORKFLOW §2.6): the bounded loop node's
+# artifact — web grounding gathered by the researcher agent's search/fetch
+# iterations, stamped into the research step's spec and appended to
+# consuming writers' asset texts. Machine channel only (step spec): it never
+# enters the dialog engine's brief ledger — same word, different object.
+# ---------------------------------------------------------------------------
+
+
+class ResearchSource(BaseModel):
+    """One web source the brief actually used."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = ""
+    url: str = ""
+
+
+class ResearchBrief(BaseModel):
+    """The research loop's closing artifact.
+
+    ``caveat`` carries the honest-degradation note (iteration-cap synthesis,
+    search trail ran dry, research unavailable) — a caveated brief is a
+    COMPLETE step, never a failed one: research is best-effort enrichment,
+    the run continues either way.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = ""
+    key_facts: list[str] = Field(default_factory=list)
+    sources: list[ResearchSource] = Field(default_factory=list)
+    caveat: str | None = None
+
+
+class ResearchVerdict(BaseModel):
+    """The researcher agent's per-iteration verdict (bounded loop, ADR-052
+    B4): pick the ONE next action — run a new search, open one result URL,
+    or close with the final brief. The agent chooses actions; the node's
+    code owns the tool set and the iteration count (禁开放自治)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["search", "fetch", "brief"]
+    query: str | None = None  # search
+    url: str | None = None  # fetch
+    brief: ResearchBrief | None = None  # brief
+
+
+# ---------------------------------------------------------------------------
 # Beat plan (产物质量线期 2, docs/tasks/output-quality-line.md §2.3): the
 # stills editor's per-shot timeline decisions — the timeline-creation layer
 # between storyboard (WHAT) and clip-spec (怎么渲). Same 铁律 as the beat

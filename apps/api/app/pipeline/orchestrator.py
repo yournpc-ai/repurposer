@@ -337,12 +337,37 @@ def _compile_task_list(
     # layer declaration (outputs-derive, ADR-043). Storyboard alignment and
     # step labels downstream read it unchanged.
     type_ordinals: dict[str, int] = {}
+    # research 编译期提升 (ADR-052 B4, align_stills 先例一般化): the bounded
+    # agent loop runs OFF the plan critical path — pulled from the chain here
+    # and injected right after the prelude with inputs=[], so the network-
+    # bound loop overlaps ASR / planning instead of queueing behind them
+    # (an empty inputs list claims immediately once asset processing drains,
+    # jobs.py readiness). Chain position is meaningless to the topology:
+    # consumers wire after it via their ``consumes_research`` declaration.
+    research_params: list[BaseModel | None] = []
+    for item, entry in zip(task.tasks or [], entries, strict=True):
+        if entry.name == "research":
+            research_params.append(
+                entry.params_model.model_validate(strip_null_params(item.params))
+                if entry.params_model
+                else None
+            )
+    research_indices: list[int] = []
+    for params in research_params:
+        spec = params.model_dump(mode="json", exclude_none=True) if params else {}
+        research_indices.append(len(nodes))
+        nodes.append(_NodeSpec("research", seq, inputs=[], spec=spec))
+        seq += 1
     for item, entry in zip(task.tasks or [], entries, strict=True):
         node_cls = NODE_KINDS[entry.name]
         params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
         if entry.name == "align_stills":
             # Handled by the input-profile injection below — the LLM naming
             # it explicitly changes nothing (idempotent runner).
+            continue
+        if entry.name == "research":
+            # Hoisted above (ADR-052 B4) — the LLM naming its position in
+            # the chain changes nothing about the execution topology.
             continue
         if not node_cls.needs_plan_prelude and not node_cls.produces_outputs:
             modifiers.append((item, entry))
@@ -393,6 +418,10 @@ def _compile_task_list(
             nodes.append(_NodeSpec("align_stills", seq, inputs=align_inputs))
             seq += 1
             inputs = [*inputs, skill_node_idx["align_stills"]]
+        if research_indices and getattr(node_cls, "consumes_research", False):
+            # 研究接线 (B4): the writer waits for the hoisted research loop —
+            # its asset texts pick up the stamped brief at run time.
+            inputs = [*inputs, *research_indices]
         skill_node_idx[entry.name] = len(nodes)
         nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
         seq += 1

@@ -53,6 +53,8 @@ from app.tools.music.params import AddMusicParams
 from app.tools.reframe.node import ReframeClip  # noqa: F401
 from app.tools.reframe.params import ReframeClipParams
 from app.tools.stills.node import AlignStills  # noqa: F401
+from app.tools.research.node import ResearchNode  # noqa: F401
+from app.tools.research.params import ResearchParams
 
 from app.pipeline.graph import NODE_KINDS
 
@@ -230,6 +232,19 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             summary_templates={
                 "en": "Aligned transcript · {n} word{n_s} · {total_seconds}s",
                 "zh": "对齐了逐字稿 · {n} 词 · {total_seconds} 秒",
+            },
+        ),
+        ToolEntry(
+            name="research",
+            description="Research a topic on the web first (fresh facts + named sources) so the "
+            "run's copy is grounded — ONLY when the request names a research / fact-check / "
+            "latest-developments need or the topic is time-sensitive; never for evergreen copy "
+            "from the user's own material",
+            behavior="probabilistic",
+            params_model=ResearchParams,
+            summary_templates={
+                "en": "Researched · {n} source{n_s}",
+                "zh": "调研完成 · {n} 个来源",
             },
         ),
         ToolEntry(

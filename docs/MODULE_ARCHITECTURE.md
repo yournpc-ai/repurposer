@@ -201,7 +201,7 @@ apps/api/
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects / assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
-│   │   ├── graph.py               # NodeBase 协议 + 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
+│   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── node_runners.py        # 内部节点 crew（preprocess / understand·plan / checkpoint / render）
 │   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手（step_context 兼估价事实装配 _estimate_facts）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
@@ -224,8 +224,11 @@ apps/api/
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：understand·plan/persona/
 │   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
-│   │                    #   dub / filler / music / posts / quotes / reframe / revise / stills
+│   │                    #   dub / filler / music / posts / quotes / reframe / research / revise / stills
 │   │                    #   （节点类+params+私有工序+估价+私有 agent 声明）；
+│   │                    #   research = 有界 loop 节点首座（ADR-052 B4）：node（BoundedLoopNode，
+│   │                    #   max_iterations=8）+ agents（researcher）+ web（零键 DDG search/fetch，
+│   │                    #   诚实降级）+ spec.research_brief 钢印 → consumes_research 写手注入；
 │   │                    #   stills/beats.py = 节拍方案代码半（期 2）：backing 表装配 + 拍锚吸附平铺 +
 │   │                    #   coherence_violations 跨拍连贯性检查 + 两段式编排（大纲→逐拍，handoff 交接）；
 │   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）

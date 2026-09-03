@@ -831,6 +831,63 @@ async def _sweep_stale_derivative_outputs(
         )
 
 
+async def _collect_research_brief_texts(db: AsyncSession, run_id: UUID) -> list[str]:
+    """Same-run research steps' briefs as writer grounding blocks (ADR-052
+    B4): one formatted text per stamped brief, the provenance header first
+    so the model treats it as background facts, not source material. A run
+    without research returns [] — the writer's texts stay untouched."""
+    steps = (
+        (
+            await db.execute(
+                select(WorkflowStep)
+                .where(
+                    WorkflowStep.run_id == run_id,
+                    WorkflowStep.kind == "research",
+                    WorkflowStep.status == "done",
+                )
+                .order_by(WorkflowStep.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    texts: list[str] = []
+    for step in steps:
+        raw = (step.spec or {}).get("research_brief")
+        if not isinstance(raw, dict):
+            continue
+        lines = [
+            "[Research brief — fresh web grounding gathered for this run. "
+            "Treat as background facts; the user's own material above stays "
+            "the primary source.]"
+        ]
+        query = (step.spec or {}).get("query")
+        if query:
+            lines.append(f"Research question: {query}")
+        summary = (raw.get("summary") or "").strip()
+        if summary:
+            lines.append(summary)
+        for fact in raw.get("key_facts") or []:
+            if isinstance(fact, str) and fact.strip():
+                lines.append(f"- {fact.strip()}")
+        sources = [
+            s for s in (raw.get("sources") or []) if isinstance(s, dict) and s.get("url")
+        ]
+        if sources:
+            lines.append(
+                "Sources: "
+                + "; ".join(
+                    f"{(s.get('title') or '').strip() or s['url']} ({s['url']})"
+                    for s in sources
+                )
+            )
+        caveat = (raw.get("caveat") or "").strip()
+        if caveat:
+            lines.append(f"Caveat: {caveat}")
+        texts.append("\n".join(lines))
+    return texts
+
+
 class DerivativeWriterNode(NodeBase):
     """Shared body for the four copy-writer nodes; each package declares a
     thin subclass with its own ``writer`` (the tool-private agent)."""
@@ -850,6 +907,10 @@ class DerivativeWriterNode(NodeBase):
     # material_excerpt path.
     requires = ()
     produces_outputs = True
+    # 研究接线声明 (ADR-052 B4): compile wires any hoisted research node into
+    # this writer's inputs, and run() appends the stamped research briefs to
+    # the asset texts below. Declarative — the four writers all inherit it.
+    consumes_research = True
     # Per-writer quotation declarations (P4): completion bounds grounded in
     # the output schema's size class; ``images_per_run`` = exact image
     # generations (the quote card's 1, skipped on targeted regeneration).
@@ -933,6 +994,12 @@ class DerivativeWriterNode(NodeBase):
         await _set_stage(node.id, "writing_copy")
 
         asset_texts = await collect_asset_texts(db, project.id)
+        # 研究简报注入 (ADR-052 B4): same-run research steps' stamped briefs
+        # append as grounding material — one formatted block per brief, the
+        # provenance header first so the model knows what it is reading.
+        # Best-effort enrichment: a research-less run's texts stay byte-for-
+        # byte unchanged; a degraded brief says so in its own caveat line.
+        asset_texts.extend(await _collect_research_brief_texts(db, run.id))
         persona = await resolve_persona(db, project)
         generation_context = _generation_context(run, project, persona)
         generation_context.target_language = target_language

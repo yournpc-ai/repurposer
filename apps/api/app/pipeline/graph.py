@@ -274,6 +274,55 @@ class NodeBase:
         return None
 
 
+class BoundedLoopNode(NodeBase):
+    """有界 loop 节点 (ADR-052 B4, DIALOG_WORKFLOW §2.6): agent 性的合法座位.
+
+    A node whose ``run`` drives an internal mini tool-loop: each iteration
+    one agent verdict → one fixed tool call → evidence accumulates, until
+    the agent closes with its final artifact or the cap spends. THREE
+    guardrails make the loop a DAG citizen, never open autonomy:
+
+    ① the iteration cap is DECLARED (``max_iterations``) — the loop can
+       never outlive its quotation;
+    ② 报价 = fold — ``estimate`` is the single-pass quote × the cap, kernel-
+       enforced here so a future loop node cannot mis-quote;
+    ③ externally it is ONE DAG node — topology / roster / SSE untouched;
+       the loop's iterations project onto the step's own summary channel,
+       never onto the graph (no new steps / canvas nodes / SSE event types).
+
+    The loop's tool set is fixed in the node code — the agent picks actions,
+    it never invents tools (禁开放自治: steering / compaction / free
+    tool-loop stay rejected). First seat: ``research`` (tools/research).
+    """
+
+    max_iterations: int = 8
+
+    def loop_estimate(self, ctx: dict) -> dict | None:
+        """Single-iteration quotation — the subclass declares one pass."""
+        return None
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """报价 = fold (guardrail ②): the cap prices the loop — range lows
+        and highs and every unit scale by ``max_iterations``."""
+        single = self.loop_estimate(ctx)
+        if single is None:
+            return None
+        return {
+            "prompt_tokens": [
+                single["prompt_tokens"][0] * self.max_iterations,
+                single["prompt_tokens"][1] * self.max_iterations,
+            ],
+            "completion_tokens": [
+                single["completion_tokens"][0] * self.max_iterations,
+                single["completion_tokens"][1] * self.max_iterations,
+            ],
+            "units": {
+                key: value * self.max_iterations
+                for key, value in (single.get("units") or {}).items()
+            },
+        }
+
+
 NODE_KINDS: dict[str, NodeBase] = {}
 
 

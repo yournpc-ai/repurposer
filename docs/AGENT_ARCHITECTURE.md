@@ -133,8 +133,18 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-- **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`…）。
+- **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
+
+### 4.6 BoundedLoopNode——agent 性的合法座位（ADR-052 B4，DIALOG_WORKFLOW §2.6）
+
+多轮自主调工具（agent 性）只有一个合法形态：**有界 loop 节点**——`NodeBase` 子类，`run()` 内部驱动迷你工具循环（每迭代一次 agent 裁决 → 一个固定工具调用 → 证据累积），三护栏缺一不可：
+
+1. **迭代上限**：`max_iterations` 类属性声明，循环永不超过它的报价；
+2. **报价 = fold**：内核 `estimate()` = 子类 `loop_estimate()`（单次报价）× 上限——最坏情形已计入 run 总价，未来 loop 节点想报错价都报不了；
+3. **对外 = DAG 单节点**：topology / roster / SSE 零改动；迭代只投影到自己 step 的 summary 通道，永不投到图上（无新 step / 无 canvas 节点 / 无 SSE 事件类型）。
+
+循环的工具集固定在节点代码里——agent 选动作，永不造工具；开放自治（steering / compaction / 自由 tool-loop / 运行期工具发现）维持否决。**首个实例 = `research`**（`app/tools/research/`）：researcher agent 驱动 search/fetch 迭代（零键 web 对）至上限，收尾把 ResearchBrief 钢印进 `spec.research_brief`；编译期提升（align_stills 先例）让它以 `inputs=[]` 与 prelude 并行，声明 `consumes_research` 的 writer（四写手基类）接线等它并把简报追加进 asset_texts。**诚实降级是结构的一部分**：研究侧失败（funnel / 网络 / 上限耗尽）一律以 caveated brief 完成 step，run 继续——`retries=0`，重试只买同样的空。
 
 ## 5. Harness 层：模型调用面
 

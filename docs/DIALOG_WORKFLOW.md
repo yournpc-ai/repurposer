@@ -1,6 +1,6 @@
 # Repurposer Dialog Workflow — 厚 Agent 蓝图
 
-> Status: 已拍板（2026-09-03，ADR-052），**施工中**——**B1 改名批已落（2026-09-03，简报 `tasks/dialog-workflow-b1-rename.md`）**；B2~B4 排期 09-04~09-10（PROGRESS W7；工艺叙事与 research「立即」两判同批）。
+> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief 账本+ask+出书门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；剧本 harness（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
 > 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；任务书字段契约归 ADR-043。
 
 ## 1. 蓝图一句话
@@ -110,11 +110,11 @@ router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON�
 | 批 | 内容 | 验收 |
 |---|---|---|
 | **B1 改名批** ✅（2026-09-03） | §3 全栈改名（实例/字段/路径/文档）；NAMING N-43+ 判例同批 | 每 commit 冷启动绿（tsc + import + 引导一处真实路径）；零行为变化 |
-| **B2 P0** | brief 账本（schema + 迁移 + 合并规则）/ router 相位统一 + ask 动作 / 出书门槛 / 默认路径声明 | 裸愿望 "I want a social post." → 先收到一词可答的主题问（带默认路径），不再收到空心书 |
-| **B3 P1** | 任务书卡 = brief 渲染（槽位行 + 空框全删 + 确认 pill 改名 + 散文牙齿） | 卡面零空文本框；每个值有来源；不填任何东⻄直接 Start 的路径在卡上可读 |
-| **B4 research 试点** | 有界 loop 节点类型 + research 节点（工具：web search/fetch） | 三护栏成立；DAG/报价/占位无感；writer 收到 research brief |
+| **B2 P0** ✅ 代码已落（2026-09-03，验证归用户产品试用） | brief 账本（schema + 迁移 + 合并规则）/ router 相位统一 + ask 动作 / 出书门槛 / 默认路径声明 | 裸愿望 "I want a social post." → 先收到一词可答的主题问（带默认路径），不再收到空心书 |
+| **B3 P1** ✅ 代码已落（2026-09-03，同上） | 任务书卡 = brief 渲染（槽位行 + 空框全删 + 确认 pill 改名 + 散文牙齿） | 卡面零空文本框；每个值有来源；不填任何东⻄直接 Start 的路径在卡上可读 |
+| **B4 research 试点** ✅ 代码已落（2026-09-03，同上） | 有界 loop 节点类型 + research 节点（工具：web search/fetch） | 三护栏成立；DAG/报价/占位无感；writer 收到 research brief |
 
-B1→B2→B3 顺序强依赖；B4 独立（2026-09-03 拍板「立即」——排期随批 09-09~09-10）。每批施工简报开做前落 `docs/tasks/`（flora-parity 先例）。
+B1→B2→B3 顺序强依赖；B4 独立（2026-09-03 拍板「立即」——排期随批 09-09~09-10）。每批施工简报开做前落 `docs/tasks/`（flora-parity 先例）。B2~B4 三批代码同日落地（简报 `tasks/dialog-workflow-b*.md`），剧本 harness 与产品试用验证归用户。
 
 ## 8. 悬案（待真实数据 / 后续拍板）
 

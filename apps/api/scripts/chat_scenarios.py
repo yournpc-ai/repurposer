@@ -2584,6 +2584,68 @@ async def s52_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
           "the echo carries the default-path declaration (验收③)", echo)
 
 
+async def s53_research_grounds_writer(ctx: Ctx) -> None:
+    """S53 research 试点全链（ADR-052 B4，有界 loop 节点）：chat 出书 → 面板
+    手编 chain 为 [research, write_post] 起步 → research step done +
+    spec.research_brief 钢印 + writer 在 research 之后完成 + post 产物存在。
+
+    网络方差说明：活 DDG 可能全灭（无网 / 被限流）——诚实降级下 brief 带
+    caveat 自述、run 照样 completed。断言只看「钢印存在 + 步骤有序 +
+    产物存在」，不看简报内容质量（那是 prompt / provider 层的事）。"""
+    pid = await ctx.new_project("S53 research grounds writer")
+
+    turn1 = await ctx.chat(
+        pid,
+        "Write a LinkedIn post about the EU AI Act's 2026 enforcement — "
+        "research the latest developments first.",
+    )
+    turn1 = await answer_caption_gate(ctx, turn1)  # no-op unless the dock quotes first
+    check(is_task_book_dock(turn1["assistant_message"]),
+          "a rooted topic docks a task book", turn1["assistant_message"])
+    book = (await ctx.results(pid)).get("pending_brief")
+    qid = turn1["assistant_message"]["id"]
+
+    # 面板手编起步（S16 先例）：chain 换成确定性的 [research, write_post]。
+    edited = dict(book["intent"])
+    edited["tasks"] = [
+        {
+            "tool": "research",
+            "params": {"query": "EU AI Act 2026 enforcement latest developments"},
+        },
+        {"tool": "write_post", "params": {"language": "en"}},
+    ]
+    res = await ctx.answer(qid, {"kind": "start", "intent": edited})
+    check(res.status_code == 200, "the research chain starts", res.text)
+    run_id = res.json()["answered_question"].get("workflow_run_id")
+    check(run_id, "a run was born", res.json())
+
+    row = await wait_run_status(run_id, {"completed", "failed"}, timeout=600.0)
+    check(row["status"] == "completed",
+          "the run completes (research is best-effort, never a blocker)", row["status"])
+
+    steps = await step_rows(run_id)
+    research_steps = [s for s in steps if s["kind"] == "research"]
+    check(len(research_steps) == 1, "one hoisted research step", [s["kind"] for s in steps])
+    rs = research_steps[0]
+    check(rs["status"] == "done",
+          "the research step completes even on a dry trail", rs["error"])
+    check(isinstance((rs["spec"] or {}).get("research_brief"), dict),
+          "the brief is stamped into the step spec (spec.research_brief)", rs["spec"])
+    writer = next(s for s in steps if s["kind"] == "write_post")
+    check(writer["status"] == "done",
+          "the writer completes after the research edge", writer["error"])
+
+    async with AsyncSessionLocal() as db:
+        outs = (
+            await db.execute(
+                select(Output).where(
+                    Output.project_id == uuid.UUID(pid), Output.type == "post"
+                )
+            )
+        ).scalars().all()
+    check(len(outs) >= 1, "the post output exists", len(outs))
+
+
 SCENARIOS = {
     # 首轮路由
     "S1": s1_vague_first_turn_then_prose_start,
@@ -2649,6 +2711,8 @@ SCENARIOS = {
     "S51": s51_bare_wish_asks_topic,
     # 出书门槛
     "S52": s52_skipped_topic_ask_drafts_from_persona,
+    # 有界 loop 节点
+    "S53": s53_research_grounds_writer,
     # 估价地基
     "S42": s42_quotation_foundation,
     "S45": s45_materialize_injection_matrix,
