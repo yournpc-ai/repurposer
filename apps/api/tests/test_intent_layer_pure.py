@@ -33,7 +33,7 @@ from app.chat.service import (
 )
 from app.models.schemas import (
     AnswerProposal,
-    AskOption,
+    Option,
     InferredIntent,
     IntentResult,
     IntentSlot,
@@ -182,8 +182,8 @@ class TestDeriveContextFields:
 
 class TestMatchOption:
     options = [
-        AskOption(id="a", label="Focus: pricing"),
-        AskOption(id="b", label="Full-talk highlights"),
+        Option(id="a", label="Focus: pricing"),
+        Option(id="b", label="Full-talk highlights"),
     ]
 
     def test_letter_hit(self):
@@ -437,8 +437,8 @@ class TestIsPendingTaskBook:
         )
         assert is_pending_task_book(message) is False
 
-    def test_choice_question_is_not_startable(self):
-        message = Message(question={"kind": "choice"}, answer=None)
+    def test_plain_question_is_not_startable(self):
+        message = Message(question={"kind": "question"}, answer=None)
         assert is_pending_task_book(message) is False
 
     def test_none_and_non_question_are_not_startable(self):

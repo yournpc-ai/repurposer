@@ -26,11 +26,12 @@ everything else goes to the four-state proposer:
 
 One LLM call per turn; the loop lives between turns, never inside one.
 
-Ask primitive (intent-ask-primitive): a message may carry a typed
+提问机器 (the question machine): a message may carry a typed
 ``question`` payload; ``answer`` NULL = pending. Pending questions dock above
-the input (QuestionDock); answered ones archive in the flow as QA pairs. At
+the input (QuestionDock); answered ones collapse into the flow as answered
+questions. At
 most one pending question per conversation — a newer question retires the
-previous one (bail: superseded). While a choice question is pending, a
+previous one (bail: superseded). While a question is pending, a
 free-text message is mapped deterministically (autoResume, zero LLM): an
 option letter/number/label hit answers with that option; otherwise
 ``allow_freeform`` records the text as a freeform answer; otherwise the text
@@ -54,9 +55,6 @@ from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
     AnswerRequest,
-    AskOption,
-    AskPayload,
-    AskProposal,
     BriefLedger,
     BriefSlot,
     BriefSlotSource,
@@ -66,8 +64,11 @@ from app.models.schemas import (
     ChatResponse,
     EditOpsProposal,
     InferredIntent,
+    Option,
     PendingBrief,
     ProjectStatus,
+    QuestionPayload,
+    QuestionProposal,
     StartAnswerRequest,
     TaskItem,
     TaskListProposal,
@@ -349,7 +350,7 @@ def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
 #     user's wording — "bilingual subtitles" / "中英双语字幕" — and sets it).
 #  2. Code-level keyword scan on the user prompt (defence-in-depth: the LLM
 #     may miss the phrasing, but a literal "bilingual"/"双语" is unambiguous).
-#  3. Otherwise: dock a choice question, the answer rides the AskProposal path.
+#  3. Otherwise: dock an options question, the answer rides the QuestionProposal path.
 #
 # Single source of truth for the option_id encoding — answer_question uses
 # the same prefix to recover the choice (caption_mode_bilingual / _source_only
@@ -431,32 +432,30 @@ async def _caption_choice_is_meaningful(
     )
 
 
-def _build_caption_mode_question(text: str) -> AskProposal:
-    """The caption-mode choice question — bilingual is the canonical default
+def _build_caption_mode_question(text: str) -> QuestionProposal:
+    """The caption-mode options question — bilingual is the canonical default
     (matches the recipe's example prompt and the reference images). The
     option_id prefix `caption_mode_` is a handshake the answer path uses to
     recover the choice (caption_mode_bilingual → Literal "bilingual")."""
     zh = _prefers_zh(text)
     if zh:
-        return AskProposal(
+        return QuestionProposal(
             type="ask",
             question="字幕模式？",
-            kind="choice",
             options=[
-                AskOption(id="caption_mode_bilingual", label="双语字幕（推荐）"),
-                AskOption(id="caption_mode_source_only", label="只保留源语言"),
-                AskOption(id="caption_mode_target_only", label="只保留目标语言"),
+                Option(id="caption_mode_bilingual", label="双语字幕（推荐）"),
+                Option(id="caption_mode_source_only", label="只保留源语言"),
+                Option(id="caption_mode_target_only", label="只保留目标语言"),
             ],
             allow_freeform=False,
         )
-    return AskProposal(
+    return QuestionProposal(
         type="ask",
         question="Caption mode?",
-        kind="choice",
         options=[
-            AskOption(id="caption_mode_bilingual", label="Bilingual (recommended)"),
-            AskOption(id="caption_mode_source_only", label="Source language only"),
-            AskOption(id="caption_mode_target_only", label="Target language only"),
+            Option(id="caption_mode_bilingual", label="Bilingual (recommended)"),
+            Option(id="caption_mode_source_only", label="Source language only"),
+            Option(id="caption_mode_target_only", label="Target language only"),
         ],
         allow_freeform=False,
     )
@@ -527,7 +526,7 @@ async def _derive_chat_caption_mode(
     return mode
 
 
-def _is_caption_mode_question(question: AskPayload) -> bool:
+def _is_caption_mode_question(question: QuestionPayload) -> bool:
     """Identify a docked caption-mode question by its option_id prefix — the
     only stable handshake between the dock and the answer paths."""
     return bool(question.options) and all(
@@ -661,11 +660,11 @@ def _cannot_do_text(text: str) -> str:
     )
 
 
-# ---- Ask primitive: question / answer ------------------------------------
+# ---- 提问机器 (the question machine): question / answer -------------------
 #
 # One message row, two states: ``question`` payload present, ``answer`` NULL =
-# pending. Pending questions dock above the input; answered ones archive as QA
-# pairs. At most one pending question per conversation — a newer question
+# pending. Pending questions dock above the input; answered ones collapse into
+# the flow. At most one pending question per conversation — a newer question
 # retires the previous one (bail: superseded). ``content`` keeps the
 # question's human text so it enters the LLM context history naturally.
 
@@ -706,7 +705,7 @@ async def _settle_open_questions(
 ) -> list[UUID]:
     """Answer every still-open question in one stroke (e.g. supersede).
 
-    A superseded interrupt question (kind=choice carrying workflow_run_id)
+    A superseded interrupt question (kind=question carrying workflow_run_id)
     can never be answered through the dock anymore — cascade-bail its parked
     run in the same stroke (node done, downstream skipped), so the single-
     pending invariant never strands a run. Returns the bailed run ids; the
@@ -732,7 +731,10 @@ async def _settle_open_questions(
         message.answer = answer.model_dump(mode="json")
         if message.workflow_run_id is None:
             continue
-        if (message.question or {}).get("kind") != "choice":
+        # Raw-dict read (no pydantic pass): rows stored before the kind
+        # convergence still spell "choice" — tolerate both spellings on read,
+        # never written.
+        if (message.question or {}).get("kind") not in ("question", "choice"):
             continue
         run = await db.get(WorkflowRun, message.workflow_run_id)
         if run is None:
@@ -742,9 +744,9 @@ async def _settle_open_questions(
     return bailed_run_ids
 
 
-def _match_option(text: str, options: list[AskOption]) -> AskOption | None:
+def _match_option(text: str, options: list[Option]) -> Option | None:
     """Deterministic autoResume mapping (zero LLM, prohibited-behavior #4):
-    a free-text reply while a choice question is pending maps to an option
+    a free-text reply while a question with options is pending maps to an option
     by letter (id), number (1-based index), or the verbatim label. Anything
     else is deliberately NOT a match — semantic-level mapping is a later,
     LLM-assisted iteration.
@@ -766,13 +768,13 @@ async def _dock_question(
     db: AsyncSession,
     conversation_id: UUID,
     content: str,
-    payload: AskPayload,
+    payload: QuestionPayload,
     intent: dict[str, Any] | None = None,
 ) -> tuple[Message, list[UUID]]:
     """Raise a new pending question (ask 落库): at most one pending per
     conversation, so any still-open question retires as superseded first.
     The question's human text lives in ``content`` — it enters the LLM
-    context history naturally and becomes the QA pair's Q line once
+    context history naturally and becomes the answered question's Q line once
     answered. Returns the new message plus the run ids whose parked
     interrupt was cascade-bailed by the supersede (finalized by the caller
     after its commit)."""
@@ -888,14 +890,14 @@ async def sync_task_book_question(
 
     content = f"Plan ready for confirmation: {_task_book_summary(derived or [], intent.tasks)}"
     # Reason keys ride the question PAYLOAD (data, localized at render) —
-    # never baked into content, which is user-facing prose (the QA archive
-    # renders it verbatim). The LLM context line re-appends them (keys are
+    # never baked into content, which is user-facing prose (the answered
+    # question renders it verbatim). The LLM context line re-appends them (keys are
     # the agent's vocabulary).
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
         content,
-        AskPayload(kind="task_book", reasons=reasons or [], brief=brief),
+        QuestionPayload(kind="task_book", reasons=reasons or [], brief=brief),
     )
     return bailed_run_ids
 
@@ -906,7 +908,7 @@ async def dock_interrupt_question(
     project_id: UUID,
     run_id: UUID,
     content: str,
-    payload: AskPayload,
+    payload: QuestionPayload,
 ) -> tuple[Message, list[UUID]]:
     """Dock the direction interrupt's question (期 4, raised by the node
     runner). ``workflow_run_id`` is the dispatch marker: the answer endpoint
@@ -932,11 +934,11 @@ async def discard_unanswered_task_book(
 
     /generate means the run started WITHOUT the user answering the docked
     question (retries, targeted runs, direct API callers — the overlay's own
-    Start always goes through ``answer_question``). No QA interaction
-    happened, so the archive must not carry a fabricated Q/A pair — the
+    Start always goes through ``answer_question``). No question was
+    answered, so the flow must not carry a fabricated answered question — the
     question row is deleted outright. Genuine confirmations (the dock's
     Start button, a prose "looks good, start it") go through
-    ``answer_question`` and still archive their QA pair.
+    ``answer_question`` and still collapse into the flow as usual.
     Flush-only — caller commits.
     """
     conversation = await find_conversation(db, user_id, project_id)
@@ -964,16 +966,17 @@ async def answer_question(
     - task_book + start  → start the run from the persisted pending brief
                            (kind "start" is the confirmation — no magic
                            option id; autonomy/intent only exist on it)
-    - choice + answer    → record, then continue the conversation: the pick
-                           rides into the next intent turn (the QA pair is
-                           in context), the follow-up reply comes back here.
+    - question + answer  → record, then continue the conversation: the pick
+                           rides into the next intent turn (the answered
+                           question is in context), the follow-up reply
+                           comes back here.
                            A brief-ask (payload.slot) backfills the ledger
                            user-stated and resumes the BOOK path
-    - choice + bail      → record only (a graceful exit, never a failure) —
+    - question + bail    → record only (a graceful exit, never a failure) —
                            except a brief-ask bail, which TAKES the default
                            path: the book path resumes and docks the
                            draft-from-persona book (提问策略③)
-    A choice question carrying ``workflow_run_id`` is a direction interrupt
+    A question carrying ``workflow_run_id`` is a direction interrupt
     (期 4): the answer wakes the parked run (spec.answer → node back to
     pending → run back to RUNNING); bail settles the node done, cascade-
     skips the downstream, and the run completes — never failed.
@@ -1001,7 +1004,7 @@ async def answer_question(
     if message.answer is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Question already answered")
 
-    question = AskPayload.model_validate(message.question)
+    question = QuestionPayload.model_validate(message.question)
     # Kind × question-kind contract: a task_book is only ever confirmed
     # (start) or dropped (bail); start is meaningless on any other question.
     if question.kind == "task_book" and data.kind not in ("start", "bail"):
@@ -1033,7 +1036,7 @@ async def answer_question(
     message.answer = AnswerPayload(
         kind=data.kind,
         option_id=data.option_id if data.kind == "option" else None,
-        # The QA archive shows the option's human label, not its bare id.
+        # The answered question shows the option's human label, not its bare id.
         text=(data.text if data.kind == "freeform" else None) or option_label,
         answered_at=datetime.now(UTC),
     ).model_dump(mode="json")
@@ -1050,7 +1053,7 @@ async def answer_question(
     # Skipping _propose_turn here is intentional: the LLM would re-derive the
     # task list from the option label alone, which is the brittle 续聊 path.
     if (
-        question.kind == "choice"
+        question.kind == "question"
         and data.kind in ("option", "freeform")
         and _is_caption_mode_question(question)
         and message.intent is not None
@@ -1224,7 +1227,7 @@ async def answer_question(
             project.pending_brief = None
             message.workflow_run_id = run.id
 
-    elif question.kind == "choice" and message.workflow_run_id is not None:
+    elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4): workflow_run_id is the dispatch
         # marker. The answer resumes the parked run — spec.answer written,
         # node back to pending, run back to RUNNING, the worker re-executes
@@ -1238,9 +1241,9 @@ async def answer_question(
             else:
                 await resume_waiting_interrupt(db, run, message.answer)
 
-    elif question.kind == "choice" and data.kind in ("option", "freeform"):
+    elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
-        # their say for the next turn, with the QA pair in context.
+        # their say for the next turn, with the answered question in context.
         project = await db.get(Project, conversation.project_id)
         say = data.text or option_label or ""
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
@@ -1264,7 +1267,7 @@ async def answer_question(
                 db, user_id, conversation, project, say, [], history[-6:]
             )
 
-    elif question.kind == "choice" and data.kind == "bail" and question.slot is not None:
+    elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
         # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default
         # path — the book path resumes and the 出书门槛 docks the
         # draft-from-persona book (the asked roll already bounds the loop).
@@ -1363,7 +1366,7 @@ async def _book_turn(
                material / explicit grounded recipe — rootless asks the topic
                once, then docks draft-from-persona) + dock
     - ask    → the ONE clarifying question docks through the 提问机器 (the
-               shared AskProposal shape; the stored book stays untouched;
+               shared QuestionProposal shape; the stored book stays untouched;
                the asked roll bounds the loop — a re-asked slot falls
                through to the draft gate)
     - answer → a plain assistant message; the stored book stays untouched
@@ -1609,8 +1612,8 @@ async def _book_turn(
                 db,
                 conversation_id,
                 intent.ask.question,
-                AskPayload(
-                    kind="choice",
+                QuestionPayload(
+                    kind="question",
                     options=intent.ask.options,
                     allow_freeform=intent.ask.allow_freeform,
                     slot=intent.ask.slot,
@@ -1735,8 +1738,8 @@ async def _book_turn(
                     db,
                     conversation_id,
                     topic_ask["question"],
-                    AskPayload(
-                        kind="choice",
+                    QuestionPayload(
+                        kind="question",
                         options=[],
                         allow_freeform=True,
                         slot="topic",
@@ -1815,8 +1818,8 @@ async def _book_turn(
                 db,
                 conversation_id,
                 caption_question.question,
-                AskPayload(
-                    kind="choice",
+                QuestionPayload(
+                    kind="question",
                     options=caption_question.options,
                     allow_freeform=caption_question.allow_freeform,
                 ),
@@ -1910,7 +1913,7 @@ async def _propose_turn(
         else {"text": ""}
     )
 
-    proposal: TaskListProposal | EditOpsProposal | AskProposal | AnswerProposal | None = (
+    proposal: TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal | None = (
         None
     )
     try:
@@ -1937,20 +1940,19 @@ async def _propose_turn(
         # LLM failure: ask back — the only failure form (prohibition #7;
         # the asset-scope revise_script guess retired with the scope itself).
         assistant_content = _ASK_BACK_TEXT
-    elif isinstance(proposal, AskProposal):
-        # Ask 落库 (N-18): the structured ask becomes the docked question.
-        # The chat surface only has the choice form — task_book questions
-        # are raised solely by the book path and confirm is the
-        # reserved cost-quote seat, so the agent's kind is adjudicated to
-        # choice (LLM proposes, code adjudicates). default_path rides as
-        # the dock's muted line (提问策略 ③); slot stays None — a post-run
-        # question never backfills the brief (book-path handshake only).
+    elif isinstance(proposal, QuestionProposal):
+        # Ask 落库 (N-18): the agent's question becomes the docked
+        # question (task_book questions are raised solely by the book path,
+        # never by the agent — LLM proposes, code adjudicates).
+        # default_path rides as the dock's muted line (提问策略 ③); slot
+        # stays None — a post-run question never backfills the brief
+        # (book-path handshake only).
         assistant_message, bailed_run_ids = await _dock_question(
             db,
             conversation_id,
             proposal.question,
-            AskPayload(
-                kind="choice",
+            QuestionPayload(
+                kind="question",
                 options=proposal.options,
                 allow_freeform=proposal.allow_freeform,
                 default_path=proposal.default_path,
@@ -2047,7 +2049,7 @@ async def _propose_turn(
             db,
             conversation_id,
             proposal.summary or _ASK_BACK_TEXT,
-            AskPayload(kind="choice", options=[], allow_freeform=True),
+            QuestionPayload(kind="question", options=[], allow_freeform=True),
             intent=proposal.model_dump(mode="json"),
         )
     elif (
@@ -2085,8 +2087,8 @@ async def _propose_turn(
             db,
             conversation_id,
             caption_question.question,
-            AskPayload(
-                kind="choice",
+            QuestionPayload(
+                kind="question",
                 options=caption_question.options,
                 allow_freeform=caption_question.allow_freeform,
             ),
@@ -2265,7 +2267,7 @@ async def prepare_chat_turn(
         ).scalars()
     )
 
-    # Deterministic autoResume (zero LLM): while a choice question is
+    # Deterministic autoResume (zero LLM): while a question is
     # pending, the user's free text is its answer when it hits an option
     # (letter / number / verbatim label) or freeform replies are allowed —
     # otherwise it's a new intent and the question stays pending. A pending
@@ -2274,8 +2276,8 @@ async def prepare_chat_turn(
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
-        pending_payload = AskPayload.model_validate(pending.question)
-        if pending_payload.kind == "choice":
+        pending_payload = QuestionPayload.model_validate(pending.question)
+        if pending_payload.kind == "question":
             matched = _match_option(request.message, pending_payload.options)
             if matched is not None:
                 pending.answer = AnswerPayload(
@@ -2459,7 +2461,7 @@ async def chat(
     """Send a message to a chat conversation and return the assistant reply.
 
     Single public entry point (JSON path): prepare the turn (locate/create
-    the conversation, settle any pending choice question deterministically),
+    the conversation, settle any pending question deterministically),
     then execute it (intent agent proposes, compile_graph adjudicates, one
     commit). The SSE path calls the two phases itself so prose deltas can
     stream between them.

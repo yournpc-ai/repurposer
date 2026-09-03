@@ -211,9 +211,9 @@ async def _build_context(
                 # vocabulary) — they live on the payload, never in prose.
                 line += f" (needs check: {', '.join(qreasons)})"
             if m.question and m.answer:
-                # Answered questions archive as QA pairs — the answer is the
-                # user's decision and must be visible to the agent (a bare
-                # "a" only makes sense next to the question it picked).
+                # Answered questions collapse into the flow — the answer is
+                # the user's decision and must be visible to the agent (a
+                # bare "a" only makes sense next to the question it picked).
                 answer = m.answer or {}
                 reply = (
                     answer.get("text")

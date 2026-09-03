@@ -179,8 +179,8 @@ class FocusRef(BaseModel):
     label: str
 
 
-class AskOption(BaseModel):
-    """One option on a structured ask (choice kind)."""
+class Option(BaseModel):
+    """One option on a structured question."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -266,6 +266,16 @@ class ChatMessageResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("question", mode="before")
+    @classmethod
+    def _normalize_question_kind(cls, q: Any) -> Any:
+        """API-boundary read tolerance (never written): rows stored before
+        the kind convergence spell ``choice`` — the wire speaks the current
+        spelling (``question``)."""
+        if isinstance(q, dict) and q.get("kind") == "choice":
+            return {**q, "kind": "question"}
+        return q
+
     id: UUID
     conversation_id: UUID
     role: MessageRole
@@ -328,25 +338,35 @@ class EditOpsProposal(BaseModel):
     summary: str
 
 
-class AskProposal(BaseModel):
-    """Intent agent output, state C: a structured ask (→ QuestionDock).
+class QuestionProposal(BaseModel):
+    """Intent agent output, state C: a structured question (→ QuestionDock).
 
-    N-18 (overturning N-14): the structured-ask payload is orthogonal to
+    N-18 (overturning N-14): the structured-question payload is orthogonal to
     task_list / edit_ops, so the union gains a third state. The pre-N-18
     "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
-    ask. ``kind`` carries the *use* (NAMING N-19): choice is the chat loop's
-    question; task_book is raised by the chat book path, never by the
-    agent; confirm is the reserved seat for the cost quote (v3).
+    question. The LLM only ever raises a plain question — a task_book question
+    is raised by the chat book path, never by the agent.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_kind(cls, data: Any) -> Any:
+        """The pre-convergence schema carried a ``kind`` field ('choice' was
+        the only value the LLM ever produced) and the LLM keeps the habit —
+        the field is gone (every agent question is a plain question), so the
+        key drops on read."""
+        if isinstance(data, dict):
+            data = dict(data)
+            data.pop("kind", None)
+        return data
+
     type: Literal["ask"] = "ask"
     question: str
-    kind: Literal["choice", "task_book", "confirm"] = "choice"
-    options: list[AskOption] = Field(default_factory=list)
+    options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
-    # ADR-052 B2 (ask 一等动作, the shared ask shape): ``slot`` names the
+    # ADR-052 B2 (ask 一等动作, the shared question shape): ``slot`` names the
     # brief-ledger slot this question fills (the pre-run router sets it; the
     # chat loop's shape C leaves it null — post-run questions never backfill
     # a brief). ``default_path`` is 提问策略 ③'s schema tooth: the skip
@@ -374,7 +394,7 @@ class AnswerProposal(BaseModel):
 
 
 IntentProposal = Annotated[
-    TaskListProposal | EditOpsProposal | AskProposal | AnswerProposal,
+    TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal,
     Field(discriminator="type"),
 ]
 """The four-state discriminated union the chat intent agent returns (§3, N-18 + N-21)."""
@@ -401,10 +421,10 @@ class AnswerResponse(BaseModel):
     """Result of ``POST /chat/messages/{id}/answer``.
 
     The answer endpoint doubles as the resume mechanism (NAMING: answer =
-    resume): ``answered_question`` is the settled question (the QA archive
-    row — same name as ``ChatResponse.answered_question``, same role), and
+    resume): ``answered_question`` is the settled question (same name as
+    ``ChatResponse.answered_question``, same role), and
     ``follow_up`` is the assistant's continuation when the answer unblocks
-    the conversation (choice kind — the pick rides into the next turn).
+    the conversation (the pick rides into the next turn).
     """
 
     answered_question: ChatMessageResponse
@@ -749,7 +769,7 @@ class InferredIntent(BaseModel):
 
     ADR-052 B2 (action set): ``draft`` drafts/refines the task book (it never
     generates — the retired ``generate`` name lied); ``ask`` asks ONE
-    clarifying question through the dock's 提问机器 (the shared AskProposal
+    question through the dock's 提问机器 (the shared QuestionProposal
     shape, 案 A 双实例); ``answer`` is a purely informational reply;
     ``start`` confirms the docked book.
     """
@@ -819,11 +839,11 @@ class InferredIntent(BaseModel):
             "quality and you must ask first ('ask')."
         ),
     )
-    ask: AskProposal | None = Field(
+    ask: QuestionProposal | None = Field(
         default=None,
         description=(
-            "The ONE question when action is 'ask' — the shared ask shape "
-            "(2-4 one-word options + freeform). Null for every other action."
+            "The ONE question when action is 'ask' — the shared question "
+            "shape (2-4 one-word options + freeform). Null for every other action."
         ),
     )
     answer: str | None = Field(
@@ -884,20 +904,31 @@ class InferredIntent(BaseModel):
     brief: BriefLedger | None = None
 
 
-class AskPayload(BaseModel):
-    """The typed ``question`` payload on a message (ask primitive).
+class QuestionPayload(BaseModel):
+    """The typed ``question`` payload on a message (提问机器 — the question
+    machine).
 
     The mechanism words live here — ``kind`` carries the *use* (task book
-    confirmation, a choice, a cost quote later), never combined with the
-    mechanism (NAMING: use × mechanism combos are banned). ``content`` on the
+    confirmation vs a plain question), never combined with the mechanism
+    (NAMING: use × mechanism combos are banned). ``content`` on the
     message row keeps the question's human text. Defined after the brief
     family: the task_book form stamps the merged ledger (B3).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["task_book", "choice", "confirm"]
-    options: list[AskOption] = Field(default_factory=list)
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_kind(cls, data: Any) -> Any:
+        """Stored rows written before the kind convergence spell ``choice``
+        (and the retired ``confirm`` seat) — upgrade on read, never written
+        (读容忍, same doctrine as the ledger rows)."""
+        if isinstance(data, dict) and data.get("kind") in ("choice", "confirm"):
+            return {**data, "kind": "question"}
+        return data
+
+    kind: Literal["task_book", "question"]
+    options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
     # The stored cost-quote seat. Its supply is code, never the LLM: the
     # estimate fold (N-34) — wired in with the week-6 presentation (dock

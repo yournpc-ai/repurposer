@@ -43,8 +43,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent
 from app.models.schemas import (
-    AskOption,
-    AskPayload,
+    Option,
+    QuestionPayload,
     AssetType,
     QuoteReadability,
     RenderStatus,
@@ -692,9 +692,9 @@ class Verify(NodeBase):
         )
         accept_label = "降级接受" if zh else "Accept as-is"
         title_label = "标题卡开场" if zh else "Open with a title card"
-        payload = AskPayload(
-            kind="choice",
-            options=[AskOption(id="a", label=accept_label), AskOption(id="b", label=title_label)],
+        payload = QuestionPayload(
+            kind="question",
+            options=[Option(id="a", label=accept_label), Option(id="b", label=title_label)],
             allow_freeform=False,
         )
         async with AsyncSessionLocal() as s:

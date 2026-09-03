@@ -22,8 +22,8 @@ from app.agents.registry import plan, understand, persona
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     EMOTIONAL_TONES,
-    AskOption,
-    AskPayload,
+    Option,
+    QuestionPayload,
     AssetStatus,
     AssetType,
     IntentSlot,
@@ -613,7 +613,7 @@ class Interrupt(NodeBase):
         # Options (code-derived, zero LLM): up to 3 "Focus: {argument}" + the
         # full-talk default; freeform rides via allow_freeform. The option's
         # argument id rides only in suspend_payload (the message payload stays a
-        # plain AskOption list, same shape as a chat choice question). The
+        # plain Option list, same shape as a chat options question). The
         # argument TEXT renders in the UI language (text_zh/text_en display
         # alternates, legacy payloads fall back to the material's text).
         focus_word = "聚焦：" if zh else "Focus: "
@@ -637,13 +637,13 @@ class Interrupt(NodeBase):
             )
             return []
         options = [
-            AskOption(
+            Option(
                 id=chr(ord("a") + i),
                 label=f"{focus_word}{(arg.text_zh if zh else arg.text_en) or arg.text}",
             )
             for i, arg in enumerate(arguments)
         ]
-        options.append(AskOption(id=chr(ord("a") + len(arguments)), label=default_label))
+        options.append(Option(id=chr(ord("a") + len(arguments)), label=default_label))
 
         question_text = (
             "这次生成想聚焦哪个方向？" if zh else "Which direction should this run focus on?"
@@ -652,7 +652,7 @@ class Interrupt(NodeBase):
         # answer and wakes the run — even "how much longer?" small talk.
         # Accepted tradeoff (2026-08-20 ruling): no intent screen on the
         # answer path; a mis-fired direction is correctable in the next turn.
-        payload = AskPayload(kind="choice", options=options, allow_freeform=True)
+        payload = QuestionPayload(kind="question", options=options, allow_freeform=True)
         async with AsyncSessionLocal() as s:
             message, bailed_run_ids = await dock_interrupt_question(
                 s,

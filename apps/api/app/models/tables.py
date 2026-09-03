@@ -421,7 +421,7 @@ class Message(Base):
         nullable=True,
     )
     intent = Column(JSON(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent)
-    # One row, two states (ask primitive): ``question`` is the typed payload
+    # One row, two states (提问机器 — the question machine): ``question`` is the typed payload
     # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
     # pending questions live in the dock, answered ones archive as QA pairs.
     # none_as_null: Python None must persist as SQL NULL — the pending

@@ -246,7 +246,7 @@ async def answer_message(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> AnswerResponse:
-    """Answer a pending question (ask primitive).
+    """Answer a pending question (提问机器 — the question machine).
 
     The answer endpoint doubles as the resume mechanism — writing the answer
     is what unblocks the pending decision: a task book start begins the run,

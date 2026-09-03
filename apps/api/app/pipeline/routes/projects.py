@@ -373,7 +373,7 @@ async def generate_content(
     # The task book is confirmed now — drop the unconfirmed copy.
     project.pending_brief = None
     # /generate starts the run without a human answer — discard the open
-    # task_book question instead of archiving a fabricated QA pair.
+    # task_book question instead of archiving a fabricated answered question.
     await discard_unanswered_task_book(db, UUID(str(current_user.id)), project_id)
     await db.commit()
     await db.refresh(run)

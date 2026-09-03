@@ -297,14 +297,13 @@ def chat_intent_system() -> str:
         "instruction targets an existing output with clip-level precision, "
         "using ONLY the ops below.\n"
         'C. {"type": "ask", "question": "<one clear question in the user\'s '
-        'language>", "kind": "choice", "options": [{"id": "a", "label": '
+        'language>", "options": [{"id": "a", "label": '
         '"<short label>"}, ...], "allow_freeform": true} — you cannot '
         "responsibly pick between two or more readings of the message, so "
         "you ask before proposing work. Give 2-4 concrete options the user "
         "can pick with one word (ids: lowercase letters a, b, c...). Use an "
         "empty options list only when no sensible options exist (a freeform "
-        "ask). kind is always 'choice' — task_book and confirm are raised "
-        "by the system, never by you.\n"
+        "ask).\n"
         'D. {"type": "answer", "text": "<helpful reply in the user\'s '
         'language>"} — a purely informational reply: what you can do, how '
         "things work, the run's progress (the context carries a per-step "

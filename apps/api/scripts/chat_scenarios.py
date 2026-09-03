@@ -92,8 +92,8 @@ from app.models.tables import (  # noqa: E402
     WorkflowStep,
 )
 from app.models.schemas import (  # noqa: E402
-    AskOption,
-    AskPayload,
+    Option,
+    QuestionPayload,
     AssetType,
     WorkflowStatus,
 )
@@ -420,9 +420,9 @@ async def seed_parked_interrupt(
             conversation_id=conversation.id,
             role="assistant",
             content="Which direction should this run focus on?",
-            question=AskPayload(
-                kind="choice",
-                options=[AskOption(id=o["id"], label=o["label"]) for o in options],
+            question=QuestionPayload(
+                kind="question",
+                options=[Option(id=o["id"], label=o["label"]) for o in options],
                 allow_freeform=True,
             ).model_dump(mode="json"),
             workflow_run_id=run.id,
@@ -571,7 +571,7 @@ async def answer_caption_gate(ctx: Ctx, turn1: dict) -> dict:
     write_quotes under the default plan must walk the same 3-turn path.)
     """
     q1 = turn1["assistant_message"].get("question")
-    if q1 is not None and q1.get("kind") == "choice" and any(
+    if q1 is not None and q1.get("kind") == "question" and any(
         o.get("id", "").startswith("caption_mode_") for o in q1.get("options", [])
     ):
         ans = await ctx.answer(
@@ -630,7 +630,7 @@ async def s1_vague_first_turn_then_prose_start(ctx: Ctx) -> None:
     turn1 = await ctx.chat(pid, "帮我处理一下这个演讲")
     q1 = turn1["assistant_message"].get("question")
     # Phase 1: 默认链含 write_quotes → caption_mode choice 先 dock
-    if q1 is not None and q1.get("kind") == "choice" and any(
+    if q1 is not None and q1.get("kind") == "question" and any(
         o.get("id", "").startswith("caption_mode_") for o in q1.get("options", [])
     ):
         caption_qid = turn1["assistant_message"]["id"]
@@ -1292,7 +1292,7 @@ async def s49_chat_path_caption_gate(ctx: Ctx) -> None:
                    "the quote cards, please"):
         turn = await ctx.chat(pid, prompt)
         q = turn["assistant_message"].get("question")
-        if q and q.get("kind") == "choice" and any(
+        if q and q.get("kind") == "question" and any(
             o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
         ):
             docked = turn
@@ -1357,7 +1357,7 @@ async def s49_chat_path_caption_gate(ctx: Ctx) -> None:
                    "the quote cards, please"):
         turn = await ctx.chat(pid_c, prompt)
         q = turn["assistant_message"].get("question")
-        if q and q.get("kind") == "choice" and any(
+        if q and q.get("kind") == "question" and any(
             o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
         ):
             docked_c = turn
@@ -1864,9 +1864,9 @@ async def s38_new_question_cascade_bails_parked_run(ctx: Ctx) -> None:
         message, bailed = await dock_interrupt_question(
             db, ctx.user_id, uuid.UUID(pid), run2.id,
             "Which direction should this run focus on?",
-            AskPayload(
-                kind="choice",
-                options=[AskOption(id=o["id"], label=o["label"]) for o in options],
+            QuestionPayload(
+                kind="question",
+                options=[Option(id=o["id"], label=o["label"]) for o in options],
                 allow_freeform=True,
             ),
         )
@@ -2504,7 +2504,7 @@ async def s51_bare_wish_asks_topic(ctx: Ctx) -> None:
     msg1 = turn1["assistant_message"]
     check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
     q1 = msg1.get("question") or {}
-    check(q1.get("kind") == "choice",
+    check(q1.get("kind") == "question",
           "the ONE question docks as a choice (never an empty book)", msg1)
     check(q1.get("slot") == "topic",
           "the deciding slot is the topic (一轮一问决定槽)", q1)
@@ -2560,7 +2560,7 @@ async def s52_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
 
     turn1 = await ctx.chat(pid, "I want a social post.")
     q1 = turn1["assistant_message"].get("question") or {}
-    check(q1.get("kind") == "choice" and q1.get("slot") == "topic",
+    check(q1.get("kind") == "question" and q1.get("slot") == "topic",
           "the topic ask docks first (S51's gate)", turn1["assistant_message"])
 
     ans = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "bail"})
