@@ -107,7 +107,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
-import { QaPair, qaAnswerText, type QaAnswer } from "@/components/chat/QaPair"
+import { AnsweredQuestion, answeredQuestionText, type QuestionAnswer } from "@/components/chat/AnsweredQuestion"
 import {
   QuestionDock,
   type Autonomy,
@@ -450,7 +450,7 @@ interface OverlayMessage {
   /** Live SSE preview bubble: deltas append until the turn.completed
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
-  /** QA archive item (answered question collapsing into the flow). */
+  /** Answered-question item (a settled question collapsing into the flow). */
   qa?: { question: string; answer: string; muted: boolean; detail?: string }
   /** The canvas product this turn was pointed at (ADR-041 D8): rendered as
    * the gray focus prefix row above the user bubble. Persisted server-side
@@ -465,7 +465,7 @@ interface OverlayMessage {
 
 /** The typed question payload mirrored from the API (messages.question). */
 interface QuestionPayload {
-  kind: "task_book" | "choice" | "confirm"
+  kind: "task_book" | "question"
   options?: { id: string; label: string }[]
   allow_freeform?: boolean
   estimate?: string | null
@@ -478,13 +478,13 @@ interface QuestionPayload {
   brief?: unknown
 }
 
-/** A question-carrying chat message (ask primitive): the dock's pending
- * question and, once answered, the QA archive of the decision. */
+/** A question-carrying chat message (提问机器): the dock's pending
+ * question and, once answered, its collapsed form in the flow. */
 interface QuestionMessage {
   id: string
   content: string | null
   question: QuestionPayload | null
-  answer: QaAnswer | null
+  answer: QuestionAnswer | null
   workflow_run_id: string | null
   created_at?: string
 }
@@ -1077,9 +1077,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
-  // Ask primitive: the pending question docks above the input (task_book in
-  // the confirm phase; choice questions from the chat loop afterwards); the
-  // answered one archives as a QA pair in the flow.
+  // 提问机器: the pending question docks above the input (task_book in
+  // the confirm phase; plain questions from the chat loop afterwards); the
+  // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [answeredQuestion, setAnsweredQuestion] = useState<QuestionMessage | null>(null)
   // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
@@ -1160,7 +1160,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
-  // the phase (task_book while confirming, choice once the chat loop asks).
+  // the phase (task_book while confirming, question once the chat loop asks).
   const fetchPendingQuestion = useCallback(async (): Promise<QuestionMessage | null> => {
     try {
       const res = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
@@ -1268,7 +1268,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             })
           } else if (m.question) {
             if (m.answer) {
-              const display = qaAnswerText(m.answer, t, !!m.workflow_run_id)
+              const display = answeredQuestionText(m.answer, t, !!m.workflow_run_id)
               history.push({
                 id: m.id,
                 role: "assistant",
@@ -1501,8 +1501,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * NON-blocking — the input group stays live below it, so "don't start" is
    * said by not starting (chat revises, walking away keeps the plan honestly
    * pending, /projects deletes). A negative action exists only where the
-   * question BLOCKS: the choice morph's × (hidden input row + bail stops a
-   * live run). No handler here — nothing to cancel. */
+   * question BLOCKS: the options question's × (hidden input row + bail stops
+   * a live run). No handler here — nothing to cancel. */
 
   const canStartGeneration = intent.tasks.length > 0
 
@@ -1712,12 +1712,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void uploadStaged(item.localId, item.file)
   }
 
-  /** An answered question collapses into the flow as a QA pair (ask
-   * primitive: the flow archives decisions, the dock holds the open one).
-   * Reason keys (payload data) render localized as the pair's detail line. */
-  const pushQaArchive = (message: QuestionMessage) => {
+  /** An answered question collapses into the flow (提问机器: the flow keeps
+   * settled decisions, the dock holds the open one).
+   * Reason keys (payload data) render localized as the block's detail line. */
+  const pushAnsweredQuestion = (message: QuestionMessage) => {
     if (!message.answer) return
-    const display = qaAnswerText(message.answer, t, !!message.workflow_run_id)
+    const display = answeredQuestionText(message.answer, t, !!message.workflow_run_id)
     pushMessage({
       role: "assistant",
       content: "",
@@ -1903,7 +1903,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // text — archive its QA pair before the assistant's continuation.
       if (data.answered_question) {
         setPendingQuestion(null)
-        pushQaArchive(data.answered_question)
+        pushAnsweredQuestion(data.answered_question)
       }
       const message = data.assistant_message
       if (message.question && !message.answer) {
@@ -2074,9 +2074,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** Docked choice question answered by a button click — the answer
+  /** Docked question answered by an option click — the answer
    * endpoint records it and continues the conversation (answer = resume). */
-  const handleChoiceAnswer = async (optionId: string) => {
+  const handleOptionAnswer = async (optionId: string) => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
     try {
@@ -2090,18 +2090,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         follow_up: QuestionMessage | null
       }
       setPendingQuestion(null)
-      pushQaArchive(data.answered_question)
+      pushAnsweredQuestion(data.answered_question)
       if (data.follow_up) void handleAssistantMessage(data.follow_up)
     } finally {
       setAnswering(false)
     }
   }
 
-  /** Choice bail — the question line's × (ADR-051): a graceful exit, never
+  /** Question bail — the question line's × (ADR-051): a graceful exit, never
    * an error toast (#5). For an interrupt (a run parked on the answer) the
    * endpoint settles the node, skips the downstream and completes the run
    * synchronously — the dock keeps watching in place (the terminal snapshot
-   * arrives over its own SSE); for a plain chat ask it just records the
+   * arrives over its own SSE); for a plain chat question it just records the
    * skip. */
   const handleBailQuestion = async () => {
     if (!pendingQuestion || answering) return
@@ -2115,18 +2115,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const data = (await res.json()) as { answered_question: QuestionMessage }
       const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
-      pushQaArchive(data.answered_question)
+      pushAnsweredQuestion(data.answered_question)
       if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
       setAnswering(false)
     }
   }
 
-  /** The choice dock's pencil row (ADR-051 形态切换): a freeform answer
+  /** The options dock's pencil row (ADR-051 形态切换): a freeform answer
    * rides the SAME send channel as the chat input — the server's
    * deterministic autoResume mapping resolves a letter/number/label hit
    * (zero LLM), anything else records a freeform answer. */
-  const handleChoiceFreeform = (text: string) => {
+  const handleFreeformAnswer = (text: string) => {
     if (chatBusy || isStarting) return
     const rollbackId = crypto.randomUUID()
     setMessages((prev) => [
@@ -2216,16 +2216,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  // The answered task_book question's QA archive display (start via dock).
+  // The answered task_book question's collapsed display (start via dock).
   const answeredDisplay = answeredQuestion?.answer
-    ? qaAnswerText(answeredQuestion.answer, t, !!answeredQuestion.workflow_run_id)
+    ? answeredQuestionText(answeredQuestion.answer, t, !!answeredQuestion.workflow_run_id)
     : null
 
-  // The dock's live form outside the confirm phase: a pending choice
-  // question from the chat loop (task_book docks only while confirming).
-  const pendingChoice =
+  // The dock's live form outside the confirm phase: a pending question
+  // from the chat loop (task_book docks only while confirming).
+  const pillQuestion =
     pendingQuestion &&
-    pendingQuestion.question?.kind === "choice" &&
+    pendingQuestion.question?.kind === "question" &&
     !pendingQuestion.answer
       ? pendingQuestion
       : null
@@ -2254,13 +2254,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
   // The remaining recall triggers (hidden-state law above): a docking
-  // question (choice / task_book) and a canvas focus pin are NEW information
+  // question (question / task_book) and a canvas focus pin are NEW information
   // — the dock must surface for them even if the user tucked it away. A
   // focus does not OPEN the history (2026-08-16 走查拍板 below), it only
   // recalls the dock's input group.
   useEffect(() => {
-    if (pendingChoice) setDockHidden(false)
-  }, [pendingChoice])
+    if (pillQuestion) setDockHidden(false)
+  }, [pillQuestion])
   useEffect(() => {
     if (phase === "confirm" && intentReady && !chatBusy) setDockHidden(false)
   }, [phase, intentReady, chatBusy])
@@ -2697,7 +2697,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     <Fragment key={m.id}>
       <MessageScrollerItem messageId={m.id}>
         {m.qa ? (
-          <QaPair
+          <AnsweredQuestion
             question={m.qa.question}
             questionDetail={m.qa.detail}
             answer={m.qa.answer}
@@ -2819,7 +2819,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         return (
                           <MessageScrollerItem key="run-header">
                             {answeredQuestion && answeredDisplay ? (
-                              <QaPair
+                              <AnsweredQuestion
                                 question={t("generationOverlay.confirmQuestion")}
                                 questionDetail={planSummary}
                                 answer={answeredDisplay.text}
@@ -2912,7 +2912,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   <>
                     <MessageScrollerItem>
                       {answeredQuestion && answeredDisplay ? (
-                        <QaPair
+                        <AnsweredQuestion
                           question={t("generationOverlay.confirmQuestion")}
                           questionDetail={planSummary}
                           answer={answeredDisplay.text}
@@ -3041,27 +3041,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The question docks render as chromeless content (plain) — the floating
   // question pill in the bottom row owns the frost and rounding (2026-09-02
   // 拆粘: they used to be square children of the ONE frosted container).
-  // While a choice question is pending the dock MORPHS (ADR-051): the input
+  // While an options question is pending the dock MORPHS (ADR-051): the input
   // row and the disclaimer hide, and the pill (its options + the pencil
   // freeform row) is all that remains.
-  const choiceDock =
-    phase !== "confirm" && pendingChoice ? (
+  const pillDock =
+    phase !== "confirm" && pillQuestion ? (
       <QuestionDock
-        kind="choice"
+        kind="question"
         plain
-        question={pendingChoice.content ?? ""}
-        options={pendingChoice.question?.options ?? []}
-        estimate={pendingChoice.question?.estimate}
-        defaultPath={pendingChoice.question?.default_path}
-        onAnswer={handleChoiceAnswer}
+        question={pillQuestion.content ?? ""}
+        options={pillQuestion.question?.options ?? []}
+        estimate={pillQuestion.question?.estimate}
+        defaultPath={pillQuestion.question?.default_path}
+        onAnswer={handleOptionAnswer}
         answering={answering}
         onBail={handleBailQuestion}
         bailLabel={
-          pendingChoice.workflow_run_id
+          pillQuestion.workflow_run_id
             ? t("questionDock.bail")
             : t("questionDock.skip")
         }
-        onFreeform={handleChoiceFreeform}
+        onFreeform={handleFreeformAnswer}
         freeformDisabled={chatBusy || isStarting}
       />
     ) : null
@@ -3082,11 +3082,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       />
     ) : null
   // The folded 打勾 (ADR-051): while a run is live and the history region is
-  // closed, ONE shimmer status line docks above the input (a pending choice
-  // question owns the dock instead). Click = expand the step log — it opens
+  // closed, ONE shimmer status line docks above the input (a pending question
+  // owns the dock instead). Click = expand the step log — it opens
   // the history, whose RunTaskList stays the only checklist.
   const runStatusRow =
-    phase === "running" && !terminal && !pendingChoice && !historyOpen ? (
+    phase === "running" && !terminal && !pillQuestion && !historyOpen ? (
       <RunStatusRow
         steps={steps}
         runStartedAt={runCreatedAt}
@@ -3354,10 +3354,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               input group below, not to the question pill — a tall option
               list in a capsule is broken geometry anyway). Same dock-surface
               frost + hairline recipe. */}
-          {(taskBookDock || choiceDock) && (
+          {(taskBookDock || pillDock) && (
             <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
               {taskBookDock}
-              {choiceDock}
+              {pillDock}
             </div>
           )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
@@ -3372,7 +3372,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               grid reads through the frost; hairline only, NO shadow — the
               dock is the composer's third parking spot and inherits its
               hero-flat rule (without the ring the glass edge dissolves into
-              the canvas). During the choice morph with no status band the
+              the canvas). During the question morph with no status band the
               container is empty — hide the whole box rather than leave a
               frost sliver (the editor stays mounted inside, DOM-owned draft
               intact). */}
@@ -3380,20 +3380,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             className={cn(
               "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
               inputStadium ? "rounded-full" : "rounded-xl",
-              pendingChoice && !runStatusRow && "hidden"
+              pillQuestion && !runStatusRow && "hidden"
             )}
           >
             {runStatusRow}
-            {/* The input row morphs away while a choice question is pending
+            {/* The input row morphs away while an options question is pending
                 (ADR-051) — CSS-hidden, NOT unmounted: the editor keeps its
                 DOM-owned draft across the morph. */}
-            <div className={cn("p-2", pendingChoice && "hidden")}>{inputBody}</div>
+            <div className={cn("p-2", pillQuestion && "hidden")}>{inputBody}</div>
           </div>
           {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
               verbatim): a page-level whisper BELOW the input container
               (2026-09-02 拆粘 — was glued between the question and the
               input); hidden WITH the input row on the question morph. */}
-          {!pendingChoice && (
+          {!pillQuestion && (
             <p className="pt-1.5 text-center text-[11px] leading-tight text-meta-foreground">
               {t("results.dock.honesty")}
             </p>

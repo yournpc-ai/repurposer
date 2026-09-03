@@ -1,9 +1,9 @@
-/** QaPair — the archived form of an answered question (ask primitive).
+/** AnsweredQuestion — an answered question collapsed into the message flow.
  *
  * Pending questions live in the QuestionDock above the input; once answered
- * they collapse into this Q/A double block in the message flow (Opus
- * pattern). The caller resolves both display strings (i18n) — this component
- * is pure layout.
+ * they collapse into this question/answer double block in the message flow
+ * (Opus pattern). The caller resolves both display strings (i18n) — this
+ * component is pure layout.
  */
 
 import { useTranslation } from "react-i18next"
@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next"
 import { Message, MessageContent } from "@/components/ui/message"
 
 /** The typed answer payload mirrored from the API (messages.answer). */
-export interface QaAnswer {
+export interface QuestionAnswer {
   kind: "option" | "freeform" | "bail" | "start"
   option_id?: string | null
   text?: string | null
@@ -20,8 +20,8 @@ export interface QaAnswer {
 
 /** Resolve an answer payload to its display line. Bail variants are
  * localized (a graceful exit, never an error); freeform shows its text. */
-export function qaAnswerText(
-  answer: QaAnswer,
+export function answeredQuestionText(
+  answer: QuestionAnswer,
   t: (key: string) => string,
   /** The answered question carried a run (interrupt): its bail stops the
    * run, it doesn't send the project back to draft — different copy. */
@@ -51,7 +51,7 @@ export function qaAnswerText(
   return { text: answer.text || answer.option_id || "", muted: false }
 }
 
-interface QaPairProps {
+interface AnsweredQuestionProps {
   /** Human question line (already localized / user data). */
   question: string
   /** Secondary question detail (e.g. the plan summary), muted. */
@@ -62,7 +62,7 @@ interface QaPairProps {
   muted?: boolean
 }
 
-export function QaPair({ question, questionDetail, answer, muted }: QaPairProps) {
+export function AnsweredQuestion({ question, questionDetail, answer, muted }: AnsweredQuestionProps) {
   const { t } = useTranslation()
   return (
     <Message align="start">

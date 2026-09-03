@@ -1,7 +1,7 @@
 /** QuestionDock — the pending question's home, docked above the input.
  *
- * The message list is the archive of *decided* things; the dock holds the
- * one *pending* decision (ask primitive — at most one at a time). The kind
+ * The message list is the record of *decided* things; the dock holds the
+ * one *pending* decision (提问机器 — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
  * - task_book: two rows (2026-08-06 rework; 2026-08-14 对齐参考定稿) — the
@@ -10,14 +10,15 @@
  *   on the bottom row. No reasons line — the agent's inference bookkeeping
  *   (chain_default / clip_count_default) is not user copy; the plan card
  *   above carries the substance and the streamed echo carries the caveats.
- * - choice (ADR-051 形态切换): while a choice question is pending the chat
- *   input row and the disclaimer HIDE — the dock IS the question: the
+ * - question (ADR-051 形态切换): while an options question is pending the
+ *   chat input row and the disclaimer HIDE — the dock IS the question: the
  *   question line (no ✓; the right-side × is the bail channel), its options
  *   as full-width ROWS (letter badges mirror the deterministic autoResume
  *   mapping — typing "a" picks option a; long labels wrap, never overflow),
  *   and the tail pencil row for a freeform answer (Enter submits through the
  *   same send channel as the chat input).
- * Answering collapses the question into a QA pair in the flow.
+ * Answering collapses the question into an answered-question block in the
+ * flow.
  */
 
 import { useState } from "react"
@@ -41,7 +42,7 @@ export type Autonomy = "auto" | "review"
  * re-expose the picker. */
 const SHOW_AUTONOMY_PICKER = false
 
-/** One option on a choice question (mirrors the API's AskOption). */
+/** One option on a structured question (mirrors the API's Option). */
 export interface DockOption {
   id: string
   label: string
@@ -64,8 +65,8 @@ interface TaskBookDockProps {
   plain?: boolean
 }
 
-interface ChoiceDockProps {
-  kind: "choice"
+interface OptionDockProps {
+  kind: "question"
   /** The question's human text (LLM-written user data, shown as-is). */
   question: string
   options: DockOption[]
@@ -93,7 +94,7 @@ interface ChoiceDockProps {
   plain?: boolean
 }
 
-export type QuestionDockProps = TaskBookDockProps | ChoiceDockProps
+export type QuestionDockProps = TaskBookDockProps | OptionDockProps
 
 const AUTONOMY_TIERS: Autonomy[] = ["auto", "review"]
 
@@ -115,8 +116,8 @@ function TaskBookForm({
     // is said by simply not starting — keep chatting (chat revision always
     // wins), walk away (the plan stays honestly pending), or delete the
     // project. A negative action earns its place only when the question
-    // BLOCKS the input (the choice morph's × keeps it: hidden input row +
-    // bailing stops a live paid run). Single-row content is also what makes
+    // BLOCKS the input (the options question's × keeps it: hidden input row
+    // + bailing stops a live paid run). Single-row content is also what makes
     // the pill's rounded-full stadium correct geometry.
     <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
       <div className="flex items-center justify-between gap-3">
@@ -180,7 +181,7 @@ function TaskBookForm({
   )
 }
 
-function ChoiceForm({
+function OptionForm({
   question,
   options,
   estimate,
@@ -192,7 +193,7 @@ function ChoiceForm({
   onFreeform,
   freeformDisabled,
   plain,
-}: ChoiceDockProps) {
+}: OptionDockProps) {
   const { t } = useTranslation()
   const [freeform, setFreeform] = useState("")
   const submitFreeform = () => {
@@ -280,6 +281,6 @@ function ChoiceForm({
 }
 
 export function QuestionDock(props: QuestionDockProps) {
-  if (props.kind === "choice") return <ChoiceForm {...props} />
+  if (props.kind === "question") return <OptionForm {...props} />
   return <TaskBookForm {...props} />
 }
