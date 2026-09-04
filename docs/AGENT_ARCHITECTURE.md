@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
 > Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2，落地前代码仍读旧名）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-47）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，施工中——B1 已落 2026-09-03）**。
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-47）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
 
 ## 1. 叙事
 
@@ -211,8 +211,8 @@ tools/dub/           配音工具
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
 - **价目住 Model 层**：`providers/llm/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
-- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏属第九周。
-- 用户呈现（PROGRESS 第九周）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
+- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏随第七周积分批（ADR-055）。
+- 用户呈现（PROGRESS 第七周积分批，ADR-055 / `docs/BILLING.md`）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
 
 ## 9. 质检方向（Phase 3，未实现）
 

@@ -133,7 +133,7 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 1. **autoResume（零 LLM 确定性结算，ADR-053 收窄）**：选项问待决 + /chat 文本 → 字母/序号/原文 verbatim 命中 → option 结算（interrupt 命中即唤醒）；**其余文本永不在此结算**（「任意文本 = freeform 回答」掩盖 2026-09-04 退役）——进入 2/3 由 LLM 判定（插话支持：**判定是 LLM 的、结算是代码的**——book path slot 握手 / chat path `pending_disposition` 三态），判为回答的由代码结算 freeform 并经既有 `answered_question` 通道上车；判为插话的正常回答 + 代码拼装提醒尾（原问题 + default_path），问题保持待决。**带 `slot` 的提问（book-path ask）作答时回填账本槽位（user-stated）并直通 book path 重判**。task_book 待决不参与任何结算（它的答案是 dock 按钮与 book path 修订/确认）。
 2. **book path（intent router 四动作）**：首次 / 待决任务书的项目级文本 → draft（链整体重提 + reasons + re-dock——面板手改 = 链结构直接编辑，无合并机器，ADR-043）/ ask（一等动作：选项问直通 dock 提问机器，`slot` 握手 → 作答回填账本，`default_path` → dock 散文第二句；同槽位重问被代码翻回 draft——问环有界）/ answer（普通消息）/ start（answer kind=start 起 run）。**出书门槛（代码裁决，draft 判定后）**：无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记，问过不再问）；仍无根（或用户跳过提问）→ draft-from-persona dock（reasons 标记 + echo 散文声明）；media-needing 链 ∧ material none ∧ 桌上无书 → answer 素材引导，永不 dock。
-3. **chat_intent agent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（2-4 选项 + 自由文本可答），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。**待决问题存在时信封带 `pending_disposition` 三态**（answer / skip / none——非第五提案态）：判 answer/skip 代码结算/跳过该问题；判 none = 插话，正常回复 + 代码提醒尾，问题保持待决。
+3. **chat_intent agent 四态**：task_list / edit_ops / ask / answer。ask 是合法输出（3 选项——真二元抉择降 2——+ 自由文本可答），answer 是纯信息直答（无工作请求且无歧义才可用——干活走 task_list/edit_ops，读数有歧义走 ask），永远不死路。**待决问题存在时信封带 `pending_disposition` 三态**（answer / skip / none——非第五提案态）：判 answer/skip 代码结算/跳过该问题；判 none = 插话，正常回复 + 代码提醒尾，问题保持待决。
 4. **代码裁决**：registry 校验 skill/params（SkillRejected → 一次 repair_feedback 重试 → 再败则反问）；edit ops 校验（OpRejected → 提示）；出生地校验（requires / clips-media / count 边界 → 422 或反问）。
 5. **LLM 故障**：MiniMaxError（含 402/429/5xx，client 边界已统一包装）→ chat loop 反问文案；book path 不兜底——provider 故障穿透到路由边界：JSON 502 / SSE 终帧 `turn.failed`，带 `user_error_line` 本地化行（明确不 dock 编造默认书：错误计划看着像真的，Start 会为它烧一次付费 run）；`tasks:null` 等 LLM 松散输出由 schema 读容忍接住，不降级为兜底。
 6. **幂等与竞态**：单待决不变量（新题 supersede 旧题 + 级联 bail）；answer 409（重复回答）；落库去重（首条消息即会话种子）；过期扫描守护式 UPDATE（用户答案永远赢）。
@@ -162,7 +162,7 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 | 路径 | 覆盖 |
 |---|---|
-| **核①** 裸愿望全旅程：主题问（slot=topic + default_path + 选项 2-4 或空）→ 待决重建零内存态 → 自由文本 slot 握手结算（kind=freeform + 账本回填 user-stated）→ 一行一答 409 → 评审卡（merged brief 钢印进 payload）→ 散文确认起 run + pending_brief 清空 | ✅ S1 |
+| **核①** 裸愿望全旅程：主题问（slot=topic + default_path + 选项 3/2 或空）→ 待决重建零内存态 → 自由文本 slot 握手结算（kind=freeform + 账本回填 user-stated）→ 一行一答 409 → 选项点选结算（kind=option + 回填 label 不 500——09-04 事故补盖）→ 评审卡（merged brief 钢印进 payload）→ 散文确认起 run + pending_brief 清空 | ✅ S1 |
 | **核②** 跳过 = 默认路径：主题问 bail → draft-from-persona 书（`draft_from_persona` reason + asked 簿记 + echo 散文声明） | ✅ S2 |
 | **核③** 插话：正常回答 + 代码拼装提醒尾（含 default_path 原文）+ 无新题 dock + 问题保持待决 → 下轮作答经 slot 握手结算回填 | ✅ S3 |
 | **核④** 素材全链：COMPLETED transcript 资产 → writer 链 run completed + post 产物落库；估价三断言（fold 报价单调性 / NULL 语义 / dangling-transform 编译拒绝）+ repair 只一轮七节（echo / 无第三轮 / transport 不修 / declared fallback / repair_feedback 首试 / streaming repair 非流 / media_text_fallback 复合 4 调用） | ✅ S4 |

@@ -16,22 +16,24 @@
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief 账本 / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
+| 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 
 ## 文档清单
 
 | 文档 | 角色 | 状态 | 何时读 |
 |---|---|---|---|
 | `PRD.md` | 产品定位、ICP、FR 需求目录、输出规格与指标 | 活跃（2026-07-31 二度瘦身：§3.4/§6 删除，FR 表压缩为目录） | 动产品方向/需求前 |
-| `PROGRESS.md` | 进展快照 + 排期（至 11-04 go/no-go）+ 需求池（**排期/优先级唯一事实源**；双受众：内部管理/投资人可摘录） | 活跃快照（每周五滚动；周期结束归档） | 排期/开工前；向上汇报 / 逐日执行对齐时 |
+| `PROGRESS.md` | 进展快照 + 排期（至 10-29 go/no-go）+ 需求池（**排期/优先级唯一事实源**；双受众：内部管理/投资人可摘录） | 活跃快照（每周五滚动；周期结束归档） | 排期/开工前；向上汇报 / 逐日执行对齐时 |
 | `REPORT-2026-09.md` | 进展简报（2026-09-01 节点快照）：进度 / 已有功能 / 后续计划一页纸——PROGRESS.md 的对外摘录 | 节点快照（不复述细节、不维护周表，过期即归档） | 向技术总监 / 投资人汇报时 |
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
-| `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程重写 + 实施切分 | 已拍板方向（2026-08-13，ADR-042），未实施——排期 PROGRESS 第六~八周 | 动身份模块/渠道/选题/home 前 |
+| `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程重写 + 实施切分 | 已拍板方向（2026-08-13，ADR-042），未实施——排期 PROGRESS 第八~十周运营端 | 动身份模块/渠道/选题/home 前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 技能包/花名册/NodeBase/估价 | 活跃（2026-08-09 重画；2026-08-18 随 ADR-043 收口请求层语法） | 动 generation/agents/skills 前 |
-| `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档（厚 agent 蓝图，ADR-052）：双引擎 workflow / canonical 词汇（router·understand·plan·brief）/ brief 账本 + ask 一等动作 / 预填评审卡 / 有界 loop 节点 + 施工切分 B1~B4 | 施工中（2026-09-03 拍板即日动工——**B1 改名批已落 09-03**，B2~B4 = PROGRESS W7 09-04~09-10） | 动 chat 意图层 / book path / 多轮对话 / agent 概念前 |
+| `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档（厚 agent 蓝图，ADR-052）：双引擎 workflow / canonical 词汇（router·understand·plan·brief）/ brief 账本 + ask 一等动作 / 预填评审卡 / 有界 loop 节点 + 施工切分 B1~B4 | 已落地（2026-09-03 拍板即日动工，**B1~B4 全量收口 09-04**） | 动 chat 意图层 / book path / 多轮对话 / agent 概念前 |
 | `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 已随 Operation Model 落地；editor 内 undo 按钮后置；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
 | `RENDERING.md` | **clip-spec 字段级契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ 轨道模型（§8 = 现行契约，ADR-044） | 活跃（2026-08-17 建；契约自 VIDEO_EDITOR §4 迁入；轨道模型 ADR-044 08-17 过会、08-17~18 落地） | 动渲染链/clip-spec/轨道/渲染服务前 |
 | `MUSIC_ARCHITECTURE.md` | AI 音乐库 | 已实现（Layer-4 音乐校验仍 future） | 动音乐前 |
+| `BILLING.md` | 积分/钱包/计费架构母文档（ADR-055）：credit / wallet / credit_transactions + hold→capture→release + configs 公共参数表 + 消耗比例参数 + 负余额语义；支付只留 W11 边界 | 活跃（2026-09-05 建；积分层施工 = PROGRESS W7 积分批 09-07~09-11） | 动积分 / 钱包 / configs / 扣费 / 估价展示前 |
 | `DECISIONS.md` | 现行架构决策集（ADR；编号不连续——过时条目直接删除，历史在 git） | 活跃 | 新决策 / 架构约束变化时 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建；直发链路代码完成 07-24，待平台凭据联调） | 动 Distribution 前 |
@@ -50,4 +52,3 @@
 ## 已规划的文档（尚未撰写）
 
 - `METRICS.md` — 产品度量：漏斗（上传→生成→精修→发布→回流）、事件埋点、各阶段成功指标
-- `BILLING.md` — 套餐经济设计：档位 / 免费额度 / credits↔产出换算 / 对外成本预估呈现；预算帽路由参照（elevencreative §8 机制 6"自动低于300积分"）

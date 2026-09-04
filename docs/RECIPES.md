@@ -1,7 +1,7 @@
 # RECIPES — 配方架构（Home 能力卡 + 兑现管线）
 
 > Status: 📐 设计定稿（Remix = overlay 内发射，**配方 = 提示词**——预填模板原文即全部发射载荷，方针 `docs/MENTIONS.md` §3；R1–R6 分期见 §8）；**画廊 v3（2026-08-27 拍板，ADR-048）**：三轴模型 + 招牌菜组织原则 + 三级闸门，§4 / §4.8 / §7 已同步
-> **架构迭代叠加（ADR-039）**：技能叙事接管——配方 = 技能组合的预设数据包（配方背后是技能，技能内部 = agent 调 LLM 用 tools）；flow key = node kind，启动自检机械对账（§7.1）；配方卡估价贴（报价 = 图 fold）随第九周报价系统落地。
+> **架构迭代叠加（ADR-039）**：技能叙事接管——配方 = 技能组合的预设数据包（配方背后是技能，技能内部 = agent 调 LLM 用 tools）；flow key = node kind，启动自检机械对账（§7.1）；配方卡估价贴（报价 = 图 fold）随第七周积分批落地（ADR-055）。
 > 上游定位：`STRATEGY.md` §5（配方库 = 品味的陈列窗，不做内容流）；排期唯一事实源 `PROGRESS.md`（架构迭代 + 闭环链 + 人设模块同周 08-10~08-14 三线并行收口）
 > 本文档角色：**配方线的母文档**——卡片层 + 能力层的架构与分期；每期施工拆成 `docs/tasks/` 独立简报，引用本文档章节号。新开会话创建 tasks 前必读 §9。
 > 用户裁决（现行，设计评审沉淀）：
@@ -176,7 +176,7 @@ Recipe = {
 - **可见性分层 = schema 的字段级属性**：公开投影（base / flow / prompt / example_assets / example_outputs——落地页匿名受众可读）经 `GET /api/v1/recipes` 下发；**预设实质（tasks）永不出服务端**。原"双端分半"纪律收编为字段可见性，不再是两套机制。
 - **存储纪律**：结构数据与资产引用直接持有于服务端 `app/pipeline/recipes.py` 静态注册表（SKILL_REGISTRY 同款，随代码部署）；**可翻译文本**（title / promise / prompt）以 i18n 键引用（en 为源语言，现状纪律不变）；烘焙资产以内容寻址 URL 引用（`recipes.assets.ts` 由上传脚本生成，现状不变）。
 - **flow ↔ tasks 机械对账**（ADR-039/043）：flow 的 key = node kind（fanout 展开规则不变）；启动自检以 `compile_graph` 纯函数编译配方预设链（tasks + 输入画像推出 materialize 注入），断言 flow keys ⊆ 编译图 kind 集——展示图与真实图**永不漂移**，人肉评审对账退役。
-- **配方估价贴**（ADR-039 / NAMING N-34）：预设图编译期定死 → 配方估价 = 图 fold 近常量；卡面"约 X credits"随第九周报价系统（逐节点 `estimate()`）落地。
+- **配方估价贴**（ADR-039 / NAMING N-34）：预设图编译期定死 → 配方估价 = 图 fold 近常量；卡面"约 X credits"随第七周积分批（逐节点 `estimate()`，ADR-055）落地。
 - **flow 的消费规格（D6）**：overlay 右区两 tab——**示例** = example_outputs / example_assets 平铺卡（自动静音循环 + 单张发声开关，零边零图）；**流程** = **唯一图画布**（FlowView 渲染）：素材 → 策展步骤（`fanout=N` 展开为同深度 N 个平行分支，dub ×3 = 三条语言分支）→ 烘焙成片终节点的**一张图**——素材→步骤 = 依赖边，终步→成片 = 血缘边。图只画一次（ElevenCreative 证据：示例平铺输入/输出，流程才是图）；手风琴 / 折叠文本形态退役。
 - **新增配方 = 写一条数据条目**（注册项 + i18n 键 + 烘焙资产），零代码路径——除非该卡演示的能力本身是新的（如分镜的 crop_track）。"扩展配方卡"的全部工作自此统一为 authoring 数据。
 - **封面 `cover` 不进数据包**（2026-08-23，ADR-048 第 1 条）：卡面媒体 = 前端 inline SVG 工艺示意图组件（`components/recipes/covers/` 按 recipe id 注册）——构图 = 左素材→右成品横向叙事，三档灰吃 token（亮主题自动反转），验收 = 200px 无字测试；零烘焙、零媒体请求。烘焙资产消费面收窄为 overlay 示例 tab + 流程画布。

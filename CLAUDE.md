@@ -9,10 +9,11 @@ Read these before touching a subsystem (check each doc's own status line — som
 - `docs/README.md` — **docs 索引与治理原则（单一事实源表）**，找文档先查这里。
 - `docs/PROGRESS.md` — 进展快照 + 排期 + 需求池的**唯一事实源**；排期/优先级只准引用它。
 - `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则 + §7 代码地图/队列机制/数据约定（现状架构唯一事实源）；新表/新模块/新认领源必须在此登记。
-- `docs/POSITIONING.md` — **定位根概念架构（运营层母文档，ADR-042，已拍板未实施）**：身份根 = 定位（positioning），人设收窄为表达分区，渠道/选题/素材挂根；施工排期 = PROGRESS 第六~八周。动身份模块/渠道/选题/home 前先读它。
+- `docs/POSITIONING.md` — **定位根概念架构（运营层母文档，ADR-042，已拍板未实施）**：身份根 = 定位（positioning），人设收窄为表达分区，渠道/选题/素材挂根；施工排期 = PROGRESS 第八~十周运营端。动身份模块/渠道/选题/home 前先读它。
 - `docs/AGENT_ARCHITECTURE.md` — 四层工程地图（Model / Harness / Graph / Loop，ADR-039）：工具包 `app/tools/`（能力唯一家，N-42 前 `app/skills/`）+ agent registry `app/agents/`（一个 Agent 类 + 声明实例）+ `NodeBase` 图内核（报价=fold / 执行=topo / 校验=∀ / 对账=⊆）+ chat 治理环。agent 架构唯一事实源；outputs 可扩展（产物 = 工具的属性，注册表派生）。
-- `docs/DIALOG_WORKFLOW.md` — **对话→生产概念架构母文档（ADR-052，施工中——B1~B4 排期 09-03~09-10）**：厚 agent = 产品层一个 agent、身体 = 一条 workflow（聊天 → 意图路由 → brief 账本/任务书 → 生产 DAG → 产出）；双引擎分离 / canonical 词汇（router·understand·plan·brief）/ 有界 loop 节点三护栏 / 施工切分 B1~B4。动 chat 意图层 / book path / 多轮对话 / agent 概念前必读。
+- `docs/DIALOG_WORKFLOW.md` — **对话→生产概念架构母文档（ADR-052，B1~B4 已收口 2026-09-04）**：厚 agent = 产品层一个 agent、身体 = 一条 workflow（聊天 → 意图路由 → brief 账本/任务书 → 生产 DAG → 产出）；双引擎分离 / canonical 词汇（router·understand·plan·brief）/ 有界 loop 节点三护栏 / 施工切分 B1~B4。动 chat 意图层 / book path / 多轮对话 / agent 概念前必读。
 - `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table. Implemented (Layer-4 music verification still future).
+- `docs/BILLING.md` — **积分/钱包/计费架构母文档（ADR-055）**：credit / wallet / credit_transactions 三词两层货币 + hold→capture→release 扣费时序 + configs 公共参数表 + 消耗比例参数 + 负余额语义；支付只留 W11 边界。动积分 / 钱包 / configs / 扣费 / 估价展示前先读它。
 - `docs/RENDERING.md` + ADR-016 — clip-spec is the **sole render contract**（字段级契约与渲染链架构的唯一事实源）; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec. 编辑器交互与范围纪律在 `docs/VIDEO_EDITOR.md`。
 - `docs/DECISIONS.md` — ADRs，**只保留现行决策**：过时 / 被翻案的内容直接删除（历史在 git，不留痕）；新决策追加新编号，编号不连续属正常。
 - `docs/COMPETITIVE_ANALYSIS.md` + `docs/DECISION_MATRIX.md` + `docs/research/` — 竞品综合 / 采纳矩阵 / 原始证据三层，评估竞品功能时按此顺序查。

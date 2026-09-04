@@ -74,7 +74,7 @@ chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）�
 
 ### 4.1 ask 升格为一等动作
 
-router 动作集（pre-run 相位）：**ask / draft / answer / start**（原 generate/answer/start 修订——generate 名不副实，它从不生成，只是起草/修订任务书）。ask 复用 chat_intent agent shape C 的形状（选项 2-4 项 + freeform，走现成 dock 提问机器——caption-mode 特例泛化为正典）。
+router 动作集（pre-run 相位）：**ask / draft / answer / start**（原 generate/answer/start 修订——generate 名不副实，它从不生成，只是起草/修订任务书）。ask 复用 chat_intent agent shape C 的形状（选项 3 项——真二元抉择降 2，2026-09-04 拍板——+ freeform，走现成 dock 提问机器——caption-mode 特例泛化为正典）。
 
 **提问策略三条**：
 1. **一轮最多一问，只问决定质量的那个缺失槽**（裸愿望无素材 → 第一问 = 主题/受众）
@@ -104,7 +104,7 @@ router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON�
 
 ## 6. 不变量（本蓝图不动的部分）
 
-四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / 占位 roster 编译期投影（ADR-051）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、选项问 = 非阻塞 pill，提问永不阻塞输入，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）。
+四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / 占位 roster 编译期投影（ADR-051）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、输入恒活；选项问 = 阻塞形态——待决时输入行与免责行让位给问题卡，铅笔行 = 自由输入通道，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）。
 
 ## 7. 落地切分（批次，各自 commit 级自绿）
 

@@ -80,7 +80,7 @@
 | book 路径 | `book path` | chat service 内分派分支：首次 / 待决任务书的项目级回合 → 任务书构建/修订/确认（`chat()` 状态分派，asset scope 永不进；N-44——plan 一词归一主 = pipeline 规划节点，chat 侧只叫 book/brief） | 不是相位（confirm 相位已降为"有 pending task_book"的普通 chat 状态） |
 | 路由器 | intent router（`intent_router`） | chat 边缘的意图路由（N-44 / ADR-052）：`plan_agent` / `chat_intent_agent` 的同概念正名——一个 router 两个相位 prompt（pre-run / post-run，相位 = 上下文参数）；ask 形状两相位共享（pre-run 不能提问的不对称根除）。业界坐标 = Anthropic routing 模式 / OpenAI SDK triage。**落地现状**：pre-run 相位实例已更名 `intent_router`（B1，2026-09-03）；post-run 相位实例仍名 `chat_intent_agent`——**物理形态已拍板 = 双实例保持**（2026-09-03，判词 DIALOG_WORKFLOW §8） | 不是 autonomy 义的 agent（永禁）；不是第二意图入口 |
 | brief 账本 | brief（`projects.pending_brief`） | 对话引擎的结构化状态（N-45 / ADR-052——更名已随 B1 落地 2026-09-03，原 `pending_intent`；槽位机制未实施 = B2）：槽位 topic / audience / tone / constraints[] / material_state + 任务链与 derived（原样）；**每槽带来源 user-stated > inferred > default，代码侧合并**（LLM proposes, code decides）；上下文工程主压缩件（累积 prompt 叙事降存档位） | 不是会话记忆（记忆层座位不变）；不是任务书（书 = 账本的渲染） |
-| 有界 loop 节点 | bounded loop node | agent 性的唯一合法座位（N-47 / ADR-052，**已拍板未实施**，B4 试点 = research 节点）：`NodeBase` 子类，内部 mini tool-loop（工具 = `app/tools/` 注册表）——三护栏：迭代上限（节点声明）/ 报价 = fold（上限 × 单次）/ 对外 = DAG 单节点（拓扑 / 占位 roster / SSE 无感）。业界同构 = LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component | 不是开放式 autonomy（永拒不变）；不是 tool-loop 解禁 |
+| 有界 loop 节点 | bounded loop node | agent 性的唯一合法座位（N-47 / ADR-052，**已落地**——B4 收口 2026-09-04，试点 = research 节点）：`NodeBase` 子类，内部 mini tool-loop（工具 = `app/tools/` 注册表）——三护栏：迭代上限（节点声明）/ 报价 = fold（上限 × 单次）/ 对外 = DAG 单节点（拓扑 / 占位 roster / SSE 无感）。业界同构 = LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component | 不是开放式 autonomy（永拒不变）；不是 tool-loop 解禁 |
 | 剧本测试 | `chat_scenarios.py` | scripts/ 下的剧本测试脚本：预设多轮剧本对活 API 跑形态级断言（S 编号，真实 LLM 不锁文案） | 不是测试套件（无测试套件纪律不变）；不叫 harness（harness 单义 = 调用面，N-48） |
 | 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `TOOL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
@@ -124,6 +124,11 @@
 | 修饰 | `morph` | 原地变换节点形态（`pipeline/morph.py`）：`spec.fork=false` 改写既有 render_spec 的变换节点（reframe_clip 等）的统称；跳过 / 救援语义自描述 | 不是工具注册项（机制形态词；工具名仍是 reframe_clip 等本体） |
 | 救援 | `rescue` | morph 失败 / 跳过的保活机制：未触及目标保 base clip 下游可见；best-effort，永不掩盖失败本身 | 不是重跑（重跑归子图词汇） |
 | 撤段 | removed segment（`segment.hidden = true`） | 编辑域用户语言：主轨被撤下的段（非破坏 hidden 标记）；撤段序单调性闸 = 段 `seq`（per-output 单调，baseline=0）在编辑重放下不许倒置 | 不是删除（真删违规，非破坏铁律） |
+| 积分 | `credit`（复数 credits） | 用户面唯一计价单位（ADR-055）：估价 / 扣费 / 余额 / 配方卡估价贴 / 任务书总价全部同一单位；序列化派生不落列（fold × `credits.per_cost_usd`）；zh 界面词 = 积分 | 不是 USD（内部成本层永不上 UI）；不是 token |
+| 钱包 | `wallet`（`wallets` 表） | 用户积分余额 + 够不够花判定（ADR-055）：首登 lazy 开户 + grant；`balance` 是台账的物化缓存（允许为负），`version` 乐观锁 | 不往 `users` 加列；不是支付账户（支付 = W11 `payments`） |
+| 台账行 | `credit_transactions`（表） | 积分余额变动唯一事实源（ADR-055）：append-only，kind ∈ grant / purchase / hold / capture / release / refund / adjust；`idempotency_key` UNIQUE 一等列；ledger 是子系统概念名不上表名 | 不叫 entry（双 entry 会计第三层用不到）；不叫裸 `transactions`（撞 DB 事务语境） |
+| 消耗比例 | `credits.per_cost_usd`（configs key） | 每 $1 provider 成本的积分价（默认 300）：报价 fold 与实扣同源单点，调参不发版、不动历史账 | 不是购买比例（钱→积分汇率 = W11 套餐定价决策，解耦） |
+| 公共参数表 | `configs`（表）/ `get_config()` | 运营参数的统一家（ADR-055）：`CONFIG_REGISTRY`（key → default/类型/desc）是唯一事实源，表只存覆盖值，启动 reconcile 补插；读取一个漏斗，未知 key 报错 | 工程参数禁入（连接串/密钥/保险丝留 env `config.py`）；模块禁直查表 |
 
 **plan 词汇现状**：RunPlan = 执行计划（工程层）；创作层自 N-17 起是**素材理解 + 分镜表**（理解/派工，不再是 plan）。plan 是合法词，但必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。**N-44 补记（B1 已落地，2026-09-03）**：plan 一词归一主 = pipeline 唯一规划节点（kind / 节点类 / agent 实例同词）；RunPlan 仍是执行计划（工程层），chat 侧只叫 book/brief——裸 plan 禁令收窄为「plan = 规划节点，其他用途带限定词」。
 
@@ -174,6 +179,7 @@
 | N-48 | harness 单义 = 调用面 Agent 漏斗；「剧本 harness」→「剧本测试」（N-33 结案） | harness 行业两义（agent harness / test harness）当年登记并存是"登记歧义"而非杀歧义，防御性命名随 API 测试套件删除多年早到期。结案：harness 只指调用面漏斗（`agents/base.py` + contexts 装配 + prompts）；测试脚本就叫**剧本测试**（`scripts/chat_scenarios.py`），不配概念名——"测试套件"概念永禁复活（去方言批 `tasks/de-dialect-question-machine.md`） | §1、§6 |
 | N-49 | 提问机器词汇批：词根 question/answer，ask 只剩 action 动词一个座位 | 去方言批（简报 `tasks/de-dialect-question-machine.md`）：`AskPayload`→`QuestionPayload` / `AskProposal`→`QuestionProposal`（kind 字段删除——LLM 只产普通问题，task_book 恒由系统举起）/ `AskOption`→`Option` / kind 枚举收敛 `{task_book, question}`（语义分支只有"是不是任务书"一处，其余结算全走载荷握手字段：`workflow_run_id`→续跑 / `slot`→回填 / `caption_mode_` 前缀→恢复模式；旧行 "choice"/"confirm" 读容忍升级，只读不写）/ `QaPair`→`AnsweredQuestion`、`qaAnswerText`→`answeredQuestionText` / OpsCard 死码删除。**方言词永禁**入代码与文档：clarify / archive / receipt / eval / primitive | §1、§6 |
 | N-50 | 形态律两词 = 文字问 / 选项问；插话 / 提醒尾；「形态切换」「morph」永禁指提问形态 | 提问机器形态律（ADR-053 R1）：问题按 `options` 是否为空分两形——**文字问**（options 空 = 普通对话消息）/ **选项问**（options 非空 = 非阻塞 pill），渲染分流与 kind 无关；**插话**（interjection）= 待决中与问题无关的用户消息（判定是 LLM 的——slot 握手 / `pending_disposition` 三态；结算是代码的）；**提醒尾** = 插话回合回复末尾代码拼装的双语固定句（原问题 + default_path，永不借 LLM 之声）。「形态切换」「morph」只许指 dock 两态形态机与 stadium 半径过渡——指提问形态 = 方言（阻塞形态已拆除，ADR-053） | §1、§6 |
+| N-51 | 积分词汇批：credit / wallet / credit_transactions / hold→capture→release / grant / purchase / payment；settle / claim / pay / ledger 表名 / entry 永禁 | 积分系统命名（ADR-055，行业坐标 = Stripe authorize→capture→release / Modern Treasury ledger transactions）：**credit**（积分 = 用户面唯一计价单位）；**wallet**（余额 + 判定）；**credit_transactions**（台账行——ledger 保留为子系统概念名不上表名，行 = transaction，entry 是双 entry 会计第三层用不到）；扣费时序 **hold → capture → release**（预扣 → 实扣 → 释放剩余——settle 是银行间清算语境、claim 是用户发起的收款动作方向相反，均禁）；**grant**（授予：开户 / 订阅周期 / 补偿）/ **purchase**（购买，W11）/ **payment**（名词位；pay 是动词只留函数名）；比例参数 `credits.per_cost_usd`（消耗比例 ≠ 购买比例） | §1、§6 |
 
 ## 4. API 命名
 

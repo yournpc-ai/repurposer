@@ -124,7 +124,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/_app.projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第十一周联调） |
 | **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
-| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`clients/minimax.py`（usage 捕获点） | 🚧 计量 ✅（Phase 1）；C2PA/披露 📋 PROGRESS 第十一周；EU 驻留 📋 需求池 |
+| **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、积分钱包（credit / wallet / 台账）、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`providers/llm/minimax.py`（usage 捕获点 + PRICING）、`platform/billing.py` + `platform/configs.py`（积分层，ADR-055 / `docs/BILLING.md`） | 🚧 计量 ✅（Phase 1）；积分层 🚧 PROGRESS W7 积分批；C2PA/披露 📋 PROGRESS 第十二周；EU 驻留 📋 需求池 |
 
 **精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
 
@@ -141,12 +141,15 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline（`files.hook_preview` = 期 4 钩子预览闸的低清预览 key，release 放行后照常全量渲染）；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
-| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第六~八周落地时本行改写】 |
+| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
 | operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
 | publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
+| `wallets` | （平台层，暂不属于任何模块） | 积分余额（ADR-055，`docs/BILLING.md`）；只由 `platform/billing.py` 写（乐观锁 `version`）；读收口于 `/wallet` 路由 |
+| `credit_transactions` | （平台层，暂不属于任何模块） | 积分台账（append-only）；只由 `platform/billing.py` 写（`idempotency_key` UNIQUE 去重）；读收口于 `/wallet/transactions` |
+| `configs` | （平台层，暂不属于任何模块） | 公共运营参数表（key 点号命名空间）；`CONFIG_REGISTRY` 是唯一事实源，一切读取走 `platform/configs.get_config()` 漏斗，模块禁直查表 |
 
 **outputs 共享聚合的细则**：`outputs` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = payload/render_spec diff）、worker（渲染产物回写 `files.video`/`files.srt`）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
 
@@ -239,7 +242,8 @@ apps/api/
 │   ├── memory/          # Memory：personas 端点、人设皮肤块 → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
-│   ├── platform/        # 平台层：auth / email / notifications / project_context / routes
+│   ├── platform/        # 平台层：auth / email / notifications / project_context / configs（公共参数表漏斗）
+│   │                    #   / billing（积分钱包：hold→capture→release，ADR-055）/ routes
 │   ├── models/          # tables.py + schemas.py + database.py
 │   ├── clients/         # minimax.py（M3 wrapper + usage 捕获点）
 │   ├── prompts/         # Jinja2 模板
