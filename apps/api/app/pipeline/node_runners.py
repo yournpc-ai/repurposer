@@ -43,7 +43,7 @@ from app.pipeline.beat_map import (
     image_refs_from_assets,
     word_axis_from_assets,
 )
-from app.pipeline.derivative_dispatch import DerivativeWriterNode, derivative_output_types
+from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.edges import (
     _align_storyboard_slots,
     _compute_coverage,
@@ -92,20 +92,22 @@ def _display_zh(run: WorkflowRun, project: Project, assets: list) -> bool:
     ).startswith("zh")
 
 
-def _all_copy_writers(run: WorkflowRun) -> bool:
-    """True iff every task in this run's chain is a copy-writer
-    (write_post / write_quotes / write_carousel / write_article — the
-    no-material lift removed their ``(TRANSCRIPT,)`` requires).
-
-    Registry-native (NODE_KINDS.get → isinstance DerivativeWriterNode) —
-    same gate the chat safety net uses, single source of truth. An empty
-    task book returns False (we never know — be safe; Understand/Plan layers run
-    as normal and either return a real understanding or hit the standard
-    "no material" exception path)."""
+def _chain_needs_material(run: WorkflowRun) -> bool:
+    """True iff any chain task's node declares a material ``requires``
+    (clips' ``(MEDIA, TRANSCRIPT)`` today; writers and research declare
+    ``()``). Registry-native — the same declarations the birthplace
+    ∀-check enforces, so the run-time gates below can never kill a chain
+    ``create_run`` already admitted. This supersedes the copy-writer
+    proxy (``isinstance DerivativeWriterNode``): a research+writer chain
+    with no source is every bit as material-free as a pure writer chain,
+    and the proxy let it die at preprocess (2026-09-05, S8). An empty or
+    unknown task book returns True (we never know — be safe)."""
     ctx = run.context if isinstance(run.context, dict) else {}
     chain_tasks = ctx.get("tasks") or []
-    return bool(chain_tasks) and all(
-        isinstance(NODE_KINDS.get(t.get("tool")), DerivativeWriterNode)
+    if not chain_tasks:
+        return True
+    return any(
+        bool(getattr(NODE_KINDS.get(t.get("tool")), "requires", ()))
         for t in chain_tasks
     )
 
@@ -132,34 +134,40 @@ class Preprocess(NodeBase):
     ) -> list[UUID]:
         """Validate source material exists (texts or media), like the old inline check.
 
-        2026-08-24 carve-out (RECIPES §4.6, copy-writer lift third gate):
-        a chain composed ENTIRELY of copy-writer tasks (write_post /
-        write_quotes / write_carousel / write_article — the no-material
-        lift removed their ``(TRANSCRIPT,)`` requires) is allowed to ship
-        with no source attached — the draft comes from prompt + persona
-        (text_without_material reason rides the book). Mixed chains
-        (writer + media-needing) keep the gate: the LLM is supposed to
-        drop the media-needing rows in EXCEPTION 2, this catches the
-        leak. Registry-native (DerivativeWriterNode isinstance) — no
-        parallel "which tools need text" list.
+        2026-09-05 widening (supersedes the 2026-08-24 copy-writer lift):
+        the gate now keys on the chain's declared ``requires``
+        (``_chain_needs_material``) — any chain whose nodes all declare no
+        material requirement (writers, research) ships with no source
+        attached, the draft grounded by prompt + persona + research.
+        Chains that DO declare (clips' MEDIA/TRANSCRIPT) keep the gate —
+        and since the birthplace ∀-check already 422s those when the
+        project lacks the input, this raise is the belt to its suspenders.
         """
-        context = run.context if isinstance(run.context, dict) else {}
-        all_copy_writers = _all_copy_writers(run)
+        needs_material = _chain_needs_material(run)
 
         asset_texts = await collect_asset_texts(db, project.id)
         assets = await _list_assets(db, project.id)
         has_media = any(a.file_url for a in assets)
-        if not asset_texts and not has_media and not all_copy_writers:
+        if not asset_texts and not has_media and needs_material:
             raise ValueError("No source material to analyze")
         logger.info(
             "generation_asset_inputs_collected",
             project_id=str(project.id),
             text_count=len(asset_texts),
             media_asset_count=sum(1 for a in assets if a.file_url),
-            all_copy_writers=all_copy_writers,
+            needs_material=needs_material,
         )
         # Done summary (a finished step must never keep the progressive stage
-        # copy — "正在分析…" reading on a ✓ row). Quantified by file count.
+        # copy — "正在分析…" reading on a ✓ row). Quantified by file count;
+        # a material-free chain with no source says so instead of "0 assets".
+        if not assets and not needs_material:
+            await _set_summary(
+                node.id,
+                "无素材输入，直接生成"
+                if _display_zh(run, project, assets)
+                else "No source material — drafting directly",
+            )
+            return []
         n = sum(1 for a in assets if a.file_url) or len(assets)
         await _set_summary(
             node.id,
@@ -455,20 +463,20 @@ class Understand(NodeBase):
     ) -> list[UUID]:
         """Understand node: material-scoped understanding, reused across runs.
 
-        2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fourth gate):
-        when the chain is all copy-writers the material is optional — the
-        understanding would only re-summarize an absent source, so we
-        materialize a STUB row (core_thesis="" + every list field empty) and
-        write it as a fresh non-reusable Output. The downstream ``plan``
-        and the four writer agents all handle the empty-shape understanding
-        gracefully (their prompts' ``{% for %}`` loops degrade to nothing
-        rendered, and the slot-level fallback copy lights up). plan
-        writes its own matching stub on the same gate, so the executor's
-        _load_plan_prelude_outputs always returns a paired (understanding,
-        storyboard) tuple."""
+        2026-09-05 widening (supersedes the 2026-08-25 copy-writer carve-out):
+        when the chain declares no material ``requires`` the material is
+        optional — the understanding would only re-summarize an absent
+        source, so we materialize a STUB row (core_thesis="" + every list
+        field empty) and write it as a fresh non-reusable Output. The
+        downstream ``plan`` and the four writer agents all handle the
+        empty-shape understanding gracefully (their prompts' ``{% for %}``
+        loops degrade to nothing rendered, and the slot-level fallback
+        copy lights up). plan writes its own matching stub on the same
+        gate, so the executor's _load_plan_prelude_outputs always returns
+        a paired (understanding, storyboard) tuple."""
         assets = await _list_assets(db, project.id)
 
-        if _all_copy_writers(run):
+        if not _chain_needs_material(run):
             asset_texts = await collect_asset_texts(db, project.id)
             has_media = any(a.file_url for a in assets)
             if not asset_texts and not has_media:
@@ -476,10 +484,11 @@ class Understand(NodeBase):
                 understanding = MaterialUnderstanding(
                     core_thesis="",
                     overall_summary=(
-                        "本轮为文案写作任务，无素材输入，draft 由 persona + 用户指令生成。"
+                        "本轮无素材输入，draft 由 persona + 用户指令生成。"
                         if zh
-                        else "No source material — this run is a copy-writer task "
-                        "drafting from persona + user instruction only."
+                        else "No source material — this run drafts from "
+                        "persona + user instruction (research grounding when "
+                        "chained)."
                     ),
                 )
                 row = Output(
@@ -495,8 +504,8 @@ class Understand(NodeBase):
                 await db.flush()
                 await _set_summary(
                     node.id,
-                    "文案写作任务，跳过素材理解" if _display_zh(run, project, assets)
-                    else "Copy-writer run — material understanding skipped",
+                    "无素材输入，跳过素材理解" if _display_zh(run, project, assets)
+                    else "No source material — understanding skipped",
                 )
                 logger.info(
                     "understand_copy_writer_stub",
@@ -750,18 +759,18 @@ class Plan(NodeBase):
         slot (per-slot count/focus/language); explicit slot fields are enforced
         by code after the LLM returns.
 
-        2026-08-25 carve-out (RECIPES §4.6, copy-writer lift fifth gate):
-        when the chain is all copy-writers and understand wrote a
-        stub understanding, the storyboard LLM has nothing to plan from
-        either — same skip rule, paired stub Storyboard (empty slots, empty
-        coverage). Executors handle the empty storyboard: ``find_slot``
-        returns ``{}`` and the prompt's ``{{ slot.focus or default }}``
-        fallback fires."""
+        2026-09-05 widening (supersedes the 2026-08-25 copy-writer lift fifth
+        gate): when the chain declares no material ``requires`` and
+        understand wrote a stub understanding, the storyboard LLM has
+        nothing to plan from either — same skip rule, paired stub
+        Storyboard (empty slots, empty coverage). Executors handle the
+        empty storyboard: ``find_slot`` returns ``{}`` and the prompt's
+        ``{{ slot.focus or default }}`` fallback fires."""
         ctx = run.context or {}
         understanding = await _load_understanding(db, node)
 
         if (
-            _all_copy_writers(run)
+            not _chain_needs_material(run)
             and (understanding.core_thesis == "")
             and not understanding.key_arguments
             and not understanding.quotable_lines
@@ -779,8 +788,8 @@ class Plan(NodeBase):
             await db.flush()
             await _set_summary(
                 node.id,
-                "文案写作任务，跳过分镜规划" if _display_zh(run, project, assets)
-                else "Copy-writer run — storyboard skipped",
+                "无素材输入，跳过分镜规划" if _display_zh(run, project, assets)
+                else "No source material — storyboard skipped",
             )
             logger.info(
                 "plan_copy_writer_stub",

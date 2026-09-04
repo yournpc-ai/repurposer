@@ -20,8 +20,8 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, update
-from sqlalchemy.dialects.postgresql import array as pg_array
+from sqlalchemy import cast, func, update
+from sqlalchemy.dialects.postgresql import JSONB, array as pg_array
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import IntentSlot
@@ -47,14 +47,22 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
 
 async def _set_spec_field(node_id: UUID, key: str, value: Any) -> None:
     """Write one spec field in its own session — same jsonb_set discipline as
-    ``_set_stage``."""
+    ``_set_stage``. The value binds as a typed JSONB cast: a bare
+    ``to_jsonb(:param)`` leaves asyncpg unable to resolve the polymorphic
+    type for dict/list payloads ("input has type unknown" — the research
+    node's brief stamp failed exactly this way on Postgres from its B4
+    birth until 2026-09-05; str values like ``_set_stage``'s resolve to
+    text and never tripped it)."""
     async with AsyncSessionLocal() as s:
         await s.execute(
             update(WorkflowStep)
             .where(WorkflowStep.id == node_id)
             .values(
                 spec=func.jsonb_set(
-                    WorkflowStep.spec, pg_array([key]), func.to_jsonb(value), True
+                    WorkflowStep.spec,
+                    pg_array([key]),
+                    func.to_jsonb(cast(value, JSONB)),
+                    True,
                 )
             )
         )
