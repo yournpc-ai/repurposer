@@ -972,10 +972,11 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     check([k for k, _ in stub.calls] == ["stream", "generate"],
           "first attempt streams, the repair round never does", stub.calls)
 
-    # 7. media_text_fallback × repair composition: the text-only degradation
-    #    runs INSIDE the attempt, and the repair round re-carries the media
-    #    (degrading again on its own schema rejection) — worst case 4 calls,
-    #    the pre-P3 retry-era bound.
+    # 7. media_text_fallback × repair composition (the c31ff8c carve-out law):
+    #    a SCHEMA rejection is not media brittleness — it routes to the
+    #    repair round with the media still attached (media-derived fields
+    #    must never be blind-labeled on a text-only retry); the text-only
+    #    degradation fires ONLY on non-schema (brittleness) errors.
     def _media_agent(stub: _StubClient, *, name: str) -> Agent:
         media = [MediaInput(type="image", mime="image/png",
                             data_url="data:image/png;base64,x")]
@@ -989,41 +990,60 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
             client=stub,  # type: ignore[arg-type]
         )
 
-    # 7a. A successful text-only degradation does NOT consume the repair
-    #     round — the echo never appears.
+    # 7a. Schema rejection → the repair round re-carries media + echo
+    #     (parts-list) — NO text-only degradation in between.
     stub = _StubClient(["schema", _ProbeResult(text="ok")])
     result = await _media_agent(stub, name="scenario_probe_7a").call()
-    check(result.text == "ok", "media degradation returns", result)
+    check(result.text == "ok", "the repair round's result returns", result)
     check(len(stub.calls) == 2,
-          "media degradation inside one attempt == 2 calls", len(stub.calls))
-    a_media, a_text = stub.calls[0][1][1], stub.calls[1][1][1]
+          "schema rejection + one repair round == 2 calls", len(stub.calls))
+    a_media, a_repair = stub.calls[0][1][1], stub.calls[1][1][1]
     check(isinstance(a_media["content"], list)
           and any(p.get("type") == "image_url" for p in a_media["content"]),
           "attempt 1 carries the media parts", a_media["content"])
-    check(isinstance(a_text["content"], str) and echo not in a_text["content"],
-          "the text degradation is pre-echo (no repair round consumed)",
-          a_text["content"][-120:])
+    check(isinstance(a_repair["content"], list)
+          and any(p.get("type") == "image_url" for p in a_repair["content"])
+          and echo in a_repair["content"][-1]["text"],
+          "the repair round re-carries media + echo (no degradation between)",
+          a_repair["content"])
 
-    # 7b. Both attempts degrade: attempt(media→text) fails twice, the repair
-    #     round re-carries media + echo and degrades to the echoed text —
-    #     4 calls total.
-    stub = _StubClient(["schema", "schema", "schema", _ProbeResult(text="ok")])
+    # 7b. Brittleness (non-schema) → the text-only degradation runs INSIDE the
+    #     attempt: string payload, no echo, the repair round unconsumed.
+    stub = _StubClient([MiniMaxError("MiniMax HTTP 500"), _ProbeResult(text="ok")])
     result = await _media_agent(stub, name="scenario_probe_7b").call()
-    check(result.text == "ok", "media composition survives to the repair round",
+    check(result.text == "ok", "media degradation returns", result)
+    check(len(stub.calls) == 2,
+          "brittleness degradation inside one attempt == 2 calls", len(stub.calls))
+    b_media, b_text = stub.calls[0][1][1], stub.calls[1][1][1]
+    check(isinstance(b_media["content"], list)
+          and any(p.get("type") == "image_url" for p in b_media["content"]),
+          "attempt 1 carries the media parts", b_media["content"])
+    check(isinstance(b_text["content"], str) and echo not in b_text["content"],
+          "the text degradation is pre-echo (no repair round consumed)",
+          b_text["content"][-120:])
+
+    # 7c. Composition: media brittle → text retry schema-rejected → the repair
+    #     round re-carries media + echo (3 calls; the degradation never
+    #     streams).
+    stub = _StubClient(
+        [MiniMaxError("MiniMax HTTP 500"), "schema", _ProbeResult(text="ok")]
+    )
+    result = await _media_agent(stub, name="scenario_probe_7c").call()
+    check(result.text == "ok", "brittle-then-schema composition survives",
           result)
-    check(len(stub.calls) == 4,
-          "worst case == 4 calls (attempt media+text, repair media+text)",
-          len(stub.calls))
-    check([k for k, _ in stub.calls] == ["generate"] * 4,
+    check(len(stub.calls) == 3,
+          "media + degraded text + repair(media) == 3 calls", len(stub.calls))
+    check([k for k, _ in stub.calls] == ["generate"] * 3,
           "the media degradation never streams", [k for k, _ in stub.calls])
-    r_media, r_text = stub.calls[2][1][1], stub.calls[3][1][1]
-    check(isinstance(r_media["content"], list)
-          and any(p.get("type") == "image_url" for p in r_media["content"])
-          and echo in r_media["content"][-1]["text"],
-          "the repair round re-carries media + echo", r_media["content"])
-    check(isinstance(r_text["content"], str) and echo in r_text["content"],
-          "the repair round's text degradation carries the echo",
-          r_text["content"][-120:])
+    check(isinstance(stub.calls[1][1][1]["content"], str),
+          "the middle retry is the text-only degradation",
+          stub.calls[1][1][1]["content"][:80])
+    c_repair = stub.calls[2][1][1]
+    check(isinstance(c_repair["content"], list)
+          and any(p.get("type") == "image_url" for p in c_repair["content"])
+          and echo in c_repair["content"][-1]["text"],
+          "the repair round re-carries media + echo after the degradation",
+          c_repair["content"])
 
 
 class _ProbeResult(BaseModel):
