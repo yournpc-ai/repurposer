@@ -10,6 +10,8 @@
  *   on the bottom row. No reasons line — the agent's inference bookkeeping
  *   (chain_default / clip_count_default) is not user copy; the plan card
  *   above carries the substance and the streamed echo carries the caveats.
+ *   Rendered only for ≥2-task chains (任务书密度律 ADR-054 — a one-task
+ *   book is pure prose; ChatDock owns the threshold).
  * - question (形态律 ADR-053 R1): the pill is NON-BLOCKING — it floats
  *   above the LIVE input: the question line (the right-side × is the bail
  *   channel), its options as full-width ROWS (letter badges mirror the

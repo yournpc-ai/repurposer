@@ -1197,6 +1197,8 @@ const en = {
     title: "Generation plan",
     planProse:
       "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
+    planProseSingle:
+      "My understanding: {{summary}}. Say \"start\" and I'll begin — or tell me what to change.",
     addTask: "Add task",
     tools: {
       translate_clip: "Captioned version",

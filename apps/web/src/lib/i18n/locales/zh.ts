@@ -1158,6 +1158,8 @@ const zh: Resources = {
     title: "生成计划",
     planProse:
       "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
+    planProseSingle:
+      "我的理解：{{summary}}。说「开始」我就开工——想改什么直接说。",
     addTask: "添加任务",
     tools: {
       translate_clip: "字幕版",

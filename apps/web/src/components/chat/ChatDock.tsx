@@ -2471,7 +2471,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // hide. Restored sessions have no echo bubble — the card stays pinned.
   const planCardVisible = phase === "confirm" && intentReady
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
-  const planCard = (
+  /** 任务书密度律 (ADR-054): the review card + confirm pill are the HEAVY
+   * rendering — a chain earns them only with review substance (≥2 tasks).
+   * A one-task book is pure prose: the echo bubble (live journey) or this
+   * pinned echo line (restored) carries the whole confirm beat, and
+   * starting = the user's next chat message (the router's start verdict,
+   * G-1) — no card, no pill, no Start button. The book row / payload /
+   * settlement are untouched; a rendering threshold only, derived from the
+   * same intent the card would render. */
+  const singleTaskBook = planCardVisible && intent.tasks.length === 1
+  const planCard = singleTaskBook ? (
+    liveBubblePresent ? null : (
+      <Message align="start">
+        <MessageContent>
+          <p className="text-sm leading-relaxed">
+            {intent.answer ??
+              t("generationOverlay.planProseSingle", { summary: planSummary })}
+          </p>
+        </MessageContent>
+      </Message>
+    )
+  ) : (
     <Message align="start">
       <MessageContent>
         <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
@@ -2809,7 +2829,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           above the new user bubble and the thinking row. When
           the turn lands, the version chip takes this slot and
           the fresh card pins bottom-most again. */}
-      {planCardInline && m.id === liveBookMessageId ? (
+      {planCardInline && planCard && m.id === liveBookMessageId ? (
         <MessageScrollerItem key={`${m.id}-live-plan`}>
           {planCard}
         </MessageScrollerItem>
@@ -2852,7 +2872,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     below (the stale confirm dock hides with it); restored
                     sessions have no echo bubble to anchor to — the card
                     stays pinned. */}
-                {planCardVisible && !planCardInline && (
+                {planCardVisible && !planCardInline && planCard && (
                   <MessageScrollerItem className="order-10">
                     {planCard}
                   </MessageScrollerItem>
@@ -3124,8 +3144,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The task-book confirm dock — chromeless content for the question pill
   // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
   // Cancel (non-blocking question = no negative action, stadium 化同批).
+  // 任务书密度律 (ADR-054): HEAVY rendering only — a one-task book's
+  // confirm is the next chat message, no pill.
   const taskBookDock =
-    phase === "confirm" && intentReady && !chatBusy ? (
+    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook ? (
       <QuestionDock
         kind="task_book"
         plain
