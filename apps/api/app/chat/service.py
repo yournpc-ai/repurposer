@@ -2014,7 +2014,18 @@ async def _propose_turn(
     # autoResume); judged settlement and the reminder tail below apply to
     # plain questions only.
     pending_judgable = (
-        pending is not None and (pending.question or {}).get("kind") == "question"
+        pending is not None
+        and (pending.question or {}).get("kind") == "question"
+        # A blank turn (attachment-only: this path receives request.message
+        # verbatim — the stand-in line is a _book_turn local) carries nothing
+        # to judge, so the question is not a judgment subject this turn,
+        # period. Without this the envelope's disposition was a coin flip on
+        # empty input: a judged "answer" settled an EMPTY freeform and woke a
+        # parked interrupt with "Direction locked: ." (2026-09-05 S6d
+        # first-run failure). Code-side guard, never a prompt plea — "a blank
+        # message never auto-answers a docked checkpoint" is a law, not a
+        # judgment.
+        and bool(text.strip())
     )
     context = (
         await _build_context(
