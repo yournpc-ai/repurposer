@@ -847,27 +847,6 @@ def _task_chain_digest(tasks: list) -> str:
     return ", ".join(labels)
 
 
-def _task_book_summary(derived: list[dict], tasks: list) -> str:
-    """One-line plan digest stored as the question's human text (data, not
-    copy — localization happens at render time). The derived preview is the
-    primary source (what the user will GET, ADR-043); the raw chain is the
-    fallback when no preview was computed."""
-    labels = []
-    for row in derived:
-        label = str(row.get("type") or "")
-        if row.get("variant"):
-            label += f"·{row['variant']}"
-        if row.get("language"):
-            label += f"({row['language']})"
-        if row.get("count"):
-            label += f" ×{row['count']}"
-        if row.get("bilingual"):
-            label += " bilingual"
-        if label:
-            labels.append(label)
-    return ", ".join(labels) if labels else _task_chain_digest(tasks)
-
-
 async def sync_task_book_question(
     db: AsyncSession,
     user_id: UUID,
@@ -877,6 +856,7 @@ async def sync_task_book_question(
     reasons: list[str] | None = None,
     derived: list[dict] | None = None,
     brief: BriefLedger | None = None,
+    echo: str | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -888,8 +868,15 @@ async def sync_task_book_question(
     so the archive and the LLM context record WHY confirmation was asked.
     ``brief`` (ADR-052 B3) stamps the merged ledger into the question payload
     — the plan card renders the agent's own understanding from it, never a
-    blank form. Returns the run ids whose parked interrupt was cascade-bailed
-    by the supersede (finalized by the caller after its commit). Flush-only.
+    blank form. ``echo`` = the turn's book-introduction prose (intent.answer,
+    or the stored draft's echo on a code-path re-dock) — since 2026-09-04 it
+    IS the row's ``content`` so the echo survives as a real message entity
+    (live journey pushes it into the flow before docking; the restore replay
+    renders it as the flow line above the answered archive). An empty echo
+    stores empty content (the docked card / plan prose are the question's
+    face, never a machine digest line). Returns the run ids whose parked
+    interrupt was cascade-bailed by the supersede (finalized by the caller
+    after its commit). Flush-only.
     """
     conversation = await _get_or_create_project_conversation(
         db, user_id, UUID(str(project.id))
@@ -904,7 +891,11 @@ async def sync_task_book_question(
     if has_messages is None and prompt:
         await _create_message(db, conversation_id, "user", prompt)
 
-    content = f"Plan ready for confirmation: {_task_book_summary(derived or [], intent.tasks)}"
+    # The echo prose IS the question row's content (2026-09-04 echo 实体化):
+    # the answered archive renders confirmQuestion and the flow renders this
+    # prose as its own message — a machine digest ("Plan ready for
+    # confirmation: …") has no seat anywhere anymore.
+    content = (echo or "").strip()
     # Reason keys ride the question PAYLOAD (data, localized at render) —
     # never baked into content, which is user-facing prose (the answered
     # question renders it verbatim). The LLM context line re-appends them (keys are
@@ -971,6 +962,8 @@ async def answer_question(
     user_id: UUID,
     message_id: UUID,
     data: AnswerRequest,
+    on_delta=None,
+    on_phase=None,
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
 
@@ -996,6 +989,12 @@ async def answer_question(
     (期 4): the answer wakes the parked run (spec.answer → node back to
     pending → run back to RUNNING); bail settles the node done, cascade-
     skips the downstream, and the run completes — never failed.
+
+    ``on_delta``/``on_phase`` (answer SSE, 2026-09-04 验收批): the answer's
+    continuation is an LLM turn (a slot answer resumes the BOOK path — the
+    echo prose generates here), so the endpoint streams like POST /chat;
+    these callbacks carry the prose previews / phase labels. None keeps the
+    one-shot JSON behavior the pill-Start path uses (no LLM there).
     """
     from app.pipeline.orchestrator import (
         TaskSpec,
@@ -1135,6 +1134,7 @@ async def answer_question(
                         db, user_id, project, replay_intent, prompt_text,
                         reasons=project.pending_brief["reasons"],
                         brief=preserved_brief,
+                        echo=replay_intent.answer,
                     )
                     follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
                     # Skip the 续聊 fallback below — the task book question is
@@ -1204,6 +1204,10 @@ async def answer_question(
                 # birthplace — ValueError here is a client-facing 422.
                 # target_language is a pure fallback (language is a per-task
                 # param): derive it from the first task that carries one.
+                if on_phase is not None:
+                    # Same labelled beat as the chat path's start branch
+                    # (_book_turn): the run is about to be born.
+                    await on_phase(THINKING_PHASE_CREATING_RUN)
                 run = await create_run(
                     db,
                     project,
@@ -1261,7 +1265,7 @@ async def answer_question(
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
         project = await db.get(Project, conversation.project_id)
-        say = data.text or option_label or ""
+        say = (data.text if data.kind == "freeform" else None) or option_label or ""
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
         if question.slot is not None and project is not None:
             # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the ledger slot takes
@@ -1277,10 +1281,13 @@ async def answer_question(
                 project,
                 ChatRequest(project_id=project.id, message=say),
                 recent=history[-5:],
+                on_delta=on_delta,
+                on_phase=on_phase,
             )
         else:
             follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
-                db, user_id, conversation, project, say, [], history[-6:]
+                db, user_id, conversation, project, say, [], history[-6:],
+                on_delta=on_delta,
             )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1369,6 +1376,7 @@ async def _book_turn(
     recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
+    on_phase=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Book path (intent-surface-unification W1): build / refine / confirm
     the task book inside the chat loop — the ONLY intent surface.
@@ -1475,7 +1483,9 @@ async def _book_turn(
     # user then pastes it; same "feed the context, never make the model guess
     # blind" precedent as presented_book). on_delta (chat SSE) streams the raw
     # verdict fragments for the answer-prose preview; on_reasoning is a
-    # liveness signal for the thinking indicator. None = today's one-shot call.
+    # liveness signal for the thinking indicator; on_phase labels the real
+    # phase switches (the start branch's create_run = "creating_run"). None =
+    # today's one-shot call.
     recent_lines: list[str] = []
     for m in recent or []:
         attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
@@ -1518,7 +1528,7 @@ async def _book_turn(
     # router can source concrete one-word option values from it (explicit
     # pick → the pending book's → the project mount → the user default —
     # the same precedence resolve_run_persona stamps at start). Without
-    # this block the "2-4 concrete options" rule had no material and
+    # this block the "3 concrete options" rule had no material and
     # questions starved to bare text.
     persona_id = (
         request.persona_id
@@ -1726,6 +1736,10 @@ async def _book_turn(
             and stored is not None
             and stored.intent is not None
         ):
+            if on_phase is not None:
+                # Real phase switch: the start verdict is about to birth
+                # the run (create_run — compile + step rows + run context).
+                await on_phase(THINKING_PHASE_CREATING_RUN)
             answered, _follow_up = await answer_question(
                 db, user_id, UUID(str(pending_question.id)),
                 # The review panel's edited book rides along (typed Start
@@ -1755,6 +1769,7 @@ async def _book_turn(
                 db, user_id, project, stored.intent, stored.prompt,
                 reasons=stored.reasons, derived=stored.derived,
                 brief=stored.brief,
+                echo=stored.intent.answer,
             )
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
@@ -1958,6 +1973,7 @@ async def _book_turn(
     bailed_run_ids = await sync_task_book_question(
         db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived,
         brief=merged_brief,
+        echo=intent.answer,
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it
@@ -2550,19 +2566,34 @@ async def prepare_chat_turn(
     )
 
 
+# Thinking-phase label for the chat SSE ``assistant.thinking`` frames
+# (2026-09-04 chat-flow-sequencing C, 同日验收修订): emitted ONLY at a real
+# phase switch — a start verdict about to birth the run. The router's own
+# inference was briefly labelled "understanding" too, but that restated
+# "Thinking…" with zero information (user ruling: the label earns its place
+# only when the activity structurally differs from thinking).
+THINKING_PHASE_CREATING_RUN = "creating_run"
+
+
 async def execute_chat_turn(
     db: AsyncSession,
     prepared: PreparedTurn,
     request: ChatRequest,
     on_delta=None,
     on_reasoning=None,
+    on_phase=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
     ``on_delta`` (chat SSE) receives raw LLM verdict fragments for the prose
     preview channel; ``on_reasoning`` receives reasoning fragments as a
-    liveness signal for the thinking indicator. None (the JSON path, repair
-    rounds, answer_question's continuation) keeps today's one-shot calls.
+    liveness signal; ``on_phase`` receives thinking-phase labels at REAL
+    phase-switch points — a start verdict about to birth the run =
+    "creating_run" (the ONLY labelled phase: the router's own inference is
+    opaque thinking, labelling it "understanding your request" restated
+    "Thinking" with zero information — 2026-09-04 验收翻案) so the client can
+    label its thinking row. None (the JSON path, repair rounds,
+    answer_question's continuation) keeps today's one-shot calls.
     """
     if prepared.interrupt_reply is not None:
         assistant_message = prepared.interrupt_reply
@@ -2584,6 +2615,7 @@ async def execute_chat_turn(
             recent=recent,
             on_delta=on_delta,
             on_reasoning=on_reasoning,
+            on_phase=on_phase,
         )
         if book_answered is not None:
             prepared.answered_question = book_answered

@@ -14,8 +14,9 @@
 机制碎片；进程内纯函数断言（估价 / repair / 编译矩阵 / merge 矩阵）按简报
 「保留并入」随链收编——零 LLM 零方差，是最便宜的覆盖。
 
-    S1  核① 裸愿望全旅程：主题问 → 自由文本作答（slot 握手判定结算）→
-             评审卡 → start → run（途中锁待决重建 / 一行一答 409 契约拍）
+    S1  核① 裸愿望全旅程：主题问 → 作答（自由文本 slot 握手 + 选项点选两路）
+             → 评审卡 → start → run（途中锁待决重建 / 一行一答 409 / 选项点选
+             不 500 三张契约拍）
     S2  核② 跳过提问 → draft-from-persona 书 + 默认路径声明
     S3  核③ 插话：正常回答 + 代码拼装提醒尾 + 保持 pending → 下轮作答回填
     S4  核④ 素材全链（run completed + 产物落库）+ 估价三断言 + repair 只一轮
@@ -511,9 +512,10 @@ def has_reminder_tail(content: str) -> bool:
 
 
 async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
-    """核① 裸愿望 → 主题问 → 自由文本作答回填 → 评审卡 → start → run 起步
-    （ADR-052 出书门槛 + ADR-053 R2 slot 握手判定结算）。途中锁两张契约拍：
-    待决重建零内存态、一行一答 409。
+    """核① 裸愿望 → 主题问 → 作答回填（自由文本 slot 握手 + 选项点选两路）→
+    评审卡 → start → run 起步（ADR-052 出书门槛 + ADR-053 R2 slot 握手判定
+    结算）。途中锁三张契约拍：待决重建零内存态、一行一答 409、选项点选不
+    500（kind 守卫）。
 
     LLM 方差说明：router 判 ask 是设计行为（prompt 策略行）；若个别模型把
     "I want a social post." 直接判 draft，首段断言会红——那是 prompt 回归
@@ -529,8 +531,9 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     check(bool((q1.get("default_path") or "").strip()),
           "the default path rides as the schema tooth (策略③)", q1)
     options = q1.get("options") or []
-    check(len(options) == 0 or 2 <= len(options) <= 4,
-          "options: 2-4 one-word picks, or empty when the persona pantry is empty (C2)",
+    check(len(options) == 0 or 2 <= len(options) <= 3,
+          "options: 3 one-word picks (2 only for a genuinely binary choice), "
+          "or empty when the persona pantry is empty (C2)",
           options)
     book1 = await pending_book(ctx, pid)
     check(book1 is None or book1.get("intent") is None,
@@ -561,6 +564,36 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     dup = await ctx.answer(msg1["id"], {"kind": "bail"})
     check(dup.status_code == 409, "re-answering the settled ask is a conflict",
           dup.status_code)
+
+    # 契约拍③：选项点选作答（2026-09-04 500 事故补盖——OptionAnswerRequest
+    # 没有 .text 属性，续聊分支的 data.text 直读未 kind 守卫就恒 500；此前
+    # 剧本只有自由文本一条作答路，点选路裸奔正是漏网根因）。第二项目同问
+    # 点选：200（无 500）+ answer.kind=option + slot 回填 user-stated（回填
+    # 的是 label 不是 id）+ book path 接续带 follow_up。
+    pid2 = await ctx.new_project("S1 option pick")
+    turn1b = await ctx.chat(pid2, "I want a social post.")
+    msg1b = turn1b["assistant_message"]
+    q1b = msg1b.get("question") or {}
+    opts = q1b.get("options") or []
+    if q1b.get("slot") == "topic" and opts:
+        pick = await ctx.answer(msg1b["id"],
+                                {"kind": "option", "option_id": opts[0]["id"]})
+        check(pick.status_code == 200, "the option pick settles (no 500)",
+              pick.text)
+        body = pick.json()
+        check(((body.get("answered_question") or {}).get("answer") or {})
+              .get("kind") == "option",
+              "the pick lands kind=option", body.get("answered_question"))
+        brief2 = ((await pending_book(ctx, pid2)) or {}).get("brief") or {}
+        topic2 = brief2.get("topic") or {}
+        check(topic2.get("source") == "user-stated"
+              and topic2.get("value") == opts[0]["label"],
+              "the option pick backfills the slot with the LABEL (not the id)",
+              topic2)
+        check(body.get("follow_up") is not None,
+              "the book path resumes with a follow-up", body)
+    else:
+        check(True, "option-pick beat skipped (pantry empty — C2 exempt)", q1b)
 
     # 评审卡：作答轮直接出书，或（answer 裁决时）推一轮——终点断言不变：
     # task_book dock 且 merged brief 钢印进 payload（预填评审卡 B3）。

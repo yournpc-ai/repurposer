@@ -922,7 +922,7 @@ function ProjectDetailPage() {
            same beat as the dock's morph. */
         <div
           className={cn(
-            "min-h-0 flex-1 transition-opacity duration-700 ease-out motion-reduce:transition-none",
+            "min-h-0 flex-1 transition-opacity duration-900 ease-out motion-reduce:transition-none",
             !hasRuns && "pointer-events-none opacity-0"
           )}
         >
@@ -973,7 +973,7 @@ function ProjectDetailPage() {
            run. */
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-700 ease-out motion-reduce:transition-none",
+            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-900 ease-out motion-reduce:transition-none",
             !hasRuns && "pointer-events-none opacity-0"
           )}
         >

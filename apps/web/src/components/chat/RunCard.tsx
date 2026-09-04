@@ -2,8 +2,8 @@
  *
  * Renders a run's step checklist live (SSE via useRunEvents — snapshot first,
  * so historical messages rehydrate through the exact same path), then the
- * produced outputs as the same cards the results page uses, plus the terminal
- * aggregate line. Never renders the graph itself ("用户不见图").
+ * produced outputs as the same cards the results page uses. Never renders
+ * the graph itself ("用户不见图").
  */
 
 import { useEffect, useRef, useState } from "react"
@@ -61,7 +61,7 @@ export function RunCard({ runId, onDone }: RunCardProps) {
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
 
-  const { steps, status, summary, terminal } = useRunEvents(runId)
+  const { steps, status, terminal } = useRunEvents(runId)
 
   // Terminal → inline the produced outputs (from steps' output_refs). Fires
   // once; `outputs !== null` guards the loaded state (empty list included).
@@ -114,12 +114,7 @@ export function RunCard({ runId, onDone }: RunCardProps) {
         </div>
       )}
 
-      {summary && (
-        <Marker variant="border" className="pt-1.5 text-foreground">
-          <MarkerContent>{summary}</MarkerContent>
-        </Marker>
-      )}
-      {failed && !summary && (
+      {failed && (
         <Marker variant="border" className="pt-1.5 text-destructive">
           <MarkerContent>{t("chat.runFailed")}</MarkerContent>
         </Marker>

@@ -89,6 +89,60 @@ def _sse(event: str, data: str) -> str:
 _HEARTBEAT_SECONDS = 15
 
 
+def _failure_detail(exc: Exception, ui_language: str) -> str:
+    """The ONE error→frame mapping both turn pumps share (2026-09-05 减法批).
+
+    HTTPException detail is client-facing by contract (4xx reasons the JSON
+    path would surface). MiniMaxError = the provider failed (no fabricated
+    default book, 2026-08-14 裁定) — the localized provider line
+    (errors.USER_ERROR_LINES) rides the frame; the raw 402/429/5xx text
+    stays in structlog. Anything else is an internal failure — the JSON path
+    answers "Internal server error" via the global handler, so the SSE path
+    must not leak str(exc) either.
+    """
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    if isinstance(exc, MiniMaxError):
+        return user_error_line(exc, ui_language)
+    return "Internal server error"
+
+
+async def _sse_pump(
+    queue: asyncio.Queue,
+    task: asyncio.Task,
+    completed_event: str,
+    failed_event: str,
+):
+    """The ONE terminal-pump loop both turn streams share (2026-09-05 减法批):
+    frames (already-serialized ``str`` items) pass through, tuples terminate
+    the stream with ``completed_event`` / ``failed_event``, a quiet client
+    gets heartbeat comments, and a disconnect cancels the turn task — which
+    lands in the task's ``finally`` BEFORE its commit, so the session
+    teardown rolls the turn back ("a failed turn persists nothing").
+
+    Queue protocol (turn-specific bodies only push tuples):
+    ``("completed", <JSON-able payload>)`` / ``("failed", <detail str>)``.
+    """
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)
+            except TimeoutError:
+                yield ": heartbeat\n\n"
+                continue
+            if isinstance(item, str):
+                yield item
+            elif item[0] == "completed":
+                yield _sse(completed_event, json.dumps(item[1]))
+                return
+            else:
+                yield _sse(failed_event, json.dumps({"detail": item[1]}))
+                return
+    finally:
+        if not task.done():
+            task.cancel()
+
+
 async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     """SSE generator for one chat turn.
 
@@ -106,11 +160,12 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     raise as an HTTP error — e.g. a recipe rejection — arrives here as a
     frame instead).
 
-    A client disconnect cancels the response, hitting the ``finally`` below:
-    the turn task is cancelled before its commit, the session teardown rolls
-    back — preserving the "a failed turn persists nothing" contract the
-    frontend rollback relies on. (No ``request.is_disconnected()`` polling:
-    the middleware's receive-channel bookkeeping breaks it.)
+    A client disconnect cancels the response, which lands in the pump's
+    ``finally`` (see ``_sse_pump``): the turn task is cancelled before its
+    commit, the session teardown rolls back — preserving the "a failed turn
+    persists nothing" contract the frontend rollback relies on. (No
+    ``request.is_disconnected()`` polling: the middleware's receive-channel
+    bookkeeping breaks it.)
     """
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -140,47 +195,97 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     # Reasoning-content frames: liveness only, never shown.
                     await queue.put(_sse("assistant.thinking", "{}"))
 
+                async def on_phase(phase: str) -> None:
+                    # A REAL phase switch (chat-flow-sequencing C): a labelled
+                    # thinking frame ({"phase": "understanding" |
+                    # "creating_run"}) — the dock's thinking row shows the
+                    # phase copy instead of the static fallback. The bare {}
+                    # keepalive frames above never carry a phase and never
+                    # touch the client's label.
+                    await queue.put(
+                        _sse("assistant.thinking", json.dumps({"phase": phase}))
+                    )
+
                 response = await execute_chat_turn(
-                    db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning
+                    db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
+                    on_phase=on_phase,
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
-            # HTTPException detail is client-facing by contract (4xx reasons
-            # the JSON path would surface). MiniMaxError = the provider
-            # failed (no fabricated default book, 2026-08-14 裁定) — the
-            # localized provider line (errors.USER_ERROR_LINES) rides the
-            # frame; the raw 402/429/5xx text stays in structlog. Anything
-            # else is an internal failure — the JSON path answers "Internal
-            # server error" via the global handler, so the SSE path must not
-            # leak str(exc) either.
-            detail = (
-                exc.detail
-                if isinstance(exc, HTTPException)
-                else user_error_line(exc, ui_language)
-                if isinstance(exc, MiniMaxError)
-                else "Internal server error"
-            )
-            await queue.put(("failed", str(detail)))
+            await queue.put(("failed", _failure_detail(exc, ui_language)))
 
     task = asyncio.create_task(run_turn())
-    try:
-        while True:
-            try:
-                item = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)
-            except TimeoutError:
-                yield ": heartbeat\n\n"
-                continue
-            if isinstance(item, str):
-                yield item
-            elif item[0] == "completed":
-                yield _sse("turn.completed", json.dumps(item[1]))
-                return
-            else:
-                yield _sse("turn.failed", json.dumps({"detail": item[1]}))
-                return
-    finally:
-        if not task.done():
-            task.cancel()
+    async for frame in _sse_pump(queue, task, "turn.completed", "turn.failed"):
+        yield frame
+
+
+async def _answer_stream(
+    user_id: UUID, message_id: UUID, data: AnswerRequest, ui_language: str
+):
+    """SSE generator for one answer turn (2026-09-04 验收批).
+
+    Mirrors ``_turn_stream`` for the answer endpoint: the answer's
+    continuation IS an LLM turn (a slot answer resumes the BOOK path — the
+    echo prose generates here), so an option click deserves the same prose
+    previews as a typed turn instead of a frozen second followed by an
+    instant blob. Wire is identical — ``assistant.delta`` prose previews,
+    ``assistant.thinking`` keepalives / phase labels, one terminal frame
+    (``answer.completed`` = the full AnswerResponse, ``answer.failed`` =
+    the JSON path's error as a frame). The extractor listens on all three
+    prose keys (``answer`` / ``text`` / ``summary``) — whichever field the
+    continuation's verdict carries streams; the others never appear at
+    extractable depth.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def run_answer() -> None:
+        from app.models.database import AsyncSessionLocal
+
+        try:
+            async with AsyncSessionLocal() as db:
+                extractor = ProseDeltaExtractor(("answer", "text", "summary"))
+
+                async def on_delta(fragment: str) -> None:
+                    text = extractor.feed(fragment)
+                    if text:
+                        await queue.put(
+                            _sse("assistant.delta", json.dumps({"text": text}))
+                        )
+                    else:
+                        await queue.put(_sse("assistant.thinking", "{}"))
+
+                async def on_phase(phase: str) -> None:
+                    await queue.put(
+                        _sse("assistant.thinking", json.dumps({"phase": phase}))
+                    )
+
+                message, follow_up = await answer_question(
+                    db,
+                    user_id,
+                    message_id,
+                    data,
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                )
+            await queue.put(
+                (
+                    "completed",
+                    AnswerResponse(
+                        answered_question=ChatMessageResponse.model_validate(message),
+                        follow_up=(
+                            ChatMessageResponse.model_validate(follow_up)
+                            if follow_up is not None
+                            else None
+                        ),
+                    ).model_dump(mode="json"),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
+            await queue.put(("failed", _failure_detail(exc, ui_language)))
+
+    task = asyncio.create_task(run_answer())
+    async for frame in _sse_pump(queue, task, "answer.completed", "answer.failed"):
+        yield frame
 
 
 @chat_router.post("", status_code=status.HTTP_201_CREATED)
@@ -243,6 +348,7 @@ async def list_chat_messages(
 async def answer_message(
     id: UUID,
     data: AnswerRequest,
+    request: Request,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> AnswerResponse:
@@ -253,15 +359,31 @@ async def answer_message(
     a choice answer continues the conversation (the follow-up reply rides
     back in the response), interrupt wake lands in phase 4. Bail is a
     graceful exit, never an error.
+
+    With ``Accept: text/event-stream`` the continuation streams
+    (``assistant.delta`` prose previews + a terminal ``answer.completed``
+    envelope carrying this same AnswerResponse) — an option click is the
+    primary answering gesture (ADR-053) and its continuation generates the
+    echo prose, so it gets the same typing animation as a typed turn. The
+    pill-Start path keeps the one-shot JSON (no LLM continuation there).
     """
-    message, follow_up = await answer_question(
-        db, UUID(str(current_user.id)), id, data
-    )
-    return AnswerResponse(
-        answered_question=ChatMessageResponse.model_validate(message),
-        follow_up=(
-            ChatMessageResponse.model_validate(follow_up)
-            if follow_up is not None
-            else None
+    if "text/event-stream" not in request.headers.get("accept", ""):
+        message, follow_up = await answer_question(
+            db, UUID(str(current_user.id)), id, data
+        )
+        return AnswerResponse(
+            answered_question=ChatMessageResponse.model_validate(message),
+            follow_up=(
+                ChatMessageResponse.model_validate(follow_up)
+                if follow_up is not None
+                else None
+            ),
+        )
+    return StreamingResponse(
+        _answer_stream(
+            UUID(str(current_user.id)), id, data, current_ui_language() or "en"
         ),
+        media_type="text/event-stream",
+        status_code=status.HTTP_200_OK,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -985,9 +985,8 @@ const zh: Resources = {
       artifact: {
         plan: "任务书",
       },
-      // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进）。
-      zoomIn: "放大",
-      zoomOut: "缩小",
+      // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进；
+      // 2026-09-05 ± 步进退役——pill 只读百分比，点击 = fit）。
       zoomFit: "适应画布",
       // render 失败原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
       // 渲染中由 BrandLoader 独自表达，不落状态行。
@@ -1065,9 +1064,14 @@ const zh: Resources = {
     assistantLabel: "Repurposer",
     userLabel: "你",
     thinking: "思考中...",
+    thinkingPhases: {
+      creating_run: "正在创建你的 workflow…",
+    },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
     runFailed: "运行失败",
+    /** 收官内容回复——FLORA 标准答案：说清什么做好了、在哪儿。无 recap、无下一步。 */
+    runReady: "{{summary}} 做好了，结果在画布上。",
     send: "发送",
     stop: "停止",
     undoLastEdit: "撤销上一步修改",
@@ -1082,6 +1086,7 @@ const zh: Resources = {
       set_caption_text: "修改字幕",
       restore_version: "恢复版本",
     },
+    choicePlaceholder: "其他想法…",
     derivativeTypes: {
       post: "社交帖子",
       quotes: "金句卡",
@@ -1159,7 +1164,7 @@ const zh: Resources = {
     planProse:
       "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
     planProseSingle:
-      "我的理解：{{summary}}。说「开始」我就开工——想改什么直接说。",
+      "我的理解：{{summary}}。要我开始吗？想改什么也直接说。",
     addTask: "添加任务",
     tools: {
       translate_clip: "字幕版",

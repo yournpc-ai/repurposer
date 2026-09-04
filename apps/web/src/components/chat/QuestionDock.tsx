@@ -4,29 +4,42 @@
  * one *pending* decision (提问机器 — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
- * - task_book: two rows (2026-08-06 rework; 2026-08-14 对齐参考定稿) — the
- *   confirm line on the top-left, the reserved credit slot on the top-right
- *   (the week-6 cost quote rides `estimate`), the actions (Cancel / Start)
- *   on the bottom row. No reasons line — the agent's inference bookkeeping
+ * - task_book: ONE row (2026-09-02 stadium 化, ADR-051 条款 8 Ⓑ) — ✓ +
+ *   the confirm line + the reserved credit slot (the week-6 cost quote
+ *   rides `estimate`) + Start; Cancel retired (non-blocking pill = no
+ *   negative action). No reasons line — the agent's inference bookkeeping
  *   (chain_default / clip_count_default) is not user copy; the plan card
  *   above carries the substance and the streamed echo carries the caveats.
  *   Rendered only for ≥2-task chains (任务书密度律 ADR-054 — a one-task
  *   book is pure prose; ChatDock owns the threshold).
- * - question (形态律 ADR-053 R1): the pill is NON-BLOCKING — it floats
- *   above the LIVE input: the question line (the right-side × is the bail
- *   channel), its options as full-width ROWS (letter badges mirror the
- *   deterministic autoResume mapping — typing "a" in the input picks
- *   option a; long labels wrap, never overflow), and the muted default-path
- *   line. A freeform answer is just the input's own send — the pencil row
- *   retired with the blocking morph (ADR-053).
+ * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回):
+ *   while an OPTIONS question is pending the chat input row and the
+ *   disclaimer HIDE — the dock IS the question (FLORA/Opus 双参照同款：两家
+ *   的选项问都接管输入): the question line (the right-side × is the bail
+ *   channel — the blocking state's exit), its options as full-width ROWS
+ *   (letter badges mirror the deterministic autoResume mapping — typing "a"
+ *   picks option a; long labels wrap, never overflow), and the tail pencil
+ *   row for a freeform answer rendered as ONE MORE ITEM ROW (the pencil in
+ *   the same badge tile — FLORA / Opus "Something else…" 同款解剖; Enter
+ *   submits through the same send channel as the chat input — autoResume /
+ *   judged settlement unchanged). No default-path subtitle line (同日拍板：
+ *   两家参照均无此行——跳过语义由 × 承担，正常对话即可). 作答反馈座 = 点中
+ *   的行本身（accent 填充 + 行尾 inline spinner，Opus 选中行解剖；作答失败
+ *   自动复位），卡底不再另置孤 spinner（同日拍板）. The morph governs
+ *   OPTIONS questions only: a text question (options-empty) is plain flow
+ *   speech with the input live, and the task-book pill stays non-blocking
+ *   (ADR-051 条款 8 Ⓑ).
  * Answering collapses the question into an answered-question block in the
  * flow.
  */
 
-import { Check, ChevronDown, Loader2, X } from "lucide-react"
+import { useState } from "react"
+import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,10 +85,6 @@ interface OptionDockProps {
   options: DockOption[]
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
   estimate?: string | null
-  /** 提问策略 ③'s schema tooth (ADR-052 B2): what happens when the user
-   * skips — rendered as the muted second line, so every question is
-   * visibly safe to skip. Empty = no line. */
-  defaultPath?: string
   onAnswer: (optionId: string) => void
   answering: boolean
   /** Bail affordance — the question line's × (ADR-051): for an interrupt
@@ -84,6 +93,12 @@ interface OptionDockProps {
   onBail?: () => void
   /** The ×'s aria-label — the caller knows the context (stop vs skip). */
   bailLabel?: string
+  /** 尾行铅笔手输入 (ADR-053 R1 阻塞形态): Enter submits a freeform answer
+   * through the same send channel as the chat input (the deterministic
+   * letter/number/label autoResume mapping resolves a hit server-side,
+   * zero LLM; anything else goes through the judged settlement). */
+  onFreeform?: (text: string) => void
+  freeformDisabled?: boolean
   /** Bare child of the floating question pill (2026-09-02 拆粘): no fill /
    * rounding / margin of its own — the pill owns the chrome. */
   plain?: boolean
@@ -110,10 +125,10 @@ function TaskBookForm({
     // is NON-blocking (the input group stays live below), so "don't start"
     // is said by simply not starting — keep chatting (chat revision always
     // wins), walk away (the plan stays honestly pending), or delete the
-    // project. The options question's × stays (ADR-053): NOT because
-    // anything blocks the input (nothing ever does — the morph is
-    // demolished), but as the explicit skip — it takes the question's
-    // stated default path, and for an interrupt it stops a live paid run.
+    // project. The task_book pill stays non-blocking even after the options
+    // question's blocking morph returned (ADR-053 R1 翻回 2026-09-04): only
+    // a BLOCKING question earns a negative action — the options question's
+    // × (bail = the default path; interrupt = stops a live paid run).
     // Single-row content is also what makes the pill's rounded-full
     // stadium correct geometry.
     <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
@@ -182,14 +197,28 @@ function OptionForm({
   question,
   options,
   estimate,
-  defaultPath,
   onAnswer,
   answering,
   onBail,
   bailLabel,
+  onFreeform,
+  freeformDisabled,
   plain,
 }: OptionDockProps) {
   const { t } = useTranslation()
+  const [freeform, setFreeform] = useState("")
+  /** The clicked option's id — the picked row itself is the loading seat
+   * (2026-09-04 用户拍板: feedback lives where the action happened — the
+   * Opus selected-row anatomy — not a lone spinner at the card's bottom).
+   * The highlight + inline spinner are gated on `answering`, so a failed
+   * answer POST clears both honestly (nothing was picked server-side). */
+  const [pickedId, setPickedId] = useState<string | null>(null)
+  const submitFreeform = () => {
+    const text = freeform.trim()
+    if (!text || !onFreeform || freeformDisabled || answering) return
+    onFreeform(text)
+    setFreeform("")
+  }
   return (
     <div className={plain ? "px-4 py-3" : "mb-2 rounded-lg bg-muted px-4 py-3"}>
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
@@ -214,11 +243,6 @@ function OptionForm({
           </Button>
         ) : null}
       </div>
-      {defaultPath ? (
-        // 提问策略 ③ — the skip path is always visible (muted second line),
-        // so the user knows exactly what skipping means before they bail.
-        <p className="mt-1 text-xs text-muted-foreground">{defaultPath}</p>
-      ) : null}
       {options.length > 0 ? (
         // Full-width rows, not pills: long option labels must wrap inside
         // the card (the old button row let them bleed past the right edge).
@@ -228,17 +252,61 @@ function OptionForm({
               key={option.id}
               variant="ghost"
               disabled={answering}
-              onClick={() => onAnswer(option.id)}
-              className="h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md bg-card px-3 py-2.5 text-left hover:bg-accent"
+              onClick={() => {
+                setPickedId(option.id)
+                onAnswer(option.id)
+              }}
+              className={cn(
+                "h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md px-3 py-2.5 text-left hover:bg-accent",
+                answering && pickedId === option.id
+                  ? "bg-accent disabled:opacity-100"
+                  : "bg-card"
+              )}
             >
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium uppercase text-muted-foreground">
                 {option.id}
               </span>
               <span className="min-w-0 break-words">{option.label}</span>
+              {answering && pickedId === option.id ? (
+                <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+              ) : null}
             </Button>
           ))}
-          {answering ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          {/* 尾行铅笔手输入 (ADR-053 R1 阻塞形态) — the freeform channel
+              while the input row is morphed away (freeform 恒在, 判词 5),
+              rendered as ONE MORE ITEM ROW (2026-09-04 用户拍板, FLORA /
+              Opus "Something else…" 同款解剖): the pencil sits in the same
+              badge tile as the option letters, the input aligns with the
+              option labels. Enter submits through the same send channel as
+              the chat input — the server's deterministic letter/number/
+              label autoResume mapping resolves a hit, anything else goes
+              through the judged settlement. */}
+          {onFreeform ? (
+            <div className="flex w-full items-center gap-2.5 rounded-md bg-card px-3 py-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+                <Pencil className="h-3 w-3" />
+              </span>
+              {/* dark:bg-transparent is NOT redundant with bg-transparent:
+                  the Input base carries bg-input/20 + dark:bg-input/30, and
+                  a bare bg-transparent loses to the dark variant (the
+                  variant-pairing law, same trap as hover) — without it the
+                  "Something else…" field shows a filled box on the dark
+                  theme (2026-09-04 用户拍板). */}
+              <Input
+                value={freeform}
+                onChange={(e) => setFreeform(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault()
+                    submitFreeform()
+                  }
+                }}
+                placeholder={t("chat.choicePlaceholder")}
+                aria-label={t("chat.choicePlaceholder")}
+                disabled={answering || freeformDisabled}
+                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+              />
+            </div>
           ) : null}
         </div>
       ) : null}

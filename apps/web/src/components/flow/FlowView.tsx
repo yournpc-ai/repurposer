@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Maximize, Minus, Plus } from "lucide-react"
 import {
   Background,
   BackgroundVariant,
@@ -66,19 +65,23 @@ function ViewportController({
   )
 
   useEffect(() => {
-    const first = prevCountRef.current === null
+    const prev = prevCountRef.current
     prevCountRef.current = count
+    const firstEver = prev === null
     // Explore surfaces keep the user's own viewport on GROWTH (2026-08-19
     // 二轮 R2): the spine toggle and refinement new-arrivals must not yank
-    // a hand-set pan/zoom — only the first mount frames the graph (and the
-    // pill offers a manual refit). Fit-locked surfaces refit on every
-    // count change as before.
-    if (!first && navigation === "explore") return
+    // a hand-set pan/zoom. But empty→non-empty is NOT growth: the project
+    // page keeps the canvas MOUNTED behind the fullscreen chat (opacity
+    // gate, not unmount), so the controller's true mount fires on an empty
+    // graph and the run's nodes arriving with the morph beat IS the first
+    // real framing (2026-09-05 fix: the graph used to sit at the default
+    // top-left viewport forever). Only a genuinely growing graph skips.
+    if (!firstEver && navigation === "explore" && prev! > 0) return
     // Double rAF (after paint + measurement); BOTH frames are tracked so a
     // mid-flight unmount never leaves a dangling callback.
     let inner = 0
     const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => fit(first ? 0 : 300))
+      inner = requestAnimationFrame(() => fit(firstEver ? 0 : 300))
     })
     return () => {
       cancelAnimationFrame(outer)
@@ -168,49 +171,28 @@ function GroupFrames({
 }
 
 /** The canvas's own navigation chrome (2026-08-19 — replaces the project
- * page's home-inherited top-right cluster): one frosted pill, zoom out /
- * live % (click = fit to view) / zoom in. Rides the same dock-surface
- * recipe as the dock and the 任务书 node — parked on the same dot grid.
- * Explore surfaces only (the parent gates it). Subscribes to zoom ONLY
- * (transform[2]) — useViewport's {x,y,zoom} shallow compare would re-render
- * the pill on every pan frame. */
+ * page's home-inherited top-right cluster; 2026-09-05 比例尺瘦身：只读百
+ * 分比——± 步进与 fit icon 全退役（用户拍板），框内就一个数字，点击
+ * 仍是 fit to view。Rides the same dock-surface recipe as the dock and
+ * the 任务书 node. Explore surfaces only (the parent gates it). Subscribes
+ * to zoom ONLY (transform[2]) — useViewport's {x,y,zoom} shallow compare
+ * would re-render the pill on every pan frame. */
 function FlowControls() {
   const { t } = useTranslation()
   const rf = useReactFlow()
   const zoom = useStore((s) => s.transform[2])
   const fit = () => void rf.fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })
-  const btn =
-    "flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
   return (
     <Panel position="top-right" className="!m-3 md:!m-4">
-      <div className="dock-surface flex items-center rounded-md ring-foreground/10 ring-1">
-        <button
-          type="button"
-          aria-label={t("results.canvas.zoomOut")}
-          className={btn}
-          onClick={() => void rf.zoomOut({ duration: 200 })}
-        >
-          <Minus className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={t("results.canvas.zoomFit")}
-          title={t("results.canvas.zoomFit")}
-          className="flex h-9 w-12 items-center justify-center gap-0.5 text-muted-foreground text-xs tabular-nums transition-colors hover:bg-accent hover:text-foreground"
-          onClick={fit}
-        >
-          <Maximize className="h-3 w-3" />
-          {Math.round(zoom * 100)}%
-        </button>
-        <button
-          type="button"
-          aria-label={t("results.canvas.zoomIn")}
-          className={btn}
-          onClick={() => void rf.zoomIn({ duration: 200 })}
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
+      <button
+        type="button"
+        aria-label={t("results.canvas.zoomFit")}
+        title={t("results.canvas.zoomFit")}
+        onClick={fit}
+        className="dock-surface flex h-9 items-center rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {Math.round(zoom * 100)}%
+      </button>
     </Panel>
   )
 }

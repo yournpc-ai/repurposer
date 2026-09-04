@@ -1251,7 +1251,15 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         // Placeholders are exempt from the status chrome: a promised slot
         // never dims, and its running signal is the FLORA wipe inside the
         // card (one living signal per card — pulse + wipe would fight).
-        node.status === "pending" && !node.placeholder && "opacity-50",
+        // Artifact cards (the plan) are exempt too: their body is
+        // birth-complete (server-projected from the confirmed book), so
+        // pipeline liveness must not dim settled information — only
+        // not-yet-landed products/placeholders read as pending (2026-09-04
+        // 验收: a decided plan looked ghostly through the whole queued phase).
+        node.status === "pending" &&
+          !node.placeholder &&
+          node.kind !== "artifact" &&
+          "opacity-50",
         node.status === "skipped" && "opacity-40",
         node.status === "running" && !node.placeholder && "flow-node-running",
         born !== undefined && "flow-node-born",

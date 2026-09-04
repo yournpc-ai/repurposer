@@ -1018,9 +1018,9 @@ const en = {
         plan: "Plan",
       },
       // Canvas navigation controls (explore surfaces, 2026-08-19 — the
-      // project page's top-right swap: app chrome out, canvas controls in).
-      zoomIn: "Zoom in",
-      zoomOut: "Zoom out",
+      // project page's top-right swap: app chrome out, canvas controls in;
+      // 2026-09-05 the ± steppers retired — the pill is a read-only
+      // percentage, click = fit).
       zoomFit: "Fit to view",
       // Render failure projected onto the product card in place (never a
       // separate node); the retry channel is the chat dock (D8). An active
@@ -1104,9 +1104,15 @@ const en = {
     assistantLabel: "Repurposer",
     userLabel: "You",
     thinking: "Thinking...",
+    thinkingPhases: {
+      creating_run: "Creating your workflow…",
+    },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
     runFailed: "Run failed",
+    /** Terminal completion reply — the FLORA standard answer: name what
+     * became ready and where it lives. No recap, no next-step. */
+    runReady: "Your {{summary}} is ready — the results are on the canvas.",
     send: "Send",
     stop: "Stop",
     undoLastEdit: "Undo last edit",
@@ -1121,6 +1127,7 @@ const en = {
       set_caption_text: "Edit caption",
       restore_version: "Restore version",
     },
+    choicePlaceholder: "Something else…",
     derivativeTypes: {
       post: "Social post",
       quotes: "Quote card",
@@ -1198,7 +1205,7 @@ const en = {
     planProse:
       "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
     planProseSingle:
-      "My understanding: {{summary}}. Say \"start\" and I'll begin — or tell me what to change.",
+      "My understanding: {{summary}}. Shall I go ahead, or would you like to change anything?",
     addTask: "Add task",
     tools: {
       translate_clip: "Captioned version",
