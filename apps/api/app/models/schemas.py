@@ -853,7 +853,8 @@ class InferredIntent(BaseModel):
         default=None,
         description=(
             "The ONE question when action is 'ask' — the shared question "
-            "shape (2-4 one-word options + freeform). Null for every other action."
+            "shape (3 one-word options — 2 only for a genuinely binary "
+            "choice — + freeform). Null for every other action."
         ),
     )
     answer: str | None = Field(

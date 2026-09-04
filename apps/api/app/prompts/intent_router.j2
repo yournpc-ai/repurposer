@@ -4,6 +4,9 @@ Recent conversation:
 
 {% endif -%}
 User message: {{ message }}
+{%- if speech_language %}
+{{ speech_language }}
+{%- endif %}
 {%- if brief_lines %}
 The brief ledger so far (code-merged state — a user-stated slot is the user's own words, a fixed fact; the asked line names slots already asked once — never ask those again):
 {{ brief_lines|join('\n') }}

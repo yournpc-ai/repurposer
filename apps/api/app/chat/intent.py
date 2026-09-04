@@ -30,6 +30,27 @@ from app.agents.base import StreamingAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.models.schemas import BriefLedger, InferredIntent, IntentResult
 from app.models.tables import Message, Persona
+from app.ui_locale import current_ui_language
+
+
+def _speech_language_line(lang: str) -> str:
+    """The speech-language directive riding every LLM turn (2026-09-04 用户
+    拍板: 言语语言一律 = 用户设置的系统语言). The value is the request's
+    Accept-Language captured by the middleware (app.ui_locale — the same
+    plumbing the run side already pins into run.context): this is the
+    language of OUR messages to the user (questions, option labels, prose,
+    summaries), never the CONTENT's language — task language params follow
+    their own rules. Without this line "the user's language" was left for
+    the LLM to infer, and a Chinese persona pantry dragged an English
+    conversation's question AND option labels into Chinese."""
+    return (
+        f"Interface language: {lang} — ALL user-facing text you write (the "
+        "question, every option label, prose, the summary, default_path) is "
+        "in this language. Never infer your speech language from the user's "
+        "message, the persona, or the material: translate pantry-sourced "
+        "option values into the interface language. (Content-language task "
+        "params follow their own rules.)"
+    )
 
 
 def _assemble_book_turn(
@@ -127,6 +148,7 @@ def _assemble_book_turn(
         if payload.get("default_path"):
             lines.append(f"- if the user skips: {payload['default_path']}")
         pending_lines = lines
+    speech_language = current_ui_language()
     return (
         {
             "message": message,
@@ -138,6 +160,12 @@ def _assemble_book_turn(
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,
+            # None outside a request (worker / scenario script) → the
+            # directive is simply omitted and the LLM falls back to the
+            # message's language (pre-2026-09-04 behavior).
+            "speech_language": (
+                _speech_language_line(speech_language) if speech_language else None
+            ),
         },
         [],
     )
@@ -159,7 +187,18 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
     """Chat-turn inputs: the user message plus the deterministic context
     digest (``agents/contexts.py``). Adjudication feedback never passes
     through here — it is the funnel's reserved ``repair_feedback`` kwarg."""
-    return ({"context_text": context.get("text", ""), "message": message}, [])
+    context_text = context.get("text", "")
+    lang = current_ui_language()
+    if lang:
+        # Same speech-language law as the book path (2026-09-04) — the chat
+        # loop's ask/answer/prose follows the UI language, never the
+        # message's or the material's.
+        context_text = (
+            f"{context_text}\n\n{_speech_language_line(lang)}"
+            if context_text
+            else _speech_language_line(lang)
+        )
+    return ({"context_text": context_text, "message": message}, [])
 
 
 chat_intent_agent: StreamingAgent[IntentResult] = StreamingAgent(
