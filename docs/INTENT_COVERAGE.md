@@ -62,6 +62,8 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 ### 3.1 待决任务书（任务书已 dock，未 Start——chat 的普通状态，不再是独立相位）
 
+渲染密度律（ADR-054，2026-09-04）：chain 单任务 = 纯散文确认（无卡无 pill，确认 = 下一条 chat 的 start 裁决）；≥2 任务 = 评审卡 + 确认 pill。本表「面板」「dock Start」各行均指 ≥2 任务的重渲染形态。
+
 | 意图 | 路由 | 现状 |
 |---|---|---|
 | G 修订链（"加条德语 post"） | /chat book path：面板手改 = 链结构直接编辑（与 LLM 提议同一数据结构），修订回合 LLM 带 presented 整链重提 → 新任务书 dock，旧 supersede；chat 恒胜是结构事实（无合并机器，ADR-043） | ✅（S5） |

@@ -100,10 +100,11 @@ router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON�
 - **两个空文本框全删**（per-row focus + run 级 instruction——修订全部走「点值改 / 聊天改」；chat 修订恒胜不变）
 - **确认 pill 按动作命名**（"Save & generate" / 「保存并开始」），散文第二句恒为默认路径声明（≤2 句拍板不变——本条给它 schema 级牙齿）
 - **默认路径必声明**（Opus "I'll use my best judgment if you step away" 同义）——「不填会怎样」永远有答案
+- **密度律（ADR-054，2026-09-04 拍板）**：卡 + 确认 pill 只在 **chain ≥2 任务**（有评审实质）时出现；**单任务书 = 纯散文确认**（无卡无 pill，确认 = 下一条 chat 的 start 裁决）——识别题为零时连卡都不展开，散文牙齿升格为全部确认 UI
 
 ## 6. 不变量（本蓝图不动的部分）
 
-四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / 占位 roster 编译期投影（ADR-051）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、选项问 = 非阻塞 pill，提问永不阻塞输入，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）。
+四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / 占位 roster 编译期投影（ADR-051）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、选项问 = 非阻塞 pill，提问永不阻塞输入，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）。
 
 ## 7. 落地切分（批次，各自 commit 级自绿）
 
