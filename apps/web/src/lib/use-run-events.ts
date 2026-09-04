@@ -19,8 +19,6 @@ export interface RunEventsState {
   steps: WorkflowStep[]
   status: string | null
   progress: number
-  /** Terminal aggregate summary ("Done · 3 clips · …"), null while running. */
-  summary: string | null
   /** The run's creation time — the overlay's chronological anchor for
    * interleaving chat messages with the run block (#5). */
   createdAt: string | null
@@ -32,7 +30,6 @@ const INITIAL: RunEventsState = {
   steps: [],
   status: null,
   progress: 0,
-  summary: null,
   createdAt: null,
   terminal: false,
 }
@@ -80,7 +77,6 @@ export function useRunEvents(
             run: {
               status: string
               progress: number
-              summary?: string | null
               created_at?: string | null
             }
             steps: WorkflowStep[]
@@ -94,7 +90,6 @@ export function useRunEvents(
             steps: data.steps,
             status: data.run.status,
             progress: data.run.progress,
-            summary: data.run.summary ?? null,
             createdAt: data.run.created_at ?? null,
             terminal,
           })
@@ -111,14 +106,12 @@ export function useRunEvents(
           const run = JSON.parse(msg.data) as {
             status: string
             progress: number
-            summary?: string | null
           }
           const terminal = run.status === "completed" || run.status === "failed"
           setState((prev) => ({
             ...prev,
             status: run.status,
             progress: run.progress,
-            summary: run.summary ?? prev.summary,
             terminal: prev.terminal || terminal,
           }))
           if (terminal) fireTerminal()

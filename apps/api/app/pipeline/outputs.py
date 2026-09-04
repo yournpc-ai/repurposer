@@ -354,30 +354,6 @@ def step_estimate_deviation(node: WorkflowStep) -> dict | None:
     return out
 
 
-def aggregate_run_summary(nodes: list[WorkflowStep]) -> str | None:
-    """Run-level rollup of step summaries, derived at read time (no column).
-
-    "Wrote a LinkedIn post · 739 words" — the recap tells what the user GOT,
-    so only **tool** summaries join (registry members; internal-crew lines —
-    understand / plan / render bookkeeping — stay on their own step rows),
-    plus any bailed waiting-seat node's user-abort note (deliberate, see
-    ``bail_waiting_interrupt`` — direction interrupt, 期 4 hook gate, …).
-    Joined in seq order (CHAT_ARCH §8)."""
-    from app.tools import TOOL_REGISTRY  # deferred: import cycle
-
-    parts = [
-        summary
-        for node in sorted(nodes, key=lambda n: n.seq)
-        if node.status == "done"
-        and (summary := (node.spec or {}).get("summary"))
-        and (
-            node.kind in TOOL_REGISTRY
-            or (node.spec or {}).get("bailed")
-        )
-    ]
-    return " · ".join(parts) if parts else None
-
-
 async def run_to_response(
     db: AsyncSession,
     run: WorkflowRun,

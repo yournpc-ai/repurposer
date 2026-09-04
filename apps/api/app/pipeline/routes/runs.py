@@ -22,7 +22,7 @@ from app.dependencies import DBDep, get_current_user_required
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import WorkflowStatus
 from app.models.tables import Project, User, WorkflowRun, WorkflowStep
-from app.pipeline.outputs import aggregate_run_summary, workflow_step_to_response
+from app.pipeline.outputs import workflow_step_to_response
 
 router = APIRouter()
 
@@ -43,7 +43,7 @@ def _hash(frame: dict) -> str:
     return hashlib.sha1(json.dumps(frame, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _run_frame(run: WorkflowRun, nodes: list[WorkflowStep]) -> dict:
+def _run_frame(run: WorkflowRun) -> dict:
     frame = {
         "id": str(run.id),
         "status": run.status,
@@ -54,8 +54,6 @@ def _run_frame(run: WorkflowRun, nodes: list[WorkflowStep]) -> dict:
         # anchor in every frame.
         "created_at": run.created_at.isoformat() if run.created_at else None,
     }
-    if run.status in _TERMINAL:
-        frame["summary"] = aggregate_run_summary(nodes)
     return frame
 
 
@@ -111,7 +109,7 @@ async def run_events(
         frames = [_step_frame(n) for n in nodes]
         for frame in frames:
             step_hashes[frame["id"]] = _hash(frame)
-        run_frame = _run_frame(run, nodes)
+        run_frame = _run_frame(run)
         run_sig = _hash(run_frame)
         yield _sse("run.snapshot", {"run": run_frame, "steps": frames})
 
@@ -129,7 +127,7 @@ async def run_events(
                     step_hashes[frame["id"]] = digest
                     yield _sse("step.updated", frame)
 
-            run_frame = _run_frame(run, nodes)
+            run_frame = _run_frame(run)
             digest = _hash(run_frame)
             if digest != run_sig:
                 run_sig = digest

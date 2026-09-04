@@ -9,12 +9,14 @@ No Redis/broker required.
 The claim helpers atomically flip a row out of its pending state before
 returning it, so a claimed row is invisible to other workers' claim queries.
 ``reap_stale`` recovers rows orphaned by a crashed worker (left mid-flight in a
-running state) on startup.
+running state): at startup with no threshold (the historical full sweep), and
+from every tick with an age threshold (nodes only — see the docstring).
 
 To scale horizontally later, only the claim mechanism here changes (e.g. swap
 to arq/Celery + Redis); callers stay the same.
 """
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -159,14 +161,29 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
     return output_id
 
 
+# Age threshold for the periodic (per-tick) node reap, in seconds
+# (chat-flow-sequencing D2): healthy LLM nodes finish ≤ ~180s (the provider
+# client bounds every call at 120–180s), so 900s is a wide lane — a node
+# older than this is orphaned by a dead event loop, not working.
+STALE_NODE_REAP_SECONDS = 900.0
+
+
 async def reap_stale(db: AsyncSession) -> None:
-    """Reset rows orphaned by a crashed worker back to pending.
+    """Startup full sweep: reset rows orphaned by a crashed worker.
 
-    Run once on worker startup. In dev there is a single worker, so anything
-    still in an in-flight state at boot must be from a previous crashed run.
+    Every in-flight row is a crash leftover — the single-worker dev
+    assumption. That assumption has a documented hazard: a stale ORPHAN
+    worker process (same dev box, days-old code) can still hold rows it
+    will never finish; the startup sweep of the LIVE worker then resets
+    those rows to pending, which is the wanted rescue — but under that
+    same single-instance assumption a startup sweep on a second live
+    worker would reset its healthy in-flight rows too. Age-based reaping
+    (``reap_stale_nodes_older_than``, the worker's every-tick sweep) is
+    immune to that, which is one reason the periodic sweep exists.
 
-    TODO: track attempts + backoff so a row that crashes the worker on every
-    run does not loop forever; for now a stuck row can be reset via reprocess.
+    TODO: track attempts + backoff so a row that crashes the worker on
+    every run does not loop forever; for now a stuck row can be reset via
+    reprocess.
     """
     assets = await db.execute(
         update(Asset)
@@ -193,4 +210,32 @@ async def reap_stale(db: AsyncSession) -> None:
             assets=asset_count,
             nodes=node_count,
             renders=render_count,
+        )
+
+
+async def reap_stale_nodes_older_than(db: AsyncSession, older_than_seconds: float) -> None:
+    """Periodic age-based sweep (the worker's every tick): NODES ONLY, and
+    only ones in ``running`` longer than the threshold (``started_at <
+    now() - threshold``). Assets and renders stay startup-sweep-only on
+    purpose: rendering already carries its own 900s httpx fence, and ASR of
+    a long video legitimately outlives any threshold we can confidently
+    set — reaping those mid-work would loop the reprocessing, not rescue
+    it. Split out of ``reap_stale`` (2026-09-05 减法批): the threshold was
+    a ``None`` sentinel switching WHICH tables get touched — a mode switch
+    dressed as a filter, now two honestly-named operations.
+    """
+    cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+    nodes = await db.execute(
+        update(WorkflowStep)
+        .where(WorkflowStep.status == "running")
+        .where(WorkflowStep.started_at < cutoff)
+        .values(status="pending")
+    )
+    await db.commit()
+    node_count = nodes.rowcount if isinstance(nodes, CursorResult) else 0
+    if node_count:
+        logger.info(
+            "reaped_stale_nodes",
+            nodes=node_count,
+            older_than_seconds=older_than_seconds,
         )

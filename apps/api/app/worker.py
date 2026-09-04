@@ -27,10 +27,12 @@ from app.distribution import (
     reap_stale_publications,
 )
 from app.pipeline.jobs import (
+    STALE_NODE_REAP_SECONDS,
     claim_pending_asset,
     claim_pending_render,
     claim_ready_node,
     reap_stale,
+    reap_stale_nodes_older_than,
 )
 from app.pipeline.orchestrator import (
     execute_step,
@@ -82,6 +84,13 @@ async def _tick() -> bool:
     # their runs (claimed on a later tick). Silent when nothing is parked.
     if await expire_stale_interrupts():
         did_work = True
+
+    # Age-based node reap (chat-flow-sequencing D2): a node sitting in
+    # ``running`` past the threshold was orphaned by a dead event loop (the
+    # execute_step fence caps real work well under it) — reset it to pending
+    # so a live tick claims it again. Runs every tick; cheap when empty.
+    async with AsyncSessionLocal() as db:
+        await reap_stale_nodes_older_than(db, STALE_NODE_REAP_SECONDS)
 
     async with AsyncSessionLocal() as db:
         render_id = await claim_pending_render(db)

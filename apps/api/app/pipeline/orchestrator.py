@@ -12,6 +12,7 @@ Run-level semantics preserved from the retired run_generation:
 - render nodes never hold a run open (they mirror the render chain, D2).
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
@@ -909,6 +910,19 @@ async def create_run(
     return run
 
 
+# Node execution fence (2026-09-04 chat-flow-sequencing D1): a node's
+# executor.run gets at most this long, period — the D9 fuse bounds wedged
+# DB sessions, this bounds a hung event loop (orphan worker claimed the node
+# then died mid-call, provider connection dead-but-unclosed). The MiniMax
+# client already carries 120–180s per-call timeouts, so every LLM chain
+# inside a healthy node stays well under this; runtime_fanout render nodes
+# return immediately (the render chain owns their lifecycle + carries its
+# own 900s httpx fence), so nothing legitimate outlives it. A tripped fence
+# walks the existing failure path: error lands on the node row + downstream
+# cascade-skips, never silent.
+NODE_EXECUTION_TIMEOUT_SECONDS = 600.0
+
+
 async def execute_step(node_id: UUID) -> None:
     """Execute one claimed node; settle terminal state + downstream + the run.
 
@@ -942,7 +956,20 @@ async def execute_step(node_id: UUID) -> None:
                 # into — readable after the with-block AND on raise (D9).
                 accrued = bound.accrued
                 with bound:
-                    output_ids = await executor.run(db, run, node, project)
+                    try:
+                        output_ids = await asyncio.wait_for(
+                            executor.run(db, run, node, project),
+                            timeout=NODE_EXECUTION_TIMEOUT_SECONDS,
+                        )
+                    except TimeoutError as exc:
+                        # A bare wait_for TimeoutError carries no message —
+                        # re-raise with the reason so the structlog failure
+                        # event below says WHAT died (the user-facing line
+                        # stays the generic honest one via user_error_line).
+                        raise RuntimeError(
+                            f"node execution timed out after "
+                            f"{NODE_EXECUTION_TIMEOUT_SECONDS:.0f}s"
+                        ) from exc
                 node.output_refs = [str(oid) for oid in (output_ids or [])]
                 # D9: metering no longer UPDATEs this row per LLM call from a
                 # second session (that locked the row this session holds
