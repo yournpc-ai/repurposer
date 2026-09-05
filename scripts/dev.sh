@@ -126,6 +126,34 @@ echo "Starting web app on http://localhost:3000 ..."
 ( cd "$ROOT/apps/web" && pnpm dev ) &
 WEB_PID=$!
 
+# --- startup liveness gate ---------------------------------------------------
+# 2026-09-06 lesson: the worker died seconds after launch (an unguarded
+# startup exception) and nothing said so — its traceback scrolled by under
+# the other services' logs and a user's run queued forever. The API has
+# wait_for_url; the other three had NOTHING. Give every service a few
+# seconds to prove it's alive, then SAY the verdict per service.
+check_alive() {
+  local pid=$1 name=$2 hint=$3
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "  ✔ $name (pid $pid)"
+    return 0
+  fi
+  echo "  ✘ $name DIED AT STARTUP — its traceback is above."
+  echo "    rerun: $hint"
+  return 1
+}
+
+sleep 5
+echo "Service status:"
+DEAD=0
+check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 )" || DEAD=1
+check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
+check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && pnpm dev )"                                                   || DEAD=1
+check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                      || DEAD=1
+if [ "$DEAD" -ne 0 ]; then
+  echo "⚠ One or more services failed to start — the environment is NOT whole."
+fi
+
 # --- cleanup ---------------------------------------------------------------
 trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$RENDER_PID" "$WEB_PID" 2>/dev/null; exit' INT TERM
 
