@@ -1393,7 +1393,14 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
 
 
 async def finalize_stuck_runs() -> None:
-    """Finalize RUNNING runs whose nodes are all settled (crash recovery)."""
+    """Finalize RUNNING runs whose nodes are all settled (crash recovery).
+
+    Case law in raw SQL: workflow_runs.status is a native enum storing the
+    enum NAME ('RUNNING' — same convention as jobs.py's run claim), while
+    workflow_steps.status is a lowercase varchar. A lowercase 'running'
+    here is a startup-killing parse error (one slipped in with a WIP edit
+    on 2026-09-06 and no worker could boot until restored).
+    """
     async with AsyncSessionLocal() as db:
         run_ids = (
             await db.execute(
