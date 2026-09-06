@@ -83,6 +83,9 @@ export interface ResultsCanvasProps {
   /** Pane-only click (node clicks excluded) — back to neutral: the surface
    * collapses the dock's history and clears the focus (D4/D8). */
   onPaneClick?: () => void
+  /** Extra classes for the zoom pill's Panel (2026-09-06): the page offsets
+   * it clear of the open chat panel so it never sits under the frost. */
+  controlsClassName?: string
   className?: string
 }
 
@@ -103,6 +106,7 @@ export function ResultsCanvas({
   onStepClick,
   focusedOutputId = null,
   onPaneClick,
+  controlsClassName,
   className,
 }: ResultsCanvasProps) {
   const { t } = useTranslation()
@@ -329,6 +333,7 @@ export function ResultsCanvas({
         edges={edges}
         navigation="explore"
         controls
+        controlsClassName={controlsClassName}
         bornIds={bornIds}
         dots
         className="h-full"

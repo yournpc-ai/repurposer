@@ -125,7 +125,11 @@
 | 09-04 | **言语语言律（用户拍板——「语言一律根据用户设置的系统语言来」；产品试用逮到中英混排）**：我们发给用户的消息（提问 / 选项 label / 散文 / 摘要 / default_path）**一律走系统语言**——这不是产物语言（产物语言走任务参数既有规则：write_* `language` / dub `target_language`，不动）。根因 = **现成架构断了一截参数**：`apiFetch` 每次请求已带 `Accept-Language: i18n.language`、middleware 已抓进 `app.ui_locale` ContextVar，但只有产物侧消费（step_display / run.context / 提醒尾 / 确定性回执），chat 两相位的 LLM 装配从没收到——「the user's language」留给 LLM 自由推断，中文人设储藏室把英文对话的提问和选项整块拖成中文。施工：`chat/intent.py` 新增 `_speech_language_line` 权威指令行，book path 经 j2 `speech_language` 块注入、chat loop 拼在 digest 尾；prompts.py 两个 system 头定义术语（「the user's language」= 上下文点名的界面语言，消息 / 人设 / 素材语言永不越权，未点名回退消息语言）+ 两处策略②加翻译条款（储藏室选项值翻译进界面语言，人设原语言永不渗漏进言语）。请求外（worker / 剧本无 Accept-Language 头）省略该行，回退旧推断行为，剧本零改动。规格同批：CHAT_ARCH §6 上下文组装表登记「言语语言行」。验证归用户自跑（compileall / 产品试用未跑——ast.parse 过） | 言语跟系统语言，产物跟任务参数——两条语言轴各归各 |
 | 09-04 | **对话流时序与取证批（简报 `tasks/chat-flow-sequencing.md` 六缺陷一次清，A~D 四组 + RunTaskList 显示律；结算语义与形态律/密度律零改动）**：① **A echo 实体化**——task_book question 行 `content` 改存 echo 散文原文（机器行 "Plan ready for confirmation" 退役，`_task_book_summary` 死函数删除），live = 信封前推 echo 流消息（流 delta 已携带 / planCard 引言同内容则去重），恢复 = 历史回放 echo 消息（时间锚 = question 行出生）+ QA 归档问句 = 本地化确认问句；② **B 选项乐观作答**——点选即入已答问题行 + 问题立刻 dock 收起，失败滤除乐观行并把问题 dock 回（apiFetch toast 照旧），成功滤乐观行换服务端 `answered_question` 行 + follow_up 走正常消息通道——作答期 chatBusy 语义收紧（送钮/自由输入/选项全锁，stop 只服务流式回合）；③ **C thinking 相位帧**——`assistant.thinking` 帧分流：`{}` keepalive 语义不变，`{"phase": "understanding" | "creating_run"}` 在 book path 路由 / start 起 run 前两个确定性代码点 emit（零 LLM 成本），前端换 thinking 行文案（未知相位 defaultValue 回退）+ 客户端 elapsed ticker；④ **D worker 双保险**——节点执行 `asyncio.wait_for` 600s 围栏（render fanout 节点即返，渲染链自带 900s httpx 围栏，合法节点 ≤180s 客户端超时——先报告再定值：无合法节点触线）+ worker `_tick` 周期 age-based 收割 running 节点 900s（阈值模式只收节点；assets/renders 留启动全量清扫——ASR 长视频合法不限时，收割会循环重处理）；⑤ **RunTaskList 显示律**（Claude Code status line 解剖为用户参照）——header = 计划标题 + 总耗时（永不劫持 running?.summary——三重冗余否决）、碎碎念单行保留（说 NOW，行说 WHAT）、prelude 簿记族（preprocess/persona_bootstrap/understand/interrupt/plan/verify）折叠成可展组行（组内 live 自动展开 / 手切优先 / 全折强制展开）、零上传 run 的 preprocess 进度文案诚实读「Preparing generation…」（`hasUploads` 传入）；收尾节拍放缓（dock 形变 550→750ms / 网格 500→700 / 画布淡入 700→900）。规格同批：CHAT_ARCH §8.6 相位帧 bullet + 新 §8.7 RunTaskList 显示律 / DECISIONS ADR-054 条款 1 同日修正案（echo 消息化——钉底 echo 行升格为实体流消息）。**挂账登记（简报 §2.7 缓办）**：人设语言 ≠ 内容默认语言守卫（人设储藏室语言渗漏进薄书 echo 成功定义——待内容语言守卫立项时一并处理）。验证归用户自跑（compileall / tsc / 剧本 / 产品试用均未跑——ast.parse 过） | 任务书 echo 是一条真消息（刷新在、归档不现机器行）；选项点选零等待；thinking 行会说「正在创建 workflow」；run 卡死 10 分钟自动放行；run 清单不再三行同指一节点 |
 | 09-04 | **对话流验收修订批（用户验收 + FLORA 标准答案拍板，当日首批的三处翻案）**：① **understanding 相位帧撤销**——"Understanding your request" 与 "Thinking…" 同义零信息（用户判词：标签只在活动结构性不同于 thinking 时配拥有座位）；唯一相位 = `creating_run`（起 run 前）。② **recap 全链退役**——服务端 `aggregate_run_summary` + run frame `summary` 字段 + 前端 RecapRow（双调用点）+ RunCard recap 行整体删除：recap 聚合的就是清单产物行同一个 spec.summary（单技能逐字相同、多技能整表复读），其设计语境「折叠打勾」（清单折着、recap 代述）已不成立；`_run_frame` 签名瘦身为 run-only。③ **收官 = 内容回复**（FLORA 标准答案：完成语零 CTA 仍然自然）——`chat.runReady` 确定性散文「{summary} 做好了，结果在画布上。」，**无下一步建议、无 recap、无 timing footer**（CC 式 footer 提案同否）；失败 run 保留人话失败行。④ **prelude 组行去自身耗时**——timing 归 header 独占，邻行第二个计时器（22s vs 23s）就是红框拥挤源。⑤ **画布 plan 节点出生即全清晰**——artifact 卡免 pending 透明（`FlowNodeCard` opacity 条件豁免）：plan body 是 birth-complete 的已拍板信息（服务端从确认任务书投影），拿执行活跃度给内容完整度染色 = 透明在说谎；pending 透明只留给产物/占位卡。规格同批：CHAT_ARCH §8.6 协议 bullet 修订 + §8.7 收官帧律 + §2 时间线 recap 行改写。验证归用户自跑（compileall / tsc / 剧本 / 产品试用均未跑——ast.parse 过） | 收官帧从「成绩单」变「一句话回复」：散文 + 清单，无复读、无计时器堆叠；plan 卡不再鬼影 |
+| 09-05 | **积分系统批全量收口（ADR-055，三天提前完工 09-03~09-05，简报 `tasks/done/credits-system.md`）**：真账本四层——configs 公共参数表（CONFIG_REGISTRY + `get_config()` 漏斗 + 启动 reconcile）+ `wallets`/`credit_transactions`/`configs` 三表 + billing 全动词（lazy 开户 grant / check_hold / hold_run / capture_step / release_run，幂等键结构去重 + 乐观锁）+ orchestrator 三缝合（`create_run` 出生地 check_hold+hold_run 不足 422 `credits.insufficient` / `execute_step` 尾段 metering 同点 capture_step / `maybe_finalize_run` release_run）；失败不扣费（failed/skipped 零 capture，S14 活 worker 探针锁）；三面展示（配方卡估价贴 / dock 总价 / chat 单价 + 账户控制台真余额）；422 入流灰行（用户级 vs provider 402 严格两词，StreamTurnError 全路贯通）；`GET /wallet` + `/wallet/transactions`（keyset 分页，idempotency_key 随行）；负余额如实（BILLING §5 差额记账 + negativeNote + 下一次 hold 必拒含 0 元，S13 锁）；`scripts/reconcile_credits.py` 对账尺四类恒等全库审计（钱包链 / 结算恒等 / 失败零扣费 / step×比例，`--since` billing-era 切 + `--user` 范围）——**首跑抓获真缺口「孤儿 hold」**（run 被删/弃置无解冻路径，生产同样存在）→ 需求池 P1 **当日兑现**：project 删除端点同事务退未结 hold（非 RUNNING）+ 收官路径台账自结算（`_release_orphaned_hold`，run/项目已删双路）+ `finalize_stuck_runs` 大小写潜伏 bug 修复（`'RUNNING'` 死匹配从未生效）+ 剧本 S15（删除后台账闭合、余额回赠额）。验证：compileall / tsc / S4·S13·S14·S15 / reconcile 验收面 no drift 全绿（用户跑）；灰行三路径 / 调参演示 / 负余额手测 / e2e 走查人工项待验 | 花钱花得明白：事前有预估、事后有明细、失败不扣费；删项目不冻钱；一条命令全库对账 |
 | 09-05 | **对话流二轮验收批（产品试用三处修复）**：① **answer 端点 SSE 化**——「点选选项后 echo 散文瞬间砸下无打字动画」根因：旧拍板「answer 端点保持 JSON」的前提是「点击低频 + start 无 LLM」，ADR-053 后选项点选已成主答路、slot 答续聊跑整段 book path LLM（echo 在此生成），前提老化。施工：`POST /chat/messages/{id}/answer` 同 /chat Accept 协商（`_answer_stream` 镜像 `_turn_stream`——delta 预览 + `answer.completed` 终帧带完整 AnswerResponse / `answer.failed`；extractor 监听 answer/text/summary 三散文键）；`answer_question` 增 `on_delta/on_phase` 透传 slot 续聊的 `_book_turn`/`_propose_turn`，起 run 前同 chat 路径 emit `creating_run`；前端 `streamAnswer`（chat-stream.ts）+ `handleOptionAnswer` 乐观 QA 之下流式预览（streaming 消息 + **typewriter 节奏释放**〔与 sendChat 同款——推理模型把 echo 压成一两个粗块尾发，裸 append 会复现「瞬间砸下」，review 自逮补〕+ 信封替换，失败同回滚重 dock）。JSON 默认不变（剧本 / pill-Start 零 LLM 路径零扰动）。② **task_book QA 归档泄漏修复**——chat 文本 start（G-1）不再归档「Save & generate? / Start generation」机器块：密度律下薄书确认 = 用户原话消息，归档块 = 把藏起来的 generation chrome 重新暴露；入档只归 pill Start（唯一无消息记录的 UI 手势）。③ **收官散文插值修复**——`chat.runReady` 的单花括号 i18next 不插值（项目惯例双花括号），node 实测复现：单花括号任何取值都原样渲染。规格同批：CHAT_ARCH §8.5 入档律 + §8.6 answer 端点条改写。④ **RunTaskList 层级重裁（三轮验收拍板，翻案 09-04 折组）**：「Preparation · 6 steps」组行是假中间层（层级错乱）——**表头行自己就是 expand 锚**（CC 的 `* Creating…` 行），步骤平铺其下，组行连同自动展开三条例行逻辑整体退役（PRELUDE_KINDS / preludeOpen / groupedLive / 防孤儿强制展开）；**终态 = 总结行**（CC "Thought for 42s (ctrl+o to expand)" 式）：terminal 时表头收敛成一行收据（行折叠、chevron 保留可点回完整回执），落档即收（terminal flip 重置未手切 toggle），收官散文 SSE 照旧跟上；`results.preludeGroup/preludeSteps` 两键随组行退役。规格同批：CHAT_ARCH §8.7 表头即锚 + 终态总结行两条。⑤ **QA 归档终裁 + 终态灰阶（四~六轮验收拍板）**：「Save & generate? / Start generation」机器块三度复发后的终裁——用户拍板「**QA 是用户做 option 选择时才有的 UI**」：**task_book 的 start 确认永不入 QA 块**（chat 文本与 pill 手势同裁，翻案早些「入档只归 pill Start」）；按 `answer.kind` 行数据自证（QA 只认 option/freeform 问答），`answeredQuestion` 前端状态机整体退役（`landOnStartedRun` 消参、两处死分支删除）。弯路实录：via_chat_turn 标志（被否：渲染只由 message 数组自证、不塞派生数据）→ 邻接 gate（被否：在猜）→ kind 终裁。终态 chrome 降灰：只灰收据行标题——收官散文是普通回复消息恒走消息本体样式（同日用户纠正：散文不是 chrome 不收特殊样式；CC 归档灰阶只适用收据元素）。规格同批：CHAT_ARCH §8.5 停靠法则终裁段 + §8.7 终态灰阶句。**over-design 复审及减法批（同批收口）**：全批 adversarial 复审逮冗余四处、全部拆掉——① `reap_stale(None)` 哨兵换表（参数驱动模式开关）→ 拆 `reap_stale`（启动全扫）+ `reap_stale_nodes_older_than`（按龄节点扫，worker 每 tick）；② `formatThinkingElapsed` / `formatElapsed` 同批孪生 → RunTaskList 出口 `formatElapsed` + `useNow` 单时钟，ChatDock ThinkingRow 消孪；③ `streamAnswer`/`streamChat` ~40 行脚手架逐字节相同 → 私有 `streamTurn` 泵 + 两个薄皮（URL/body/终帧名显式参数化，公共签名不动）；④ `_turn_stream`/`_answer_stream` 的终帧泵循环 + 错误映射两处重复 → `_sse_pump` 生成器 + `_failure_detail`（runs.py 第三条相似循环刻意不动——三处抽象是过度，两处是诚实）。自立概念裁决：`prelude` 簿记族（PRELUDE_KINDS/preludeGroup/「prelude 簿记族」）= 有实体的命名（折叠组的 kind 集合 + i18n 组名），保留；`thinkingPhases` 命名空间单键（creating_run）= 动态键查表需要命名空间，保留。验证归用户自跑（ast.parse 过；tsc / 剧本 / 产品试用未跑——ChatDock 调用面 grep 对齐过）。⑥ **画布三修（验收拍板）**：首渲不居中——项目页画布在全屏 chat 期**保持挂载**（opacity 门控非卸载），ViewportController 首次 fit 打在空图上被 `getNodes()` 守卫挡回，节点随 run 到达时 explore 策略又跳过 growth fit → 图永停默认左上角视口；修 = **empty→non-empty 不算 growth**（explore 只在真增长时让位视口，图到达那一拍就是首次取景）。比例尺瘦身：± 步进与 fit icon 全退役，框内只读百分比、点击仍 = fit（`zoomIn/zoomOut` 两键随退役）。免责行边距对称：`pt-1.5`→`pt-5`，与列 `pb-5` 镜像（上窄下宽是病）。⑦ **收官句同管道 + 终态死槽清理（验收拍板）**：「Your Post (English) is ready…」与 echo 散文样式可分的最后两道根因——(a) 终态 header unit（起始 banner / QA stand-in）在 terminal 仍占一个 unit 位，空渲染也吃 gap-6 → 消息与收据间一堵空带；修 = terminal 不推 header unit（receipt 即归档头）。(b) 收官句的裸 `<p>` 管道退役，改走 `AssistantText`（Streamdown）——与每条 assistant 散文同一渲染器，构造上保证普通消息不可分出样式差（legacy 窗口同步）。收据↔收官句收为一簇：terminal item `-mt-4` 吃掉一级 gap（gap-6→~8px 视觉）。 | 选项点选也有打字动画；薄书确认不再出现机器 QA 块；收官句正常带上计划名；终态清单收敛一行收据、表头即展开锚；task_book 确认（chat/pill）永不出现 QA 块；终态收据降灰（散文回归消息本体样式）；首渲图居中、比例尺只读百分比、免责行上下对称 |
+| 09-06 | **项目页 FLORA 对齐续轮（ADR-056，周六插入批，纯前端零后端、排期不动）**：① **chat→canvas 过渡简化（任务一，用户拍板「简单 fade 即可」）**——首个 run 到达时全屏舞台从 `grid-rows 1fr→0fr` 收拢 700ms（视觉 = 整个聊天框飞上去）改为 **300ms 原地淡出**；画布淡入 900ms → 500ms/`delay-150`（舞台淡出过半时画布起步，移动端列表同构）；stageMounted 闩锁 750→300ms 同调；chrome crossfade 与底排几何零改动。② **桌面面板化（任务二，用户对照 FLORA 截图拍板「学完」）**——ChatDock 升**三形态机**（ADR-051 否决清单「右侧 full-height sheet」一条经真实反馈翻案，Queue bar / multi-chat / 窗口控件 / 左栏工具条维持否决）：full（首 run 前居中全屏，不动）/ **panel**（桌面首 run 后 = 400px docked 右栏：`dock-surface` 浮卡 + 细长 header（标题 + Minus 最小化）+ 面板体 = 消息滚动区 + 输入钉底；面板可见性两态 open/minimized 复用 `dockHidden` + 四唤回触发器，`raiseHistory` 收窄 dock-only）/ dock（收窄为移动端专用）。**草稿跨 full→panel 翻存活 = 承重结构**：单 root + 恒渲染 card wrapper（full/dock 挂 `contents`、panel 挂浮卡）+ 舞台/底排恒定子索引——MentionEditor 的 DOM 文本与 chips 永不 remount（序列化携带被禁：有损 by construction）；scroller 单挂载律不破（`historySlotOpen` 改键 `dock &&`）。面板入场 `dock-panel-in`（400ms / 150ms delay）以 stageMounted 门控——水合首帧与刷新直挂 panel 永不重播；画布为 explore 面，面板出现/隐藏/唤回零重取景。③ **积分 pill（BILLING §7 第四读面）**——项目页左下 `CreditsPill`（post-first-run 桌面专属，rounded-md 守小圆角律）：Coins + 余额 tabular-nums，点击 Popover = 余额 + held（>0 才显示）+ 最近台账 10 条（kind 本地化 + 有符号金额 + 相对时间）+ 负余额注记；手卷 apiFetch（`toast:false` 静默防双报），run 起跑/终态经 `refreshKey` 自动刷新，后端零改动。移动端 dock / stadium / 三可见性态零改动。规格同批：DECISIONS ADR-056 新立 + ADR-051 条款 7/8 改写现在时、CHAT_ARCH §头部形态事实三形态化、CLAUDE.md 三处（例外第 4 条收窄移动端 / composer 行为契约 / dock 引用）、BILLING §7 读面清单。验证：tsc 绿（批末一次过）；手工走查（morph 手感 / **草稿跨 full→panel 存活（最高风险项）** / 面板唤回 / pill 弹窗 / 移动回归）归用户 | chat 不再「飞上去」——原地淡出后画布淡入；有 run 的项目页 = 画布 + 右侧对话面板（可收成圆点）；左下角随时看余额与最近花费 |
+| 09-06 | **SSE 首回合闪烁根修（用户实测报告「最后一个字符落定后闪一下」）**：根因 = thinking 行渲染门 `chatBusy && !messages.some(m => m.streaming)` 在出书路径的 settle 窗口重新打开——`finalizePreview()` 把预览泡转静态后、`await fetchPendingBrief()`（网络往返）期间 `chatBusy` 仍真（`setChatBusy(false)` 在 finally），门在已完成文本下方闪挂 thinking 行一个往返时长。修 = 门忠实于其注释意图「covers send → first delta」：新增 `previewSeen` 状态（两条流式路径的 typewriter 首次落地置真、发送开始置假），门改 `chatBusy && !previewSeen`——预览泡一旦存在过，本回合 thinking 行永不回归。**同族第二雷同批拆**：streamAnswer 收官旧制 = 删流式预览 + 同段 echo 新 id 重推（AssistantText 重挂载、入场动画重播 = 整段文字闪着重淡入），对齐 sendChat 的 finalizePreview 纪律——乐观 QA 块**原位**替换为真归档行（`pushAnsweredQuestion` 拆 build/push）、预览泡同 key 原地转静态补 runId；`handleAssistantMessage` 的 echoCarried 护栏扩到 text-question 与纯散文分支（follow_up 四形态零双份；附带修掉 follow_up=null 时预览被删吃文本的边例）。规格同批：CHAT_ARCH §8.6 前端 bullet 改写（信封 = 原地落定永不 remount + previewSeen 门）。验证：tsc 绿；手测（首回合出书不闪 / 点选项不闪不重淡入 / QA 归档时序 / 失败回滚）归用户 | SSE 回复打完最后一个字符，屏幕不再闪 |
+| 09-06 | **面板双几何 float/docked（同日续裁定，in-flow 分栏翻案，ADR-056 同日修订）**：用户再以 FLORA「Dock panel」截图对照拍板——面板常态 = **浮层 popover 效果**，「不是说画布和 dock 左右布局」，docked 后靠右 fixed「**但仍然是雾面玻璃**」。首版 in-flow `md:flex-row` 让位栏的问题：画布在面板边缘截断 → 磨砂后面无画布可糊 = 平面实色。施工：panel root 归一为三形态同一 fixed overlay 层（`hidden` 隐藏），卡片 = fixed 双几何——**float（默认）** 右锚浮窗（垂直 ~18%/10% 内凹、底偏重，rounded-2xl——同日走查修正「全高 16px 内凹」：FLORA 的浮态是浮窗不是全高 sheet）/ **docked** 靠右齐边全高 rounded-none，同一 dock-surface 磨砂 + 300ms inset/半径过渡 morph，`localStorage["repurposer-panel-mode"]` 持久；header 加几何切换钮（PanelRight ↔ PictureInPicture2）。**画布恒 full-bleed 在雾面之下**（页面回退 flex-row/min-w-0，恢复 ADR-041 full-bleed 法则原文）；画布 zoom pill 经 `onPanelStateChange`（hidden + 几何）+ FlowView/ResultsCanvas `controlsClassName` 通道**仅 docked 态**右移 `md:!mr-[424px]` 让位——float 自 18% 起不触顶角，统一偏移在浮窗上方留死区（同日走查逮，float 下 pill 回顶角）。稳定树不动：float↔docked 切换同树零 remount，草稿存活律延伸。**float 态右下角 LogoMark 点常驻 = 切换钮**（同日走查拍板：开 → 点收起、收 → 点展开；docked 全高态右下角归 send 钮，点仍只在 minimized 出现）。规格同批：ADR-056 全文修订（Context 同日续裁定 + 双几何条款 + in-flow 入 Alternatives 否决）+ ADR-051 条款 7 措辞 + CHAT_ARCH §头部 + CLAUDE.md composer 契约。验证：tsc 绿；手测（float 常态 / docked 切换 morph / 雾面透点 / zoom pill 让位 / minimized 归位 / 草稿跨切换存活）归用户 | 面板常态是浮在画布上的雾面卡；点一下靠右固定，画布始终在雾面下延续 |
 
 
 
@@ -133,7 +137,7 @@
 
 ## 2. 后续排期开发计划（2026-08-03 → 2026-10-29，仅工作日）
 
-**排期口径**：工作日顺排，每周五验收。前五周（意图层 / 人设 / 分镜 / 质量线期 0 / 质量线期 1）已收口。后续排期分为五阶段——**闭环验证 + 8 卡齐亮 + 首页优化（W6）→ FLORA 对齐批（2 天，ADR-051）+ 对话工作流批（B1~B4，6 天，ADR-052）+ 消耗计算大迭代含支付/积分架构（W7）→ 运营端质量飞跃（W8-W10，内容生产中台 / Memory + 账号体系 / 端到端联调三刀）→ 支付实际开发与分发联调（W11）→ 法务与 AI 合规（W12）+ 缓冲续项（W13）+ go/no-go 评估（W14）**；**2026-08-31 FLORA 对齐批插入 W7 头部 2 个工作日，其后全部顺延——go/no-go 10-23 → 10-27（回退 10-30，不触发新拍板）**；**2026-09-03 对话工作流批（B1~B4，ADR-052 + 母文档 `DIALOG_WORKFLOW.md`）插入 W7 即日动工 6 个工作日（09-02 实际交付 ADR-051 续裁定批，消耗计算未动工）——原计划自 09-02 起顺延 7 个工作日；W9「意图识别智能化升级」并入 B2 交付（同一意图面），W10 起净顺延 6 天——go/no-go 10-27 → 11-04（⚠️ 超已批回退位 10-30；回退路径 = W13 缓冲吃 3 天回到 10-30 内，或 W9/W10 压缩，下次周五滚动定夺）**；**2026-09-05 拍板（三）：对话工作流批余量（B2 day2 / B3 / B4×2）提前全部完成（记 09-04 交付），**积分系统批（ADR-055，母文档 `docs/BILLING.md`——积分完全先行、真账本、支付只留 W11 边界）提前至 09-07 开工占 5 个工作日**，取代原 09-11~09-17 消耗计算排期；W8 起整体提前 4 个工作日——go/no-go 11-04 → **10-29**（回到已批回退位 10-30 内 ✅）。施工依据：闭环优先于卡片数量（ADR-035/041，简报 `tasks/results-canvas.md`）；FLORA 对齐依据 ADR-051 + 简报 `tasks/flora-parity.md`；对话工作流依据 ADR-052 + 母文档 `docs/DIALOG_WORKFLOW.md`；积分系统依据 ADR-055 + 母文档 `docs/BILLING.md` + 简报 `tasks/credits-system.md`；运营端排期承接 ADR-042 / 母文档 `docs/POSITIONING.md`；积分批承接第二周 P4 估价地基（`workflow_steps.estimate`）。工期按全栈排实：前端与后端双端各占工期，界面留出反复校准时间，调研 spike 与 e2e 测试显性占行。
+**排期口径**：工作日顺排，每周五验收。前五周（意图层 / 人设 / 分镜 / 质量线期 0 / 质量线期 1）已收口。后续排期分为五阶段——**闭环验证 + 8 卡齐亮 + 首页优化（W6）→ FLORA 对齐批（2 天，ADR-051）+ 对话工作流批（B1~B4，6 天，ADR-052）+ 消耗计算大迭代含支付/积分架构（W7）→ 运营端质量飞跃（W8-W10，内容生产中台 / Memory + 账号体系 / 端到端联调三刀）→ 支付实际开发与分发联调（W11）→ 法务与 AI 合规（W12）+ 缓冲续项（W13）+ go/no-go 评估（W14）**；**2026-08-31 FLORA 对齐批插入 W7 头部 2 个工作日，其后全部顺延——go/no-go 10-23 → 10-27（回退 10-30，不触发新拍板）**；**2026-09-03 对话工作流批（B1~B4，ADR-052 + 母文档 `DIALOG_WORKFLOW.md`）插入 W7 即日动工 6 个工作日（09-02 实际交付 ADR-051 续裁定批，消耗计算未动工）——原计划自 09-02 起顺延 7 个工作日；W9「意图识别智能化升级」并入 B2 交付（同一意图面），W10 起净顺延 6 天——go/no-go 10-27 → 11-04（⚠️ 超已批回退位 10-30；回退路径 = W13 缓冲吃 3 天回到 10-30 内，或 W9/W10 压缩，下次周五滚动定夺）**；**2026-09-05 拍板（三）**：对话工作流批余量（B2 day2 / B3 / B4×2）提前全部完成（记 09-04 交付），**积分系统批（ADR-055，母文档 `docs/BILLING.md`——积分完全先行、真账本、支付只留 W11 边界）提前开工**——当日实际 09-03~09-05 三天完工（原排 09-07~09-11 五天），"09-07 开工"安排同日作废、窗口由拍板（四）支付批顶上；**2026-09-05 拍板（四）：支付批自 W11（10-02）提前至 09-07 开工占两周（09-07~09-18）**——W8~W10 运营端顺延一周（09-21 起），W12 起因运营三刀原状（W9 四天 / W10 周五起）恰好落回原排期，**go/no-go 维持 10-29 不动**（仍早于已批回退位 10-30 ✅）；代价 = 支付商入驻审批跑道收紧（08-14 提交 → 09-01 前须确认沙盒到位，未过审首周切 mock 对接、真联调吃批内第二周）。施工依据：闭环优先于卡片数量（ADR-035/041，简报 `tasks/results-canvas.md`）；FLORA 对齐依据 ADR-051 + 简报 `tasks/flora-parity.md`；对话工作流依据 ADR-052 + 母文档 `docs/DIALOG_WORKFLOW.md`；积分系统依据 ADR-055 + 母文档 `docs/BILLING.md` + 简报 `tasks/credits-system.md`；运营端排期承接 ADR-042 / 母文档 `docs/POSITIONING.md`；积分批承接第二周 P4 估价地基（`workflow_steps.estimate`）。工期按全栈排实：前端与后端双端各占工期，界面留出反复校准时间，调研 spike 与 e2e 测试显性占行。
 
 ### 纵览：十二个阶段
 
@@ -146,17 +150,17 @@
 | **第五周（08-31~09-04）** | **产物质量线 期 1：理解层 v2**（节拍地图 schema + prosody 确定性工序 + 上传时跑汇合素材理解前移） ✅ **提前完成（08-23）** | 节拍地图全字段产出 + 词级时间戳零覆写 + asset 级复用（验收三件套 + visual anchors 双半，`scripts/verify_beat_map.py` 全绿） |
 | **第六周（08-24~08-28）** | **闭环验证 + 8 卡齐亮 + 首页优化**（首要目标）——4 卡 authoring（voice-dub / social-post / quote-cards / carousel）+ voice-dub 声纹打磨 + 完整闭环 e2e 测试（Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产，跑遍 8 卡）+ 首页双形态校准（首次/回访）+ 配方→闭环→选题接力点对齐 | 🎯 8 卡完整通路 + 闭环 e2e 绿 + 首页体验就绪 |
 | **第七周（08-31~09-11）** | **FLORA 对齐批（2 天，ADR-051）+ 对话工作流批（B1~B4，ADR-052——余量提前收口 09-04）+ 积分系统批（5 天，ADR-055）**——画布优先路由（overlay 退役）/ 折叠打勾 + 占位物化 / 提问 dock 形态切换 / 节点交互升级 → 改名批（intent_router / understand / plan / pending_brief）+ brief 账本 + ask 一等动作 + 任务书密度律 + 提问机器形态律 + 有界 loop 节点 & research 试点 → **积分系统（真账本，积分完全先行、支付只留 W11 边界）**：configs 公共参数表 + wallets/credit_transactions 三表 + 开户 grant + hold→capture→release 真扣费 + 失败不扣费 + 出生地 shortfall 判定 + 三面展示（dock 总价 / chat 单价 / 配方卡估价贴）+ 余额不足入流灰行 | 🎯 画布/chat 体验对齐 + 对话工作流就绪（裸愿望不再收空心书）+ 消耗透明就绪 + 积分真账本就绪（支付留 W11） |
-| **第八周（09-14~09-18）** | **运营端（上）：内容生产中台**——选题库（topics + lifecycle + agent + 选题卡发射）+ 内容形态库（分镜 / 脚本 / 预设 / 文章）+ 不同平台 skill 添加（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026） | 内容生产中台通路 |
-| **第九周（09-21~09-24）** | **运营端（中）：Memory + 账号体系**——Memory（persona）模块迭代（风格学习 + 校准回路 + Voice DNA）+ Persona 显化深化 + 账号体系绑定（**positioning root**：`personas`→`positionings` 改名刀 + 三分区 + `channel_accounts.positioning_id` + 公共档案）+ 定位对话化（意图识别智能化升级并入 W7 对话工作流批 B2） | 🎯 身份复利资产就绪（persona 校准回路 + 渠道有所属） |
-| **第十周（09-25~10-01）** | **运营端（下）：端到端联调**——home 改版（回访态 = 选题管道 + 最近产物 + 渠道状态）+ 全链联调（定位 → 选题 → 生成 → 精修 → 发布）+ 闭环质量验证（多 persona × 多选题组合） | 🎯 **运营端闭环 + 质量飞跃** |
-| **第十一周（10-02~10-08）** | **支付实际开发 + 分发联调**——支付接入（沙盒 + 入驻审批为前提 ⚠️；钱→积分购买比例与套餐语义本周定）+ 订阅生命周期 + webhook + 套餐权益执行 + 用户计费中心（积分台账投影）+ LinkedIn / TikTok OAuth 发布链路（开发者权限到位 ⚠️） | 🎯 商业化闭环 + 分发就绪 |
+| **第十一周（09-07~09-18，自 10-02 提前）** | **支付实际开发 + 分发联调**——支付接入（沙盒；**入驻审批跑道收紧 ⚠️**：08-14 提交 → 09-01 前须确认到位，未过审首周切 mock 对接、真联调吃批内第二周；钱→积分购买比例与套餐语义本周定）+ 订阅生命周期 + webhook + 套餐权益执行 + 用户计费中心（积分台账投影）+ LinkedIn / TikTok OAuth 发布链路（开发者权限到位 ⚠️） | 🎯 商业化闭环 + 分发就绪 |
+| **第八周（09-21~09-25）** | **运营端（上）：内容生产中台**——选题库（topics + lifecycle + agent + 选题卡发射）+ 内容形态库（分镜 / 脚本 / 预设 / 文章）+ 不同平台 skill 添加（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026） | 内容生产中台通路 |
+| **第九周（09-28~10-01）** | **运营端（中）：Memory + 账号体系**——Memory（persona）模块迭代（风格学习 + 校准回路 + Voice DNA）+ Persona 显化深化 + 账号体系绑定（**positioning root**：`personas`→`positionings` 改名刀 + 三分区 + `channel_accounts.positioning_id` + 公共档案）+ 定位对话化（意图识别智能化升级并入 W7 对话工作流批 B2） | 🎯 身份复利资产就绪（persona 校准回路 + 渠道有所属） |
+| **第十周（10-02~10-08）** | **运营端（下）：端到端联调**——home 改版（回访态 = 选题管道 + 最近产物 + 渠道状态）+ 全链联调（定位 → 选题 → 生成 → 精修 → 发布）+ 闭环质量验证（多 persona × 多选题组合） | 🎯 **运营端闭环 + 质量飞跃** |
 | **第十二周（10-09~10-15）** | **法务 + AI 合规**——法务页面 + 用户协议 + 隐私协议 + Cookie 同意 + AI 内容标识（C2PA 选型 + 自动判定 + 披露）+ SEO + 邮件送达 + 监控告警 | 法务 + 合规 + 上线配套就绪 |
 | **第十三周（10-16~10-22）** | **缓冲周 + 续项收口**——性能压测 + 文档收口 + 回归全套 + Last-mile 修复（W11 入驻审批 / 开发者权限未到位时的回退位） | 上线前提全部到位 |
 | **第十四周（10-23~10-29）** | **全周期验收 + go/no-go 评估**——九阶段成果整体走查 + 修复 + 上线演练 + 🎯 go/no-go 评估材料 + 全周期进度回填 | 🎯 上线 go/no-go 评估材料（**10-29**） |
 
 > **闭环优先于卡片数量（2026-08-05 拍板）**：配方卡全部点亮但不闭环时，期中汇报只能说"还没跑通"；先立闭环——闭环链于第二周收口，dub 为全程载体卡；此后每张新卡 = 一行"扩展配方类型"，上线即落入既有通路——叙事从"补窟窿"变成"扩展通路"。哲学论证 → STRATEGY §5；行为规格 → CHAT_ARCH §3.3；形态裁决 → ADR-035/041，简报 `tasks/results-canvas.md`；配方数据 schema → RECIPES §7.1。分镜压缩 1 周 ⚠️，回退则 go/no-go 移至 10-30。闭环链全部图面由 **FlowView 只读图基座**渲染（ADR-036）——overlay 扇出主视觉 / 结果画布 / 血缘板（复核门），chat 唯一修改通道不变；并直接消费架构迭代红利（ADR-039）：画布节点自动获得友好名，配方卡的流程图与真实执行自动核对、图不骗人。
 
-**外部因素（需按期启动）**：LinkedIn / TikTok 开发者权限（暂缓，时间未定——W11 联调排期届时按实际申请时间重排）；支付商入驻申请（08-14 前提交，审批周期数周——W11 支付接入前提 ⚠️，顺延后审批跑道更充裕）；律师法务联系（08-24 前启动，周期 2–4 周——W12 法务落地前提）。术语表、管理后台、帮助中心等最后项按需再考虑。
+**外部因素（需按期启动）**：LinkedIn / TikTok 开发者权限（暂缓，时间未定——支付批（09-07 起）联调届时按实际申请时间重排）；支付商入驻申请（08-14 前提交，审批周期数周——**支付批 09-07 动工前提 ⚠️ 跑道收紧：提交至动工仅 ~3.5 周，09-01 前须确认沙盒审批到位；未过审则首周切 mock/合同流对接、真联调吃支付批第二周**）；律师法务联系（08-24 前启动，周期 2–4 周——W12 法务落地前提）。术语表、管理后台、帮助中心等最后项按需再考虑。
 
 ### 第 1 周（08-03 ~ 08-07）：意图层单面化（chat 唯一入口）
 
@@ -255,13 +259,19 @@
 | 四 08-27 | **配方画廊 v3 拍板 + 三文档落档**（实际交付，原排"首页优化 v1"的双形态/接力点口径已在 v3 拍板中对齐——首次 = 招牌菜接住 / 回访 = 选题管道，接力点实装归运营端迭代）——ADR-048 v3 修订（三轴模型 + 招牌菜 + 三级闸门 + 阵容治理）+ RECIPES §4/§7 同步 + quote-cards 简报 v3 + **产物/输入展示组件统一立项**（outputs 按视频/图片/文字等类型 + 画幅统一渲染，前后端数据结构清算，详 §1.3 本日行） | 画廊定位终稿：卡 = 招牌菜，不为覆盖负责；展示组件统一进入施工 |
 | 五 08-28 | 全链路联调 + **quote-cards v3 工程 P1（欠账清零：None→stacked / layout_mode 清尸 / demo 前缀 / 文案 / 死代码 / S13 断言）✅ 提前 08-27 落地（详 §1.3 本日行 08-27b）** + 展示组件统一第一刀 ✅ 随 P1 同批（后端薄层 + 前端类型驱动）+ **D9 死锁族根修 ✅（ADR-050，详 §1.3 08-28 行——pageinspect 实锤 feedback-pop 污节点根因，六点修复 + S13 姊妹洞同修，e2e 连跑 ×2 零锁等）** +【验收】🎯 8 卡完整通路 + 闭环 e2e 绿 + 首页体验就绪；**P2 帧卡 Output 化 ✅ 当日落地（详 §1.3 08-28b——形态 A/B 样张 + parents 谱系 + 双语同条 + 纯文稿叠卡全验收）**；P3 烘焙清场 ✅ 当日落地（详 §1.3 08-28c——v3 简报全绿关闭） | 整个产品的"跑通功能"阶段验收；chat 发"做一张金句卡"出叠卡 |
 
-### 第七周（08-31 ~ 09-11）：**FLORA 对齐批（2 天，ADR-051）+ 对话工作流批（B1~B4，ADR-052）+ 积分系统批（5 天，ADR-055——积分完全先行，支付只留 W11 边界）**
+### 第七周（08-31 ~ 09-11）：**FLORA 对齐批（2 天，ADR-051）+ 对话工作流批（B1~B4，ADR-052）+ 积分系统批（3 天提前完工 09-05，ADR-055——积分完全先行，支付批 09-07 顶上）**
 
 > **2026-08-31 用户拍板插入**：FLORA 对齐批（ADR-051 + 简报 `tasks/flora-parity.md`）占本周头两个工作日；原计划整体顺延 2 个工作日，go/no-go 10-23 → 10-27（仍早于已批回退位 10-30，不触发新拍板）。消耗大迭代口径不变：用户对每一步生成的花费可见。架构地基（`workflow_steps.estimate`）第二周已落，本周接消费面；支付/积分模型层同周定（架构同步，开发分离）。**不接钱包判定**——纯展示。
 
 > **2026-09-03 用户拍板插入**：对话工作流批（B1~B4，ADR-052 + 母文档 `DIALOG_WORKFLOW.md`——改名批 / brief 账本 + ask / 预填评审卡 / 有界 loop 节点 + research 试点「立即」）**即日动工**占 6 个工作日（09-03~09-10）；09-02 实际交付 ADR-051 续裁定批（dock 拆粘 / 形态机 / 活性同步），消耗计算未动工。原计划自 09-02 起整体顺延 7 个工作日（W9「意图识别智能化升级」并入 B2 交付，W10 起净顺延 6 天），go/no-go 10-27 → **11-04** ⚠️ **超已批回退位 10-30**——回退路径：W13 缓冲周（10-22~10-28）吃 3 天回到 10-30 内，或 W9/W10 联调压缩；下次周五滚动定夺。三判同批：步骤叙事 = 工艺叙事发稿（N-24 不动）；research 试点 = 立即（B4 随批）；W9 意图升级日与 B2 合并（同一意图面不改两遍）。
 
-> **2026-09-05 用户拍板**：对话工作流批余量（B2 day2 / B3 / B4×2）**提前全部完成**（记 09-04 交付）；**积分系统批提前至 09-07 开工（5 个工作日，ADR-055 + 母文档 `docs/BILLING.md` + 简报 `tasks/credits-system.md`）**——积分完全先行（真账本：开户赠额 / hold→capture→release / 失败不扣费），支付只留 W11 边界；取代原 09-11~09-17 消耗计算排期，W8 起整体提前 4 个工作日，go/no-go 11-04 → **10-29**（回到已批回退位 10-30 内 ✅）。
+> **2026-09-05 用户拍板**：对话工作流批余量（B2 day2 / B3 / B4×2）**提前全部完成**（记 09-04 交付）；**积分系统批提前开工（ADR-055 + 母文档 `docs/BILLING.md` + 简报 `tasks/credits-system.md`）**——积分完全先行（真账本：开户赠额 / hold→capture→release / 失败不扣费），支付只留 W11 边界。
+>
+> **2026-09-05 拍板（四）：支付批自 W11（10-02）提前至 09-07 开工占两周（09-07~09-18）**，顶上积分批提前完工释放的窗口；W8~W10 运营端顺延一周（09-21 起），W12 起因运营三刀原状（W9 四天 / W10 周五起）恰好落回原排期——**go/no-go 维持 10-29 不动** ✅。
+>
+> **09-05 实记**：积分批 09-03~09-05 三天提前完工（原排五天）。自动化验证全绿（compileall / tsc / S4·S13·S14 / reconcile 验收面 no drift）；人工项（灰行三路径 / 调参演示 / 负余额手测 / e2e 走查）待验。**对账尺首跑抓获真缺口：孤儿 hold（run 被删/弃置无解冻路径，生产同样存在）→ 需求池 P1 当日兑现（删除即退 + 收官台账自结算 + `finalize_stuck_runs` 死匹配修复 + S15 锁——见 §1.3 本日第二行）**。支付商入驻审批跑道收紧 ⚠️：08-14 提交 → 09-01 前须确认沙盒到位。
+>
+> **09-06 实记**：项目页 FLORA 对齐续轮（ADR-056）周六插入落地——过渡简化（舞台 fade 300ms + 画布 500ms/delay-150）+ 桌面面板化（ChatDock 三形态机 full/panel/dock，dock 收窄移动端专用）+ 积分 pill（项目页左下读面）。纯前端零后端，不占排期（详 §1.3 本日行）。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
@@ -270,58 +280,57 @@
 | 三 09-02 | **实际交付：ADR-051 续裁定批**（消耗计算架构顺延）——dock 拆粘三寄存（问题 pill 独立浮层 / 输入组独立层律 / 免责行页级耳语）+ 两态形态机 + hidden 第三可见性态 + run 活性同步三条（interrupt 准入 / runAlive waiting⊆running / plan 卡 compile 期任务书兜底） | 有画布 dock 与全屏 chat 同构；park 帧画布不再死寂 |
 | 四 09-03 | **B1 改名批 ✅ 当日落地**（ADR-052 判词 3，NAMING N-43~N-47；简报 `tasks/dialog-workflow-b1-rename.md`）：`plan_agent` → `intent_router`（`chat_intent_agent` 相位合一 = B2，本批不动）、`director_understand` → `understand`、`director_plan` → `plan`（plan 一词归一主）、`pending_intent` → `pending_brief`（列 rename 迁移）、plan path → book path（含 `plan_path` 分派位）、presented_plan → presented_book、plan_summary → book_summary；数据迁移 ×2（kind 两值 + 列 rename）；commit 级自绿 | 每 commit 冷启动绿；零行为变化 |
 | 五 09-04 | ✅ **对话工作流批全量收口（B2~B4 余量提前完成，2026-09-05 拍板记本日）**——B2（brief 账本 + router 相位统一 + ask 一等动作 + 出书门槛 + 提问策略三条）/ B3（任务书 = brief 渲染：**任务书密度律**——评审卡+确认 pill 归 ≥2 任务、单任务书纯散文确认，ADR-054；**提问机器形态律 + 插话支持**，ADR-053）/ B4（**有界 loop 节点** BoundedLoopNode 三护栏 + **research 试点**）+ C1~C4 复查清扫 + 剧本浓缩（52 碎片 → 12 条核心 story，INTENT_COVERAGE 对齐）【验收】🎯 **对话工作流批收口（B1~B4）** | 裸愿望先收一词可答的主题问、不再收空心书；单任务书不套重形态；agent 性有了有界合法座位；作家收到 research brief |
-| 一 09-07 | **积分批 day 1：configs + 三表地基**（ADR-055，简报 `tasks/credits-system.md`）——`platform/configs.py`（CONFIG_REGISTRY 唯一事实源 + `get_config()` 漏斗 + 启动 reconcile；首批 `wallet.signup_grant=500` / `credits.per_cost_usd=300`）+ `wallets` / `credit_transactions` / `configs` 三表 + 一个 migration + `platform/billing.py` 骨架（首登 lazy 开户 + grant） | 新用户开户即见真余额 |
-| 二 09-08 | **积分批 day 2：扣费时序**——`credits_for_cost` 单一换算点（报价与实扣同源）+ orchestrator 三缝合点（`create_run` → check_hold + hold_run，不足 422 `credits.insufficient` / `execute_step` 尾段与 metering 同写入点 → 成功 `capture_step` / `maybe_finalize_run` → `release_run`）+ 幂等键 + 乐观锁 | 每 run = 1 hold + N capture + 1 release 逐笔可查 |
-| 三 09-09 | **积分批 day 3：展示三面**——序列化派生 `estimate_credits`/`cost_credits`（不落列）+ dock 生成前总价 / chat 修改单价 / 配方卡估价贴 + 账户控制台 credits 槽接真余额 | 翻每张卡、点"开始吧"之前先看到大约花多少 |
-| 四 09-10 | **积分批 day 4：失败不扣费 + 余额不足**——failed/skipped 零 capture + 422 入流灰行（用户级"积分不足" vs provider 级 402 严格两词）+ `GET /wallet` + `/wallet/transactions` + 负余额如实显示（文案接差额记账） | 系统出问题用户不花钱；真快用完时能看到提示 |
-| 五 09-11 | 全链路联调（dub 链真管线 run，台账与 `workflow_steps.cost` 聚合对账 × 比例）+【验收】🎯 **消耗透明就绪 + 积分真账本就绪**（支付实际开发留 W11） | 事前有预估、事后有明细、失败不扣费——花钱花得明白 |
+| 三 09-03 | ✅ **积分批 day 1~2 提前落地**：configs + 三表地基 + billing 动词——`platform/configs.py`（CONFIG_REGISTRY 唯一事实源 + `get_config()` 漏斗 + 启动 reconcile；首批 `wallet.signup_grant=500` / `credits.per_cost_usd=300`）+ `wallets` / `credit_transactions` / `configs` 三表 + migration + 首登 lazy 开户 grant + 扣费时序（`credits_for_cost` 单一换算点 + orchestrator 三缝合点：`create_run` → check_hold + hold_run（不足 422 `credits.insufficient`）/ `execute_step` 尾段 → 成功 `capture_step` / `maybe_finalize_run` → `release_run`）+ 幂等键 + 乐观锁 | 新用户开户即见真余额；每 run = 1 hold + N capture + 1 release 逐笔可查 |
+| 四 09-04 | ✅ **积分批 day 3 提前落地**：展示三面——序列化派生 `estimate_credits`/`cost_credits`（不落列）+ dock 生成前总价 / chat 修改单价 / 配方卡估价贴 + 账户控制台 credits 槽接真余额 | 翻每张卡、点"开始吧"之前先看到大约花多少 |
+| 五 09-05 | ✅ **积分批 day 4~5 提前落地**：day 4 = 失败不扣费（failed/skipped 零 capture）+ 余额不足出生地 422 入流灰行（用户级 vs provider 级 402 严格两词）+ `GET /wallet` + `/wallet/transactions`（keyset 分页）+ 负余额如实显示；day 5 = `scripts/reconcile_credits.py` 对账尺（四类恒等式全库审计）+ 验收 runbook + 对账首跑抓获孤儿 hold 真缺口 → 需求池 P1【验收】🎯 **消耗透明就绪 + 积分真账本就绪**（自动化面全绿；灰行三路径 / 调参演示 / 负余额手测 / e2e 走查待验；支付批 09-07 顶上——拍板（四）） | 事前有预估、事后有明细、失败不扣费——花钱花得明白 |
 
-### 第八周（09-14 ~ 09-18）：**运营端（上）——内容生产中台**
+### 第十一周（09-07 ~ 09-18，自 10-02 提前）：**支付实际开发 + 分发联调**
+
+> 在 W7 落定的积分+支付联合架构上接入实际支付商 + LinkedIn / TikTok OAuth 发布链路。**⚠️ 入驻审批跑道收紧**（08-14 提交 → 09-01 前须确认沙盒到位）——未过审则第一周切 mock / 合同流对接，真联调吃批内第二周；开发者权限同理。
+
+| 日 | 交付 | 验收口径（用户视角） |
+|---|---|---|
+| 一 09-07 | **支付接入**（供应商对接 + 沙盒创建订阅）+ 订阅生命周期（续费 / 升级 / 取消）+ webhook 事件测试 | 可以在线订阅付费；升级、续费、取消都自助 |
+| 二 09-08 | **套餐权益执行**（额度检查 / 超限提示 / 周期重置——用户级余额不足入流灰行 vs provider 额度两词分开） | 自己套餐含多少、用了多少、什么时候重置清清楚楚 |
+| 三 09-09 | **用户计费中心**（用量、明细、套餐页入口；W7 钱包架构消费面） | 每笔消费有据可查 |
+| 四 09-10 | **LinkedIn / TikTok OAuth 发布链路**（开发者权限到位 ⚠️）+ 双平台发布链路验收（成功 / 失败 / 授权过期进通知中心） | 产物一键发到 LinkedIn / TikTok；发布结果有通知 |
+| 五 09-11 | 第一周收口（mock 路径对账 + 审批 / 权限状态盘点，定第二周联调顺序） | 支付主链就绪，外部依赖有明确落点 |
+| 一 09-14 ~ 五 09-18 | 端到端联调（订阅 → 使用 → 查账 → 管理套餐 + 发布到渠道全链；审批未到位则 mock 验收 + 真联调排队清单）+【验收】🎯 **商业化闭环 + 分发就绪** | 从免费到付费的完整体验；产物有去处 |
+
+### 第八周（09-21 ~ 09-25）：**运营端（上）——内容生产中台**
 
 > 运营端是质量飞跃的关键（前面只是跑通功能）。本周先把"内容生产中台"搭好——选题、内容形态库、不同平台 skill 一次性立住，给后续 Memory / 账号体系 / 端到端联调提供发射台。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 09-14 | **选题库**（`topics` 表 + 生命周期状态机：灵感 / 已排期 / 生产中 / 已发布 / 有数据 + API + MODULE_ARCH 表归属登记） | 想到要做的话题有了去处——记下来、有状态、能顺着做下去 |
-| 二 09-15 | **选题 agent**（roster 新声明：定位 × 素材档案挖矿，首批选题提议产出——"你那场关于 X 的演讲还没做成过任何东西"形态） | 系统能根据"你的定位 + 你的素材库"端出下一批可做的题 |
-| 三 09-16 | **选题卡 UI**（列表 / 状态 / 详情 / 选题发射：点卡 → 任务书预填 → chat 确认即 run，复用 chat 唯一意图面，无第二入口） | 点一张选题卡，计划已经填好，确认就开工 |
-| 四 09-17 | **内容形态库**（分镜 / 脚本 / 预设 / 文章 — 形式层 skill 化，统一登记入 SKILL_REGISTRY）+ **不同平台 skill 添加**（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026；不同平台 = LinkedIn / TikTok / Newsletter / 网站 等渠道适配模板） | 内容生产有了完整工具集 |
-| 五 09-18 | 端到端测试（选题 → run → 产物 → 精修，全链跑通）+【验收】🎯 **内容生产中台通路** | 从"选题"到"产物"通路立住 |
+| 一 09-21 | **选题库**（`topics` 表 + 生命周期状态机：灵感 / 已排期 / 生产中 / 已发布 / 有数据 + API + MODULE_ARCH 表归属登记） | 想到要做的话题有了去处——记下来、有状态、能顺着做下去 |
+| 二 09-22 | **选题 agent**（roster 新声明：定位 × 素材档案挖矿，首批选题提议产出——"你那场关于 X 的演讲还没做成过任何东西"形态） | 系统能根据"你的定位 + 你的素材库"端出下一批可做的题 |
+| 三 09-23 | **选题卡 UI**（列表 / 状态 / 详情 / 选题发射：点卡 → 任务书预填 → chat 确认即 run，复用 chat 唯一意图面，无第二入口） | 点一张选题卡，计划已经填好，确认就开工 |
+| 四 09-24 | **内容形态库**（分镜 / 脚本 / 预设 / 文章 — 形式层 skill 化，统一登记入 SKILL_REGISTRY）+ **不同平台 skill 添加**（**R5 虚拟视频作为 AI 生成 skill 落位**，ADR-026；不同平台 = LinkedIn / TikTok / Newsletter / 网站 等渠道适配模板） | 内容生产有了完整工具集 |
+| 五 09-25 | 端到端测试（选题 → run → 产物 → 精修，全链跑通）+【验收】🎯 **内容生产中台通路** | 从"选题"到"产物"通路立住 |
 
-### 第九周（09-21 ~ 09-24）：**运营端（中）——Memory + 账号体系**
+### 第九周（09-28 ~ 10-01）：**运营端（中）——Memory + 账号体系**
 
 > 身份根（persona 校准回路 + 渠道挂根）+ 定位对话化。Memory 是身份复利资产的承载（STRATEGY §2.2 "Identity keeps the customer"），账号体系 = positioning root 落地（POSITIONING.md 母文档）。**意图识别智能化升级并入 W7 对话工作流批 B2**（同一意图面不改两遍，ADR-052——brief 账本就是「chat 多轮上下文加深」的正解形态，定位字段直接成 brief 槽位来源）。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 一 09-21 | **Memory（persona）模块迭代**（风格学习 + 校准回路 + Voice DNA 强化——删改痕迹回流 persona 校准，已通过 Operation Model 落地）+ 失败步人格偏移监控 | 产物越用越像你，校准有反馈回路 |
-| 二 09-22 | **Persona 显化深化**（风格六件编辑 + 声纹 dub 现状机制不动 + 皮肤块现状不动；用户能看清"AI 学到了我什么 / 在哪里学的 / 哪里不对"） | 维修点从"产品黑盒"变成"我能看懂的特征表" |
-| 三 09-23 | **账号体系绑定**（positioning root 落地）`personas`→`positionings` 全栈改名（表 + Alembic / FK 网 / 端点 / 前端路由 / i18n / 存储前缀）+ 内容定位字段入表（territory / differentiation / goals） | 老用户数据与功能零变化；身份从"人设"升为"定位" |
-| 四 09-24 | **渠道挂根**（`channel_accounts.positioning_id` + 公共档案字段：昵称 / 简介 / 头像，agent 可基于定位起草）+ 定位页三分区（内容定位 / 人设定位 / 平台定位）+ sidebar「人设」→「定位」+ composer 身份控件随根改名 + **定位对话化**（chat 诊断产出定位草案 + 确认环节——骑 B2 的 ask/brief 机器）+ 回归 harness 全绿 +【验收】🎯 **身份复利资产就绪** | 每个渠道账号知道自己属于哪个定位；身份一页收齐；定位聊出来不靠填表 |
+| 一 09-28 | **Memory（persona）模块迭代**（风格学习 + 校准回路 + Voice DNA 强化——删改痕迹回流 persona 校准，已通过 Operation Model 落地）+ 失败步人格偏移监控 | 产物越用越像你，校准有反馈回路 |
+| 二 09-29 | **Persona 显化深化**（风格六件编辑 + 声纹 dub 现状机制不动 + 皮肤块现状不动；用户能看清"AI 学到了我什么 / 在哪里学的 / 哪里不对"） | 维修点从"产品黑盒"变成"我能看懂的特征表" |
+| 三 09-30 | **账号体系绑定**（positioning root 落地）`personas`→`positionings` 全栈改名（表 + Alembic / FK 网 / 端点 / 前端路由 / i18n / 存储前缀）+ 内容定位字段入表（territory / differentiation / goals） | 老用户数据与功能零变化；身份从"人设"升为"定位" |
+| 四 10-01 | **渠道挂根**（`channel_accounts.positioning_id` + 公共档案字段：昵称 / 简介 / 头像，agent 可基于定位起草）+ 定位页三分区（内容定位 / 人设定位 / 平台定位）+ sidebar「人设」→「定位」+ composer 身份控件随根改名 + **定位对话化**（chat 诊断产出定位草案 + 确认环节——骑 B2 的 ask/brief 机器）+ 回归 harness 全绿 +【验收】🎯 **身份复利资产就绪** | 每个渠道账号知道自己属于哪个定位；身份一页收齐；定位聊出来不靠填表 |
 
-### 第十周（09-25 ~ 10-01）：**运营端（下）——端到端联调 + 质量飞跃**
+### 第十周（10-02 ~ 10-08）：**运营端（下）——端到端联调 + 质量飞跃**
 
 > 收口三周运营端。home 改版 + 全链联调 + 闭环质量验证。**"用户到来即彷徨"每次访问都要答案**（STRATEGY §5）——这一周是产品从"能跑通"走向"让人感觉到质量"的临界点。
 
 | 日 | 交付 | 验收口径（用户视角） |
 |---|---|---|
-| 五 09-25 | **home 改版**（回访态 = 选题管道 + 最近产物 + 渠道状态；首次态保留配方卡接住；composer 保留但主 CTA 是选题卡） + 素材上提（assets 归根 = 定位级素材档案） | 老用户打开产品第一眼看到"下一条做什么"；"我所有的素材"一处可见 |
-| 一 09-28 | **端到端联调**（首轮对话定定位 → 选题 → 生成 → 精修 → 发布全链；不同 persona + 不同选题组合） | 运营闭环全程走通 |
-| 二 09-29 | **闭环质量验证**（多 persona × 多选题组合 + 多平台 × 多语言组合）：发现的问题当天修 | 各类用户群都能稳定走通闭环 |
-| 三 09-30 | 修复 + 优化（节奏 / 运镜 / 风格保真等 L2 质量控制补齐打分门槛 / 维度明细 / persona 保真 / 术语表） | 产物"像不像 AI 写的"问题收敛 |
-| 四 10-01 | 【验收+缓冲】🎯 **运营端闭环 + 质量飞跃** | 定位可共建、选题驱动回访、渠道有所属、persona 复利沉淀中；产出物带着可辨认的个人印记——产品开始有"高端大气的 agents 团队"的味道 |
-
-### 第十一周（10-02 ~ 10-08）：**支付实际开发 + 分发联调**
-
-> 在 W7 落定的积分+支付联合架构上接入实际支付商 + LinkedIn / TikTok OAuth 发布链路。⚠️ 入驻审批 / 开发者权限到位为前提——没过审则吃 W13 缓冲。
-
-| 日 | 交付 | 验收口径（用户视角） |
-|---|---|---|
-| 五 10-02 | **支付接入**（供应商对接 + 沙盒创建订阅）+ 订阅生命周期（续费 / 升级 / 取消）+ webhook 事件测试 | 可以在线订阅付费；升级、续费、取消都自助 |
-| 一 10-05 | **套餐权益执行**（额度检查 / 超限提示 / 周期重置——用户级余额不足入流灰行 vs provider 额度两词分开） | 自己套餐含多少、用了多少、什么时候重置清清楚楚 |
-| 二 10-06 | **用户计费中心**（用量、明细、套餐页入口；W7 钱包架构消费面） | 每笔消费有据可查 |
-| 三 10-07 | **LinkedIn / TikTok OAuth 发布链路**（开发者权限到位 ⚠️）+ 双平台发布链路验收（成功 / 失败 / 授权过期进通知中心） | 产物一键发到 LinkedIn / TikTok；发布结果有通知 |
-| 四 10-08 | 端到端联调（订阅 → 使用 → 查账 → 管理套餐 + 发布到渠道全链）+【验收】🎯 **商业化闭环 + 分发就绪** | 从免费到付费的完整体验；产物有去处 |
+| 五 10-02 | **home 改版**（回访态 = 选题管道 + 最近产物 + 渠道状态；首次态保留配方卡接住；composer 保留但主 CTA 是选题卡） + 素材上提（assets 归根 = 定位级素材档案） | 老用户打开产品第一眼看到"下一条做什么"；"我所有的素材"一处可见 |
+| 一 10-05 | **端到端联调**（首轮对话定定位 → 选题 → 生成 → 精修 → 发布全链；不同 persona + 不同选题组合） | 运营闭环全程走通 |
+| 二 10-06 | **闭环质量验证**（多 persona × 多选题组合 + 多平台 × 多语言组合）：发现的问题当天修 | 各类用户群都能稳定走通闭环 |
+| 三 10-07 | 修复 + 优化（节奏 / 运镜 / 风格保真等 L2 质量控制补齐打分门槛 / 维度明细 / persona 保真 / 术语表） | 产物"像不像 AI 写的"问题收敛 |
+| 四 10-08 | 【验收+缓冲】🎯 **运营端闭环 + 质量飞跃** | 定位可共建、选题驱动回访、渠道有所属、persona 复利沉淀中；产出物带着可辨认的个人印记——产品开始有"高端大气的 agents 团队"的味道 |
 
 ### 第十二周（10-09 ~ 10-15）：**法务 + AI 合规 + 上线配套**
 
@@ -402,6 +411,7 @@
 | TRANSCRIPT 资产生产侧语言印记 | P2 | 无（消费侧已在：`_project_source_language` 读 `meta.language`，08-28 P2 扩展至 TRANSCRIPT） | quote-cards v3 P3 烘焙登记：视频/音频由 ASR 盖 `meta.language`，文本族 processors（transcript / docx / pdf 上传链）不盖章——alt 推导对纯文稿项目缺源语言锚（烘焙脚本手工盖章绕过）；盖章点 = 各 text processor 完工处（语言探测或上传者声明） |
 | verify judge QuoteReadability schema 回归 | P2 | agent 调用台账（上方 P1 行——outcome 分类天然承载此类回归的取证） | 2026-08-28 两轮烘焙 2/2 命中：MiniMax 对 QuoteReadability 出 per-quote 裸数组（`[{quote, context_read, standalone, issue}, …]`），pydantic 期 object，schema repair 一轮仍败，`verify_judge_failed` 后 verify 降级完成（产物不受影响，judge 信号缺失）；修法 = prompt/schema 对齐或裸数组→wrapper 边界归一 |
 | S41 media_text_fallback × repair 组合漂移 | P2 | agent 调用台账（同上——funnel 行为的取证面） | 2026-08-29 全套件跑红揪出（main 上既有，非 quote-cards 轮引入——base.py 与断言自 HEAD 起均未动）：S41 7a 期"media 降级在 attempt 内部完成、不吃 repair 轮（pre-echo）"，实际 schema 拒绝直接烧掉 repair 轮且媒体未降级（payload 仍 parts 表 + 带回显）；生产两处 `media_text_fallback=True`（clips agents / registry:91）在册；修法 = base.py 降级时机回 attempt 内，或断言改述现行为 |
+| ~~孤儿 hold 回收（project 删除即解冻 / reaper）~~ | — | — | **✅ 09-05 当日兑现（P1 不跨夜）**：删除端点同事务退未结 hold（非 RUNNING）+ 收官路径台账自结算（`_release_orphaned_hold`，run/项目已删双路）+ `finalize_stuck_runs` 大小写潜伏 bug 修复（`'RUNNING'` 死匹配从未生效）；剧本 S15 锁删除路径（RUNNING 在途归 worker 收官）；dev 存量 7 笔按业务决定不手工补（尺子 ○ known-open 豁免）——条目关闭 |
 | ~~对话工作流升级（B1 改名批 + B2 brief 账本/ask + B3 预填评审卡）~~ | — | — | **已排期（2026-09-03 拍板，W7 即日动工 09-03~09-08，ADR-052）——条目关闭** |
 | ~~research 节点试点（有界 loop 节点，B4）~~ | — | — | **已排期（2026-09-03 拍板「立即」，随对话工作流批 09-09~09-10）——条目关闭** |
 

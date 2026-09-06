@@ -189,6 +189,10 @@ export interface FlowViewProps {
    * = fit / +) parked top-right. Explore surfaces only — a fit-locked
    * surface has no zoom business, so the prop is ignored there. */
   controls?: boolean
+  /** Extra classes for the controls' Panel (2026-09-06): the project page
+   * offsets the zoom pill clear of the open chat panel (a fixed right
+   * margin) so it never sits under the frost. */
+  controlsClassName?: string
   /** Birth choreography (ADR-036 补记 3, growth-driven since ADR-051): the
    * ids of nodes that appeared while the surface was mounted (placeholder
    * materialization, in-place fills, revision growth) — they enter staggered

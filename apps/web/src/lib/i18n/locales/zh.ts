@@ -38,6 +38,27 @@ const zh: Resources = {
     networkError: "网络错误，请检查连接",
     skipToContent: "跳到主要内容",
   },
+  credits: {
+    range: "约 {{low}}–{{high}} 积分",
+    insufficient: "积分不够了——当前余额 {{balance}}，这次生成约需 {{required}}。",
+    negativeNote: "上次实际花费超出预估，差额已记账，充值后继续。",
+    // 项目页左下角积分 pill 与其弹窗（BILLING §7 读面，2026-09-06）。
+    balance: "余额",
+    held: "预占中",
+    recent: "最近变动",
+    tx: {
+      empty: "暂无变动",
+      kind: {
+        grant: "赠送",
+        purchase: "购买",
+        hold: "预扣",
+        capture: "实扣",
+        release: "释放",
+        refund: "退款",
+        adjust: "调整",
+      },
+    },
+  },
   nav: {
     home: "首页",
     personas: "人设",
@@ -496,6 +517,7 @@ const zh: Resources = {
       promptTitle: "示例提示词",
       promptPlaceholder: "说说你想做什么…",
       send: "生成",
+      estimate: "典型消耗：约 {{low}}–{{high}} 积分",
     },
     "multilingual-subs": {
       title: "多语言字幕",
@@ -959,6 +981,12 @@ const zh: Resources = {
       // logo 点；agent 发言 / 提问 / 焦点会唤回。
       hide: "收起聊天",
       show: "展开聊天",
+      // 右侧 docked 面板的细长 header 标题（2026-09-06 三形态机）。
+      panelTitle: "对话",
+      // 面板几何切换（2026-09-06，FLORA「Dock panel」对齐）：浮动 = 雾面卡
+      // 浮于 full-bleed 画布上（默认）；停靠 = 靠右齐边全高，仍是雾面。
+      dockPanel: "停靠面板",
+      floatPanel: "浮动面板",
       // dock 常驻免责行（ADR-051，2026-08-31 —— FLORA FAUNA 行逐字镜像，
       // 用户拍板；基础形态钉在输入区上方，提问形态随输入行隐藏）。
       honesty: "Repurposer 是 AI，可能出错。重要信息请核对。",

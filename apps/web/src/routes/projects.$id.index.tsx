@@ -11,6 +11,7 @@ import { ClipDetailModal } from "@/components/results/ClipDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
+import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/components/flow/types"
 import type { RunFlowAsset } from "@/components/flow/runFlow"
@@ -266,12 +267,27 @@ function ProjectDetailPage() {
   // The page's two-form choreography driver (2026-09-02 形态机): has the
   // project ever started a run? False = the pre-generation world (centered
   // fullscreen chat + back pill, no canvas); the first run's arrival flips
-  // it true — the dock morphs full → dock, the canvas fades in, and the
-  // back pill crossfades into the full ProjectMenu, all on one beat. The
+  // it true — the chat stage fades out in place (300ms), the canvas fades
+  // in on a slight delay, and the back pill crossfades into the full
+  // ProjectMenu, all on one beat (2026-09-06 fade-simplified: the old
+  // grid-rows collapse read as the chat flying up, user-retired). The
   // loading/error early returns below guarantee this is settled at first
   // render, so projects WITH runs mount straight in the dock world (the
   // hydrated first frame never replays the morph).
   const hasRuns = latestRun != null
+  // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
+  // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
+  // never an in-flow column): the canvas's top-right zoom pill steps clear
+  // ONLY when the geometry can cover it — docked is full-height; float
+  // starts ~18% down and never reaches the corner (the uniform offset's
+  // dead zone above the float panel was user-caught same-day). The dock
+  // reports its tucked-away state + geometry up.
+  const [panelState, setPanelState] = useState({
+    hidden: false,
+    docked: false,
+  })
+  const panelCoversCorner =
+    hasRuns && !isMobile && !panelState.hidden && panelState.docked
 
   useEffect(() => {
     setLoading(true)
@@ -842,7 +858,9 @@ function ProjectDetailPage() {
     // lives OUTSIDE the _app layout — no sidebar / header / title block.
     // Floating chrome: the project menu (top-left) + the canvas's own zoom
     // pill (top-right, FlowView `controls`); the canvas fills the viewport,
-    // the chat dock floats at the bottom (click-through above itself). App
+    // the chat dock floats at the bottom on mobile / docks as the right
+    // panel on desktop (2026-09-06 三形态机: md+ = flex row, the panel is an
+    // in-flow column and the canvas makes room — FLORA docked mode). App
     // chrome (theme / language / notifications) lives in the studio shell —
     // 2026-08-19 走查拍板, confirmed to cover MOBILE too (nearest entry =
     // back to /projects).
@@ -912,22 +930,26 @@ function ProjectDetailPage() {
            node born while the surface watches enters staggered in compile
            order (placeholders materialize, fills birth in place), a running
            placeholder carries the FLORA wipe, and the hydrated first frame
-           never replays. The canvas is FULL-BLEED — the dock is a
+           never replays. The canvas is FULL-BLEED — the dock/panel is a
            completely floating layer above it, never a layout reservation
-           (no safe-area padding: reserving space IS the occlusion). A node
-           passing under the dock is panned back into view — the canvas is
-           explore navigation. The whole canvas is gated on hasRuns (2026-09-02
+           (no safe-area padding: reserving space IS the occlusion; 2026-09-06
+           the panel's in-flow flex-row cut was user-retired same-day — the
+           frost must have the canvas living beneath it). A node passing
+           under the dock is panned back into view — the canvas is explore
+           navigation. The whole canvas is gated on hasRuns (2026-09-02
            形态机): pre-generation it is invisible + inert (the full-form chat
            stage owns the page); the first run's arrival fades it in on the
-           same beat as the dock's morph. */
+           same beat as the stage's fade-out — 500ms on a 150ms delay
+           (2026-09-06 fade-simplified). */
         <div
           className={cn(
-            "min-h-0 flex-1 transition-opacity duration-900 ease-out motion-reduce:transition-none",
+            "min-h-0 flex-1 transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
             !hasRuns && "pointer-events-none opacity-0"
           )}
         >
           <ResultsCanvas
             className="h-full"
+            controlsClassName={panelCoversCorner ? "md:!mr-[424px]" : undefined}
             assets={canvasAssets}
             steps={latestRun?.steps ?? []}
             outputs={outputs}
@@ -970,10 +992,10 @@ function ProjectDetailPage() {
            iPad width); the same chat dock floats over it. pt-16 clears the
            floating chrome; pb-36 keeps the last card above the dock. Same
            hasRuns gate as the canvas — the list fades in with the first
-           run. */
+           run (same 500ms/150ms-delay beat as the stage's fade-out). */
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-900 ease-out motion-reduce:transition-none",
+            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
             !hasRuns && "pointer-events-none opacity-0"
           )}
         >
@@ -999,13 +1021,17 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The two-form machine (2026-09-02 形态机): pre-first-run the dock
-        // is the centered fullscreen chat; the first run's arrival morphs
-        // it to the bottom dock (the canvas fades in on the same beat).
-        // Projects WITH runs mount straight in "dock" — the loading gate
-        // above settles hasRuns before first render, so the hydrated first
-        // frame never replays the morph.
-        form={hasRuns ? "dock" : "full"}
+        // The three-form machine (2026-09-06, FLORA-aligned): pre-first-run
+        // the dock is the centered fullscreen chat; the first run's arrival
+        // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
+        // the full-bleed canvas, float / docked-right geometry toggled in
+        // its header) or the MOBILE bottom dock ("dock", unchanged).
+        // The stage fades out in place, the canvas fades in on a slight
+        // delay on the same beat. Projects WITH runs mount straight in
+        // "panel"/"dock" — the loading gate above settles hasRuns before
+        // first render, so the hydrated first frame never replays the morph.
+        form={!hasRuns ? "full" : isMobile ? "dock" : "panel"}
+        onPanelStateChange={setPanelState}
         prompt={
           firstMessage?.text ??
           pendingBrief?.prompt ??
@@ -1048,6 +1074,20 @@ function ProjectDetailPage() {
           void fetchCanvasAssets()
         }}
       />
+
+      {/* The credits balance pill (BILLING §7 read surface, 2026-09-06) —
+          bottom-left on the desktop project page: the one surface where
+          credits are spent AND no studio shell carries the account console.
+          Post-first-run only (the pre-run fullscreen chat owns the bottom
+          row); the pill itself is hidden below md (the mobile dock owns the
+          small screen's bottom edge). refreshKey rides the latest run's
+          id+status — a run's hold/capture settles server-side and the pill
+          refetches on the flip. */}
+      {hasRuns && (
+        <CreditsPill
+          refreshKey={latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"}
+        />
+      )}
 
       {detailOutput && (
         <ClipDetailModal

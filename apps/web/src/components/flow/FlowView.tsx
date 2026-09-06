@@ -177,13 +177,13 @@ function GroupFrames({
  * the 任务书 node. Explore surfaces only (the parent gates it). Subscribes
  * to zoom ONLY (transform[2]) — useViewport's {x,y,zoom} shallow compare
  * would re-render the pill on every pan frame. */
-function FlowControls() {
+function FlowControls({ className }: { className?: string }) {
   const { t } = useTranslation()
   const rf = useReactFlow()
   const zoom = useStore((s) => s.transform[2])
   const fit = () => void rf.fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })
   return (
-    <Panel position="top-right" className="!m-3 md:!m-4">
+    <Panel position="top-right" className={cn("!m-3 md:!m-4", className)}>
       <button
         type="button"
         aria-label={t("results.canvas.zoomFit")}
@@ -212,6 +212,7 @@ export function FlowView({
   onPaneClick,
   navigation = "fit",
   controls = false,
+  controlsClassName,
   bornIds,
   groups = [],
   dots = false,
@@ -347,7 +348,7 @@ export function FlowView({
         />
         {/* The zoom pill is canvas chrome for explore surfaces only — a
             fit-locked surface has no zoom business (the prop is ignored). */}
-        {explore && controls && <FlowControls />}
+        {explore && controls && <FlowControls className={controlsClassName} />}
       </ReactFlow>
     </div>
   )

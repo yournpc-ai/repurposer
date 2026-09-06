@@ -36,6 +36,40 @@ const en = {
     networkError: "Network error — check your connection",
     skipToContent: "Skip to content",
   },
+  credits: {
+    /** The one estimate range form every surface shares (dock total /
+     * per-task price / — three surfaces, one source, BILLING §7). */
+    range: "~{{low}}–{{high}} credits",
+    /** The user-level shortfall grey row (BILLING §7, 2026-09-10) — strictly
+     * two vocabularies with the provider's 402 line. Factual, no CTA: the
+     * purchase entry is W11, so there is nothing to sell yet. */
+    insufficient:
+      "Not enough credits — your balance is {{balance}}, this run needs about {{required}}.",
+    /** BILLING §5: a NULL-estimate run may settle the balance negative — the
+     * number shows honestly and this note explains it (account console /
+     * credits pill). No top-up CTA yet — the purchase entry is W11. */
+    negativeNote:
+      "Your last run cost more than estimated — the difference has been recorded. Top up to continue.",
+    /** The project page's bottom-left credits pill and its popover
+     * (BILLING §7 read surface, 2026-09-06). */
+    balance: "Balance",
+    held: "Held in active runs",
+    recent: "Recent activity",
+    tx: {
+      empty: "No transactions yet",
+      /** Ledger kind labels (BILLING §2 vocabulary; server kinds are
+       * free-form strings — unknown kinds render raw). */
+      kind: {
+        grant: "Grant",
+        purchase: "Purchase",
+        hold: "Hold",
+        capture: "Spent",
+        release: "Released",
+        refund: "Refund",
+        adjust: "Adjustment",
+      },
+    },
+  },
   nav: {
     home: "Home",
     personas: "Personas",
@@ -509,6 +543,9 @@ const en = {
       promptTitle: "Example prompt",
       promptPlaceholder: "What do you want to make?",
       send: "Generate",
+      /** 估价贴: the card's credits quotation on the typical source,
+       * rendered above the send button (BILLING §7). */
+      estimate: "Typical cost: ~{{low}}–{{high}} credits",
     },
     "multilingual-subs": {
       title: "Multilingual captions",
@@ -988,6 +1025,13 @@ const en = {
       // recall it.
       hide: "Hide chat",
       show: "Show chat",
+      // The right-docked panel's slim header label (2026-09-06 三形态机).
+      panelTitle: "Chat",
+      // The panel's geometry toggle (2026-09-06, FLORA "Dock panel" parity):
+      // float = frosted card over the full-bleed canvas (default); docked =
+      // flush right edge full-height, still frosted.
+      dockPanel: "Dock panel",
+      floatPanel: "Float panel",
       // The dock's resident disclaimer (ADR-051, 2026-08-31 — the FLORA
       // FAUNA-line, VERBATIM per user ruling; docked above the input area
       // in the base form, hidden with it on the question morph).

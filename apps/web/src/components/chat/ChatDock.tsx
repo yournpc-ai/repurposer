@@ -37,7 +37,9 @@ import {
   Minus,
   Music,
   Newspaper,
+  PanelRight,
   Paperclip,
+  PictureInPicture2,
   Plus,
   Quote,
   Square,
@@ -49,7 +51,11 @@ import {
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
-import { streamAnswer, streamChat } from "@/lib/chat-stream"
+import { streamAnswer, streamChat, StreamTurnError } from "@/lib/chat-stream"
+import {
+  asCreditsInsufficient,
+  type CreditsInsufficientDetail,
+} from "@/lib/credits"
 import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
@@ -259,6 +265,9 @@ const LEGACY_SLOT_TO_TOOL: Record<string, string> = {
   carousel: "write_carousel",
   article: "write_article",
 }
+
+/** The panel geometry's persistence key (float | docked) — 2026-09-06. */
+const PANEL_MODE_KEY = "repurposer-panel-mode"
 
 function normalizeTasks(raw: unknown): TaskItem[] {
   if (!Array.isArray(raw)) return []
@@ -471,7 +480,13 @@ interface OverlayMessage {
 interface QuestionPayload {
   kind: "task_book" | "question"
   options?: { id: string; label: string }[]
-  estimate?: string | null
+  /** The dock's credits quotation (BILLING §7): task_book only — total
+   * [low, high] + the per-task marginal range aligned by task index (Σ
+   * per_task ≡ total exactly; null = the task adds no quoted cost). */
+  estimate_credits?: {
+    total: [number, number]
+    per_task: ([number, number] | null)[]
+  } | null
   /** 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
    * dock time; the plan card renders its valued slots. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
@@ -549,15 +564,21 @@ function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
 interface ChatDockProps {
   projectId: string
   prompt: string
-  /** The dock's form (2026-09-02 两态形态机): "full" = the pre-generation
-   * centered fullscreen chat (the message stage fills the page above the
-   * input group); "dock" = the bottom dock over the canvas. The page drives
-   * it off `latestRun` — the first run's arrival morphs full → dock with a
-   * grid-rows collapse transition (the canvas fades in on the same beat).
-   * One message machine, pure layout forms — NOT the retired overlay route /
-   * second shell (ADR-051). Projects with runs mount straight in "dock"
-   * (the hydrated first frame never replays). */
-  form?: "full" | "dock"
+  /** The dock's form (2026-09-02 两态形态机; 2026-09-06 三形态机): "full" =
+   * the pre-generation centered fullscreen chat (the message stage fills
+   * the page above the input group); "panel" = the DESKTOP chat panel — a
+   * FROSTED OVERLAY on the full-bleed canvas in two parking geometries
+   * (float = right-anchored floating window, vertically inset ~18%/10%,
+   * the default; docked = flush right edge full-height — the header's
+   * dock toggle, FLORA "Dock panel" parity; the canvas lives under the
+   * frost in BOTH, never an in-flow column); "dock" = the MOBILE bottom dock. The page drives it
+   * off `latestRun` — the first run's arrival morphs full → panel/dock:
+   * the stage fades out in place (300ms) and the canvas fades in on a
+   * slight delay on the same beat. One message machine, pure layout forms
+   * — NOT the retired overlay route / second shell (ADR-051). Projects
+   * with runs mount straight in "panel"/"dock" (the hydrated first frame
+   * never replays). */
+  form?: "full" | "dock" | "panel"
   /** The composer's draft, handed over via router state: sent as the first
    * /chat message on mount (mentions + persona choice ride along). Null on
    * restored sessions — the conversation is already on the server. */
@@ -596,6 +617,11 @@ interface ChatDockProps {
    * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
    * from the first beat, not only at terminal. One-shot per run. */
   onRunStarted?: (runId: string) => void | Promise<void>
+  /** The panel's tucked-away state AND parking geometry (panel form only)
+   * — the page offsets the canvas's top-right zoom pill clear of the panel
+   * only when it can actually be covered (docked = full-height; float
+   * starts ~18% down and never reaches the pill). */
+  onPanelStateChange?: (state: { hidden: boolean; docked: boolean }) => void
 }
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
@@ -979,44 +1005,87 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   onFocusChange,
   onComplete,
   onRunStarted,
+  onPanelStateChange,
 }, ref) {
   const { t } = useTranslation()
 
-  // The dock is the SOLE shell (ADR-051, 2026-08-31) with TWO layout forms
-  // (2026-09-02 形态机): before the project's first run it is the centered
-  // fullscreen chat (the message stage owns the page above the input group —
-  // the canvas has nothing to show yet); the first run's arrival morphs it
-  // into the bottom dock. Same message machine, same input group (immutable
-  // slot, zero displacement) — only the stage above it collapses.
+  // The dock is the SOLE shell (ADR-051, 2026-08-31) with THREE layout forms
+  // (2026-09-06 三形态机, FLORA-aligned): before the project's first run it is
+  // the centered fullscreen chat ("full" — the message stage owns the page
+  // above the input group); the first run's arrival morphs it into the
+  // DESKTOP panel ("panel" — a FROSTED OVERLAY on the full-bleed canvas in
+  // two parking geometries: float / docked-right, FLORA "Dock panel" parity)
+  // or the MOBILE bottom dock ("dock"). Same message machine, same input
+  // group (immutable slot, zero displacement) — the tree below is
+  // form-stable (one root, one always-rendered card wrapper, fixed child
+  // indexes), so the MentionEditor never remounts across a runtime form flip
+  // and its DOM-owned draft + mention chips survive untouched.
   const full = form === "full"
+  const dock = form === "dock"
+  const panel = form === "panel"
   /** History region (dock D4 修订 — 一体容器两态): in the DOCK form the flow
    * lives INSIDE the input group's container, growing upward; closed = the
    * input group alone (the canvas owns the screen). Agent speech always
-   * raises it (#6). In the FULL form the stage is always on — this flag is
-   * inert, and it resets on the morph so the dock lands collapsed. */
+   * raises it (#6). Dock form ONLY (2026-09-06): in the full form the stage
+   * is always on, and in the panel form the panel body IS the flow — this
+   * flag stays inert in both, and it resets on the morph so the dock lands
+   * collapsed. */
   const [historyOpen, setHistoryOpen] = useState(false)
-  /** The third visibility state (2026-09-02 形态机): the user tucks the whole
-   * dock away to a LogoMark chip at the bottom-right — node-dense canvas
-   * reading and screenshot sharing need the unobstructed graph. Dock form
-   * only; recall triggers (agent speech / a docking question / a canvas
-   * focus) clear it, so the user can only ever hide a STATIC input group,
-   * never new information — prohibition #6 (the dock never goes silent)
-   * survives hiding. The live run's status row is deliberately NOT a recall
-   * trigger: the canvas wipe conveys liveness, and the completion recap is
-   * agent speech, which recalls on its own. */
+  /** The tucked-away state (2026-09-02 形态机; 2026-09-06 extended to the
+   * panel form): the user tucks the whole dock/panel away to a LogoMark chip
+   * at the bottom-right — node-dense canvas reading and screenshot sharing
+   * need the unobstructed graph. Full form only excepted; recall triggers
+   * (agent speech / a docking question / a canvas focus) clear it, so the
+   * user can only ever hide a STATIC input group, never new information —
+   * prohibition #6 (the dock never goes silent) survives hiding. The live
+   * run's status row is deliberately NOT a recall trigger: the canvas wipe
+   * conveys liveness, and the completion recap is agent speech, which
+   * recalls on its own. */
   const [dockHidden, setDockHidden] = useState(false)
-  /** History-raising funnel: every setHistoryOpen(true) also recalls the
-   * hidden dock — the two are independent (collapsed ≠ hidden) but no path
-   * may raise the history while the dock stays tucked away. */
+  // The panel's two parking geometries (2026-09-06 用户拍板, FLORA "Dock
+  // panel" parity): FLOAT (the default) = a frosted floating WINDOW
+  // anchored right, vertically inset ~18%/10% (FLORA-measured — a window,
+  // not a full-height sheet); DOCKED = snapped flush to the right edge
+  // full-height. BOTH are overlays on the full-bleed canvas — the frost
+  // must have the canvas living beneath it, never an in-flow column that
+  // stops the canvas at the panel's edge (the first cut's md:flex-row was
+  // user-retired same-day). Persisted per browser; ChatDock mounts
+  // post-gate on the client, so the lazy initializer reads localStorage
+  // with no SSR/hydration fork.
+  const [panelDocked, setPanelDocked] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(PANEL_MODE_KEY) === "docked",
+  )
+  const togglePanelDocked = useCallback(() => {
+    setPanelDocked((docked) => {
+      const next = !docked
+      try {
+        window.localStorage.setItem(PANEL_MODE_KEY, next ? "docked" : "float")
+      } catch {
+        /* storage denied — session-only then */
+      }
+      return next
+    })
+  }, [])
+  // The page offsets the canvas's top-right zoom pill clear of the panel
+  // only when the geometry can cover it (docked = full-height).
+  useEffect(() => {
+    onPanelStateChange?.({ hidden: dockHidden, docked: panelDocked })
+  }, [dockHidden, panelDocked, onPanelStateChange])
+  /** History-raising funnel: recalls the hidden dock/panel, and raises the
+   * history region — dock form only (in the panel the flow is always on;
+   * writing historyOpen there would only mute the run status row, whose
+   * condition reads !historyOpen). */
   const raiseHistory = useCallback(() => {
     setDockHidden(false)
-    setHistoryOpen(true)
-  }, [])
-  // The stage's scroller stays mounted through the collapse transition
-  // (grid-rows 1fr → 0fr animates over 700ms — paced with the canvas fade
-  // below so the full→dock morph reads as ONE beat, 2026-09-04) and unmounts
-  // right after — cutting it at the flip would freeze the content
-  // mid-collapse.
+    if (dock) setHistoryOpen(true)
+  }, [dock])
+  // The stage's scroller stays mounted through the fade-out (300ms
+  // opacity — paced with the canvas's delayed fade-in so the morph reads
+  // as ONE beat, 2026-09-06) and unmounts right after — cutting it at the
+  // flip would freeze the content mid-fade. In the PANEL form the stage
+  // region IS the panel body — the scroller never unmounts there.
   const [stageMounted, setStageMounted] = useState(full)
   useEffect(() => {
     if (full) {
@@ -1026,9 +1095,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       return
     }
     setHistoryOpen(false)
-    const id = setTimeout(() => setStageMounted(false), 750)
+    const id = setTimeout(() => setStageMounted(false), 300)
     return () => clearTimeout(id)
-  }, [full])
+  }, [full, form])
+  // The panel's entrance beat: only the full→panel MORPH replays it (a
+  // straight-to-panel mount — refresh, history — has stageMounted=false
+  // and never replays; 水合首帧永不重播). Reads stageMounted at the flip;
+  // deliberately not a dep — the latch clearing it 300ms later must not
+  // retrigger this effect.
+  const [panelEnter, setPanelEnter] = useState(false)
+  useEffect(() => {
+    if (form !== "panel" || !stageMounted) return
+    setPanelEnter(true)
+    const id = setTimeout(() => setPanelEnter(false), 600)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form])
   useImperativeHandle(ref, () => ({
     closeHistory: () => setHistoryOpen(false),
     insertMention: (mention: ChatMention) =>
@@ -1116,6 +1198,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [input, setInput] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
+  // The thinking row covers ONLY send → first delta (its own design intent,
+  // :3422): once a streaming preview has existed this turn the preview IS
+  // the progress indicator, and the row must never come back — a settle
+  // window (the docked book's `await fetchPendingBrief()`) still has
+  // chatBusy=true with no `streaming` message, and a `!streaming`-derived
+  // gate re-opens there and flashes the row below the finished text.
+  const [previewSeen, setPreviewSeen] = useState(false)
   // The editor is DOM-owned (MentionEditor): `input`/`mentions` are its
   // onChange mirrors, kept only as the send payload; the live-text ref backs
   // the failed-turn rollback's "don't clobber fresh typing" guard.
@@ -1497,6 +1586,30 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void onRunStartedRef.current?.(runId)
   }, [])
 
+  /** Land the user-level shortfall as the in-flow grey row (BILLING §7 — the
+   * 422's typed form, never a toast): the meta:"error" seat turn.failed
+   * already uses. The question stays docked (the server settled nothing and
+   * committed nothing), so Start can be retried once the balance recovers. */
+  const pushCreditsGreyRow = useCallback(
+    (d: CreditsInsufficientDetail) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: t("credits.insufficient", {
+            balance: d.balance,
+            required: d.required,
+          }),
+          meta: "error",
+          at: new Date().toISOString(),
+        },
+      ])
+      raiseHistory()
+    },
+    [t, raiseHistory],
+  )
+
   const handleStartGeneration = useCallback(async () => {
     // runId && !terminal: a run is LIVE — starting now would double-launch.
     // (A terminal run does NOT block: the dock's refinement Start launches
@@ -1513,16 +1626,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // "start" is a first-class answer kind (no magic option id); the
         // panel's edited task book rides along so hand edits (slots marked
         // explicit) reach the run instead of the stale stored intent.
+        // toast:false — the start path surfaces its own failures: the
+        // structured credits 422 as the grey row, anything else inline.
         const res = await apiFetch(
           `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
           {
             method: "POST",
             body: { kind: "start", autonomy, intent },
+            toast: false,
           },
         )
         if (!res.ok) {
-          const detail = await res.json().catch(() => ({}))
-          throw new Error(detail.detail || "Generation failed")
+          const body = await res.json().catch(() => ({}))
+          const credits = asCreditsInsufficient(body?.detail)
+          if (credits) {
+            pushCreditsGreyRow(credits)
+            return
+          }
+          throw new Error(
+            typeof body?.detail === "string" && body.detail
+              ? body.detail
+              : t("generationOverlay.failed"),
+          )
         }
         const answered = ((await res.json()) as { answered_question: QuestionMessage }).answered_question
         if (!answered.workflow_run_id) throw new Error("Generation failed")
@@ -1549,10 +1674,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           instruction: intent.specific_instruction || prompt,
           autonomy,
         },
+        toast: false,
       })
       if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        throw new Error(detail.detail || "Generation failed")
+        const body = await res.json().catch(() => ({}))
+        const credits = asCreditsInsufficient(body?.detail)
+        if (credits) {
+          pushCreditsGreyRow(credits)
+          return
+        }
+        throw new Error(
+          typeof body?.detail === "string" && body.detail
+            ? body.detail
+            : t("generationOverlay.failed"),
+        )
       }
       const data = (await res.json()) as { run_id: string }
       setRunId(data.run_id)
@@ -1566,7 +1701,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // is exactly how "typed an answer, send does nothing" happens.
       setIsStarting(false)
     }
-  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun])
+  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun, pushCreditsGreyRow])
 
   /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
    * NON-blocking — the input group stays live below it, so "don't start" is
@@ -1797,20 +1932,26 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * a plain assistant message).
    * QA 只归真问答（2026-09-05 用户拍板）：task_book 的 start 确认永不入
    * QA 块——QA 是「用户做 option 选择」的 UI，start（无论 chat 文本还是
-   * pill 手势）不是问答；薄书的记录 = echo 散文 + 用户原话 + run 收据行。 */
-  const pushAnsweredQuestion = (message: QuestionMessage) => {
-    if (!message.answer) return
+   * pill 手势）不是问答；薄书的记录 = echo 散文 + 用户原话 + run 收据行。
+   * Builder form (2026-09-06): the streamAnswer settle SPLICES the row at
+   * the optimistic block's own index (the preview right after it must not
+   * remount); pushAnsweredQuestion keeps the append-at-end ordering for
+   * paths without a live preview. */
+  const buildAnsweredQuestionRow = (
+    message: QuestionMessage,
+  ): Omit<OverlayMessage, "id"> | null => {
+    if (!message.answer) return null
     const isTaskBook = message.question?.kind === "task_book"
     // Task-book start confirmations never archive as QA (ruling above).
-    if (isTaskBook) return
+    if (isTaskBook) return null
     if (
       message.question?.kind === "question" &&
       (message.question?.options?.length ?? 0) === 0
     ) {
-      return
+      return null
     }
     const display = answeredQuestionText(message.answer, t, !!message.workflow_run_id)
-    pushMessage({
+    return {
       role: "assistant",
       content: "",
       at: message.created_at,
@@ -1819,7 +1960,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         answer: display.text,
         muted: display.muted,
       },
-    })
+    }
+  }
+  const pushAnsweredQuestion = (message: QuestionMessage) => {
+    const row = buildAnsweredQuestionRow(message)
+    if (row) pushMessage(row)
   }
 
   /** The chat loop's reply: a pending OPTIONS question docks (never enters
@@ -1860,12 +2005,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         (message.question.options?.length ?? 0) === 0
       ) {
         // 形态律 (ADR-053 R1): a text question never docks — render it as a
-        // plain assistant message and leave the input live.
-        pushMessage({
-          role: "assistant",
-          content: message.content ?? "",
-          runId: message.workflow_run_id,
-        })
+        // plain assistant message and leave the input live. echoCarried:
+        // the turn's finalized preview bubble already IS that message.
+        if (!opts?.echoCarried) {
+          pushMessage({
+            role: "assistant",
+            content: message.content ?? "",
+            runId: message.workflow_run_id,
+          })
+        }
         return
       }
       if (message.question.kind === "task_book" && !opts?.echoCarried) {
@@ -1900,11 +2048,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       return
     }
-    pushMessage({
-      role: "assistant",
-      content: message.content ?? "",
-      runId: message.workflow_run_id,
-    })
+    // A plain prose reply. echoCarried: the turn's finalized preview bubble
+    // already carries this prose (its runId was stamped at finalize time).
+    if (!opts?.echoCarried) {
+      pushMessage({
+        role: "assistant",
+        content: message.content ?? "",
+        runId: message.workflow_run_id,
+      })
+    }
   }
 
   /** One endpoint for every turn (intent-surface-unification W2): the server
@@ -1952,10 +2104,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const ctrl = new AbortController()
     abortRef.current = ctrl
     setChatBusy(true)
+    setPreviewSeen(false)
     setThinkingPhase(null)
     const streamId = crypto.randomUUID()
     let streamedAny = false
     const appendDelta = (delta: string) => {
+      if (!streamedAny) setPreviewSeen(true)
       streamedAny = true
       setMessages((prev) =>
         prev.some((m) => m.id === streamId)
@@ -2132,17 +2286,26 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // The failure itself lands in the flow as a gray system row (never a
       // toast — turn.failed is a fact of the conversation). The server
       // commits nothing, so the row is local-only and a refresh drops it.
-      const detail = e instanceof Error ? e.message : t("chat.failed")
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: detail,
-          meta: "error",
-          at: new Date().toISOString(),
-        },
-      ])
+      // A structured credits shortfall (the judged-start 422 riding the
+      // turn.failed frame) takes the shared grey-row seat — 双路同语义
+      // with the typed Start.
+      const credits =
+        e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+      if (credits) {
+        pushCreditsGreyRow(credits)
+      } else {
+        const detail = e instanceof Error ? e.message : t("chat.failed")
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: detail,
+            meta: "error",
+            at: new Date().toISOString(),
+          },
+        ])
+      }
     } finally {
       if (abortRef.current === ctrl) {
         abortRef.current = null
@@ -2248,6 +2411,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const previewId = `answer-preview-${optimisticId}`
     setAnswering(true)
     setChatBusy(true)
+    setPreviewSeen(false)
     setPendingQuestion(null)
     setMessages((prev) => [
       ...prev,
@@ -2268,7 +2432,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // reasoning model tends to deliver the echo in one coarse chunk right
     // before the terminal frame; raw appends read as "popped in at once",
     // which is the exact symptom this stream exists to kill.
+    let previewStreamed = false
     const typewriter = createTypewriter((text) => {
+      if (!previewStreamed) {
+        previewStreamed = true
+        setPreviewSeen(true)
+      }
       setMessages((prev) =>
         prev.some((m) => m.id === previewId)
           ? prev.map((m) =>
@@ -2296,29 +2465,55 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           if (payload.phase) setThinkingPhase(payload.phase)
         },
       })
-      // Envelope wins: drop the optimistic block AND the streaming preview,
-      // then archive the real answered row and land the follow-up (its echo
-      // was already streamed into the preview — handleAssistantMessage's
-      // echo push dedupes against the flow copy by content).
+      // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
+      // 同一纪律): the optimistic block becomes the real answered row AT
+      // ITS OWN INDEX and the streaming preview settles static under the
+      // SAME key — never a remount. The old delete-then-repush remounted
+      // the settled echo and replayed its entrance animation (a visible
+      // flicker right after the last character). The follow-up's prose is
+      // already IN the preview → handleAssistantMessage rides echoCarried.
       typewriter.flush()
       setThinkingPhase(null)
+      const answeredRow = buildAnsweredQuestionRow(data.answered_question)
+      const followUp = data.follow_up
       setMessages((prev) =>
-        prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
+        prev.flatMap((m) => {
+          if (m.id === optimisticId)
+            return answeredRow ? [{ ...answeredRow, id: crypto.randomUUID() }] : []
+          if (m.id === previewId)
+            return [
+              {
+                ...m,
+                runId: followUp?.workflow_run_id ?? m.runId,
+                streaming: false,
+              },
+            ]
+          return [m]
+        }),
       )
-      pushAnsweredQuestion(data.answered_question)
-      if (data.follow_up) await handleAssistantMessage(data.follow_up)
+      if (followUp) {
+        await handleAssistantMessage(followUp, { echoCarried: previewStreamed })
+      }
     } catch (e) {
       // The stream helper rejects with the server's detail (the JSON path's
       // toast semantics — manual here, apiFetch is not in the loop). flush
       // stops the pacing clock — a lingering tick would re-create the
-      // preview right after the rollback removed it.
+      // preview right after the rollback removed it. A structured credits
+      // shortfall skips the toast and lands as the in-flow grey row instead
+      // (双路同语义 with the typed Start).
       typewriter.flush()
       setThinkingPhase(null)
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
       )
       setPendingQuestion(question)
-      toast.error(e instanceof Error ? e.message : t("chat.failed"))
+      const credits =
+        e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+      if (credits) {
+        pushCreditsGreyRow(credits)
+      } else {
+        toast.error(e instanceof Error ? e.message : t("chat.failed"))
+      }
     } finally {
       setAnswering(false)
       setChatBusy(false)
@@ -2647,6 +2842,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // hide. Restored sessions have no echo bubble — the card stays pinned.
   const planCardVisible = phase === "confirm" && intentReady
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
+  /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
+   * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
+  const taskEstimates = pendingQuestion?.question?.estimate_credits?.per_task
   /** 任务书密度律 (ADR-054): the review card + confirm pill are the HEAVY
    * rendering — a chain earns them only with review substance (≥2 tasks).
    * A one-task book is pure prose: the echo bubble (live journey) or this
@@ -2749,6 +2947,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     const meta = TOOL_META[task.tool]
                     if (!meta) return null
                     const { labelKey, Icon } = meta
+                    const estimate = taskEstimates?.[index] ?? null
                     const langParam = meta.langParam
                     const lang = langParam
                       ? (task.params[langParam] as string | undefined) ?? "en"
@@ -2763,11 +2962,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         key={index}
                         className="flex flex-col gap-2 rounded-md bg-card p-3"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="flex items-center gap-1.5 text-sm">
+                        {/* The row wraps at the panel's 336px content width
+                            (2026-09-06 — count stepper / language select /
+                            price fall to a second line instead of
+                            overflowing); at max-w-3xl nothing changes. */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="flex min-w-0 items-center gap-1.5 text-sm">
                             <Icon className="h-3.5 w-3.5" />
                             {t(labelKey)}
                           </span>
+                          {estimate ? (
+                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {t("credits.range", {
+                                low: estimate[0],
+                                high: estimate[1],
+                              })}
+                            </span>
+                          ) : null}
                           {limits && count != null && (
                             <div className="flex items-center gap-1">
                               <Button
@@ -3044,12 +3255,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             <MessageScrollerViewport className="scroll-fade-y">
               {/* Full form: the stage sits under the floating top chrome
                   (the ← Projects pill, ~56px) — extra headroom keeps the
-                  first row clear; the dock form hugs the card's top edge. */}
+                  first row clear; the dock form hugs the card's top edge;
+                  the panel form fills the 400px column (no max-w centering). */}
               <MessageScrollerContent
-                className={cn(
-                  "mx-auto w-full max-w-3xl gap-8 px-4 pb-8",
-                  full ? "pt-16" : "pt-4",
-                )}
+                className={
+                  panel
+                    ? "w-full gap-6 px-3 pb-6 pt-3"
+                    : cn(
+                        "mx-auto w-full max-w-3xl gap-8 px-4 pb-8",
+                        full ? "pt-16" : "pt-4",
+                      )
+                }
               >
                 {/* Opening prompt */}
                 {prompt ? (
@@ -3300,11 +3516,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </MessageScrollerItem>
                 ) : null}
 
-                {/* Thinking row covers send → first delta; once the preview
-                    bubble exists it IS the progress indicator. The label
+                {/* Thinking row covers send → first delta; once a preview
+                    bubble has existed this turn it IS the progress indicator
+                    (previewSeen) — even after it settles static: the docked
+                    book's settle await keeps chatBusy true, and a
+                    streaming-derived gate would flash the row back below
+                    the finished text (2026-09-06 首回合闪烁根修). The label
                     follows the server's phase frames (理解中 → 创建 workflow),
                     falling back to the static copy when no phase arrived. */}
-                {chatBusy && !messages.some((m) => m.streaming) && (
+                {chatBusy && !previewSeen && (
                   <MessageScrollerItem>
                     <ThinkingRow
                       label={
@@ -3341,7 +3561,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         plain
         question={pillQuestion.content ?? ""}
         options={pillQuestion.question?.options ?? []}
-        estimate={pillQuestion.question?.estimate}
         onAnswer={handleOptionAnswer}
         answering={answering}
         onBail={handleBailQuestion}
@@ -3359,6 +3578,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Cancel (non-blocking question = no negative action, stadium 化同批).
   // 任务书密度律 (ADR-054): HEAVY rendering only — a one-task book's
   // confirm is the next chat message, no pill.
+  const taskBookEstimate = pendingQuestion?.question?.estimate_credits?.total
   const taskBookDock =
     phase === "confirm" && intentReady && !chatBusy && !singleTaskBook ? (
       <QuestionDock
@@ -3370,6 +3590,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         onStart={handleStartGeneration}
         starting={isStarting}
         startDisabled={!canStartGeneration || chatBusy}
+        estimate={
+          taskBookEstimate
+            ? t("credits.range", {
+                low: taskBookEstimate[0],
+                high: taskBookEstimate[1],
+              })
+            : null
+        }
       />
     ) : null
   // The folded 打勾 (ADR-051): while a run is live and the history region is
@@ -3394,7 +3622,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             ? t("results.stepper.transcribing")
             : t("results.stepper.queued")
         }
-        onClick={() => setHistoryOpen(true)}
+        onClick={() => {
+          // Dock form only: expands the step log into the history region.
+          // In the panel the flow is already on — the row is display-only.
+          if (dock) setHistoryOpen(true)
+        }}
       />
     ) : null
   const inputBody = (
@@ -3499,8 +3731,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           className="max-h-32 min-h-9 text-sm"
         />
         {/* History toggle — dock form only: in the full form the stage IS
-            the history (always on), so the toggle has no meaning there. */}
-        {!full && (
+            the history (always on), and in the panel form the panel body
+            IS the flow — the toggle has no meaning in either. */}
+        {dock && (
           <Button
             variant="ghost"
             size="icon"
@@ -3516,11 +3749,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             )}
           </Button>
         )}
-        {/* Hide — dock form only: folds the whole dock to the bottom-right
-            LogoMark dot (the user's own gesture; every recall trigger above
-            brings it back). In the full form the chat IS the page — there
-            is nothing to hide to. */}
-        {!full && (
+        {/* Hide — dock form only (the panel's minimize lives in its header):
+            folds the whole dock to the bottom-right LogoMark dot (the user's
+            own gesture; every recall trigger above brings it back). In the
+            full form the chat IS the page — there is nothing to hide to. */}
+        {dock && (
           <Button
             variant="ghost"
             size="icon"
@@ -3563,9 +3796,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     </>
   )
 
-  // The history slot's one condition (2026-09-02 拆粘): dock form + the
-  // stage's collapse latch finished + the region raised.
-  const historySlotOpen = !full && !stageMounted && historyOpen
+  // The history slot's one condition (2026-09-02 拆粘; 2026-09-06 dock-only):
+  // dock form + the stage's fade latch finished + the region raised. In the
+  // panel form the stage region holds the scroller permanently — the slot
+  // must never open there (the two slots never mount it at once).
+  const historySlotOpen = dock && !stageMounted && historyOpen
   // The input container's stadium form (2026-09-02, user-ruled — the FLORA
   // Chat-bar anatomy): rounded-full is correct geometry ONLY on the truly
   // collapsed one-row box. Any second band (run status shimmer / staged
@@ -3574,34 +3809,122 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // frosted layer above (输入框独立层律, 同日用户拍板 — the input group is
   // always a standalone layer, never fused with the message flow), so an
   // open history no longer breaks the stadium. Radius transitions with the
-  // box.
-  const inputStadium = !runStatusRow && staged.length === 0
+  // box. Panel form (2026-09-06): the input sits INSIDE the panel card —
+  // always rounded-xl, the stadium law is dock-only.
+  const inputStadium = !panel && !runStatusRow && staged.length === 0
 
   return (
-    // The dock is click-through by design (the canvas owns the screen): the
-    // root itself must be pointer-events-none too — without it the root box
-    // is still the hit target and swallows every canvas hover/click even
-    // though all children opt out individually. The bottom row's inner
-    // container re-enables events for the input group / history / docks.
-    <div className="pointer-events-none fixed inset-0 z-50 flex flex-col">
-      {/* The message stage (two-form machine, 2026-09-02): the FULL form's
-          chat stage owns the center (grid row 1fr); the DOCK form collapses
-          the row to 0fr so the canvas owns the screen. The grid-template-rows
-          transition IS the full→dock morph — the container keeps flex-1 in
-          both forms, so the fr resolves to stable pixels and the bottom row
-          never moves. The scroller stays mounted through the collapse
-          (stageMounted, 550ms) and unmounts right after; cutting it at the
-          flip would freeze the content mid-collapse. */}
+    <>
+    {/* The dock is click-through by design (the canvas owns the screen): the
+        root itself must be pointer-events-none too — without it the root box
+        is still the hit target and swallows every canvas hover/click even
+        though all children opt out individually. The bottom row's inner
+        container (and the panel card) re-enables events for the input group
+        / history / docks. Form branches (2026-09-06 三形态机): every form's
+        root is the SAME fixed overlay layer — full = the centered stage,
+        dock = the bottom input group, panel = the frosted card parked over
+        the FULL-BLEED canvas (float / docked-right geometry on the card,
+        never an in-flow column); the panel root hides via `hidden` when
+        tucked away (display:none keeps the MentionEditor's DOM-owned
+        draft). */}
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-0 z-50 flex flex-col",
+        panel && dockHidden && "hidden"
+      )}
+    >
+      {/* The card wrapper — ALWAYS rendered (root's child 0): layout-
+          transparent (contents) in full/dock, the frosted panel card in
+          panel form. Float = a right-anchored floating WINDOW, vertically
+          inset ~18%/10% (FLORA-measured: bottom-weighted, the input parks
+          near the canvas's bottom edge) — never full-height; docked =
+          flush right edge full-height (square). ONE dock-surface frost
+          over the living canvas in both, morphing on a 300ms inset/
+          radius transition. The stage region and the bottom row stay its
+          children at constant indexes in every form, so the editor tree
+          never remounts across a runtime form flip or a geometry toggle —
+          the draft + mention chips survive untouched (the same discipline
+          as the blocking-question morph's CSS-hide, never-unmount). */}
+      <div
+        className={
+          panel
+            ? cn(
+                "dock-surface pointer-events-auto fixed flex w-[400px] flex-col ring-1 ring-foreground/10 transition-all duration-300 ease-out motion-reduce:transition-none",
+                panelDocked
+                  ? "top-0 right-0 bottom-0 rounded-none"
+                  : "top-[18%] right-4 bottom-[10%] rounded-2xl",
+                panelEnter && "dock-panel-in"
+              )
+            : "contents"
+        }
+      >
+      {/* The message stage (2026-09-06): the FULL form's chat stage owns the
+          page above the input group; the DOCK form fades it out in place
+          (300ms opacity — the old grid-rows 1fr→0fr collapse read as the
+          whole chat flying up, user-retired); the PANEL form keeps it on as
+          the panel body. The wrapper keeps flex-1 in every form (invisible
+          + click-through in dock), so the bottom row never moves. The
+          scroller stays mounted through the dock fade (stageMounted, 300ms)
+          and unmounts right after; cutting it at the flip would freeze the
+          content mid-fade. */}
       <div
         className={cn(
-          "grid min-h-0 flex-1 transition-[grid-template-rows] duration-700 ease-out motion-reduce:transition-none",
-          full
-            ? "pointer-events-auto grid-rows-[1fr]"
-            : "pointer-events-none grid-rows-[0fr]"
+          "min-h-0 flex-1 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+          full || panel
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
         )}
       >
-        <div className="min-h-0 overflow-hidden">
-          {(full || stageMounted) && chatScroller}
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          {/* Slot 0 — the panel's slim header (panel form only; "hidden"
+              otherwise keeps the slot indexes stable across the flip):
+              quiet label + the geometry toggle (float ↔ docked-right,
+              FLORA "Dock panel" parity) + the minimize gesture (tucks the
+              panel to the bottom-right LogoMark dot, same law as the
+              dock's Hide). */}
+          <div
+            className={
+              panel
+                ? "flex h-10 shrink-0 items-center justify-between gap-2 pl-4 pr-2"
+                : "hidden"
+            }
+          >
+            <span className="text-xs text-muted-foreground">
+              {t("results.dock.panelTitle")}
+            </span>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={t(
+                  panelDocked ? "results.dock.floatPanel" : "results.dock.dockPanel"
+                )}
+                onClick={togglePanelDocked}
+              >
+                {panelDocked ? (
+                  <PictureInPicture2 className="h-4 w-4" />
+                ) : (
+                  <PanelRight className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={t("results.dock.hide")}
+                onClick={() => setDockHidden(true)}
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          {/* Slot 1 — the ONE scroller mount point across all forms (the
+              history slot below is gated dock-only and can never open while
+              this slot holds the scroller). */}
+          <div className="min-h-0 flex-1">
+            {(full || stageMounted || panel) && chatScroller}
+          </div>
         </div>
       </div>
 
@@ -3618,13 +3941,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           (a stale plan must not be Start-able mid-revision). */}
       <div
         className={cn(
-          "pointer-events-none relative shrink-0 px-4 pb-5 pt-2 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
-          dockHidden && "translate-y-3 opacity-0"
+          "pointer-events-none relative shrink-0 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+          panel ? "px-3 pb-3 pt-2" : "px-4 pb-5 pt-2",
+          dock && dockHidden && "translate-y-3 opacity-0"
         )}
       >
         <div
           className={cn(
-            "mx-auto w-full max-w-3xl",
+            panel ? "w-full" : "mx-auto w-full max-w-3xl",
             dockHidden ? "pointer-events-none" : "pointer-events-auto"
           )}
         >
@@ -3693,29 +4017,43 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             <div className={cn("p-2", pillDock && "hidden")}>{inputBody}</div>
           </div>
           {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
-              verbatim): a page-level whisper BELOW the input container
-              (2026-09-02 拆粘 — was glued between the question and the
-              input); hidden WITH the input row on the options-question
-              morph (ADR-053 R1 阻塞形态). pt-5 mirrors the column's pb-5 —
-              the whisper's top and bottom air stay equal (2026-09-05 用户
-              拍板: 上窄下宽 was the asymmetry). */}
+              verbatim): a whisper BELOW the input container (2026-09-02 拆粘 —
+              was glued between the question and the input); hidden WITH the
+              input row on the options-question morph (ADR-053 R1 阻塞形态).
+              pt-5 mirrors the dock column's pb-5 — the whisper's top and
+              bottom air stay equal (2026-09-05 用户拍板); the panel's tighter
+              register uses pt-3 (2026-09-06). */}
           {!pillDock && (
-            <p className="pt-5 text-center text-[11px] leading-tight text-meta-foreground">
+            <p
+              className={cn(
+                "text-center text-[11px] leading-tight text-meta-foreground",
+                panel ? "pt-3" : "pt-5"
+              )}
+            >
               {t("results.dock.honesty")}
             </p>
           )}
         </div>
       </div>
+      </div>
+    </div>
 
-      {/* The hidden-state recall dot (2026-09-02): one true circular icon
-          button (the rounded-full exception family, same as send) riding the
-          dock-surface frost — bottom-right so it never collides with the
-          canvas's own top-right slot reservation. Crossfades in with a scale
-          pop on the same beat as the bottom row's exit. */}
+      {/* The recall dot (2026-09-02; 2026-09-06 moved OUT of the root — the
+          panel root hides via `hidden` and would take the dot with it; same
+          day user-ruled the FLOAT panel's dot STAYS RESIDENT as a toggle —
+          click parks the open panel away / recalls the parked one): one true
+          circular icon button (the rounded-full exception family, same as
+          send) riding the dock-surface frost — bottom-right so it never
+          collides with the canvas's own top-right slot reservation.
+          Visibility: float panel = always (its 10% bottom inset leaves the
+          corner free); docked panel / mobile dock = only when tucked away
+          (the open docked panel's own send button owns the corner).
+          Crossfades in with a scale pop on the same beat as the bottom
+          row's exit. */}
       <div
         className={cn(
-          "absolute bottom-5 right-4 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
-          dockHidden
+          "fixed bottom-5 right-4 z-50 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+          (panel && !panelDocked) || dockHidden
             ? "pointer-events-auto opacity-100 scale-100"
             : "pointer-events-none opacity-0 scale-75"
         )}
@@ -3724,14 +4062,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           variant="ghost"
           size="icon"
           className="dock-surface h-10 w-10 rounded-full ring-1 ring-foreground/10 hover:bg-accent"
-          aria-label={t("results.dock.show")}
-          aria-hidden={!dockHidden}
-          tabIndex={dockHidden ? 0 : -1}
-          onClick={() => setDockHidden(false)}
+          aria-label={t(dockHidden ? "results.dock.show" : "results.dock.hide")}
+          aria-hidden={!((panel && !panelDocked) || dockHidden)}
+          tabIndex={(panel && !panelDocked) || dockHidden ? 0 : -1}
+          onClick={() => setDockHidden(!dockHidden)}
         >
           <LogoMark className="h-5 w-5" />
         </Button>
       </div>
-    </div>
+    </>
   )
 })
