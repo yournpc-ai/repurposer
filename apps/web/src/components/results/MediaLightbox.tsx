@@ -64,7 +64,7 @@ export function MediaLightbox({
         {data && (
           <div className="flex max-h-[85vh] flex-col-reverse md:flex-row">
             {/* Info column — scrollable; the media column stays put. */}
-            <div className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto p-5 md:w-[320px] lg:w-[360px]">
+            <div className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto p-5 md:w-[320px] lg:w-[360px] thin-scroll">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-muted-foreground">
                   {data.createdAt

@@ -245,11 +245,11 @@ export function RecipeInspectOverlay({
             <X className="h-5 w-5" />
           </DialogClose>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto thin-scroll md:flex-row md:overflow-hidden">
             {/* LEFT — the launch zone: material is the recipe's only blank, so
                 the upload zone is the hero; the prefilled prompt stays visible
                 and editable (it IS the visible preset — no picker controls). */}
-            <div className="flex w-full flex-shrink-0 flex-col gap-5 p-6 md:w-[360px] md:overflow-y-auto lg:w-[400px]">
+            <div className="flex w-full flex-shrink-0 flex-col gap-5 p-6 md:w-[360px] md:overflow-y-auto md:thin-scroll lg:w-[400px]">
               <div>
                 <DialogTitle className="text-xl">{title}</DialogTitle>
                 <DialogDescription className="mt-1.5 text-sm">
@@ -414,7 +414,7 @@ export function RecipeInspectOverlay({
 
                 <TabsContent
                   value="examples"
-                  className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 md:h-auto"
+                  className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 md:h-auto md:thin-scroll"
                 >
                   <div className="flex flex-col gap-8">
                     {card.example_outputs.length > 0 && (

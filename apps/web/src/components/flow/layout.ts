@@ -56,18 +56,22 @@ export function productNodeSize(aspect?: string | null): { width: number; height
 }
 
 /** Text-product card size (post / article, no baked media): the card is the
- * readable text container — width matches the product lane, height is a
+ * readable text container — wider than the 280 clip lane (2026-09-06 user
+ * ruling: long-form read too cramped at the lane width), height is a
  * function of preview line count so the canvas stays compact but legible.
  * Budgets mirror FlowNodeCard's real chrome: caption = 26px, body padding
- * = 24px (top+bottom), toolbar band = 44px, plus the text body height. */
+ * = 24px (top+bottom), toolbar band = 44px, plus the text body height.
+ * Preview clamp 8 → 12 lines (same ruling — the canvas preview carries a
+ * real reading burden before the reader opens). */
+const TEXT_PRODUCT_WIDTH = 340
 export function textProductNodeSize(lineCount: number): { width: number; height: number } {
-  const clamped = Math.max(2, Math.min(lineCount, 8))
+  const clamped = Math.max(2, Math.min(lineCount, 12))
   const lineHeight = 18 // text-xs leading-relaxed ≈ 18px per line
   const titleHeight = 22 // title line if present
   const bodyHeight = clamped * lineHeight
   const hashtagsHeight = 20 // one-row hashtag band
   return {
-    width: 280,
+    width: TEXT_PRODUCT_WIDTH,
     height: 26 + 12 + titleHeight + bodyHeight + hashtagsHeight + 12 + 44,
   }
 }

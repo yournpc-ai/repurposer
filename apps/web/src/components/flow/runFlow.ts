@@ -535,14 +535,16 @@ function textContentFromOutput(output: Output): FlowNode["textContent"] | undefi
 function textProductLineCount(output: Output): number {
   const tc = textContentFromOutput(output)
   if (!tc) return 0
-  // Estimate visible lines from the body at the card's text width (~248px,
-  // text-xs). A rough heuristic: ~55 chars per line for Latin, ~35 for CJK.
+  // Estimate visible lines from the body at the card's text width (~312px
+  // inside the 340 text-product card, text-xs). A rough heuristic: ~68
+  // chars per line for Latin, ~44 for CJK (2026-09-06 width bump — keep
+  // the estimate in sync with layout.ts's TEXT_PRODUCT_WIDTH).
   const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(tc.body)
-  const charsPerLine = cjk ? 35 : 55
+  const charsPerLine = cjk ? 44 : 68
   const bodyLines = Math.max(1, Math.ceil(tc.body.length / charsPerLine))
   const titleLines = tc.title ? 1 : 0
-  // We count title + body, then clamp to the 2–8 preview range.
-  return Math.min(8, Math.max(2, titleLines + bodyLines))
+  // We count title + body, then clamp to the 2–12 preview range.
+  return Math.min(12, Math.max(2, titleLines + bodyLines))
 }
     const textContent = textContentFromOutput(output)
     const textLines = textContent ? textProductLineCount(output) : 0

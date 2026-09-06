@@ -135,7 +135,7 @@ function SettingsDialog({
             <p className="px-5 pt-4 pb-1 pr-10 text-sm font-semibold">
               {t(active.labelKey)}
             </p>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-2 thin-scroll">
               {open ? active.render() : null}
             </div>
           </div>

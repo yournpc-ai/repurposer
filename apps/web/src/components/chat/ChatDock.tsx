@@ -38,7 +38,6 @@ import {
   Music,
   Newspaper,
   PanelRight,
-  Paperclip,
   PictureInPicture2,
   Plus,
   Quote,
@@ -118,12 +117,15 @@ import {
   type Autonomy,
 } from "@/components/chat/QuestionDock"
 import {
-  formatElapsed,
   RunTaskList,
   RunStatusRow,
-  useNow,
 } from "@/components/chat/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
+import {
+  fileIconFor,
+  formatChipDuration,
+  useStagedFileMeta,
+} from "@/lib/stagedFiles"
 
 const LANGUAGE_OPTIONS = [
   { code: "en", labelKey: "languages.en" },
@@ -550,6 +552,87 @@ function assetFilename(fileUrl: string | null): string {
   return fileUrl.split("/").pop() || fileUrl
 }
 
+/** One staged attachment in the dock's input band — THUMBNAIL FIRST (2026-
+ * 09-06: dock chips learned the composer chip anatomy, one staged-file
+ * language across every input surface): image = the file itself, video =
+ * first frame, both via the shared useStagedFileMeta probe (object URLs
+ * self-revoke); audio/docs keep the type icon. Upload lifecycle states
+ * (shimmer / retry / ×) unchanged — only the media sliver is new. */
+function StagedAttachmentChip({
+  item,
+  onRetry,
+  onRemove,
+}: {
+  item: StagedUpload
+  onRetry: () => void
+  onRemove: () => void
+}) {
+  const { t } = useTranslation()
+  const meta = useStagedFileMeta(item.file)
+  const Icon = item.asset
+    ? assetTypeIcon(item.asset.type)
+    : fileIconFor(item.file)
+  const isAv =
+    item.file.type.startsWith("video/") || item.file.type.startsWith("audio/")
+  const typeLabel = item.asset
+    ? t(`generationOverlay.assetTypes.${item.asset.type}`, {
+        defaultValue: item.asset.type,
+      })
+    : t("generationOverlay.assetTypes.file")
+  const metaLine =
+    item.status === "error"
+      ? t("composer.uploadFailed")
+      : isAv && meta.duration !== undefined
+        ? `${typeLabel} · ${formatChipDuration(meta.duration)}`
+        : typeLabel
+  return (
+    <Attachment
+      size="sm"
+      state={
+        item.status === "uploading"
+          ? "uploading"
+          : item.status === "error"
+            ? "error"
+            : "done"
+      }
+    >
+      <AttachmentMedia variant={meta.thumbUrl ? "image" : "icon"}>
+        {meta.thumbUrl ? <img src={meta.thumbUrl} alt="" /> : <Icon />}
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle>{item.file.name}</AttachmentTitle>
+        <AttachmentDescription>{metaLine}</AttachmentDescription>
+      </AttachmentContent>
+      <AttachmentActions
+        // FLORA hover anatomy (2026-09-06): the chip chrome (× / retry)
+        // reveals on hover — a clean tile at rest, chrome on demand. Error
+        // state keeps its actions always visible (a hidden retry is a dead
+        // end); focus-within covers keyboard users.
+        className={
+          item.status === "error"
+            ? "opacity-100"
+            : "opacity-0 transition-opacity group-hover/attachment:opacity-100 focus-within:opacity-100"
+        }
+      >
+        {item.status === "error" && (
+          <AttachmentAction
+            aria-label={t("generationOverlay.retryUpload")}
+            onClick={onRetry}
+          >
+            <Undo2 />
+          </AttachmentAction>
+        )}
+        <AttachmentAction
+          aria-label={t("generationOverlay.removeAttachment")}
+          onClick={onRemove}
+        >
+          <X />
+        </AttachmentAction>
+      </AttachmentActions>
+    </Attachment>
+  )
+}
+
 /** 形态律 (ADR-053 R1): a TEXT question (options-empty) never docks — it
  * lives in the flow as a plain assistant message, so a refresh / revival
  * fetch keeps nothing for the pill. Task books and options questions dock
@@ -818,7 +901,7 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
         {text ? (
           <BubbleGroup>
             <Bubble variant="muted" align="end">
-              <BubbleContent className="rounded-2xl px-4 py-2.5 text-sm">
+              <BubbleContent className="rounded-2xl px-4 py-2 text-sm">
                 <p className="whitespace-pre-wrap">{text}</p>
               </BubbleContent>
             </Bubble>
@@ -879,16 +962,11 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
   )
 }
 
-/** "37s" / "1m 6s" — the thinking row's live elapsed shorthand (Claude
- * Code's "Thinking for 37s" pacing; the clock starts at mount ≈ send). The
- * formatter itself is the shared {@link formatElapsed} from RunTaskList. */
+/** The thinking row — label only (2026-09-06 user ruling: the live "· 3s"
+ * elapsed countdown is retired, a bare "Thinking…" shimmer carries the
+ * phase; the run-level clocks live on RunTaskList's header/receipt, not
+ * here). */
 function ThinkingRow({ label }: { label: string }) {
-  // Live elapsed, client-side: null on the server render AND the first
-  // client frame (hydration-safe), ticking once a second after mount —
-  // the shared useNow clock.
-  const [start] = useState(() => Date.now())
-  const now = useNow(true)
-  const elapsed = now != null ? formatElapsed(now - start) : null
   return (
     <Message align="start">
       <MessageContent>
@@ -898,12 +976,6 @@ function ThinkingRow({ label }: { label: string }) {
           <BrandLoader className="h-5 w-5" />
           {/* Same text shimmer the running step markers use. */}
           <span className="shimmer">{label}</span>
-          {elapsed ? (
-            <span className="shrink-0 tabular-nums text-xs">
-              {" · "}
-              {elapsed}
-            </span>
-          ) : null}
         </div>
       </MessageContent>
     </Message>
@@ -3252,7 +3324,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           autoScroll
         >
           <MessageScroller className="h-full">
-            <MessageScrollerViewport className="scroll-fade-y">
+            <MessageScrollerViewport className="scroll-fade-y thin-scroll">
               {/* Full form: the stage sits under the floating top chrome
                   (the ← Projects pill, ~56px) — extra headroom keeps the
                   first row clear; the dock form hugs the card's top edge;
@@ -3637,66 +3709,33 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           the already-created asset). */}
       {staged.length > 0 && (
         <AttachmentGroup className="px-1 pb-2">
-          {staged.map((s) => {
-            const Icon = s.asset
-              ? assetTypeIcon(s.asset.type)
-              : s.file.type.startsWith("video/")
-                ? Video
-                : s.file.type.startsWith("audio/")
-                  ? Mic2
-                  : s.file.type.startsWith("image/")
-                    ? ImageIcon
-                    : FileText
-            const typeLabel = s.asset
-              ? t(`generationOverlay.assetTypes.${s.asset.type}`, {
-                  defaultValue: s.asset.type,
-                })
-              : t("generationOverlay.assetTypes.file")
-            return (
-              <Attachment
-                key={s.localId}
-                size="sm"
-                state={
-                  s.status === "uploading"
-                    ? "uploading"
-                    : s.status === "error"
-                      ? "error"
-                      : "done"
-                }
-              >
-                <AttachmentMedia>
-                  <Icon />
-                </AttachmentMedia>
-                <AttachmentContent>
-                  <AttachmentTitle>{s.file.name}</AttachmentTitle>
-                  <AttachmentDescription>
-                    {s.status === "error"
-                      ? t("composer.uploadFailed")
-                      : typeLabel}
-                  </AttachmentDescription>
-                </AttachmentContent>
-                <AttachmentActions>
-                  {s.status === "error" && (
-                    <AttachmentAction
-                      aria-label={t("generationOverlay.retryUpload")}
-                      onClick={() => retryStaged(s)}
-                    >
-                      <Undo2 />
-                    </AttachmentAction>
-                  )}
-                  <AttachmentAction
-                    aria-label={t("generationOverlay.removeAttachment")}
-                    onClick={() => removeStaged(s)}
-                  >
-                    <X />
-                  </AttachmentAction>
-                </AttachmentActions>
-              </Attachment>
-            )
-          })}
+          {staged.map((s) => (
+            <StagedAttachmentChip
+              key={s.localId}
+              item={s}
+              onRetry={() => retryStaged(s)}
+              onRemove={() => removeStaged(s)}
+            />
+          ))}
         </AttachmentGroup>
       )}
-      <div className="flex items-end gap-2">
+      {/* Two-band anatomy (2026-09-06 user ruling, ElevenLabs parity —
+          FINAL): text band on top (FULL width, top-aligned) + control strip
+          in-flow at the bottom — two stacked regions even at rest, exactly
+          ElevenLabs' composer ([text zone][+ · permissions · autonomy ·
+          send]). Journey: side-lane flex (text clamped to ~73%) → floating
+          strip + reserved pb-10 band (rest read half-empty) → an adaptive
+          width-flip (oscillated every frame, same-hour revert — width-
+          changing flips are structurally unstable) → THIS. In-flow strip:
+          no overlay, no measurement, oscillation-proof by construction.
+          Strip members: + (attach — ElevenLabs/FLORA's plus; the paperclip
+          RETIRED, composer included), history/hide (dock form only), the
+          flex-1 spacer, stop/send anchored right. Stadium corollary: the
+          rest box is genuinely two bands now, and a capsule on multi-row
+          content is broken geometry — the input is rounded-xl in every
+          form (the stadium exception belonged to the retired one-row
+          rest; the law survives for truly one-row boxes). */}
+      <div>
         <input
           ref={fileInputRef}
           type="file"
@@ -3705,15 +3744,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           accept="video/*,audio/*,image/*,.pdf,.txt,.md,.markdown,.pptx,.ppt"
           onChange={(e) => handleFilesPicked(e.target.files)}
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          aria-label={t("generationOverlay.attachFiles")}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Paperclip className="h-4.5 w-4.5" />
-        </Button>
         {/* The composer family's editor (one input component across
             composer / overlay chat / output chat): @-chips inline —
             asset = context enrichment, output = the pinned revision
@@ -3728,70 +3758,99 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           mentionContext={mentionContext}
           onChange={handleEditorChange}
           onSubmit={handleSend}
-          className="max-h-32 min-h-9 text-sm"
+          // Long-content headroom (2026-09-06, FLORA-measured): ~10 lines
+          // visible before scrolling (was max-h-32 ≈ 6). Full-width px-3
+          // text band; the bottom air is small because the control strip
+          // owns the space below.
+          className="block max-h-56 w-full px-3 pt-2.5 pb-1 text-sm thin-scroll"
         />
-        {/* History toggle — dock form only: in the full form the stage IS
-            the history (always on), and in the panel form the panel body
-            IS the flow — the toggle has no meaning in either. */}
-        {dock && (
+        {/* The control strip — in-flow under the text band (ElevenLabs'
+            bottom row): + opens the file picker (their + opens an upload
+            menu; ours has one destination — the picker — so no menu),
+            history/hide ride along in the dock form, send/stop anchor the
+            right end (the flex-1 spacer). GLYPH-RAIL alignment (2026-09-06
+            user ruling, FLORA-measured — the dock twin of the composer's
+            glyph-left-edge law): the strip carries NO container padding;
+            the + glyph's LEFT edge and the ↑ glyph's RIGHT edge sit on the
+            text band's 12px rails (px-3 / pr-3) via 3px button margins
+            (36px button − 18px glyph = 9px inset; 12 − 9 = 3). Ghost
+            buttons show no chrome at rest, so only the glyphs read —
+            aligning containers leaves the glyphs visibly adrift when not
+            hovering. Both glyphs are 18px for optical parity. */}
+        <div className="flex items-center gap-0.5 pb-1.5">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label={t("results.dock.history")}
-            aria-pressed={historyOpen}
-            onClick={() => setHistoryOpen((v) => !v)}
+            className="ml-[3px] h-9 w-9 shrink-0"
+            aria-label={t("generationOverlay.attachFiles")}
+            onClick={() => fileInputRef.current?.click()}
           >
-            {historyOpen ? (
-              <ChevronDown className="h-4.5 w-4.5" />
-            ) : (
-              <History className="h-4.5 w-4.5" />
-            )}
+            <Plus className="h-4.5 w-4.5" />
           </Button>
-        )}
-        {/* Hide — dock form only (the panel's minimize lives in its header):
-            folds the whole dock to the bottom-right LogoMark dot (the user's
-            own gesture; every recall trigger above brings it back). In the
-            full form the chat IS the page — there is nothing to hide to. */}
-        {dock && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label={t("results.dock.hide")}
-            onClick={() => setDockHidden(true)}
-          >
-            <Minus className="h-4.5 w-4.5" />
-          </Button>
-        )}
-        {/* The stop button only exists while a stream is actually
-            abortable (the answer path sets chatBusy without one — nothing
-            to stop there). */}
-        {chatBusy && abortRef.current ? (
-          <Button
-            size="icon"
-            variant="secondary"
-            className="h-9 w-9 shrink-0 rounded-full"
-            onClick={handleStop}
-            aria-label={t("chat.stop")}
-          >
-            <Square className="h-3.5 w-3.5 fill-current" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            className="h-9 w-9 shrink-0 rounded-full"
-            disabled={
-              (!input.trim() &&
-                !staged.some((s) => s.status === "done")) ||
-              staged.some((s) => s.status === "uploading")
-            }
-            onClick={handleSend}
-            aria-label={t("chat.send")}
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-        )}
+          {/* History toggle — dock form only: in the full form the stage IS
+              the history (always on), and in the panel form the panel body
+              IS the flow — the toggle has no meaning in either. */}
+          {dock && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              aria-label={t("results.dock.history")}
+              aria-pressed={historyOpen}
+              onClick={() => setHistoryOpen((v) => !v)}
+            >
+              {historyOpen ? (
+                <ChevronDown className="h-4.5 w-4.5" />
+              ) : (
+                <History className="h-4.5 w-4.5" />
+              )}
+            </Button>
+          )}
+          {/* Hide — dock form only (the panel's minimize lives in its
+              header): folds the whole dock to the bottom-right LogoMark
+              dot. In the full form the chat IS the page — nothing to hide
+              to. */}
+          {dock && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              aria-label={t("results.dock.hide")}
+              onClick={() => setDockHidden(true)}
+            >
+              <Minus className="h-4.5 w-4.5" />
+            </Button>
+          )}
+          <span className="min-w-0 flex-1" />
+          {/* The stop button only exists while a stream is actually
+              abortable (the answer path sets chatBusy without one —
+              nothing to stop there). */}
+          {chatBusy && abortRef.current ? (
+            <Button
+              size="icon"
+              variant="secondary"
+              className="mr-[3px] h-9 w-9 shrink-0 rounded-full"
+              onClick={handleStop}
+              aria-label={t("chat.stop")}
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              className="mr-[3px] h-9 w-9 shrink-0 rounded-full"
+              disabled={
+                (!input.trim() &&
+                  !staged.some((s) => s.status === "done")) ||
+                staged.some((s) => s.status === "uploading")
+              }
+              onClick={handleSend}
+              aria-label={t("chat.send")}
+            >
+              <ArrowUp className="h-4.5 w-4.5" />
+            </Button>
+          )}
+        </div>
       </div>
     </>
   )
@@ -3801,17 +3860,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // panel form the stage region holds the scroller permanently — the slot
   // must never open there (the two slots never mount it at once).
   const historySlotOpen = dock && !stageMounted && historyOpen
-  // The input container's stadium form (2026-09-02, user-ruled — the FLORA
-  // Chat-bar anatomy): rounded-full is correct geometry ONLY on the truly
-  // collapsed one-row box. Any second band (run status shimmer / staged
-  // chips) morphs it back to rounded-xl — a stadium on multi-row content is
-  // broken geometry. The history region is NOT a band: it floats as its own
-  // frosted layer above (输入框独立层律, 同日用户拍板 — the input group is
-  // always a standalone layer, never fused with the message flow), so an
-  // open history no longer breaks the stadium. Radius transitions with the
-  // box. Panel form (2026-09-06): the input sits INSIDE the panel card —
-  // always rounded-xl, the stadium law is dock-only.
-  const inputStadium = !panel && !runStatusRow && staged.length === 0
+  // Radius: the input container is rounded-xl in EVERY form (2026-09-06,
+  // two-band ElevenLabs anatomy — the rest box is genuinely two bands:
+  // full-width text + the in-flow control strip, and the 2026-09-02 law
+  // says a capsule on multi-row content is broken geometry). The dock's
+  // stadium exception retired with the one-row rest it belonged to; the
+  // law itself survives for truly one-row boxes. Radius still transitions
+  // with the box for any future shape change.
+  const inputRadius = "rounded-xl"
 
   return (
     <>
@@ -3849,10 +3905,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         className={
           panel
             ? cn(
-                "dock-surface pointer-events-auto fixed flex w-[400px] flex-col ring-1 ring-foreground/10 transition-all duration-300 ease-out motion-reduce:transition-none",
+                // FLORA-measured width (2026-09-06 user ruling, devtools
+                // evidence): their right chat panel is a fixed 480px column
+                // — was 400px. Docked additionally mirrors FLORA's
+                // border grammar: a LEFT-edge hairline only (their
+                // border-width: 0 0 0 1px) — the flush top/right/bottom
+                // edges draw no ring against the viewport; the float
+                // window keeps the full hairline.
+                "dock-surface pointer-events-auto fixed flex w-[480px] flex-col transition-all duration-300 ease-out motion-reduce:transition-none",
                 panelDocked
-                  ? "top-0 right-0 bottom-0 rounded-none"
-                  : "top-[18%] right-4 bottom-[10%] rounded-2xl",
+                  ? "top-0 right-0 bottom-0 rounded-none border-l border-foreground/10"
+                  : "top-[18%] right-4 bottom-[10%] rounded-2xl ring-1 ring-foreground/10",
                 panelEnter && "dock-panel-in"
               )
             : "contents"
@@ -3933,12 +3996,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           ADR-051 条款 8): the row is THREE detached registers — the pending
           question floats as its own frosted pill above (decision), the
           input container holds only the history region + the input group
-          (action), and the honesty line whispers below the container at
-          page level (the ChatGPT/FLORA pattern — it used to be glued
-          between the question and the input). The 停靠法则 survives: the
-          question pill is always visible regardless of how tall the plan
-          card scrolls. The task-book dock HIDES while a turn is in flight
-          (a stale plan must not be Start-able mid-revision). */}
+          (action), and the honesty line whispers directly ABOVE the input
+          container (FAUNA parity, 2026-09-06 user ruling — it used to sit
+          below; the ChatGPT/FLORA below-input position was the 2026-09-02
+          拆粘 form). The 停靠法则 survives: the question pill is always
+          visible regardless of how tall the plan card scrolls. The
+          task-book dock HIDES while a turn is in flight (a stale plan must
+          not be Start-able mid-revision). */}
       <div
         className={cn(
           "pointer-events-none relative shrink-0 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
@@ -3982,6 +4046,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               {pillDock}
             </div>
           )}
+          {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
+              verbatim): a whisper directly ABOVE the input container
+              (2026-09-06 user ruling — FAUNA parity; was below the input
+              since the 2026-09-02 拆粘); hidden WITH the input row on the
+              options-question morph (ADR-053 R1 阻塞形态). pb-2 / pb-1.5
+              (dock / panel) is the whisper's bottom air against the input —
+              the panel's tighter register mirrors its tighter column pad. */}
+          {!pillDock && (
+            <p
+              className={cn(
+                "pb-1.5 text-center text-xs leading-tight text-meta-foreground",
+                !panel && "pb-2"
+              )}
+            >
+              {t("results.dock.honesty")}
+            </p>
+          )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
               the container owns ONLY the resident input row (+ the run
               status shimmer / staged chips bands when present) — the
@@ -4002,7 +4083,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           <div
             className={cn(
               "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
-              inputStadium ? "rounded-full" : "rounded-xl",
+              inputRadius,
               pillDock && !runStatusRow && "hidden"
             )}
           >
@@ -4016,23 +4097,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 settles via the slot handshake). */}
             <div className={cn("p-2", pillDock && "hidden")}>{inputBody}</div>
           </div>
-          {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
-              verbatim): a whisper BELOW the input container (2026-09-02 拆粘 —
-              was glued between the question and the input); hidden WITH the
-              input row on the options-question morph (ADR-053 R1 阻塞形态).
-              pt-5 mirrors the dock column's pb-5 — the whisper's top and
-              bottom air stay equal (2026-09-05 用户拍板); the panel's tighter
-              register uses pt-3 (2026-09-06). */}
-          {!pillDock && (
-            <p
-              className={cn(
-                "text-center text-[11px] leading-tight text-meta-foreground",
-                panel ? "pt-3" : "pt-5"
-              )}
-            >
-              {t("results.dock.honesty")}
-            </p>
-          )}
         </div>
       </div>
       </div>

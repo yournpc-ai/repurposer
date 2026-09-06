@@ -350,7 +350,7 @@ export function MentionEditor({
         onMouseUp={updatePicker}
         onPaste={handlePaste}
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none",
+          "min-h-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none thin-scroll",
           disabled && "pointer-events-none opacity-60",
           className,
         )}

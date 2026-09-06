@@ -40,6 +40,9 @@ const zh: Resources = {
   },
   credits: {
     range: "约 {{low}}–{{high}} 积分",
+    /** 档案面板对账尺的实扣侧（2026-09-06）——产物所属 step 的计量实扣，
+     * 与 credits.range 的估价侧并排呈现。 */
+    spent: "{{count}} 积分",
     insufficient: "积分不够了——当前余额 {{balance}}，这次生成约需 {{required}}。",
     negativeNote: "上次实际花费超出预估，差额已记账，充值后继续。",
     // 项目页左下角积分 pill 与其弹窗（BILLING §7 读面，2026-09-06）。
@@ -1016,6 +1019,23 @@ const zh: Resources = {
       // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进；
       // 2026-09-05 ± 步进退役——pill 只读百分比，点击 = fit）。
       zoomFit: "适应画布",
+      // 产物档案面板（2026-09-06，FLORA 节点详情对齐）：点产物节点召唤，
+      // 挂在缩放钮下方——只摆出生证明，纯只读事实（修订只经 chat；
+      // FLORA 的内联参数编辑有意不搬）。
+      inspector: {
+        stepLabel: "工序",
+        estimateLabel: "估价",
+        spentLabel: "实扣",
+        durationLabel: "耗时",
+        createdLabel: "生成时间",
+        languageLabel: "语言",
+        sourceLabel: "来源素材",
+        sourceFull: "完整素材",
+        rangeLabel: "截取区间",
+        specLabel: "任务参数",
+        modelsLabel: "模型",
+        close: "关闭详情",
+      },
       // render 失败原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
       // 渲染中由 BrandLoader 独自表达，不落状态行。
       renderFailed: "渲染失败——在下方说一句重试。",
@@ -1237,7 +1257,12 @@ const zh: Resources = {
     starting: "启动中…",
     startingLine: "我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成。",
     planUpdated: "好，我记下了——上面的计划已更新。",
-    chatPlaceholder: "和 Repurposer 聊聊…",
+    // FAUNA 同位 mechanics placeholder（2026-09-06 用户拍板终稿——产品
+    // 实测 @ 生效）：FAUNA 句式去 '/' 版。「节点」措辞成立：@ 选择器候选
+    // （素材 / 产物）本就是画布节点。不写 '/'：chat 无 slash 体系，写了
+    // 即虚假承诺（虚构 SKU 禁令同样适用于 placeholder 文案）；FAUNA 原串
+    // 的 '/' 半句只有在 slash 真落地那天才配进文案。
+    chatPlaceholder: "输入 @ 引用节点，描述你的修改想法",
     chatPlaceholderConfirm: "告诉我怎么调整计划…",
     attachFiles: "上传文件",
     retryUpload: "重试上传",

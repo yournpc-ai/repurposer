@@ -584,7 +584,7 @@ function TextProductCard({
   }
 
   const contentClass =
-    "h-full w-full overflow-y-auto rounded-lg px-3 py-3 text-left text-xs leading-relaxed"
+    "h-full w-full overflow-y-auto rounded-lg px-3 py-3 text-left text-xs leading-relaxed thin-scroll"
 
   return (
     <div className="group/text relative flex h-full w-full flex-col" onClick={handleRootClick}>
@@ -614,16 +614,20 @@ function TextProductCard({
             disabled={saving}
             className={cn(
               contentClass,
-              "resize-none bg-transparent outline-none",
+              "resize-none bg-transparent outline-none thin-scroll overscroll-contain",
             )}
-            style={{ scrollbarWidth: "thin", overscrollBehavior: "contain" }}
           />
         ) : (
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={(e) => {
+              // Entering inline edit is NOT the node-select gesture — a
+              // select opens the TextDetailModal reader (2026-09-06); same
+              // stopPropagation contract as the toolbar buttons.
+              e.stopPropagation()
+              setEditing(true)
+            }}
             className={cn(contentClass, "cursor-text")}
-            style={{ scrollbarWidth: "thin" }}
           >
             {title ? (
               <p className="mb-1 line-clamp-1 text-sm font-medium leading-snug">{title}</p>
@@ -631,7 +635,9 @@ function TextProductCard({
             <p
               className={cn(
                 "whitespace-pre-wrap",
-                title ? "line-clamp-[6]" : "line-clamp-[7]",
+                // 12-line preview budget (layout.ts textProductNodeSize,
+                // 2026-09-06 bump) — the title line eats one of them.
+                title ? "line-clamp-[11]" : "line-clamp-[12]",
               )}
             >
               {body}

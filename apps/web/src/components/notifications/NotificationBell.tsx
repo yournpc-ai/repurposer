@@ -184,7 +184,7 @@ export function NotificationBell() {
         <div className="px-4 pb-2 pt-3 text-sm font-semibold">
           {t("notifications.title")}
         </div>
-        <div className="max-h-96 divide-y divide-border overflow-y-auto">
+        <div className="max-h-96 divide-y divide-border overflow-y-auto thin-scroll">
           {!data || data.items.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               {t("notifications.empty")}

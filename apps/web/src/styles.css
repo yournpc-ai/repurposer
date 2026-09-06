@@ -18,8 +18,12 @@
  *
  * Per-theme recipe (2026-08-05/06, reference pass): light = 92% + blur(24px)
  * — at 85% the dark hero type behind bled through and tinted the panel dirty
- * gray; dark drops to 68% + blur(28px) — over the near-black canvas an 85%+
- * fill reads as a solid box and the blur has nothing to show.
+ * gray; dark = 68% + blur(28px) — over the near-black canvas an 85%+ fill
+ * reads as a solid box and the blur has nothing to show. (FLORA's 90%/12px
+ * was A/B-tried 2026-09-06 and closed the same day: on OUR calm near-black
+ * canvas the composite differs by ~2 lightness points of neutral gray —
+ * imperceptible. Their recipe reads because their canvas is busy; ours is
+ * deliberately calm. Reference-pass values kept for the dot-grid intent.)
  *
  * Shadow law (ADR-046, 2026-08-21): shadows belong to floating layers ONLY —
  * this utility carries the whisper shadow-xl in light (it lifts the glass off
@@ -53,7 +57,11 @@
  * so the canvas's dot grid reads through the frost (the Lovart reference
  * anatomy). NO shadow — the dock is the same input group's third parking
  * spot as the home composer and inherits its hero-flat rule (hairline
- * only); the ring rides the component, not this recipe. */
+ * only); the ring rides the component, not this recipe.
+ * (FLORA's 90%/12px moved this too on 2026-09-06 — same-day A/B closed:
+ * imperceptible on the calm near-black canvas, ~2 lightness points of
+ * neutral gray between the two composites. Reference values restored so
+ * the dot grid keeps reading through the dock.) */
 @utility dock-surface {
   background-color: color-mix(in oklch, var(--popover) 65%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
@@ -67,6 +75,28 @@
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: var(--popover);
+  }
+}
+
+/* Thin scroller (2026-09-06, FLORA-parity): 6px rounded thumb at 12%
+ * foreground on a transparent track — quiet scroll chrome for the dock
+ * family (message viewport / editor / history). Overlay-style: no
+ * permanent gutter, the classic scrollbar eats layout width. */
+@utility thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--foreground) 12%, transparent)
+    transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground) 12%, transparent);
+    border-radius: 999px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
@@ -586,7 +616,10 @@ body {
   --subtle: oklch(0.24 0 0);
   --inset: oklch(0.15 0 0);
   --muted-foreground: oklch(0.63 0 0);
-  --meta-foreground: oklch(0.52 0 0);
+  /* Whisper tier — FLORA-measured (2026-09-06 user ruling): their dock
+   * disclaimer renders #606060 ≈ 0.42; the whole dark whisper register
+   * (meta labels, disabled, the honesty line) moves with it. Was 0.52. */
+  --meta-foreground: oklch(0.42 0 0);
   --accent: oklch(1 0 0 / 8%);
   --accent-foreground: oklch(0.95 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -594,7 +627,7 @@ body {
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   /* Same roles as light — the references resolve against the dark ladder
-   * (inset 0.15 well, meta 0.52 glyph); the icon chip speaks glass. */
+   * (inset 0.15 well, meta 0.42 whisper glyph); the icon chip speaks glass. */
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
   --icon-chip: oklch(1 0 0 / 10%);
@@ -644,10 +677,19 @@ body {
 }
 
 /* MentionEditor placeholder: shown via CSS only while the editable is truly
-   empty (React never renders content inside it — the DOM owns the text). */
+   empty (React never renders content inside it — the DOM owns the text).
+   Whisper by CONTRAST, not by size (2026-09-06, second cut after FLORA
+   devtools correction): the 12px figure in the reference is their
+   DISCLAIMER line — the placeholder itself renders at INPUT size (~15px)
+   in a quiet gray. Ours = inherited 14px + meta-foreground (one step
+   dimmer than the input's muted body), one line, ellipsis when the copy
+   outgrows the box (the two-line wrap was the real 别扭). */
 [contenteditable][data-placeholder]:empty::before {
   content: attr(data-placeholder);
-  color: var(--muted-foreground);
+  color: var(--meta-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 

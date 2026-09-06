@@ -199,7 +199,7 @@ export function ClipDetailModal({
           {/* Info panel */}
           <div
             className={cn(
-              "flex min-w-0 flex-col gap-4 overflow-y-auto p-5",
+              "flex min-w-0 flex-col gap-4 overflow-y-auto p-5 thin-scroll",
               isLandscape
                 ? "w-full"
                 : "w-full md:w-[320px] lg:w-[360px]"
@@ -275,7 +275,7 @@ export function ClipDetailModal({
 
               <TabsContent value="transcript" className="pt-3">
                 {transcriptLines.length > 0 ? (
-                  <div className="max-h-52 space-y-2 overflow-y-auto pr-2">
+                  <div className="max-h-52 space-y-2 overflow-y-auto pr-2 thin-scroll">
                     {transcriptLines.map((line, i) => (
                       <div key={i} className="flex items-baseline gap-3 text-sm">
                         <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">

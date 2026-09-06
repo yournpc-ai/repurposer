@@ -5,9 +5,10 @@
  * the shared FlowView substrate (prohibition #9 — no hand-drawn edges or
  * layout here). Navigation is open (pan/zoom, D7); editing gestures are
  * structurally absent in the substrate. Product nodes are cards (D5): the
- * surface owns their actions — click focuses (焦点注入, D8; a clip also
- * opens its detail modal), the action bar carries info + download / delete,
- * and node business (publish / open / focus) lives in the bar's ⋯ menu. */
+ * surface owns their actions — click focuses (焦点注入, D8) and summons the
+ * OutputInspector (the FLORA-parity dossier under the zoom pill, 2026-09-06),
+ * the action bar carries info + download / delete, and node business
+ * (publish / open / focus) lives in the bar's ⋯ menu. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -25,13 +26,14 @@ import {
 } from "lucide-react"
 
 import { toAbsoluteUrl } from "@/lib/api"
+import { cn, formatDuration } from "@/lib/utils"
 import type { Output, PlaceholderRow, WorkflowStep } from "@/lib/types"
-import { formatDuration } from "@/lib/utils"
 import {
   MediaLightbox,
   type MediaChip,
   type MediaLightboxData,
 } from "@/components/results/MediaLightbox"
+import { OutputInspector } from "@/components/results/OutputInspector"
 
 import { FlowView } from "./FlowView"
 import { PRODUCT_TYPE_ICON } from "./FlowNodeCard"
@@ -50,6 +52,11 @@ export interface ResultsCanvasProps {
    * promised placeholder slot reads alive (wipe + edge packet) even before
    * its producing step starts (2026-09-02 用户拍板: waiting ⊆ running). */
   runAlive?: boolean
+  /** The project has at least one run — the page's VISIBILITY gate for the
+   * canvas (opacity / pointer-events). The settle key (initial framing)
+   * joins this with baselineReady: frame only when the visible, settled
+   * content is present, never on a partial fetch frame (2026-09-06). */
+  hasRuns?: boolean
   /** The run's prompt — displayed in every product node's interaction area
    * (read-only; editing happens in the dock). */
   prompt?: string | null
@@ -83,8 +90,10 @@ export interface ResultsCanvasProps {
   /** Pane-only click (node clicks excluded) — back to neutral: the surface
    * collapses the dock's history and clears the focus (D4/D8). */
   onPaneClick?: () => void
-  /** Extra classes for the zoom pill's Panel (2026-09-06): the page offsets
-   * it clear of the open chat panel so it never sits under the frost. */
+  /** Extra classes for the top-right canvas chrome (2026-09-06): the zoom
+   * pill's Panel AND the OutputInspector share one corner and one
+   * docked-panel avoidance — the page offsets both clear of the open chat
+   * panel so nothing sits under the frost. */
   controlsClassName?: string
   className?: string
 }
@@ -95,6 +104,7 @@ export function ResultsCanvas({
   outputs,
   placeholders,
   runAlive = false,
+  hasRuns = false,
   prompt = null,
   baselineReady,
   baselineKey,
@@ -154,6 +164,19 @@ export function ResultsCanvas({
     () => new Map(assets.map((a) => [`asset:${a.id}`, a])),
     [assets]
   )
+
+  // ── Output inspector (2026-09-06, FLORA node-detail parity) ─────────────
+  // A product click summons its dossier, anchored under the zoom pill
+  // (right-aligned — the ADR-056 canvas-chrome slot). View state owned
+  // here by the canvas: selecting another product swaps in place, pane
+  // click / Esc / the row vanishing (delete / refresh) closes.
+  const [inspectedId, setInspectedId] = useState<string | null>(null)
+  const inspectedOutput = inspectedId
+    ? (outputById.get(`output:${inspectedId}`) ?? null)
+    : null
+  useEffect(() => {
+    if (inspectedId && !inspectedOutput) setInspectedId(null)
+  }, [inspectedId, inspectedOutput])
 
   // ── Media lightbox (2026-08-15) ──────────────────────────────────────
   // The expand affordance / asset media click: one frosted dialog — left
@@ -284,6 +307,8 @@ export function ResultsCanvas({
       }
       const output = outputById.get(id)
       if (output) {
+        // Click = dock focus (D8) + the dossier swap-in.
+        setInspectedId(output.id)
         onOutputClick?.(output)
         return
       }
@@ -326,25 +351,51 @@ export function ResultsCanvas({
     [outputById, onRevise],
   )
 
+  // Pane click = back to neutral: the dossier closes with the focus (D4/D8).
+  const handlePaneClick = useCallback(() => {
+    setInspectedId(null)
+    onPaneClick?.()
+  }, [onPaneClick])
+
   return (
-    <div className={className}>
+    <div className={cn("relative", className)}>
       <FlowView
         nodes={nodes}
         edges={edges}
         navigation="explore"
         controls
         controlsClassName={controlsClassName}
+        settleKey={baselineReady && hasRuns ? baselineKey : null}
         bornIds={bornIds}
         dots
         className="h-full"
         selectedId={focusedOutputId ? `output:${focusedOutputId}` : null}
-        onPaneClick={onPaneClick}
+        onPaneClick={handlePaneClick}
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
         onOutputAction={handleOutputAction}
         onRevise={handleRevise}
         onAssetAction={onAssetAction}
       />
+      {/* The dossier rides the zoom pill's corner: right-aligned with it,
+          stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its
+          docked-panel avoidance so both clear the open frost. */}
+      {inspectedOutput && (
+        <OutputInspector
+          output={inspectedOutput}
+          step={
+            steps.find((s) => s.id === inspectedOutput.workflow_step_id) ??
+            null
+          }
+          assets={assets}
+          onClose={() => setInspectedId(null)}
+          onAction={(output, action) => onOutputAction?.(output, action)}
+          className={cn(
+            "absolute top-[52px] right-3 z-30 md:top-[60px] md:right-4",
+            controlsClassName,
+          )}
+        />
+      )}
       <MediaLightbox
         data={lightbox}
         onOpenChange={(open) => {

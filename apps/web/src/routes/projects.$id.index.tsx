@@ -8,6 +8,7 @@ import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { ClipDetailModal } from "@/components/results/ClipDetailModal"
+import { TextDetailModal } from "@/components/results/TextDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
@@ -355,8 +356,12 @@ function ProjectDetailPage() {
   const handleOutputClick = useCallback((output: Output) => {
     setFocusedOutputId(output.id)
     // 单击 = detail modal 旧逻辑原样 (D5): clips with a render open the
-    // detail view; every product click also becomes the dock's focus.
+    // detail view; text products (post / article) open the reader
+    // (2026-09-06 — their cards only preview 12 lines and the old click
+    // target was the inline EDIT textarea, so long-form had no reading
+    // surface at all); every product click also becomes the dock's focus.
     if (output.type === "clip" && output.files.video) setDetailOutput(output)
+    else if (output.type === "post" || output.type === "article") setDetailOutput(output)
   }, [])
 
   const handleOutputAction = useCallback(async (output: Output, action: FlowOutputAction) => {
@@ -949,7 +954,7 @@ function ProjectDetailPage() {
         >
           <ResultsCanvas
             className="h-full"
-            controlsClassName={panelCoversCorner ? "md:!mr-[424px]" : undefined}
+            controlsClassName={panelCoversCorner ? "md:!mr-[504px]" : undefined}
             assets={canvasAssets}
             steps={latestRun?.steps ?? []}
             outputs={outputs}
@@ -963,6 +968,10 @@ function ProjectDetailPage() {
               latestRun.status !== "completed" &&
               latestRun.status !== "failed"
             }
+            // The settle key's visibility half (2026-09-06): the canvas is
+            // gated on hasRuns, so initial framing joins it with the
+            // baseline — partial fetch frames never frame.
+            hasRuns={hasRuns}
             prompt={prompt || latestRun?.context?.instruction || null}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /assets have both settled for THIS project —
@@ -1089,16 +1098,25 @@ function ProjectDetailPage() {
         />
       )}
 
-      {detailOutput && (
-        <ClipDetailModal
-          output={detailOutput}
-          open
-          onOpenChange={(open) => {
-            if (!open) setDetailOutput(null)
-          }}
-          onRegenerate={fetchResults}
-        />
-      )}
+      {detailOutput &&
+        (detailOutput.type === "post" || detailOutput.type === "article" ? (
+          <TextDetailModal
+            output={detailOutput}
+            open
+            onOpenChange={(open) => {
+              if (!open) setDetailOutput(null)
+            }}
+          />
+        ) : (
+          <ClipDetailModal
+            output={detailOutput}
+            open
+            onOpenChange={(open) => {
+              if (!open) setDetailOutput(null)
+            }}
+            onRegenerate={fetchResults}
+          />
+        ))}
 
       {publishOutput && (
         <PublishDialog

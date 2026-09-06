@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUp, Box, Paperclip, User } from "lucide-react"
+import { ArrowUp, Box, Plus, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
@@ -382,7 +382,7 @@ export function HomeComposer({
                           className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                           tabIndex={dockP > 0.5 ? 0 : -1}
                         >
-                          <Paperclip className="size-4.5" />
+                          <Plus className="size-4.5" />
                         </Button>
                       }
                     />
@@ -484,7 +484,7 @@ export function HomeComposer({
                             className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                             data-tour="composer-assets"
                           >
-                            <Paperclip className="size-4.5" />
+                            <Plus className="size-4.5" />
                           </Button>
                         }
                       />

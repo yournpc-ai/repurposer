@@ -191,8 +191,17 @@ export interface FlowViewProps {
   controls?: boolean
   /** Extra classes for the controls' Panel (2026-09-06): the project page
    * offsets the zoom pill clear of the open chat panel (a fixed right
-   * margin) so it never sits under the frost. */
+   * margin) so it never sits under the frost. The inspector shares it. */
   controlsClassName?: string
+  /** Settle-driven initial framing (2026-09-06): surfaces whose data arrives
+   * through MULTIPLE async fetches (the results canvas: /results + /assets,
+   * gated visible by hasRuns) pass a key that is non-null exactly when their
+   * visible, settled content is present. Each transition to a new non-null
+   * key frames the graph once; growth afterwards never re-frames (explore
+   * law). Absent = the legacy count-based initial fit (first non-empty
+   * frame) — which centered PARTIAL arrivals and left the rest of the
+   * graph off-center at the default viewport. */
+  settleKey?: string | null
   /** Birth choreography (ADR-036 补记 3, growth-driven since ADR-051): the
    * ids of nodes that appeared while the surface was mounted (placeholder
    * materialization, in-place fills, revision growth) — they enter staggered

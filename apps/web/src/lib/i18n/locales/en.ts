@@ -40,6 +40,9 @@ const en = {
     /** The one estimate range form every surface shares (dock total /
      * per-task price / — three surfaces, one source, BILLING §7). */
     range: "~{{low}}–{{high}} credits",
+    /** The inspector's 对账尺 actual side (2026-09-06) — the metered charge
+     * of the product's producing step, shown against credits.range's quote. */
+    spent: "{{count}} credits",
     /** The user-level shortfall grey row (BILLING §7, 2026-09-10) — strictly
      * two vocabularies with the provider's 402 line. Factual, no CTA: the
      * purchase entry is W11, so there is nothing to sell yet. */
@@ -1032,9 +1035,10 @@ const en = {
       // flush right edge full-height, still frosted.
       dockPanel: "Dock panel",
       floatPanel: "Float panel",
-      // The dock's resident disclaimer (ADR-051, 2026-08-31 — the FLORA
-      // FAUNA-line, VERBATIM per user ruling; docked above the input area
-      // in the base form, hidden with it on the question morph).
+      // The dock's resident disclaimer (ADR-051 — the FLORA FAUNA-line,
+      // VERBATIM per user ruling; ABOVE the input container since the
+      // 2026-09-06 FAUNA-parity ruling, hidden with the input on the
+      // question morph).
       honesty: "Repurposer is AI and can make mistakes. Check important info.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
@@ -1066,6 +1070,23 @@ const en = {
       // 2026-09-05 the ± steppers retired — the pill is a read-only
       // percentage, click = fit).
       zoomFit: "Fit to view",
+      // The product dossier (2026-09-06, FLORA node-detail parity): a product
+      // click summons it under the zoom pill — 出生证明 rows only, read-only
+      // facts (修订只经 chat; FLORA's inline parameter editing stays unported).
+      inspector: {
+        stepLabel: "Step",
+        estimateLabel: "Quote",
+        spentLabel: "Charged",
+        durationLabel: "Duration",
+        createdLabel: "Created",
+        languageLabel: "Language",
+        sourceLabel: "Source",
+        sourceFull: "Full source",
+        rangeLabel: "Range",
+        specLabel: "Spec",
+        modelsLabel: "Models",
+        close: "Close details",
+      },
       // Render failure projected onto the product card in place (never a
       // separate node); the retry channel is the chat dock (D8). An active
       // render speaks through the BrandLoader alone — no status line.
@@ -1294,7 +1315,16 @@ const en = {
     starting: "Starting…",
     startingLine: "I'm starting your generation — stay to refine it together, or leave and I'll finish in the background.",
     planUpdated: "Got it — I've updated the plan above.",
-    chatPlaceholder: "Chat with Repurposer…",
+    // FAUNA-parity mechanics placeholder (2026-09-06 user ruling, final
+    // cut — @ verified working in product): FAUNA's form verbatim minus
+    // the '/' clause, minus "your" (single-line nowrap ellipsis at the
+    // inherited 14px: the 57-char original clips in the 480px panel's
+    // input; 46 chars fits). "nodes" is honest here: the @ picker's
+    // candidates (assets / outputs) ARE canvas nodes. NO '/' — chat has
+    // no slash-command system; advertising it would be a false promise
+    // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
+    // half earns its seat only if slash commands ever ship.
+    chatPlaceholder: "Use '@' to mention nodes and describe changes",
     chatPlaceholderConfirm: "Ask me to adjust the plan…",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",

@@ -46,10 +46,12 @@ function ViewportController({
   count,
   wrapperRef,
   navigation,
+  settleKey,
 }: {
   count: number
   wrapperRef: React.RefObject<HTMLDivElement | null>
   navigation: "fit" | "explore"
+  settleKey?: string | null
 }) {
   const rf = useReactFlow()
   const prevCountRef = useRef<number | null>(null)
@@ -65,6 +67,12 @@ function ViewportController({
   )
 
   useEffect(() => {
+    // Settle-driven surfaces (settleKey provided): the count-based initial
+    // fit is DISABLED — the count transition fired on the first PARTIAL
+    // fetch frame (the three sources resolve in any order) and everything
+    // after is growth, which explore never re-frames (refresh / re-entry
+    // used to strand the graph at the default top-left viewport).
+    if (settleKey != null) return
     const prev = prevCountRef.current
     prevCountRef.current = count
     const firstEver = prev === null
@@ -87,7 +95,37 @@ function ViewportController({
       cancelAnimationFrame(outer)
       cancelAnimationFrame(inner)
     }
-  }, [count, fit, navigation])
+  }, [count, fit, navigation, settleKey])
+
+  // ── Settle-driven initial framing (2026-09-06) ────────────────────────
+  // Each transition to a NEW non-null key frames once (the surface's
+  // visible, settled content is present — for the results canvas:
+  // baselineReady && hasRuns). The fired mark lands inside the rAF, not
+  // the effect body, so a cancelled pass (unmount / StrictMode remount)
+  // re-fires instead of latching the key without framing.
+  const firedSettleRef = useRef<string | null>(null)
+  useEffect(() => {
+    const key = settleKey ?? null
+    if (key == null) {
+      // A settle withdrawal (runs wiped / project switch loading) re-arms
+      // the next settle — a same-key return (a new run after a wipe) must
+      // re-frame, not latch on the stale mark.
+      firedSettleRef.current = null
+      return
+    }
+    if (firedSettleRef.current === key) return
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        firedSettleRef.current = key
+        fit(300)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
+  }, [settleKey, fit])
 
   useEffect(() => {
     if (navigation !== "fit") return
@@ -213,6 +251,7 @@ export function FlowView({
   navigation = "fit",
   controls = false,
   controlsClassName,
+  settleKey,
   bornIds,
   groups = [],
   dots = false,
@@ -345,6 +384,7 @@ export function FlowView({
           count={nodes.length}
           wrapperRef={wrapperRef}
           navigation={navigation}
+          settleKey={settleKey}
         />
         {/* The zoom pill is canvas chrome for explore surfaces only — a
             fit-locked surface has no zoom business (the prop is ignored). */}
