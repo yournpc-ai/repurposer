@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -585,3 +586,71 @@ class Notification(Base):
             postgresql_where=text("read_at IS NULL"),
         ),
     )
+
+
+class Wallet(Base):
+    """Credit wallet — one row per user (ADR-055, docs/BILLING.md §2).
+
+    The wallet is its own aggregate root (deliberately no column on
+    ``users``): lazy-opened on first login with the signup grant. ``balance``
+    is only the materialized cache of the append-only ``credit_transactions``
+    ledger — negative values are allowed by design (BILLING §5, no CHECK).
+    ``version`` is the optimistic lock that keeps concurrent holds from
+    over-drawing.
+    """
+
+    __tablename__ = "wallets"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    balance = Column(BigInteger, nullable=False, default=0)
+    version = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class CreditTransaction(Base):
+    """Credit ledger row (ADR-055) — append-only, the sole source of truth for
+    every balance change; ``wallets.balance`` is only its materialized cache.
+
+    ``kind`` is a plain string (Notification.type precedent — W11's
+    ``purchase`` joins without a migration): grant | purchase | hold |
+    capture | release | refund | adjust. ``amount`` is signed (hold/capture
+    negative); ``balance_after`` chains each row to the balance it produced,
+    so ledger drift is a one-query audit. ``idempotency_key`` is a
+    first-class UNIQUE column: worker restarts, step retries and (W11)
+    payment webhook replays dedupe structurally, never via check-then-write
+    code. ``ref`` carries the cause ({\"run_id\": …} / {\"step_id\": …} /
+    {\"source\": \"signup\"} / W11 {\"payment_event\": …}).
+    """
+
+    __tablename__ = "credit_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String(20), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    balance_after = Column(BigInteger, nullable=False)
+    ref = Column(JSONB, nullable=False, default=dict)
+    idempotency_key = Column(String(128), nullable=False, unique=True)
+    note = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class Config(Base):
+    """Public operating parameter (ADR-055) — the ``configs`` table.
+
+    ``CONFIG_REGISTRY`` (app/platform/configs.py) is the sole source of truth
+    for the key set / defaults / types / descriptions; rows here are only the
+    override carrier, reconciled at startup. Keys use dotted namespaces
+    (``credits.per_cost_usd``). All reads funnel through ``get_config()`` —
+    modules never query this table directly. Boundary rule: operating
+    parameters (changing them must not require a deploy) live here;
+    engineering parameters (a wrong value breaks the deployment — DSNs,
+    secrets, DB fuses) stay in env ``app/config.py``.
+    """
+
+    __tablename__ = "configs"
+
+    key = Column(String(128), primary_key=True)
+    value = Column(JSONB, nullable=False)
+    description = Column(String(512), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)

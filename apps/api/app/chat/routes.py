@@ -89,19 +89,21 @@ def _sse(event: str, data: str) -> str:
 _HEARTBEAT_SECONDS = 15
 
 
-def _failure_detail(exc: Exception, ui_language: str) -> str:
+def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
     """The ONE error→frame mapping both turn pumps share (2026-09-05 减法批).
 
     HTTPException detail is client-facing by contract (4xx reasons the JSON
-    path would surface). MiniMaxError = the provider failed (no fabricated
-    default book, 2026-08-14 裁定) — the localized provider line
-    (errors.USER_ERROR_LINES) rides the frame; the raw 402/429/5xx text
-    stays in structlog. Anything else is an internal failure — the JSON path
-    answers "Internal server error" via the global handler, so the SSE path
-    must not leak str(exc) either.
+    path would surface). A STRUCTURED detail (the credits.insufficient
+    payload, API.md §4) passes through as the object — the client renders
+    its typed form (the dock's grey row), never a repr'd dict. MiniMaxError
+    = the provider failed (no fabricated default book, 2026-08-14 裁定) —
+    the localized provider line (errors.USER_ERROR_LINES) rides the frame;
+    the raw 402/429/5xx text stays in structlog. Anything else is an
+    internal failure — the JSON path answers "Internal server error" via the
+    global handler, so the SSE path must not leak str(exc) either.
     """
     if isinstance(exc, HTTPException):
-        return str(exc.detail)
+        return exc.detail if isinstance(exc.detail, dict) else str(exc.detail)
     if isinstance(exc, MiniMaxError):
         return user_error_line(exc, ui_language)
     return "Internal server error"
@@ -121,7 +123,9 @@ async def _sse_pump(
     teardown rolls the turn back ("a failed turn persists nothing").
 
     Queue protocol (turn-specific bodies only push tuples):
-    ``("completed", <JSON-able payload>)`` / ``("failed", <detail str>)``.
+    ``("completed", <JSON-able payload>)`` / ``("failed", <detail str|dict>)``
+    — a dict detail is a typed failure payload (credits.insufficient), sent
+    as the frame's ``detail`` object verbatim.
     """
     try:
         while True:

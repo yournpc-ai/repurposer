@@ -172,6 +172,29 @@ class RecipePublic(BaseModel):
     flow: list[FlowStep]
     example_assets: list[ExampleAsset]
     example_outputs: list[ExampleOutput]
+    # 估价贴 (BILLING §7, ADR-055): the card's credits quotation [low, high]
+    # on the typical source (RECIPE_QUOTE_FACTS) — computed by the route from
+    # the declared chain's estimate fold × the live consumption ratio, so one
+    # config edit moves every sticker (调参三面同动). None = unquoted chain.
+    estimate_credits: list[int] | None = None
+
+
+# 估价事实包 (BILLING §7): the typical-source quantities every recipe card's
+# sticker quotes against — a ~20-minute talk with one speaker and a bound
+# persona. These are QUANTITIES, never a price: the sticker still flows
+# through estimate() × PRICING × the ratio, so pricing and ratio changes
+# move it without touching this pack. Fields mirror ``_estimate_facts``
+# (step_context.py); a card needing atypical quantities gets a per-entry
+# pack when that day comes, not before.
+RECIPE_QUOTE_FACTS: dict = {
+    "text_chars": 20_000,
+    "text_count": 1,
+    "media_count": 1,
+    "persona_exists": True,
+    "voice_clone_needed": True,
+    "clips": [{"seconds": 1200.0, "caption_chars": 15_000}],
+    "output_seconds": {},
+}
 
 
 # Public demo/ tree (content-addressed where baked; source materials curated

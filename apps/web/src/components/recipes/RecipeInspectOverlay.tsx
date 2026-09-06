@@ -356,16 +356,30 @@ export function RecipeInspectOverlay({
                 />
               </div>
 
-              <Button
-                onClick={handleLaunch}
-                disabled={launching}
-                className="mt-auto h-10 w-full text-sm"
-              >
-                {launching && (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                )}
-                {t("recipes.inspect.send")}
-              </Button>
+              <div className="mt-auto flex flex-col gap-2">
+                {/* 估价贴 (BILLING §7): the card's credits quotation on the
+                    typical source — the decision sees the price before the
+                    send. Muted, tabular, never a badge (卡面禁令的 overlay
+                    同律). */}
+                {card.estimate_credits ? (
+                  <p className="text-center text-xs tabular-nums text-muted-foreground">
+                    {t("recipes.inspect.estimate", {
+                      low: card.estimate_credits[0],
+                      high: card.estimate_credits[1],
+                    })}
+                  </p>
+                ) : null}
+                <Button
+                  onClick={handleLaunch}
+                  disabled={launching}
+                  className="h-10 w-full text-sm"
+                >
+                  {launching && (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  )}
+                  {t("recipes.inspect.send")}
+                </Button>
+              </div>
             </div>
 
             {/* RIGHT — top/bottom stacked layout (2026-08-24, was a floating

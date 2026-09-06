@@ -28,7 +28,8 @@ from app.pipeline.routes import (
     recipes,
     runs,
 )
-from app.platform.routes import auth_router, files_router, notifications_router
+from app.platform.configs import reconcile_configs
+from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
 from app.operations.routes import router as operations_router
 from app.ui_locale import capture_ui_language
 
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
+        await reconcile_configs(db)
     yield
 
 
@@ -242,6 +244,7 @@ app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
 # resource, not the module — DISTRIBUTION.md §1.1)
 app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])
 app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
+app.include_router(wallet_router, prefix="/api/v1", tags=["wallet"])
 
 
 @app.get("/health")

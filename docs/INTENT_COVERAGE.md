@@ -174,6 +174,9 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 | SSE 流式：answer 轮 delta 拼接 == 信封散文；draft 轮 echo deltas == intent.answer | ✅ S10 |
 | 整条源规则活链（"给我的视频加中英双语字幕" → translate 单独成链 + derived 预览 + materialize_source 注入）+ materialize 三画像矩阵（media / stills / existing + 无画像拒绝 + select_clips 在场不注入，进程内） | ✅ S11 |
 | merge_brief 来源优先级矩阵：user-stated 恒胜 / 重申恒胜 / inferred>default / None 永不落账 / 同秩最新胜 / asked 簿永不吃 LLM 提议 | ✅ S12 |
+| 积分① 余额不足出生地拦截：钱包置零 → typed Start 与 /generate 双路结构化 422 {code, balance, required} 同形同义 → 零 run 零台账行；负余额 hold 必拒（含 0 元 hold，BILLING §5） | ✅ S13 |
+| 积分② 失败不扣费：缺参确定性失败探针（seeded run，活 worker）→ FAILED + 级联 skipped → 台账零 capture、hold 全额 release、余额回到赠额；capture 幂等（重复调用结构性 no-op）+ bounce 重跑差额落 attempt 键 + Σ captures ≡ credits（总成本）（进程内） | ✅ S14（需 dev worker） |
+| 积分③ 孤儿 hold 回收（BILLING §8 边界落地）：PENDING run + 真 hold → DELETE /projects/{id} → 同事务先退未结 hold 再级联删 run（RUNNING 在途归收官路径台账结算，幂等键两路相斥只退一笔）→ 台账 hold+release 闭合、余额回赠额 | ✅ S15 |
 | ask 落库（chat_intent agent ask 提案 → dock 选项问） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
 | translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |
 

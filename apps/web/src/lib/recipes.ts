@@ -54,6 +54,10 @@ export interface RecipePublic {
     /** Declared frame for media kinds (falls back to the card aspect). */
     aspect?: string | null
   }[]
+  /** 估价贴 (BILLING §7): the card's credits quotation [low, high] on the
+   * typical source — serialization-derived against the live ratio (a config
+   * edit moves every sticker). null = unquoted chain. */
+  estimate_credits?: [number, number] | null
 }
 
 /** Does a staged file cover a required input slot? The launch gate reads

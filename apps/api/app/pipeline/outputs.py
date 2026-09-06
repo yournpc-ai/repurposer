@@ -20,6 +20,8 @@ from app.models.schemas import (
 )
 from app.models.tables import Output, WorkflowStep, WorkflowRun
 from app.pipeline.graph import fold_estimates, node_for
+from app.platform.billing import cost_usd, credits_at_ratio, estimate_usd_range
+from app.platform.configs import get_config
 
 
 def visible_outputs_stmt() -> Select:
@@ -41,9 +43,22 @@ async def list_visible_outputs(
     return list(result.scalars().all())
 
 
-def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
-    """Serialize a node; ``stage`` is the display hint from spec (results.stepper.* keys)."""
+def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse:
+    """Serialize a node; ``stage`` is the display hint from spec (results.stepper.* keys).
+
+    ``ratio`` (credits.per_cost_usd) is read ONCE per response by the caller
+    and injected — the credits fields are the serialization-layer derivation
+    (BILLING §7: USD stays in estimate/cost, credits are folded at read time
+    and never persisted), so one config edit moves every surface at once.
+    """
     node_cls = node_for(node.kind)
+    estimate_credits: list[int] | None = None
+    if node.estimate:
+        usd_low, usd_high = estimate_usd_range(node.estimate)
+        estimate_credits = [
+            credits_at_ratio(usd_low, ratio),
+            credits_at_ratio(usd_high, ratio),
+        ]
     return StepResponse(
         id=node.id,
         kind=node.kind,
@@ -61,6 +76,10 @@ def workflow_step_to_response(node: WorkflowStep) -> StepResponse:
         canvas_text=(node_cls.canvas_text(node) if node_cls else None),
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
+        estimate_credits=estimate_credits,
+        cost_credits=(
+            credits_at_ratio(cost_usd(node.cost), ratio) if node.cost else None
+        ),
         started_at=node.started_at,
         finished_at=node.finished_at,
     )
@@ -367,6 +386,7 @@ async def run_to_response(
             select(WorkflowStep).where(WorkflowStep.run_id == run.id).order_by(WorkflowStep.seq)
         )
         nodes = list(result.scalars().all())
-        resp.steps = [workflow_step_to_response(n) for n in nodes]
+        ratio = await get_config(db, "credits.per_cost_usd")
+        resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
         resp.cost = aggregate_step_cost(nodes)
     return resp

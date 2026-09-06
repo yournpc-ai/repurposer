@@ -1,7 +1,7 @@
 # 积分系统批（credits system）
 
-> 状态：待施工（2026-09-05 立项，用户拍板；ADR-055 同批落档）。
-> 排期：PROGRESS W7 积分批 09-07~09-11（5 个工作日）。
+> 状态：✅ 施工完成（2026-09-05 三天提前完工 09-03~09-05；自动化验证全绿——compileall / tsc / S4·S13·S14·S15 / reconcile 验收面 no drift；人工项待验 = 灰行三路径 / 调参演示 / 负余额手测 / e2e 走查。验收对账首跑抓获孤儿 hold 真缺口 → 需求池 P1 当日兑现，S15 锁）。
+> 排期：PROGRESS W7 积分批（原排 09-07~09-11 五天，实际 09-03~09-05 三天提前完工；释放窗口由支付批 09-07 顶上——拍板（四））。
 > 先读：`docs/BILLING.md`（母文档，唯一事实源）、ADR-055、仓库根 `CLAUDE.md`、`docs/MODULE_ARCHITECTURE.md` §4（表归属）、`docs/NAMING.md` N-51、`docs/API.md` §4（错误形态）。架构语境：AGENT_ARCHITECTURE §8（估价与计量）、ADR-025（计量单边界）、ADR-050（会话纪律）。
 
 ## 1. 范围

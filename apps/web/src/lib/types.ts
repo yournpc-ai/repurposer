@@ -265,6 +265,12 @@ export interface WorkflowStep {
   /** The artifact node's body copy (e.g. the interrupt's full direction
    * answer); absent = the card falls back to the summary line. */
   canvas_text?: string | null
+  /** Credits derivation (ADR-055, BILLING §7 — serialization-folded, never
+   * persisted): the step's quotation [low, high] / metered actual in
+   * credits. estimate_credits null = never quoted; cost_credits null =
+   * nothing metered yet. */
+  estimate_credits?: [number, number] | null
+  cost_credits?: number | null
   started_at: string | null
   finished_at: string | null
 }

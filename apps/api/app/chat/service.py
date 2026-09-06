@@ -70,6 +70,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     StartAnswerRequest,
+    TaskBookEstimate,
     TaskItem,
     TaskListProposal,
 )
@@ -92,6 +93,7 @@ from app.pipeline.derivative_dispatch import (
     derive_quote_alt_language,
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
+from app.platform.billing import CreditsInsufficientError
 from app.platform.project_context import resolve_default_persona
 from app.providers.llm.minimax import MiniMaxError
 from app.tools import ToolRejected, validate_task_list
@@ -278,20 +280,39 @@ async def _create_run_from_tasks(
     summary: str,
     caption_mode: str | None = None,
 ) -> UUID:
-    """Dispatch a proposed task list through the ONLY run birthplace."""
+    """Dispatch a proposed task list through the ONLY run birthplace.
+
+    A user-level shortfall converts to the structured 422 HERE — the chat
+    dispatch's single conversion point (BILLING §7): every dispatch path
+    (the judged start, both repair re-dispatches) then raises the same
+    ``{code, balance, required}`` the typed Start's answer endpoint raises,
+    the repair handlers' broad ValueError catches never swallow it, and the
+    SSE turn pump carries it as the turn.failed frame the dock renders as
+    its grey row (入流灰行, 双路同语义).
+    """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
-    run = await create_run(
-        db,
-        project,
-        TaskSpec(
-            tasks=tasks,
-            target_language=first_task_language(tasks) or project.language or "en",
-            instruction=summary,
-            scope="full",
-            caption_mode=caption_mode,
-        ),
-    )
+    try:
+        run = await create_run(
+            db,
+            project,
+            TaskSpec(
+                tasks=tasks,
+                target_language=first_task_language(tasks) or project.language or "en",
+                instruction=summary,
+                scope="full",
+                caption_mode=caption_mode,
+            ),
+        )
+    except CreditsInsufficientError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "code": "credits.insufficient",
+                "balance": exc.balance,
+                "required": exc.required,
+            },
+        ) from exc
     return run.id
 
 
@@ -301,7 +322,18 @@ def _prefers_zh(text: str) -> bool:
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
 
 
-# ---- brief 账本 (DIALOG_WORKFLOW §2.4, ADR-052 B2) ---------------------------
+async def _safe_task_estimate(
+    db: AsyncSession, project: Project, tasks: list[TaskItem]
+) -> TaskBookEstimate | None:
+    """The dock payload's credits quotation, degraded like the derived
+    preview (the book-turn's own posture): an uncompilable/unquotable chain
+    docks quote-less, never blocked."""
+    from app.pipeline.orchestrator import derive_task_estimates  # deferred
+
+    try:
+        return await derive_task_estimates(db, project, tasks)
+    except (ToolRejected, ValueError):
+        return None# ---- brief 账本 (DIALOG_WORKFLOW §2.4, ADR-052 B2) ---------------------------
 
 _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.DEFAULT: 0,
@@ -857,6 +889,7 @@ async def sync_task_book_question(
     derived: list[dict] | None = None,
     brief: BriefLedger | None = None,
     echo: str | None = None,
+    estimate: TaskBookEstimate | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -868,7 +901,11 @@ async def sync_task_book_question(
     so the archive and the LLM context record WHY confirmation was asked.
     ``brief`` (ADR-052 B3) stamps the merged ledger into the question payload
     — the plan card renders the agent's own understanding from it, never a
-    blank form. ``echo`` = the turn's book-introduction prose (intent.answer,
+    blank form. ``estimate`` (BILLING §7) stamps the chain's credits
+    quotation (total + per-task marginal, the dry-run compile's fold × the
+    live ratio) — the dock pill reads the total, the plan card's task rows
+    the per-task prices; None docks quote-less, never blocked. ``echo`` = the
+    turn's book-introduction prose (intent.answer,
     or the stored draft's echo on a code-path re-dock) — since 2026-09-04 it
     IS the row's ``content`` so the echo survives as a real message entity
     (live journey pushes it into the flow before docking; the restore replay
@@ -904,7 +941,12 @@ async def sync_task_book_question(
         db,
         conversation_id,
         content,
-        QuestionPayload(kind="task_book", reasons=reasons or [], brief=brief),
+        QuestionPayload(
+            kind="task_book",
+            reasons=reasons or [],
+            brief=brief,
+            estimate_credits=estimate,
+        ),
     )
     return bailed_run_ids
 
@@ -1135,6 +1177,9 @@ async def answer_question(
                         reasons=project.pending_brief["reasons"],
                         brief=preserved_brief,
                         echo=replay_intent.answer,
+                        estimate=await _safe_task_estimate(
+                            db, project, replay_intent.tasks
+                        ),
                     )
                     follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
                     # Skip the 续聊 fallback below — the task book question is
@@ -1237,6 +1282,18 @@ async def answer_question(
             except ToolRejected as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
+                ) from exc
+            except CreditsInsufficientError as exc:
+                # Same structured shortfall payload as the typed /generate
+                # endpoint (BILLING §7) — the dock renders the grey row off
+                # {code, balance, required}. BEFORE ValueError (it subclasses it).
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    {
+                        "code": "credits.insufficient",
+                        "balance": exc.balance,
+                        "required": exc.required,
+                    },
                 ) from exc
             except ValueError as exc:
                 raise HTTPException(
@@ -1770,6 +1827,7 @@ async def _book_turn(
                 reasons=stored.reasons, derived=stored.derived,
                 brief=stored.brief,
                 echo=stored.intent.answer,
+                estimate=await _safe_task_estimate(db, project, stored.intent.tasks),
             )
             question = await latest_pending_question(db, conversation_id)
             assert question is not None  # sync_task_book_question just docked it
@@ -1882,6 +1940,10 @@ async def _book_turn(
         derived = await derive_plan_preview(db, project, intent.tasks)
     except (ToolRejected, ValueError):
         derived = []
+    # Dock 载荷的估价面 (BILLING §7): the same dry-run compile's credits
+    # quotation (total + per-task marginal), degraded exactly like the
+    # preview — an unquotable/uncompilable chain docks quote-less.
+    task_estimate = await _safe_task_estimate(db, project, intent.tasks)
 
     # Persist the unconfirmed task book on the project: leaving the chat and
     # coming back (any device) restores this exact plan. Cleared once the run
@@ -1974,6 +2036,7 @@ async def _book_turn(
         db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived,
         brief=merged_brief,
         echo=intent.answer,
+        estimate=task_estimate,
     )
     question = await latest_pending_question(db, conversation_id)
     assert question is not None  # sync_task_book_question just docked it

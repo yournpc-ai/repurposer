@@ -23,6 +23,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import WorkflowStatus
 from app.models.tables import Project, User, WorkflowRun, WorkflowStep
 from app.pipeline.outputs import workflow_step_to_response
+from app.platform.configs import get_config
 
 router = APIRouter()
 
@@ -35,8 +36,8 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
-def _step_frame(node: WorkflowStep) -> dict:
-    return workflow_step_to_response(node).model_dump(mode="json")
+def _step_frame(node: WorkflowStep, *, ratio: int) -> dict:
+    return workflow_step_to_response(node, ratio=ratio).model_dump(mode="json")
 
 
 def _hash(frame: dict) -> str:
@@ -57,11 +58,11 @@ def _run_frame(run: WorkflowRun) -> dict:
     return frame
 
 
-async def _load(run_id: UUID) -> tuple[WorkflowRun | None, list[WorkflowStep]]:
+async def _load(run_id: UUID) -> tuple[WorkflowRun | None, list[WorkflowStep], int]:
     async with AsyncSessionLocal() as db:
         run = await db.get(WorkflowRun, run_id)
         if run is None:
-            return None, []
+            return None, [], 0
         nodes = list(
             (
                 await db.execute(
@@ -73,9 +74,13 @@ async def _load(run_id: UUID) -> tuple[WorkflowRun | None, list[WorkflowStep]]:
             .scalars()
             .all()
         )
+        # The credits ratio rides the same read (cached after the first call,
+        # so the per-tick re-read is free) — the frames' credits derivation
+        # stays the serialization fold × the live ratio.
+        ratio = await get_config(db, "credits.per_cost_usd")
         # Detach from the session — frames are read-only snapshots.
         db.expunge_all()
-        return run, nodes
+        return run, nodes, ratio
 
 
 @router.get("/{run_id}/events")
@@ -103,10 +108,10 @@ async def run_events(
         step_hashes: dict[str, str] = {}
         run_sig: str | None = None
 
-        run, nodes = await _load(run_id)
+        run, nodes, ratio = await _load(run_id)
         if run is None:
             return
-        frames = [_step_frame(n) for n in nodes]
+        frames = [_step_frame(n, ratio=ratio) for n in nodes]
         for frame in frames:
             step_hashes[frame["id"]] = _hash(frame)
         run_frame = _run_frame(run)
@@ -117,11 +122,11 @@ async def run_events(
         while True:
             await asyncio.sleep(_TAIL_INTERVAL)
 
-            run, nodes = await _load(run_id)
+            run, nodes, ratio = await _load(run_id)
             if run is None:
                 return
             for node in nodes:
-                frame = _step_frame(node)
+                frame = _step_frame(node, ratio=ratio)
                 digest = _hash(frame)
                 if step_hashes.get(frame["id"]) != digest:
                     step_hashes[frame["id"]] = digest

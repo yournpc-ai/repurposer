@@ -50,6 +50,8 @@ from app.pipeline.outputs import (
     run_to_response,
     visible_outputs_stmt,
 )
+from app.platform.billing import CreditsInsufficientError, release_run
+from app.platform.configs import get_config
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
 
@@ -201,7 +203,8 @@ async def get_project_results(
     latest_run_resp = None
     if latest_run is not None:
         latest_run_resp = RunResponse.model_validate(latest_run)
-        latest_run_resp.steps = [workflow_step_to_response(n) for n in nodes]
+        ratio = await get_config(db, "credits.per_cost_usd")
+        latest_run_resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
         latest_run_resp.cost = aggregate_step_cost(nodes)
 
     # Placeholder roster (ADR-051 B — 占位物化): only while the latest run is
@@ -300,6 +303,21 @@ async def delete_project(
     await db.execute(delete(Operation).where(Operation.project_id == project_id))
     await db.execute(delete(Publication).where(Publication.project_id == project_id))
     await db.execute(delete(Output).where(Output.project_id == project_id))
+    # Credits (ADR-055): the ledger is append-only and outlives run rows, so
+    # release every un-settled hold BEFORE the cascade deletes the runs — a
+    # frozen hold would have no terminal left to settle at (orphan hold,
+    # BILLING §8). RUNNING runs stay with their in-flight worker: its
+    # finalize path settles from the ledger even after the row is gone.
+    run_ids = (
+        await db.execute(
+            select(WorkflowRun.id).where(
+                WorkflowRun.project_id == project_id,
+                WorkflowRun.status != WorkflowStatus.RUNNING,
+            )
+        )
+    ).scalars().all()
+    for rid in run_ids:
+        await release_run(db, user_id=current_user.id, run_id=rid)
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
     await db.execute(delete(Asset).where(Asset.project_id == project_id))
     await db.delete(project)
@@ -365,6 +383,18 @@ async def generate_content(
             target_id=request.target_id,
         )
         run = await create_run(db, project, task_spec)
+    except CreditsInsufficientError as exc:
+        # User-level shortfall (ADR-055): the structured 422 the dock's grey
+        # row reads (BILLING §7) — strictly two vocabularies with provider
+        # 402s. BEFORE the ValueError catch (it subclasses ValueError).
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "credits.insufficient",
+                "balance": exc.balance,
+                "required": exc.required,
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

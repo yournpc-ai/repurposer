@@ -74,8 +74,25 @@ export interface AnswerTurnBody {
  * former copies' fetchEventSource scaffolding was byte-identical; only the
  * URL, the body and the terminal event names differ, and those stay
  * explicit parameters, never inference). Resolves with the terminal
- * envelope; rejects with Error(server detail) on pre-stream failures and
- * mid-stream `.failed` frames, and with the abort error on stop (chat). */
+ * envelope; rejects with StreamTurnError(server detail) on pre-stream
+ * failures and mid-stream `.failed` frames, and with the abort error on
+ * stop (chat). */
+
+/** A turn failure carrying the server's raw `detail` — a string for plain
+ * errors, the structured object for typed failures (credits.insufficient,
+ * API.md §4). `message` keeps the human string form so generic callers
+ * degrade exactly as before; typed callers read `detail` via
+ * asCreditsInsufficient & co. */
+export class StreamTurnError extends Error {
+  detail: unknown
+
+  constructor(detail: unknown, fallback: string) {
+    super(typeof detail === "string" && detail ? detail : fallback)
+    this.name = "StreamTurnError"
+    this.detail = detail
+  }
+}
+
 function streamTurn<T>(
   url: string,
   body: unknown,
@@ -122,10 +139,12 @@ function streamTurn<T>(
         if (!res.ok) {
           // Pre-stream failures (404 access, 422 recipe rejection, …) arrive
           // as a plain JSON error body — keep the toast semantics identical
-          // to the JSON path.
+          // to the JSON path. A structured detail (credits.insufficient)
+          // rides the error object for typed handling downstream.
           const data = await res.json().catch(() => ({}))
-          throw new Error(
-            (data as { detail?: string }).detail || `stream: ${res.status}`,
+          throw new StreamTurnError(
+            (data as { detail?: unknown }).detail,
+            `stream: ${res.status}`,
           )
         }
       },
@@ -138,8 +157,8 @@ function streamTurn<T>(
         } else if (msg.event === terminal.completed) {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === terminal.failed) {
-          const data = JSON.parse(msg.data) as { detail?: string }
-          reject(new Error(data.detail || "Stream failed"))
+          const data = JSON.parse(msg.data) as { detail?: unknown }
+          reject(new StreamTurnError(data.detail, "Stream failed"))
         }
         // heartbeat comment frames never reach onmessage.
       },
@@ -179,8 +198,9 @@ export function streamAnswer<T>(
 
 /** One streamed chat turn. Resolves with the ChatResponse envelope (the
  * caller supplies its shape — the two surfaces type it differently); rejects
- * with Error(server detail) on HTTP failures and mid-stream turn.failed, and
- * with the abort error on stop (callers check `e.name === "AbortError"`). */
+ * with StreamTurnError(server detail) on HTTP failures and mid-stream
+ * turn.failed, and with the abort error on stop (callers check
+ * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
   { signal, onDelta, onThinking }: StreamChatOptions,

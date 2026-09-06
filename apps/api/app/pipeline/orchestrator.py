@@ -29,10 +29,11 @@ from app.models.schemas import (
     AssetType,
     IntentSlot,
     ProjectStatus,
+    TaskBookEstimate,
     TaskItem,
     WorkflowStatus,
 )
-from app.models.tables import Asset, Message, Output, WorkflowStep, Project, WorkflowRun
+from app.models.tables import Asset, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step, merge_accrued_cost
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
@@ -46,14 +47,23 @@ from app.pipeline.graph import (
     MEDIA,
     NODE_KINDS,
     Requirement,
+    fold_estimates,
     generation_node_kinds,
     node_for,
     node_for_output,
     runtime_fanout_kinds,
 )
-from app.pipeline.recipes import RECIPE_REGISTRY
+from app.pipeline.recipes import RECIPE_QUOTE_FACTS, RECIPE_REGISTRY, RecipeEntry
 from app.pipeline.step_context import _estimate_facts
 from app.pipeline.tracks import assert_single_writer_per_track
+from app.platform.billing import (
+    capture_step,
+    check_hold,
+    credits_for_cost,
+    estimate_usd_range,
+    hold_run,
+    release_run,
+)
 from app.tools import TOOL_REGISTRY, ToolEntry, strip_null_params, validate_task_list
 
 logger = structlog.get_logger()
@@ -608,6 +618,94 @@ async def derive_plan_preview(
     return rows
 
 
+async def derive_task_estimates(
+    db: AsyncSession, project: Project, tasks: list[TaskItem]
+) -> TaskBookEstimate | None:
+    """The dock payload's credits quotation (BILLING §7): the book's total
+    [low, high] plus a per-task MARGINAL range.
+
+    Per-task = the prefix-compile difference (compile the chain up to task i,
+    subtract the credits of the chain up to i−1): the shared prelude
+    (understand/plan/…) lands on the first task that needs it and cancels
+    out of every later delta, so Σ per_task ≡ total exactly — the dock's
+    numbers can never drift from the run's own fold (三面同源). A task adding
+    no quoted cost (an unquotable fan-out, e.g. a dub whose targets don't
+    exist at compile) gets None and settles at capture. Mirrors
+    derive_plan_preview's compile (same profile, same graph the dock
+    previews); raises ToolRejected / ValueError — the caller degrades to a
+    quote-less dock exactly like a preview-less one.
+    """
+    if not tasks:
+        return None
+    spec = TaskSpec(tasks=list(tasks))
+    profile = await _materialize_profile(db, project, spec)
+    facts = await _estimate_facts(db, project)
+
+    async def prefix_credits(prefix: list[TaskItem]) -> list[int]:
+        node_specs = _compile_task_list(
+            TaskSpec(tasks=list(prefix)), materialize_profile=profile
+        )
+        fold = fold_estimates(
+            NODE_KINDS[ns.kind].estimate(
+                {
+                    **facts,
+                    "spec": ns.spec,
+                    "input_kinds": [node_specs[i].kind for i in ns.inputs],
+                }
+            )
+            for ns in node_specs
+        )
+        usd_low, usd_high = estimate_usd_range(fold)
+        return [
+            await credits_for_cost(db, usd_low),
+            await credits_for_cost(db, usd_high),
+        ]
+
+    per_task: list[list[int] | None] = []
+    prev = [0, 0]
+    total = [0, 0]
+    for i in range(1, len(tasks) + 1):
+        current = await prefix_credits(tasks[:i])
+        delta = [current[0] - prev[0], current[1] - prev[1]]
+        per_task.append(None if delta == [0, 0] else delta)
+        prev = current
+        total = current
+    if total == [0, 0]:
+        return None
+    return TaskBookEstimate(total=total, per_task=per_task)
+
+
+def compile_recipe_quote(entry: RecipeEntry) -> dict:
+    """配方卡估价贴的 fold (BILLING §7): the recipe's declared chain compiled
+    with the shared typical-source fact pack (RECIPE_QUOTE_FACTS — quantities,
+    never prices). The route prices the fold USD → credits against the LIVE
+    ratio, so a config edit moves every sticker (调参三面同动). Mirrors the
+    startup self-check's recipe compile (same stills/materialize derivation)
+    so the quote can never drift from the reconciled flow."""
+    input_types = {t for s in entry.input_slots for t in s.accepted_types}
+    add_stills = _recipe_adds_stills(input_types)
+    materialize = (
+        "media"
+        if {"video", "audio"} & input_types
+        else ("stills" if add_stills else None)
+    )
+    node_specs = compile_graph(
+        TaskSpec(tasks=entry.tasks),
+        add_stills_align=add_stills,
+        materialize_profile=materialize,
+    )
+    return fold_estimates(
+        NODE_KINDS[ns.kind].estimate(
+            {
+                **RECIPE_QUOTE_FACTS,
+                "spec": ns.spec,
+                "input_kinds": [node_specs[i].kind for i in ns.inputs],
+            }
+        )
+        for ns in node_specs
+    )
+
+
 async def _check_birthplace_requires(
     db: AsyncSession, project: Project, task: "TaskSpec"
 ) -> None:
@@ -901,11 +999,20 @@ async def create_run(
     for node, ns in zip(nodes, node_specs, strict=True):
         node.inputs = [str(nodes[i].id) for i in ns.inputs]
     await db.flush()
+    # Credits (ADR-055): hold the high-end fold at the birthplace — same
+    # transaction as the run, so a shortfall (422 credits.insufficient) rolls
+    # the run back with it and the worker never sees either. NULL-estimate
+    # nodes contribute 0 to the fold and settle at capture (BILLING §3).
+    _, usd_high = estimate_usd_range(fold_estimates([n.estimate for n in nodes]))
+    required = await credits_for_cost(db, usd_high)
+    await check_hold(db, user_id=project.user_id, required=required)
+    await hold_run(db, user_id=project.user_id, run_id=run.id, amount=required)
     logger.info(
         "run_materialized",
         run_id=str(run.id),
         nodes=len(node_specs),
         scope=task.scope,
+        credits_held=required,
     )
     return run
 
@@ -987,6 +1094,13 @@ async def execute_step(node_id: UUID) -> None:
                     # Clear any transient note from earlier attempts (W3) —
                     # a done node carries no error.
                     node.error = None
+                    # Credits (ADR-055): settle the step's actual at the
+                    # metering merge write — same session, same commit
+                    # (ADR-050). Only the done branch: failed/skipped nodes
+                    # never write a capture (失败不扣费), and runtime_fanout
+                    # (render) settles in the render chain — its terminal
+                    # state is D2-owned and render is priced $0 (PRICING).
+                    await capture_step(db, user_id=project.user_id, node=node)
                 await db.commit()
                 logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Suspend as s:
@@ -1239,6 +1353,33 @@ async def bail_waiting_interrupt(
     return node
 
 
+async def _release_orphaned_hold(db: AsyncSession, run_id: UUID) -> None:
+    """Settle a hold whose run (or project) row is already gone — orphan-hold
+    recovery (BILLING §8 known boundary → 支付批前落地).
+
+    The ledger is append-only and its hold rows carry the owner, so the
+    remainder (release_run recomputes hold − captures from the ledger,
+    clamped at 0) can be returned without any run/project row. Idempotent:
+    the release idem key dedupes against a prior settlement. No hold row →
+    nothing was ever frozen → nothing to do.
+    """
+    holder = (
+        await db.execute(
+            select(CreditTransaction.user_id)
+            .where(
+                CreditTransaction.kind == "hold",
+                CreditTransaction.ref["run_id"].astext == str(run_id),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if holder is None:
+        logger.warning("credits_release_skipped_no_hold", run_id=str(run_id))
+        return
+    await release_run(db, user_id=holder, run_id=run_id)
+    await db.commit()
+
+
 async def maybe_finalize_run(run_id: UUID) -> None:
     """Settle a run once no non-render node is active.
 
@@ -1250,7 +1391,14 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         run = await db.get(
             WorkflowRun, run_id, with_for_update=True
         )
-        if run is None or run.status in (
+        if run is None:
+            # Orphan-hold recovery (BILLING §8): the run row was deleted
+            # mid-flight (project deletion cascades it) while this finalize
+            # raced behind it. The ledger outlives the run — settle the
+            # hold's remainder from it instead of freezing it forever.
+            await _release_orphaned_hold(db, run_id)
+            return
+        if run.status in (
             WorkflowStatus.COMPLETED,
             WorkflowStatus.FAILED,
         ):
@@ -1279,6 +1427,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         gen_nodes = [n for n in nodes if n.kind in GENERATION_NODE_KINDS]
         any_failed = any(n.status == "failed" for n in nodes)
         gen_failed_like = [n for n in gen_nodes if n.status in ("failed", "skipped")]
+        project = await db.get(Project, run.project_id)
 
         if any_failed and (not gen_nodes or len(gen_failed_like) == len(gen_nodes)):
             first_error = next((n.error for n in nodes if n.status == "failed"), None)
@@ -1291,18 +1440,24 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             # and resumes the PENDING node, or it doesn't). Drop back to
             # DRAFT so the user can either retry (a new message) or clean
             # up (delete) — the failed run stays in the run row for history.
-            project = await db.get(Project, run.project_id)
             if project is not None and project.status == ProjectStatus.PROCESSING:
                 project.status = ProjectStatus.DRAFT
                 project.updated_at = datetime.now(UTC)
         else:
             run.status = WorkflowStatus.COMPLETED
             run.error = None
-            project = await db.get(Project, run.project_id)
             if project is not None:
                 project.status = ProjectStatus.REVIEW
                 project.updated_at = datetime.now(UTC)
         run.progress = 100
+        # Credits (ADR-055): a terminal run releases the un-captured
+        # remainder of its hold — a failed run releases it whole
+        # (失败不扣费). A missing project settles from the ledger (its
+        # hold rows carry the owner), never skipped (orphan hold, BILLING §8).
+        if project is not None:
+            await release_run(db, user_id=project.user_id, run_id=run.id)
+        else:
+            await _release_orphaned_hold(db, run_id)
         await db.commit()
         logger.info(
             "run_finalized",

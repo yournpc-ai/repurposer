@@ -915,6 +915,23 @@ class InferredIntent(BaseModel):
     brief: BriefLedger | None = None
 
 
+class TaskBookEstimate(BaseModel):
+    """Dock 载荷的估价面 (BILLING §7, ADR-055): the task book's credits
+    quotation, code-supplied (the estimate fold × PRICING × the consumption
+    ratio — never the LLM, never a persisted column).
+
+    ``total`` = the whole book's [low, high] credits. ``per_task`` aligns
+    with the task list by index: each entry is the task's MARGINAL range
+    (prefix-compile difference — Σ per_task ≡ total exactly, 三面同源), or
+    None for a task that adds no quoted cost (an unquotable fan-out — it
+    settles at capture, BILLING §3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total: list[int]
+    per_task: list[list[int] | None]
+
+
 class QuestionPayload(BaseModel):
     """The typed ``question`` payload on a message (提问机器 — the question
     machine).
@@ -938,13 +955,25 @@ class QuestionPayload(BaseModel):
             return {**data, "kind": "question"}
         return data
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_estimate(cls, data: Any) -> Any:
+        """Rows docked before the credits batch carry the never-supplied
+        ``estimate: str | None`` seat (always null, shape replaced by the
+        structured ``estimate_credits``) — drop it on read, never written
+        (读容忍, same doctrine as ``_drop_legacy_flags``)."""
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if k != "estimate"}
+        return data
+
     kind: Literal["task_book", "question"]
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
-    # The stored cost-quote seat. Its supply is code, never the LLM: the
-    # estimate fold (N-34) — wired in with the week-6 presentation (dock
-    # total / chat unit price); NULL until then.
-    estimate: str | None = None
+    # The dock's credits quotation (BILLING §7): task_book only, stamped at
+    # dock time from the estimate fold (N-34) × the consumption ratio —
+    # code-supplied, structured (data, localized at render), never a
+    # pre-formatted string. None until supplied / for plain questions.
+    estimate_credits: TaskBookEstimate | None = None
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
@@ -2257,6 +2286,13 @@ class StepResponse(BaseModel):
     # The canvas node's body copy (e.g. the interrupt's full direction
     # answer) — None = the surface falls back to ``summary``.
     canvas_text: str | None = None
+    # Credits derivation (ADR-055, BILLING §7 — serialization-derived, NEVER
+    # persisted columns): the step's quotation / metered actual, priced USD
+    # (PRICING) × the consumption ratio at read time. ``estimate_credits``
+    # [low, high] is None when the node never quoted (NULL estimate);
+    # ``cost_credits`` is None while nothing was metered (cost NULL).
+    estimate_credits: list[int] | None = None
+    cost_credits: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
 

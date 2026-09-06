@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   Monitor,
   Moon,
@@ -7,7 +8,7 @@ import {
   LogOut,
   LogIn,
   Crown,
-  Sparkles,
+  Coins,
   RotateCcw,
   Settings,
   Palette,
@@ -18,6 +19,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
 import { setLocale, type Locale } from "@/lib/i18n"
 import { useTheme, type Theme } from "@/lib/theme/ThemeProvider"
 import { clearAuth, getUser } from "@/lib/auth"
@@ -52,6 +54,26 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
   const { theme, setTheme } = useTheme()
   const user = getUser()
   const currentLocale: Locale = i18n.language === "en" ? "en" : "zh"
+  /** The wallet's real balance (ADR-055 — the credits slot's value). Reads
+   * on mount only; a run's hold/capture settles server-side and shows on
+   * the next open. Silent failure keeps the "—" (page-level load failure,
+   * never a toast — 防双报). */
+  const [balance, setBalance] = useState<number | null>(null)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let cancelled = false
+    apiFetch("/api/v1/wallet", { toast: false })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.balance === "number") {
+          setBalance(data.balance)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated])
 
   const handleLogout = () => {
     clearAuth()
@@ -120,10 +142,20 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
           </span>
         </div>
         <div className="flex h-8 items-center gap-2 px-2">
-          <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+          <Coins className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-foreground">{t("common.credits")}</span>
-          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">—</span>
+          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+            {balance ?? "—"}
+          </span>
         </div>
+        {/* Negative balance (BILLING §5): a NULL-estimate run may settle the
+            balance past zero — the number shows honestly and this note
+            explains it. No top-up CTA: the purchase entry is W11. */}
+        {balance !== null && balance < 0 && (
+          <p className="px-2 pb-1.5 text-[11px] leading-snug text-muted-foreground">
+            {t("credits.negativeNote")}
+          </p>
+        )}
       </div>
 
       {/* 偏好: labeled rows with trailing controls (MiniMax row anatomy) —

@@ -664,6 +664,52 @@ POST /api/v1/notifications/read-all
 
 204.
 
+## 11.5 Wallet (credits)
+
+### Read Wallet
+
+```http
+GET /api/v1/wallet
+```
+
+Returns `{ "balance": n, "held": n }` in credits (ADR-055). `balance` is the spendable truth and may be negative (shown honestly — an over-estimate run settled past zero; the next hold is refused until it recovers); `held` is the credits currently frozen in un-settled run holds. The wallet is lazy-opened with the signup grant on first login, so every caller always has one.
+
+### List Ledger Transactions
+
+```http
+GET /api/v1/wallet/transactions?limit=30&cursor=<opaque>
+```
+
+Returns the caller's ledger rows newest-first — one run is `1 hold + N capture + 1 release` rows, each carrying `id`, `kind` (grant | hold | capture | release | …), signed `amount`, `balance_after`, `ref` (`{run_id}` / `{step_id}` / `{source}`), the `idempotency_key` natural key, `note`, and `created_at`. Keyset pagination over `(created_at, id)` (the ledger is append-only, so the cursor never drifts): a page that has more rows answers `next_cursor`; pass it back as `cursor` for the next page. `limit` defaults to 30, max 100; a malformed cursor is a 422.
+
+```json
+{
+  "items": [
+    {
+      "id": "…",
+      "kind": "capture",
+      "amount": -27,
+      "balance_after": 353,
+      "ref": { "run_id": "…", "step_id": "…" },
+      "idempotency_key": "step:…:capture",
+      "note": "Step write_post capture",
+      "created_at": "2026-09-10T09:00:00Z"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+The frontend projection (billing center) is W11; the endpoint is the ledger's read-only truth from Day 4.
+
+Insufficient credits at run birth is a structured 422 (user-level vocabulary, never conflated with a provider 402):
+
+```json
+{ "detail": { "code": "credits.insufficient", "balance": 12, "required": 340 } }
+```
+
+Credits elsewhere are serialization-derived (USD stays internal): `GET /runs/{id}` steps carry `estimate_credits [low, high]` / `cost_credits`; the task-book dock payload carries `estimate_credits {total, per_task}`; `GET /recipes` cards carry `estimate_credits [low, high]`.
+
 ## 12. Persona Skin Block (brand)
 
 The standalone Brand Template module is retired (ADR-038): the visual skin lives on the persona as the `brand` JSONB block, read and written through the Persona endpoints (§5 — `PUT /api/v1/personas/{persona_id}` with `{"brand": {...}}`). There are no `/brand-templates` endpoints.

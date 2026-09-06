@@ -28,6 +28,12 @@
     S10 SSE 流式：delta 拼接 == 信封散文（唯一 transport 座）
     S11 整条源规则（整条视频字幕活链）+ materialize 注入矩阵（进程内）
     S12 merge_brief 来源矩阵（进程内纯函数）
+    S13 积分① 余额不足出生地拦截（typed Start 与 /generate 双路 422
+             同形同义）+ 负余额 hold 必拒（BILLING §5）
+    S14 积分② 失败不扣费（活 worker 缺参探针：FAILED + 级联 skipped →
+             零 capture、hold 全额 release）+ capture 幂等/bounce 差额（进程内）
+    S15 积分③ 孤儿 hold 回收（BILLING §8 边界落地：project 删除先退未结
+             hold 再级联删 run——台账闭合、余额回赠额）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -66,7 +72,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
-from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy import delete, func, select  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.providers.llm.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
@@ -81,11 +87,13 @@ from app.pipeline.orchestrator import (  # noqa: E402
 from app.models.tables import (  # noqa: E402
     Asset,
     Conversation,
+    CreditTransaction,
     Message,
     Operation,
     Output,
     Project,
     User,
+    Wallet,
     WorkflowRun,
     WorkflowStep,
 )
@@ -97,6 +105,15 @@ from app.models.schemas import (  # noqa: E402
     WorkflowStatus,
 )
 from app.platform.auth import create_access_token  # noqa: E402
+from app.platform.billing import (  # noqa: E402
+    CreditsInsufficientError,
+    capture_step,
+    check_hold,
+    cost_usd,
+    credits_for_cost,
+    get_or_create_wallet,
+    hold_run,
+)
 
 BASE = os.getenv("SCENARIO_API_BASE", "http://127.0.0.1:8000/api/v1")
 TIMEOUT = httpx.Timeout(180.0)  # book-path turns are real LLM calls
@@ -1776,6 +1793,294 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
           "an LLM-proposed asked roll never lands (code-owned)", out.asked)
 
 
+async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
+    """积分① 余额不足出生地拦截：钱包置零 → dock 任务书 → typed Start
+    收结构化 422 {code, balance, required}（typed /generate 同形同义）
+    → 零 run、零台账行（hold 与 run 同事务回滚）；负余额用户下一次 hold
+    必拒——含 0 元 hold（BILLING §5：gate at the start）。"""
+    # 专用 fixture 用户：钱包手工置零——不动共享 ctx 用户的余额（S4 等
+    # 剧本还要起真 run）；结束后清台账/钱包行（FK 序）。
+    user_id = await make_user()
+    local = Ctx(user_id, keep=False)
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Wallet(user_id=user_id, balance=0))
+            await db.commit()
+
+        # 账户控制台 credits 槽的供给端：GET /wallet 必须真服务——held() 的
+        # SQL JSONB 分组曾自 Day 2 起恒 500（控制台「—」案，2026-09-06 修）。
+        res_w = await local.client.get("/wallet")
+        check(res_w.status_code == 200
+              and (res_w.json() or {}).get("balance") == 0,
+              "GET /wallet serves the console credits slot", res_w.text)
+
+        pid = await local.new_project("S13 credits 422")
+        await seed_asset(pid, user_id, AssetType.TRANSCRIPT, "talk.txt",
+                         extracted_text="My talk about grid storage auctions.",
+                         processed=True)
+        turn1 = await local.chat(pid, "write a LinkedIn post from my talk")
+        turn1 = await answer_caption_gate(local, turn1)
+        check(is_task_book_dock(turn1["assistant_message"]),
+              "turn1 docks a task_book", turn1["assistant_message"])
+
+        # typed Start（答题端点 kind=start）——结构化 422。
+        res = await local.answer(turn1["assistant_message"]["id"], {"kind": "start"})
+        check(res.status_code == 422, "typed Start is a 422 on zero balance", res.text)
+        detail = (res.json() or {}).get("detail") or {}
+        check(detail.get("code") == "credits.insufficient",
+              "the payload carries the user-level code", detail)
+        check(detail.get("balance") == 0, "balance rides the payload", detail)
+        check(isinstance(detail.get("required"), int) and detail["required"] > 0,
+              "required rides the payload", detail)
+        check(await count_runs(pid) == 0, "no run was born", None)
+
+        # typed /generate（legacy fallback 路）——同形同义。
+        res2 = await local.client.post(
+            f"/projects/{pid}/generate",
+            json={
+                "tasks": [{"tool": "write_post", "params": {"language": "en"}}],
+                "target_language": "en",
+            },
+        )
+        check(res2.status_code == 422, "/generate is a 422 on zero balance", res2.text)
+        detail2 = (res2.json() or {}).get("detail") or {}
+        check(detail2.get("code") == "credits.insufficient"
+              and detail2.get("balance") == 0 and detail2.get("required", 0) > 0,
+              "the /generate payload is the same shape", detail2)
+
+        # 台账零行：check_hold 拒在 hold_run 之前，run 行也随事务回滚。
+        async with AsyncSessionLocal() as db:
+            n = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(CreditTransaction)
+                    .where(CreditTransaction.user_id == user_id)
+                )
+            ).scalar_one()
+        check(n == 0, "no ledger rows leaked from the rejected births", n)
+
+        # 负余额 hold 必拒（BILLING §5）——含 0 元 hold。
+        async with AsyncSessionLocal() as db:
+            wallet = await db.get(Wallet, user_id)
+            wallet.balance = -50
+            await db.commit()
+        raised: CreditsInsufficientError | None = None
+        async with AsyncSessionLocal() as db:
+            try:
+                await check_hold(db, user_id=user_id, required=0)
+            except CreditsInsufficientError as e:
+                raised = e
+        check(raised is not None and raised.balance == -50,
+              "a negative balance fails even a free (0) hold", raised)
+    finally:
+        await local.cleanup()
+        await local.close()
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                delete(CreditTransaction).where(CreditTransaction.user_id == user_id)
+            )
+            await db.execute(delete(Wallet).where(Wallet.user_id == user_id))
+            await db.commit()
+
+
+async def s14_failed_run_zero_capture_full_release(ctx: Ctx) -> None:
+    """积分② 失败不扣费：确定性失败探针（translate_clip 缺参，08-14 先例）
+    被活 worker 执行到 FAILED、两个下游级联 skipped → 台账零 capture、
+    hold 全额 release、余额回到赠额；进程内 capture 幂等（重复调用结构
+    性 no-op = 复位重跑只记一次）+ QualityBounce 重跑差额落 attempt 键。"""
+    user_id = await make_user()
+    local = Ctx(user_id, keep=False)
+    hold_amount = 120
+    try:
+        pid = await local.new_project("S14 no charge on failure")
+
+        # A) 活 worker 探针：seeded run（缺参 translate_clip + 两个下游
+        #    节点），hold 走真动词 hold_run，认领/失败/级联/收官/释放全
+        #    走真路径（需要 dev worker 在跑——剧本通用前提）。
+        async with AsyncSessionLocal() as db:
+            wallet = await get_or_create_wallet(db, user_id)  # 开户赠额
+            grant = int(wallet.balance)
+            run = WorkflowRun(
+                project_id=uuid.UUID(pid),
+                status=WorkflowStatus.PENDING,
+                context={"outputs": [{"type": "clip"}], "target_language": "en"},
+            )
+            db.add(run)
+            await db.flush()
+            bad = WorkflowStep(run_id=run.id, kind="translate_clip", status="pending",
+                               seq=1, spec={}, estimate=None)
+            down1 = WorkflowStep(run_id=run.id, kind="add_music", status="pending",
+                                 seq=2, spec={}, estimate=None)
+            down2 = WorkflowStep(run_id=run.id, kind="remove_filler", status="pending",
+                                 seq=3, spec={}, estimate=None)
+            db.add_all([bad, down1, down2])
+            await db.flush()
+            down1.inputs = [str(bad.id)]
+            down2.inputs = [str(down1.id)]
+            await hold_run(db, user_id=user_id, run_id=run.id, amount=hold_amount)
+            await db.commit()
+            run_id = str(run.id)
+
+        row = await wait_run_status(run_id, {"failed"}, timeout=120.0)
+        check(row["status"] == "failed", "the probe run settles FAILED", row)
+        steps = await step_rows(run_id)
+        by_kind = {s["kind"]: s["status"] for s in steps}
+        check(by_kind.get("translate_clip") == "failed",
+              "the probe node itself failed", by_kind)
+        check(by_kind.get("add_music") == "skipped"
+              and by_kind.get("remove_filler") == "skipped",
+              "the downstream cascade-skipped", by_kind)
+
+        async with AsyncSessionLocal() as db:
+            txns = list(
+                (
+                    await db.execute(
+                        select(CreditTransaction)
+                        .where(CreditTransaction.user_id == user_id)
+                        .order_by(CreditTransaction.created_at)
+                    )
+                ).scalars().all()
+            )
+        kinds = [t.kind for t in txns]
+        check("capture" not in kinds,
+              "zero capture rows — failed/skipped steps never charge", kinds)
+        hold_row = next((t for t in txns if t.kind == "hold"), None)
+        release_row = next((t for t in txns if t.kind == "release"), None)
+        check(hold_row is not None and hold_row.amount == -hold_amount,
+              "the hold landed at birth", hold_row.amount if hold_row else None)
+        check(release_row is not None and release_row.amount == hold_amount,
+              "the hold releases in full at the terminal state",
+              release_row.amount if release_row else None)
+        async with AsyncSessionLocal() as db:
+            final_balance = int((await db.get(Wallet, user_id)).balance)
+        check(final_balance == grant,
+              "the wallet is whole again (balance back to the grant)",
+              (grant, final_balance))
+
+        # B) capture 幂等（进程内，零 worker 依赖）：重复调用结构性 no-op
+        #    （TransientNodeError 复位重跑只记一次的存储侧保证）；成本累加
+        #    后的第二 capture（QualityBounce 重跑）只记差额、落 attempt 键，
+        #    且 Σ captures ≡ credits(总成本)（与 workflow_steps.cost ×比例
+        #    对账的恒等式，不吃取整抖动）。
+        async with AsyncSessionLocal() as db:
+            run2 = WorkflowRun(
+                project_id=uuid.UUID(pid),
+                status=WorkflowStatus.COMPLETED,
+                context={"target_language": "en"},
+            )
+            db.add(run2)
+            await db.flush()
+            step = WorkflowStep(
+                run_id=run2.id, kind="write_post", status="done", seq=1, spec={},
+                cost={"prompt_tokens": 100_000, "completion_tokens": 50_000},
+            )
+            db.add(step)
+            await db.flush()
+            first = await capture_step(db, user_id=user_id, node=step)
+            check(first is not None and first.idempotency_key.endswith(":capture"),
+                  "the first capture lands at the step key",
+                  getattr(first, "idempotency_key", None))
+            again = await capture_step(db, user_id=user_id, node=step)
+            check(again is None,
+                  "a duplicate capture call is a structural no-op", again)
+            step.cost = {"prompt_tokens": 200_000, "completion_tokens": 100_000}
+            step.attempt = 2
+            delta = await capture_step(db, user_id=user_id, node=step)
+            check(delta is not None and delta.idempotency_key.endswith(":capture:2"),
+                  "the bounce re-run lands at the attempt key",
+                  getattr(delta, "idempotency_key", None))
+            total_credits = await credits_for_cost(db, cost_usd(step.cost))
+            check(abs(int(first.amount)) + abs(int(delta.amount)) == total_credits,
+                  "Σ captures ≡ credits(total cost) — the delta reconciles",
+                  (first.amount, delta.amount, total_credits))
+            await db.commit()
+    finally:
+        await local.cleanup()
+        await local.close()
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                delete(CreditTransaction).where(CreditTransaction.user_id == user_id)
+            )
+            await db.execute(delete(Wallet).where(Wallet.user_id == user_id))
+            await db.commit()
+
+
+async def s15_orphan_hold_released_on_project_delete(ctx: Ctx) -> None:
+    """积分③ 孤儿 hold 回收（BILLING §8 边界落地）：project 删除先把未结
+    hold 按台账动词退回（同事务；RUNNING 除外——在途 worker 的收官路径
+    从台账结算）。删除后台账 grant+hold+release 闭合、钱包余额回到赠额。
+    与 worker 认领无 racing 依赖：未认领 = 删除路径即退，已认领 = 收官路径
+    即退，幂等键保证只退一笔。专用 fixture 用户（钱包动账），FK 序清理。"""
+    user_id = await make_user()
+    local = Ctx(user_id, keep=False)
+    hold_amount = 77
+    try:
+        pid = await local.new_project("S15 orphan hold recovery")
+
+        # 造一个 PENDING run + 真 hold——从未执行的 run 被删 = 事故现场
+        # 的形状（无任何收官路径会触到它）。
+        async with AsyncSessionLocal() as db:
+            wallet = await get_or_create_wallet(db, user_id)  # 开户赠额
+            grant = int(wallet.balance)
+            run = WorkflowRun(
+                project_id=uuid.UUID(pid),
+                status=WorkflowStatus.PENDING,
+                context={"outputs": [{"type": "clip"}], "target_language": "en"},
+            )
+            db.add(run)
+            await db.flush()
+            db.add(WorkflowStep(run_id=run.id, kind="translate_clip",
+                                status="pending", seq=1, spec={}, estimate=None))
+            await hold_run(db, user_id=user_id, run_id=run.id, amount=hold_amount)
+            await db.commit()
+            run_id = str(run.id)
+
+        res = await local.client.delete(f"/projects/{pid}")
+        check(res.status_code == 204, "project delete succeeds", res.text)
+
+        # 等 release 落定（删除路径同步落；在途路径由 worker 收官落——
+        # 两种路径幂等键相斥，只落一笔）。
+        rows: list = []
+        for _ in range(60):
+            async with AsyncSessionLocal() as db:
+                rows = (
+                    await db.execute(
+                        select(CreditTransaction).where(
+                            CreditTransaction.user_id == user_id,
+                            CreditTransaction.ref["run_id"].astext == run_id,
+                        ).order_by(CreditTransaction.created_at,
+                                   CreditTransaction.id)
+                    )
+                ).scalars().all()
+            if any(r.kind == "release" for r in rows):
+                break
+            await asyncio.sleep(1)
+        kinds = [r.kind for r in rows]
+        check("release" in kinds,
+              "the deleted run's hold settles (delete path or terminal path)",
+              kinds)
+        check(kinds == ["hold", "release"],
+              "the run's ledger closes hold + release — no capture, no drift"
+              " (grant row carries no run ref, by design)",
+              kinds)
+        hold = next(r for r in rows if r.kind == "hold")
+        rel = next(r for r in rows if r.kind == "release")
+        check(int(hold.amount) == -hold_amount and int(rel.amount) == hold_amount,
+              "the hold returns whole — nothing executed",
+              [(r.kind, int(r.amount)) for r in rows])
+        check(int(rel.balance_after) == grant,
+              "wallet is back at the grant", int(rel.balance_after))
+    finally:
+        await local.cleanup()
+        await local.close()
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                delete(CreditTransaction).where(CreditTransaction.user_id == user_id)
+            )
+            await db.execute(delete(Wallet).where(Wallet.user_id == user_id))
+            await db.commit()
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -1789,6 +2094,9 @@ SCENARIOS = {
     "S10": s10_sse_turn_streaming,
     "S11": s11_whole_source_and_materialize_matrix,
     "S12": s12_merge_brief_source_matrix,
+    "S13": s13_credits_insufficient_birthplace_422,
+    "S14": s14_failed_run_zero_capture_full_release,
+    "S15": s15_orphan_hold_released_on_project_delete,
 }
 
 

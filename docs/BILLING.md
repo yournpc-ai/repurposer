@@ -1,6 +1,6 @@
 # BILLING — 积分与计费架构
 
-> Status: 活跃（2026-09-05 建，ADR-055 同批落档；积分层施工 = PROGRESS W7 积分批 09-07~09-11；支付 / 套餐经济 = W11）
+> Status: 活跃（2026-09-05 建，ADR-055 同批落档；积分层施工完成 = W7 积分批 09-03~09-05 三天提前完工；支付 / 套餐经济 = W11 支付批 09-07~09-18 随拍板（四）提前）
 > 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API、分期。排期只引用 PROGRESS；参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
 
 ## 1. 概念层（三个词，两层货币）
@@ -136,16 +136,18 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端三面**：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 + 账户控制台 credits 槽 + 余额不足入流灰行。三面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端三面 + 两余额读面**：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 + 账户控制台 credits 槽 + 项目页左下角 **CreditsPill**（2026-09-06，ADR-056——post-first-run 桌面；Coins + 余额，点击 Popover = 余额 + held + 最近台账 10 条 + 负余额注记；数据 = 本节两个端点，后端零改动）+ 余额不足入流灰行。估价三面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
 
 ## 8. 分期与边界
 
 | 期 | 内容 |
 |---|---|
-| **W7 积分批（09-07~09-11）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分此时就是真的**——只是还没有花钱买的入口 |
+| **W7 积分批（09-03~09-05 提前完工）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分此时就是真的**——只是还没有花钱买的入口 |
 | **W11 支付批** | `platform/payments.py` 适配器（三方对接 + webhook + 订阅生命周期）→ 只写 ledger；套餐语义（周期额度 vs 充值包、购买比例、档位）那时定，`kind`/`ref` 已留座位；用户计费中心 = 台账只读投影 |
 
 **显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、双桶余额（订阅周期额度 vs 充值包——W11 套餐语义定夺时如需分桶，ledger 加列而非改语义）。
+
+**孤儿 hold 回收（2026-09-05 验收对账暴露，当日落地）**：曾存在的边界——run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时 hold 无解冻路径。现行机制 = 双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。剧本 S15 锁删除路径。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免（dev go-live 前存量 7 笔按业务决定不手工补），活 run 未结仍硬判。
 
 ## 9. 模块家与缝合点
 
