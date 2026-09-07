@@ -179,7 +179,11 @@ export function ResultsCanvas({
           label:
             spec.role === "task_book"
               ? t("results.canvas.taskBook")
-              : (spec.summary ?? t("results.canvas.document")),
+              : spec.role === "transcript"
+                ? t("results.canvas.transcript")
+                : spec.role === "research_brief"
+                  ? t("results.canvas.researchBrief")
+                  : (spec.summary ?? t("results.canvas.document")),
           detail: spec.summary ?? undefined,
           spec,
           frame,

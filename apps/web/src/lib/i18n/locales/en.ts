@@ -1046,8 +1046,11 @@ const en = {
       reprocess: "Reprocess",
       more: "More actions",
       // The graph canvas's document node (ADR-057): the task book as a
-      // first-class glass text node; generic documents get the plain label.
+      // first-class glass text node; the transcript / research brief are
+      // the type's other two instances; generic documents get the plain label.
       taskBook: "Task book",
+      transcript: "Transcript",
+      researchBrief: "Research brief",
       document: "Document",
       // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
       // right slot stays empty): the un-run node's dashed region reads its

@@ -71,6 +71,12 @@ _CLIP_FAMILY_KINDS = frozenset({
 })
 
 _TASK_BOOK_ROLE = "task_book"
+# 转写稿 document (ADR-057 document 型第二实例): the asset's ASR transcript /
+# extracted text as a first-class card. research brief (第三实例): the bounded
+# loop's closing artifact as its own card, fed by the agent node.
+_TRANSCRIPT_ROLE = "transcript"
+_RESEARCH_BRIEF_ROLE = "research_brief"
+_RESEARCH_BRIEF_KEY = "research_brief"
 
 # States a DRAFT re-stamp may revisit (K5): a live node (queued/running), a
 # finished one (done), or one mid-revision (stale) belongs to an earlier
@@ -198,20 +204,83 @@ async def stamp_asset_node(
 
 async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) -> None:
     """Asset deletion's graph twin — the node goes through the same wiring
-    door (edges cascade structurally). Absent node = pre-K2 asset, skip."""
+    door (edges cascade structurally), and its 转写稿 document goes with it
+    (the artifact's owner is gone). Absent node = pre-K2 asset, skip."""
+    existing = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.spec["asset_id"].as_string() == str(asset_id),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    victims = [
+        n
+        for n in existing
+        if n.kind == "asset"
+        or (n.kind == "document" and (n.spec or {}).get("role") == _TRANSCRIPT_ROLE)
+    ]
+    if victims:
+        await apply_wiring_ops(
+            db,
+            project_id,
+            [{"op": "delete_node", "node": UUID(str(n.id))} for n in victims],
+        )
+
+
+async def stamp_transcript_node(
+    db: AsyncSession, project_id: UUID, asset: Asset
+) -> GraphNode | None:
+    """转写稿 document (ADR-057 document 型第二实例 — 中间产物升一等公民):
+    the asset's transcript / extracted text gets its own card the moment it
+    exists, fed by the asset node (text edge — the artifact's derivation
+    face). Born done: it is an intermediate artifact, not an execution unit
+    (same ruling as the asset itself). Idempotent on role+asset_id; the text
+    refreshes on reprocess. A LEAF face — consumers still wire from the asset
+    (the execution truth); rewiring consumers arrives with 改稿驱动重剪.
+    Flush-only."""
+    text = asset.transcript or asset.extracted_text
+    if not text:
+        return None
     existing = (
         await db.execute(
             select(GraphNode).where(
                 GraphNode.project_id == project_id,
-                GraphNode.kind == "asset",
-                GraphNode.spec["asset_id"].as_string() == str(asset_id),
+                GraphNode.kind == "document",
+                GraphNode.spec["role"].as_string() == _TRANSCRIPT_ROLE,
+                GraphNode.spec["asset_id"].as_string() == str(asset.id),
             )
         )
     ).scalar_one_or_none()
     if existing is not None:
-        await apply_wiring_ops(
-            db, project_id, [{"op": "delete_node", "node": UUID(str(existing.id))}]
-        )
+        if (existing.spec or {}).get("text") != text:
+            existing.spec = {**(existing.spec or {}), "text": text}
+        return existing
+    asset_node = await stamp_asset_node(db, project_id, asset)
+    delta = await apply_wiring_ops(
+        db,
+        project_id,
+        [
+            {
+                "op": "add_node",
+                "kind": "document",
+                "spec": {
+                    "role": _TRANSCRIPT_ROLE,
+                    "asset_id": str(asset.id),
+                    "text": text,
+                },
+                "after": [UUID(str(asset_node.id))],
+            }
+        ],
+    )
+    node = await db.get(GraphNode, delta.affected[0])
+    assert node is not None
+    node.state = "done"  # an artifact, not an execution unit
+    return node
 
 
 async def stamp_run_graph(
@@ -512,6 +581,12 @@ async def _stamp_graph_core(
             and not (
                 n.kind == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
             )
+            and not (
+                # The brief doc lives as long as its research is in the chain
+                n.kind == "document"
+                and (n.spec or {}).get("role") == _RESEARCH_BRIEF_ROLE
+                and "research" in families
+            )
             and (n.spec or {}).get("fill_key") not in families
         ]
         if orphans:
@@ -543,6 +618,9 @@ async def _stamp_graph_core(
     for asset in assets:
         node = await stamp_asset_node(db, project_id, asset)
         asset_node_ids.append(UUID(str(node.id)))
+        # 转写稿 document 随素材处理落地（幂等；无转写文本的素材跳过）——
+        # 上传时处理、run 内 preprocess、存量回填三条路在这一个 ensure 汇合。
+        await stamp_transcript_node(db, project_id, asset)
 
     # ── 4. The task-book document (the plan prelude's artifact — FLORA
     # text-node form; the prelude's steps are its internal workflow). Run
@@ -691,6 +769,55 @@ async def _stamp_graph_core(
             for step in prelude_steps:
                 step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
 
+    # ── 6b. The research-brief document (document 型第三实例 — the loop's
+    # closing artifact gets its own card, fed by the agent node) ───────────
+    # draft = the preview's promise / run = queued with its agent; the text
+    # back-writes at sync (the agent's terminal mirrors onto it). A LEAF
+    # face — consuming writers still wire from the agent (the execution
+    # truth), the doc is the artifact's readable face.
+    research_node_id = node_id_by_key.get("research")
+    brief_doc: GraphNode | None = None
+    if research_node_id is not None:
+        brief_doc = by_fill_key.get(_RESEARCH_BRIEF_KEY)
+        if brief_doc is None:
+            delta = await apply_wiring_ops(
+                db,
+                project_id,
+                [
+                    {
+                        "op": "add_node",
+                        "kind": "document",
+                        "spec": {
+                            "role": _RESEARCH_BRIEF_ROLE,
+                            "fill_key": _RESEARCH_BRIEF_KEY,
+                        },
+                        "after": [research_node_id],
+                    }
+                ],
+            )
+            brief_doc = await db.get(GraphNode, delta.affected[0])
+            # Register the after-shorthand's derivation edge — the dedupe set
+            # was seeded before this batch; section 7's re-ensure relies on it.
+            have_edge.add((str(research_node_id), str(brief_doc.id), "text"))
+        if brief_doc is not None:
+            # The agent↔brief link — sync_graph_node_for_step mirrors the
+            # agent's terminal state + renders the brief onto the doc.
+            agent_node = await db.get(GraphNode, research_node_id)
+            if agent_node is not None and (agent_node.spec or {}).get(
+                "brief_doc_id"
+            ) != str(brief_doc.id):
+                agent_node.spec = {
+                    **(agent_node.spec or {}),
+                    "brief_doc_id": str(brief_doc.id),
+                }
+            if draft:
+                # A live/finished brief doc is an earlier run's truth — the
+                # preview leaves it (the generation nodes' own restamp rule).
+                if str(brief_doc.state) in _DRAFT_RESTAMP_STATES:
+                    brief_doc.state = "draft"
+            else:
+                brief_doc.state = "queued"
+
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     def connect(from_id: UUID, to_id: UUID, edge_type: str) -> None:
         if (str(from_id), str(to_id), edge_type) in have_edge or from_id == to_id:
@@ -726,6 +853,10 @@ async def _stamp_graph_core(
                 target_node,
                 "video" if upstream.kind in _CLIP_FAMILY_KINDS else "text",
             )
+    # The brief doc's derivation edge (newborns got it from the after-
+    # shorthand above; a reused doc re-ensures it — dedupe wins).
+    if research_node_id is not None and brief_doc is not None:
+        connect(research_node_id, UUID(str(brief_doc.id)), "text")
     # Assets feed the graph: text into the task book and the writers, the
     # media flow into the clip-family roots (a root = no clip-family
     # upstream inside this run). A root that acts on the project's EXISTING
@@ -883,6 +1014,23 @@ def _task_book_text(steps: list[WorkflowStep]) -> str | None:
     )
 
 
+def _research_brief_text(brief: dict) -> str | None:
+    """The brief document's body: summary + key facts (+ the honest caveat)
+    — every line is the loop's own words, no fabricated labels."""
+    lines: list[str] = []
+    summary = str(brief.get("summary") or "").strip()
+    if summary:
+        lines.append(summary)
+    for fact in (brief.get("key_facts") or [])[:6]:
+        fact = str(fact).strip()
+        if fact:
+            lines.append(f"• {fact}")
+    caveat = str(brief.get("caveat") or "").strip()
+    if caveat:
+        lines.append(f"⚠ {caveat}")
+    return "\n".join(lines) or None
+
+
 async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None:
     """Back-write (the orchestrator's execute_step hook): re-aggregate the
     owning node's state from its internal step family and back-write the
@@ -924,3 +1072,16 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
     )
     if output_ids != ((node.spec or {}).get("output_ids") or []):
         node.spec = {**(node.spec or {}), "output_ids": output_ids}
+    # The research loop's brief document mirrors its agent node: state in
+    # lockstep (queued → running → done/failed with the loop), text = the
+    # closing artifact rendered the moment it exists.
+    if node.kind == "agent":
+        doc_id = (node.spec or {}).get("brief_doc_id")
+        if doc_id:
+            doc = await db.get(GraphNode, UUID(str(doc_id)))
+            if doc is not None:
+                doc.state = node.state
+                brief = (step.spec or {}).get("research_brief")
+                text = _research_brief_text(brief) if isinstance(brief, dict) else None
+                if text and text != (doc.spec or {}).get("text"):
+                    doc.spec = {**(doc.spec or {}), "text": text}

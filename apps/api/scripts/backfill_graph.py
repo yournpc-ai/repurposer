@@ -29,7 +29,11 @@ logger = structlog.get_logger()
 
 
 async def main() -> None:
-    from app.pipeline.graph_fill import stamp_asset_node, stamp_run_graph
+    from app.pipeline.graph_fill import (
+        stamp_asset_node,
+        stamp_run_graph,
+        stamp_transcript_node,
+    )
 
     async with AsyncSessionLocal() as db:
         projects = list((await db.execute(select(Project))).scalars().all())
@@ -47,6 +51,8 @@ async def main() -> None:
                 )
                 for asset in assets:
                     await stamp_asset_node(db, project.id, asset)
+                    # 转写稿 document — same idempotent ensure as the stamps.
+                    await stamp_transcript_node(db, project.id, asset)
                 latest_run = (
                     await db.execute(
                         select(WorkflowRun)

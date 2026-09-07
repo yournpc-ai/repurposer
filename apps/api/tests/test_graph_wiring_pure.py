@@ -21,7 +21,11 @@ Covered:
   half-applied graph (the caller's transaction rolls back)
 - sync_graph_node_for_step's 版本累积: a re-fill's landed products JOIN the
   node's existing output_ids (the pager's version lineage), never a cleared
-  slate
+  slate; the research agent's brief document mirrors its terminal + text
+- stamp_transcript_node (转写稿 document): born done with the text edge,
+  idempotent, refreshes on reprocess, skips text-less assets
+- _stamp_graph_core's research-brief document: born with its agent (draft /
+  queued), derivation edge, orphan-swept when the chain drops research
 - _fill_key_for_step idempotency fingerprints (graph_fill): producer slot /
   translate·dub transform / bare-kind shapes — a re-run of the same slot
   finds its node, a new slot grows one
@@ -32,8 +36,14 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.models.tables import GraphEdge, GraphNode, Project, WorkflowStep
-from app.pipeline.graph_fill import _fill_key_for_step, sync_graph_node_for_step
+from app.models.schemas import AssetType
+from app.models.tables import Asset, GraphEdge, GraphNode, Project, WorkflowRun, WorkflowStep
+from app.pipeline.graph_fill import (
+    _fill_key_for_step,
+    _stamp_graph_core,
+    stamp_transcript_node,
+    sync_graph_node_for_step,
+)
 from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
 
 _PROJECT_ID = uuid4()
@@ -51,6 +61,11 @@ class _StubResult:
 
     def all(self):
         return self._rows
+
+    def scalar_one_or_none(self):
+        # Stub limitation: WHERE clauses are NOT evaluated — the tests seed
+        # precisely so the full list already is the answer.
+        return self._rows[0] if self._rows else None
 
 
 class _StubDb:
@@ -79,18 +94,58 @@ class _StubDb:
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
         if entity is GraphNode:
-            return _StubResult(list(self.nodes))
-        if entity is GraphEdge:
-            return _StubResult(list(self.edges))
-        if entity is WorkflowStep:
-            return _StubResult(list(self.steps))
-        return _StubResult([])
+            rows = self.nodes
+        elif entity is GraphEdge:
+            rows = self.edges
+        elif entity is WorkflowStep:
+            rows = self.steps
+        else:
+            return _StubResult([])
+        return _StubResult(self._apply_where(list(rows), stmt))
+
+    @staticmethod
+    def _apply_where(rows, stmt):
+        """The stub's mini-WHERE: evaluates simple ``col == v`` / ``col IN (...)`
+        criteria on plain columns (id / kind / type / status / project_id).
+        Anything fancier (JSON-path filters) stays unevaluated — the tests
+        seed precisely for those."""
+        for crit in getattr(stmt, "_where_criteria", []):
+            left = getattr(crit, "left", None)
+            op_name = getattr(getattr(crit, "operator", None), "__name__", "")
+            value = getattr(getattr(crit, "right", None), "value", None)
+            col = getattr(left, "name", None)
+            if col is None or value is None:
+                continue
+            if op_name == "eq":
+                rows = [r for r in rows if str(getattr(r, col, None)) == str(value)]
+            elif op_name == "in_op":
+                values = {str(v) for v in value}
+                rows = [r for r in rows if str(getattr(r, col, None)) in values]
+        return rows
+
+    def _register(self, obj):
+        """Read-after-write: a landed row is visible to the next select
+        (deduped — the door re-adds the whole working set at landing)."""
+        bucket = self.nodes if isinstance(obj, GraphNode) else self.edges if isinstance(obj, GraphEdge) else None
+        if bucket is not None and all(str(r.id) != str(obj.id) for r in bucket):
+            bucket.append(obj)
 
     def add(self, obj):
         self.added.append(obj)
+        self._register(obj)
 
     async def delete(self, obj):
         self.deleted.append(obj)
+        if isinstance(obj, GraphNode):
+            self.nodes = [n for n in self.nodes if str(n.id) != str(obj.id)]
+            # the FK cascade's stub form: the node's edges die with it
+            self.edges = [
+                e
+                for e in self.edges
+                if str(e.from_node) != str(obj.id) and str(e.to_node) != str(obj.id)
+            ]
+        elif isinstance(obj, GraphEdge):
+            self.edges = [e for e in self.edges if str(e.id) != str(obj.id)]
 
     async def flush(self):
         self.flush_count += 1
@@ -398,3 +453,135 @@ def test_fill_key_translate_dub_shape():
 def test_fill_key_bare_kind_for_deterministic_steps():
     assert _fill_key_for_step(WorkflowStep(kind="remove_filler", spec={})) == "remove_filler"
     assert _fill_key_for_step(WorkflowStep(kind="research", spec={"query": "q"})) == "research"
+
+
+# ---- 转写稿 document (stamp_transcript_node) ---------------------------------
+
+
+def _asset(**kw):
+    return Asset(
+        id=uuid4(),
+        project_id=_PROJECT_ID,
+        type=kw.pop("type", AssetType.VIDEO),
+        **kw,
+    )
+
+
+@pytest.mark.asyncio
+async def test_transcript_node_skips_textless_assets():
+    db = _StubDb()
+    assert await stamp_transcript_node(db, _PROJECT_ID, _asset()) is None
+    assert db.added == []
+
+
+@pytest.mark.asyncio
+async def test_transcript_node_born_done_with_text_edge_and_idempotent():
+    asset = _asset(transcript="the quick brown fox")
+    db = _StubDb()
+    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
+    assert doc is not None
+    assert doc.state == "done"  # an artifact, not an execution unit
+    assert doc.kind == "document"
+    assert doc.spec["role"] == "transcript"
+    assert doc.spec["text"] == "the quick brown fox"
+    edge = next(e for e in db.edges if e.to_node == doc.id)
+    assert edge.edge_type == "text"
+    # idempotent: a second stamp finds the same card — no twin, no second
+    # edge (re-seeded stub: the doc-check's filtered select returns it).
+    db2 = _StubDb(nodes=[doc], edges=list(db.edges))
+    again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
+    assert str(again.id) == str(doc.id)
+    assert db2.added == []
+
+
+@pytest.mark.asyncio
+async def test_transcript_node_text_refreshes_on_reprocess():
+    asset = _asset(transcript="v1")
+    db = _StubDb()
+    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
+    asset.transcript = "v2 — reprocessed"
+    again = await stamp_transcript_node(_StubDb(nodes=[doc]), _PROJECT_ID, asset)
+    assert str(again.id) == str(doc.id)
+    assert again.spec["text"] == "v2 — reprocessed"
+
+
+# ---- research brief document (_stamp_graph_core + sync mirror) ---------------
+
+
+def _research_chain():
+    research = WorkflowStep(
+        id=uuid4(), kind="research", seq=1, spec={"query": "grid storage"}, estimate=None
+    )
+    post = WorkflowStep(
+        id=uuid4(),
+        kind="write_post",
+        seq=2,
+        spec={"slot": {"type": "post"}, "slot_index": 0},
+        estimate=None,
+    )
+    post.inputs = [str(research.id)]
+    research.inputs = []
+    return [research, post]
+
+
+@pytest.mark.asyncio
+async def test_research_brief_doc_born_with_agent_and_swept_without_it():
+    project = Project(id=_PROJECT_ID)
+    db = _StubDb()
+    await _stamp_graph_core(
+        db, project, _research_chain(), run=None, ui_language="en", draft=True, book_text="b"
+    )
+    agent = next(n for n in db.nodes if n.kind == "agent")
+    doc = next(
+        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
+    )
+    assert doc.state == "draft"  # the preview's promise
+    assert (agent.spec or {}).get("brief_doc_id") == str(doc.id)
+    edge = next(e for e in db.edges if str(e.to_node) == str(doc.id))
+    assert (str(edge.from_node), edge.edge_type) == (str(agent.id), "text")
+    # the writer still wires from the AGENT (the execution truth — leaf face)
+    writer = next(n for n in db.nodes if n.kind == "generator")
+    assert any(
+        str(e.from_node) == str(agent.id) and str(e.to_node) == str(writer.id) for e in db.edges
+    )
+    # a re-docked chain WITHOUT research orphan-sweeps the brief doc
+    db2 = _StubDb(nodes=list(db.nodes), edges=list(db.edges))
+    post_only = [_research_chain()[1]]
+    await _stamp_graph_core(
+        db2, project, post_only, run=None, ui_language="en", draft=True, book_text="b"
+    )
+    assert not [
+        n for n in db2.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    steps = _research_chain()
+    db = _StubDb(steps=steps)
+    await _stamp_graph_core(
+        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
+    )
+    doc = next(
+        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
+    )
+    assert doc.state == "queued"
+    # the loop closes: the brief lands on the research step's spec, the sync
+    # mirrors the agent's terminal + renders the text onto the doc
+    research = steps[0]
+    research.status = "done"
+    research.spec = {
+        **(research.spec or {}),
+        "research_brief": {
+            "summary": "Storage is the bottleneck.",
+            "key_facts": ["Fact one", "Fact two"],
+            "sources": [{"title": "t", "url": "u"}],
+            "caveat": None,
+        },
+    }
+    await sync_graph_node_for_step(db, research)
+    assert doc.state == "done"
+    assert "Storage is the bottleneck." in doc.spec["text"]
+    assert "• Fact one" in doc.spec["text"]

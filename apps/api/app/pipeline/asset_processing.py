@@ -272,6 +272,17 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_status = AssetStatus.COMPLETED
             asset.processing_error = None
             await db.commit()
+            # 转写稿落图 (ADR-057 document 型第二实例): the transcript /
+            # extracted text gets its document node the moment it exists —
+            # pre-run projects see it on the canvas without waiting for a
+            # book/run stamp (which re-ensures it idempotently anyway).
+            if asset.project_id is not None and (result.transcript or result.extracted_text):
+                from app.pipeline.graph_fill import (  # deferred: runtime edge
+                    stamp_transcript_node,
+                )
+
+                await stamp_transcript_node(db, asset.project_id, asset)
+                await db.commit()
             logger.info(
                 "asset_processed",
                 asset_id=str(asset_id),
