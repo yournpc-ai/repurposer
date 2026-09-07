@@ -1053,18 +1053,23 @@ const en = {
       focusNode: "Point it out in chat",
       reprocess: "Reprocess",
       more: "More actions",
-      // 过程脊 group node (D6): the folded middle steps as one container.
-      spine: "Process",
-      spineSteps_one: "{{count}} step",
-      spineSteps: "{{count}} steps",
-      // The artifact node card (D6 修订; 2026-08-19 名词节点收窄): the only
-      // live grant is "plan" — the 任务书 glass text node. canvas_key is
-      // derived at serialization time from the node CLASS (never persisted),
-      // so every run — old or new — renders the same narrowed canvas with
-      // zero migration; no other label keys can ever appear.
-      artifact: {
-        plan: "Plan",
-      },
+      // The graph canvas's document node (ADR-057): the task book as a
+      // first-class glass text node; generic documents get the plain label.
+      taskBook: "Task book",
+      document: "Document",
+      // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
+      // right slot stays empty): the un-run node's dashed region reads its
+      // own quotation; queued / skipped / failed / stale are quiet labels.
+      draftBody: "Generated when it runs",
+      estimateSingle: "≈ {{count}} credits",
+      estimateRange: "≈ {{low}}–{{high}} credits",
+      queued: "Queued",
+      skipped: "Skipped",
+      runFailed: "Run failed",
+      stale: "Rerun available",
+      // The card-face program region (ADR-057 §5): generator/agent nodes
+      // read their prompt here (processor nodes read params as fact chips).
+      promptLabel: "Prompt",
       // Canvas navigation controls (explore surfaces, 2026-08-19 — the
       // project page's top-right swap: app chrome out, canvas controls in;
       // 2026-09-05 the ± steppers retired — the pill is a read-only
@@ -1096,10 +1101,6 @@ const en = {
       expand: "Expand",
       mute: "Mute",
       unmute: "Unmute",
-      // Placeholder slot card (ADR-051 B — 占位物化): the functional
-      // teaching line on the quiet card — the @-mention revision channel.
-      placeholderHint:
-        "Lands here when it's ready — @-mention it in chat to revise.",
       // Hover prompt 框 (ADR-051 F): the per-card revision bar, prefilled
       // with the product's own spec — sending rides the chat channel with
       // the product pinned as focus.

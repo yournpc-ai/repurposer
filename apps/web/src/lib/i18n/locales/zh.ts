@@ -1005,17 +1005,23 @@ const zh: Resources = {
       focusNode: "在对话中指认",
       reprocess: "重新处理",
       more: "更多操作",
-      // 过程脊组节点（D6）：折起的中间步骤为一个容器。
-      spine: "处理过程",
-      spineSteps_one: "{{count}} 个步骤",
-      spineSteps: "{{count}} 个步骤",
-      // 工件节点卡（D6 修订；2026-08-19 名词节点收窄）：现行唯一授予 = plan
-      // （任务书玻璃文本节点）。canvas_key 序列化时从节点类现算（从不入行），
-      // 新旧 run 同渲染收窄画布、零迁移——不会再出现其它标签键。zh 分工：
-      // 画布节点叫「任务书」，确认面/计划界面仍叫「计划」（NAMING 登记）。
-      artifact: {
-        plan: "任务书",
-      },
+      // 图画布的文档节点（ADR-057）：任务书升为一等玻璃文本节点；通用文档
+      // 用普通标签。zh 分工照旧：画布节点叫「任务书」，确认面/计划界面仍叫
+      // 「计划」（NAMING 登记）。
+      taskBook: "任务书",
+      document: "文档",
+      // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
+      // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。
+      draftBody: "运行后生成",
+      estimateSingle: "约 {{count}} 积分",
+      estimateRange: "约 {{low}}–{{high}} 积分",
+      queued: "排队中",
+      skipped: "已跳过",
+      runFailed: "运行失败",
+      stale: "可重跑",
+      // 卡面程序区（ADR-057 §5）：generator/agent 节点在此读自己的 prompt
+      // （processor 节点读参数事实 chips）。
+      promptLabel: "提示词",
       // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进；
       // 2026-09-05 ± 步进退役——pill 只读百分比，点击 = fit）。
       zoomFit: "适应画布",
@@ -1043,8 +1049,6 @@ const zh: Resources = {
       expand: "展开",
       mute: "静音",
       unmute: "取消静音",
-      // 占位槽位卡（ADR-051 B——占位物化）：安静卡上的功能性教学行——@ 指认修订通道。
-      placeholderHint: "产物就绪后在此落地——在对话里 @ 它来修订。",
       // 悬停 prompt 框（ADR-051 F）：每卡修订条，预填产物自身 spec——发送走
       // chat 通道并把产物钉为本轮焦点。
       reviseTooltip: "修订这个产物",
