@@ -159,10 +159,6 @@ export interface FlowViewProps {
    * names the displayed member when the version pager flipped the card
    * (ADR-051 F2 — the lightbox follows the shown variant, not the row). */
   onExpandMedia?: (nodeId: string, outputId?: string) => void
-  /** Hover prompt 框 send (ADR-051 F): the card reports the revision ask
-   * with the product pinned — the surface rides it into the chat revision
-   * channel (zero new execution channel, prohibition #1). */
-  onRevise?: (outputId: string, text: string) => void
   /** The node's pager flipped its displayed product (mount + flip) — the
    * surface tracks it so a node click selects what the user is LOOKING at
    * (the lightbox / dossier / focus follow the shown member). */

@@ -206,7 +206,7 @@ apps/api/
 │   ├── dependencies/    # 依赖注入（auth：JWT / 匿名回退默认用户数据）
 │   ├── chat/            # Agent Interface：routes / service / intent / stream_extract（ProseDeltaExtractor，N-26）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
-│   │   ├── routes/      # projects / assets / outputs / runs / music / recipes 端点
+│   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
 │   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── graph_store.py         # wiring 层（ADR-057）：apply_wiring_ops = 持久图唯一写口

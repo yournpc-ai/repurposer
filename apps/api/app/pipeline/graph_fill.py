@@ -24,8 +24,8 @@ Three directions:
   uncompilable re-dock).
 - **back-write** (``sync_graph_node_for_step``): the orchestrator's
   execute_step calls this at every step terminal — the node's state is the
-  aggregate of its internal step family (the runFlow.ts aggregateStatus
-  logic's server-side home), and landed outputs back-write
+  aggregate of its internal step family (the retired canvas projection's
+  aggregateStatus logic's server-side home), and landed outputs back-write
   ``spec.output_ids``.
 
 Migration mapping (简报 §3): assets → asset / plan prelude → the task-book
@@ -141,8 +141,8 @@ def _node_label(step: WorkflowStep, ui_language: str) -> str | None:
 
 def _aggregate_family(states: list[str]) -> str:
     """Node state = its internal step family's aggregate (the retired
-    runFlow aggregateStatus's server-side form): failure always visible,
-    then liveness, then terminal honesty (all skipped = skipped)."""
+    canvas projection's aggregateStatus, server-side form): failure always
+    visible, then liveness, then terminal honesty (all skipped = skipped)."""
     if not states:
         return "queued"
     if any(s == "failed" for s in states):
@@ -293,7 +293,7 @@ async def stamp_draft_graph(
     for step, ns in zip(steps, node_specs, strict=True):
         step.inputs = [str(steps[i].id) for i in ns.inputs]
     # The draft book's text — the same summary the runtime plan stamps
-    # (Plan._book_summary, one source): the run's back-write overwrites it
+    # (Plan.book_summary, one source): the run's back-write overwrites it
     # with the identical composition, zero flicker.
     parsed = [
         IntentSlot.model_validate(s.spec["slot"])
@@ -302,7 +302,7 @@ async def stamp_draft_graph(
     ]
     intent_slots = [s for s in parsed if s.type in known_output_types()]
     target_language = first_task_language(tasks) or project.language or "en"
-    book_text = Plan._book_summary(intent_slots, target_language)
+    book_text = Plan.book_summary(intent_slots, target_language)
     await _stamp_graph_core(
         db,
         project,
@@ -739,7 +739,8 @@ async def _stamp_graph_core(
         if s.kind in _CLIP_FAMILY_KINDS
         and node_of(s) is not None
         and not any(
-            (by_id.get(str(u)) or WorkflowStep()).kind in _CLIP_FAMILY_KINDS
+            (upstream := by_id.get(str(u))) is not None
+            and upstream.kind in _CLIP_FAMILY_KINDS
             for u in (s.inputs or [])
         )
     ]
@@ -860,7 +861,7 @@ def _family_estimate(fam_steps: list[WorkflowStep]) -> dict | None:
 
 def _task_book_text(steps: list[WorkflowStep]) -> str | None:
     """The task-book document's birth text — the compile-time task book the
-    plan node was stamped with (Plan._book_summary's one source). The plan
+    plan node was stamped with (Plan.book_summary's one source). The plan
     step's runtime book_summary overwrites it at back-write time (same
     source, no flicker)."""
     plan_step = next((s for s in steps if s.kind == "plan"), None)
@@ -873,7 +874,7 @@ def _task_book_text(steps: list[WorkflowStep]) -> str | None:
     from app.models.schemas import IntentSlot  # deferred: schema leaf
     from app.pipeline.node_runners import Plan  # deferred: runner crew
 
-    return Plan._book_summary(
+    return Plan.book_summary(
         [IntentSlot.model_validate(s) for s in slots_raw],
         task_book.get("target_language") or "en",
     )

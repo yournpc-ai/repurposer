@@ -1102,11 +1102,8 @@ const en = {
       expand: "Expand",
       mute: "Mute",
       unmute: "Unmute",
-      // Hover prompt 框 (ADR-051 F): the per-card revision bar, prefilled
-      // with the product's own spec — sending rides the chat channel with
-      // the product pinned as focus.
-      reviseTooltip: "Revise this product",
-      revisePlaceholder: "Ask for a change…",
+      // The card-face program region's send button (ADR-057 K4 direct edit
+      // — confirmed through the pricing card, never a new channel).
       reviseSend: "Send revision",
       // Version pager (ADR-051 F2 — 变体分页): the fork-family flipper in
       // the card's action band — a separate pill, never merged with the

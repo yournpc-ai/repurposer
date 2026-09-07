@@ -678,7 +678,10 @@ class Plan(NodeBase):
     agents = (plan,)
 
     @staticmethod
-    def _book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
+    def book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
+        """The human task-book summary line — PUBLIC: the graph fill
+        (graph_fill stamp / back-write) recomposes the identical line from
+        the same slot source, so the document node's text never flickers."""
         if not slots:
             return None
         from collections import Counter
@@ -834,7 +837,7 @@ class Plan(NodeBase):
         zh = _display_zh(run, project, assets)
         # 任务书摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
         # back-write 同源读它。
-        book_summary = self._book_summary(intent_slots, ctx.get("target_language", "en"))
+        book_summary = self.book_summary(intent_slots, ctx.get("target_language", "en"))
         if book_summary:
             node.spec = {**(node.spec or {}), "book_summary": book_summary, "task_book": task_book}
         await _set_summary(

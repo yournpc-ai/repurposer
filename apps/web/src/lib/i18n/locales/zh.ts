@@ -1050,10 +1050,7 @@ const zh: Resources = {
       expand: "展开",
       mute: "静音",
       unmute: "取消静音",
-      // 悬停 prompt 框（ADR-051 F）：每卡修订条，预填产物自身 spec——发送走
-      // chat 通道并把产物钉为本轮焦点。
-      reviseTooltip: "修订这个产物",
-      revisePlaceholder: "说一句要改什么…",
+      // 卡面程序区发送钮（ADR-057 K4 直改——经定价确认卡确认，永不开新通道）。
       reviseSend: "发送修订",
       // 版本分页（ADR-051 F2——变体分页）：卡底动作带的 fork 族翻页——独立的
       // pill，永不与条目切换器合并（variants = 条目切换 ≠ 版本切换）。

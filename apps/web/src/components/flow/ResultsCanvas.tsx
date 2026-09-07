@@ -79,8 +79,9 @@ export interface ResultsCanvasProps {
   /** A product node's factsbar action (download / delete in the bar;
    * publish / open / focus ride the ⋯ menu — all one channel). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
-  /** Hover prompt 框 send (ADR-051 F): the surface rides the revision ask
-   * into the dock's chat channel with the product pinned as focus. */
+  /** The revision chat channel (ADR-051 F 通道律; ADR-057 K4): the pricing
+   * confirmation's confirmed turn rides it into the dock's chat with the
+   * node's displayed product pinned as the one-shot focus. */
   onRevise?: (output: Output, text: string) => void
   /** The draft-confirm card's Start (ADR-057 K5 — 确认 = 节点锚定): the
    * surface rides it to the dock's one start path (the imperative
@@ -398,8 +399,8 @@ export function ResultsCanvas({
         return
       }
       if (node.kind === "document") {
-        // The task book is read on the card — no dock business yet (K5
-        // wires the confirmation beat to it).
+        // The task book is read on the card — no dock business; its confirm
+        // beat lives on the draft-confirm card anchored above it (K5).
         return
       }
       // A graph card: click = dock focus (D8) + the dossier swap-in, on the
@@ -422,26 +423,15 @@ export function ResultsCanvas({
     [outputById, onOutputAction],
   )
 
-  // Hover prompt 框 send (ADR-051 F): id → row, then up to the surface —
-  // the dock's chat channel is the only revision path (prohibition #1).
-  const handleRevise = useCallback(
-    (id: string, text: string) => {
-      const output = outputById.get(id)
-      if (output) onRevise?.(output, text)
-    },
-    [outputById, onRevise],
-  )
-
   // ── Prompt direct edit → the pricing confirmation (ADR-057 K4) ────────
   // The card-face program region reports a new program; NOTHING touches
   // the graph here — the confirm card anchors at the edited node (world
   // space, riding pan/zoom like the prototype's scene C), names the
   // affected subgraph (本节点 ∪ 图边下游) as chips, prices it by folding
   // each node's own quote, and soft-compares the balance. Only the
-  // confirmed turn rides the chat channel (零旁路 — the same onRevise
-  // channel as the hover prompt 框, with the node's displayed product
-  // pinned as the one-shot focus so the agent lands edit_prompt on THIS
-  // node, never a guess).
+  // confirmed turn rides the chat channel (零旁路 — the surface's onRevise
+  // channel, with the node's displayed product pinned as the one-shot
+  // focus so the agent lands edit_prompt on THIS node, never a guess).
   const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
   const handlePromptEdit = useCallback((nodeId: string, text: string) => {
     setPromptEdit({ nodeId, text })
@@ -751,7 +741,6 @@ export function ResultsCanvas({
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
         onOutputAction={handleOutputAction}
-        onRevise={handleRevise}
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}

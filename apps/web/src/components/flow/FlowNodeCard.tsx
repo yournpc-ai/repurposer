@@ -59,11 +59,6 @@ export interface FlowCardData extends Record<string, unknown> {
    * `outputId` overrides the node's own row when the pager has the card
    * displaying a sibling (the lightbox must show what the card shows). */
   onExpandMedia?: (nodeId: string, outputId?: string) => void
-  /** Revision-turn dispatch (ADR-051 F — hover prompt 框): the edited spec
-   * text rides the surface's chat channel with this output pinned as focus.
-   * The output id is the DISPLAYED member's (the revision targets the
-   * product the user is looking at). */
-  onRevise?: (outputId: string, text: string) => void
   /** The pager's displayed product (mount + flip) — the surface tracks it
    * so a node click selects what the user is LOOKING at. */
   onDisplayChange?: (nodeId: string, outputId: string) => void
@@ -458,75 +453,6 @@ function DocumentCard({ node }: { node: FlowNode }) {
         ) : (
           <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
         )}
-      </div>
-    </div>
-  )
-}
-
-/** The hover prompt 框 (ADR-051 F): one frosted bar revealed over the card's
- * bottom on hover, prefilled with the node's OWN program (spec.prompt —
- * server-composed at fill time). Editing it into any revision ask and
- * sending rides the chat revision channel with the displayed product
- * pinned as focus (prohibition #1: zero new execution channel — never an
- * in-place rerun button). Hover-only reveal: touch keeps the ⋯ menu's
- * focus path. K4 replaces this with the card-face direct edit + the
- * pricing confirmation. */
-function ReviseHoverBar({
-  specPrompt,
-  group,
-  onRevise,
-}: {
-  specPrompt?: string | null
-  /** The reveal group's name ("product" / "text") — matches the card root's
-   * `group/{name}` class. */
-  group: string
-  onRevise?: (text: string) => void
-}) {
-  const { t } = useTranslation()
-  const [draft, setDraft] = useState(specPrompt ?? "")
-  // Re-seed when the displayed product changes (a pager flip / a refetch).
-  useEffect(() => setDraft(specPrompt ?? ""), [specPrompt])
-  if (!onRevise) return null
-  const send = () => {
-    const text = draft.trim()
-    if (!text) return
-    onRevise(text)
-    setDraft(specPrompt ?? "")
-  }
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute inset-x-2 bottom-2 z-10 opacity-0 transition-opacity",
-        `group-hover/${group}:opacity-100`,
-      )}
-    >
-      <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-lg p-1 ring-1 ring-foreground/10">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault()
-              send()
-            }
-          }}
-          onClick={(e) => e.stopPropagation()}
-          placeholder={t("results.canvas.revisePlaceholder")}
-          aria-label={t("results.canvas.reviseTooltip")}
-          className="h-7 min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground"
-        />
-        <button
-          type="button"
-          title={t("results.canvas.reviseSend")}
-          aria-label={t("results.canvas.reviseSend")}
-          onClick={(e) => {
-            e.stopPropagation()
-            send()
-          }}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background transition-opacity hover:opacity-80"
-        >
-          <ArrowUp className="h-3.5 w-3.5" />
-        </button>
       </div>
     </div>
   )
@@ -1113,7 +1039,6 @@ function GraphCard({
   selected,
   onOutputAction,
   onExpandMedia,
-  onRevise,
   onDisplayChange,
   onPromptEdit,
 }: {
@@ -1121,7 +1046,6 @@ function GraphCard({
   selected: boolean
   onOutputAction?: FlowCardData["onOutputAction"]
   onExpandMedia?: FlowCardData["onExpandMedia"]
-  onRevise?: FlowCardData["onRevise"]
   onDisplayChange?: FlowCardData["onDisplayChange"]
   onPromptEdit?: FlowCardData["onPromptEdit"]
 }) {
@@ -1219,7 +1143,7 @@ function GraphCard({
     !!output && output.type === "clip" && output.render_status === "failed"
 
   return (
-    <div className="group/product relative flex h-full w-full flex-col">
+    <div className="relative flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={TypeIcon} />
       <div
         className={cn(
@@ -1270,13 +1194,6 @@ function GraphCard({
           }
           onPromptEdit={onPromptEdit}
         />
-        {output ? (
-          <ReviseHoverBar
-            specPrompt={node.spec?.prompt ?? output.spec_prompt}
-            group="product"
-            onRevise={onRevise ? (text) => onRevise(output.id, text) : undefined}
-          />
-        ) : null}
       </div>
 
       {/* The factsbar band under the card (外置律): runtime facts + actions
@@ -1362,7 +1279,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onRevise, onDisplayChange, onPromptEdit } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1398,7 +1315,6 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           selected={selected}
           onOutputAction={onOutputAction}
           onExpandMedia={onExpandMedia}
-          onRevise={onRevise}
           onDisplayChange={onDisplayChange}
           onPromptEdit={onPromptEdit}
         />
