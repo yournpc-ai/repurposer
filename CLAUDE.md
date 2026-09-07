@@ -264,3 +264,5 @@ Overall style: restrained, lightweight, unified. Key reference points:
 ## Testing
 
 The API test suite was removed because it had drifted from the rapidly changing implementation (stale columns, changed storage paths, outdated mocks). Verify changes by running the relevant flow end-to-end instead of relying on a test suite.
+
+**Exception — deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction). If a behavior needs a real transaction or an LLM to verify, it belongs to an e2e run (chat_scenarios), not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
