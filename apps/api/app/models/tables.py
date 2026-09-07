@@ -253,6 +253,83 @@ class WorkflowStep(Base):
     )
 
 
+class GraphNode(Base):
+    """One node of the project's persistent canvas graph (ADR-057).
+
+    The graph IS the product object: a project = one persistent, mutable
+    graph (a forest — islands are legal), built and revised by the wiring
+    layer (``pipeline/graph_store.apply_wiring_ops``, the ONLY writer), with
+    chat as its only consumer surface. ``kind`` is one of the five node
+    types — asset | document | generator | processor | agent. ``state`` is
+    the orthogonal lifecycle dimension — draft | queued | running | done |
+    failed | skipped | stale. ``spec`` is the node's program: prompt /
+    params / the estimate fold of its internal workflow / the produced
+    ``output_id`` back-reference / the internal step keys (steps stay
+    step-grained inside the node — composition, not projection). ``layout``
+    is the settled canvas frame (append-only: assigned once at add_node,
+    existing nodes never move). Execution semantics (workflow_steps /
+    NodeBase / queue / hold→capture→release) are untouched by this table.
+    """
+
+    __tablename__ = "graph_nodes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind = Column(String(20), nullable=False)
+    state = Column(String(20), nullable=False, default="draft")
+    spec = Column(JSONB, nullable=False, default=dict)
+    # {x, y, w, h} — the settled canvas frame, assigned once at birth.
+    layout = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class GraphEdge(Base):
+    """One typed context/data-flow edge of the persistent graph (ADR-057).
+
+    An edge is a typed flow (video | audio | text | ctx — ctx renders
+    dashed), NOT an execution-order decoration: execution order inside a run
+    stays on workflow_steps.inputs. ``from_port`` / ``to_port`` name the
+    endpoint ports (the port law: in = the consuming region's bottom-left,
+    out = the producing region's top-right; same-side ports stack from the
+    corner). Node deletion cascades its edges structurally.
+    """
+
+    __tablename__ = "graph_edges"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_node = Column(
+        UUID(as_uuid=True),
+        ForeignKey("graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_port = Column(String(40), nullable=False, default="out")
+    to_node = Column(
+        UUID(as_uuid=True),
+        ForeignKey("graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    to_port = Column(String(40), nullable=False, default="in")
+    edge_type = Column(String(10), nullable=False, default="text")
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("ix_graph_edges_from", "from_node"),
+        Index("ix_graph_edges_to", "to_node"),
+    )
+
+
 class Output(Base):
     """Unified product row (ADR-030): clips and derivatives became types.
 

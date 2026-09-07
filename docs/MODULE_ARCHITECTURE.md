@@ -19,6 +19,8 @@
 ┌────────────────────────── 前端面 ──────────────────────────┐
 │ composer ✅ │ Editor GUI ✅ │ chat ✅ │ 步骤清单 ✅          │
 │ FlowView 图面（配方流程图 ✅ / 结果画布 ✅ ADR-041 / 血缘板 📋spike，ADR-036）│ MCP 📋P2 │
+│ 【已拍板重构（ADR-057，内核批 PROGRESS 09-24 起）：图升正为持久可变产品对象——画布直读   │
+│  graph_nodes/graph_edges，runFlow 五补丁投影（canvas_hidden/canvas_key/过程脊/脊收编/R1）火化】│
 └──────────────────────────────┬─────────────────────────────┘
                                ▼ 意图
 ┌──────────────── Agent Interface（chat 升级版 + MCP）────────┐
@@ -99,6 +101,7 @@ Memory/Context：personas（含皮肤块 brand / 声纹块 voice，ADR-038；�
 Pipeline：
 assets ──► workflow_runs ──► workflow_steps ✅ ──► outputs ✅（统一产物，ADR-030）
 （上传/ASR）  （run 容器）     （施工图：计划+账簿）     type=clip 带 source_ref+render_spec
+graph_nodes ──► graph_edges（📋 ADR-057 持久图：节点五型 + 类型化边；画布直读，零投影）
 music（AI 音乐库）                             payload/files/score/publishing/provenance
 
 Agent Interface：conversations ──► messages
@@ -144,6 +147,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
+| `graph_nodes` / `graph_edges` | Pipeline（✅ ADR-057，K1 已落两表 + wiring 层；消费面随 K2~K5 逐批接管） | **图即产品对象**：项目持久图（节点五型 asset/document/generator/processor/agent + 状态维度 + prompt/params spec + 产物引用；边 = 类型化上下文流）。只由 graph 服务（wiring 层 `pipeline/graph_store.apply_wiring_ops`）写——chat 是唯一消费面，前端画布直读零投影；workflow_steps 保持 step 粒度住节点内部（billing capture / 计量 / 重试不变） |
 | operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
 | publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
