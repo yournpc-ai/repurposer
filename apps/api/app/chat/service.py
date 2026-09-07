@@ -954,6 +954,27 @@ async def sync_task_book_question(
             estimate_credits=estimate,
         ),
     )
+    # Draft graph (ADR-057 K5 — 图先展示后运行): the docked chain stamps the
+    # canvas's preview as DRAFT nodes through the birthplace's own compile
+    # (same fill keys → Start fills them in place). A chain the birthplace
+    # would reject degrades exactly like the quote-less dock (the derived
+    # preview's posture): the book docks, the stale preview tears down, and
+    # Start 422s for real.
+    from app.pipeline.graph_fill import (  # deferred: import cycle
+        clear_draft_graph,
+        stamp_draft_graph,
+    )
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    try:
+        await stamp_draft_graph(db, project, intent.tasks, current_ui_language())
+    except (ToolRejected, ValueError):
+        logger.warning(
+            "draft_graph_stamp_failed",
+            project_id=str(project.id),
+            exc_info=True,
+        )
+        await clear_draft_graph(db, UUID(str(project.id)))
     return bailed_run_ids
 
 
@@ -1205,8 +1226,13 @@ async def answer_question(
         if data.kind == "bail":
             # Graceful exit: the unconfirmed task book is dropped, the project
             # stays a draft and the prompt stays in the conversation — the
-            # setup can be reopened any time. Never a failure.
+            # setup can be reopened any time. Never a failure. The book's
+            # draft graph goes with it (K5 — asset nodes stay: they are the
+            # project's inputs, never the book's).
             project.pending_brief = None
+            from app.pipeline.graph_fill import clear_draft_graph  # deferred
+
+            await clear_draft_graph(db, UUID(str(project.id)))
         else:
             # kind == "start" (the only other kind a task_book accepts).
             pending = (
@@ -1250,6 +1276,21 @@ async def answer_question(
                     status.HTTP_422_UNPROCESSABLE_CONTENT,
                     "The task book is empty — nothing to start.",
                 )
+            # The confirmed chain's draft twin must mirror what Start
+            # actually runs (K5): the review panel's hand edits (data.intent)
+            # may diverge from the last docked stamp — re-sync idempotently
+            # (a no-op when unchanged). A chain the birthplace would reject
+            # tears the preview down; create_run then 422s as today.
+            from app.pipeline.graph_fill import (  # deferred: import cycle
+                clear_draft_graph,
+                stamp_draft_graph,
+            )
+            from app.ui_locale import current_ui_language  # deferred
+
+            try:
+                await stamp_draft_graph(db, project, tasks, current_ui_language())
+            except (ToolRejected, ValueError):
+                await clear_draft_graph(db, UUID(str(project.id)))
             try:
                 # Entry constraints (clips-media gate included) reject at the
                 # birthplace — ValueError here is a client-facing 422.

@@ -54,11 +54,11 @@ export interface ResultsCanvasProps {
   /** The graph's one read frame (ADR-057). Null = not yet loaded — the
    * canvas stays empty behind the page's gate. */
   graph: ProjectGraph | null
-  /** The project has at least one run — the page's VISIBILITY gate for the
-   * canvas (opacity / pointer-events). The settle key (initial framing)
-   * joins this with baselineReady: frame only when the visible, settled
-   * content is present, never on a partial fetch frame (2026-09-06). */
-  hasRuns?: boolean
+  /** The canvas is VISIBLE (the page's graph-world gate: first run OR a
+   * docked book's draft graph, K5). The settle key (initial framing) joins
+   * this with baselineReady: frame only when the visible, settled content
+   * is present, never on a partial fetch frame (2026-09-06). */
+  visible?: boolean
   /** Birth-choreography baseline contract (ADR-036 补记 3): the surface
    * flips `baselineReady` only when its initial fetches have settled (they
    * resolve in any order) and the data belongs to `baselineKey`; the first
@@ -100,7 +100,7 @@ export interface ResultsCanvasProps {
 
 export function ResultsCanvas({
   graph,
-  hasRuns = false,
+  visible = false,
   baselineReady,
   baselineKey,
   tourOutputId,
@@ -631,7 +631,7 @@ export function ResultsCanvas({
         navigation="explore"
         controls
         controlsClassName={controlsClassName}
-        settleKey={baselineReady && hasRuns ? baselineKey : null}
+        settleKey={baselineReady && visible ? baselineKey : null}
         bornIds={bornIds}
         dots
         overlay={promptEditOverlay}

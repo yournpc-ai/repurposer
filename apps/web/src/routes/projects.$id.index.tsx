@@ -254,17 +254,27 @@ function ProjectDetailPage() {
   }, [projectId])
 
   const latestRun = results?.latest_run
-  // The page's two-form choreography driver (2026-09-02 形态机): has the
-  // project ever started a run? False = the pre-generation world (centered
-  // fullscreen chat + back pill, no canvas); the first run's arrival flips
-  // it true — the chat stage fades out in place (300ms), the canvas fades
-  // in on a slight delay, and the back pill crossfades into the full
-  // ProjectMenu, all on one beat (2026-09-06 fade-simplified: the old
-  // grid-rows collapse read as the chat flying up, user-retired). The
-  // loading/error early returns below guarantee this is settled at first
-  // render, so projects WITH runs mount straight in the dock world (the
-  // hydrated first frame never replays the morph).
+  // The page's two-form choreography driver (2026-09-02 形态机; 2026-09-08
+  // K5 拓宽): pre-generation it is the centered fullscreen chat + back pill
+  // (no canvas); the GRAPH WORLD's arrival flips it — the chat stage fades
+  // out in place (300ms), the canvas fades in on a slight delay, and the
+  // back pill crossfades into the full ProjectMenu, all on one beat
+  // (2026-09-06 fade-simplified: the old grid-rows collapse read as the
+  // chat flying up, user-retired). The graph world arrives on EITHER the
+  // first run (hasRuns) OR the docked task book's draft graph
+  // (hasDraftGraph — 图先展示后运行, ADR-057 K5: the canvas previews the
+  // whole chain as draft nodes before a credit moves; bail tears it down
+  // and the world morphs back). The loading/error early returns below
+  // guarantee this is settled at first render, so projects WITH runs (or a
+  // pending draft) mount straight in the dock world (the hydrated first
+  // frame never replays the morph).
   const hasRuns = latestRun != null
+  const hasDraftGraph = (graph?.nodes ?? []).some((n) => n.state === "draft")
+  const graphLive = hasRuns || hasDraftGraph
+  // The driver forks per surface (prohibition #13 — mobile has no canvas):
+  // the desktop world morphs on the draft graph's arrival; mobile waits
+  // for the first run (its confirm beat stays in the dock).
+  const worldLive = isMobile ? hasRuns : graphLive
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -277,7 +287,7 @@ function ProjectDetailPage() {
     docked: false,
   })
   const panelCoversCorner =
-    hasRuns && !isMobile && !panelState.hidden && panelState.docked
+    graphLive && !isMobile && !panelState.hidden && panelState.docked
 
   useEffect(() => {
     setLoading(true)
@@ -852,10 +862,11 @@ function ProjectDetailPage() {
     // back to /projects).
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
       {/* Top-left chrome — a TWO-FORM machine (2026-09-02 形态机, driven by
-          hasRuns): pre-generation it is a plain back pill (icon + Projects);
-          the first run's arrival crossfades it into the full ProjectMenu
-          (brand mark + title + ops). Both are stacked in one slot — the
-          active form in flow, the inactive one absolutely overlaid — so the
+          worldLive): pre-generation it is a plain back pill (icon + Projects);
+          the graph world's arrival (first run OR the docked book's draft
+          graph, desktop) crossfades it into the full ProjectMenu (brand
+          mark + title + ops). Both are stacked in one slot — the active
+          form in flow, the inactive one absolutely overlaid — so the
           crossfade never shifts layout. z-[60]: above the ChatDock's z-50
           root — in the full form its stage covers the page and would
           otherwise swallow the pill's clicks. */}
@@ -863,11 +874,11 @@ function ProjectDetailPage() {
         <div
           className={cn(
             "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
-            hasRuns
+            worldLive
               ? "opacity-100"
               : "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
           )}
-          aria-hidden={!hasRuns}
+          aria-hidden={!worldLive}
         >
           <ProjectMenu
             projectId={project.id}
@@ -886,15 +897,15 @@ function ProjectDetailPage() {
         <div
           className={cn(
             "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
-            hasRuns
+            worldLive
               ? "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
               : "opacity-100"
           )}
-          aria-hidden={hasRuns}
+          aria-hidden={worldLive}
         >
           <Link
             to="/projects"
-            tabIndex={hasRuns ? -1 : 0}
+            tabIndex={worldLive ? -1 : 0}
             className="dock-surface flex h-9 items-center gap-1.5 rounded-md pl-2 pr-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -921,15 +932,16 @@ function ProjectDetailPage() {
            the panel's in-flow flex-row cut was user-retired same-day — the
            frost must have the canvas living beneath it). A node passing
            under the dock is panned back into view — the canvas is explore
-           navigation. The whole canvas is gated on hasRuns (2026-09-02
-           形态机): pre-generation it is invisible + inert (the full-form chat
-           stage owns the page); the first run's arrival fades it in on the
+           navigation. The whole canvas is gated on graphLive (2026-09-02
+           形态机; K5 拓宽): pre-generation it is invisible + inert (the
+           full-form chat stage owns the page); the graph world's arrival
+           (first run OR the docked book's draft graph) fades it in on the
            same beat as the stage's fade-out — 500ms on a 150ms delay
            (2026-09-06 fade-simplified). */
         <div
           className={cn(
             "min-h-0 flex-1 transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
-            !hasRuns && "pointer-events-none opacity-0"
+            !graphLive && "pointer-events-none opacity-0"
           )}
         >
           <ResultsCanvas
@@ -937,9 +949,9 @@ function ProjectDetailPage() {
             controlsClassName={panelCoversCorner ? "md:!mr-[504px]" : undefined}
             graph={graph}
             // The settle key's visibility half (2026-09-06): the canvas is
-            // gated on hasRuns, so initial framing joins it with the
+            // gated on graphLive, so initial framing joins it with the
             // baseline — partial fetch frames never frame.
-            hasRuns={hasRuns}
+            visible={graphLive}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /graph have both settled for THIS project —
             // an early partial frame must not become the baseline (the
@@ -997,16 +1009,20 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The three-form machine (2026-09-06, FLORA-aligned): pre-first-run
-        // the dock is the centered fullscreen chat; the first run's arrival
-        // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
-        // the full-bleed canvas, float / docked-right geometry toggled in
-        // its header) or the MOBILE bottom dock ("dock", unchanged).
-        // The stage fades out in place, the canvas fades in on a slight
-        // delay on the same beat. Projects WITH runs mount straight in
-        // "panel"/"dock" — the loading gate above settles hasRuns before
-        // first render, so the hydrated first frame never replays the morph.
-        form={!hasRuns ? "full" : isMobile ? "dock" : "panel"}
+        // The three-form machine (2026-09-06, FLORA-aligned; K5 拓宽): pre-
+        // generation the dock is the centered fullscreen chat; the GRAPH
+        // WORLD's arrival morphs it into the DESKTOP panel ("panel" — a
+        // frosted overlay on the full-bleed canvas, float / docked-right
+        // geometry toggled in its header) or the MOBILE bottom dock
+        // ("dock", unchanged). The desktop world arrives on the first run
+        // OR the docked book's draft graph (图先展示后运行); mobile has no
+        // canvas (prohibition #13) and waits for the first run. The stage
+        // fades out in place, the canvas fades in on a slight delay on the
+        // same beat. Projects WITH runs (or a pending draft) mount straight
+        // in "panel"/"dock" — the loading gate above settles the driver
+        // before first render, so the hydrated first frame never replays
+        // the morph.
+        form={isMobile ? (hasRuns ? "dock" : "full") : graphLive ? "panel" : "full"}
         onPanelStateChange={setPanelState}
         prompt={
           firstMessage?.text ??
@@ -1052,12 +1068,13 @@ function ProjectDetailPage() {
       {/* The credits balance pill (BILLING §7 read surface, 2026-09-06) —
           bottom-left on the desktop project page: the one surface where
           credits are spent AND no studio shell carries the account console.
-          Post-first-run only (the pre-run fullscreen chat owns the bottom
-          row); the pill itself is hidden below md (the mobile dock owns the
-          small screen's bottom edge). refreshKey rides the latest run's
-          id+status — a run's hold/capture settles server-side and the pill
-          refetches on the flip. */}
-      {hasRuns && (
+          Graph-world only (the pre-run fullscreen chat owns the bottom row —
+          the draft world already shows the canvas, K5); the pill itself is
+          hidden below md (the mobile dock owns the small screen's bottom
+          edge). refreshKey rides the latest run's id+status — a run's
+          hold/capture settles server-side and the pill refetches on the
+          flip. */}
+      {worldLive && (
         <CreditsPill
           refreshKey={latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"}
         />

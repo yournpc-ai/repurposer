@@ -1,21 +1,27 @@
-"""Graph fill (ADR-057 K2) — the run → graph double-write and back-write.
+"""Graph fill (ADR-057 K2; K5 draft stamp) — the run/draft → graph writes.
 
 双写期 (the double-write period): ``create_run`` keeps materializing
 ``workflow_steps`` exactly as before (the execution ledger — billing
 capture / metering / retries ride it), and ADDITIONALLY stamps the run's
-intent onto the persistent graph (the product face). The old canvas is
-untouched until K3 flips the data source.
+intent onto the persistent graph (the product face).
 
-Two directions:
+Three directions:
 
-- **stamp** (``stamp_run_graph``): compiled steps → graph nodes/edges via
-  the wiring layer (the graph's only write door — zero bypass). Node
+- **run stamp** (``stamp_run_graph``): compiled steps → graph nodes/edges
+  via the wiring layer (the graph's only write door — zero bypass). Node
   identity is idempotent (``spec.fill_key``): a re-run of the same slot
   REUSES its node (spec refreshed, state re-queued), a new slot grows a
   node; the graph is edited continuously, never re-grown wholesale.
   Steps carry the back-pointer (``step.spec.graph_node_id``) and nodes
   carry their internal workflow (``spec.step_ids``) — composition, never
   projection: steps stay step-grained INSIDE the node.
+- **draft stamp** (``stamp_draft_graph``, K5): the docked task book's
+  chain dry-run compiles through the birthplace's own compile and stamps
+  the SAME graph as DRAFT nodes (图先展示后运行 — the canvas previews the
+  whole chain before a credit moves; Start fills these very nodes in
+  place, same deterministic compile → same fill keys).
+  ``clear_draft_graph`` tears the unconfirmed preview down (bail /
+  uncompilable re-dock).
 - **back-write** (``sync_graph_node_for_step``): the orchestrator's
   execute_step calls this at every step terminal — the node's state is the
   aggregate of its internal step family (the runFlow.ts aggregateStatus
@@ -65,6 +71,33 @@ _CLIP_FAMILY_KINDS = frozenset({
 })
 
 _TASK_BOOK_ROLE = "task_book"
+
+# States a DRAFT re-stamp may revisit (K5): a live node (queued/running), a
+# finished one (done), or one mid-revision (stale) belongs to an earlier
+# run's graph truth — the new book's preview never clobbers them (edges
+# still derive to them; the run's own stamp re-fills them for real).
+_DRAFT_RESTAMP_STATES = frozenset({"draft", "failed", "skipped"})
+
+
+class _DraftStep:
+    """A compile-time stand-in for WorkflowStep (stamp_draft_graph): the
+    dry-run compile's _NodeSpec projected to the step shape the stamp core
+    reads (id / kind / seq / spec / inputs / estimate). Never persisted —
+    Start's birthplace re-compiles and the real steps take over (the same
+    deterministic compile → the same fill keys → the draft nodes fill in
+    place, never twins)."""
+
+    __slots__ = ("id", "kind", "seq", "spec", "inputs", "estimate")
+
+    def __init__(self, kind: str, seq: int, spec: dict, estimate: dict | None) -> None:
+        from uuid import uuid4
+
+        self.id = uuid4()
+        self.kind = kind
+        self.seq = seq
+        self.spec = spec
+        self.inputs: list[str] = []
+        self.estimate = estimate
 
 
 def _fill_key_for_step(step: WorkflowStep) -> str:
@@ -194,8 +227,150 @@ async def stamp_run_graph(
     spec — the compile is fully persisted), so the backfill script replays
     the exact same stamping. Filled nodes leave the call at state=queued.
     """
-    ui_language = str((run.context or {}).get("ui_language") or "en")
+    await _stamp_graph_core(
+        db,
+        project,
+        steps,
+        run=run,
+        ui_language=str((run.context or {}).get("ui_language") or "en"),
+        draft=False,
+        book_text=None,
+    )
+
+
+async def stamp_draft_graph(
+    db: AsyncSession,
+    project: Project,
+    tasks: list,
+    ui_language: str,
+) -> None:
+    """Draft stamp (ADR-057 K5) — the docked task book's graph twin.
+
+    图先展示后运行: the moment a book docks, the canvas sees the whole chain
+    as DRAFT nodes (「运行后生成 · 约 N 积分」 per node, zero consumption
+    until Start) — the draft graph IS the "you'll get", the ADR-043 derived
+    preview's replacement. The compile is the birthplace's own
+    (``compile_graph`` with the same stills/materialize derivations), so
+    fill keys collide with the run's and Start fills these very nodes in
+    place. Raises ToolRejected / ValueError on an uncompilable chain — the
+    caller degrades exactly like the quote-less dock (and tears the stale
+    preview down via ``clear_draft_graph``). Flush-only.
+    """
+    from app.models.schemas import IntentSlot  # deferred: schema leaf
+    from app.pipeline.graph import known_output_types  # deferred: kernel leaf
+    from app.pipeline.node_runners import Plan  # deferred: runner crew
+    from app.pipeline.orchestrator import (  # deferred: import cycle
+        TaskSpec,
+        _materialize_profile,
+        _needs_stills_alignment,
+        compile_graph,
+        first_task_language,
+    )
+    from app.pipeline.step_context import _estimate_facts  # deferred: facts pack
+
+    spec = TaskSpec(tasks=list(tasks))
+    node_specs = compile_graph(
+        spec,
+        add_stills_align=await _needs_stills_alignment(db, project, spec),
+        materialize_profile=await _materialize_profile(db, project, spec),
+    )
+    facts = await _estimate_facts(db, project)
+    steps = [
+        _DraftStep(
+            ns.kind,
+            ns.seq,
+            dict(ns.spec or {}),
+            NODE_KINDS[ns.kind].estimate(
+                {
+                    **facts,
+                    "spec": ns.spec,
+                    "input_kinds": [node_specs[i].kind for i in ns.inputs],
+                }
+            ),
+        )
+        for ns in node_specs
+    ]
+    for step, ns in zip(steps, node_specs, strict=True):
+        step.inputs = [str(steps[i].id) for i in ns.inputs]
+    # The draft book's text — the same summary the runtime plan stamps
+    # (Plan._book_summary, one source): the run's back-write overwrites it
+    # with the identical composition, zero flicker.
+    parsed = [
+        IntentSlot.model_validate(s.spec["slot"])
+        for s in steps
+        if (s.spec or {}).get("slot")
+    ]
+    intent_slots = [s for s in parsed if s.type in known_output_types()]
+    target_language = first_task_language(tasks) or project.language or "en"
+    book_text = Plan._book_summary(intent_slots, target_language)
+    await _stamp_graph_core(
+        db,
+        project,
+        steps,
+        run=None,
+        ui_language=ui_language,
+        draft=True,
+        book_text=book_text,
+    )
+
+
+async def clear_draft_graph(db: AsyncSession, project_id: UUID) -> None:
+    """Tear down the unconfirmed book's graph (bail / a re-dock whose chain
+    no longer compiles): draft-state generation nodes go, and the draft-born
+    task-book document with them (a RUN-born book — ``spec.run_id`` present
+    — is history and stays). Asset nodes are the project's inputs, never
+    the book's — they stay. Flush-only."""
+    nodes = list(
+        (
+            await db.execute(
+                select(GraphNode).where(GraphNode.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    victims = [
+        n
+        for n in nodes
+        if n.kind != "asset"
+        and (
+            str(n.state) == "draft"
+            or (
+                n.kind == "document"
+                and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
+                and not (n.spec or {}).get("run_id")
+            )
+        )
+    ]
+    if victims:
+        await apply_wiring_ops(
+            db,
+            project_id,
+            [{"op": "delete_node", "node": UUID(str(n.id))} for n in victims],
+        )
+
+
+async def _stamp_graph_core(
+    db: AsyncSession,
+    project: Project,
+    steps: list,
+    *,
+    run: WorkflowRun | None,
+    ui_language: str,
+    draft: bool,
+    book_text: str | None,
+) -> None:
+    """The one topology stamper behind the run fill and the draft preview
+    (K5 — ONE source, zero drift: the draft's graph and the run's graph are
+    the same derivation over the same compile).
+
+    ``draft=False`` (run fill): nodes leave at state=queued, steps back-point
+    to their nodes, the task book queues with its prelude. ``draft=True``
+    (book dock): nodes leave at state=draft with no run/step linkage, only
+    _DRAFT_RESTAMP_STATES nodes are re-stamped, and draft-state orphans of
+    the previous dock are torn down (the run fill never deletes)."""
     project_id = UUID(str(project.id))
+    run_id_str = str(run.id) if run is not None else None
 
     # ── 1. Classify the steps into node families ─────────────────────────
     # node_key → {"kind": graph kind, "steps": [step]}; every generation /
@@ -322,6 +497,34 @@ async def stamp_run_graph(
         (str(e.from_node), str(e.to_node), e.edge_type) for e in existing_edges
     }
 
+    # Orphan sweep (draft only): a re-docked chain replaces the last one —
+    # draft-state nodes whose slot vanished from the new compile are torn
+    # down through the same wiring door. The task-book document is never an
+    # orphan (the draft always re-ensures its book below); live/finished
+    # nodes are history, never the preview's business. The run fill never
+    # deletes — its graph only grows / re-fills.
+    if draft:
+        orphans = [
+            n
+            for n in existing_nodes
+            if n.kind != "asset"
+            and str(n.state) == "draft"
+            and not (
+                n.kind == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
+            )
+            and (n.spec or {}).get("fill_key") not in families
+        ]
+        if orphans:
+            orphan_ids = {UUID(str(n.id)) for n in orphans}
+            await apply_wiring_ops(
+                db,
+                project_id,
+                [{"op": "delete_node", "node": node_id} for node_id in orphan_ids],
+            )
+            by_fill_key = {
+                k: n for k, n in by_fill_key.items() if UUID(str(n.id)) not in orphan_ids
+            }
+
     ops: list[dict[str, Any]] = []
     node_id_by_key: dict[str, UUID] = {}
 
@@ -342,13 +545,18 @@ async def stamp_run_graph(
         asset_node_ids.append(UUID(str(node.id)))
 
     # ── 4. The task-book document (the plan prelude's artifact — FLORA
-    # text-node form; the prelude's steps are its internal workflow). Only
-    # a run WITH a prelude births it — a targeted render/hook scope never
-    # grows an empty book card.
+    # text-node form; the prelude's steps are its internal workflow). Run
+    # mode: only a run WITH a prelude births it — a targeted render/hook
+    # scope never grows an empty book card. Draft mode (K5): the book
+    # ALWAYS has its face — it is the confirm beat's canvas anchor; its
+    # text is the dock-composed summary (the runtime plan's back-write
+    # re-composes the identical line). A run-born book (spec.run_id) keeps
+    # its historical text through a draft — the bail stays honest.
     prelude_steps = [s for s in steps if s.kind in _PRELUDE_KINDS]
-    book_text = _task_book_text(steps)
+    if book_text is None and not draft:
+        book_text = _task_book_text(steps)
     if task_book_node is None:
-        if prelude_steps:
+        if prelude_steps or draft:
             ops.append(
                 {
                     "op": "add_node",
@@ -359,10 +567,11 @@ async def stamp_run_graph(
                     },
                 }
             )
-    elif book_text:
+    elif book_text or draft:
         # A revised chain re-stamps the book — the runtime plan summary
         # overwrites it at back-write time (same source, no flicker).
-        task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
+        if not draft or not (task_book_node.spec or {}).get("run_id"):
+            task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
 
     # ── 5. Generation / processor / agent nodes (idempotent by fill_key) ──
     new_node_specs: dict[str, dict[str, Any]] = {}  # fill_key → add_node spec
@@ -399,6 +608,11 @@ async def stamp_run_graph(
         )
         if reused is not None:
             node_id_by_key[key] = UUID(str(reused.id))
+            if draft and str(reused.state) not in _DRAFT_RESTAMP_STATES:
+                # A live / finished / mid-revision node belongs to an
+                # earlier run's truth — the draft preview leaves it
+                # untouched (edges still derive to it via the key map).
+                continue
             # The node is being re-filled: refresh its program + internal
             # workflow and re-queue it (修订/重跑 = 原地图变更, never a twin).
             reused.spec = {
@@ -409,11 +623,17 @@ async def stamp_run_graph(
                 "estimate": estimate,
                 "frame_class": frame_class,
                 **({} if revise_headed else {"tool": head.kind}),
-                "step_ids": [str(s.id) for s in fam_steps],
-                "run_id": str(run.id),
+                **(
+                    {}
+                    if draft
+                    else {
+                        "step_ids": [str(s.id) for s in fam_steps],
+                        "run_id": run_id_str,
+                    }
+                ),
                 "output_ids": [],
             }
-            reused.state = "queued"
+            reused.state = "draft" if draft else "queued"
             continue
         new_node_specs[key] = {
             "fill_key": key,
@@ -423,8 +643,14 @@ async def stamp_run_graph(
             "estimate": estimate,
             "frame_class": frame_class,
             "tool": head.kind,
-            "step_ids": [str(s.id) for s in fam_steps],
-            "run_id": str(run.id),
+            **(
+                {}
+                if draft
+                else {
+                    "step_ids": [str(s.id) for s in fam_steps],
+                    "run_id": run_id_str,
+                }
+            ),
             "output_ids": [],
         }
         ops.append({"op": "add_node", "kind": fam["kind"], "spec": new_node_specs[key]})
@@ -443,21 +669,24 @@ async def stamp_run_graph(
                 node_id_by_key[str(spec["fill_key"])] = node_id
 
     # ── 6. Back-pointer the steps to their nodes + queue the task book ────
-    for key, fam in families.items():
-        node_id = node_id_by_key.get(key)
-        if node_id is None:
-            continue
-        for step in fam["steps"]:
-            step.spec = {**(step.spec or {}), "graph_node_id": str(node_id)}
-    if task_book_node is not None and prelude_steps:
-        task_book_node.spec = {
-            **(task_book_node.spec or {}),
-            "step_ids": [str(s.id) for s in prelude_steps],
-            "run_id": str(run.id),
-        }
-        task_book_node.state = "queued"
-        for step in prelude_steps:
-            step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
+    # Run mode only — the draft's stand-in steps have no rows to point, and
+    # the draft book keeps its birth state (its text is already present).
+    if run is not None:
+        for key, fam in families.items():
+            node_id = node_id_by_key.get(key)
+            if node_id is None:
+                continue
+            for step in fam["steps"]:
+                step.spec = {**(step.spec or {}), "graph_node_id": str(node_id)}
+        if task_book_node is not None and prelude_steps:
+            task_book_node.spec = {
+                **(task_book_node.spec or {}),
+                "step_ids": [str(s.id) for s in prelude_steps],
+                "run_id": run_id_str,
+            }
+            task_book_node.state = "queued"
+            for step in prelude_steps:
+                step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     def connect(from_id: UUID, to_id: UUID, edge_type: str) -> None:
@@ -549,7 +778,8 @@ async def stamp_run_graph(
 
     logger.info(
         "graph_stamped",
-        run_id=str(run.id),
+        run_id=str(run.id) if run is not None else None,
+        draft=draft,
         nodes=len(node_id_by_key) + (1 if task_book_node is not None else 0),
         edges=len(pending_edges),
     )
