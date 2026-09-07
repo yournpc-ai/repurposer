@@ -51,15 +51,8 @@ const zh: Resources = {
     recent: "最近变动",
     tx: {
       empty: "暂无变动",
-      kind: {
-        grant: "赠送",
-        purchase: "购买",
-        hold: "预扣",
-        capture: "实扣",
-        release: "释放",
-        refund: "退款",
-        adjust: "调整",
-      },
+      /** 语义账本塌缩（ADR-057 K4）：用户面只显三族——花费 / 赠送 / 充值；
+       * 账本的 hold / capture / release 机器词服务端折叠，永不上 UI。 */
     },
   },
   nav: {
@@ -1022,6 +1015,14 @@ const zh: Resources = {
       // 卡面程序区（ADR-057 §5）：generator/agent 节点在此读自己的 prompt
       // （processor 节点读参数事实 chips）。
       promptLabel: "提示词",
+      // K4 直改：起草中 meta 标签承担状态；发送后定价确认卡锚在节点旁
+      // （受影响子图 = 本节点 ∪ 图边下游，价格 = 各节点估价 fold；
+      // 余额 = 软对照，422 仍是事实源）。
+      promptEditing: "提示词——修改中",
+      confirmTitle: "修订 {{label}}",
+      confirmBlastSingle: "重跑此节点",
+      confirmBlast: "重跑 {{count}} 个节点",
+      confirmStart: "确认开始",
       // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进；
       // 2026-09-05 ± 步进退役——pill 只读百分比，点击 = fit）。
       zoomFit: "适应画布",

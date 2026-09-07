@@ -393,11 +393,28 @@ class AnswerProposal(BaseModel):
     text: str
 
 
+class WiringProposal(BaseModel):
+    """Intent agent output, state E (ADR-057 K4): edit the persistent graph
+    and re-fill a subgraph — 修订 = ``edit_prompt(node)`` + ``run({node} ∪
+    downstream)``, the revision loop's one form. ``ops`` speaks the
+    graph_store wiring registry's vocabulary (add_node / connect /
+    edit_prompt / delete_node / run); adjudication is
+    ``apply_wiring_ops``'s (op shape / references / ports / cycles), never
+    the schema boundary's — ops stay loose dicts here so the registry's own
+    errors feed the repair round verbatim."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["wiring"] = "wiring"
+    ops: list[dict] = Field(default_factory=list)
+    summary: str
+
+
 IntentProposal = Annotated[
-    TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal,
+    TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal | WiringProposal,
     Field(discriminator="type"),
 ]
-"""The four-state discriminated union the chat intent agent returns (§3, N-18 + N-21)."""
+"""The five-state discriminated union the chat intent agent returns (§3, N-18 + N-21; state E = ADR-057 wiring ops)."""
 
 
 class IntentResult(BaseModel):

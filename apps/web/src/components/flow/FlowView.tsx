@@ -247,6 +247,7 @@ export function FlowView({
   onExpandMedia,
   onRevise,
   onDisplayChange,
+  onPromptEdit,
   onPaneClick,
   navigation = "fit",
   controls = false,
@@ -254,6 +255,7 @@ export function FlowView({
   settleKey,
   bornIds,
   groups = [],
+  overlay,
   dots = false,
   className,
 }: FlowViewProps) {
@@ -310,6 +312,7 @@ export function FlowView({
         onExpandMedia,
         onRevise,
         onDisplayChange,
+        onPromptEdit,
       },
       draggable: false,
       connectable: false,
@@ -342,7 +345,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onRevise, onDisplayChange])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onRevise, onDisplayChange, onPromptEdit])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />
@@ -403,6 +406,7 @@ export function FlowView({
             bornRanks={bornRanks}
           />
         )}
+        {overlay}
         <ViewportController
           count={nodes.length}
           wrapperRef={wrapperRef}

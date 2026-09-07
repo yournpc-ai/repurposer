@@ -67,6 +67,10 @@ export interface FlowCardData extends Record<string, unknown> {
   /** The pager's displayed product (mount + flip) — the surface tracks it
    * so a node click selects what the user is LOOKING at. */
   onDisplayChange?: (nodeId: string, outputId: string) => void
+  /** Card-face prompt direct edit (ADR-057 K4): the card reports the new
+   * program; the surface opens the pricing confirmation (锚定子图 + 估价)
+   * — nothing touches the graph until the confirmed turn rides chat. */
+  onPromptEdit?: (nodeId: string, text: string) => void
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -959,13 +963,54 @@ function QuietBody({ node }: { node: FlowNode }) {
 }
 
 /** The program region (ADR-057 §5 — the card-face spec): generator/agent
- * nodes read their prompt (K4 makes it directly editable + the pricing
- * confirmation); processor nodes read their params as fact chips (no LLM
- * prompt — deterministic 工序). Read-only on this surface for K3. */
-function ProgramRegion({ node }: { node: FlowNode }) {
+ * nodes read their prompt — and on a node that has products (done / stale),
+ * the region is DIRECTLY EDITABLE (K4, the prototype's scene-C anatomy):
+ * click drafts in place, Enter sends, Esc cancels. Sending does NOT touch
+ * the graph — it lifts the new program to the surface's pricing
+ * confirmation (锚定子图 + 估价), and only the confirmed turn rides the
+ * chat channel (零旁路). Processor nodes read their params as fact chips
+ * (no LLM prompt — deterministic 工序, never editable here). */
+function ProgramRegion({
+  node,
+  editable,
+  onPromptEdit,
+}: {
+  node: FlowNode
+  editable?: boolean
+  onPromptEdit?: (nodeId: string, text: string) => void
+}) {
   const { t } = useTranslation()
   const prompt = node.spec?.prompt
   const params = node.spec?.params ?? null
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(prompt ?? "")
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!editing) setDraft(prompt ?? "")
+  }, [prompt, editing])
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      const len = textareaRef.current.value.length
+      textareaRef.current.setSelectionRange(len, len)
+    }
+  }, [editing])
+
+  // Same canvas-wheel isolation as the text product's inline edit: React
+  // Flow's zoom listens natively on the pane, so the textarea stops the
+  // native event while editing.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el || !editing) return
+    const stopWheel = (e: WheelEvent) => {
+      e.stopPropagation()
+    }
+    el.addEventListener("wheel", stopWheel, { passive: true })
+    return () => el.removeEventListener("wheel", stopWheel)
+  }, [editing])
+
   if (node.kind === "processor") {
     const chips: string[] = []
     if (params) {
@@ -988,13 +1033,72 @@ function ProgramRegion({ node }: { node: FlowNode }) {
       </div>
     )
   }
-  if (!prompt) return null
+  if (!prompt && !editing) return null
+
+  const send = () => {
+    const text = draft.trim()
+    setEditing(false)
+    if (!text || text === (prompt ?? "").trim()) return
+    onPromptEdit?.(node.id, text)
+  }
+
   return (
-    <div className="shrink-0 px-3 py-2">
-      <p className="text-meta text-[9px]">{t("results.canvas.promptLabel")}</p>
-      <p title={prompt} className="mt-0.5 line-clamp-3 text-xs leading-snug">
-        {prompt}
+    <div
+      className={cn(
+        "shrink-0 px-3 py-2 transition-colors",
+        editable && !editing && "cursor-text hover:bg-accent/50",
+      )}
+      onClick={(e) => {
+        if (!editable || editing) return
+        // Entering the draft is NOT the node-select gesture.
+        e.stopPropagation()
+        setEditing(true)
+      }}
+    >
+      <p className="text-meta text-[9px]">
+        {editing ? t("results.canvas.promptEditing") : t("results.canvas.promptLabel")}
       </p>
+      {editing ? (
+        <div className="mt-0.5">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                send()
+              } else if (e.key === "Escape") {
+                e.preventDefault()
+                setDraft(prompt ?? "")
+                setEditing(false)
+              }
+            }}
+            onBlur={send}
+            rows={3}
+            className="w-full resize-none bg-transparent text-xs leading-snug outline-none"
+          />
+          <div className="mt-1 flex items-center justify-end">
+            <button
+              type="button"
+              title={t("results.canvas.reviseSend")}
+              aria-label={t("results.canvas.reviseSend")}
+              onClick={(e) => {
+                e.stopPropagation()
+                send()
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-80"
+            >
+              <ArrowUp className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p title={prompt ?? undefined} className="mt-0.5 line-clamp-3 text-xs leading-snug">
+          {prompt}
+        </p>
+      )}
     </div>
   )
 }
@@ -1011,6 +1115,7 @@ function GraphCard({
   onExpandMedia,
   onRevise,
   onDisplayChange,
+  onPromptEdit,
 }: {
   node: FlowNode
   selected: boolean
@@ -1018,6 +1123,7 @@ function GraphCard({
   onExpandMedia?: FlowCardData["onExpandMedia"]
   onRevise?: FlowCardData["onRevise"]
   onDisplayChange?: FlowCardData["onDisplayChange"]
+  onPromptEdit?: FlowCardData["onPromptEdit"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
@@ -1150,7 +1256,20 @@ function GraphCard({
             {t("results.canvas.renderFailed")}
           </p>
         ) : null}
-        <ProgramRegion node={node} />
+        <ProgramRegion
+          node={node}
+          // 直改闸门 (K4): only a settled node with products edits in place
+          // (the confirmation pins its product as the revision focus);
+          // a queued/running node is executing its program (the wiring op
+          // rejects it too), a draft has no product to pin (K5 owns it).
+          editable={
+            (node.kind === "generator" || node.kind === "agent") &&
+            outputs.length > 0 &&
+            node.status !== "queued" &&
+            node.status !== "running"
+          }
+          onPromptEdit={onPromptEdit}
+        />
         {output ? (
           <ReviseHoverBar
             specPrompt={node.spec?.prompt ?? output.spec_prompt}
@@ -1243,7 +1362,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onRevise, onDisplayChange } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onRevise, onDisplayChange, onPromptEdit } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1281,6 +1400,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onExpandMedia={onExpandMedia}
           onRevise={onRevise}
           onDisplayChange={onDisplayChange}
+          onPromptEdit={onPromptEdit}
         />
       ) : (
         <ThumbCard

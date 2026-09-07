@@ -307,6 +307,12 @@ def chat_intent_system() -> str:
         for name, opdef in OP_REGISTRY.items()
         if opdef.client_allowed and not opdef.precomputed and opdef.llm_visible
     )
+    # The wiring vocabulary (ADR-057 K4) comes from the graph registry —
+    # same injection discipline as the tool/op catalogs (注册表条目扰动 =
+    # prompt 扰动: entries stay terse, the gate enumerations ride along).
+    from app.pipeline.graph_store import wiring_catalog_lines
+
+    wiring_lines = wiring_catalog_lines()
     return (
         "You are the intent proposer of an AI content repurposing tool. "
         "Given one user message and the assembled context, decide what to do "
@@ -319,11 +325,13 @@ def chat_intent_system() -> str:
         "task params follow their own rules.\n\n"
         'Return a single JSON object {"proposal": PROPOSAL, '
         '"pending_disposition": "answer" | "skip" | "none"} where PROPOSAL '
-        "is exactly one of four shapes:\n"
+        "is exactly one of five shapes:\n"
         'A. {"type": "task_list", "tasks": [{"tool": "<name>", "params": {...}}], '
-        '"summary": "<one user-facing sentence>"} — run new work. Only use '
-        "tools from the list below; tasks is never empty (when you need to "
-        "ask the user first, use shape C instead).\n"
+        '"summary": "<one user-facing sentence>"} — run NEW work (something '
+        "the graph does not have yet: a new language version, a new output "
+        "type, a first generation). Only use tools from the list below; "
+        "tasks is never empty (when you need to ask the user first, use "
+        "shape C instead).\n"
         'B. {"type": "edit_ops", "target_output_id": "<uuid>", '
         '"ops": [{"op": "<name>", "params": {...}}], '
         '"summary": "<one user-facing sentence>"} — the user wants a precise '
@@ -345,11 +353,36 @@ def chat_intent_system() -> str:
         "things work, the run's progress (the context carries a per-step "
         "status section — quote real node states from it), an explanation "
         "of an existing output, or small talk. Nothing is dispatched, no "
-        "run starts, no question docks.\n\n"
+        "run starts, no question docks.\n"
+        'E. {"type": "wiring", "ops": [<wiring op>, ...], '
+        '"summary": "<one user-facing sentence>"} — the user wants to CHANGE '
+        "something the graph already HAS (revise a node's direction, rewrite "
+        "a post that exists, re-cut the selection, redo a language version "
+        "differently). The context's Graph section names every node with "
+        "its id, its current program, its products and its downstream — "
+        "compose the node's NEW full program from its CURRENT one plus the "
+        "user's ask (never invent a fresh program out of context), then "
+        'emit [{"op": "edit_prompt", "node": "<node id>", "prompt": '
+        '"<the new full program>"}, {"op": "run"}]. The bare run op '
+        "re-fills the edited node and everything downstream of it — never "
+        "name nodes yourself.\n\n"
         "Available tools:\n" + tool_lines + "\n\n"
         "Available edit ops (shape B only):\n" + op_lines + "\n\n"
+        "Available wiring ops (shape E only):\n" + wiring_lines + "\n\n"
         "Rules:\n"
         "- Never invent tools, ops, or params not in the lists.\n"
+        "- Shape E vs shape A (the boundary that keeps the graph honest): "
+        "E revises what EXISTS — the target node is in the Graph section "
+        "(or is the focus's node) and the ask changes its direction, "
+        "wording, or parameters. A creates what does NOT exist — a new "
+        "language version nobody made, a new output type, more of a kind "
+        "(e.g. '再来一条德语 post' when no German post exists). When a "
+        "revision would need a node that is not there, that is shape A.\n"
+        "- Shape E composes, never rewrites from scratch: the new program "
+        "must read as the CURRENT program with the user's change applied "
+        "(shorter / sharper / drop the second point), in the current "
+        "program's language. One edit_prompt per revision target; end the "
+        'ops with a single bare {"op": "run"}.\n'
         "- Translating captions or dubbing a voice is shape A "
         "(translate_clip / dub_clip), never shape B.\n"
         "- A translate/dub target must be a language the source LACKS — "

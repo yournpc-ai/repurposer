@@ -255,17 +255,23 @@ async def get_wallet(
 
 
 class WalletTransactionItem(BaseModel):
-    """One ledger row (BILLING §7 — the W11 billing center's read-only
-    projection in embryo). ``idempotency_key`` rides along deliberately: it
-    is the ledger's natural key and the reconciliation handle."""
+    """One SEMANTIC ledger row (ADR-057 K4, BILLING §7 — the user面 only ever
+    sees three families): the raw hold/capture/release machinery folds
+    server-side into per-run-event net rows — a run's captures become ONE
+    花费 line named after the run; holds and releases never render (the
+    wallet's ``held`` strip already carries the frozen truth). The ledger
+    itself is untouched — this is a read projection, and a run split by the
+    page edge shows its page-local net (the fold is per page)."""
 
     id: str
-    kind: str
+    # 三族: spend = 花费 (a run's settled cost / a negative adjust) /
+    # grant = 赠送 (signup grant, refund, a positive adjust) /
+    # topup = 充值 (purchase — W11 boundary).
+    family: str
     amount: int
-    balance_after: int
-    ref: dict
-    idempotency_key: str
-    note: str | None
+    # The row's display name: a spend names its run (the task book's
+    # instruction, trimmed); grant/topup name their family (+ note).
+    label: str
     created_at: datetime
 
 
@@ -301,24 +307,111 @@ async def get_wallet_transactions(
     limit: int = Query(default=30, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> WalletTransactionsResponse:
-    """List the caller's ledger rows, newest first (keyset pagination — the
-    ledger is append-only, so the cursor is drift-free)."""
+    """List the caller's SEMANTIC ledger rows, newest first (keyset
+    pagination on the raw ledger — drift-free; the fold rides above it).
+
+    The fold (ADR-057 K4): hold/capture/release collapse per run into ONE
+    花费 row (the run's settled net — hold+release cancel; a run with no
+    captures yet renders nothing, the ``held`` strip owns the frozen part);
+    grant/refund/positive-adjust render as 赠送, purchase as 充值, a
+    negative adjust as 花费. Ledger machine kinds never cross the wire."""
+    from sqlalchemy import select as _select
+
+    from app.models.tables import WorkflowRun as _Run
+    from app.ui_locale import current_ui_language
+
     keyset = _decode_cursor(cursor) if cursor else None
     rows, nxt = await list_transactions(db, user.id, limit=limit, cursor=keyset)
-    return WalletTransactionsResponse(
-        items=[
+
+    # ── Group the run-scoped rows (hold / capture / release) by run ──────
+    # Order is preserved newest-first: a group's slot is its LATEST row's.
+    groups: dict[str, dict] = {}
+    ordered: list[tuple[str, object]] = []  # (group key | "", row) newest-first
+    for row in rows:
+        ref = row.ref or {}
+        run_id = ref.get("run_id") if row.kind in ("hold", "capture", "release") else None
+        if run_id:
+            group = groups.setdefault(str(run_id), {"captures": 0, "at": row.created_at})
+            if row.kind == "capture":
+                group["captures"] += int(row.amount)
+            ordered.append((str(run_id), row))
+        else:
+            ordered.append(("", row))
+
+    # Run labels in one batch (a spend names its run's task book).
+    run_ids = [UUID(rid) for rid in groups]
+    run_rows = (
+        list(
+            (
+                await db.execute(_select(_Run).where(_Run.id.in_(run_ids)))
+            )
+            .scalars()
+            .all()
+        )
+        if run_ids
+        else []
+    )
+    zh = (current_ui_language() or "").startswith("zh")
+    instruction_by_run = {
+        str(r.id): str(((r.context or {}).get("instruction") or "")).strip()
+        for r in run_rows
+    }
+
+    def run_label(run_id: str) -> str:
+        text = instruction_by_run.get(run_id) or ""
+        if not text:
+            return "花费" if zh else "Spent"
+        return text if len(text) <= 36 else text[:36] + "…"
+
+    items: list[WalletTransactionItem] = []
+    emitted: set[str] = set()
+    for key, row in ordered:
+        if key:
+            if key in emitted:
+                continue
+            emitted.add(key)
+            spent = -abs(int(groups[key]["captures"]))
+            if spent == 0:
+                # A run with no metered captures yet — the held strip owns
+                # its frozen part; no row (鸡毛蒜皮不上明面).
+                continue
+            items.append(
+                WalletTransactionItem(
+                    id=f"run:{key}",
+                    family="spend",
+                    amount=spent,
+                    label=run_label(key),
+                    created_at=groups[key]["at"],
+                )
+            )
+            continue
+        amount = int(row.amount)
+        if row.kind == "purchase":
+            family = "topup"
+        elif row.kind in ("grant", "refund"):
+            family = "grant"
+        elif row.kind == "adjust":
+            family = "grant" if amount >= 0 else "spend"
+        else:
+            # Unknown kinds (forward-compat) bucket by sign, never raw.
+            family = "grant" if amount >= 0 else "spend"
+        fallback = {
+            "topup": "充值" if zh else "Top-up",
+            "grant": "赠送" if zh else "Grant",
+            "spend": "花费" if zh else "Spent",
+        }[family]
+        items.append(
             WalletTransactionItem(
                 id=str(row.id),
-                kind=row.kind,
-                amount=int(row.amount),
-                balance_after=int(row.balance_after),
-                ref=dict(row.ref or {}),
-                idempotency_key=row.idempotency_key,
-                note=row.note,
+                family=family,
+                amount=amount,
+                label=row.note or fallback,
                 created_at=row.created_at,
             )
-            for row in rows
-        ],
+        )
+
+    return WalletTransactionsResponse(
+        items=items,
         next_cursor=_encode_cursor(*nxt) if nxt is not None else None,
     )
 

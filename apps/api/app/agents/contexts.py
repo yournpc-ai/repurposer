@@ -25,6 +25,8 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
+    GraphEdge,
+    GraphNode,
     Message,
     Persona,
     Project,
@@ -78,6 +80,7 @@ def _output_one_liner(output: Any) -> str:
 
 
 _RUN_STEP_PROGRESS_LIMIT = 12
+_GRAPH_CONTEXT_LIMIT = 16
 
 
 def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
@@ -149,6 +152,56 @@ async def _build_context(
             one_liner = _output_one_liner(o)
             lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
 
+    # The persistent graph (ADR-057 — the wiring revision's target table):
+    # the agent points at a node by its row id; the node's own program line
+    # (prompt / params) and state ride so the agent can compose the NEW
+    # program from the CURRENT one (never invent it). Capped — a grown
+    # graph's older islands stop mattering to a revision ask.
+    graph_nodes = list(
+        (
+            await db.execute(
+                select(GraphNode)
+                .where(GraphNode.project_id == project.id)
+                .order_by(GraphNode.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    node_id_by_output: dict[str, str] = {}
+    if graph_nodes:
+        graph_edges = list(
+            (
+                await db.execute(
+                    select(GraphEdge).where(GraphEdge.project_id == project.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        children: dict[str, list[str]] = {}
+        for e in graph_edges:
+            children.setdefault(str(e.from_node), []).append(str(e.to_node))
+        lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
+        for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
+            spec = n.spec or {}
+            label = spec.get("summary") or n.kind
+            row = f"- {n.kind} id={n.id} state={n.state} — {label}"
+            prompt = spec.get("prompt")
+            if prompt:
+                row += f" | program: {str(prompt)[:140]}"
+            output_ids = spec.get("output_ids") or []
+            if output_ids:
+                row += f" | products: {len(output_ids)}"
+                for oid in output_ids:
+                    node_id_by_output[str(oid)] = str(n.id)
+            downstream = children.get(str(n.id)) or []
+            if downstream:
+                row += f" | downstream: {', '.join(downstream)}"
+            lines.append(row)
+        if len(graph_nodes) > _GRAPH_CONTEXT_LIMIT:
+            lines.append(f"- … ({len(graph_nodes) - _GRAPH_CONTEXT_LIMIT} older nodes omitted)")
+
     latest_run = (
         await db.execute(
             select(WorkflowRun)
@@ -190,6 +243,12 @@ async def _build_context(
                 f"Current focus output: {focused.type} id={focused.id}"
                 + (f": {one_liner}" if one_liner else "")
             )
+            # The focus's owning NODE rides along (ADR-057): a wiring
+            # revision targets the node, not the product — the agent reads
+            # the definite id here instead of resolving it itself.
+            focus_node = node_id_by_output.get(str(focused.id))
+            if focus_node is not None:
+                lines.append(f"Focus's graph node: id={focus_node}")
 
     if recent:
         lines.append("Recent rounds:")

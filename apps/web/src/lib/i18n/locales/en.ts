@@ -60,17 +60,9 @@ const en = {
     recent: "Recent activity",
     tx: {
       empty: "No transactions yet",
-      /** Ledger kind labels (BILLING §2 vocabulary; server kinds are
-       * free-form strings — unknown kinds render raw). */
-      kind: {
-        grant: "Grant",
-        purchase: "Purchase",
-        hold: "Hold",
-        capture: "Spent",
-        release: "Released",
-        refund: "Refund",
-        adjust: "Adjustment",
-      },
+      /** The semantic fold (ADR-057 K4): the user面 only ever sees three
+       * families — spend / grant / top-up; the ledger's hold / capture /
+       * release machinery folds server-side and never crosses the wire. */
     },
   },
   nav: {
@@ -1070,6 +1062,15 @@ const en = {
       // The card-face program region (ADR-057 §5): generator/agent nodes
       // read their prompt here (processor nodes read params as fact chips).
       promptLabel: "Prompt",
+      // K4 direct edit: while drafting the meta label owns the state; on
+      // send the pricing confirmation anchors at the node (受影响子图 =
+      // the node ∪ its downstream, priced by the fold of their quotes;
+      // balance = the soft compare, 422 stays the fact source).
+      promptEditing: "Prompt — editing",
+      confirmTitle: "Revise {{label}}",
+      confirmBlastSingle: "Rerun this node",
+      confirmBlast: "Rerun {{count}} nodes",
+      confirmStart: "Confirm & run",
       // Canvas navigation controls (explore surfaces, 2026-08-19 — the
       // project page's top-right swap: app chrome out, canvas controls in;
       // 2026-09-05 the ± steppers retired — the pill is a read-only

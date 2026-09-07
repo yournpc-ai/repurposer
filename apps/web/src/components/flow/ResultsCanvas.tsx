@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ViewportPortal } from "@xyflow/react"
 import {
   Clapperboard,
   Clock,
@@ -28,9 +29,10 @@ import {
   Star,
 } from "lucide-react"
 
-import { toAbsoluteUrl } from "@/lib/api"
+import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { cn, formatDuration } from "@/lib/utils"
 import type { GraphNode, Output, ProjectGraph, WorkflowStep } from "@/lib/types"
+import { Button } from "@/components/ui/button"
 import {
   MediaLightbox,
   type MediaChip,
@@ -424,9 +426,179 @@ export function ResultsCanvas({
     [outputById, onRevise],
   )
 
-  // Pane click = back to neutral: the dossier closes with the focus (D4/D8).
+  // ── Prompt direct edit → the pricing confirmation (ADR-057 K4) ────────
+  // The card-face program region reports a new program; NOTHING touches
+  // the graph here — the confirm card anchors at the edited node (world
+  // space, riding pan/zoom like the prototype's scene C), names the
+  // affected subgraph (本节点 ∪ 图边下游) as chips, prices it by folding
+  // each node's own quote, and soft-compares the balance. Only the
+  // confirmed turn rides the chat channel (零旁路 — the same onRevise
+  // channel as the hover prompt 框, with the node's displayed product
+  // pinned as the one-shot focus so the agent lands edit_prompt on THIS
+  // node, never a guess).
+  const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
+  const [promptEditBalance, setPromptEditBalance] = useState<number | null>(null)
+  const handlePromptEdit = useCallback((nodeId: string, text: string) => {
+    setPromptEdit({ nodeId, text })
+  }, [])
+
+  const editedNode = promptEdit ? (nodeById.get(promptEdit.nodeId) ?? null) : null
+  // A refresh / delete vanishing the anchor node closes the card.
+  useEffect(() => {
+    if (promptEdit && !editedNode) setPromptEdit(null)
+  }, [promptEdit, editedNode])
+
+  const promptEditBlast = useMemo(() => {
+    if (!promptEdit) return null
+    // Downstream walk over the graph's own edges (the projection walk's
+    // replacement — 修订波及面 = 图边遍历, never a scope guess).
+    const adjacency = new Map<string, string[]>()
+    for (const e of graph?.edges ?? []) {
+      const list = adjacency.get(e.from_node) ?? []
+      list.push(e.to_node)
+      adjacency.set(e.from_node, list)
+    }
+    const seen = new Set<string>([promptEdit.nodeId])
+    const queue = [promptEdit.nodeId]
+    while (queue.length > 0) {
+      const current = queue.shift() as string
+      for (const next of adjacency.get(current) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    // Only the runnable kinds carry a price — asset/document nodes never
+    // re-run (and in our topology are never downstream of a generator).
+    const affected = [...seen].flatMap((id) => {
+      const n = nodeById.get(id)
+      return n && (n.kind === "generator" || n.kind === "processor" || n.kind === "agent")
+        ? [n]
+        : []
+    })
+    const low = affected.reduce((sum, n) => sum + (n.estimateCredits?.[0] ?? 0), 0)
+    const high = affected.reduce(
+      (sum, n) => sum + (n.estimateCredits?.[1] ?? n.estimateCredits?.[0] ?? 0),
+      0,
+    )
+    return { affected, low, high }
+  }, [promptEdit, graph, nodeById])
+
+  // The balance soft-compare: lazy, silent (mirrors CreditsPill's 防双报
+  // discipline) — a fetch failure just keeps the line blank.
+  useEffect(() => {
+    if (!promptEdit) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/v1/wallet", { toast: false })
+        if (!res.ok) return
+        const wallet = (await res.json()) as { balance: number }
+        if (!cancelled) setPromptEditBalance(wallet.balance)
+      } catch {
+        /* silent */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [promptEdit])
+
+  // Esc closes (the edit textarea has already unmounted by the time the
+  // card is open, so no gesture collision).
+  useEffect(() => {
+    if (!promptEdit) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPromptEdit(null)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [promptEdit])
+
+  const handlePromptEditConfirm = useCallback(() => {
+    if (!promptEdit) return
+    const node = nodeById.get(promptEdit.nodeId)
+    const outputs = node?.outputs ?? []
+    const output =
+      outputById.get(displayedRef.current.get(promptEdit.nodeId) ?? "") ?? outputs[0]
+    setPromptEdit(null)
+    if (output) onRevise?.(output, promptEdit.text)
+  }, [promptEdit, nodeById, outputById, onRevise])
+
+  const promptEditOverlay =
+    promptEdit && editedNode && promptEditBlast ? (
+      <ViewportPortal>
+        <div
+          className="dock-surface pointer-events-auto absolute z-20 w-64 rounded-xl p-3.5 ring-1 ring-foreground/10"
+          style={{
+            left: editedNode.frame?.x ?? 0,
+            top: (editedNode.frame?.y ?? 0) - 12,
+            transform: "translateY(-100%)",
+          }}
+        >
+          <p className="text-[13px] font-semibold">
+            {t("results.canvas.confirmTitle", { label: editedNode.label })}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+            <span>
+              {promptEditBlast.affected.length === 1
+                ? t("results.canvas.confirmBlastSingle")
+                : t("results.canvas.confirmBlast", {
+                    count: promptEditBlast.affected.length,
+                  })}
+            </span>
+            {promptEditBlast.affected.map((n) => (
+              <span
+                key={n.id}
+                className="rounded bg-inset px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+              >
+                {n.label}
+              </span>
+            ))}
+          </div>
+          <p className="mt-2.5 text-xs tabular-nums">
+            {promptEditBlast.low === promptEditBlast.high
+              ? t("results.canvas.estimateSingle", { count: promptEditBlast.low })
+              : t("credits.range", {
+                  low: promptEditBlast.low,
+                  high: promptEditBlast.high,
+                })}
+            {promptEditBalance != null && (
+              <span
+                className={cn(
+                  "ml-1 text-[11px]",
+                  promptEditBalance < promptEditBlast.low
+                    ? "text-destructive"
+                    : "text-meta-foreground",
+                )}
+              >
+                · {t("credits.balance")} {promptEditBalance.toLocaleString()}
+              </span>
+            )}
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => setPromptEdit(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" className="h-8" onClick={handlePromptEditConfirm}>
+              {t("results.canvas.confirmStart")}
+            </Button>
+          </div>
+        </div>
+      </ViewportPortal>
+    ) : null
+
+  // Pane click = back to neutral: the dossier closes with the focus (D4/D8),
+  // and a pending pricing confirmation dismisses with it.
   const handlePaneClick = useCallback(() => {
     setInspectedId(null)
+    setPromptEdit(null)
     onPaneClick?.()
   }, [onPaneClick])
 
@@ -462,6 +634,7 @@ export function ResultsCanvas({
         settleKey={baselineReady && hasRuns ? baselineKey : null}
         bornIds={bornIds}
         dots
+        overlay={promptEditOverlay}
         className="h-full"
         selectedId={focusedOutputId ? (nodeIdByOutputId.get(focusedOutputId) ?? null) : null}
         onPaneClick={handlePaneClick}
@@ -471,6 +644,7 @@ export function ResultsCanvas({
         onRevise={handleRevise}
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
+        onPromptEdit={handlePromptEdit}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its

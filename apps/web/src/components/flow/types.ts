@@ -167,6 +167,11 @@ export interface FlowViewProps {
    * surface tracks it so a node click selects what the user is LOOKING at
    * (the lightbox / dossier / focus follow the shown member). */
   onDisplayChange?: (nodeId: string, outputId: string) => void
+  /** Card-face prompt direct edit (ADR-057 K4): the card reports the new
+   * program; the surface opens the pricing confirmation (锚定受影响子图 +
+   * 估价随行) — nothing touches the graph until the confirmed turn rides
+   * the chat channel (零旁路). */
+  onPromptEdit?: (nodeId: string, text: string) => void
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void
@@ -201,6 +206,11 @@ export interface FlowViewProps {
   /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
    * frames behind member node clusters, naming the region. */
   groups?: FlowGroup[]
+  /** Surface-owned canvas content (ADR-057 K4 — the pricing-confirmation
+   * card): rendered as a ReactFlow child, so the surface composes its own
+   * anchoring (ViewportPortal = world space, Panel = screen space). The
+   * substrate stays business-blind; the surface owns everything inside. */
+  overlay?: React.ReactNode
   /** Dot-grid canvas backdrop (the "流程" tab's drafting-table feel). */
   dots?: boolean
   className?: string

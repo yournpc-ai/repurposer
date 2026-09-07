@@ -211,6 +211,53 @@ async def stamp_run_graph(
         return fam
 
     by_id = {str(s.id): s for s in steps}
+    # revise_script is a TARGETED morph (K4): it folds into the node that
+    # owns its target output — 修订 = 原地图变更, the revision never grows a
+    # twin node. The target's producing step lives outside this run, so the
+    # fill key is resolved in one batched lookup (missing/predated target →
+    # the bare-kind fallback family, same as any unrecognized step).
+    revise_target_keys: dict[str, str] = {}  # revise step id → fill key
+    revise_steps = [s for s in steps if s.kind == "revise_script"]
+    if revise_steps:
+        target_ids = [
+            UUID(str((s.spec or {}).get("target_id")))
+            for s in revise_steps
+            if (s.spec or {}).get("target_id")
+        ]
+        if target_ids:
+            targets = list(
+                (await db.execute(select(Output).where(Output.id.in_(target_ids))))
+                .scalars()
+                .all()
+            )
+            producer_ids = [
+                t.workflow_step_id for t in targets if t.workflow_step_id is not None
+            ]
+            producers_by_id = (
+                {
+                    str(p.id): p
+                    for p in (
+                        await db.execute(
+                            select(WorkflowStep).where(WorkflowStep.id.in_(producer_ids))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                }
+                if producer_ids
+                else {}
+            )
+            key_by_output = {
+                str(t.id): _fill_key_for_step(producers_by_id[str(t.workflow_step_id)])
+                for t in targets
+                if t.workflow_step_id is not None
+                and str(t.workflow_step_id) in producers_by_id
+            }
+            for s in revise_steps:
+                key = key_by_output.get(str((s.spec or {}).get("target_id") or ""))
+                if key:
+                    revise_target_keys[str(s.id)] = key
+
     producers = [s for s in steps if s.kind not in _PRELUDE_KINDS and s.kind != "verify" and s.kind != "render" and s.kind != "align_stills"]
     for step in steps:
         if step.kind in _PRELUDE_KINDS or step.kind in ("render",):
@@ -230,6 +277,12 @@ async def stamp_run_graph(
             )
             if owner is not None:
                 family_for(_fill_key_for_step(owner), _graph_kind_of(owner))["steps"].append(step)
+            continue
+        if step.kind == "revise_script" and str(step.id) in revise_target_keys:
+            # The revision rides its TARGET's node (原地图变更 — the same
+            # fill key, so the reuse path re-queues the node with the new
+            # program instead of growing a revise twin).
+            family_for(revise_target_keys[str(step.id)], "generator")["steps"].append(step)
             continue
         family_for(_fill_key_for_step(step), _graph_kind_of(step))["steps"].append(step)
 
@@ -330,17 +383,32 @@ async def stamp_run_graph(
         )
         reused = by_fill_key.get(key)
         frame_class = _frame_class_of(fam_steps)
+        # A revise-headed family revisits an EXISTING node: the node's name,
+        # its executable tool identity (spec.tool) and its structured params
+        # (the slot the next revision re-runs from) stay the original
+        # producer's — only the program line (prompt) refreshes to the
+        # revision instruction.
+        revise_headed = head.kind == "revise_script"
+        # A stale node carries a DIRECTLY-EDITED program (edit_prompt — the
+        # card-face edit / the wiring revision): the edit IS the program, so
+        # the stamp must not overwrite it with the composed line.
+        keep_edited_prompt = (
+            reused is not None
+            and reused.state == "stale"
+            and bool((reused.spec or {}).get("prompt"))
+        )
         if reused is not None:
             node_id_by_key[key] = UUID(str(reused.id))
             # The node is being re-filled: refresh its program + internal
             # workflow and re-queue it (修订/重跑 = 原地图变更, never a twin).
             reused.spec = {
                 **(reused.spec or {}),
-                "summary": _node_label(head, ui_language),
-                **({"prompt": prompt} if prompt else {}),
-                "params": _params_of(head),
+                **({} if revise_headed else {"summary": _node_label(head, ui_language)}),
+                **({"prompt": prompt} if prompt and (revise_headed or not keep_edited_prompt) else {}),
+                **({} if revise_headed else {"params": _params_of(head)}),
                 "estimate": estimate,
                 "frame_class": frame_class,
+                **({} if revise_headed else {"tool": head.kind}),
                 "step_ids": [str(s.id) for s in fam_steps],
                 "run_id": str(run.id),
                 "output_ids": [],
@@ -354,6 +422,7 @@ async def stamp_run_graph(
             "params": _params_of(head),
             "estimate": estimate,
             "frame_class": frame_class,
+            "tool": head.kind,
             "step_ids": [str(s.id) for s in fam_steps],
             "run_id": str(run.id),
             "output_ids": [],

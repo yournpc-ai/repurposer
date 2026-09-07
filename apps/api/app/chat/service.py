@@ -73,6 +73,7 @@ from app.models.schemas import (
     TaskBookEstimate,
     TaskItem,
     TaskListProposal,
+    WiringProposal,
 )
 from app.models.tables import (
     Asset,
@@ -279,6 +280,7 @@ async def _create_run_from_tasks(
     tasks: list[TaskItem],
     summary: str,
     caption_mode: str | None = None,
+    instruction: str | None = None,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace.
 
@@ -289,6 +291,10 @@ async def _create_run_from_tasks(
     the repair handlers' broad ValueError catches never swallow it, and the
     SSE turn pump carries it as the turn.failed frame the dock renders as
     its grey row (入流灰行, 双路同语义).
+
+    ``instruction`` overrides the run's task-book instruction (default = the
+    summary): the wiring revision path pins the edited node program here
+    (the writers' GenerationContext.instruction steers the rewrite).
     """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
@@ -299,7 +305,7 @@ async def _create_run_from_tasks(
             TaskSpec(
                 tasks=tasks,
                 target_language=first_task_language(tasks) or project.language or "en",
-                instruction=summary,
+                instruction=instruction or summary,
                 scope="full",
                 caption_mode=caption_mode,
             ),
@@ -2287,6 +2293,82 @@ async def _propose_turn(
                 assistant_message.content = str(e.detail)
                 assistant_content = assistant_message.content
                 proposal = None
+    elif isinstance(proposal, WiringProposal):
+        # 修订 = edit_prompt(node) + run({node} ∪ downstream) (ADR-057 K4):
+        # the ops land through the graph's ONLY write door (validation /
+        # repair echo below), then the resolved subgraph translates back to
+        # a chain and rides the ONLY run birthplace — zero bypass, and the
+        # revision target is the graph node id, never a run-scope guess.
+        from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+        from app.pipeline.graph_revise import tasks_for_graph_nodes
+        from app.models.tables import GraphNode
+
+        async def _dispatch_wiring(p: WiringProposal) -> UUID | None:
+            if project is None or not p.ops:
+                raise WiringRejected("wiring: no ops to apply")
+            delta = await apply_wiring_ops(db, UUID(str(project.id)), p.ops)
+            if not delta.run_nodes:
+                # A pure graph edit with no run (e.g. a delete) lands as-is.
+                return None
+            run_nodes = list(
+                (
+                    await db.execute(
+                        select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            by_id = {str(n.id): n for n in run_nodes}
+            ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
+            tasks = tasks_for_graph_nodes(ordered)
+            if not tasks:
+                raise WiringRejected("run: the resolved subgraph has nothing executable")
+            # The edited programs pin the run's instruction (the writers'
+            # GenerationContext.instruction steers the rewrite); the
+            # summary-only fallback keeps the run's book honest.
+            instruction = "\n".join(
+                str(op.get("prompt")) for op in p.ops
+                if op.get("op") == "edit_prompt" and op.get("prompt")
+            )
+            return await _create_run_from_tasks(
+                db, project, tasks, p.summary, instruction=instruction or None
+            )
+
+        try:
+            run_id = await _dispatch_wiring(proposal)
+            assistant_content = proposal.summary
+        except (WiringRejected, ToolRejected, ValueError) as first_error:
+            # One bounded repair round — the adjudication's own error rides
+            # the funnel's reserved feedback kwarg (same posture as the
+            # edit_ops repair); a task_list repair re-dispatches through the
+            # shared funnel.
+            repaired = False
+            try:
+                retry = await chat_intent_agent.call(
+                    message=text, context=context,
+                    repair_feedback=str(first_error),
+                )
+                if isinstance(retry.proposal, WiringProposal) and retry.proposal.ops:
+                    run_id = await _dispatch_wiring(retry.proposal)
+                    proposal = retry.proposal
+                    assistant_content = retry.proposal.summary
+                    repaired = True
+                elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
+                    run_id = await _create_run_from_tasks(
+                        db, project, retry.proposal.tasks, retry.proposal.summary,
+                        caption_mode=await _derive_chat_caption_mode(
+                            db, project, retry.proposal.tasks, text
+                        ),
+                    )
+                    proposal = retry.proposal
+                    assistant_content = retry.proposal.summary
+                    repaired = True
+            except (WiringRejected, ToolRejected, ValueError, MiniMaxError):
+                pass
+            if not repaired:
+                proposal = None
+                assistant_content = _cannot_do_text(text)
     elif not proposal.tasks:
         # N-18 migration: the pre-ask "tasks=[] ask back" maps onto a
         # freeform ask (no options, free-text replies resume onto it).

@@ -20,24 +20,16 @@ interface WalletState {
 
 interface WalletTransaction {
   id: string
-  kind: string
+  /** The semantic fold's three families (ADR-057 K4 — the ledger's
+   * hold/capture/release machinery never crosses the wire): spend = 花费 /
+   * grant = 赠送 / topup = 充值. */
+  family: "spend" | "grant" | "topup" | string
   amount: number
-  balance_after: number
-  note: string | null
+  /** The row's display name — a spend names its run; grant/topup name
+   * their family (server-composed in the UI language). */
+  label: string
   created_at: string
 }
-
-/** Server-side kinds are free-form strings (BILLING §2) — localized labels
- * exist for the registry vocabulary; anything else renders raw. */
-const KNOWN_KINDS = new Set([
-  "grant",
-  "purchase",
-  "hold",
-  "capture",
-  "release",
-  "refund",
-  "adjust",
-])
 
 /** Same relative-time helper as NotificationBell (reuses the notifications.*
  * keys) — duplicated locally per the codebase's hand-rolled pattern. */
@@ -161,9 +153,10 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
             </p>
           )}
         </div>
-        {/* Recent ledger rows — separated by spacing + a meta label, never a
-            drawn divider. Signed amounts stay neutral (no green/red
-            semantics); balance_after is the ledger's self-check chain. */}
+        {/* Recent semantic rows (ADR-057 K4 语义账本塌缩): one row per run
+            event / grant / top-up — the ledger's hold/capture/release
+            machinery folds server-side and never renders here. Signed
+            amounts stay neutral (no green/red semantics). */}
         <div className="flex flex-col p-2 pt-0">
           <p className="px-2 pb-1 text-[11px] text-meta">
             {t("credits.recent")}
@@ -178,9 +171,7 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
             items.map((item) => (
               <div key={item.id} className="flex items-center gap-2 px-2 py-1.5">
                 <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                  {KNOWN_KINDS.has(item.kind)
-                    ? t(`credits.tx.kind.${item.kind}`)
-                    : item.kind}
+                  {item.label}
                 </span>
                 <span
                   className={cn(
