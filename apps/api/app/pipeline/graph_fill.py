@@ -615,6 +615,10 @@ async def _stamp_graph_core(
                 continue
             # The node is being re-filled: refresh its program + internal
             # workflow and re-queue it (修订/重跑 = 原地图变更, never a twin).
+            # spec.output_ids SURVIVES the re-fill (版本累积): the new run's
+            # products JOIN the node's version lineage at back-write time —
+            # the card's pager flips across versions (原型 C 的 2/2), never
+            # a cleared-then-refilled blank.
             reused.spec = {
                 **(reused.spec or {}),
                 **({} if revise_headed else {"summary": _node_label(head, ui_language)}),
@@ -631,7 +635,6 @@ async def _stamp_graph_core(
                         "run_id": run_id_str,
                     }
                 ),
-                "output_ids": [],
             }
             reused.state = "draft" if draft else "queued"
             continue
@@ -911,6 +914,13 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
         book_summary = ((plan_step.spec or {}).get("book_summary")) if plan_step else None
         if book_summary and book_summary != (node.spec or {}).get("text"):
             node.spec = {**(node.spec or {}), "text": book_summary}
-    output_ids = [str(ref) for s in family for ref in (s.output_refs or [])]
+    # 版本累积 (ADR-057 — the pager's version lineage): the new terminal's
+    # landed products JOIN the node's existing versions instead of replacing
+    # them — a revision's old and new products stay flippable on the card
+    # (原型 C 的 2/2); deletions filter at read time (visibility join).
+    landed = [str(ref) for s in family for ref in (s.output_refs or [])]
+    output_ids = list(
+        dict.fromkeys([*((node.spec or {}).get("output_ids") or []), *landed])
+    )
     if output_ids != ((node.spec or {}).get("output_ids") or []):
         node.spec = {**(node.spec or {}), "output_ids": output_ids}

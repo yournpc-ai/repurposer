@@ -19,6 +19,9 @@ Covered:
   seeds = the batch's affected set
 - batch atomicity: a failing op kills the batch BEFORE the flush — never a
   half-applied graph (the caller's transaction rolls back)
+- sync_graph_node_for_step's 版本累积: a re-fill's landed products JOIN the
+  node's existing output_ids (the pager's version lineage), never a cleared
+  slate
 - _fill_key_for_step idempotency fingerprints (graph_fill): producer slot /
   translate·dub transform / bare-kind shapes — a re-run of the same slot
   finds its node, a new slot grows one
@@ -30,7 +33,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.tables import GraphEdge, GraphNode, Project, WorkflowStep
-from app.pipeline.graph_fill import _fill_key_for_step
+from app.pipeline.graph_fill import _fill_key_for_step, sync_graph_node_for_step
 from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
 
 _PROJECT_ID = uuid4()
@@ -55,10 +58,11 @@ class _StubDb:
     records writes. ``flush_count`` is the batch-atomicity witness — a
     rejected batch must die BEFORE any flush."""
 
-    def __init__(self, nodes=(), edges=()):
+    def __init__(self, nodes=(), edges=(), steps=()):
         self.project = Project(id=_PROJECT_ID)
         self.nodes = list(nodes)
         self.edges = list(edges)
+        self.steps = list(steps)
         self.added: list = []
         self.deleted: list = []
         self.flush_count = 0
@@ -68,11 +72,19 @@ class _StubDb:
             return self.project if str(row_id) == str(self.project.id) else None
         if model is GraphNode:
             return next((n for n in self.nodes if str(n.id) == str(row_id)), None)
+        if model is WorkflowStep:
+            return next((s for s in self.steps if str(s.id) == str(row_id)), None)
         return None
 
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
-        return _StubResult(list(self.nodes if entity is GraphNode else self.edges))
+        if entity is GraphNode:
+            return _StubResult(list(self.nodes))
+        if entity is GraphEdge:
+            return _StubResult(list(self.edges))
+        if entity is WorkflowStep:
+            return _StubResult(list(self.steps))
+        return _StubResult([])
 
     def add(self, obj):
         self.added.append(obj)
@@ -336,6 +348,30 @@ async def test_a_failing_op_kills_the_batch_before_any_flush():
             ],
         )
     assert db.flush_count == 0  # never a half-applied graph — the caller rolls back
+
+
+# ---- sync back-write: 版本累积 (the pager's version lineage) ----------------
+
+
+@pytest.mark.asyncio
+async def test_sync_back_write_accumulates_versions():
+    old_id, new_id = uuid4(), uuid4()
+    node = _node("generator", state="done", spec={"output_ids": [str(old_id)]})
+    step = WorkflowStep(
+        id=uuid4(),
+        kind="write_post",
+        status="done",
+        spec={"graph_node_id": str(node.id)},
+        output_refs=[new_id],
+    )
+    node.spec["step_ids"] = [str(step.id)]
+    db = _StubDb(nodes=[node], steps=[step])
+    await sync_graph_node_for_step(db, step)
+    # the re-fill's product JOINS the lineage — the card pages old ∪ new
+    assert node.spec["output_ids"] == [str(old_id), str(new_id)]
+    # idempotent: the same terminal re-synced adds nothing twice
+    await sync_graph_node_for_step(db, step)
+    assert node.spec["output_ids"] == [str(old_id), str(new_id)]
 
 
 # ---- fill-key idempotency fingerprints (graph_fill) --------------------------

@@ -1054,6 +1054,18 @@ function GraphCard({
   // The pager flips the display AND the action target among the node's
   // products; displayId survives refetches (ids are stable).
   const [displayId, setDisplayId] = useState<string | null>(null)
+  // 版本累积 (the version lineage): a re-fill landing NEW products flips
+  // the display to the newest version — the revision's arrival is seen in
+  // place (原型 C's 2/2). Mount keeps the first (the chain's birth order).
+  const seenOutputIdsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const ids = new Set(outputs.map((o) => o.id))
+    const prev = seenOutputIdsRef.current
+    seenOutputIdsRef.current = ids
+    if (prev === null) return
+    const added = outputs.filter((o) => !prev.has(o.id))
+    if (added.length > 0) setDisplayId(added[added.length - 1].id)
+  }, [outputs])
   const output = (displayId ? outputs.find((o) => o.id === displayId) : null) ?? outputs[0]
   // The surface tracks the shown member — a node click selects what the
   // user is LOOKING at (mount + flip both report).
