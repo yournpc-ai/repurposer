@@ -20,7 +20,7 @@ import "./flow.css"
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
 import { BIRTH_STAGGER_MS, flowNodeSize, layoutFlow } from "./layout"
-import type { FlowGroup, FlowViewProps } from "./types"
+import type { FlowGroup, FlowViewProps, GraphEdgeType } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
@@ -77,8 +77,7 @@ function ViewportController({
     prevCountRef.current = count
     const firstEver = prev === null
     // Explore surfaces keep the user's own viewport on GROWTH (2026-08-19
-    // 二轮 R2): the spine toggle and refinement new-arrivals must not yank
-    // a hand-set pan/zoom. But empty→non-empty is NOT growth: the project
+    // 二轮 R2): refinement new-arrivals must not yank a hand-set pan/zoom. But empty→non-empty is NOT growth: the project
     // page keeps the canvas MOUNTED behind the fullscreen chat (opacity
     // gate, not unmount), so the controller's true mount fires on an empty
     // graph and the run's nodes arriving with the morph beat IS the first
@@ -247,6 +246,7 @@ export function FlowView({
   onAssetAction,
   onExpandMedia,
   onRevise,
+  onDisplayChange,
   onPaneClick,
   navigation = "fit",
   controls = false,
@@ -266,6 +266,21 @@ export function FlowView({
   const { rfNodes, rfEdges, layout, sizes, bornRanks } = useMemo(() => {
     const layout = layoutFlow(nodes, edges)
     const sizes = new Map(nodes.map((n) => [n.id, flowNodeSize(n)]))
+    // The port law's data half (ADR-057): each node's visible handles derive
+    // from its incident TYPED edges — in-ports stack from the consumption
+    // region's bottom-left corner, out-ports from the production region's
+    // top-right. Untyped surfaces (the recipe 说明书) carry no ports and
+    // keep the legacy invisible handles.
+    const portsByNode = new Map<string, { in: GraphEdgeType[]; out: GraphEdgeType[] }>()
+    for (const e of edges) {
+      if (!e.edgeType) continue
+      const target = portsByNode.get(e.to) ?? { in: [], out: [] }
+      if (!target.in.includes(e.edgeType)) target.in.push(e.edgeType)
+      portsByNode.set(e.to, target)
+      const source = portsByNode.get(e.from) ?? { in: [], out: [] }
+      if (!source.out.includes(e.edgeType)) source.out.push(e.edgeType)
+      portsByNode.set(e.from, source)
+    }
     // Newborn ids → stagger ranks in compile order (the reveal order IS the
     // slowed-down compile order). One batch births together; the delay gap
     // between consecutive ranks is the shared BIRTH_STAGGER_MS quantum.
@@ -289,10 +304,12 @@ export function FlowView({
         node: n,
         bornIndex: bornRanks.get(n.id),
         selected: n.id === selectedId,
+        ports: portsByNode.get(n.id),
         onOutputAction,
         onAssetAction,
         onExpandMedia,
         onRevise,
+        onDisplayChange,
       },
       draggable: false,
       connectable: false,
@@ -303,12 +320,18 @@ export function FlowView({
       const to = bornRanks.get(e.to) ?? -1
       const bornAt = Math.max(from, to)
       return {
-        id: `${e.from}->${e.to}`,
+        id: `${e.from}->${e.to}${e.edgeType ? `:${e.edgeType}` : ""}`,
         source: e.from,
         target: e.to,
         type: "flow",
+        // Typed flows land on their named ports (the visible handles);
+        // untyped surfaces fall back to the node's default handle pair.
+        ...(e.edgeType
+          ? { sourceHandle: `out:${e.edgeType}`, targetHandle: `in:${e.edgeType}` }
+          : {}),
         data: {
           semantic: e.semantic,
+          edgeType: e.edgeType,
           drawDelay: bornAt >= 0 ? bornAt * BIRTH_STAGGER_MS + 240 : null,
           active:
             nodes.find((n) => n.id === e.to)?.status === "running" ||
@@ -319,7 +342,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onRevise])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onRevise, onDisplayChange])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

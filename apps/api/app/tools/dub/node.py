@@ -51,12 +51,10 @@ class DubClip(NodeBase):
     retries = 2
     agents = (translator,)
 
-    # No canvas_group (2026-08-19 名词节点收窄): the dub is an ATTRIBUTE of
-    # the derived video — each language's product card already carries its
-    # whole identity (language label + the dubbed frame) and is itself the
-    # mention/intervention target (dock focus). The step folds into the
-    # 过程脊; its step pill stays an @workflow_step target. Same precedent as
-    # translate_clip (2026-08-15).
+    # 图节点 (ADR-057): dub_clip is a GENERATOR node on the persistent
+    # graph — its prompt is the parameterized intent (target language,
+    # voice), editable on the card; each language's product lands in the
+    # node's own product region.
     def estimate(self, ctx: dict) -> dict | None:
         """TTS 按字符 / 克隆按次 + translator token range, driven by the
         target clips' caption text — knowable only when the clips EXIST at

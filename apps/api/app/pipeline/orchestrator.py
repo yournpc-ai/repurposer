@@ -533,12 +533,12 @@ def _compile_task_list(
             seq += 1
 
     # 任务书兜底 (2026-09-02 用户拍板): stamp the compile-time task book on
-    # the plan node so the plan card's canvas_text fallback is born
-    # WITH the graph — while the run parks at the direction interrupt the
-    # plan card already reads the request's summary, never a transparent
-    # shell. The runtime stamp (book_summary + refined task_book) overwrites
-    # it when planning lands; both read the same generation-node spec.slot
-    # source, and _book_summary renders the two identically.
+    # the plan node so the task-book document node's text is born WITH the
+    # graph — while the run parks at the direction interrupt the document
+    # already reads the request's summary, never a transparent shell. The
+    # runtime stamp (book_summary + refined task_book) overwrites it when
+    # planning lands; both read the same generation-node spec.slot source,
+    # and _book_summary renders the two identically.
     if plan_idx is not None:
         book_slots = [
             ns.spec["slot"] for ns in nodes if isinstance(ns.spec.get("slot"), dict)

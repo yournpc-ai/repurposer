@@ -1,14 +1,17 @@
 "use client"
 
-/** ResultsCanvas (ADR-041 D1) — the project page's terminal-state default
- * center: the current run's real topology + latest products, rendered by
- * the shared FlowView substrate (prohibition #9 — no hand-drawn edges or
- * layout here). Navigation is open (pan/zoom, D7); editing gestures are
- * structurally absent in the substrate. Product nodes are cards (D5): the
+/** ResultsCanvas (ADR-041 D1; ADR-057 K3) — the project page's center: the
+ * persistent graph read DIRECTLY (`GET /projects/{id}/graph` — node id =
+ * graph node id, edge = graph edge, state = the row's state; zero
+ * projection, the display model IS the domain model). The mapping below is
+ * the render boundary only: field pass-through + i18n labels — no topology
+ * derivation, no hidden-step resolution (the retired projection's whole
+ * job). Navigation is open (pan/zoom, D7); editing gestures are
+ * structurally absent in the substrate. Product nodes are cards: the
  * surface owns their actions — click focuses (焦点注入, D8) and summons the
- * OutputInspector (the FLORA-parity dossier under the zoom pill, 2026-09-06),
- * the action bar carries info + download / delete, and node business
- * (publish / open / focus) lives in the bar's ⋯ menu. */
+ * OutputInspector (the FLORA-parity dossier under the zoom pill), the
+ * factsbar carries info + download / delete, and node business (publish /
+ * open / focus) lives in the bar's ⋯ menu. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -27,7 +30,7 @@ import {
 
 import { toAbsoluteUrl } from "@/lib/api"
 import { cn, formatDuration } from "@/lib/utils"
-import type { Output, PlaceholderRow, WorkflowStep } from "@/lib/types"
+import type { GraphNode, Output, ProjectGraph, WorkflowStep } from "@/lib/types"
 import {
   MediaLightbox,
   type MediaChip,
@@ -37,29 +40,23 @@ import { OutputInspector } from "@/components/results/OutputInspector"
 
 import { FlowView } from "./FlowView"
 import { PRODUCT_TYPE_ICON } from "./FlowNodeCard"
-import { runFlowGraph, SPINE_NODE_ID, type RunFlowAsset } from "./runFlow"
-import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "./types"
+import type {
+  FlowAssetAction,
+  FlowAssetInfo,
+  FlowEdge,
+  FlowNode,
+  FlowOutputAction,
+} from "./types"
 
 export interface ResultsCanvasProps {
-  assets: RunFlowAsset[]
-  steps: WorkflowStep[]
-  outputs: Output[]
-  /** The live run's server-projected placeholder roster (ADR-051 B): slots
-   * render as quiet placeholder cards at their final position; landed
-   * outputs fill them in place. Empty for terminal/absent runs. */
-  placeholders?: PlaceholderRow[]
-  /** The run is non-terminal (pending / running / waiting_human) — a
-   * promised placeholder slot reads alive (wipe + edge packet) even before
-   * its producing step starts (2026-09-02 用户拍板: waiting ⊆ running). */
-  runAlive?: boolean
+  /** The graph's one read frame (ADR-057). Null = not yet loaded — the
+   * canvas stays empty behind the page's gate. */
+  graph: ProjectGraph | null
   /** The project has at least one run — the page's VISIBILITY gate for the
    * canvas (opacity / pointer-events). The settle key (initial framing)
    * joins this with baselineReady: frame only when the visible, settled
    * content is present, never on a partial fetch frame (2026-09-06). */
   hasRuns?: boolean
-  /** The run's prompt — displayed in every product node's interaction area
-   * (read-only; editing happens in the dock). */
-  prompt?: string | null
   /** Birth-choreography baseline contract (ADR-036 补记 3): the surface
    * flips `baselineReady` only when its initial fetches have settled (they
    * resolve in any order) and the data belongs to `baselineKey`; the first
@@ -68,23 +65,24 @@ export interface ResultsCanvasProps {
    * later growth births. */
   baselineReady: boolean
   baselineKey: string
-  /** The node carrying the results tour's data-tour anchors. */
+  /** The output carrying the results tour's data-tour anchors (first ready
+   * product, chosen by the surface). */
   tourOutputId?: string | null
+  /** The dossier's producing-step lookup (latest run's steps — /results
+   * payload, execution-ledger facts only). */
+  steps?: WorkflowStep[]
   /** A product node was clicked — the surface sets the dock focus and opens
    * the detail modal (clips). */
   onOutputClick?: (output: Output) => void
-  /** A product node's action-bar action (download / delete in the bar;
+  /** A product node's factsbar action (download / delete in the bar;
    * publish / open / focus ride the ⋯ menu — all one channel). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
   /** Hover prompt 框 send (ADR-051 F): the surface rides the revision ask
    * into the dock's chat channel with the product pinned as focus. */
   onRevise?: (output: Output, text: string) => void
-  /** An asset node's toolbar action (download / delete / reprocess) — the
-   * surface owns them; absent = asset nodes render no toolbar. */
+  /** An asset node's factsbar action (download / delete / reprocess) — the
+   * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
-  /** A process step node was clicked (the spine expanded) — the surface
-   * inserts the step's @workflow_step mention into the dock (D8). */
-  onStepClick?: (stepId: string, label: string) => void
   /** The dock-focused product id — its node carries the selected ring. */
   focusedOutputId?: string | null
   /** Pane-only click (node clicks excluded) — back to neutral: the surface
@@ -99,34 +97,109 @@ export interface ResultsCanvasProps {
 }
 
 export function ResultsCanvas({
-  assets,
-  steps,
-  outputs,
-  placeholders,
-  runAlive = false,
+  graph,
   hasRuns = false,
-  prompt = null,
   baselineReady,
   baselineKey,
   tourOutputId,
+  steps,
   onOutputClick,
   onOutputAction,
   onRevise,
   onAssetAction,
-  onStepClick,
   focusedOutputId = null,
   onPaneClick,
   controlsClassName,
   className,
 }: ResultsCanvasProps) {
   const { t } = useTranslation()
-  // 过程脊 expand/collapse is view state (D6 — the graph data is always
-  // full; only the surface's density flips).
-  const [spineExpanded, setSpineExpanded] = useState(false)
-  const { nodes, edges } = useMemo(
-    () => runFlowGraph({ assets, steps, outputs, placeholders, runAlive, prompt, tourOutputId, spineExpanded }, t),
-    [assets, steps, outputs, placeholders, runAlive, prompt, tourOutputId, spineExpanded, t]
-  )
+
+  // ── Graph → the FlowView render contract (ADR-057 直读: field
+  // pass-through + i18n labels, zero topology derivation) ────────────────
+  const { nodes, edges } = useMemo<{ nodes: FlowNode[]; edges: FlowEdge[] }>(() => {
+    const graphNodes = graph?.nodes ?? []
+    // The batch's highest clip score (score triage — what to post first):
+    // the winning product's badge accents, wherever the pager shows it.
+    const topClipScore = Math.max(
+      0,
+      ...graphNodes.flatMap((n) =>
+        (n.outputs ?? [])
+          .filter((o) => o.type === "clip")
+          .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
+      ),
+    )
+    const nodes: FlowNode[] = graphNodes.map((n: GraphNode, i: number) => {
+      const spec = n.spec ?? {}
+      const layout = n.layout ?? {}
+      const frame = {
+        x: Number(layout.x ?? 0),
+        y: Number(layout.y ?? 0),
+        w: Number(layout.w ?? 280),
+        h: Number(layout.h ?? 260),
+      }
+      if (n.kind === "asset") {
+        const asset = n.asset ?? null
+        const mediaUrl = toAbsoluteUrl(asset?.stream_url ?? asset?.file_url ?? null)
+        return {
+          id: n.id,
+          kind: "asset",
+          label: t(`generationOverlay.assetTypes.${asset?.type ?? spec.asset_type ?? ""}`, {
+            defaultValue: String(asset?.type ?? spec.asset_type ?? "asset"),
+          }),
+          detail: asset?.title ?? spec.title ?? undefined,
+          asset: asset
+            ? {
+                id: asset.id,
+                type: asset.type,
+                title: asset.title,
+                file_url: asset.file_url,
+                stream_url: asset.stream_url,
+                duration_seconds: asset.duration_seconds,
+              }
+            : undefined,
+          thumbUrl: asset?.type === "image" ? mediaUrl : null,
+          videoUrl: asset?.type === "video" ? mediaUrl : null,
+          frame,
+          order: i,
+        }
+      }
+      if (n.kind === "document") {
+        return {
+          id: n.id,
+          kind: "document",
+          label:
+            spec.role === "task_book"
+              ? t("results.canvas.taskBook")
+              : (spec.summary ?? t("results.canvas.document")),
+          detail: spec.summary ?? undefined,
+          spec,
+          frame,
+          order: i,
+        }
+      }
+      // generator / processor / agent — the graph card.
+      const outputs = n.outputs ?? []
+      return {
+        id: n.id,
+        kind: n.kind,
+        label: spec.summary ?? n.kind,
+        status: n.state,
+        spec,
+        outputs,
+        estimateCredits: n.estimate_credits ?? null,
+        frame,
+        topClipScore,
+        tourTargets: !!tourOutputId && outputs.some((o) => o.id === tourOutputId),
+        order: i,
+      }
+    })
+    const edges: FlowEdge[] = (graph?.edges ?? []).map((e) => ({
+      from: e.from_node,
+      to: e.to_node,
+      edgeType: e.edge_type,
+    }))
+    return { nodes, edges }
+  }, [graph, tourOutputId, t])
 
   // ── Birth choreography (ADR-036 补记 3, growth-driven since ADR-051) ────
   // The reveal is every graph GROWTH witnessed after the baseline: nodes
@@ -139,31 +212,38 @@ export function ResultsCanvas({
   // frame dropping these ids never cuts a keyframe mid-flight.
   const seenIdsRef = useRef<Set<string> | null>(null)
   const baselinedKeyRef = useRef<string | null>(null)
-  const prevSpineExpandedRef = useRef(spineExpanded)
   const bornIds = useMemo(() => {
     if (!baselineReady) return undefined
     if (baselinedKeyRef.current !== baselineKey) return undefined
-    // A spine density flip is not growth — its step pills must never birth.
-    if (spineExpanded !== prevSpineExpandedRef.current) return undefined
     const seen = seenIdsRef.current ?? new Set<string>()
     const fresh = nodes.filter((n) => !seen.has(n.id))
     return fresh.length > 0 ? new Set(fresh.map((n) => n.id)) : undefined
-  }, [nodes, spineExpanded, baselineReady, baselineKey])
+  }, [nodes, baselineReady, baselineKey])
   useEffect(() => {
     if (!baselineReady) return
     baselinedKeyRef.current = baselineKey
     seenIdsRef.current = new Set(nodes.map((n) => n.id))
-    prevSpineExpandedRef.current = spineExpanded
-  }, [nodes, spineExpanded, baselineReady, baselineKey])
-  const outputById = useMemo(
-    () => new Map(outputs.map((o) => [`output:${o.id}`, o])),
-    [outputs]
-  )
+  }, [nodes, baselineReady, baselineKey])
+
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
-  const assetByNodeId = useMemo(
-    () => new Map(assets.map((a) => [`asset:${a.id}`, a])),
-    [assets]
-  )
+  const outputById = useMemo(() => {
+    const map = new Map<string, Output>()
+    for (const n of nodes) for (const o of n.outputs ?? []) map.set(o.id, o)
+    return map
+  }, [nodes])
+  /** output id → its node's id (focus → the selected ring's node). */
+  const nodeIdByOutputId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const n of nodes) for (const o of n.outputs ?? []) map.set(o.id, n.id)
+    return map
+  }, [nodes])
+
+  // The pager's displayed product per node (the card reports its display;
+  // a node click selects what the user is LOOKING at, not a stale first).
+  const displayedRef = useRef(new Map<string, string>())
+  const handleDisplayChange = useCallback((nodeId: string, outputId: string) => {
+    displayedRef.current.set(nodeId, outputId)
+  }, [])
 
   // ── Output inspector (2026-09-06, FLORA node-detail parity) ─────────────
   // A product click summons its dossier, anchored under the zoom pill
@@ -171,9 +251,7 @@ export function ResultsCanvas({
   // here by the canvas: selecting another product swaps in place, pane
   // click / Esc / the row vanishing (delete / refresh) closes.
   const [inspectedId, setInspectedId] = useState<string | null>(null)
-  const inspectedOutput = inspectedId
-    ? (outputById.get(`output:${inspectedId}`) ?? null)
-    : null
+  const inspectedOutput = inspectedId ? (outputById.get(inspectedId) ?? null) : null
   useEffect(() => {
     if (inspectedId && !inspectedOutput) setInspectedId(null)
   }, [inspectedId, inspectedOutput])
@@ -182,7 +260,7 @@ export function ResultsCanvas({
   // The expand affordance / asset media click: one frosted dialog — left
   // the scrollable info column (timestamp, full prompt, derived-attribute
   // chips), right the media. Product chips are product facts only (never a
-  // model name, prohibition #12).
+  // model name in the chips row).
   const [lightbox, setLightbox] = useState<MediaLightboxData | null>(null)
 
   // Handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
@@ -196,10 +274,13 @@ export function ResultsCanvas({
       return `${base || "media"}.${ext.length > 0 && ext.length <= 4 ? ext : "mp4"}`
     }
 
-    // The version pager's flipped display (ADR-051 F2): the lightbox follows
-    // the SHOWN member, not the node's own row.
+    // The pager's flipped display: the lightbox follows the SHOWN product,
+    // not the node's first row.
     const output =
-      (outputId ? outputById.get(`output:${outputId}`) : undefined) ?? node.output
+      (outputId ? outputById.get(outputId) : undefined) ??
+      (node.outputs?.length
+        ? outputById.get(displayedRef.current.get(nodeId) ?? "") ?? node.outputs[0]
+        : undefined)
     if (output) {
       const url = toAbsoluteUrl(output.files.video ?? output.files.image ?? null)
       if (!url) return
@@ -209,7 +290,9 @@ export function ResultsCanvas({
           label: node.label,
         },
       ]
-      if (node.detail) chips.push({ Icon: Languages, label: node.detail })
+      if (output.language) {
+        chips.push({ Icon: Languages, label: t(`languages.${output.language}`, { defaultValue: output.language }) })
+      }
       const aspect = (output.render_spec as { aspect?: string } | null)?.aspect
       // "original" (whole-source, 2026-08-17) is not a fixed tier — the real
       // pixels are unknown until the media loads, so no shape chip.
@@ -244,18 +327,17 @@ export function ResultsCanvas({
         })
       }
       const title =
-        output.publishing.title || output.payload.hook || node.label
+        output.publishing.title || (output.payload.hook as string | undefined) || node.label
       setLightbox({
         kind: output.files.video ? "video" : "image",
         url,
-        // Poster derives from the SHOWN output (the node's own thumbUrl only
-        // describes its own row — the pager may have flipped the display).
+        // Poster derives from the SHOWN output.
         poster: output.files.video
           ? toAbsoluteUrl(output.files.image ?? output.publishing.cover_image_url ?? null)
           : null,
         title,
         createdAt: output.created_at,
-        prompt: node.prompt,
+        prompt: node.spec?.prompt ?? output.spec_prompt ?? null,
         chips,
         // 模型事实 (ADR-051 H): the shown member's own server-stamped facts —
         // display-only on this detail surface (禁令2 禁选择器).
@@ -265,7 +347,7 @@ export function ResultsCanvas({
       return
     }
 
-    const asset = assetByNodeId.get(nodeId)
+    const asset = node.asset
     if (asset) {
       const url = node.videoUrl ?? node.thumbUrl ?? null
       if (!url) return
@@ -290,52 +372,43 @@ export function ResultsCanvas({
         // The caption carries the type name now — the filename (detail) is
         // the lightbox's title.
         title: node.detail ?? node.label,
-        createdAt: asset.created_at ?? null,
+        createdAt: null,
         chips,
         downloadName: node.detail ?? node.label,
       })
     }
-  }, [nodeById, assetByNodeId, outputById])
+  }, [nodeById, outputById, t])
 
   const handleSelect = useCallback(
     (id: string) => {
-      // The spine group node toggles in place; a step node points the
-      // dock at it (@workflow_step); a product node focuses / details.
-      if (id === SPINE_NODE_ID) {
-        setSpineExpanded((v) => !v)
-        return
-      }
-      const output = outputById.get(id)
-      if (output) {
-        // Click = dock focus (D8) + the dossier swap-in.
-        setInspectedId(output.id)
-        onOutputClick?.(output)
-        return
-      }
-      if (id.startsWith("asset:")) {
+      const node = nodeById.get(id)
+      if (!node) return
+      if (node.kind === "asset") {
         // Source media nodes have no dock business — a click IS the
         // expand gesture (the lightbox; non-media assets no-op inside).
         handleExpandMedia(id)
         return
       }
-      if (id.startsWith("artifact:")) {
-        // 工件卡 = 可干预的产出物 (D6 修订): clicking points the dock at
-        // the group's representative step (@workflow_step, D8).
-        const node = nodeById.get(id)
-        if (node?.anchorStepId) onStepClick?.(node.anchorStepId, node.label)
+      if (node.kind === "document") {
+        // The task book is read on the card — no dock business yet (K5
+        // wires the confirmation beat to it).
         return
       }
-      if (id.startsWith("step:")) {
-        const node = nodeById.get(id)
-        if (node) onStepClick?.(id.slice(5), node.label)
-      }
+      // A graph card: click = dock focus (D8) + the dossier swap-in, on the
+      // product the pager is SHOWING (fallback = the node's first).
+      const outputs = node.outputs ?? []
+      if (outputs.length === 0) return
+      const output =
+        outputById.get(displayedRef.current.get(id) ?? "") ?? outputs[0]
+      setInspectedId(output.id)
+      onOutputClick?.(output)
     },
-    [outputById, onOutputClick, onStepClick, nodeById, handleExpandMedia],
+    [nodeById, outputById, onOutputClick, handleExpandMedia],
   )
 
   const handleOutputAction = useCallback(
     (id: string, action: FlowOutputAction) => {
-      const output = outputById.get(`output:${id}`)
+      const output = outputById.get(id)
       if (output) onOutputAction?.(output, action)
     },
     [outputById, onOutputAction],
@@ -345,7 +418,7 @@ export function ResultsCanvas({
   // the dock's chat channel is the only revision path (prohibition #1).
   const handleRevise = useCallback(
     (id: string, text: string) => {
-      const output = outputById.get(`output:${id}`)
+      const output = outputById.get(id)
       if (output) onRevise?.(output, text)
     },
     [outputById, onRevise],
@@ -356,6 +429,27 @@ export function ResultsCanvas({
     setInspectedId(null)
     onPaneClick?.()
   }, [onPaneClick])
+
+  // The dossier's asset facts (出生证明 lineage) come from the graph's own
+  // asset nodes — one source, zero second fetch.
+  const inspectorAssets = useMemo(
+    () =>
+      nodes.flatMap((n) =>
+        n.kind === "asset" && n.asset
+          ? [
+              {
+                id: n.asset.id,
+                type: n.asset.type,
+                title: n.asset.title,
+                file_url: n.asset.file_url,
+                stream_url: n.asset.stream_url,
+                duration_seconds: n.asset.duration_seconds,
+              },
+            ]
+          : [],
+      ),
+    [nodes],
+  )
 
   return (
     <div className={cn("relative", className)}>
@@ -369,13 +463,14 @@ export function ResultsCanvas({
         bornIds={bornIds}
         dots
         className="h-full"
-        selectedId={focusedOutputId ? `output:${focusedOutputId}` : null}
+        selectedId={focusedOutputId ? (nodeIdByOutputId.get(focusedOutputId) ?? null) : null}
         onPaneClick={handlePaneClick}
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
         onOutputAction={handleOutputAction}
         onRevise={handleRevise}
         onAssetAction={onAssetAction}
+        onDisplayChange={handleDisplayChange}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its
@@ -384,10 +479,10 @@ export function ResultsCanvas({
         <OutputInspector
           output={inspectedOutput}
           step={
-            steps.find((s) => s.id === inspectedOutput.workflow_step_id) ??
+            (steps ?? []).find((s) => s.id === inspectedOutput.workflow_step_id) ??
             null
           }
-          assets={assets}
+          assets={inspectorAssets}
           onClose={() => setInspectedId(null)}
           onAction={(output, action) => onOutputAction?.(output, action)}
           className={cn(

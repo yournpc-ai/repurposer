@@ -21,6 +21,73 @@
   stroke-opacity: 0.55;
 }
 
+/* ── Typed flows (ADR-057 端口法则, the graph canvas) ──────────────────── */
+/* The edge's edge_type colors the stroke: video / audio carry their own
+ * hues (the canvas's one semantic-color vocabulary — the only non-neutral
+ * tokens on the surface); text keeps the quiet neutral stroke; ctx is the
+ * dashed context flow. The port dots speak the same colors. */
+:root {
+  --flow-video: oklch(0.58 0.16 295);
+  --flow-audio: oklch(0.66 0.15 350);
+}
+.dark {
+  --flow-video: oklch(0.68 0.15 295);
+  --flow-audio: oklch(0.72 0.13 350);
+}
+.flow-edge-video {
+  stroke: var(--flow-video);
+  stroke-opacity: 0.7;
+}
+.flow-edge-audio {
+  stroke: var(--flow-audio);
+  stroke-opacity: 0.7;
+}
+.flow-edge-text {
+  stroke: var(--muted-foreground);
+  stroke-opacity: 0.55;
+}
+.flow-edge-ctx {
+  stroke: var(--muted-foreground);
+  stroke-opacity: 0.45;
+  stroke-dasharray: 4 4;
+}
+/* A born ctx edge must KEEP its dashes — the birth keyframe settles solid
+   (6 0.01), which would erase the ctx signature; ctx edges skip the march
+   and fade in place instead. */
+.flow-edge-ctx.flow-edge-born {
+  animation: flow-edge-in 640ms ease-out backwards;
+}
+
+/* The port dots (port law: in = the consumption region's bottom-left, out =
+ * the production region's top-right; same-side ports stack from the corner).
+ * React Flow's default handle chrome is a giant square — ours is a 10px dot
+ * with a page-colored halo so it reads on top of the card's media. */
+.flow-port {
+  width: 10px !important;
+  height: 10px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border-radius: 50%;
+  border: 2px solid var(--background);
+  background: var(--muted-foreground);
+}
+.flow-port-video {
+  background: var(--flow-video);
+}
+.flow-port-audio {
+  background: var(--flow-audio);
+}
+.flow-port-text {
+  background: var(--muted-foreground);
+}
+.flow-port-ctx {
+  background: transparent;
+  border: 1.5px dashed var(--muted-foreground);
+  width: 11px !important;
+  height: 11px !important;
+}
+
+
 /* ── Birth choreography (ADR-036 补记 3) ─────────────────────────────── */
 
 /* Node enters: fade + settle. `backwards` fill holds the from-state during
@@ -114,15 +181,15 @@
   animation: flow-node-pulse 1.6s ease-in-out infinite;
 }
 
-/* ── Placeholder wipe (ADR-051, FLORA parity 2026-09-01 拍板) ────────── */
+/* ── Node fill wipe (ADR-057 §5, FLORA parity 2026-09-01 拍板) ─────────── */
 
-/* A running placeholder fills left→right with a quiet foreground wash —
- * the card's own run 期 projection. Pure CSS, zero clocks: ease-out growth
- * front-loads the visible motion and CAPS at 96% (a long step just sits
- * there — the fill never claims a fraction, so the 假进度禁令 holds; the
- * landing output is the only 100%). transform scaleX keeps it on the
+/* A filling node (state = running) wipes left→right with a quiet foreground
+ * wash — the card's own run 期 expression. Pure CSS, zero clocks: ease-out
+ * growth front-loads the visible motion and CAPS at 96% (a long step just
+ * sits there — the fill never claims a fraction, so the 假进度禁令 holds;
+ * the landing output is the only 100%). transform scaleX keeps it on the
  * compositor; the card's overflow-hidden clips the rounded corners. */
-@keyframes placeholder-fill {
+@keyframes node-fill {
   from {
     transform: scaleX(0);
   }
@@ -130,7 +197,7 @@
     transform: scaleX(0.96);
   }
 }
-.placeholder-wipe {
+.node-fill-wipe {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -138,7 +205,7 @@
   transform-origin: left center;
   background: var(--foreground);
   opacity: 0.07;
-  animation: placeholder-fill 40s cubic-bezier(0.08, 0.72, 0.24, 1) forwards;
+  animation: node-fill 40s cubic-bezier(0.08, 0.72, 0.24, 1) forwards;
 }
 
 /* ── Layout moves stay smooth (growth recenters, never jumps) ────────── */
@@ -166,7 +233,7 @@
   }
   /* The wipe's growth is motion — reduced users get a static half-fill
      marker (the running signal survives, the travel doesn't). */
-  .placeholder-wipe {
+  .node-fill-wipe {
     animation: none !important;
     transform: scaleX(0.5);
   }

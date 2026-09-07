@@ -116,14 +116,6 @@ class Preprocess(NodeBase):
     kind = "preprocess"
     task_name = "Analyze uploads"
     task_name_zh = "分析素材"
-    # canvas_hidden (2026-08-19 二轮评审 R1): the prelude is plan's UPSTREAM —
-    # folding it into the 过程脊 together with plan's DOWNSTREAM (select_clips)
-    # made the visible graph a 2-cycle (spine⇄artifact:plan): the 任务书
-    # landed at the bottom of the product column with a loop-back edge
-    # sweeping the canvas. Hiding the prelude restores the clean DAG
-    # (素材→任务书→脊→产物); its state still lives in the step rows and the
-    # chat stepper (canvas_hidden has exactly one consumer — runFlow).
-    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """Validation only — no LLM, no priced units."""
@@ -181,9 +173,6 @@ class PersonaBootstrap(NodeBase):
     task_name = "Prepare persona"
     task_name_zh = "准备人设"
     agents = (persona,)
-    # canvas_hidden — same prelude rule as Preprocess (2026-08-19 二轮评审
-    # R1: the spine must never hold steps from both sides of the 任务书).
-    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """The one extraction call — free when a persona is already mounted
@@ -401,9 +390,6 @@ class Understand(NodeBase):
     task_name_zh = "看懂素材"
     agents = (understand,)
 
-    def canvas_group(self, node):
-        return "plan"
-
     def estimate(self, ctx: dict) -> dict | None:
         """One multimodal call: texts trimmed to MAX_CHARS_PER_TEXT each plus
         a per-item media bound. An asset-hash reuse zeroes the ACTUAL — the
@@ -549,15 +535,6 @@ class Interrupt(NodeBase):
     task_name = "Pick a direction"
     task_name_zh = "选定方向"
 
-    def canvas_group(self, node):
-        return "plan"
-
-    def canvas_text(self, node):
-        # The plan card's body = the direction the user picked, in full (the
-        # spec summary is truncated to a line).
-        answer = (node.spec or {}).get("answer") or {}
-        return answer.get("text") or None
-
     def estimate(self, ctx: dict) -> dict | None:
         """Zero by ruling (P4): thin node, no LLM — the options are
         code-derived from the understanding."""
@@ -699,18 +676,6 @@ class Plan(NodeBase):
     task_name = "Plan content"
     task_name_zh = "规划内容"
     agents = (plan,)
-
-    def canvas_group(self, node):
-        return "plan"
-
-    def canvas_text(self, node):
-        """Plan 卡正文 = 人话任务书摘要（不是内部工序 summary）。"""
-        spec = node.spec or {}
-        if spec.get("book_summary"):
-            return spec["book_summary"]
-        task_book = spec.get("task_book") or {}
-        slots = [IntentSlot.model_validate(s) for s in task_book.get("slots", [])]
-        return self._book_summary(slots, task_book.get("target_language", "en"))
 
     @staticmethod
     def _book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
@@ -867,7 +832,8 @@ class Plan(NodeBase):
         await db.flush()
         assets = await _list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
-        # 任务书摘要落 spec，供 canvas_text 投影到 plan 节点。
+        # 任务书摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
+        # back-write 同源读它。
         book_summary = self._book_summary(intent_slots, ctx.get("target_language", "en"))
         if book_summary:
             node.spec = {**(node.spec or {}), "book_summary": book_summary, "task_book": task_book}
@@ -890,9 +856,6 @@ class RenderRequest(NodeBase):
     # well as at compile time (targeted re-render) — the recipe-flow
     # reconciliation treats them as present in every producer graph.
     runtime_fanout = True
-    # Render is 1:1 with its clip product — never a canvas node; its state
-    # projects onto the product card in place (ADR-041 D6 修订).
-    canvas_hidden = True
 
     def estimate(self, ctx: dict) -> dict | None:
         """Render 按秒 (mechanical exact): the target clip's payload duration,

@@ -211,22 +211,6 @@ export interface ModelFact {
 
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
 
-/** One pending product slot of a LIVE run (ADR-051 B — 占位物化): the
- * server-projected roster from the run's own compiled steps (never a
- * frontend guess). A landed output fills its slot in place — matched by
- * step_id, ordinal within the step. `whole` marks the whole-source clip
- * (the "Video" card); `variant` marks a fork family ("subs" | "dub");
- * `aspect` null = the surface's default tier (never a hardcoded fake). */
-export interface PlaceholderRow {
-  step_id: string
-  type: string
-  whole: boolean
-  count: number
-  language: string | null
-  variant: string | null
-  aspect: string | null
-}
-
 export type IntentSlotType = "clips" | "post" | "quotes" | "carousel" | "article"
 
 /** 任务槽 (IntentSlot, N-20 request layer): one line of the task book — one
@@ -255,16 +239,8 @@ export interface WorkflowStep {
   summary?: string | null
   /** Output row ids this node produced (RunCard inlines these on completion). */
   output_refs?: string[]
-  /** DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036). */
+  /** DAG edges: upstream step ids (the run's execution DAG). */
   inputs?: string[]
-  /** Canvas 渲染单元 (ADR-041 D6 修订): steps sharing a canvas_key merge
-   * into ONE artifact node; null folds into the 过程脊; canvas_hidden never
-   * renders (render projects onto the product card in place). */
-  canvas_key?: string | null
-  canvas_hidden?: boolean
-  /** The artifact node's body copy (e.g. the interrupt's full direction
-   * answer); absent = the card falls back to the summary line. */
-  canvas_text?: string | null
   /** Credits derivation (ADR-055, BILLING §7 — serialization-folded, never
    * persisted): the step's quotation [low, high] / metered actual in
    * credits. estimate_credits null = never quoted; cost_credits null =
@@ -273,6 +249,84 @@ export interface WorkflowStep {
   cost_credits?: number | null
   started_at: string | null
   finished_at: string | null
+}
+
+/** The project graph (ADR-057) — the persistent, mutable product object the
+ * canvas reads directly (`GET /projects/{id}/graph`; zero projection — the
+ * display model IS the domain model). Node five-types; state is an
+ * orthogonal dimension; edges are typed flows (the port law: in = the
+ * consumption region's bottom-left, out = the production region's
+ * top-right). */
+export type GraphNodeKind = "asset" | "document" | "generator" | "processor" | "agent"
+
+export type GraphNodeState =
+  | "draft"
+  | "queued"
+  | "running"
+  | "done"
+  | "failed"
+  | "skipped"
+  | "stale"
+
+export type GraphEdgeType = "video" | "audio" | "text" | "ctx"
+
+/** The asset row joined onto an asset node (AssetResponse passthrough). */
+export interface GraphNodeAsset {
+  id: string
+  type: string
+  title: string | null
+  file_url: string | null
+  stream_url?: string | null
+  duration_seconds?: number | null
+  created_at?: string
+}
+
+export interface GraphNode {
+  id: string
+  kind: GraphNodeKind
+  state: GraphNodeState
+  /** The node's program: prompt / params / role / fill_key / frame_class /
+   * summary — the node type's own shape, rendered as-is. */
+  spec: {
+    summary?: string | null
+    prompt?: string | null
+    params?: Record<string, unknown> | null
+    role?: string | null
+    text?: string | null
+    asset_id?: string | null
+    asset_type?: string | null
+    title?: string | null
+    output_ids?: string[]
+    frame_class?: string | null
+    [key: string]: unknown
+  }
+  /** 画布定居取景: the settled frame {x, y, w, h} — server-assigned once,
+   * append-only; existing frames never move. */
+  layout: { x?: number; y?: number; w?: number; h?: number }
+  /** The node's quotation folded to credits at read time (BILLING §7);
+   * null = unquoted. */
+  estimate_credits?: [number, number] | null
+  /** Asset nodes: the joined asset row. */
+  asset?: GraphNodeAsset | null
+  /** Producer nodes: the joined visible product rows (created_at asc — the
+   * card's pager order). */
+  outputs?: Output[]
+  created_at: string
+  updated_at?: string | null
+}
+
+export interface GraphEdge {
+  id: string
+  from_node: string
+  from_port: string
+  to_node: string
+  to_port: string
+  edge_type: GraphEdgeType
+}
+
+export interface ProjectGraph {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
 }
 
 export interface BrandTemplate {

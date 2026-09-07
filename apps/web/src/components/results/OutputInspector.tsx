@@ -15,17 +15,17 @@ import { Download, Send, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn, formatDuration } from "@/lib/utils"
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { GraphNodeAsset, Output, WorkflowStep } from "@/lib/types"
 
-import type { RunFlowAsset } from "@/components/flow/runFlow"
 import type { FlowOutputAction } from "@/components/flow/types"
 
 export interface OutputInspectorProps {
   output: Output
   /** The producing step (workflow_steps row) — null for carried rows. */
   step: WorkflowStep | null
-  /** Canvas source assets — source_ref resolves a name through these. */
-  assets: RunFlowAsset[]
+  /** Canvas source assets (the graph's own asset nodes) — source_ref
+   * resolves a name through these. */
+  assets: GraphNodeAsset[]
   onClose: () => void
   /** The surface's one action channel — same outlet as the card's bar/⋯. */
   onAction: (output: Output, action: FlowOutputAction) => void

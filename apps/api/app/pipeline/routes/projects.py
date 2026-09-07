@@ -9,11 +9,15 @@ from sqlalchemy import Integer, cast, delete, or_, select
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
+    AssetResponse,
     ExportRequest,
     GenerateRequest,
     GenerateResponse,
+    GraphEdgeResponse,
+    GraphNodeResponse,
     OutputResponse,
     ProjectCreate,
+    ProjectGraphResponse,
     ProjectResponse,
     ProjectResultsResponse,
     ProjectStatus,
@@ -24,6 +28,8 @@ from app.models.schemas import (
 from app.models.tables import (
     Asset,
     Conversation,
+    GraphEdge,
+    GraphNode,
     Message,
     Operation,
     Output,
@@ -43,14 +49,18 @@ from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.outputs import (
     aggregate_step_cost,
     compose_spec_prompt,
-    derive_placeholder_rows,
     list_visible_outputs,
     model_facts_for,
     workflow_step_to_response,
     run_to_response,
     visible_outputs_stmt,
 )
-from app.platform.billing import CreditsInsufficientError, release_run
+from app.platform.billing import (
+    CreditsInsufficientError,
+    credits_at_ratio,
+    estimate_usd_range,
+    release_run,
+)
 from app.platform.configs import get_config
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
@@ -207,17 +217,6 @@ async def get_project_results(
         latest_run_resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
         latest_run_resp.cost = aggregate_step_cost(nodes)
 
-    # Placeholder roster (ADR-051 B — 占位物化): only while the latest run is
-    # non-terminal — a terminal run's unfilled slots vanish (the chat narrates
-    # the failure; the graph expresses products, never step progress).
-    placeholders: list[dict] = []
-    if latest_run is not None and latest_run.status in (
-        WorkflowStatus.PENDING,
-        WorkflowStatus.RUNNING,
-        WorkflowStatus.WAITING_HUMAN,
-    ):
-        placeholders = derive_placeholder_rows(nodes, outputs)
-
     # Per-product spec prompts (ADR-051 F — hover prompt 框): the producing
     # step's slot/params composed in the run's pinned ui_language, stamped
     # only for outputs whose step is in this payload (carried rows stay None
@@ -255,7 +254,142 @@ async def get_project_results(
         "latest_run": latest_run_resp,
         "assets": assets,
         "pending_brief": project.pending_brief,
-        "placeholders": placeholders,
+    }
+
+
+@router.get("/{project_id}/graph", response_model=ProjectGraphResponse)
+async def get_project_graph(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User | None = Depends(get_current_user),
+) -> dict:
+    """The project graph's one read frame (ADR-057): nodes + edges + the
+    joined display rows (asset rows / visible product rows / per-node credit
+    estimates). The canvas renders this directly — zero projection, the
+    display model IS the domain model."""
+    await get_project_for_user(db, project_id, current_user.id if current_user else None)
+
+    nodes = list(
+        (
+            await db.execute(
+                select(GraphNode)
+                .where(GraphNode.project_id == project_id)
+                .order_by(GraphNode.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    edges = list(
+        (
+            await db.execute(
+                select(GraphEdge).where(GraphEdge.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not nodes:
+        return {"nodes": [], "edges": []}
+
+    # ── Joined display rows ──────────────────────────────────────────────
+    asset_ids = [
+        UUID(str((n.spec or {}).get("asset_id")))
+        for n in nodes
+        if n.kind == "asset" and (n.spec or {}).get("asset_id")
+    ]
+    assets_by_id = {}
+    if asset_ids:
+        assets_by_id = {
+            str(a.id): a
+            for a in (
+                await db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+            )
+            .scalars()
+            .all()
+        }
+
+    visible = await list_visible_outputs(db, project_id)
+    outputs_by_id = {str(o.id): o for o in visible}
+
+    # The outputs' dossier facts (spec_prompt / model_facts — OutputInspector
+    # and the lightbox read them, same stamp as /results): the producing
+    # step's slot/params composed in that step's run's pinned ui_language.
+    step_ids = [o.workflow_step_id for o in visible if o.workflow_step_id is not None]
+    if step_ids:
+        steps = list(
+            (
+                await db.execute(select(WorkflowStep).where(WorkflowStep.id.in_(step_ids)))
+            )
+            .scalars()
+            .all()
+        )
+        steps_by_id = {str(s.id): s for s in steps}
+        run_ids = list({s.run_id for s in steps})
+        runs = list(
+            (
+                await db.execute(select(WorkflowRun).where(WorkflowRun.id.in_(run_ids)))
+            )
+            .scalars()
+            .all()
+        )
+        ui_lang_by_run = {
+            str(r.id): str((r.context or {}).get("ui_language") or "en") for r in runs
+        }
+        for output in visible:
+            step = steps_by_id.get(str(output.workflow_step_id))
+            if step is None:
+                continue
+            prompt_text = compose_spec_prompt(
+                step, ui_lang_by_run.get(str(step.run_id), "en")
+            )
+            if prompt_text:
+                output.spec_prompt = prompt_text
+            output.model_facts = model_facts_for(step.kind, output)
+
+    ratio = await get_config(db, "credits.per_cost_usd")
+
+    resp_nodes: list[GraphNodeResponse] = []
+    for node in nodes:
+        spec = dict(node.spec or {})
+        estimate_credits: list[int] | None = None
+        if spec.get("estimate"):
+            usd_low, usd_high = estimate_usd_range(spec["estimate"])
+            estimate_credits = [
+                credits_at_ratio(usd_low, ratio),
+                credits_at_ratio(usd_high, ratio),
+            ]
+        asset_resp = None
+        if node.kind == "asset":
+            asset = assets_by_id.get(str(spec.get("asset_id") or ""))
+            if asset is not None:
+                asset_resp = AssetResponse.model_validate(asset)
+        node_outputs = sorted(
+            (
+                outputs_by_id[str(oid)]
+                for oid in (spec.get("output_ids") or [])
+                if str(oid) in outputs_by_id
+            ),
+            key=lambda o: o.created_at,
+        )
+        resp_nodes.append(
+            GraphNodeResponse(
+                id=node.id,
+                kind=node.kind,
+                state=node.state,
+                spec=spec,
+                layout=node.layout or {},
+                estimate_credits=estimate_credits,
+                asset=asset_resp,
+                outputs=[OutputResponse.model_validate(o) for o in node_outputs],
+                created_at=node.created_at,
+                updated_at=node.updated_at,
+            )
+        )
+
+    return {
+        "nodes": resp_nodes,
+        "edges": [GraphEdgeResponse.model_validate(e) for e in edges],
     }
 
 

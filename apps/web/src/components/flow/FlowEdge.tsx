@@ -3,10 +3,14 @@ import { useRef } from "react"
 
 import { cn } from "@/lib/utils"
 
-import type { FlowEdgeSemantic } from "./types"
+import type { FlowEdgeSemantic, GraphEdgeType } from "./types"
 
 export interface FlowEdgeData extends Record<string, unknown> {
-  semantic: FlowEdgeSemantic
+  /** Recipe surface: derivation vs process order. */
+  semantic?: FlowEdgeSemantic
+  /** Graph canvas (ADR-057 port law): the typed flow — colors the stroke
+   * (video / audio / text), ctx renders dashed. */
+  edgeType?: GraphEdgeType
   /** Birth stagger delay (ms); null = render instantly (no choreography). */
   drawDelay: number | null
   /** Live "work flowing through this edge" — one short bright packet
@@ -17,8 +21,9 @@ export interface FlowEdgeData extends Record<string, unknown> {
 
 export type FlowEdgeType = Edge<FlowEdgeData>
 
-/** The one edge renderer — a single quiet stroke for both semantics plus
- * the dashed-flow birth animation (`flow-edge-birth`: dashes march in, then
+/** The one edge renderer — a single quiet stroke for the recipe semantics,
+ * the port law's typed colors on the graph canvas (ctx dashed), plus the
+ * dashed-flow birth animation (`flow-edge-birth`: dashes march in, then
  * settle solid). Live work rides as a second path: one short packet
  * traveling the same bezier (`flow-edge-packet`), so the base stroke never
  * flashes. */
@@ -55,7 +60,11 @@ export function FlowEdge({
         path={path}
         className={cn(
           "flow-edge",
-          data?.semantic === "lineage" ? "flow-edge-lineage" : "flow-edge-dependency",
+          data?.edgeType
+            ? `flow-edge-${data.edgeType}`
+            : data?.semantic === "lineage"
+              ? "flow-edge-lineage"
+              : "flow-edge-dependency",
           draw && "flow-edge-born",
         )}
         style={draw ? { animationDelay: `${drawDelay}ms` } : undefined}

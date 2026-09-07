@@ -51,7 +51,6 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
     (BILLING §7: USD stays in estimate/cost, credits are folded at read time
     and never persisted), so one config edit moves every surface at once.
     """
-    node_cls = node_for(node.kind)
     estimate_credits: list[int] | None = None
     if node.estimate:
         usd_low, usd_high = estimate_usd_range(node.estimate)
@@ -68,12 +67,6 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
-        # 渲染单元 (D6 修订) comes from the node CLASS (self-description,
-        # like label()), never the row — legacy/unknown kinds fold into the
-        # spine by default.
-        canvas_key=node_cls.canvas_group(node) if node_cls else None,
-        canvas_hidden=node_cls.canvas_hidden if node_cls else False,
-        canvas_text=(node_cls.canvas_text(node) if node_cls else None),
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         estimate_credits=estimate_credits,
@@ -83,11 +76,6 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         started_at=node.started_at,
         finished_at=node.finished_at,
     )
-
-
-# Clip-producer kinds a fork can hang off (the fork's card count and aspect
-# inherit from the producer it derives from).
-_CLIP_PRODUCER_KINDS = ("materialize_source", "select_clips")
 
 
 def compose_spec_prompt(step: WorkflowStep, ui_language: str) -> str | None:
@@ -184,114 +172,6 @@ def model_facts_for(step_kind: str | None, output: Output) -> list[dict[str, str
     elif step_kind == "dub_clip":
         facts.append({"modality": "voice", "model": "MiniMax speech-2.6-hd"})
     return facts
-
-
-def _clips_slot_count(step: WorkflowStep) -> int:
-    """A select_clips step's promised card count (the slot's count — the
-    params model's default rides the persisted spec, so this never guesses)."""
-    return int(((step.spec or {}).get("slot") or {}).get("count") or 1)
-
-
-def derive_placeholder_rows(
-    nodes: list[WorkflowStep],
-    outputs: list[Output],
-) -> list[dict]:
-    """The live run's placeholder roster (ADR-051 B — 占位物化): what the
-    run's output-creating steps will MAKE, projected from the run's own step
-    rows — the materialized compile, i.e. the runtime form of ADR-043's
-    dry-run (the roster can never drift from what will actually execute;
-    prohibition #4 — never a frontend guess). One row per producing step,
-    keyed by ``step_id`` so the surface matches a landed output to its slot
-    and fills it in place.
-
-    Morph modifiers (non-fork translate/dub) create NO row — they rewrite an
-    existing card in place. A fork's card count + aspect inherit from the
-    producer it hangs off (inputs walk); a fork acting on existing clips
-    sizes off the current clip list; a targeted fork (target_output_id) is
-    always one card. Aspect stays None when unknown — the surface's default
-    tier (画幅未知取默认档), never a hardcoded fake.
-    """
-    by_id = {str(n.id): n for n in nodes}
-
-    def upstream_producer(step: WorkflowStep) -> WorkflowStep | None:
-        """Nearest clip producer upstream (BFS over the real edge table —
-            modifier chains walk through to materialize/select)."""
-        seen: set[str] = set()
-        frontier = [str(u) for u in (step.inputs or [])]
-        while frontier:
-            cur_id = frontier.pop(0)
-            if cur_id in seen:
-                continue
-            seen.add(cur_id)
-            cur = by_id.get(cur_id)
-            if cur is None:
-                continue
-            if cur.kind in _CLIP_PRODUCER_KINDS:
-                return cur
-            frontier.extend(str(u) for u in (cur.inputs or []))
-        return None
-
-    rows: list[dict] = []
-    for node in nodes:  # the endpoint passes them seq-ordered
-        spec = node.spec or {}
-        if node.kind == "materialize_source":
-            rows.append({"step_id": node.id, "type": "clip", "whole": True})
-            continue
-        if node.kind == "select_clips":
-            rows.append(
-                {
-                    "step_id": node.id,
-                    "type": "clip",
-                    "count": _clips_slot_count(node),
-                    "language": spec.get("target_language"),
-                    "aspect": spec.get("aspect"),
-                }
-            )
-            continue
-        if node.kind in ("translate_clip", "dub_clip"):
-            if not spec.get("fork"):
-                continue  # morph — rewrites an existing card in place
-            producer = upstream_producer(node)
-            if spec.get("target_output_id"):
-                count = 1
-            elif producer is not None:
-                count = (
-                    1
-                    if producer.kind == "materialize_source"
-                    else _clips_slot_count(producer)
-                )
-            else:
-                # Acting on existing clips (no in-run producer) — one derived
-                # card per current clip.
-                count = max(1, sum(1 for o in outputs if o.type == "clip"))
-            rows.append(
-                {
-                    "step_id": node.id,
-                    "type": "clip",
-                    "whole": producer is not None
-                    and producer.kind == "materialize_source",
-                    "count": count,
-                    "language": spec.get("target_language"),
-                    "variant": "subs" if node.kind == "translate_clip" else "dub",
-                    "aspect": (producer.spec or {}).get("aspect")
-                    if producer is not None
-                    else None,
-                }
-            )
-            continue
-        node_cls = node_for(node.kind)
-        if node_cls is None or not node_cls.produces_outputs or not node_cls.output_type:
-            continue
-        if node_cls.output_type == "clips":
-            continue  # select_clips handled above
-        rows.append(
-            {
-                "step_id": node.id,
-                "type": node_cls.output_type,
-                "language": spec.get("target_language"),
-            }
-        )
-    return rows
 
 
 def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:

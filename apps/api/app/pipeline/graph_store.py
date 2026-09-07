@@ -186,28 +186,42 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 
 # ---- layout (画布定居取景: assigned once, append-only) ----------------------
 
-# Canvas frames per kind (w, h) — the graph surface's own size facts (the
-# recipe surface keeps its frontend layout; these two sleeves share the
-# canvas's one size language and are calibrated together at K3).
+# Canvas frames per SIZE CLASS (w, h) — the graph surface's reserved boxes.
+# Heights reserve the class's MAX content height (the frontend renders
+# content-driven heights inside the reservation, so a column never overlaps
+# and a node fills into its reservation as products land): clip = the 9:16
+# product card's full anatomy (caption 26 + thumb 498 + program 88 + bar
+# 44); text = the 12-line text card's (caption 26 + body 282 + program 88 +
+# bar 44). A node's class comes from spec.frame_class (the fill stamps it
+# from the family's product vocabulary); an unstamped generator/processor/
+# agent reserves the clip maximum — safe by construction.
 _GAP_MAIN = 96
 _GAP_CROSS = 24
-_NODE_FRAME: dict[str, tuple[int, int]] = {
-    "asset": (280, 228),
+_FRAME_CLASS: dict[str, tuple[int, int]] = {
+    "asset": (280, 260),
     "document": (260, 200),
-    "generator": (280, 420),
-    "processor": (280, 380),
-    "agent": (280, 420),
+    "text": (340, 440),
+    "clip": (280, 660),
 }
+_KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
+
+
+def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
+    cls = _KIND_FRAME_CLASS.get(kind) or str(spec.get("frame_class") or "") or "clip"
+    return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
 
 def _assign_layout(
-    kind: str, parents: list[GraphNode], existing: list[GraphNode]
+    kind: str,
+    spec: dict[str, Any],
+    parents: list[GraphNode],
+    existing: list[GraphNode],
 ) -> dict[str, int]:
     """The settled frame for a newborn node: x = right of its parents'
     rightmost edge (islands start a fresh column), y = appended under that
     column's current tail. Existing frames NEVER move — the graph only
     grows, it never jolts (append-only 保序律)."""
-    w, h = _NODE_FRAME[kind]
+    w, h = _frame_of(kind, spec)
     x = (
         max(int((p.layout or {}).get("x", 0)) + int((p.layout or {}).get("w", w))
             for p in parents)
@@ -363,7 +377,7 @@ async def apply_wiring_ops(
                 # (图先展示后运行 — zero consumption until a run fills it).
                 state="done" if op.kind == "asset" else "draft",
                 spec=dict(op.spec),
-                layout=_assign_layout(op.kind, parents, list(nodes.values())),
+                layout=_assign_layout(op.kind, dict(op.spec), parents, list(nodes.values())),
             )
             nodes[UUID(str(node.id))] = node
             newborn_ids.append(UUID(str(node.id)))
@@ -435,7 +449,7 @@ async def apply_wiring_ops(
             for e in edges
             if UUID(str(e.to_node)) == nid and UUID(str(e.from_node)) in nodes
         ]
-        node.layout = _assign_layout(node.kind, parents, placed)
+        node.layout = _assign_layout(node.kind, node.spec or {}, parents, placed)
         placed.append(node)
 
     # Land the batch: deletions (edges cascade structurally), then the new

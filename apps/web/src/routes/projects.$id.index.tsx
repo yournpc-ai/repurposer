@@ -15,7 +15,6 @@ import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type C
 import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/components/flow/types"
-import type { RunFlowAsset } from "@/components/flow/runFlow"
 import { PostCard } from "@/components/results/PostCard"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
 import { PublishDialog } from "@/components/publish/PublishDialog"
@@ -34,7 +33,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 
-import type { IntentSlot, Output, PlaceholderRow, WorkflowStep, Project } from "@/lib/types"
+import type { IntentSlot, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
 
 /** A clip counts as tour-ready once its MP4 exists and no render is in
  * flight — the same condition ClipCard uses to leave its rendering state. */
@@ -138,8 +137,6 @@ interface ProjectResults {
   latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
   pending_brief?: PendingBrief | null
-  /** Live run's placeholder roster (ADR-051 B — server-projected). */
-  placeholders?: PlaceholderRow[]
 }
 
 /** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
@@ -224,7 +221,9 @@ function ProjectDetailPage() {
    * takes precedence the moment it exists, so the dock mounts in one pass
    * (no effect lag on refresh). */
   const [stickyCompletedRun, setStickyCompletedRun] = useState<WorkflowRun | null>(null)
-  const [canvasAssets, setCanvasAssets] = useState<RunFlowAsset[]>([])
+  // The persistent graph's one read frame (ADR-057 — the canvas's ONLY data
+  // source; fetched alongside /results on the same cadence).
+  const [graph, setGraph] = useState<ProjectGraph | null>(null)
 
   // ── Product actions (ADR-041 D5/D8) ──────────────────────────────────
   // The canvas's product nodes ARE the cards: click sets the dock focus
@@ -237,30 +236,20 @@ function ProjectDetailPage() {
 
   const fetchResults = useCallback(async () => {
     try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/results`)
+      // The canvas reads the graph directly (ADR-057 — zero projection):
+      // one cadence, two fetches, the graph frame and the ledger/results
+      // payload always agree.
+      const [res, graphRes] = await Promise.all([
+        apiFetch(`/api/v1/projects/${projectId}/results`),
+        apiFetch(`/api/v1/projects/${projectId}/graph`, { toast: false }),
+      ])
       if (!res.ok) throw new Error("Project not found")
       setResults(await res.json())
+      if (graphRes.ok) setGraph((await graphRes.json()) as ProjectGraph)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load project")
     } finally {
       setLoading(false)
-    }
-  }, [projectId])
-
-  // Canvas assets carry titles/file urls (the /results asset list is a
-  // lightweight status view) — the full asset endpoint, fetched once per
-  // project and after every asset action (delete / reprocess).
-  const [canvasAssetsReady, setCanvasAssetsReady] = useState(false)
-  const fetchCanvasAssets = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
-        toast: false,
-      })
-      if (res.ok) setCanvasAssets((await res.json()) as RunFlowAsset[])
-    } catch {
-      /* the canvas keeps the last asset set */
-    } finally {
-      setCanvasAssetsReady(true)
     }
   }, [projectId])
 
@@ -293,7 +282,6 @@ function ProjectDetailPage() {
   useEffect(() => {
     setLoading(true)
     fetchResults()
-    fetchCanvasAssets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -318,8 +306,7 @@ function ProjectDetailPage() {
   // would bleed into the new page while its results load.
   useEffect(() => {
     setStickyCompletedRun(null)
-    setCanvasAssets([])
-    setCanvasAssetsReady(false)
+    setGraph(null)
     setDetailOutput(null)
     setPublishOutput(null)
     setFocusedOutputId(null)
@@ -384,7 +371,7 @@ function ProjectDetailPage() {
     }
   }, [handleOutputClick, fetchResults])
 
-  // Asset-node toolbar (2026-08-17 走查拍板): the surface owns the source
+  // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
   // here: the card opens the lightbox directly).
   const handleAssetAction = useCallback(async (asset: FlowAssetInfo, action: FlowAssetAction) => {
@@ -395,21 +382,15 @@ function ProjectDetailPage() {
     }
     if (action === "delete") {
       const res = await apiDelete(`/api/v1/projects/${projectId}/assets/${asset.id}`)
-      if (res.ok) await Promise.all([fetchResults(), fetchCanvasAssets()])
+      if (res.ok) await fetchResults()
     } else if (action === "reprocess") {
       const res = await apiPost(
         `/api/v1/projects/${projectId}/assets/${asset.id}/reprocess`,
         {}
       )
-      if (res.ok) await Promise.all([fetchResults(), fetchCanvasAssets()])
+      if (res.ok) await fetchResults()
     }
-  }, [projectId, fetchResults, fetchCanvasAssets])
-
-  // 点过程节点 = @workflow_step 指认 (D8): the chip lands in the dock's
-  // input — the mention rides the next turn as a definite reference.
-  const handleStepClick = useCallback((stepId: string, label: string) => {
-    dockRef.current?.insertMention({ type: "workflow_step", id: stepId, label })
-  }, [])
+  }, [projectId, fetchResults])
 
   // Hover prompt 框 send (ADR-051 F): the card's revision ask rides the
   // dock's chat channel with the product pinned as the one-shot focus
@@ -927,16 +908,15 @@ function ProjectDetailPage() {
           fullscreen world — app chrome lives in the studio shell. */}
 
       {!isMobile ? (
-        /* Canvas-first (ADR-051): the desktop page is ALWAYS the canvas —
-           pre-run it carries the source assets; a live run's spine / plan /
-           placeholder slots project onto it in place, products land as
-           in-place fills. The completion beat = the growth-driven birth
-           choreography (ADR-036 补记 3, FLORA-reconciled 2026-09-01): every
-           node born while the surface watches enters staggered in compile
-           order (placeholders materialize, fills birth in place), a running
-           placeholder carries the FLORA wipe, and the hydrated first frame
-           never replays. The canvas is FULL-BLEED — the dock/panel is a
-           completely floating layer above it, never a layout reservation
+        /* Canvas-first (ADR-051; ADR-057 K3 直读): the desktop page is
+           ALWAYS the canvas — the persistent graph read directly (nodes =
+           graph rows: assets at upload, run fills in place, draft estimate
+           → running wipe → done self-evident). The completion beat = the
+           growth-driven birth choreography (ADR-036 补记 3): every node
+           born while the surface watches enters staggered in compile order,
+           a filling node carries the FLORA wipe, and the hydrated first
+           frame never replays. The canvas is FULL-BLEED — the dock/panel is
+           a completely floating layer above it, never a layout reservation
            (no safe-area padding: reserving space IS the occlusion; 2026-09-06
            the panel's in-flow flex-row cut was user-retired same-day — the
            frost must have the canvas living beneath it). A node passing
@@ -955,39 +935,26 @@ function ProjectDetailPage() {
           <ResultsCanvas
             className="h-full"
             controlsClassName={panelCoversCorner ? "md:!mr-[504px]" : undefined}
-            assets={canvasAssets}
-            steps={latestRun?.steps ?? []}
-            outputs={outputs}
-            placeholders={results?.placeholders ?? []}
-            // Liveness (2026-09-02 用户拍板): non-terminal = alive — a run
-            // parked at WAITING_HUMAN keeps its promised slots' wipe and
-            // the edge packets flowing (waiting ⊆ running); only completed
-            // / failed stills the canvas.
-            runAlive={
-              latestRun != null &&
-              latestRun.status !== "completed" &&
-              latestRun.status !== "failed"
-            }
+            graph={graph}
             // The settle key's visibility half (2026-09-06): the canvas is
             // gated on hasRuns, so initial framing joins it with the
             // baseline — partial fetch frames never frame.
             hasRuns={hasRuns}
-            prompt={prompt || latestRun?.context?.instruction || null}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
-            // /results AND /assets have both settled for THIS project —
+            // /results AND /graph have both settled for THIS project —
             // an early partial frame must not become the baseline (the
             // rest of the graph would "birth" on a plain refresh), and a
             // stale previous-project payload must not contaminate it.
             baselineReady={
-              results?.project?.id === projectId && canvasAssetsReady
+              results?.project?.id === projectId && graph != null
             }
             baselineKey={projectId}
             tourOutputId={resultsTourClipId}
+            steps={latestRun?.steps ?? []}
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
             onRevise={handleRevise}
             onAssetAction={handleAssetAction}
-            onStepClick={handleStepClick}
             focusedOutputId={focusedOutputId}
             onPaneClick={() => {
               // 点画布空白 = 回中性: history 收起 + 焦点清除 (D4/D8).
@@ -1073,14 +1040,12 @@ function ProjectDetailPage() {
         onComplete={handleDockComplete}
         // A dock-started run (confirm / prose / 修订): refetch NOW — the
         // fresh latest_run flips runActive, the page SSE attaches, and the
-        // run 期活画布 (placeholder materialization / wipe / fills) renders
-        // from the first beat instead of arriving whole at terminal. The
-        // assets endpoint rides along: a book-turn can CREATE assets
-        // server-side (declared-material promotion) after the page's
-        // initial fetch — the canvas's source node comes from this list.
+        // live canvas (graph nodes filling in place, ADR-057) renders from
+        // the first beat instead of arriving whole at terminal. The graph
+        // rides the same fetch — a book-turn can CREATE assets server-side
+        // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
           void fetchResults()
-          void fetchCanvasAssets()
         }}
       />
 

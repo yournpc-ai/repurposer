@@ -33,12 +33,9 @@ class AddMusic(NodeBase):
     after = ("select_clips", "materialize_source")
     requires = (MEDIA,)
 
-    # No canvas_group (2026-08-19 名词节点收窄): the music bed is an
-    # ATTRIBUTE of the scored video — the product card owns it. A standalone
-    # music card parked a progress fact in the product lane. The step folds
-    # into the 过程脊; intervention = click the video (dock focus) or the
-    # expanded spine's step pill (@workflow_step). Same precedent as
-    # translate_clip (2026-08-15).
+    # 图节点 (ADR-057): add_music is a PROCESSOR node on the persistent
+    # graph — deterministic, no LLM prompt; its params live in the card's
+    # factsbar and its product lands in the node's own product region.
     def estimate(self, ctx: dict) -> dict | None:
         """Library pick by code — no LLM, no generation (the same fan-out
         render caveat as the other morphs)."""

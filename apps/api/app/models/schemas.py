@@ -2273,19 +2273,8 @@ class StepResponse(BaseModel):
     # Output row ids this node produced — the RunCard collects these on run
     # completion to inline the product cards (chat-loop-v2).
     output_refs: list[UUID] = Field(default_factory=list)
-    # DAG edges: upstream step ids (the RunFlowGraph's edge table, ADR-036).
+    # DAG edges: upstream step ids (the run's execution DAG, ADR-028).
     inputs: list[UUID] = Field(default_factory=list)
-    # Canvas 渲染单元 (ADR-041 D6 修订 2026-08-12) — the node class's
-    # self-described artifact identity, lifted by the serializer: steps
-    # sharing a ``canvas_key`` within one run merge into ONE canvas node
-    # ("plan" = understand+interrupt+plan); None folds into the 过程脊;
-    # ``canvas_hidden`` never renders (render projects onto the product
-    # card). View behavior only; the row set is always full.
-    canvas_key: str | None = None
-    canvas_hidden: bool = False
-    # The canvas node's body copy (e.g. the interrupt's full direction
-    # answer) — None = the surface falls back to ``summary``.
-    canvas_text: str | None = None
     # Credits derivation (ADR-055, BILLING §7 — serialization-derived, NEVER
     # persisted columns): the step's quotation / metered actual, priced USD
     # (PRICING) × the consumption ratio at read time. ``estimate_credits``
@@ -2605,26 +2594,54 @@ class ProjectAssetStatus(BaseModel):
     processing_error: str | None = None
 
 
-class PlaceholderRow(BaseModel):
-    """One pending product slot of a LIVE run (ADR-051 B — 占位物化).
+class GraphNodeResponse(BaseModel):
+    """One node of the project's persistent graph (ADR-057 — the graph IS
+    the product object; the canvas reads this frame directly, zero
+    projection).
 
-    Projected from the run's own step rows (the materialized compile — the
-    runtime form of ADR-043's dry-run, so the roster can never drift from
-    what will actually execute). One row per output-creating step, keyed by
-    ``step_id`` so a landed output fills its slot in place. ``type`` is the
-    user-facing output vocabulary (clip / post / quotes / carousel /
-    article); ``whole`` marks the whole-source clip (the "Video" card);
-    ``variant`` marks a fork family ("subs" / "dub"); ``aspect`` stays None
-    when unknown (the surface's default tier — never a hardcoded fake).
-    """
+    ``spec`` is the node's program (prompt / params / estimate / role /
+    fill_key — the node type's own shape, never interpreted at the API
+    boundary); ``layout`` is the settled canvas frame (画布定居取景,
+    append-only). ``estimate_credits`` folds the node's quotation to
+    credits at read time (same serialization-layer rule as StepResponse).
+    ``asset`` / ``outputs`` are the joined display rows: the asset node
+    carries its asset row; a producer node carries its product rows
+    (``spec.output_ids`` resolved, visibility-filtered, created_at
+    ascending — the card's pager order)."""
 
-    step_id: UUID
-    type: str
-    whole: bool = False
-    count: int = 1
-    language: str | None = None
-    variant: str | None = None
-    aspect: str | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: str
+    state: str
+    spec: dict = Field(default_factory=dict)
+    layout: dict = Field(default_factory=dict)
+    estimate_credits: list[int] | None = None
+    asset: AssetResponse | None = None
+    outputs: list[OutputResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class GraphEdgeResponse(BaseModel):
+    """One typed flow of the persistent graph (ADR-057 port law)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    from_node: UUID
+    from_port: str
+    to_node: UUID
+    to_port: str
+    edge_type: str
+
+
+class ProjectGraphResponse(BaseModel):
+    """The project graph's one read frame — nodes + edges + joined display
+    rows, everything the canvas renders, in one fetch."""
+
+    nodes: list[GraphNodeResponse] = Field(default_factory=list)
+    edges: list[GraphEdgeResponse] = Field(default_factory=list)
 
 
 class ProjectResultsResponse(BaseModel):
@@ -2638,8 +2655,6 @@ class ProjectResultsResponse(BaseModel):
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_brief: PendingBrief | None = None
-    # Live-run placeholder roster (ADR-051 B) — empty for terminal/absent runs.
-    placeholders: list[PlaceholderRow] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

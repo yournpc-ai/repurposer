@@ -62,13 +62,10 @@ class TranslateClip(NodeBase):
     retries = 2
     agents = (translator,)
 
-    # No canvas_group (2026-08-15 走查拍板): the translation is an ATTRIBUTE
-    # of the derived video — the fork's product card already carries its
-    # whole identity (language label + the subtitled frame). A standalone
-    # subs card duplicated that with zero incremental info and parked a
-    # progress fact in the product lane (D2 violation in spirit). The step
-    # folds into the 过程脊; intervention = click the video (dock focus, D8)
-    # or the expanded spine's step pill (@workflow_step).
+    # 图节点 (ADR-057): translate_clip is a GENERATOR node on the persistent
+    # graph — its prompt is the parameterized intent (target language,
+    # bilingual), editable on the card; each language's product lands in the
+    # node's own product region.
     def estimate(self, ctx: dict) -> dict | None:
         """One translator call per target clip, sized by the caption text —
         knowable only when the clips EXIST at compile time. A translate

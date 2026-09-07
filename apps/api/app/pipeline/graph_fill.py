@@ -26,9 +26,9 @@ Migration mapping (简报 §3): assets → asset / plan prelude → the task-boo
 document / select_clips·writers·revise·translate·dub → generator /
 materialize·remove_filler·add_music·reframe → processor / research →
 agent. Render steps join NO family — their state rides the output row's
-render_status (the canvas_hidden spirit, inherited inside the node's
-product region). align_stills / verify live inside their downstream
-producer / their executor's node.
+render_status (the node's product region carries it in place).
+align_stills / verify live inside their downstream producer / their
+executor's node.
 """
 
 from __future__ import annotations
@@ -302,7 +302,6 @@ async def stamp_run_graph(
                     "kind": "document",
                     "spec": {
                         "role": _TASK_BOOK_ROLE,
-                        "summary": "Task book",
                         "text": book_text,
                     },
                 }
@@ -330,6 +329,7 @@ async def stamp_run_graph(
             else None
         )
         reused = by_fill_key.get(key)
+        frame_class = _frame_class_of(fam_steps)
         if reused is not None:
             node_id_by_key[key] = UUID(str(reused.id))
             # The node is being re-filled: refresh its program + internal
@@ -340,6 +340,7 @@ async def stamp_run_graph(
                 **({"prompt": prompt} if prompt else {}),
                 "params": _params_of(head),
                 "estimate": estimate,
+                "frame_class": frame_class,
                 "step_ids": [str(s.id) for s in fam_steps],
                 "run_id": str(run.id),
                 "output_ids": [],
@@ -352,6 +353,7 @@ async def stamp_run_graph(
             **({"prompt": prompt} if prompt else {}),
             "params": _params_of(head),
             "estimate": estimate,
+            "frame_class": frame_class,
             "step_ids": [str(s.id) for s in fam_steps],
             "run_id": str(run.id),
             "output_ids": [],
@@ -493,6 +495,15 @@ def _graph_kind_of(step: WorkflowStep) -> str:
     return "generator"
 
 
+def _frame_class_of(fam_steps: list[WorkflowStep]) -> str:
+    """The node's reserved-frame size class (graph_store._FRAME_CLASS): the
+    clip family's product region is the 9:16-capable media card; writers /
+    research reserve the text card. Assets / documents derive from kind."""
+    if any(s.kind in _CLIP_FAMILY_KINDS for s in fam_steps):
+        return "clip"
+    return "text"
+
+
 async def _existing_clip_producer_nodes(db: AsyncSession, project_id: UUID) -> list[UUID]:
     """The graph nodes that produced the project's CURRENT clips (mode②'s
     "act on existing clips" wiring source): clip outputs → their producing
@@ -592,6 +603,14 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
         .all()
     )
     node.state = _aggregate_family([str(s.status) for s in family])
+    # The task-book document's text rides the plan step's runtime book — the
+    # refined book_summary overwrites the compile-time fallback when planning
+    # lands (same source as the stamp, no flicker).
+    if node.kind == "document" and (node.spec or {}).get("role") == _TASK_BOOK_ROLE:
+        plan_step = next((s for s in family if s.kind == "plan"), None)
+        book_summary = ((plan_step.spec or {}).get("book_summary")) if plan_step else None
+        if book_summary and book_summary != (node.spec or {}).get("text"):
+            node.spec = {**(node.spec or {}), "text": book_summary}
     output_ids = [str(ref) for s in family for ref in (s.output_refs or [])]
     if output_ids != ((node.spec or {}).get("output_ids") or []):
         node.spec = {**(node.spec or {}), "output_ids": output_ids}

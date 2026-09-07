@@ -20,8 +20,8 @@ import type { Output } from "@/lib/types"
  * saves on blur). This is the ClipDetailModal parallel for text products:
  * full text at a readable measure, one Copy action, zero editing (editing
  * stays on the card's inline textarea; this modal is read-only on
- * purpose). Field extraction mirrors runFlow's textContentFromOutput so
- * the card preview and the reader never disagree about what the product
+ * purpose). Field extraction mirrors the canvas card's text-region rules
+ * so the preview and the reader never disagree about what the product
  * says. */
 export function TextDetailModal({
   output,

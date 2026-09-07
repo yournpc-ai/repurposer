@@ -1,15 +1,26 @@
-/** FlowView contract (ADR-036) — the stable surface all four consumers adapt
- * domain data into: recipe fan-out / run flow graph / stage family view /
- * lineage board. The renderer knows nothing about topology semantics; every
- * edge carries its meaning, every node is real (step `inputs` /
- * `derived_from_output_id` — decorative illustration is prohibited). */
+/** FlowView contract (ADR-036; ADR-057 K3) — the stable surface the two
+ * consumers render through: the recipe 说明书 (fit-locked compact thumbs)
+ * and the project graph canvas (ADR-057 — the persistent graph read
+ * DIRECTLY: node id = graph node id, edge = graph edge, state = the row's
+ * state; zero projection, the display model is the domain model). The
+ * renderer knows nothing about topology semantics; every edge carries its
+ * meaning, every node is real. */
 
-export type FlowNodeKind = "asset" | "output" | "step" | "spine" | "artifact"
+import type { GraphEdgeType, GraphNodeKind, GraphNodeState } from "@/lib/types"
 
-export type FlowNodeStatus = "pending" | "running" | "done" | "failed" | "skipped"
+export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
+
+/** Recipe surface: "asset" | "step" | "output". Graph canvas: the five
+ * node types (asset is shared — the same media card on both surfaces). */
+export type FlowNodeKind = GraphNodeKind | "output" | "step"
+
+/** Graph canvas node state (the graph row's own state vocabulary). The
+ * recipe surface leaves status unset — its cards have no liveness. */
+export type FlowNodeStatus = GraphNodeState
 
 /** lineage 血缘边 = derivation (asset→output, output→output);
- * dependency 依赖边 = process order (step→step). Visually distinct. */
+ * dependency 依赖边 = process order (step→step). Visually distinct.
+ * Recipe surface only — the graph canvas's edges carry `edgeType`. */
 export type FlowEdgeSemantic = "lineage" | "dependency"
 
 /** Product-node actions (ADR-041 D5) — the old card-face actions moved onto
@@ -40,8 +51,12 @@ export interface FlowNode {
   kind: FlowNodeKind
   /** Friendly, pre-localized name — never a model name (prohibition #12).
    * On media nodes this is the TYPE name (caption = type icon + type name,
-   * always top-left; the right slot stays empty — 2026-08-17 走查拍板). */
+   * always top-left; the right slot stays empty — 2026-08-17 走查拍板;
+   * ADR-057 §5: 状态原地表达, caption 右槽恒空 — no status badge ever). */
   label: string
+  /** Graph canvas: the graph row's state — expressed IN PLACE (draft dashed
+   * region / running wipe / done self-evident content / failed in-card red /
+   * stale factsbar badge), never a caption badge. */
   status?: FlowNodeStatus
   /** Secondary fact carried as data (the lightbox's info chips read it) —
    * never rendered in the caption's right slot. Asset nodes: the filename. */
@@ -50,61 +65,38 @@ export interface FlowNode {
    * toolbar facts (filename / duration / download target) derive from it. */
   asset?: FlowAssetInfo
   thumbUrl?: string | null
-  /** The product row behind an output node (results canvas only, D5 — the
-   * node IS the product card: score / top-pick / next-step live on it).
-   * Absent on the recipe surface, whose output nodes stay compact thumbs. */
-  output?: import("@/lib/types").Output
-  /** Placeholder slot of a live run (ADR-051 B — 占位物化): the node is a
-   * quiet placeholder card born at its final size/position; the real output
-   * landing from the same producing step fills the slot in place (same
-   * roster index, node id swaps placeholder:… → output:…). Carries the
-   * display facts the skin needs (type / whole / language / variant /
-   * aspect). The node's `status` mirrors the producing step — a running
-   * step gives the card its FLORA wipe (the run 期 fill projection); the
-   * step narrative still lives in the dock's folded checklist. */
-  placeholder?: {
-    stepId: string
-    type: string
-    whole: boolean
-    language?: string | null
-    variant?: string | null
-    aspect?: string | null
-  }
-  /** The run's prompt, shown in the product card's padded interaction area
-   * (results canvas, D5 anatomy: spec on the body — read-only; changes
-   * happen in chat, never in place). */
-  prompt?: string | null
-  /** The product's OWN spec as a prompt-style line (ADR-051 F — the per-
-   * card global-prompt display retired into this): the card body shows it
-   * at rest; the hover prompt 框 prefills with it (editable — sending rides
-   * the chat revision channel with the product pinned as focus). */
-  specPrompt?: string | null
-  /** Fork family (ADR-051 F2 — 变体分页): every visible row connected
-   * through source_ref.derived_from_output_id, created_at ascending — each
-   * a REAL row with its own media (morph versions share one row's current
-   * media, so they never become pager entries). Present only when the
-   * family has ≥2 members; the card's "1 of N" pager flips the display
-   * (and the action target) among members. Distinct slot from `variants`
-   * (items switcher) — the two never merge. */
-  familyOutputs?: import("@/lib/types").Output[]
   /** Video asset nodes (results canvas): the browser-playable URL — the
    * node renders an inline muted-loop <video>, never a file icon. */
   videoUrl?: string | null
-  /** Multi-item outputs (quotes = N quote cards, carousel = N slides): the
-   * node's display variants — a hover switcher fades in at the top of the
-   * node and flips the main display. Items without their own media render
-   * as a text tile. */
-  variants?: { label: string; sub?: string; thumbUrl?: string | null }[]
-  /** Text-product outputs (post / article): a preview of the generated text
-   * rendered inside the card, since these types have no baked image/video.
-   * The node itself becomes the readable text card (Gamma/Tome-style). */
-  textContent?: {
-    title: string | null
-    body: string
-    hashtags: string[]
+  /** ── Graph canvas (ADR-057) ──────────────────────────────────────────
+   * The graph row's program, rendered as-is: generator/agent cards carry
+   * `spec.prompt` in the card-face program region (K4 makes it directly
+   * editable); processor cards render `spec.params` as fact chips; the
+   * document node renders `spec.text` as its body. */
+  spec?: {
+    summary?: string | null
+    prompt?: string | null
+    params?: Record<string, unknown> | null
+    role?: string | null
+    text?: string | null
+    [key: string]: unknown
   }
-  /** The batch's recommended pick (score triage) — adapter-computed. */
-  topPick?: boolean
+  /** The node's product region: its joined visible product rows (created_at
+   * asc — the card's pager flips the display AND the action target among
+   * them, ADR-051 F2 mechanics generalized from fork-family to slot
+   * siblings). Empty/undefined = the region shows the state-appropriate
+   * body (draft estimate / running wipe / quiet done). */
+  outputs?: import("@/lib/types").Output[]
+  /** The node's quotation in credits (server-folded at read time) — the
+   * draft card's 「运行后生成 · 约 N 积分」. Null = unquoted. */
+  estimateCredits?: [number, number] | null
+  /** 画布定居取景: the server-settled frame — position AND reserved size
+   * come from the graph row (append-only; existing frames never move). The
+   * card renders content-driven height inside the reservation. */
+  frame?: { x: number; y: number; w: number; h: number }
+  /** The batch's highest clip score (score triage — what to post first):
+   * the card accents the winning product's badge. */
+  topClipScore?: number
   /** Size override (pure-math layout stays measurement-free): the results
    * canvas's product cards are bigger than the shared per-kind defaults. */
   size?: { width: number; height: number }
@@ -114,18 +106,7 @@ export interface FlowNode {
   containThumb?: boolean
   /** Carries the surface's data-tour anchors (first ready product only). */
   tourTargets?: boolean
-  /** Spine group node only (results canvas, D6 过程脊): the fold's current
-   * state — the card flips its chevron on it. */
-  expanded?: boolean
-  /** Artifact nodes only (results canvas, D6 修订 — the render unit is the
-   * intervenable artifact; 2026-08-19 收窄后恒为 "plan" = 任务书玻璃文本节点;
-   * canvas_key 序列化时从节点类现算、从不入行，旧 run 重序列化即同一收窄
-   * 画布，无残留 key 可兼容): the group's key, the card's body copy, and
-   * the representative step id the @workflow_step mention anchors to. */
-  artifact?: string
-  body?: string
-  anchorStepId?: string
-  /** Stable within-layer ordering key (step `seq` / output `created_at`) —
+  /** Stable within-layer ordering key (step `seq` / node birth index) —
    * append-only growth stability: chat adds nodes, the graph only grows,
    * existing nodes never move (ADR-036). */
   order: number
@@ -134,7 +115,11 @@ export interface FlowNode {
 export interface FlowEdge {
   from: string
   to: string
-  semantic: FlowEdgeSemantic
+  /** Graph canvas (ADR-057 port law): the typed flow — colors the stroke
+   * (video / audio / text), ctx renders dashed. */
+  edgeType?: GraphEdgeType
+  /** Recipe surface: derivation vs process order. */
+  semantic?: FlowEdgeSemantic
 }
 
 /** A region frame (2026-08-19 预留, the FLORA technique-workflow form): a
@@ -178,6 +163,10 @@ export interface FlowViewProps {
    * with the product pinned — the surface rides it into the chat revision
    * channel (zero new execution channel, prohibition #1). */
   onRevise?: (outputId: string, text: string) => void
+  /** The node's pager flipped its displayed product (mount + flip) — the
+   * surface tracks it so a node click selects what the user is LOOKING at
+   * (the lightbox / dossier / focus follow the shown member). */
+  onDisplayChange?: (nodeId: string, outputId: string) => void
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void
