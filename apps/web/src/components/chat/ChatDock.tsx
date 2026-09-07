@@ -721,6 +721,11 @@ export interface ChatDockHandle {
    * it IS the dock's send path. No-op while a turn/run is in flight; a failed
    * turn rolls the bubble back and returns the draft to the dock's input. */
   sendRevision: (text: string, focus: { id: string; label: string }) => void
+  /** Canvas draft-confirm card's Start (ADR-057 K5): the desktop confirm
+   * beat — identical to the dock pill's Start (the task_book question's
+   * start answer, the only start path; guards and failure surfaces ride
+   * along). No-op while a turn/run is in flight or nothing is pending. */
+  startPendingBook: () => void
 }
 
 /** 预填评审卡 slot row (ADR-052 B3): one valued brief-ledger slot. A
@@ -1205,6 +1210,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       raiseHistory()
       void sendChat(trimmed, { rollbackId, draft: trimmed, focus })
     },
+    // Canvas draft-confirm card (ADR-057 K5): the desktop confirm beat —
+    // it IS the dock's Start (same answer channel, same guards, same
+    // credits-grey-row failure surface). No-op while a turn/run is in
+    // flight or no task book is pending.
+    startPendingBook: () => void handleStartGeneration(),
   }))
 
   const [phase, setPhase] = useState<Phase>(
@@ -2907,12 +2917,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return rows
   }, [brief, t])
 
-  // Plan-card placement (2026-08-06 in-flight rework): settled → pinned
-  // bottom-most (order-10); while a chat turn is in flight → inline at its
-  // echo anchor in the message loop (above the new user bubble + thinking
-  // row), so the flow reads chronologically and the stale confirm dock can
-  // hide. Restored sessions have no echo bubble — the card stays pinned.
-  const planCardVisible = phase === "confirm" && intentReady
+  // Plan-card placement (2026-08-06 in-flight rework; 2026-09-08 K5 裁定):
+  // settled → pinned bottom-most (order-10); while a chat turn is in flight
+  // → inline at its echo anchor in the message loop (above the new user
+  // bubble + thinking row), so the flow reads chronologically and the stale
+  // confirm dock can hide. Restored sessions have no echo bubble — the card
+  // stays pinned. K5 形态裁定 (简报「dock 任务书卡保留至图节点接管确认节拍后
+  // 退役」): the DESKTOP panel form retires the card — the draft graph IS
+  // the book's face (图先展示后运行: the chain, its per-node quotes, and the
+  // confirm beat all live on the canvas), so the panel renders only the
+  // echo prose. The mobile dock keeps the card (prohibition #13 — no
+  // canvas below iPad width — the dock is its only plan surface).
+  const planCardVisible = phase === "confirm" && intentReady && form !== "panel"
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
@@ -3649,10 +3665,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
   // Cancel (non-blocking question = no negative action, stadium 化同批).
   // 任务书密度律 (ADR-054): HEAVY rendering only — a one-task book's
-  // confirm is the next chat message, no pill.
+  // confirm is the next chat message, no pill. K5 形态裁定: the DESKTOP
+  // panel form retires the pill too — the canvas's draft-confirm card
+  // (anchored at the task-book document node, 估价随行) IS the confirm
+  // beat there; the mobile dock keeps it (no canvas).
   const taskBookEstimate = pendingQuestion?.question?.estimate_credits?.total
   const taskBookDock =
-    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook ? (
+    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook && form !== "panel" ? (
       <QuestionDock
         kind="task_book"
         plain

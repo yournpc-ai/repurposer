@@ -147,7 +147,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
-| `graph_nodes` / `graph_edges` | Pipeline（✅ ADR-057，K1 两表 + wiring 层、K2 图填充双写已落；消费面随 K3~K5 逐批接管） | **图即产品对象**：项目持久图（节点五型 asset/document/generator/processor/agent + 状态维度 + prompt/params spec + 产物引用；边 = 类型化上下文流）。结构变更只由 wiring 层（`pipeline/graph_store.apply_wiring_ops`）写——chat 是唯一消费面，前端画布直读零投影；状态/产物反写只由 orchestrator（`graph_fill.sync_graph_node_for_step`，step 终态同点）；workflow_steps 保持 step 粒度住节点内部（billing capture / 计量 / 重试不变） |
+| `graph_nodes` / `graph_edges` | Pipeline（✅ ADR-057 已落地） | **图即产品对象**：项目持久图（节点五型 asset/document/generator/processor/agent + 状态维度 + prompt/params spec + 产物引用；边 = 类型化上下文流）。结构变更只由 wiring 层（`pipeline/graph_store.apply_wiring_ops`）写——chat 是唯一消费面，前端画布直读零投影；草稿图 dock 即 stamp（`graph_fill.stamp_draft_graph`），run 填充与 step 终态反写只经 `graph_fill`（stamp_run_graph / sync_graph_node_for_step）；workflow_steps 保持 step 粒度住节点内部（billing capture / 计量 / 重试不变） |
 | operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
 | publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
@@ -209,6 +209,15 @@ apps/api/
 │   │   ├── routes/      # projects / assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
 │   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
+│   │   ├── graph_store.py         # wiring 层（ADR-057）：apply_wiring_ops = 持久图唯一写口
+│   │   │                        #   （add_node / connect / edit_prompt / delete_node / run(_subgraph)，op 校验 +
+│   │   │                        #   单事务 + 定居取景 layout 指派；GraphDelta 返回受影响子图）
+│   │   ├── graph_fill.py          # run/draft → 图 stamping 内核（同一推导源零漂移）：stamp_run_graph（create_run
+│   │   │                        #   图填充，fill_key 幂等复用无双生）/ stamp_draft_graph（dock 即 stamp 草稿图，
+│   │   │                        #   图先展示后运行）/ clear_draft_graph（bail 拆除）/ sync_graph_node_for_step
+│   │   │                        #   （step 终态 → 节点聚合态 + 产物反写 spec.output_ids）
+│   │   ├── graph_revise.py        # 修订桥（K4）：图节点 → task list（spec.tool/spec.params 展开），
+│   │   │                        #   WiringProposal 的 run op 经它进 create_run（出生地不变）
 │   │   ├── node_runners.py        # 内部节点 crew（preprocess / understand·plan / checkpoint / render）
 │   │   ├── step_context.py / step_display.py / edges.py / morph.py / images.py  # 节点共享机械助手（step_context 兼估价事实装配 _estimate_facts）
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）

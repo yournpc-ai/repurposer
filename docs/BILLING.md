@@ -136,7 +136,9 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端三面 + 两余额读面**：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 + 账户控制台 credits 槽 + 项目页左下角 **CreditsPill**（2026-09-06，ADR-056——post-first-run 桌面；Coins + 余额，点击 Popover = 余额 + held + 最近台账 10 条 + 负余额注记；数据 = 本节两个端点，后端零改动）+ 余额不足入流灰行。估价三面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端四面 + 两余额读面**（四面 2026-09-07 ADR-057 扩展）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**确认 = 节点锚定**（ADR-057）：确认卡锚在图上受影响节点旁、估价随行，取代抽象总价行——用户确认的是「这张图的这些节点要花这些积分」，不是一句话总价。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+
+**语义账本塌缩**（ADR-057，内核批同批落地）：hold / release 永不上 UI——CreditsPill popover 的台账投影改写为 **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，随批删除。
 
 ## 8. 分期与边界
 

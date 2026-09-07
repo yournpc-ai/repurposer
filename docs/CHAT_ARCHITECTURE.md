@@ -1,7 +1,7 @@
 # Chat Architecture — Agent Interface 层
 
 > Status: ✅ v2 已实现（意图层单面化：`POST /chat` 是唯一意图表面，任务书构建/修订/确认并入 book path；2026-08-18 复核对齐代码）。意图覆盖现状见 `INTENT_COVERAGE.md`；实施史简报归 `docs/tasks/done/`。
-> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）/ ADR-039（架构规范级大迭代：本文 = 四层工程地图的 Loop 层行为规格；技能包收编注册表、`kind`/`cost_hint` 字段退役、agent 正名，见 §4）
+> 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）/ ADR-039（架构规范级大迭代：本文 = 四层工程地图的 Loop 层行为规格；技能包收编注册表、`kind`/`cost_hint` 字段退役、agent 正名，见 §4）/ **ADR-057（图即产品对象，2026-09-07 拍板，内核批落地时本文 §5/§9 改写）——chat 的全部产出统一翻案为 wiring ops（图变更 API：add_node / connect / edit_prompt / delete_node / run(_subgraph)），图持久化、画布直读零投影；五补丁（canvas_hidden / canvas_key / 过程脊 / 脊收编 / R1 游走）随批火化；task_list / edit_ops 两家族统一为 wiring op 集，chat 唯一消费面不变**
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；chat/ 包是本文的代码家。
 >
 > 关键形态事实：
@@ -178,14 +178,14 @@ book path 的推理者是 **intent router**（四动作 verdict，ADR-052 B2）�
 - **judge/verify**：Phase 3 节点 kind，非用户技能。
 - **缓议**：`adapt_to_platform`（等 Distribution 回流数据）、`insert_broll` / `motion_graphics`（talking-head 知识内容价值低）、`avatar_gen`（v2，ADR-029 已定框架）。
 
-## 5. compile_graph：任务列表物化
+## 5. 物化：wiring ops → 持久图 → run 填充（ADR-057）
 
-`compile_graph` 的全量入口只有技能链一种（task list；targeted scope 走各自的定向小拓扑，full scope 无 tasks 直接拒生）：
+**项目 = 一张持久可变图**（`graph_nodes` / `graph_edges`，owner = Pipeline，MODULE_ARCH §4）。chat 的全部产出统一为 **wiring ops**——`add_node` / `connect` / `edit_prompt` / `delete_node` / `run(_subgraph)`，初始生成 / 修订 / 新建同一组 op（「修订环」一词退役）；`apply_wiring_ops` 是唯一写口，chat 是唯一消费面，画布直读零投影（显示模型 = 领域模型——节点 id = 图行 id，边 = 图边，状态 = 行状态）。
 
-1. **校验**：task list 每个 skill 必须在 registry；params 过 schema；不认识的 skill → 拒收并让 intent 修复一次（retry 1 次），仍败 → 回复用户"这个我还不会"。
-2. **拓扑排序**：拓扑约束 = 节点类声明的 `after`（顺序）与 `requires`（出生地输入校验），无 ports / 类型边机制。生成技能共享一份去重的 plan 前奏（preprocess → persona_bootstrap ∥ understand → plan）；修饰技能（`needs_plan_prelude=False`，如 `add_music` / `remove_filler`，`after=("select_clips","materialize_source")`）挂在 clips 节点或注入的 `materialize_source` 之后、渲染 fan-out 之前跑（render 节点运行期物化，D2），多个修饰节点按提议顺序串链。
-3. **补默认值**：`select_clips.count` 缺省 = 项目默认 / brand 默认 music 等，全部由代码补，不信 LLM 的缺省判断。
-4. **落图**：产物是标准 `workflow_steps`——之后走图、认领、计量、打勾流与既有 run 零差异。**动态化只发生在编译前，编译后零差异。**
+- **book path（draft 载荷）**：任务书 dock 即干跑出生地同款编译，把链 stamp 为 **draft 图**（`graph_fill.stamp_draft_graph`——图先展示后运行：节点空态 + 逐节点估价，零消耗直到 Start；bail / 编译失败经 `clear_draft_graph` 拆除）。任务书本身 = 图上的 **document 节点**（brief 账本机制不动——账本 = 对话引擎状态，document 节点 = 它的渲染落点）。
+- **chat_intent（WiringProposal，提案第五态）**：修订/新建诉求产出 op 序列 + 摘要；`edit_prompt` 改写目标节点程序行，`run` 解出受影响子图（本节点 ∪ 图边下游），经 `graph_revise` 桥翻回 task list 进 `create_run`。
+- **run = 图填充**：`create_run` 仍是 WorkflowRun 唯一出生地（零旁路不变），`compile_graph` 的三职责不变——① **校验**（registry + params schema，不认识 → intent 修复一次，仍败 → "这个我还不会"）；② **拓扑排序**（节点类声明的 `after` / `requires`；生成技能共享去重 plan 前奏；修饰技能挂 clips / 注入的 `materialize_source` 之后，按提议顺序串链）；③ **补默认值**（全部由代码补，不信 LLM 的缺省判断）。产物仍是标准 `workflow_steps`（billing capture / 计量 / 重试的 step 粒度账本不变），steps 住进节点**内部**（组合，不是投影）。同一确定性编译 → 同一 fill_key——run 的 stamp 把 draft 节点**原地**填充（state 重 queue、step 回指、产物反写 `spec.output_ids`），永无双生；新槽位长新节点，图持续编辑从不整体重长。
+- **画布读面**：`GET /projects/{id}/graph`（节点 + 边 + 产物引用一帧）→ FlowView 直渲；`runFlow.ts` 投影适配器与五补丁（`canvas_hidden` / `canvas_key` / 过程脊 / 脊收编 / R1 游走）已火化。
 
 ## 6. 对话上下文（context 组装）
 
@@ -271,13 +271,13 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **诚实 preprocess**：零上传 run 的 preprocess 进度文案读 "Preparing generation…"（`hasUploads` 由调用方从 assets 计算传入），"Analyzing your uploads…" 只在真有上传时说。
 - **终态 = 总结行（同批拍板，CC "Thought for 42s (ctrl+o to expand)" 式）**：terminal 时同一表头行收敛成**一行收据**（行折叠、chevron 保留、点击展开完整平铺回执），随后收官散文 SSE 跟上。落档即收（terminal flip 重置未手切的 toggle）；`results.preludeGroup/preludeSteps` 两键随组行退役。**终态 chrome 降灰（2026-09-05 验收拍板，CC 归档灰阶；同批收窄）**：**只灰收据行标题**（RunTaskList terminal 态）——归档元素是事实收据不是对话正文；**收官散文是普通回复消息**，恒走消息本体样式（用户拍板：它不是 chrome 不收特殊样式）。**收官句走 AssistantText 同一管道（同日二轮拍板）**：`chat.runReady` 终帧经 `AssistantText`（Streamdown）渲染，与每条 assistant 散文同一渲染器——裸 `<p>` 特殊管道退役（构造上杜绝与 echo 分出样式差）。**终态 header unit 退役**（同批）：起始 banner / QA stand-in 是活相 chrome，terminal 时 receipt 即归档头——再推 header unit 只在消息与收据间留死槽（空渲染也吃 gap）。失败 run 例外：清单下保留人话失败行。
 
-## 9. Edit Ops 边界（v2，归 Operation Model）
+## 9. 修订边界（ADR-057：wiring 统一 + edit ops 节点内部存活）
 
-chat 的另一半是"改现有产物"。边界判定：
+chat 的另一半是"改现有产物"。修订目标 = **图节点 id 的确定引用**（@ mention / 焦点预钉 / 图断面上下文行，agent 永不在 run 内猜 scope——「Target clip not found」类失败结构性不可能）。边界判定：
 
-- 指令能表达为对某个 output 的 clip-spec diff → **edit ops** → Operation Model（operations 表，✅ 已落地）；
-- 指令需要新的生成 → **task list** → 新 run（本文机制）；
-- 拿不准 → intent 反问。
+- 指令需要重新生成（改意图 / 改程序）→ **wiring ops**（§5）——`edit_prompt(node)` 改写程序行 + `run({node} ∪ downstream)`（下游由图边遍历确定）；卡面 prompt 直改 = 同一个 op 同一种通道（定价确认卡锚定受影响子图、估价随行，确认后骑 `POST /chat` 唯一通道）。
+- 指令能表达为对某个 output 的 clip-spec diff（trim / 字幕样式等参数精确指令）→ **edit ops** → Operation Model（operations 表）——作为**节点内部**的产物级精修存活。
+- 拿不准 → intent 反问（**反问是合法输出，不是失败**）。
 
 edit ops **已定稿并落地**（2026-07-26，ADR-032 D5 + `tasks/done/operation-model.md`）：产物级 op = `remove_range` / `set_trim` / `set_title` / `set_caption_style` / `set_music` / `set_crop` / `set_aspect` / `set_caption_text` / `restore_version`（+ system 内部 `snapshot` / `set_spec`），chat 已真应用（registry 校验 + message_id 血统）；**plan 级 op（`set_node_params` / `regenerate_node` / `swap_slot`）归 RunPlan 小拓扑，不进 operations 表**——两家族分开登记；`restore_range` 独立 op 被否决（判例 N-16：caption 不可复活，恢复语义归快照层）。
 
@@ -302,4 +302,6 @@ edit ops **已定稿并落地**（2026-07-26，ADR-032 D5 + `tasks/done/operatio
 - **禁止**引入 agent 框架（Agno / LangGraph 等）。
 - **禁止**把 SSE 做成事件总线（事件存储 / 投递保证 / 重放）。
 - **禁止** chat 绕开 `orchestrator.create_run` 自建 run（零旁路原则不变）。
+- **禁止**画布绕开持久图自建投影（ADR-057 零投影——显示模型 = 领域模型；`runFlow.ts` 式适配器/补丁永不再引入）。
+- **禁止**图结构变更绕开 `apply_wiring_ops`（wiring 层 = 唯一写口）；**禁止** LLM 簿记上图（wiring op 的图面命名走 builder 钢印，禁模型自报）。
 - **禁止** registry 无评审膨胀——skill 准入必须过 NAMING §7/§8。

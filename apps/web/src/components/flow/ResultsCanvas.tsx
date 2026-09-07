@@ -82,6 +82,11 @@ export interface ResultsCanvasProps {
   /** Hover prompt 框 send (ADR-051 F): the surface rides the revision ask
    * into the dock's chat channel with the product pinned as focus. */
   onRevise?: (output: Output, text: string) => void
+  /** The draft-confirm card's Start (ADR-057 K5 — 确认 = 节点锚定): the
+   * surface rides it to the dock's one start path (the imperative
+   * handle — the task_book question's start answer; same guards, same
+   * grey-row failure surface). */
+  onDraftConfirm?: () => void
   /** An asset node's factsbar action (download / delete / reprocess) — the
    * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
@@ -108,6 +113,7 @@ export function ResultsCanvas({
   onOutputClick,
   onOutputAction,
   onRevise,
+  onDraftConfirm,
   onAssetAction,
   focusedOutputId = null,
   onPaneClick,
@@ -437,10 +443,80 @@ export function ResultsCanvas({
   // pinned as the one-shot focus so the agent lands edit_prompt on THIS
   // node, never a guess).
   const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
-  const [promptEditBalance, setPromptEditBalance] = useState<number | null>(null)
   const handlePromptEdit = useCallback((nodeId: string, text: string) => {
     setPromptEdit({ nodeId, text })
   }, [])
+
+  // ── Draft-confirm card (ADR-057 K5 — 确认 = 节点锚定) ──────────────────
+  // While the docked task book's draft graph is on the canvas, the desktop
+  // confirm beat lives HERE: anchored at the task-book document node, the
+  // whole chain's price folded from the draft nodes' OWN quotes (the same
+  // numbers the draft cards read — never a second estimate source), the
+  // balance as the soft compare, Start riding the dock's one start path
+  // (the imperative handle — same guards, same grey-row failure surface).
+  // 任务书密度律 mirror (ADR-054): a one-task chain confirms by the next
+  // chat message — no card (it never earns the heavy rendering). The card
+  // self-clears when the run starts (the draft nodes re-queue) and refreshes
+  // when a refine re-docks (the graph re-stamps).
+  const draftNodes = useMemo(
+    () =>
+      nodes.filter(
+        (n) =>
+          n.status === "draft" &&
+          (n.kind === "generator" || n.kind === "processor" || n.kind === "agent"),
+      ),
+    [nodes],
+  )
+  const taskBookDoc = useMemo(
+    () =>
+      nodes.find((n) => n.kind === "document" && n.spec?.role === "task_book") ??
+      null,
+    [nodes],
+  )
+  const draftEstimate = useMemo<[number, number] | null>(() => {
+    if (draftNodes.length === 0) return null
+    const low = draftNodes.reduce((sum, n) => sum + (n.estimateCredits?.[0] ?? 0), 0)
+    const high = draftNodes.reduce(
+      (sum, n) => sum + (n.estimateCredits?.[1] ?? n.estimateCredits?.[0] ?? 0),
+      0,
+    )
+    return [low, high]
+  }, [draftNodes])
+  // 任务书密度律 mirror (ADR-054): the chain's TASK count gates the heavy
+  // confirm, not the node count — the compile-injected materialize_source
+  // is never a task (whole-source materialization, ADR-043), so a modifier-
+  // only one-task book ([remove_filler] → 2 nodes) stays prose-confirmed.
+  // The price fold above keeps every node (materialize's cost is real).
+  const draftTaskCount = useMemo(
+    () => draftNodes.filter((n) => n.spec?.tool !== "materialize_source").length,
+    [draftNodes],
+  )
+  const draftConfirmVisible =
+    draftTaskCount >= 2 && taskBookDoc !== null && draftEstimate !== null
+
+  // The balance soft-compare, shared by both confirm cards (K4's prompt-
+  // edit card on open, K5's resident draft card while the draft graph is
+  // up): lazy + silent (CreditsPill's 防双报 discipline) — a fetch failure
+  // just keeps the line blank.
+  const [balanceNow, setBalanceNow] = useState<number | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/v1/wallet", { toast: false })
+        if (!res.ok) return
+        const wallet = (await res.json()) as { balance: number }
+        if (!cancelled) setBalanceNow(wallet.balance)
+      } catch {
+        /* silent */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // draftConfirmVisible's flip re-arms the fetch (a re-docked chain
+    // re-quotes; the balance may have moved with a prior run).
+  }, [promptEdit !== null, draftConfirmVisible])
 
   const editedNode = promptEdit ? (nodeById.get(promptEdit.nodeId) ?? null) : null
   // A refresh / delete vanishing the anchor node closes the card.
@@ -484,26 +560,6 @@ export function ResultsCanvas({
     )
     return { affected, low, high }
   }, [promptEdit, graph, nodeById])
-
-  // The balance soft-compare: lazy, silent (mirrors CreditsPill's 防双报
-  // discipline) — a fetch failure just keeps the line blank.
-  useEffect(() => {
-    if (!promptEdit) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await apiFetch("/api/v1/wallet", { toast: false })
-        if (!res.ok) return
-        const wallet = (await res.json()) as { balance: number }
-        if (!cancelled) setPromptEditBalance(wallet.balance)
-      } catch {
-        /* silent */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [promptEdit])
 
   // Esc closes (the edit textarea has already unmounted by the time the
   // card is open, so no gesture collision).
@@ -564,16 +620,16 @@ export function ResultsCanvas({
                   low: promptEditBlast.low,
                   high: promptEditBlast.high,
                 })}
-            {promptEditBalance != null && (
+            {balanceNow != null && (
               <span
                 className={cn(
                   "ml-1 text-[11px]",
-                  promptEditBalance < promptEditBlast.low
+                  balanceNow < promptEditBlast.low
                     ? "text-destructive"
                     : "text-meta-foreground",
                 )}
               >
-                · {t("credits.balance")} {promptEditBalance.toLocaleString()}
+                · {t("credits.balance")} {balanceNow.toLocaleString()}
               </span>
             )}
           </p>
@@ -587,6 +643,53 @@ export function ResultsCanvas({
               {t("common.cancel")}
             </Button>
             <Button size="sm" className="h-8" onClick={handlePromptEditConfirm}>
+              {t("results.canvas.confirmStart")}
+            </Button>
+          </div>
+        </div>
+      </ViewportPortal>
+    ) : null
+
+  // The draft world'S confirm beat (ADR-057 K5): resident while the docked
+  // book's draft graph is up, anchored above the task-book document node —
+  // the prototype's confirmCard anatomy (title / price + balance soft
+  // compare / Start), no Cancel (non-blocking doctrine: "don't start" is
+  // said by not starting — chat revises, walking away keeps the book
+  // honestly pending).
+  const draftConfirmOverlay =
+    draftConfirmVisible && draftEstimate ? (
+      <ViewportPortal>
+        <div
+          className="dock-surface pointer-events-auto absolute z-20 w-64 rounded-xl p-3.5 ring-1 ring-foreground/10"
+          style={{
+            left: taskBookDoc?.frame?.x ?? 0,
+            top: (taskBookDoc?.frame?.y ?? 0) - 12,
+            transform: "translateY(-100%)",
+          }}
+        >
+          <p className="text-[13px] font-semibold">{t("results.canvas.taskBook")}</p>
+          <p className="mt-2 text-xs tabular-nums">
+            {draftEstimate[0] === draftEstimate[1]
+              ? t("results.canvas.estimateSingle", { count: draftEstimate[0] })
+              : t("credits.range", {
+                  low: draftEstimate[0],
+                  high: draftEstimate[1],
+                })}
+            {balanceNow != null && (
+              <span
+                className={cn(
+                  "ml-1 text-[11px]",
+                  balanceNow < draftEstimate[0]
+                    ? "text-destructive"
+                    : "text-meta-foreground",
+                )}
+              >
+                · {t("credits.balance")} {balanceNow.toLocaleString()}
+              </span>
+            )}
+          </p>
+          <div className="mt-3 flex justify-end">
+            <Button size="sm" className="h-8" onClick={() => onDraftConfirm?.()}>
               {t("results.canvas.confirmStart")}
             </Button>
           </div>
@@ -634,7 +737,14 @@ export function ResultsCanvas({
         settleKey={baselineReady && visible ? baselineKey : null}
         bornIds={bornIds}
         dots
-        overlay={promptEditOverlay}
+        overlay={
+          promptEditOverlay || draftConfirmOverlay ? (
+            <>
+              {promptEditOverlay}
+              {draftConfirmOverlay}
+            </>
+          ) : null
+        }
         className="h-full"
         selectedId={focusedOutputId ? (nodeIdByOutputId.get(focusedOutputId) ?? null) : null}
         onPaneClick={handlePaneClick}

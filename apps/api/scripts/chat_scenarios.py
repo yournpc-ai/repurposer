@@ -16,11 +16,15 @@
 
     S1  核① 裸愿望全旅程：主题问 → 作答（自由文本 slot 握手 + 选项点选两路）
              → 评审卡 → start → run（途中锁待决重建 / 一行一答 409 / 选项点选
-             不 500 三张契约拍）
+             不 500 三张契约拍；K5 草稿图横切：dock 即 stamp draft 节点 +
+             任务书 document + 逐节点估价，start 同 id 原地填充无双生）
     S2  核② 跳过提问 → draft-from-persona 书 + 默认路径声明
     S3  核③ 插话：正常回答 + 代码拼装提醒尾 + 保持 pending → 下轮作答回填
     S4  核④ 素材全链（run completed + 产物落库）+ 估价三断言 + repair 只一轮
+             + 修订 = wiring 横切（K4/K5 验收点：chat 修订 → edit_prompt 原地
+             改写节点程序（同 id 无双生）→ 子图重跑起 run）
     S5  核⑤ 修订链：手改存活 / chat 恒胜 / supersede 标记 / task_book 不打字母
+             + 草稿图随行（新槽位长新 draft 节点 / 参数微调同 fill_key 零双生）
     S6  核⑥ interrupt 一条：三答法 + 空白不答 + bail 级联 + 插话后续跑
     S7  核⑦ caption mode：选项问 → 回执 + run.context + refine 存活
     S8  核⑧ research 全链（活 DDG，网络全灭时 caveat 降级也算过）
@@ -207,6 +211,12 @@ class Ctx:
     async def results(self, pid: str) -> dict:
         res = await self.client.get(f"/projects/{pid}/results")
         check(res.status_code == 200, "GET results", res.text)
+        return res.json()
+
+    async def graph(self, pid: str) -> dict:
+        """The persistent graph's one read frame (ADR-057 K3 直读端点)."""
+        res = await self.client.get(f"/projects/{pid}/graph")
+        check(res.status_code == 200, "GET project graph", res.text)
         return res.json()
 
     async def runs(self, pid: str) -> list[dict]:
@@ -624,12 +634,35 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
           "the review card stamps the merged brief into the payload", ftopic)
 
-    # 散文确认 start → run 起步（G-1）。
+    # 草稿图（ADR-057 K5——图先展示后运行）：dock 即 stamp——draft 节点 +
+    # 任务书 document + 逐节点估价，零消耗直到 start。
+    draft_graph = await ctx.graph(pid)
+    draft_nodes = [
+        n for n in draft_graph["nodes"]
+        if n.get("state") == "draft" and n.get("kind") in ("generator", "processor", "agent")
+    ]
+    check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
+          draft_graph["nodes"])
+    check(any(
+        n.get("kind") == "document" and (n.get("spec") or {}).get("role") == "task_book"
+        for n in draft_graph["nodes"]
+    ), "the task-book document node rides the draft graph", draft_graph["nodes"])
+    check(any(n.get("estimate_credits") for n in draft_nodes),
+          "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
+    draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
+
+    # 散文确认 start → run 起步（G-1）+ 草稿图原地填充（同 id 无双生）。
     turn3 = await ctx.chat(pid, "looks good, start")
     check(turn3["run_id"] is not None, "prose confirmation starts the run", turn3)
     check(turn3["answered_question"] is not None, "the book settles on start", turn3)
     check((await ctx.results(pid)).get("pending_brief") is None,
           "pending_brief cleared on start")
+    filled_graph = await ctx.graph(pid)
+    check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
+          "start fills the SAME nodes in place (same compile → same fill keys — never twins)",
+          filled_graph["nodes"])
+    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
+          "the draft world re-queues on start", filled_graph["nodes"])
 
 
 # ---- S2 核② 跳过 → draft-from-persona ------------------------------------------
@@ -752,6 +785,36 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
             )
         ).scalars().all()
     check(len(outs) >= 1, "the post output lands in the DB", len(outs))
+
+    # A2) 修订 = wiring（ADR-057 K4/K5 横切——修订环根治验收点）: chat 修订
+    #    → WiringProposal（edit_prompt + run 子图）→ 节点程序行原地改写
+    #    （同 id 无双生）→ 子图重跑起 run。锁的是设计行为（shape E 修既有图
+    #    节点）；红了 = chat_intent prompt 回归信号，不是剧本松劲。
+    graph_before = await ctx.graph(pid)
+    post_node = next(
+        (n for n in graph_before["nodes"]
+         if (n.get("spec") or {}).get("tool") == "write_post"),
+        None,
+    )
+    check(post_node is not None, "the run's fill grew the writer's graph node",
+          graph_before["nodes"])
+    prompt_before = (post_node.get("spec") or {}).get("prompt")
+    turn_rev = await ctx.chat(pid, "make the post shorter")
+    check(turn_rev["run_id"] is not None,
+          "the revision rides the wiring path — the subgraph rerun is born",
+          turn_rev)
+    graph_after = await ctx.graph(pid)
+    post_after = next(
+        (n for n in graph_after["nodes"] if n["id"] == post_node["id"]), None
+    )
+    check(post_after is not None,
+          "the revision reuses the SAME node (edit_prompt + rerun — never a twin)",
+          graph_after["nodes"])
+    check((post_after.get("spec") or {}).get("prompt") != prompt_before,
+          "edit_prompt rewrote the node's program in place",
+          (post_after.get("spec") or {}).get("prompt"))
+    check(post_after.get("state") != "draft",
+          "the rerun re-queues its node", post_after.get("state"))
 
     # B) 估价地基（进程内编译，零 LLM）——fold 对账 / 单调性 / NULL 语义。
     assert_runners_registered()
@@ -1155,6 +1218,12 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
           "the panel hand edit survives an unrelated refine", tasks)
     check(any(t["tool"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
           "the German post arrived", tasks)
+    # 草稿图随行（K5）：新槽位长新 draft 节点，书全文进 document。
+    graph2 = await ctx.graph(pid)
+    check(any(
+        (n.get("spec") or {}).get("tool") == "write_post" and n.get("state") == "draft"
+        for n in graph2["nodes"]
+    ), "the German post grows its own draft node on the graph", graph2["nodes"])
     msgs = await ctx.messages(turn2["conversation_id"])
     old = next(m for m in msgs if m["id"] == first_qid)
     check((old.get("answer") or {}).get("text") == "superseded",
@@ -1171,6 +1240,11 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
     clips = [t for t in tasks if t["tool"] == "select_clips"]
     check(clips and task_params(clips[0]).get("count") == 2,
           "the chat revision overrides the panel pin (chat always wins)", tasks)
+    # 参数微调 = 同 fill_key 复用——图节点零双生（K5 幂等锚）。
+    graph3 = await ctx.graph(pid)
+    check(sorted(n["id"] for n in graph3["nodes"]) == sorted(n["id"] for n in graph2["nodes"]),
+          "a param refine reuses the same nodes (fill-key idempotency — no twins)",
+          graph3["nodes"])
 
     # task_book 待决不参与任何结算：打字母永不当选项答掉（旧 S40 并入）。
     live_qid = turn3["assistant_message"]["id"]

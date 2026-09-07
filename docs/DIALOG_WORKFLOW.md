@@ -26,7 +26,7 @@
 | 环境 | 人（每轮等待输入） | 队列（worker 认领执行） |
 | 保证 | 单待决问题 / brief 合并优先级 | 报价=fold / 执行=topo / 占位 roster 编译期投影 |
 
-**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **任务书**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。
+**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **任务书**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。**（2026-09-07 ADR-057 修订：接口载体从「一次性编译图」翻案为「持久可变图」——chat 建/改草稿图（wiring 层唯一消费面），确认 → run 填充节点，修订 = 原地图变更；任务书并入图感知层 = document 节点，不再是独立用户面文档层。账本机制不动——账本 = 对话引擎状态，任务书卡 = 它的渲染，渲染落点改挂图。）**
 
 ### 2.3 router（意图路由）
 
@@ -39,6 +39,7 @@ chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）�
 - **槽位**（初版）：`topic` / `audience` / `tone` / `constraints[]` / `material_state`（none | pasted | attached）+ 任务链与 derived（原样保留）。
 - **每槽带来源**：`user-stated` / `inferred` / `default`。合并是代码的事：**user-stated > inferred > default**（LLM proposes, code decides 不变——LLM 每轮提议更新，代码按来源优先级合并，永不反向覆盖）。
 - **上下文工程的主压缩件**：账本存在后，累积 prompt 叙事退居存档位，recent 窗口保留——账本比任何 message window 便宜且抗遗忘。
+- **（ADR-057 注）**账本与 run 的接缝不变：账本 → 任务书 → 起 run；变化的是任务书的落地形态——图上的 document 节点（修订 = 图变更 wiring op，不再是「任务书文档层 + 投影补丁」）。
 
 ### 2.5 角色 = 节点的 display 属性
 
@@ -104,7 +105,7 @@ router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON�
 
 ## 6. 不变量（本蓝图不动的部分）
 
-四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / 占位 roster 编译期投影（ADR-051）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、输入恒活；选项问 = 阻塞形态——待决时输入行与免责行让位给问题卡，铅笔行 = 自由输入通道，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）。
+四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / ~~占位 roster 编译期投影（ADR-051）~~（ADR-057：草稿图即占位，干跑投影退役）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、输入恒活；选项问 = 阻塞形态——待决时输入行与免责行让位给问题卡，铅笔行 = 自由输入通道，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）/ **图即产品对象**（ADR-057：持久可变图 + wiring 层 chat 唯一消费面 + 能力完备手势缺席 + 修订 = 图变更）。
 
 ## 7. 落地切分（批次，各自 commit 级自绿）
 
