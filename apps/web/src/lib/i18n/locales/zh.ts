@@ -123,12 +123,12 @@ const zh: Resources = {
       },
     },
     signIn: "登录",
-    openStudio: "免费开始",
+    openStudio: "前往应用",
     heroTitle1: "你讲完了",
     heroTitle2: "剩下的交给我们",
     heroSubtitle:
       "Repurposer 是一个 AI 助手，专为那些拥有内容却无暇经营自媒体的专家服务。提供你现有的素材——<b>演讲视频</b>、会议录音、照片、幻灯片，或者只是一份文字稿。大概描述你的想法，它会建议、策划，并用你的风格带来成品。<b>你只需选出你满意的，然后一键发布即可。</b>",
-    ctaTryBeta: "免费试用测试版",
+    ctaTryBeta: "试用测试版",
     ctaSeeHow: "看看它是怎么工作的",
     comparison: {
       ariaLabel: "前后对比：原始素材与生成结果",

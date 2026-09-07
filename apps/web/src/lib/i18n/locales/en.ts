@@ -133,12 +133,12 @@ const en = {
       },
     },
     signIn: "Sign in",
-    openStudio: "Start repurposing",
+    openStudio: "Go to app",
     heroTitle1: "You did the talking",
     heroTitle2: "We do the rest",
     heroSubtitle:
       "Repurposer is an AI assistant for experts who have content but no time to manage social media. Just give it what you already have — <b>talk videos</b>, meeting recordings, photos, slides, or even just a transcript. Tell it roughly what you want, and it will offer suggestions, plan, and deliver finished pieces in your style. <b>Select the version you like and publish with one click.</b>",
-    ctaTryBeta: "Try the free beta",
+    ctaTryBeta: "Try the beta",
     ctaSeeHow: "See how it works",
     comparison: {
       ariaLabel: "Before and after: raw material and the generated result",
