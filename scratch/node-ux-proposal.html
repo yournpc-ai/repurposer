@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Repurposer · 图即产品对象（交互原型 v2）</title>
+<style>
+  :root{
+    --bg:#151617; --card:#262728; --muted:#2c2d2f; --inset:#1b1c1e;
+    --fg:rgba(255,255,255,.95); --mfg:rgba(255,255,255,.63); --meta:rgba(255,255,255,.42);
+    --accent:rgba(255,255,255,.08); --hair:rgba(255,255,255,.10);
+    --frost:rgba(38,39,40,.68);
+    --video:#8b7cf6; --audio:#e077b8; --text:#9aa0a6; --ctx:#7a7f85;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#0f1011;color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;
+    font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  .meta-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--meta)}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 28px}
+
+  header{padding:34px 0 14px}
+  header h1{font-size:20px;font-weight:600}
+  header .sub{color:var(--mfg);font-size:13px;margin-top:4px;max-width:900px}
+  .controls{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:8px;
+    background:var(--muted);font-size:13px;transition:background .15s}
+  .btn:hover{background:#343537}
+  .btn.primary{background:var(--fg);color:#141517;font-weight:500}
+  .btn.primary:hover{background:#fff}
+  .btn:disabled{opacity:.45;cursor:default}
+  .legend{display:flex;align-items:center;gap:16px;margin-left:8px;font-size:12px;color:var(--mfg);flex-wrap:wrap}
+  .legend .li{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .dot.video{background:var(--video)} .dot.audio{background:var(--audio)} .dot.text{background:var(--text)}
+  .dot.ctx{background:transparent;border:1.5px dashed var(--ctx)}
+
+  /* scene tabs */
+  .scenes{display:flex;gap:8px;margin:18px 0 12px}
+  .scene-tab{height:32px;padding:0 14px;border-radius:8px;font-size:12.5px;color:var(--mfg);
+    background:var(--bg);box-shadow:0 0 0 1px var(--hair);transition:all .15s}
+  .scene-tab:hover{color:var(--fg)}
+  .scene-tab.on{background:var(--fg);color:#141517;font-weight:500;box-shadow:none}
+
+  .stage-scroll{overflow-x:auto;padding-bottom:6px}
+  .stage{display:flex;height:660px;min-width:1240px;border-radius:14px;overflow:hidden;
+    box-shadow:0 0 0 1px var(--hair)}
+  #canvas{flex:1;position:relative;overflow:hidden;background:var(--bg);
+    background-image:radial-gradient(rgba(255,255,255,.16) 1px,transparent 1.4px);
+    background-size:32px 32px}
+  #edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .edge{fill:none;stroke-width:1.5;opacity:.55}
+  .edge-video{stroke:var(--video)} .edge-text{stroke:var(--text)} .edge-audio{stroke:var(--audio)}
+  .edge-ctx{stroke:var(--ctx);stroke-dasharray:4 4;opacity:.45}
+  .edge-born{stroke-dasharray:1000;stroke-dashoffset:1000;animation:edgeIn .7s ease-out forwards}
+  @keyframes edgeIn{to{stroke-dashoffset:0}}
+
+  /* nodes */
+  .node{position:absolute}
+  .node-born{animation:born .45s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes born{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+  .caption{display:flex;align-items:flex-end;gap:6px;height:26px;padding:0 4px 8px;font-size:11px;color:var(--mfg)}
+  .caption svg{width:14px;height:14px;flex:none}
+  .caption .status{margin-left:auto}
+  .badge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+    border-radius:50%;background:var(--fg);color:#141517}
+  .badge svg{width:11px;height:11px}
+  .badge.run{background:transparent}
+  .badge.run svg{width:14px;height:14px;color:var(--fg);animation:spin 1s linear infinite}
+  .badge.stale{background:transparent;box-shadow:0 0 0 1.5px var(--meta);color:var(--mfg);width:auto;
+    border-radius:9px;padding:0 7px;font-size:9.5px;height:16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .card{position:relative;background:var(--card);border-radius:10px;overflow:hidden;
+    box-shadow:0 0 0 1px var(--hair)}
+  .glass{background:var(--frost);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4)}
+  .thumb{height:120px;display:flex;align-items:center;justify-content:center;position:relative;
+    background:linear-gradient(135deg,#1e2126,#262b33 55%,#1a1d22)}
+  .thumb svg{width:22px;height:22px;color:rgba(255,255,255,.5)}
+  .thumb .dur{position:absolute;left:8px;bottom:8px;font-size:10px;padding:2px 6px;border-radius:5px;
+    background:rgba(0,0,0,.65);color:#fff}
+
+  /* draft body（未运行态） */
+  .draft-body{margin:10px 12px;border:1.5px dashed rgba(255,255,255,.16);border-radius:8px;
+    min-height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    color:var(--meta);font-size:11px;text-align:center;padding:10px}
+  .draft-body .est{font-size:10px;color:var(--mfg);background:var(--inset);border-radius:5px;padding:2px 8px;
+    font-variant-numeric:tabular-nums}
+
+  .output-text{padding:12px 14px;font-size:11.5px;line-height:1.65;max-height:170px;overflow:hidden}
+  .output-text p{margin-bottom:8px}
+  .output-text .tags{color:var(--mfg);font-size:10px;margin-bottom:0}
+
+  /* timeline face */
+  .tl{padding:8px 12px 10px}
+  .tl .ruler{display:flex;justify-content:space-between;font-size:8.5px;color:var(--meta);
+    border-bottom:1px solid var(--hair);padding-bottom:3px;margin-bottom:6px}
+  .tl .lane{display:flex;align-items:center;gap:5px;height:20px;margin-bottom:5px}
+  .tl .lane .lab{font-size:9px;color:var(--meta);width:26px;flex:none}
+  .tl .lane .track{flex:1;height:16px;border-radius:4px;background:var(--inset);display:flex;gap:2px;padding:2px}
+  .tl .blk{height:100%;border-radius:3px}
+  .tl .blk.v{background:rgba(139,124,246,.55)} .tl .blk.a{background:rgba(224,119,184,.55)} .tl .blk.m{background:rgba(224,119,184,.3)}
+
+  /* prompt 区（可直改） */
+  .program{border-top:1px solid var(--hair);padding:10px 14px 12px;cursor:pointer;position:relative;transition:background .15s}
+  .program:hover{background:var(--accent)}
+  .program .p-spec{font-size:11.5px;margin-top:4px;white-space:pre-wrap}
+  .program .p-edit{position:absolute;top:8px;right:10px;font-size:10px;color:var(--meta);opacity:0;transition:opacity .15s}
+  .program:hover .p-edit{opacity:1}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .chip{font-size:10px;color:var(--mfg);background:var(--inset);border-radius:5px;padding:2px 7px;white-space:nowrap}
+  .runtime{display:flex;align-items:center;gap:8px;padding:7px 14px;border-top:1px solid var(--hair);
+    font-size:10.5px;color:var(--meta)}
+  .program.drafting{cursor:default;background:var(--accent)}
+  .program textarea{width:100%;min-height:60px;background:transparent;border:none;outline:none;resize:none;
+    color:var(--fg);font:inherit;font-size:11.5px;line-height:1.6;margin-top:4px}
+  .draft-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+  .draft-row .hint{font-size:10px;color:var(--meta)}
+  .draft-row .send{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+    border-radius:50%;background:var(--fg);color:#141517}
+  .draft-row .send svg{width:13px;height:13px}
+
+  .port{position:absolute;width:10px;height:10px;border-radius:50%;z-index:3;box-shadow:0 0 0 2px var(--bg)}
+  .port.video{background:var(--video)} .port.audio{background:var(--audio)} .port.text{background:var(--text)}
+  .port.ctx{background:transparent;border:1.5px dashed var(--ctx);box-shadow:none;width:11px;height:11px}
+  .port .tip{position:absolute;left:14px;top:-3px;font-size:10px;color:var(--meta);white-space:nowrap;
+    opacity:0;transition:opacity .15s;pointer-events:none}
+  .port:hover .tip{opacity:1}
+
+  /* 声音波形（音频产物区） */
+  .wave{display:flex;align-items:center;gap:3px;height:64px;padding:8px 14px}
+  .wave i{flex:1;background:var(--audio);opacity:.5;border-radius:2px}
+  .wave.m i{opacity:.3}
+
+  .wipe{position:absolute;inset:0;pointer-events:none;opacity:0}
+  .card.running .wipe{opacity:1}
+  .card.running .wipe::before{content:"";position:absolute;inset:0;transform-origin:left;
+    background:linear-gradient(90deg,rgba(255,255,255,.02),rgba(255,255,255,.09) 98%,rgba(255,255,255,.16));
+    animation:wipe 1.8s ease-out forwards}
+  @keyframes wipe{from{transform:scaleX(0)}to{transform:scaleX(.96)}}
+
+  .float-card{position:absolute;z-index:20;border-radius:12px;background:var(--frost);
+    backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);
+    box-shadow:0 0 0 1px var(--hair);display:none}
+  .float-card.show{display:block;animation:pop .18s ease-out}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  #estimatePill{padding:8px 14px;font-size:12px;color:var(--mfg);align-items:center;gap:8px}
+  #estimatePill.show{display:inline-flex}
+  #estimatePill .dots i{display:inline-block;width:3px;height:3px;border-radius:50%;background:var(--mfg);
+    margin-left:2px;animation:blink 1s infinite}
+  #estimatePill .dots i:nth-child(2){animation-delay:.2s}#estimatePill .dots i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+  #confirmCard{width:264px;padding:14px}
+  #confirmCard h4{font-size:13px;font-weight:600}
+  #confirmCard .blast{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--mfg);flex-wrap:wrap}
+  #confirmCard .price{margin-top:10px;font-size:12px}
+  #confirmCard .price .bal{color:var(--meta);font-size:11px}
+  #confirmCard .row{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  #confirmCard .row .btn{height:30px;font-size:12px}
+  .pulse{animation:pulse 1s ease-in-out 2}
+  @keyframes pulse{50%{box-shadow:0 0 0 5px rgba(255,255,255,.18)}}
+
+  .pager{display:none;align-items:center;gap:2px;border-radius:8px;background:var(--frost);
+    backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:0 0 0 1px var(--hair);
+    padding:0 4px;height:32px;margin-right:8px}
+  .pager.show{display:inline-flex}
+  .pager button{width:24px;height:24px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+  .pager button:hover{background:var(--accent)}
+  .pager button svg{width:12px;height:12px}
+  .pager span{font-size:11px;color:var(--mfg);padding:0 4px;font-variant-numeric:tabular-nums}
+  .factsbar{background:var(--frost);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+    border-radius:8px;box-shadow:0 0 0 1px var(--hair);padding:0 8px;display:inline-flex;align-items:center;gap:6px;
+    height:32px;font-size:11px;color:var(--mfg);white-space:nowrap}
+  .factsbar .sep{width:1px;height:12px;background:var(--hair)}
+  .factsbar button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;color:var(--fg)}
+  .factsbar button:hover{background:var(--accent)}
+  .factsbar button svg{width:13px;height:13px}
+  .toolbar-row{display:flex;justify-content:center;padding-top:8px;height:40px;align-items:flex-start}
+
+  #creditsPill{position:absolute;left:16px;bottom:16px;z-index:30;display:flex;align-items:center;gap:7px;
+    height:34px;padding:0 13px;border-radius:8px;font-size:13px;background:var(--frost);
+    backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);
+    box-shadow:0 0 0 1px var(--hair)}
+  #creditsPill:hover{background:rgba(48,49,51,.75)}
+  #creditsPill svg{width:14px;height:14px;color:var(--mfg)}
+  #creditsPill b{font-weight:500;font-variant-numeric:tabular-nums}
+  #walletPop{position:absolute;left:16px;bottom:58px;z-index:30;width:300px;border-radius:12px;
+    background:var(--frost);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);
+    box-shadow:0 0 0 1px var(--hair);padding:8px;display:none}
+  #walletPop.show{display:block;animation:pop .18s ease-out}
+  #walletPop .bal-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;font-size:12px}
+  #walletPop .bal-row svg{width:13px;height:13px;color:var(--mfg)}
+  #walletPop .bal-row b{margin-left:auto;font-weight:500;color:var(--mfg);font-size:11px;font-variant-numeric:tabular-nums}
+  #walletPop .tx-label{padding:8px 8px 4px}
+  .tx-row{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;animation:pop .2s ease-out}
+  .tx-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tx-row .amt{font-variant-numeric:tabular-nums;color:var(--mfg)}
+  .tx-row .amt.pos{color:var(--fg)}
+  .tx-row .when{font-size:11px;color:var(--meta);flex:none}
+
+  #chat{width:360px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--hair);
+    background:rgba(24,25,27,.72)}
+  #chat .c-head{display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;flex:none}
+  #chat .c-head b{font-size:13px;font-weight:600}
+  #chat .c-head .minus{margin-left:auto;color:var(--mfg);font-size:15px}
+  #chatBody{flex:1;overflow-y:auto;padding:8px 16px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:92%;font-size:12.5px;line-height:1.65;animation:pop .2s ease-out}
+  .msg.user{align-self:flex-end;background:var(--muted);border-radius:12px;padding:8px 12px}
+  .msg.assistant{align-self:flex-start}
+  .msg.runline{align-self:flex-start;font-size:11px;color:var(--meta);display:flex;align-items:center;gap:6px}
+  .msg.runline svg{width:12px;height:12px;flex:none}
+  .msg.runline.done{color:var(--mfg)}
+  .msg .confirm-pill{display:inline-flex;align-items:center;gap:8px;margin-top:8px;background:var(--muted);
+    border-radius:9px;padding:7px 12px;font-size:12px}
+  .msg .confirm-pill button{background:var(--fg);color:#141517;border-radius:6px;height:26px;padding:0 12px;
+    font-size:12px;font-weight:500}
+  .msg .confirm-pill button:disabled{opacity:.4}
+  #chat .c-input{flex:none;padding:12px 14px;border-top:1px solid var(--hair)}
+  #chat .c-input .box{display:flex;align-items:center;gap:10px;background:var(--inset);border-radius:10px;
+    padding:4px 6px 4px 12px;font-size:12.5px}
+  #chat .c-input input{flex:1;background:transparent;border:none;outline:none;color:var(--fg);font:inherit;font-size:12.5px;height:32px}
+  #chat .c-input input::placeholder{color:var(--meta)}
+  #chat .c-input .up{width:30px;height:30px;border-radius:50%;background:var(--fg);color:#141517;flex:none;
+    display:inline-flex;align-items:center;justify-content:center}
+  #chat .c-input .up svg{width:14px;height:14px}
+  #chat .c-input .up:disabled{background:var(--muted);color:var(--mfg)}
+  #chat .c-input .disclaimer{text-align:center;font-size:10px;color:var(--meta);margin-top:8px}
+
+  section.anno{padding:44px 0 8px;border-top:1px solid rgba(255,255,255,.05);margin-top:44px}
+  .anno h2{font-size:16px;font-weight:600;margin:6px 0 4px}
+  .anno .lede{color:var(--mfg);font-size:13px;max-width:900px}
+  table.cmp{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+  table.cmp th{font-size:11px;color:var(--meta);text-align:left;font-weight:400;letter-spacing:.06em;
+    padding:8px 10px;border-bottom:1px solid var(--hair)}
+  table.cmp td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  table.cmp td:first-child{color:var(--mfg);white-space:nowrap}
+  ul.law{list-style:none;margin-top:14px}
+  ul.law li{padding:8px 0 8px 22px;position:relative;font-size:13px;color:var(--mfg);border-top:1px solid rgba(255,255,255,.05)}
+  ul.law li:first-child{border-top:none}
+  ul.law li::before{content:"—";position:absolute;left:0;color:var(--meta)}
+  ul.law li b{color:var(--fg);font-weight:500}
+  footer{padding:40px 0 60px;color:var(--meta);font-size:12px}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="meta-label">UX Proposal v2 · 2026-09-07 · 签字前走查</div>
+  <h1>图即产品对象：草稿态跑全图 · 孤岛生长 · 直改修订</h1>
+  <p class="sub">三个场景都是同一张常驻图、同一套 wiring ops（add_node / connect / edit_prompt / run），同一个执行语义（图先铺开零消耗 → 确认才扣 → 节点逐个填充）。节点直改已拍板：prompt 区可点改，发送走同一 op + 价格确认。</p>
+  <div class="controls">
+    <button class="btn primary" id="playBtn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+      <span id="playLabel">播放</span>
+    </button>
+    <button class="btn" id="resetBtn">重置场景</button>
+    <div class="legend">
+      <span class="li"><span class="dot text"></span>文本 / 转写</span>
+      <span class="li"><span class="dot video"></span>视频</span>
+      <span class="li"><span class="dot audio"></span>音频</span>
+      <span class="li"><span class="dot ctx"></span>上下文（虚线）</span>
+    </div>
+  </div>
+  <div class="scenes">
+    <button class="scene-tab on" data-scene="A">A · 草稿态：图先铺开，确认才跑</button>
+    <button class="scene-tab" data-scene="B">B · 孤岛生长：chat 布节点</button>
+    <button class="scene-tab" data-scene="C">C · 直改修订：改 prompt 重跑局部</button>
+  </div>
+</header>
+
+<div class="wrap stage-scroll">
+  <div class="stage">
+    <div id="canvas">
+      <svg id="edges"></svg>
+      <!-- nodes 由场景脚本挂载 -->
+
+      <div class="float-card" id="estimatePill">估价中<span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="float-card" id="confirmCard">
+        <h4 id="ccTitle">修订</h4>
+        <div class="blast" id="ccSteps"></div>
+        <div class="price" id="ccPrice"></div>
+        <div class="row">
+          <button class="btn" id="confirmCancel">取消</button>
+          <button class="btn primary" id="confirmOk">确认开始</button>
+        </div>
+      </div>
+
+      <button id="creditsPill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10.5c0-1 1-1.8 2.5-1.8s2.5.8 2.5 1.8c0 2.4-5 1.4-5 3.9 0 1 1 1.8 2.5 1.8s2.5-.8 2.5-1.8"/></svg>
+        <b id="balanceNum">10,500</b>
+      </button>
+      <div id="walletPop">
+        <div class="bal-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
+          余额 <b id="balanceNum2">10,500</b>
+        </div>
+        <div class="tx-label meta-label">最近花费</div>
+        <div id="txList"></div>
+      </div>
+    </div>
+
+    <div id="chat">
+      <div class="c-head"><b>Chat</b><span class="minus">−</span></div>
+      <div id="chatBody"></div>
+      <div class="c-input">
+        <div class="box">
+          <input id="chatInput" placeholder="描述你想创建的内容…">
+          <button class="up" id="chatSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+        </div>
+        <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核实。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="anno">
+    <div class="meta-label">01 · 节点五型 + 状态独立成维</div>
+    <h2>画布词汇表（仓库 kind 注册表全映射）</h2>
+    <table class="cmp">
+      <tr><th style="width:120px">型</th><th style="width:40%">解剖</th><th style="width:26%">实例</th><th>消耗</th></tr>
+      <tr><td>① 素材 asset</td><td>caption / 媒体区 / 事实带 / typed 输出端口（视频·音频·转写·页面）</td><td>video / audio / image / doc / 粘贴文本 / voice_sample</td><td>处理免费</td></tr>
+      <tr><td>② 文档 document</td><td>玻璃文本卡 / 正文 / context 虚线入 / 文本出</td><td>任务书 / 转写稿（可编辑驱动重剪）/ 孤岛文本</td><td>免费</td></tr>
+      <tr><td>③ 生成 generator</td><td>caption（右槽永空）/ 产物区 / <b>prompt 区（可点改）</b> / typed ports（入=区域左下·出=区域右上）｜<b>卡下 bar：模型+参数+动作</b> / 版本分页</td><td>write_post·article·carousel·quotes / revise_script / translate / select_clips / dub / music /〔图·视频生成〕</td><td>逐节点估价 + capture</td></tr>
+      <tr><td>④ 加工 processor</td><td>同③但 prompt 区 → params 事实区；<b>编辑器面（时间线轨）缓做——先只给成品感</b></td><td>render（clip-spec 装配）/ materialize / reframe / filler / stills / 金句 composite</td><td>render=0，其余按 actual</td></tr>
+      <tr><td>⑤ agent</td><td>③ + 轨迹面（轮次/工具调用）</td><td>research（B4 已在）</td><td>fold=上限×单价</td></tr>
+      <tr><td>永不画布化</td><td colspan="2">preprocess / persona_bootstrap / understand / interrupt / render_request / verify_judge（=产物卡质量徽章）——住节点体内的内部 workflow：节点拥有 steps，组合非投影</td><td>—</td></tr>
+      <tr><td>状态（非类型）</td><td colspan="3"><b>caption 永不带角标——状态原地表达</b>：draft（虚线空区+估价）/ running（卡上 wipe）/ done（内容自证）/ failed（卡内红条）/ <b>stale</b>（bar 徽章「可重跑」·成本守门）/ versions（版本分页住 bar）</td><td>—</td></tr>
+    </table>
+  </section>
+
+  <section class="anno">
+    <div class="meta-label">02 · wiring ops：chat 布线的地基</div>
+    <h2>手动布线与 chat 布线不互斥——同一套 mutation 层，UI 只不开手动</h2>
+    <table class="cmp">
+      <tr><th style="width:150px">op</th><th style="width:44%">语义</th><th>场景演示</th></tr>
+      <tr><td>add_node</td><td>画布落一个节点（孤岛合法——图是森林，不必连通）</td><td>B：孤岛提示词节点出生</td></tr>
+      <tr><td>connect</td><td>连一条 typed 边（载荷类型决定颜色与落点）</td><td>B：提示词 → 图生成，边随节点一起长</td></tr>
+      <tr><td>edit_prompt</td><td>改某节点的 prompt（直改或 chat 指认，同一 op）</td><td>C：Post prompt 直改</td></tr>
+      <tr><td>run(_subgraph)</td><td>填充一个节点或它的下游子图（执行事件，hold→capture→release）</td><td>A：跑全图；C：重跑局部</td></tr>
+      <tr><td>delete_node</td><td>删节点（下游产物语义简报里定）</td><td>—</td></tr>
+      <tr><td>端口法则</td><td>进 = 消费区域<b>最左下角</b>（prompt 区）；出 = 生产区域<b>最右上角</b>；同侧多端口顺角堆叠（ElevenLabs 实测解剖）</td><td>全部场景</td></tr>
+    </table>
+  </section>
+
+  <section class="anno">
+    <div class="meta-label">03 · 积分三面</div>
+    <h2>草稿态逐节点估价 · 确认才扣 · 语义台账</h2>
+    <table class="cmp">
+      <tr><td style="width:150px">草稿态估价</td><td>图先铺开零消耗，每个未运行节点带自己的估价（「运行后生成 · 约 N 积分」）；全图总价在 chat 确认 pill</td></tr>
+      <tr><td>节点锚定确认</td><td>边际价 = 重跑子图 fold（没动的不收钱）；波及面 chips；余额软对照；422 仍是事实源</td></tr>
+      <tr><td>语义台账</td><td>hold/release 永不上 UI；按 run 事件一行一事（首次全图 −12 / Post 修订 −3 / 赠送 +500）</td></tr>
+      <tr><td>免费层</td><td>改字免费即时；chat / 素材处理不上账（鸡毛蒜皮不上明面）</td></tr>
+    </table>
+  </section>
+
+  <section class="anno">
+    <div class="meta-label">04 · 不变的法（2026-09-07 拍板）</div>
+    <ul class="law">
+      <li><b>图即产品对象</b>：常驻、可突变、agent 搭建、用户看见；运行 = 填充节点；修订 = 原地突变。</li>
+      <li><b>chat 唯一操作面 + 节点直改并存</b>：prompt 直改走同一 wiring op（edit_node_prompt）+ 价格确认——直改已拍板，不是第二通道。</li>
+      <li><b>双图坍缩为一图</b>：执行图即展示图；steps 住节点体内（组合非投影）；ADR-036 投影模型与五补丁同批火化。</li>
+      <li><b>确认才花钱</b>：hold→capture→release、失败不扣费、负余额语义全部不变，重锚到 执行事件+节点。</li>
+      <li><b>spec/任务书词汇退役</b>：用户世界只有「这张图」和 chat；任务书 = 文档节点（②型）。</li>
+      <li><b>首站 = 迁移现有管线</b>（修订环随之根治），生成类配方第二批；<b>内核批排期提到最前</b>。</li>
+    </ul>
+  </section>
+  <footer>Repurposer · 图即产品对象 UX 原型 v2（scratch/node-ux-proposal.html）· 仅设计讨论用，非受控文档</footer>
+</div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const canvas = $('#canvas'), svg = $('#edges');
+  let timers = [];
+  const later = (fn,t)=>timers.push(setTimeout(fn,t));
+  const clearTimers = ()=>{ timers.forEach(t=>{clearTimeout(t);clearInterval(t)}); timers=[]; };
+
+  const CHECK = '<span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span>';
+  const SPIN = '<span class="badge run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg></span>';
+  const ICON = {
+    video:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>',
+    doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    play:'<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+    text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>',
+    image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>',
+    timeline:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M2 15h20M7 4v16"/></svg>',
+    audio:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 10v4"/><path d="M6 7v10"/><path d="M10 4v16"/><path d="M14 7v10"/><path d="M18 10v4"/><path d="M22 11v2"/></svg>',
+  };
+
+  /* ── shared state ─────────────────────────────── */
+  let balance = 10500, scene = 'A', edgesDef = [];
+  function renderBalance(){ const s = balance.toLocaleString('en-US'); $('#balanceNum').textContent = s; $('#balanceNum2').textContent = s; }
+  function addTx(name, amt, when){
+    const r = document.createElement('div'); r.className='tx-row';
+    r.innerHTML = `<span class="name">${name}</span><span class="amt ${amt>0?'pos':''}">${amt>0?'+'+amt:'−'+Math.abs(amt)}</span><span class="when">${when}</span>`;
+    $('#txList').prepend(r);
+  }
+  function clearScene(){
+    clearTimers();
+    canvas.querySelectorAll('.node,.scene-hint').forEach(n=>n.remove());
+    $('#confirmCard').classList.remove('show'); $('#estimatePill').classList.remove('show');
+    $('#chatBody').innerHTML = ''; $('#txList').innerHTML = ''; svg.innerHTML='';
+    balance = 10500; renderBalance(); edgesDef = [];
+    $('#playBtn').disabled = false;
+  }
+
+  /* ── chat helpers ─────────────────────────────── */
+  function addMsg(role, html){ const d=document.createElement('div'); d.className=`msg ${role}`; d.innerHTML=html; $('#chatBody').appendChild(d); $('#chatBody').scrollTop=1e6; return d; }
+  function addRunLine(html, done){ const d=document.createElement('div'); d.className='msg runline'+(done?' done':''); d.innerHTML=html; $('#chatBody').appendChild(d); $('#chatBody').scrollTop=1e6; return d; }
+  function addConfirmPill(text, btnLabel, onOk){
+    const d = addMsg('assistant', `<span>${text}</span>`);
+    const pill = document.createElement('span'); pill.className='confirm-pill';
+    const btn = document.createElement('button'); btn.textContent = btnLabel;
+    btn.addEventListener('click', ()=>{ btn.disabled = true; onOk(); });
+    pill.appendChild(btn); d.appendChild(pill); $('#chatBody').scrollTop=1e6;
+    return btn;
+  }
+
+  /* ── edges ────────────────────────────────────── */
+  function layoutEdges(){
+    const cr = canvas.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${cr.width} ${cr.height}`);
+    svg.innerHTML = '';
+    for(const e of edgesDef){
+      const pa = document.getElementById(e.a), pb = document.getElementById(e.b);
+      if(!pa||!pb) continue;
+      const ra = pa.getBoundingClientRect(), rb = pb.getBoundingClientRect();
+      const x1 = ra.left-cr.left+ra.width/2, y1 = ra.top-cr.top+ra.height/2;
+      const x2 = rb.left-cr.left+rb.width/2, y2 = rb.top-cr.top+rb.height/2;
+      const dx = Math.max(40, Math.abs(x2-x1)*0.45);
+      const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
+      p.setAttribute('class', `edge edge-${e.type}` + (e.born?' edge-born':''));
+      svg.appendChild(p);
+    }
+  }
+  window.addEventListener('resize', layoutEdges);
+
+  /* ── node builders ────────────────────────────── */
+  function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+  function portsHtml(ports){
+    /* 端口法则（ElevenLabs 实测）：进 = 消费区域最左下角，出 = 生产区域最
+       右上角；同侧多端口顺角堆叠。left→bottom 起算，right→top 起算。 */
+    return ports.map(p=>`<span class="port ${p.type}" id="${p.id}" style="${p.side}:-5px;${p.from??(p.side==='right'?'top':'bottom')}:${p.v}px">${p.tip?`<span class="tip">${p.tip}</span>`:''}</span>`).join('');
+  }
+  function assetNode(o){
+    return el(`<div class="node ${o.born?'node-born':''}" id="${o.id}" style="left:${o.x};top:${o.y};width:${o.w}px">
+      <div class="caption">${ICON.video}${o.title}</div>
+      <div class="card"><div class="thumb">${ICON.play}<span class="dur">${o.dur}</span></div></div>
+      <div class="toolbar-row"><div class="factsbar">${o.facts}</div></div>
+      ${portsHtml(o.ports)}
+    </div>`);
+  }
+  function docNode(o){
+    return el(`<div class="node ${o.born?'node-born':''}" id="${o.id}" style="left:${o.x};top:${o.y};width:${o.w}px">
+      <div class="caption">${ICON.doc}${o.title}</div>
+      <div class="card glass" style="padding:11px 13px">
+        <div style="font-size:11.5px;line-height:1.6">${o.body}</div>
+        ${o.meta?`<div class="meta-label" style="margin-top:7px;font-size:9.5px">${o.meta}</div>`:''}
+      </div>
+      ${portsHtml(o.ports)}
+    </div>`);
+  }
+  function genNode(o){
+    /* o: {id,x,y,w,title,icon,state:'draft'|'done',est,prompt,chips,runtime,bodyHtml,draftLabel,ports,editable,born}
+       解剖（2026-09-07 走查拍板）：卡内 = 产物区 + prompt 区；caption 右槽
+       永空（状态原地表达：draft 虚线框 / running wipe / done 内容自证）；
+       模型+参数+动作 = 卡下外置 bar（ElevenLabs 解剖对齐）。 */
+    const body = o.state === 'draft'
+      ? `<div class="draft-body"><span>⬡ ${o.draftLabel ?? '运行后生成'}</span><span class="est">约 ${o.est} 积分</span></div>`
+      : o.bodyHtml;
+    const ACTIONS = `<span class="sep"></span>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>`;
+    return el(`<div class="node ${o.born?'node-born':''}" id="${o.id}" style="left:${o.x};top:${o.y};width:${o.w}px">
+      <div class="caption">${o.icon}${o.title}</div>
+      <div class="card" data-card>
+        <div class="wipe"></div>
+        <div data-body>${body}</div>
+        ${o.prompt != null ? `<div class="program" data-program>
+          <div class="p-head"><span class="meta-label" style="font-size:9.5px">prompt</span></div>
+          <p class="p-spec">${o.prompt}</p>
+          ${o.chips?`<div class="chips">${o.chips.map(c=>`<span class="chip">${c}</span>`).join('')}</div>`:''}
+          ${o.editable?'<span class="p-edit">点击直接改</span>':''}
+        </div>`:''}
+      </div>
+      <div class="toolbar-row"><div class="factsbar">${o.runtime ?? ''}${o.state==='done' ? ACTIONS : ''}</div></div>
+      ${portsHtml(o.ports)}
+    </div>`);
+  }
+  function timelineFace(filled){
+    const lanes = [
+      {lab:'视频', cls:'v', blocks: filled ? [[0,62],[66,30]] : []},
+      {lab:'配音', cls:'a', blocks: filled ? [[0,44]] : []},
+      {lab:'音乐', cls:'m', blocks: filled ? [[0,88]] : []},
+    ];
+    return `<div class="tl"><div class="ruler">${['0:00','0:06','0:12','0:18','0:24','0:30'].map(t=>`<span>${t}</span>`).join('')}</div>
+      ${lanes.map(l=>`<div class="lane"><span class="lab">${l.lab}</span><span class="track">${l.blocks.map(([lft,w])=>`<span class="blk ${l.cls}" style="margin-left:${lft}%;width:${w}%"></span>`).join('')}</span></div>`).join('')}</div>`;
+  }
+  function runFill(nodeEl, fillHtml, done){
+    /* 状态原地表达：wipe 在卡上，落地 = 内容自证——caption 永不带角标。 */
+    nodeEl.querySelector('[data-card]').classList.add('running');
+    later(()=>{
+      nodeEl.querySelector('[data-card]').classList.remove('running');
+      nodeEl.querySelector('[data-body]').innerHTML = fillHtml;
+      done && done();
+    }, 1900);
+  }
+  function showConfirm(nodeEl, {title, steps, price, onOk}){
+    const c = $('#confirmCard');
+    $('#ccTitle').textContent = title;
+    $('#ccSteps').innerHTML = `重跑 ${steps.length} 步 ` + steps.map(s=>`<span class="chip">${s}</span>`).join('');
+    $('#ccPrice').innerHTML = `约 ${price} 积分 <span class="bal">· 余额 ${balance.toLocaleString('en-US')} ✓</span>`;
+    c.classList.add('show');
+    const nr = nodeEl.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+    c.style.left = Math.min(nr.left-cr.left, cr.width-280)+'px';
+    c.style.top = Math.max(nr.top-cr.top-c.offsetHeight-12, 8)+'px';
+    $('#confirmOk').onclick = ()=>{ c.classList.remove('show'); onOk(); };
+    $('#confirmCancel').onclick = ()=>c.classList.remove('show');
+  }
+  function anchorEstimate(nodeEl){
+    const e = $('#estimatePill');
+    e.classList.add('show');
+    const nr = nodeEl.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+    e.style.left = (nr.left-cr.left)+'px';
+    e.style.top = (nr.top-cr.top-e.offsetHeight-12)+'px';
+  }
+
+  /* ══ SCENE A · 草稿态：图先铺开，确认才跑 ══ */
+  const POST_V1 = `<div class="output-text"><p>Universities can no longer afford to be ivory towers.</p><p>Three forces are reshaping how innovation moves from lab to society:</p><p>→ Pace of tech acceleration<br>→ Collapsed research-to-product timelines<br>→ Public trust as the new currency</p><p class="tags">#TechInnovation #IndustryAcademia #ResearchLeadership</p></div>`;
+  const CLIP_BODY = `<div class="thumb" style="height:110px">${ICON.play}<span class="dur">0:30</span></div>`;
+  const WAVE_VOICE = `<div class="wave">${[36,58,44,70,52,80,62,40,66,48,74,56,38,60,46,68,50,42].map(h=>`<i style="height:${h}%"></i>`).join('')}</div>`;
+  const WAVE_MUSIC = `<div class="wave m">${[52,40,62,36,70,44,58,80,48,66,38,56,72,42,60,46,64,50].map(h=>`<i style="height:${h}%"></i>`).join('')}</div>`;
+  function mountGraph({draft}){
+    canvas.appendChild(assetNode({id:'nAsset',x:'2.5%',y:'34%',w:185,title:'原视频 · MP4',dur:'03:42',facts:'03:42 · 1920×1080',ports:[
+      {id:'pAvV',side:'right',type:'video',v:34,tip:'视频流'},{id:'pAvA',side:'right',type:'audio',v:58,tip:'音频流'},{id:'pAvT',side:'right',type:'text',v:82,tip:'转写文本'}]}));
+    canvas.appendChild(docNode({id:'nBook',x:'22%',y:'3%',w:215,title:'任务书 · 文档',body:'LinkedIn 一周三条：1 条竖屏 clip + 1 条 post。语气犀利，面向学界同行。',meta:'chat 已确认 · 09-06',ports:[{id:'pBkO',side:'right',type:'ctx',v:34,tip:'上下文 →'}]}));
+    canvas.appendChild(docNode({id:'nTrans',x:'19.5%',y:'32%',w:200,title:'转写稿 · 文档',body:'"…universities can no longer afford to be ivory towers. The next breakthrough will not emerge in isolation…"<br><span style="color:var(--meta);font-size:10px">word 级时间戳 · speaker_map 2 人 · 可编辑</span>',meta:'可编辑 — 改稿驱动下游重剪',ports:[{id:'pTrI',side:'left',type:'text',v:10},{id:'pTrO',side:'right',type:'text',v:34}]}));
+    canvas.appendChild(genNode({id:'nDub',x:'41%',y:'3%',w:240,title:'配音 · 生成',icon:ICON.audio ?? ICON.text,state:draft?'draft':'done',
+      est:'18–26', draftLabel:'运行后生成 · 配音',
+      bodyHtml: WAVE_VOICE,
+      prompt:'配 0:32–1:05 选段，语速平稳，保留强调停顿',
+      chips:['@转写稿 0:32–1:05','@人设 · 声纹（克隆）'],
+      runtime:'speech-2.6-hd · 克隆声纹',
+      ports:[{id:'pDbI',side:'left',type:'text',v:58},{id:'pDbC',side:'left',type:'ctx',v:82},{id:'pDbO',side:'right',type:'audio',v:34}]}));
+    canvas.appendChild(genNode({id:'nPost',x:'41%',y:'33%',w:240,title:'撰写 Post · 生成',icon:ICON.text,state:draft?'draft':'done',
+      est:'2–4', draftLabel:'运行后生成 · 文本',
+      bodyHtml: POST_V1,
+      prompt:'写得犀利一点，面向学界同行，三个论点',
+      chips:['@转写稿 0:32–1:05','@任务书','@人设 · 学术评审'],
+      runtime:'MiniMax M3 · EN · LinkedIn',
+      ports:[{id:'pPoT',side:'left',type:'text',v:58},{id:'pPoC',side:'left',type:'ctx',v:82},{id:'pPoO',side:'right',type:'text',v:34}]}));
+    canvas.appendChild(genNode({id:'nMusic',x:'41%',y:'62%',w:240,title:'配乐 · 生成',icon:ICON.audio ?? ICON.text,state:draft?'draft':'done',
+      est:'6–9', draftLabel:'运行后生成 · 音乐',
+      bodyHtml: WAVE_MUSIC,
+      prompt:'轻氛围 ambient，不抢人声，30s，渐出结尾',
+      chips:['@任务书'],
+      runtime:'music-2.6 · 30s',
+      ports:[{id:'pMuC',side:'left',type:'ctx',v:58},{id:'pMuO',side:'right',type:'audio',v:34}]}));
+    canvas.appendChild(genNode({id:'nTl',x:'68%',y:'22%',w:280,title:'竖屏 Clip · 加工',icon:ICON.timeline,state:draft?'draft':'done',
+      est:'8–12', draftLabel:'运行后生成 · 成片',
+      bodyHtml: CLIP_BODY,
+      prompt:'挑最反直觉的一段，9:16 竖屏，30 秒，字幕 EN',
+      chips:['@原视频','@配音','@配乐','@任务书'],
+      runtime:'clip-spec · Remotion · 9:16 · 30s',
+      ports:[{id:'pTlV',side:'left',type:'video',v:58,tip:'视频'},{id:'pTlA1',side:'left',type:'audio',v:82,tip:'配音'},{id:'pTlA2',side:'left',type:'audio',v:106,tip:'配乐'},{id:'pTlC',side:'left',type:'ctx',v:130},{id:'pTlO',side:'right',type:'video',v:34,tip:'成片'}]}));
+    edgesDef = [
+      {a:'pAvV',b:'pTlV',type:'video'},{a:'pAvT',b:'pTrI',type:'text'},
+      {a:'pTrO',b:'pDbI',type:'text'},{a:'pTrO',b:'pPoT',type:'text'},
+      {a:'pDbO',b:'pTlA1',type:'audio'},{a:'pMuO',b:'pTlA2',type:'audio'},
+      {a:'pBkO',b:'pDbC',type:'ctx'},{a:'pBkO',b:'pPoC',type:'ctx'},
+      {a:'pBkO',b:'pMuC',type:'ctx'},{a:'pBkO',b:'pTlC',type:'ctx'},
+    ];
+    requestAnimationFrame(layoutEdges);
+  }
+  function mountA(){
+    clearScene();
+    mountGraph({draft:true});
+    $('#playLabel').textContent = '播放：确认并跑全图';
+    addMsg('user','把这段讲座剪一条带配音配乐的竖屏短片，再写一条 LinkedIn post');
+    addMsg('assistant','图布好了：配音、配乐进时间线出竖屏 clip，另起一条写 post，转写稿是现成的。还没跑——跑了才扣。');
+    const btn = addConfirmPill('跑完整张图约 <b class="mono">34–51</b> 积分','开始', ()=>runAll(false));
+    window.__playA = ()=>{ later(()=>{btn.click()}, 600); };
+  }
+  function runAll(auto){
+    const opening = addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg> 运行开始 · 节点逐个填充');
+    const dub = document.getElementById('nDub'), mus = document.getElementById('nMusic'),
+          po = document.getElementById('nPost'), tl = document.getElementById('nTl');
+    const line = (t)=>addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> '+t, true);
+    later(()=>runFill(dub, WAVE_VOICE, ()=>{
+      line('配音落地 · −22');
+      runFill(mus, WAVE_MUSIC, ()=>{
+        line('配乐落地 · −7');
+        runFill(po, POST_V1, ()=>{
+          line('撰写 Post 落地 · −3');
+          runFill(tl, CLIP_BODY, ()=>{
+            line('竖屏 Clip 落地 · −10');
+            /* 动作行原地沉降（现行打勾流标准）：一行从进行态变成完成态，
+               不堆第二行。 */
+            opening.classList.add('done');
+            opening.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> 本次运行花费 42 积分';
+            balance -= 42; renderBalance(); addTx('首次全图（4 节点）', -42, '刚刚');
+            addMsg('assistant','都齐了。要改哪条直接说，我只动该动的那几步。');
+          });
+        });
+      });
+    }), 700);
+  }
+
+  /* ══ SCENE B · 孤岛生长 ══ */
+  let bStep = 0;
+  function mountB(){
+    clearScene(); bStep = 0;
+    $('#playLabel').textContent = '播放：两轮 chat 布图';
+    const hint = el(`<div class="scene-hint" style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);color:var(--meta);font-size:12px;text-align:center;pointer-events:none">画布还空着<br><span style="font-size:11px">在右下角 chat 里说一句想做的，agent 来布节点</span></div>`);
+    canvas.appendChild(hint);
+    addMsg('assistant','画布是空的。说个想做的就行——我先铺开给你看，你点头才跑。比如：「写一段办公室健康的 explainer 提示词」。');
+    $('#chatInput').disabled = false; $('#chatSend').disabled = false;
+    window.__playB = ()=>{
+      later(()=>bChat('帮我写一段办公室健康的 explainer 提示词', {auto:true, onDone:()=>{
+        later(()=>bChat('用这个提示词生成一张风格图', {auto:true}), 700);
+      }}), 500);
+    };
+  }
+  function bChat(text, opts){
+    opts = opts || {};
+    addMsg('user', text);
+    if(bStep === 0){
+      bStep = 1;
+      const hint = canvas.querySelector('.scene-hint'); hint && hint.remove();
+      later(()=>{
+        const n = genNode({id:'nIsland',x:'8%',y:'26%',w:260,title:'提示词 · 生成',icon:ICON.text,state:'draft',est:'1–2',
+          draftLabel:'运行后生成 · 文本', prompt:'写一段 20 秒 explainer 口播稿提示词：办公室健康，4 个 shot，不要广告感',
+          chips:[], runtime:'MiniMax M3', born:true,
+          ports:[{id:'pIsO',side:'right',type:'text',v:34}]});
+        canvas.appendChild(n); layoutEdges();
+        addMsg('assistant','落好了，还没跑。');
+        const btn = addConfirmPill('运行它？约 <b class="mono">1–2</b> 积分','生成', ()=>{
+          runFill(n, `<div class="output-text"><p>"Create a 20s explainer VO script about staying healthy with a desk job — 4 shots, 5s each, no brand mentions, no ad tone, conversational…"</p></div>`, ()=>{
+            addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> 提示词落地 · −2', true);
+            balance -= 2; renderBalance(); addTx('提示词生成', -2, '刚刚');
+            /* 提示语只在用户还没往前走时说（bStep 仍停在 1）——
+               播放链与手动链都不再说迟到台词。 */
+            if(bStep === 1) addMsg('assistant','接着说一句「拿它生张风格图」，我就把下一个接上。');
+            opts.onDone && opts.onDone();
+          });
+        });
+        if(opts.auto) later(()=>btn.click(), 900);
+      }, 700);
+    } else if(bStep === 1){
+      bStep = 2;
+      later(()=>{
+        const n = genNode({id:'nImg',x:'48%',y:'22%',w:280,title:'风格图 · 生成',icon:ICON.image,state:'draft',est:'6–9',
+          draftLabel:'运行后生成 · 图像', prompt:'@提示词 — 2×2 风格帧，办公室场景，柔和自然光',
+          chips:['@提示词'], runtime:'Image gen · 2K · 自动', born:true,
+          ports:[{id:'pImI',side:'left',type:'text',v:58},{id:'pImO',side:'right',type:'video',v:34}]});
+        canvas.appendChild(n);
+        edgesDef.push({a:'pIsO',b:'pImI',type:'text',born:true});
+        layoutEdges();
+        addMsg('assistant','布好了——「用这个提示词」就是这条边。');
+        const btn = addConfirmPill('运行它？约 <b class="mono">6–9</b> 积分','生成', ()=>{
+          runFill(n, `<div class="thumb" style="height:130px">${ICON.image}</div>`, ()=>{
+            addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> 风格图落地 · −7', true);
+            balance -= 7; renderBalance(); addTx('风格图生成', -7, '刚刚');
+            addMsg('assistant','可以一直往下接：运动提示词、视频、时间线。');
+            opts.onDone && opts.onDone();
+          });
+        });
+        if(opts.auto) later(()=>btn.click(), 900);
+      }, 700);
+    } else {
+      addMsg('assistant','原型演示到这。真产品里可以一直说下去——改、删、再接，都行。');
+    }
+  }
+
+  /* ══ SCENE C · 直改修订 ══ */
+  const POST_V2 = `<div class="output-text"><p>Ivory towers are now a liability.</p><p>Two forces decide whether research matters:</p><p>→ Pace of tech acceleration<br>→ Public trust as the new currency</p><p>The window between discovery and deployment has collapsed. Universities that still plan in decades will be lapped by those that ship in quarters.</p><p class="tags">#TechInnovation #IndustryAcademia #ResearchLeadership</p></div>`;
+  let cDrafting = false, cRevised = false;
+  function mountC(){
+    clearScene(); cDrafting = false; cRevised = false;
+    mountGraph({draft:false});
+    $('#playLabel').textContent = '播放：直改 Post prompt';
+    addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> 首次运行完成 · 花费 42 积分', true);
+    addMsg('assistant','要改哪条，点它卡上的 prompt 就行。拿 Post 这条试试。');
+    addTx('首次全图（4 节点）', -42, '1 小时前');
+    balance -= 42; renderBalance();
+    const post = document.getElementById('nPost');
+    const prog = post.querySelector('[data-program]');
+    prog.classList.add('editable'); prog.insertAdjacentHTML('beforeend','');
+    prog.querySelector('.p-edit') || prog.insertAdjacentHTML('beforeend','<span class="p-edit">点击直接改</span>');
+    prog.addEventListener('click', ()=>openC());
+    window.__playC = ()=>{
+      later(()=>openC(), 400);
+      later(()=>typeC('\n→ 再犀利一点，砍掉第二个论点'), 1100);
+      later(sendC, 3000);
+      later(()=>$('#confirmOk').classList.add('pulse'), 5600);
+      later(()=>{ $('#confirmOk').classList.remove('pulse'); $('#confirmOk').click(); }, 6600);
+    };
+  }
+  function openC(){
+    if(cDrafting || cRevised) return;
+    cDrafting = true;
+    const post = document.getElementById('nPost');
+    const prog = post.querySelector('[data-program]');
+    prog.classList.add('drafting');
+    prog.innerHTML = `
+      <div class="p-head"><span class="meta-label" style="font-size:9.5px">prompt — 修改中</span></div>
+      <textarea id="cBox" spellcheck="false">写得犀利一点，面向学界同行，三个论点</textarea>
+      <div class="draft-row"><span class="hint">Enter 发送 · Esc 取消</span>
+        <button class="send" id="cSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button></div>`;
+    const box = $('#cBox'); box.focus(); box.setSelectionRange(box.value.length, box.value.length);
+    $('#cSend').addEventListener('click', sendC);
+    box.addEventListener('keydown', e=>{
+      if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendC(); }
+      if(e.key==='Escape'){ cDrafting=false; restoreCProg('写得犀利一点，面向学界同行，三个论点'); }
+    });
+  }
+  function restoreCProg(spec){
+    const post = document.getElementById('nPost');
+    post.querySelector('[data-program]').outerHTML = `<div class="program" data-program>
+      <div class="p-head"><span class="meta-label" style="font-size:9.5px">prompt</span></div>
+      <p class="p-spec">${spec.replace(/\n/g,'<br>')}</p>
+      <div class="chips"><span class="chip">@转写稿 0:32–1:05</span><span class="chip">@任务书</span><span class="chip">@人设 · 学术评审</span></div>
+      <span class="p-edit">点击直接改</span></div>`;
+    post.querySelector('[data-program]').addEventListener('click', ()=>openC());
+  }
+  function typeC(text){
+    const box = $('#cBox'); if(!box) return;
+    let i=0; const t=setInterval(()=>{ box.value+=text[i++]; if(i>=text.length) clearInterval(t); },34);
+    timers.push(t);
+  }
+  function sendC(){
+    if(!cDrafting) return;
+    cDrafting = false;
+    const spec = $('#cBox').value;
+    restoreCProg(spec);
+    addMsg('user','@撰写 Post 再犀利一点，砍掉第二个论点');
+    const post = document.getElementById('nPost');
+    anchorEstimate(post);
+    later(()=>{
+      $('#estimatePill').classList.remove('show');
+      addMsg('assistant','收到——只重写这条 Post 并校验，其他节点不动。');
+      showConfirm(post, {title:'修订 Post', steps:['写作','校验'], price:'2–4', onOk:()=>{
+        const rl = addRunLine('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg> 正在重写 Post…');
+        runFill(post, POST_V2, ()=>{
+          rl.classList.add('done');
+          rl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> 已完成 · 本次修订花费 3 积分';
+          balance -= 3; renderBalance(); addTx('Post 修订', -3, '刚刚');
+          const pager = document.createElement('div');
+          pager.className = 'pager show';
+          pager.innerHTML = '<button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button><span>2 / 2</span><button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>';
+          post.querySelector('.toolbar-row') || post.appendChild(Object.assign(document.createElement('div'),{className:'toolbar-row'}));
+          post.querySelector('.toolbar-row').prepend(pager);
+          cRevised = true; $('#playBtn').disabled = false;
+        });
+      }});
+    }, 1400);
+  }
+
+  /* ── scene manager ────────────────────────────── */
+  const MOUNTS = {A:mountA, B:mountB, C:mountC};
+  const PLAYS = {A:()=>window.__playA&&window.__playA(), B:()=>window.__playB&&window.__playB(), C:()=>window.__playC&&window.__playC()};
+  function switchScene(s){
+    scene = s;
+    document.querySelectorAll('.scene-tab').forEach(t=>t.classList.toggle('on', t.dataset.scene===s));
+    MOUNTS[s]();
+  }
+  document.querySelectorAll('.scene-tab').forEach(t=>t.addEventListener('click', ()=>switchScene(t.dataset.scene)));
+  $('#playBtn').addEventListener('click', ()=>{ $('#playBtn').disabled = true; PLAYS[scene](); });
+  $('#resetBtn').addEventListener('click', ()=>MOUNTS[scene]());
+  $('#chatSend').addEventListener('click', ()=>{
+    const v = $('#chatInput').value.trim(); if(!v) return;
+    $('#chatInput').value = '';
+    if(scene === 'B') bChat(v);
+    else { addMsg('user', v); later(()=>addMsg('assistant','这个场景点左上 ▶ 看演示。'), 400); }
+  });
+  $('#chatInput').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.nativeEvent.isComposing) $('#chatSend').click(); });
+  $('#creditsPill').addEventListener('click', e=>{ e.stopPropagation(); $('#walletPop').classList.toggle('show'); });
+  document.addEventListener('click', e=>{ if(!$('#walletPop').contains(e.target)) $('#walletPop').classList.remove('show'); });
+
+  mountA();
+})();
+</script>
+</body>
+</html>
