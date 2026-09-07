@@ -144,6 +144,11 @@ async def create_asset_from_key(
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
+    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
+    # flush-only, commits with the asset below.
+    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+
+    await stamp_asset_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -180,6 +185,10 @@ async def upload_asset(
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
+    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row.
+    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+
+    await stamp_asset_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -267,6 +276,11 @@ async def delete_asset(
             detail="Asset not found",
         )
     await delete_file(asset.file_url)
+    # The graph twin goes through the same wiring door (ADR-057 K2) — edges
+    # cascade structurally; absent node (pre-K2 asset) skips.
+    from app.pipeline.graph_fill import remove_asset_node  # deferred: import cycle
+
+    await remove_asset_node(db, project_id, asset_id)
     await db.delete(asset)
     await db.commit()
 

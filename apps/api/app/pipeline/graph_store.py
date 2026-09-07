@@ -341,6 +341,7 @@ async def apply_wiring_ops(
 
     delta = GraphDelta()
     pending_delete: list[UUID] = []
+    newborn_ids: list[UUID] = []  # op order — the post-loop layout pass
 
     for op in parsed:
         if isinstance(op, AddNodeOp):
@@ -365,6 +366,7 @@ async def apply_wiring_ops(
                 layout=_assign_layout(op.kind, parents, list(nodes.values())),
             )
             nodes[UUID(str(node.id))] = node
+            newborn_ids.append(UUID(str(node.id)))
             delta.affected.append(UUID(str(node.id)))
             for parent_id in op.after:
                 add_edge(parent_id, UUID(str(node.id)), None, None, None)
@@ -419,6 +421,22 @@ async def apply_wiring_ops(
                     int((nodes[n].layout or {}).get("y", 0)),
                 ),
             )
+
+    # Settle the newborns' frames with FULL edge knowledge (画布定居取景):
+    # the add-time column guess knew only `after`; the real parents are the
+    # batch's edges. Re-walk the newborns in op order over the placed set —
+    # existing frames NEVER move (append-only 保序律), each newborn settles
+    # once, before the flush, so no frame is ever persisted wrong.
+    placed = [n for n in nodes.values() if UUID(str(n.id)) not in set(newborn_ids)]
+    for nid in newborn_ids:
+        node = nodes[nid]
+        parents = [
+            nodes[UUID(str(e.from_node))]
+            for e in edges
+            if UUID(str(e.to_node)) == nid and UUID(str(e.from_node)) in nodes
+        ]
+        node.layout = _assign_layout(node.kind, parents, placed)
+        placed.append(node)
 
     # Land the batch: deletions (edges cascade structurally), then the new
     # rows, then the edited rows (ORM-tracked already).

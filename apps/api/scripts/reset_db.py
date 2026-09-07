@@ -77,7 +77,12 @@ PROTECTED_PREFIXES = ("demo/", "music/")
 
 # Tables whose rows die via FK cascade when their parent is wiped — covered
 # indirectly, so the drift report should not flag them as "not wiped".
-CASCADE_COVERED = {"workflow_steps"}  # workflow_runs.run_id ondelete=CASCADE
+CASCADE_COVERED = {
+    "workflow_steps",  # workflow_runs.run_id ondelete=CASCADE
+    # graph_edges cascade with graph_nodes, both with projects (ADR-057).
+    "graph_nodes",
+    "graph_edges",
+}
 
 
 def _plan() -> list[tuple[str, object]]:

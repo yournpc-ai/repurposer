@@ -999,6 +999,15 @@ async def create_run(
     for node, ns in zip(nodes, node_specs, strict=True):
         node.inputs = [str(nodes[i].id) for i in ns.inputs]
     await db.flush()
+    # Graph fill (ADR-057 K2, 双写期): stamp the run's intent onto the
+    # persistent graph — the execution ledger (workflow_steps) is unchanged;
+    # the graph is the product face, filled through the wiring door. It
+    # raises on a bug: same transaction, so the run birth rolls back WITH
+    # the half-stamped graph — loud in dev, never a drifted graph (K3 直读
+    # 前这是唯一防线).
+    from app.pipeline.graph_fill import stamp_run_graph  # deferred: import cycle
+
+    await stamp_run_graph(db, project, run, nodes)
     # Credits (ADR-055): hold the high-end fold at the birthplace — same
     # transaction as the run, so a shortfall (422 credits.insufficient) rolls
     # the run back with it and the worker never sees either. NULL-estimate
@@ -1046,6 +1055,11 @@ async def execute_step(node_id: UUID) -> None:
                 node.status = "running"
                 node.started_at = datetime.now(UTC)
                 node.attempt = (node.attempt or 0) + 1
+                # Graph back-write (ADR-057 K2): the family's first running
+                # step flips the owning graph node queued → running.
+                from app.pipeline.graph_fill import sync_graph_node_for_step
+
+                await sync_graph_node_for_step(db, node)
             run = await db.get(WorkflowRun, node.run_id)
             if run is not None and run.status == WorkflowStatus.PENDING:
                 run.status = WorkflowStatus.RUNNING
@@ -1101,6 +1115,13 @@ async def execute_step(node_id: UUID) -> None:
                     # (render) settles in the render chain — its terminal
                     # state is D2-owned and render is priced $0 (PRICING).
                     await capture_step(db, user_id=project.user_id, node=node)
+                # Graph back-write (ADR-057 K2): AFTER the status write above —
+                # the owning graph node's state re-aggregates off its internal
+                # step family (this step included), products back-write too.
+                # Same session, same commit; no-op for steps outside the graph.
+                from app.pipeline.graph_fill import sync_graph_node_for_step
+
+                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Suspend as s:
@@ -1121,6 +1142,9 @@ async def execute_step(node_id: UUID) -> None:
                 run = await db.get(WorkflowRun, node.run_id)
                 if run is not None:
                     run.status = WorkflowStatus.WAITING_HUMAN
+                from app.pipeline.graph_fill import sync_graph_node_for_step
+
+                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info("workflow_step_waiting", node_id=str(node_id), kind=node.kind)
         except QualityBounce as q:
@@ -1133,6 +1157,8 @@ async def execute_step(node_id: UUID) -> None:
             # morph writes die with them), so the modifiers re-apply to the
             # repaired round — never a silently unmorphed final product.
             # No cascade, no failure record, run stays open.
+            from app.pipeline.graph_fill import sync_graph_node_for_step
+
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
                 if node is None:
@@ -1189,6 +1215,8 @@ async def execute_step(node_id: UUID) -> None:
                             s.status = "pending"
                             s.finished_at = None
                             s.error = None
+                            await sync_graph_node_for_step(db, s)
+                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info(
                     "quality_bounce",
@@ -1239,6 +1267,9 @@ async def execute_step(node_id: UUID) -> None:
                 node.finished_at = datetime.now(UTC)
                 # Bill the failed attempt — its LLM/media calls happened.
                 node.cost = merge_accrued_cost(node.cost, accrued)
+                from app.pipeline.graph_fill import sync_graph_node_for_step
+
+                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 # Morph-failure rescue: a failed in-place morph leaves its
                 # producer-suppressed targets at render_status NULL — the
@@ -1295,6 +1326,11 @@ async def _cascade_skip(
             child.status = "skipped"
             child.error = reason or f"upstream node {current} failed"
             child.finished_at = datetime.now(UTC)
+            # Graph back-write (ADR-057 K2): a cascade-skipped child flips its
+            # owning graph node's aggregate with it (no-op outside the graph).
+            from app.pipeline.graph_fill import sync_graph_node_for_step
+
+            await sync_graph_node_for_step(db, child)
             frontier.append(child.id)
 
 
@@ -1322,6 +1358,9 @@ async def resume_waiting_interrupt(
     node.started_at = None
     if run.status == WorkflowStatus.WAITING_HUMAN:
         run.status = WorkflowStatus.RUNNING
+    from app.pipeline.graph_fill import sync_graph_node_for_step
+
+    await sync_graph_node_for_step(db, node)
     logger.info("interrupt_resumed", run_id=str(run.id), node_id=str(node.id))
     return node
 
@@ -1348,6 +1387,9 @@ async def bail_waiting_interrupt(
     node.spec = {**(node.spec or {}), "bailed": True, "summary": "Bailed by user"}
     node.status = "done"
     node.finished_at = datetime.now(UTC)
+    from app.pipeline.graph_fill import sync_graph_node_for_step
+
+    await sync_graph_node_for_step(db, node)
     await _cascade_skip(db, node, reason="user bailed")
     logger.info("interrupt_bailed", run_id=str(run.id), node_id=str(node.id))
     return node

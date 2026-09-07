@@ -55,5 +55,11 @@ async def create_transcript_asset_from_text(
         meta={"content_sha256": hashlib.sha256(payload).hexdigest()},
     )
     db.add(asset)
+    # 上传即落图 (ADR-057 K2): the chat-declared transcript gets its asset
+    # node in the same flush — the graph's asset family stays complete
+    # regardless of which door the asset row came through.
+    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+
+    await stamp_asset_node(db, project_id, asset)
     await db.flush()
     return asset
