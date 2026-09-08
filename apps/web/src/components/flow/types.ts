@@ -116,7 +116,8 @@ export interface FlowEdge {
   from: string
   to: string
   /** Graph canvas (ADR-057 port law): the typed flow — colors the stroke
-   * (video / audio / text), ctx renders dashed. */
+   * (video / audio), text/ctx neutral (every edge solid — ctx, the
+   * reference flow, is told by the port glyph, not the stroke). */
   edgeType?: GraphEdgeType
   /** Recipe surface: derivation vs process order. */
   semantic?: FlowEdgeSemantic

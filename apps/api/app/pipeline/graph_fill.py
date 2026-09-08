@@ -40,7 +40,7 @@ executor's node.
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import select
@@ -633,11 +633,17 @@ async def _stamp_graph_core(
     prelude_steps = [s for s in steps if s.kind in _PRELUDE_KINDS]
     if book_text is None and not draft:
         book_text = _task_book_text(steps)
+    book_newborn_id: UUID | None = None
     if task_book_node is None:
         if prelude_steps or draft:
+            # Pinned id — the SAME batch's connect ops wire off it, so the
+            # book's frame is born with full edge knowledge (布局一开始就定
+            # 好, 2026-09-08 用户拍板 — never stacked-then-repaired).
+            book_newborn_id = uuid4()
             ops.append(
                 {
                     "op": "add_node",
+                    "id": book_newborn_id,
                     "kind": "document",
                     "spec": {
                         "role": _TASK_BOOK_ROLE,
@@ -650,9 +656,11 @@ async def _stamp_graph_core(
         # overwrites it at back-write time (same source, no flicker).
         if not draft or not (task_book_node.spec or {}).get("run_id"):
             task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
+    task_book_id = book_newborn_id or (
+        UUID(str(task_book_node.id)) if task_book_node is not None else None
+    )
 
     # ── 5. Generation / processor / agent nodes (idempotent by fill_key) ──
-    new_node_specs: dict[str, dict[str, Any]] = {}  # fill_key → add_node spec
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
         head = next((s for s in fam_steps if s.kind not in ("verify", "align_stills")), fam_steps[0])
@@ -716,121 +724,81 @@ async def _stamp_graph_core(
             }
             reused.state = "draft" if draft else "queued"
             continue
-        new_node_specs[key] = {
-            "fill_key": key,
-            "summary": _node_label(head, ui_language),
-            **({"prompt": prompt} if prompt else {}),
-            "params": _params_of(head),
-            "estimate": estimate,
-            "frame_class": frame_class,
-            "tool": head.kind,
-            **(
-                {}
-                if draft
-                else {
-                    "step_ids": [str(s.id) for s in fam_steps],
-                    "run_id": run_id_str,
-                }
-            ),
-            "output_ids": [],
-        }
-        ops.append({"op": "add_node", "kind": fam["kind"], "spec": new_node_specs[key]})
-
-    if ops:
-        delta = await apply_wiring_ops(db, project_id, ops)
-        # Map newborn ids back to their fill keys / the task book (the ops
-        # order is the construction order above).
-        added = iter(delta.affected)
-        for op in ops:
-            node_id = next(added)
-            spec = op.get("spec") or {}
-            if op["kind"] == "document" and spec.get("role") == _TASK_BOOK_ROLE:
-                task_book_node = await db.get(GraphNode, node_id)
-            elif spec.get("fill_key"):
-                node_id_by_key[str(spec["fill_key"])] = node_id
-
-    # ── 6. Back-pointer the steps to their nodes + queue the task book ────
-    # Run mode only — the draft's stand-in steps have no rows to point, and
-    # the draft book keeps its birth state (its text is already present).
-    if run is not None:
-        for key, fam in families.items():
-            node_id = node_id_by_key.get(key)
-            if node_id is None:
-                continue
-            for step in fam["steps"]:
-                step.spec = {**(step.spec or {}), "graph_node_id": str(node_id)}
-        if task_book_node is not None and prelude_steps:
-            task_book_node.spec = {
-                **(task_book_node.spec or {}),
-                "step_ids": [str(s.id) for s in prelude_steps],
-                "run_id": run_id_str,
+        # Pinned newborn id — known BEFORE the batch, so §7's connect ops
+        # reference it directly and the door's frame settle sees the final
+        # edge set (布局一开始就定好: the chain is born left→right, never
+        # stacked at x=0 and repaired).
+        newborn_id = uuid4()
+        node_id_by_key[key] = newborn_id
+        ops.append(
+            {
+                "op": "add_node",
+                "id": newborn_id,
+                "kind": fam["kind"],
+                "spec": {
+                    "fill_key": key,
+                    "summary": _node_label(head, ui_language),
+                    **({"prompt": prompt} if prompt else {}),
+                    "params": _params_of(head),
+                    "estimate": estimate,
+                    "frame_class": frame_class,
+                    "tool": head.kind,
+                    **(
+                        {}
+                        if draft
+                        else {
+                            "step_ids": [str(s.id) for s in fam_steps],
+                            "run_id": run_id_str,
+                        }
+                    ),
+                    "output_ids": [],
+                },
             }
-            task_book_node.state = "queued"
-            for step in prelude_steps:
-                step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
+        )
 
-    # ── 6b. The research-brief document (document 型第三实例 — the loop's
-    # closing artifact gets its own card, fed by the agent node) ───────────
-    # draft = the preview's promise / run = queued with its agent; the text
-    # back-writes at sync (the agent's terminal mirrors onto it). A LEAF
-    # face — consuming writers still wire from the agent (the execution
-    # truth), the doc is the artifact's readable face.
+    # ── 6b-create. The research-brief document's add op rides the SAME
+    # batch (document 型第三实例 — the loop's closing artifact gets its own
+    # card, fed by the agent node): the agent's id is already pinned above,
+    # so the after-shorthand resolves in-batch. The doc's state + the
+    # agent↔brief link settle after the batch (§6b-tail).
     research_node_id = node_id_by_key.get("research")
+    brief_newborn_id: UUID | None = None
     brief_doc: GraphNode | None = None
     if research_node_id is not None:
         brief_doc = by_fill_key.get(_RESEARCH_BRIEF_KEY)
         if brief_doc is None:
-            delta = await apply_wiring_ops(
-                db,
-                project_id,
-                [
-                    {
-                        "op": "add_node",
-                        "kind": "document",
-                        "spec": {
-                            "role": _RESEARCH_BRIEF_ROLE,
-                            "fill_key": _RESEARCH_BRIEF_KEY,
-                        },
-                        "after": [research_node_id],
-                    }
-                ],
-            )
-            brief_doc = await db.get(GraphNode, delta.affected[0])
-            # Register the after-shorthand's derivation edge — the dedupe set
-            # was seeded before this batch; section 7's re-ensure relies on it.
-            have_edge.add((str(research_node_id), str(brief_doc.id), "text"))
-        if brief_doc is not None:
-            # The agent↔brief link — sync_graph_node_for_step mirrors the
-            # agent's terminal state + renders the brief onto the doc.
-            agent_node = await db.get(GraphNode, research_node_id)
-            if agent_node is not None and (agent_node.spec or {}).get(
-                "brief_doc_id"
-            ) != str(brief_doc.id):
-                agent_node.spec = {
-                    **(agent_node.spec or {}),
-                    "brief_doc_id": str(brief_doc.id),
+            brief_newborn_id = uuid4()
+            ops.append(
+                {
+                    "op": "add_node",
+                    "id": brief_newborn_id,
+                    "kind": "document",
+                    "spec": {
+                        "role": _RESEARCH_BRIEF_ROLE,
+                        "fill_key": _RESEARCH_BRIEF_KEY,
+                    },
+                    "after": [research_node_id],
                 }
-            if draft:
-                # A live/finished brief doc is an earlier run's truth — the
-                # preview leaves it (the generation nodes' own restamp rule).
-                if str(brief_doc.state) in _DRAFT_RESTAMP_STATES:
-                    brief_doc.state = "draft"
-            else:
-                brief_doc.state = "queued"
+            )
+            # Register the after-shorthand's derivation edge — §7's
+            # re-ensure dedupes against it.
+            have_edge.add((str(research_node_id), str(brief_newborn_id), "text"))
+    brief_doc_id = brief_newborn_id or (
+        UUID(str(brief_doc.id)) if brief_doc is not None else None
+    )
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     def connect(from_id: UUID, to_id: UUID, edge_type: str) -> None:
         if (str(from_id), str(to_id), edge_type) in have_edge or from_id == to_id:
             return
         have_edge.add((str(from_id), str(to_id), edge_type))
-        pending_edges.append(
+        ops.append(
             {"op": "connect", "from_node": from_id, "to_node": to_id, "edge_type": edge_type}
         )
 
     def node_of(step: WorkflowStep) -> UUID | None:
         return node_id_by_key.get(_fill_key_for_step(step))
 
-    pending_edges: list[dict[str, Any]] = []
     # Step-input topology → node edges (the compiled DAG's shape, resolved
     # to the graph's nouns — never invented wiring).
     for step in steps:
@@ -842,8 +810,8 @@ async def _stamp_graph_core(
             if upstream is None:
                 continue
             if upstream.kind in _PRELUDE_KINDS:
-                if task_book_node is not None:
-                    connect(UUID(str(task_book_node.id)), target_node, "ctx")
+                if task_book_id is not None:
+                    connect(task_book_id, target_node, "ctx")
                 continue
             source_node = node_of(upstream)
             if source_node is None:
@@ -855,17 +823,17 @@ async def _stamp_graph_core(
             )
     # The brief doc's derivation edge (newborns got it from the after-
     # shorthand above; a reused doc re-ensures it — dedupe wins).
-    if research_node_id is not None and brief_doc is not None:
-        connect(research_node_id, UUID(str(brief_doc.id)), "text")
+    if research_node_id is not None and brief_doc_id is not None:
+        connect(research_node_id, brief_doc_id, "text")
     # Assets feed the graph: text into the task book and the writers, the
     # media flow into the clip-family roots (a root = no clip-family
     # upstream inside this run). A root that acts on the project's EXISTING
     # clips (mode② — the project already has clips from an earlier run)
     # wires from that run's producer node instead: the clips it consumes
     # are that node's products, not the raw assets.
-    if task_book_node is not None:
+    if task_book_id is not None:
         for asset_node_id in asset_node_ids:
-            connect(asset_node_id, UUID(str(task_book_node.id)), "text")
+            connect(asset_node_id, task_book_id, "text")
     existing_producer_ids = await _existing_clip_producer_nodes(db, project_id)
     clip_roots = [
         s
@@ -908,15 +876,70 @@ async def _stamp_graph_core(
     for asset_node_id, asset in zip(asset_node_ids, assets):
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
-    if pending_edges:
-        await apply_wiring_ops(db, project_id, pending_edges)
+
+    # ── ONE batch — the graph's only write door ───────────────────────────
+    # Adds carry pinned ids and every connect references them, so the door's
+    # frame settle (画布定居取景) sees the FINAL edge set: the chain is born
+    # left→right with full edge knowledge, never stacked-then-repaired.
+    if ops:
+        await apply_wiring_ops(db, project_id, ops)
+    if book_newborn_id is not None:
+        task_book_node = await db.get(GraphNode, book_newborn_id)
+
+    # ── 6. Back-pointer the steps to their nodes + queue the task book ────
+    # Run mode only — the draft's stand-in steps have no rows to point, and
+    # the draft book keeps its birth state (its text is already present).
+    if run is not None:
+        for key, fam in families.items():
+            node_id = node_id_by_key.get(key)
+            if node_id is None:
+                continue
+            for step in fam["steps"]:
+                step.spec = {**(step.spec or {}), "graph_node_id": str(node_id)}
+        if task_book_node is not None and prelude_steps:
+            task_book_node.spec = {
+                **(task_book_node.spec or {}),
+                "step_ids": [str(s.id) for s in prelude_steps],
+                "run_id": run_id_str,
+            }
+            task_book_node.state = "queued"
+            for step in prelude_steps:
+                step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
+
+    # ── 6b-tail. The research-brief document's state + the agent↔brief
+    # link (document 型第三实例): draft = the preview's promise / run =
+    # queued with its agent; the text back-writes at sync (the agent's
+    # terminal mirrors onto it). A LEAF face — consuming writers still wire
+    # from the agent (the execution truth), the doc is the artifact's
+    # readable face.
+    if research_node_id is not None:
+        if brief_newborn_id is not None:
+            brief_doc = await db.get(GraphNode, brief_newborn_id)
+        if brief_doc is not None:
+            # The agent↔brief link — sync_graph_node_for_step mirrors the
+            # agent's terminal state + renders the brief onto the doc.
+            agent_node = await db.get(GraphNode, research_node_id)
+            if agent_node is not None and (agent_node.spec or {}).get(
+                "brief_doc_id"
+            ) != str(brief_doc.id):
+                agent_node.spec = {
+                    **(agent_node.spec or {}),
+                    "brief_doc_id": str(brief_doc.id),
+                }
+            if draft:
+                # A live/finished brief doc is an earlier run's truth — the
+                # preview leaves it (the generation nodes' own restamp rule).
+                if str(brief_doc.state) in _DRAFT_RESTAMP_STATES:
+                    brief_doc.state = "draft"
+            else:
+                brief_doc.state = "queued"
 
     logger.info(
         "graph_stamped",
         run_id=str(run.id) if run is not None else None,
         draft=draft,
         nodes=len(node_id_by_key) + (1 if task_book_node is not None else 0),
-        edges=len(pending_edges),
+        edges=sum(1 for op in ops if op["op"] == "connect"),
     )
 
 

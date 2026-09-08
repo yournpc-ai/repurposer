@@ -63,8 +63,10 @@ export function clipNodeHeight(aspect?: string | null): number {
 
 /** Text-product body height by preview line count (post / article — no
  * baked media): padding + optional title + clamped body + hashtag band.
- * Preview clamp 2–12 lines (2026-09-06 ruling — the canvas preview carries
- * a real reading burden before the reader opens). */
+ * Preview height cap 2–12 lines (2026-09-06 ruling — the canvas preview
+ * carries a real reading burden before the reader opens); the cap bounds
+ * the NODE's height only — the full body SCROLLS inside it (2026-09-08:
+ * line-clamp truncation retired for in-place scroll, nowheel+nopan). */
 export function textBodyHeight(lineCount: number, hasTitle: boolean): number {
   const clamped = Math.max(2, Math.min(lineCount, 12))
   const lineHeight = 18 // text-xs leading-relaxed ≈ 18px per line

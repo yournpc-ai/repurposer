@@ -22,69 +22,79 @@
 }
 
 /* ── Typed flows (ADR-057 端口法则, the graph canvas) ──────────────────── */
-/* The edge's edge_type colors the stroke: video / audio carry their own
- * hues (the canvas's one semantic-color vocabulary — the only non-neutral
- * tokens on the surface); text keeps the quiet neutral stroke; ctx is the
- * dashed context flow. The port dots speak the same colors. */
+/* 线锚同色律 (2026-09-09 走查拍板, FLORA): the edge's stroke IS its port
+ * anchor's fill — ONE tint per flow, two surfaces, so the line reads as
+ * growing out of the anchor, never a second voice. video / audio carry the
+ * canvas's one semantic-color vocabulary (their port glyphs keep the full
+ * hue); text / ctx share the neutral tint (every edge solid — the reference
+ * flow is told by the port glyph, Files vs T, not the stroke). */
 :root {
   --flow-video: oklch(0.58 0.16 295);
   --flow-audio: oklch(0.66 0.15 350);
+  --flow-video-tint: color-mix(in oklch, var(--flow-video) 28%, var(--background));
+  --flow-audio-tint: color-mix(in oklch, var(--flow-audio) 28%, var(--background));
+  --flow-neutral-tint: color-mix(in oklch, var(--muted-foreground) 22%, var(--background));
 }
 .dark {
   --flow-video: oklch(0.68 0.15 295);
   --flow-audio: oklch(0.72 0.13 350);
+  /* The dark canvas asks for a stronger pour for the same perceived step. */
+  --flow-video-tint: color-mix(in oklch, var(--flow-video) 38%, var(--background));
+  --flow-audio-tint: color-mix(in oklch, var(--flow-audio) 38%, var(--background));
+  --flow-neutral-tint: color-mix(in oklch, var(--muted-foreground) 26%, var(--background));
 }
 .flow-edge-video {
-  stroke: var(--flow-video);
-  stroke-opacity: 0.7;
+  stroke: var(--flow-video-tint);
 }
 .flow-edge-audio {
-  stroke: var(--flow-audio);
-  stroke-opacity: 0.7;
+  stroke: var(--flow-audio-tint);
 }
 .flow-edge-text {
-  stroke: var(--muted-foreground);
-  stroke-opacity: 0.55;
+  stroke: var(--flow-neutral-tint);
 }
 .flow-edge-ctx {
-  stroke: var(--muted-foreground);
-  stroke-opacity: 0.45;
-  stroke-dasharray: 4 4;
-}
-/* A born ctx edge must KEEP its dashes — the birth keyframe settles solid
-   (6 0.01), which would erase the ctx signature; ctx edges skip the march
-   and fade in place instead. */
-.flow-edge-ctx.flow-edge-born {
-  animation: flow-edge-in 640ms ease-out backwards;
+  stroke: var(--flow-neutral-tint);
 }
 
-/* The port dots (port law: in = the consumption region's bottom-left, out =
- * the production region's top-right; same-side ports stack from the corner).
- * React Flow's default handle chrome is a giant square — ours is a 10px dot
- * with a page-colored halo so it reads on top of the card's media. */
+/* The port anchors (port law: in = the consumption region's bottom-left,
+ * out = the production region's top-right; same-side ports stack from the
+ * corner; 2026-09-08 FLORA 收编——外置圆形锚点): a 28px circle parked FULLY
+ * OUTSIDE the card with a 12px gap — the edge attaches at the circle's
+ * center and the opaque fill hides the line's inner half, so the stroke
+ * reads as touching the anchor, never the card face. ONE anatomy for every
+ * type: fill = the flow's SHARED tint (线锚同色律 — the same variable the
+ * edge strokes with), glyph = the flow's full color at ~46% (it breathes
+ * inside the circle, never fills it). video/audio carry the semantic hues;
+ * text and ctx ride the neutral tint — every edge is solid, so the
+ * reference flow (ctx) is told from a material text flow ONLY by this glyph
+ * (Files vs T, 2026-09-09). */
 .flow-port {
-  width: 10px !important;
-  height: 10px !important;
+  width: 28px !important;
+  height: 28px !important;
   min-width: 0 !important;
   min-height: 0 !important;
+  /* react-flow's left/right handles carry translate(0,-50%) — kill it so
+     the corner-law's bottom/top offsets pin the chip's ACTUAL edge. */
+  transform: none !important;
   border-radius: 50%;
-  border: 2px solid var(--background);
-  background: var(--muted-foreground);
+  border: none;
+  background: var(--flow-neutral-tint);
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flow-port > svg {
+  width: 13px;
+  height: 13px;
 }
 .flow-port-video {
-  background: var(--flow-video);
+  background: var(--flow-video-tint);
+  color: var(--flow-video);
 }
 .flow-port-audio {
-  background: var(--flow-audio);
-}
-.flow-port-text {
-  background: var(--muted-foreground);
-}
-.flow-port-ctx {
-  background: transparent;
-  border: 1.5px dashed var(--muted-foreground);
-  width: 11px !important;
-  height: 11px !important;
+  background: var(--flow-audio-tint);
+  color: var(--flow-audio);
 }
 
 

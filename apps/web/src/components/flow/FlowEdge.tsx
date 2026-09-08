@@ -9,7 +9,8 @@ export interface FlowEdgeData extends Record<string, unknown> {
   /** Recipe surface: derivation vs process order. */
   semantic?: FlowEdgeSemantic
   /** Graph canvas (ADR-057 port law): the typed flow — colors the stroke
-   * (video / audio / text), ctx renders dashed. */
+   * (video / audio), text/ctx stay neutral (every edge solid — the
+   * reference flow is told by the port glyph, not the stroke). */
   edgeType?: GraphEdgeType
   /** Birth stagger delay (ms); null = render instantly (no choreography). */
   drawDelay: number | null
@@ -22,7 +23,7 @@ export interface FlowEdgeData extends Record<string, unknown> {
 export type FlowEdgeType = Edge<FlowEdgeData>
 
 /** The one edge renderer — a single quiet stroke for the recipe semantics,
- * the port law's typed colors on the graph canvas (ctx dashed), plus the
+ * the port law's typed colors on the graph canvas (all solid), plus the
  * dashed-flow birth animation (`flow-edge-birth`: dashes march in, then
  * settle solid). Live work rides as a second path: one short packet
  * traveling the same bezier (`flow-edge-packet`), so the base stroke never

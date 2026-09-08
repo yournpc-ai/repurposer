@@ -234,6 +234,11 @@ function ProjectDetailPage() {
   const [publishOutput, setPublishOutput] = useState<Output | null>(null)
   const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null)
 
+  const fetchGraph = useCallback(async () => {
+    const graphRes = await apiFetch(`/api/v1/projects/${projectId}/graph`, { toast: false })
+    if (graphRes.ok) setGraph((await graphRes.json()) as ProjectGraph)
+  }, [projectId])
+
   const fetchResults = useCallback(async () => {
     try {
       // The canvas reads the graph directly (ADR-057 — zero projection):
@@ -303,6 +308,17 @@ function ProjectDetailPage() {
     (latestRun.status === "pending" || latestRun.status === "running")
   const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
   const sseActive = runActive && sse.steps.length > 0
+
+  // The canvas's live read (ADR-057 K2 — run 期节点原地填充): graph node
+  // states back-write at every step transition (queued → running → done,
+  // and landed products write spec.output_ids), so every SSE step diff is
+  // also a graph-state change. Refetch the graph on the same beat — the
+  // run's start/terminal full refetches stay (they also carry /results).
+  const sseSteps = sse.steps
+  useEffect(() => {
+    if (!sseActive) return
+    void fetchGraph()
+  }, [sseSteps, sseActive, fetchGraph])
 
   // The completed-run snapshot (D9): a live completed run takes precedence;
   // the sticky copy keeps the canvas's terminal frame up while a later

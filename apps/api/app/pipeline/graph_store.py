@@ -46,17 +46,22 @@ class WiringRejected(ValueError):
 class AddNodeOp(BaseModel):
     """Place a node. ``spec`` is the node's program (prompt / params /
     asset_id / text — well-formed shapes are the producer's knowledge, K2's
-    migration mapping); ``after`` wires its birth edges (connect's shorthand)."""
+    migration mapping); ``after`` wires its birth edges (connect's shorthand).
+    ``id`` pins the newborn's identity — the server-side stamper's seat: its
+    SAME-batch connect ops reference the pinned id, so frames are born with
+    full edge knowledge (布局一开始就定好, 2026-09-08 用户拍板 — never an
+    island guess repaired by a second pass). Chat proposals never carry one."""
 
     op: Literal["add_node"]
     kind: Literal["asset", "document", "generator", "processor", "agent"]
     spec: dict[str, Any] = Field(default_factory=dict)
     after: list[UUID] = Field(default_factory=list)
+    id: UUID | None = None
 
 
 class ConnectOp(BaseModel):
     """Wire one typed flow. ``edge_type`` None derives from the two ends'
-    port offers (ctx = the dashed context flow)."""
+    port offers (ctx = the reference/context flow)."""
 
     op: Literal["connect"]
     from_node: UUID
@@ -121,7 +126,7 @@ def wiring_catalog_lines() -> str:
             "- add_node: place a node (kind: asset|document|generator|processor|agent; "
             "spec: the node's program — prompt/params; after: upstream node ids to wire from)",
             "- connect: wire a typed flow between two nodes "
-            "(edge_type: video|audio|text|ctx — ctx = context, the dashed line)",
+            "(edge_type: video|audio|text|ctx — ctx = the reference/context flow)",
             "- edit_prompt: rewrite a generator/agent node's prompt",
             "- delete_node: remove a node (its edges go with it)",
             "- run: fill nodes with products (nodes optional — default = the "
@@ -197,6 +202,14 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 # agent reserves the clip maximum — safe by construction.
 _GAP_MAIN = 96
 _GAP_CROSS = 24
+# A fresh column's first node RISES above its topmost parent (2026-09-09
+# 走查拍板, FLORA 同典): out-ports ride the parent's top-RIGHT (~54px from
+# its top: outBase 40 + half the 28px anchor), in-ports the child's
+# bottom-LEFT (~204px from its top at the draft anatomy: 26+120+88+44 −
+# inBase 60 − half the anchor), so a top-aligned child forces every edge
+# into a steep S across the gap. Lifting the child by the port-geometry
+# delta + a breath of slack (204 − 54 − 24) lets the line arc gently.
+_FRESH_COLUMN_RISE = 126
 _FRAME_CLASS: dict[str, tuple[int, int]] = {
     "asset": (280, 260),
     "document": (260, 200),
@@ -204,6 +217,19 @@ _FRAME_CLASS: dict[str, tuple[int, int]] = {
     "clip": (280, 660),
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
+
+# 统一摆位律 (2026-09-09 拍板): ONE frame law owns every newborn's frame
+# (_assign_layout), and columns are DEPTH-pitched — x = depth × _PITCH,
+# never derived from a parent's right edge (mixed frame widths made
+# parent-right columns ragged: same-column nodes of different widths hand
+# their children different starts, and same-depth siblings drift into
+# horizontal overlap). Depth = the topological generation (max parent
+# depth + 1, islands 0), so a child always lands strictly right of EVERY
+# parent by ≥ _GAP_MAIN. A node's column IS its depth — the frame's x is a
+# rendering of it, never the source of truth. Frames of projects born
+# before this law are replayed once by migration (see
+# migrations/versions/e7a9c1d35b28_depth_pitch_frames.py).
+_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 340 + 96
 
 
 def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
@@ -214,32 +240,106 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
 def _assign_layout(
     kind: str,
     spec: dict[str, Any],
+    depth: int,
     parents: list[GraphNode],
-    existing: list[GraphNode],
+    column: list[GraphNode],
 ) -> dict[str, int]:
-    """The settled frame for a newborn node: x = right of its parents'
-    rightmost edge (islands start a fresh column), y = appended under that
-    column's current tail. Existing frames NEVER move — the graph only
-    grows, it never jolts (append-only 保序律)."""
+    """THE one frame law (统一摆位律) — every newborn's settled frame comes
+    from this function and nowhere else:
+      x = depth × _PITCH                  (depth-pitched columns, never ragged)
+      y = ① the column's tail + _GAP_CROSS  (siblings stack in place)
+          ② a fresh column → the topmost parent's y − _FRESH_COLUMN_RISE
+             (the port-geometry delta — the out→in arc stays gentle)
+          ③ an island → 0
+    Existing frames NEVER move — the graph only grows, it never jolts
+    (append-only 保序律)."""
     w, h = _frame_of(kind, spec)
-    x = (
-        max(int((p.layout or {}).get("x", 0)) + int((p.layout or {}).get("w", w))
-            for p in parents)
-        + _GAP_MAIN
-        if parents
-        else 0
-    )
-    column = [n for n in existing if int((n.layout or {}).get("x", 0)) == x]
-    y = (
-        max(
-            int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", h))
-            for n in column
+    if column:
+        y = (
+            max(
+                int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", h))
+                for n in column
+            )
+            + _GAP_CROSS
         )
-        + _GAP_CROSS
-        if column
-        else 0
-    )
-    return {"x": x, "y": y, "w": w, "h": h}
+    elif parents:
+        y = min(int((p.layout or {}).get("y", 0)) for p in parents) - _FRESH_COLUMN_RISE
+    else:
+        y = 0
+    return {"x": depth * _PITCH, "y": y, "w": w, "h": h}
+
+
+def settle_frames_with_edges(
+    newborns: list[GraphNode],
+    placed: list[GraphNode],
+    edges: list[GraphEdge],
+) -> None:
+    """The door's frame settle (画布定居取景): every newborn's frame is
+    assigned ONCE — by _assign_layout, the one frame law — parents-first
+    over the batch's FINAL edge set (a node is born with full edge
+    knowledge, never an island guess repaired later; 2026-09-08 用户拍板:
+    布局一开始就定好). ``placed`` = the settled history — existing frames
+    NEVER move (append-only 保序律); the newborns' provisional add-time
+    values are replaced before the flush, so no provisional frame is ever
+    persisted."""
+    by_id = {UUID(str(n.id)): n for n in [*placed, *newborns]}
+
+    def parents_of(node_id: UUID) -> list[GraphNode]:
+        return [
+            by_id[UUID(str(e.from_node))]
+            for e in edges
+            if UUID(str(e.to_node)) == node_id and UUID(str(e.from_node)) in by_id
+        ]
+
+    # Depth = the topological generation (max parent depth + 1, islands 0),
+    # memoized over the FINAL edge set — settled history derives it the same
+    # way (a node's column IS its depth; the frame's x merely renders it).
+    # The cycle guard only keeps a poisoned world from looping forever — the
+    # wiring adjudication rejects cycles before this ever runs.
+    depth_memo: dict[UUID, int] = {}
+
+    def depth_of(node_id: UUID, trail: set[UUID]) -> int:
+        memo = depth_memo.get(node_id)
+        if memo is not None:
+            return memo
+        if node_id in trail:
+            return 0
+        trail.add(node_id)
+        ups = parents_of(node_id)
+        d = 0 if not ups else max(depth_of(UUID(str(p.id)), trail) for p in ups) + 1
+        depth_memo[node_id] = d
+        return d
+
+    def frame_of(node: GraphNode) -> None:
+        nid = UUID(str(node.id))
+        depth = depth_of(nid, set())
+        parents = parents_of(nid)
+        column = [n for n in working if depth_of(UUID(str(n.id)), set()) == depth]
+        node.layout = _assign_layout(node.kind, node.spec or {}, depth, parents, column)
+
+    settled = {UUID(str(n.id)) for n in placed}
+    working = list(placed)
+    pending = list(newborns)
+    # Parents-first passes: a newborn whose parent is also a newborn waits
+    # for the pass that settles it (a chain settles one link per pass).
+    # Structurally cycle-free (the wiring adjudication rejects cycles); the
+    # fallback below settles whatever remains rather than loop forever.
+    while pending:
+        progressed = False
+        for node in list(pending):
+            nid = UUID(str(node.id))
+            if any(UUID(str(p.id)) not in settled for p in parents_of(nid)):
+                continue
+            frame_of(node)
+            working.append(node)
+            settled.add(nid)
+            pending.remove(node)
+            progressed = True
+        if not progressed:
+            for node in pending:
+                frame_of(node)
+                working.append(node)
+            break
 
 
 # ---- the delta ---------------------------------------------------------------
@@ -359,16 +459,22 @@ async def apply_wiring_ops(
 
     for op in parsed:
         if isinstance(op, AddNodeOp):
+            if op.id is not None and op.id in nodes:
+                raise WiringRejected(f"add_node: id {op.id} already exists")
             parents = []
             for parent_id in op.after:
                 parent = nodes.get(parent_id)
                 if parent is None:
                     raise WiringRejected(f"add_node: unknown upstream {parent_id}")
                 parents.append(parent)
+            pw, ph = _frame_of(op.kind, dict(op.spec))
             node = GraphNode(
                 # Explicit ids: the working map wires after-edges off them
                 # BEFORE the flush (the column default only fires at INSERT).
-                id=uuid4(),
+                # A stamper-pinned id (op.id) lets the SAME batch's connect
+                # ops reference the newborn — frames born with full edge
+                # knowledge.
+                id=op.id or uuid4(),
                 project_id=project_id,
                 kind=op.kind,
                 # Assets are inputs, not execution units — their content is
@@ -377,7 +483,27 @@ async def apply_wiring_ops(
                 # (图先展示后运行 — zero consumption until a run fills it).
                 state="done" if op.kind == "asset" else "draft",
                 spec=dict(op.spec),
-                layout=_assign_layout(op.kind, dict(op.spec), parents, list(nodes.values())),
+                # Provisional frame (a placeholder — the door's settle
+                # replaces it with the frame law's output before the flush,
+                # so no provisional value is ever persisted). Pitch-monotone
+                # (right of every parent, risen with them) so the run op's
+                # layout-ordered subgraph reads the same before and after
+                # the settle.
+                layout={
+                    "x": (
+                        max(int((p.layout or {}).get("x", 0)) for p in parents) + _PITCH
+                        if parents
+                        else 0
+                    ),
+                    "y": (
+                        min(int((p.layout or {}).get("y", 0)) for p in parents)
+                        - _FRESH_COLUMN_RISE
+                        if parents
+                        else 0
+                    ),
+                    "w": pw,
+                    "h": ph,
+                },
             )
             nodes[UUID(str(node.id))] = node
             newborn_ids.append(UUID(str(node.id)))
@@ -437,20 +563,12 @@ async def apply_wiring_ops(
             )
 
     # Settle the newborns' frames with FULL edge knowledge (画布定居取景):
-    # the add-time column guess knew only `after`; the real parents are the
-    # batch's edges. Re-walk the newborns in op order over the placed set —
-    # existing frames NEVER move (append-only 保序律), each newborn settles
-    # once, before the flush, so no frame is ever persisted wrong.
+    # parents-first over the batch's FINAL edge set (the add-time column
+    # guess was a placeholder — the real parents are the batch's edges).
+    # Each frame is assigned ONCE here, before the flush — born right, never
+    # repaired later; existing frames NEVER move (append-only 保序律).
     placed = [n for n in nodes.values() if UUID(str(n.id)) not in set(newborn_ids)]
-    for nid in newborn_ids:
-        node = nodes[nid]
-        parents = [
-            nodes[UUID(str(e.from_node))]
-            for e in edges
-            if UUID(str(e.to_node)) == nid and UUID(str(e.from_node)) in nodes
-        ]
-        node.layout = _assign_layout(node.kind, node.spec or {}, parents, placed)
-        placed.append(node)
+    settle_frames_with_edges([nodes[nid] for nid in newborn_ids], placed, edges)
 
     # Land the batch: deletions (edges cascade structurally), then the new
     # rows, then the edited rows (ORM-tracked already).
@@ -477,5 +595,6 @@ __all__ = [
     "WiringOp",
     "WiringRejected",
     "apply_wiring_ops",
+    "settle_frames_with_edges",
     "wiring_catalog_lines",
 ]

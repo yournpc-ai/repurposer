@@ -29,6 +29,11 @@ Covered:
 - _fill_key_for_step idempotency fingerprints (graph_fill): producer slot /
   translate·dub transform / bare-kind shapes — a re-run of the same slot
   finds its node, a new slot grows one
+- settle_frames_with_edges (the door's frame settle — 布局一开始就定好):
+  chains grow right one column per depth (parents-first passes), siblings
+  stack inside their shared column, settled history never moves; pinned-id
+  adds wire same-batch connects (born with full edge knowledge) and id
+  collisions are rejected
 """
 
 from uuid import uuid4
@@ -44,7 +49,7 @@ from app.pipeline.graph_fill import (
     stamp_transcript_node,
     sync_graph_node_for_step,
 )
-from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+from app.pipeline.graph_store import WiringRejected, apply_wiring_ops, settle_frames_with_edges
 
 _PROJECT_ID = uuid4()
 
@@ -193,10 +198,12 @@ async def test_add_node_with_after_derives_edge_state_layout():
     assert newborn.state == "draft"  # 图先展示后运行 — zero consumption until a run
     edge = next(e for e in db.added if isinstance(e, GraphEdge))
     assert (edge.from_node, edge.to_node, edge.edge_type) == (asset.id, newborn.id, "video")
-    # 定居取景: x = the parent's right edge + the main gap; existing frames
-    # never move (append-only 保序律).
-    assert newborn.layout["x"] == 280 + 96
-    assert newborn.layout["y"] == 0
+    # 定居取景 (统一摆位律): x = depth × pitch (the parent's generation 0 →
+    # the child lands one pitch right); a fresh column's first node RISES
+    # above its parent (2026-09-09); existing frames never move
+    # (append-only 保序律).
+    assert newborn.layout["x"] == 436
+    assert newborn.layout["y"] == -126
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     assert db.flush_count == 1
 
@@ -585,3 +592,103 @@ async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
     assert doc.state == "done"
     assert "Storage is the bottleneck." in doc.spec["text"]
     assert "• Fact one" in doc.spec["text"]
+
+
+# ---- settle_frames_with_edges (the door's frame settle, 2026-09-08) ---------
+
+
+@pytest.mark.asyncio
+async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
+    """The stamper's seat: a pinned id lets the SAME batch's connect op
+    reference the newborn — the door's settle sees the final edge set and
+    the chain is born left→right, never stacked at x=0 and repaired
+    (2026-09-08 用户拍板: 布局一开始就定好)."""
+    book_id = uuid4()
+    writer_id = uuid4()
+    db = _StubDb()
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [
+            {"op": "add_node", "id": book_id, "kind": "document",
+             "spec": {"role": "task_book", "text": "1 LinkedIn post · English"}},
+            {"op": "add_node", "id": writer_id, "kind": "generator",
+             "spec": {"fill_key": "write_post#post#0", "frame_class": "text"}},
+            {"op": "connect", "from_node": book_id, "to_node": writer_id, "edge_type": "ctx"},
+        ],
+    )
+    book = next(n for n in db.nodes if n.id == book_id)
+    writer = next(n for n in db.nodes if n.id == writer_id)
+    assert (book.layout["x"], book.layout["y"]) == (0, 0)
+    assert writer.layout["x"] == 436
+    # A fresh column's first node rises above its parent (2026-09-09).
+    assert writer.layout["y"] == -126
+
+
+@pytest.mark.asyncio
+async def test_add_node_pinned_id_collision_rejected():
+    existing = _node("generator")
+    db = _StubDb(nodes=[existing])
+    with pytest.raises(WiringRejected, match="already exists"):
+        await apply_wiring_ops(
+            db,
+            _PROJECT_ID,
+            [{"op": "add_node", "id": existing.id, "kind": "generator", "spec": {}}],
+        )
+
+
+def test_settle_frames_chain_grows_right_not_down():
+    """The fill's two-batch case: nodes born as x=0 islands (stacked), edges
+    landed after — the re-settle walks parents-first and the chain reads
+    left → right, one column per depth."""
+    book = _node("document", spec={"role": "task_book"},
+                 layout={"x": 0, "y": 0, "w": 260, "h": 200})
+    writer = _node("generator", spec={"fill_key": "write_post#post#0", "frame_class": "text"},
+                   layout={"x": 0, "y": 224, "w": 340, "h": 440})
+    verify_free_second = _node("generator", spec={"fill_key": "write_post#post#1", "frame_class": "text"},
+                               layout={"x": 0, "y": 688, "w": 340, "h": 440})
+    edges = [
+        _edge(book.id, writer.id, "ctx"),
+        _edge(book.id, verify_free_second.id, "ctx"),
+    ]
+    settle_frames_with_edges([book, writer, verify_free_second], [], edges)
+    # The book has no parents — it stays at the origin island.
+    assert (book.layout["x"], book.layout["y"]) == (0, 0)
+    # Children settle one depth-pitch right: the first RISES above the book
+    # (2026-09-09), the second stacks INSIDE the shared column (same depth)
+    # under its sibling (cross gap).
+    assert writer.layout["x"] == 436
+    assert writer.layout["y"] == -126
+    assert verify_free_second.layout["x"] == 436
+    assert verify_free_second.layout["y"] == -126 + 440 + 24
+
+
+def test_settle_frames_parent_chain_one_link_per_pass():
+    """A → B → C: C must wait for B's settled frame (parents-first passes),
+    landing one column further right — never computed off B's provisional
+    island frame."""
+    a = _node("document", layout={"x": 0, "y": 0, "w": 260, "h": 200})
+    b = _node("generator", spec={"frame_class": "text"}, layout={"x": 0, "y": 224, "w": 340, "h": 440})
+    c = _node("processor", spec={"frame_class": "clip"}, layout={"x": 0, "y": 688, "w": 280, "h": 660})
+    edges = [_edge(a.id, b.id, "ctx"), _edge(b.id, c.id, "text")]
+    settle_frames_with_edges([a, b, c], [], edges)
+    assert b.layout["x"] == 436
+    assert c.layout["x"] == 2 * 436
+    # The rise compounds link by link: b above a, c above b.
+    assert c.layout["y"] == -252
+
+
+def test_settle_frames_never_moves_settled_history():
+    """Settled nodes are the re-settle's ground truth: a newborn parented by
+    one settles right of ITS frame; the settled frame itself is untouched."""
+    asset = _node("asset", state="done", spec={"asset_type": "video"},
+                  layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    book = _node("document", layout={"x": 0, "y": 284, "w": 260, "h": 200})
+    writer = _node("generator", spec={"frame_class": "text"},
+                   layout={"x": 0, "y": 508, "w": 340, "h": 440})
+    edges = [_edge(asset.id, book.id, "text"), _edge(book.id, writer.id, "ctx")]
+    settle_frames_with_edges([book, writer], [asset], edges)
+    assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
+    # The book rises above its settled parent; the settled frame is untouched.
+    assert (book.layout["x"], book.layout["y"]) == (436, -126)
+    assert writer.layout["x"] == 2 * 436

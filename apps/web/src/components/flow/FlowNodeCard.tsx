@@ -2,11 +2,13 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
+  AudioLines,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
   Download,
   FileText,
+  Files,
   Image as ImageIcon,
   Images,
   Maximize2,
@@ -15,6 +17,8 @@ import {
   Quote,
   Trash2,
   TriangleAlert,
+  Type,
+  Video,
   Volume2,
   VolumeX,
 } from "lucide-react"
@@ -769,8 +773,15 @@ function TextProductRegion({
     }
   }
 
+  // nowheel + nopan (2026-09-08 user ruling): the region scrolls + selects
+  // DIRECTLY — react-flow's pane gestures yield to elements carrying the
+  // classes (wheel → zoom, drag → pan both stay local), so the full body
+  // reads in place without the click-to-edit first. The 12-line budget
+  // still caps the NODE's height (layout.ts); the body scrolls inside it
+  // instead of truncating (clamp retired — scrolling carries the reading
+  // burden now).
   const contentClass =
-    "h-full w-full overflow-y-auto rounded-lg px-3 py-3 text-left text-xs leading-relaxed thin-scroll"
+    "nowheel nopan h-full w-full overflow-y-auto overscroll-contain rounded-lg px-3 py-3 text-left text-xs leading-relaxed thin-scroll"
 
   return (
     <div
@@ -823,14 +834,7 @@ function TextProductRegion({
           {title ? (
             <p className="mb-1 line-clamp-1 text-sm font-medium leading-snug">{title}</p>
           ) : null}
-          <p
-            className={cn(
-              "whitespace-pre-wrap",
-              title ? "line-clamp-[11]" : "line-clamp-[12]",
-            )}
-          >
-            {body}
-          </p>
+          <p className="whitespace-pre-wrap">{body}</p>
           {clipped.length > 0 ? (
             <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">
               {clipped.map((h) => `#${h}`).join(" ")}
@@ -1241,11 +1245,27 @@ function GraphCard({
   )
 }
 
-/** The port-law handles (ADR-057): visible typed ports — in = the
- * consumption region's bottom-left corner, stacked up; out = the
- * production region's top-right corner, stacked down. Port colors match
- * their flow (ctx = the dashed context port). Untyped surfaces (the recipe
- * 说明书) keep the legacy invisible pair. */
+/** The port-law handles (ADR-057 §5; 2026-09-08 FLORA 收编——外置圆形锚点):
+ * visible typed ports as 28px tinted circles parked FULLY OUTSIDE the card
+ * with a 12px gap (the anchor floats off the node — edges attach at the
+ * circle's center, the fill hides the line's inner half, so the stroke
+ * touches the anchor and never the card face) — in = the consumption
+ * region's bottom-left corner, stacked up; out = the production region's
+ * top-right corner, stacked down. ONE anatomy for every type — the tinted
+ * circle + the flow's glyph (video/audio carry the semantic hues, text/ctx
+ * the neutral step). Every edge is solid, so the reference flow (ctx) is
+ * told from a material text flow ONLY by this anchor's glyph. Glyph
+ * vocabulary (2026-09-09 FLORA 收编): text = the letter T, video = the
+ * camera, audio = the waveform; ctx = the overlapping documents (the
+ * reference flow names its SOURCE). Untyped surfaces (the recipe 说明书)
+ * keep the legacy invisible pair. */
+const PORT_ICON: Record<GraphEdgeType, typeof Clapperboard> = {
+  video: Video,
+  audio: AudioLines,
+  text: Type,
+  ctx: Files,
+}
+
 function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeType[]; out: GraphEdgeType[] } }) {
   if (!ports) {
     return (
@@ -1257,31 +1277,42 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
   }
   // The consumption region sits above the factsbar band (document has no
   // band — its region is the card bottom); production starts under the
-  // caption band.
-  const inBase = node.kind === "document" ? 14 : 58
-  const outBase = 38
+  // caption band. 34px stacking clears the 28px circles; the 40px side
+  // offset parks each circle fully outside the card with a 12px gap.
+  const inBase = node.kind === "document" ? 16 : 60
+  const outBase = 40
   return (
     <>
-      {ports.in.map((type, i) => (
-        <Handle
-          key={`in:${type}`}
-          id={`in:${type}`}
-          type="target"
-          position={Position.Left}
-          className={cn("flow-port", `flow-port-${type}`)}
-          style={{ top: "auto", bottom: inBase + i * 22 }}
-        />
-      ))}
-      {ports.out.map((type, i) => (
-        <Handle
-          key={`out:${type}`}
-          id={`out:${type}`}
-          type="source"
-          position={Position.Right}
-          className={cn("flow-port", `flow-port-${type}`)}
-          style={{ top: outBase + i * 22 }}
-        />
-      ))}
+      {ports.in.map((type, i) => {
+        const Icon = PORT_ICON[type]
+        return (
+          <Handle
+            key={`in:${type}`}
+            id={`in:${type}`}
+            type="target"
+            position={Position.Left}
+            className={cn("flow-port", `flow-port-${type}`)}
+            style={{ top: "auto", bottom: inBase + i * 34, left: -40 }}
+          >
+            <Icon />
+          </Handle>
+        )
+      })}
+      {ports.out.map((type, i) => {
+        const Icon = PORT_ICON[type]
+        return (
+          <Handle
+            key={`out:${type}`}
+            id={`out:${type}`}
+            type="source"
+            position={Position.Right}
+            className={cn("flow-port", `flow-port-${type}`)}
+            style={{ top: outBase + i * 34, right: -40 }}
+          >
+            <Icon />
+          </Handle>
+        )
+      })}
     </>
   )
 }
