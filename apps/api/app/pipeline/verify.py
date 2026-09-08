@@ -691,6 +691,7 @@ class Verify(NodeBase):
         title_label = "标题卡开场" if zh else "Open with a title card"
         payload = QuestionPayload(
             kind="question",
+            question=question_text,
             options=[Option(id="a", label=accept_label), Option(id="b", label=title_label)],
             allow_freeform=False,
         )

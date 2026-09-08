@@ -136,7 +136,11 @@ def _assemble_book_turn(
     pending_lines: list[str] | None = None
     if pending_question is not None:
         payload = pending_question.question or {}
-        lines = [f"- question: {pending_question.content or ''}"]
+        # The BARE question is the pending block's referent (ask 三分解剖 ②)
+        # — content may carry the framing prose, which is noise for the
+        # judge-THIS-message-against-it decision (legacy rows fall back to
+        # content, where the bare question lives).
+        lines = [f"- question: {payload.get('question') or pending_question.content or ''}"]
         options = payload.get("options") or []
         if options:
             lines.append(

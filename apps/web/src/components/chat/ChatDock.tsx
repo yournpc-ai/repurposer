@@ -118,7 +118,6 @@ import {
 } from "@/components/chat/QuestionDock"
 import {
   RunTaskList,
-  RunStatusRow,
 } from "@/components/chat/RunTaskList"
 import type { IntentSlot, Output } from "@/lib/types"
 import {
@@ -481,6 +480,11 @@ interface OverlayMessage {
 /** The typed question payload mirrored from the API (messages.question). */
 interface QuestionPayload {
   kind: "task_book" | "question"
+  /** The BARE question (ask 三分解剖 ②): the dock's title and the QA
+   * archive's Q line. Absent on legacy rows and task_book docks — those
+   * store the question (or the echo prose) AS the content; every reader
+   * falls back to `content`. */
+  question?: string
   options?: { id: string; label: string }[]
   /** The dock's credits quotation (BILLING §7): task_book only — total
    * [low, high] + the per-task marginal range aligned by task index (Σ
@@ -493,6 +497,13 @@ interface QuestionPayload {
    * dock time; the plan card renders its valued slots. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
   brief?: unknown
+  /** 任务书行自完备 (2026-09-08, 方案 B): task_book only — the derived
+   * preview ("you'll get") stamped at dock time. Absent on rows docked
+   * before the seal — the recovery pending-brief fetch is the fallback. */
+  derived?: DerivedRow[]
+  /** task_book only: the needs-clarification reason KEYS (data, localized
+   * at render — never baked into the row's content). */
+  reasons?: string[]
 }
 
 /** A question-carrying chat message (提问机器): the dock's pending
@@ -500,10 +511,31 @@ interface QuestionPayload {
 interface QuestionMessage {
   id: string
   content: string | null
+  /** The row's intent JSONB: task_book docks stamp the presented chain
+   * here (任务书行自完备, 方案 B — the envelope's row IS the whole plan
+   * card, no second fetch); ask questions stash their replay payload.
+   * Null on rows docked before the seal. */
+  intent?: unknown
   question: QuestionPayload | null
   answer: QuestionAnswer | null
   workflow_run_id: string | null
   created_at?: string
+}
+
+/** ask 三分解剖 ①: the row's framing prose — its content when the ask
+ * brought one (the content then differs from the bare question); null when
+ * the row carries none (legacy rows, code-composed questions — their
+ * content IS the bare question, and the pill's title already says it). */
+function questionEcho(m: QuestionMessage): string | null {
+  const content = (m.content ?? "").trim()
+  const bare = (m.question?.question ?? "").trim()
+  return content && content !== bare ? content : null
+}
+
+/** ask 三分解剖 ②: the bare question — the payload's own field, falling
+ * back to the content where legacy rows stored it (读容忍). */
+function bareQuestion(m: QuestionMessage): string {
+  return (m.question?.question ?? "").trim() || (m.content ?? "").trim()
 }
 
 interface ProjectAsset {
@@ -1151,9 +1183,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     onPanelStateChange?.({ hidden: dockHidden, docked: panelDocked })
   }, [dockHidden, panelDocked, onPanelStateChange])
   /** History-raising funnel: recalls the hidden dock/panel, and raises the
-   * history region — dock form only (in the panel the flow is always on;
-   * writing historyOpen there would only mute the run status row, whose
-   * condition reads !historyOpen). */
+   * history region — dock form only (in the panel the flow is always on). */
   const raiseHistory = useCallback(() => {
     setDockHidden(false)
     if (dock) setHistoryOpen(true)
@@ -1283,7 +1313,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The thinking row covers ONLY send → first delta (its own design intent,
   // :3422): once a streaming preview has existed this turn the preview IS
   // the progress indicator, and the row must never come back — a settle
-  // window (the docked book's `await fetchPendingBrief()`) still has
+  // window (the pre-seal row's legacy `await fetchPendingBrief()` fallback;
+  // 方案 B 后活路零拉取) still has
   // chatBusy=true with no `streaming` message, and a `!streaming`-derived
   // gate re-opens there and flashes the row below the finished text.
   const [previewSeen, setPreviewSeen] = useState(false)
@@ -1481,6 +1512,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   })
                 }
               } else if (hasOptions) {
+                // ask 三分解剖: the framing prose replays as its own flow
+                // message first (it sat above the dock live), then the QA
+                // block quotes the BARE question — a refresh reads like the
+                // live flow did.
+                const echo = questionEcho(m)
+                if (echo) {
+                  history.push({
+                    id: `${m.id}-echo`,
+                    role: "assistant",
+                    content: echo,
+                    at: m.created_at,
+                  })
+                }
                 const display = answeredQuestionText(
                   m.answer,
                   t,
@@ -1492,7 +1536,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   content: "",
                   at: m.created_at,
                   qa: {
-                    question: m.content ?? "",
+                    question: bareQuestion(m),
                     answer: display.text,
                     muted: display.muted,
                   },
@@ -1520,6 +1564,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 runId: m.workflow_run_id,
                 at: m.created_at,
               })
+            } else if (m.question.kind === "question") {
+              // A pending OPTIONS question docks (the pill revives via the
+              // pending_question fetch) — its framing prose replays as a
+              // flow message so the refresh reads like the live flow did.
+              const echo = questionEcho(m)
+              if (echo) {
+                history.push({
+                  id: `${m.id}-echo`,
+                  role: "assistant",
+                  content: echo,
+                  at: m.created_at,
+                })
+              }
             }
           } else {
             history.push({
@@ -2019,6 +2076,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * the optimistic block's own index (the preview right after it must not
    * remount); pushAnsweredQuestion keeps the append-at-end ordering for
    * paths without a live preview. */
+  /** QA 块一个 builder（2026-09-08 收口）: the optimistic block at option
+   * click and the server archive row at the envelope build the SAME qa
+   * payload through this one funnel — the Q line reads bareQuestion() in
+   * both, so the envelope swap can never flip the block's wording (the
+   * 2026-09-08 QA-flip bug class was a second hand-written construction
+   * reading question.content). */
+  const buildQaBlock = (
+    message: QuestionMessage,
+    answer: string,
+    muted: boolean,
+  ): NonNullable<OverlayMessage["qa"]> => ({
+    question: bareQuestion(message),
+    answer,
+    muted,
+  })
+
   const buildAnsweredQuestionRow = (
     message: QuestionMessage,
   ): Omit<OverlayMessage, "id"> | null => {
@@ -2037,11 +2110,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       role: "assistant",
       content: "",
       at: message.created_at,
-      qa: {
-        question: message.content ?? "",
-        answer: display.text,
-        muted: display.muted,
-      },
+      qa: buildQaBlock(message, display.text, display.muted),
     }
   }
   const pushAnsweredQuestion = (message: QuestionMessage) => {
@@ -2098,10 +2167,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         return
       }
-      if (message.question.kind === "task_book" && !opts?.echoCarried) {
-        // The echo lands ABOVE the docked card, anchored at the question
-        // row's own birth time (#5 chronology).
-        const echo = (message.content ?? "").trim()
+      if (!opts?.echoCarried) {
+        // The framing prose (ask 三分解剖 ① — a task book's echo, or an
+        // options question's framing speech) lands ABOVE the docked pill,
+        // anchored at the question row's own birth time (#5 chronology).
+        // Rows whose content IS the bare question (code-composed, legacy)
+        // carry no echo — the pill's title already says it.
+        const echo = questionEcho(message)
         if (echo) {
           pushMessage({
             role: "assistant",
@@ -2112,20 +2184,32 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
-        // 预填评审卡 (B3): the question payload's brief is the turn-fresh
-        // stamp (frozen with the question row at dock time); the refetched
-        // pending_brief row is the fallback for rows docked before B3.
+        // 任务书行自完备 (2026-09-08, 方案 B): the docked row IS the whole
+        // plan card — the chain on the row's `intent` column, the derived
+        // preview + brief + reasons + estimate on the payload. The live
+        // path renders it straight off the envelope (one turn = one call);
+        // the pending-brief fetch is the RECOVERY seat only, kept as the
+        // fallback for rows docked before the seal (intent column null).
         const questionBrief = normalizeBrief(message.question.brief)
-        const pending = await fetchPendingBrief()
-        if (pending) {
-          setIntent(normalizeIntent(pending.intent))
-          setBrief(questionBrief ?? normalizeBrief(pending.brief))
-          setDerived(pending.derived ?? [])
-          setReasons(pending.reasons ?? [])
+        if (message.intent) {
+          setIntent(normalizeIntent(message.intent))
+          setBrief(questionBrief)
+          setDerived(message.question.derived ?? [])
+          setReasons(message.question.reasons ?? [])
           setIntentReady(true)
           setPhase("confirm")
-          // No "plan updated" filler line on refinements — the turn's own
-          // streamed echo bubble already says what changed.
+        } else {
+          const pending = await fetchPendingBrief()
+          if (pending) {
+            setIntent(normalizeIntent(pending.intent))
+            setBrief(questionBrief ?? normalizeBrief(pending.brief))
+            setDerived(pending.derived ?? [])
+            setReasons(pending.reasons ?? [])
+            setIntentReady(true)
+            setPhase("confirm")
+            // No "plan updated" filler line on refinements — the turn's own
+            // streamed echo bubble already says what changed.
+          }
         }
       }
       return
@@ -2229,6 +2313,35 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             : m
         )
       )
+    /** 打字机律最后闸门 (2026-09-08 用户拍板): a turn that streamed NO deltas
+     * (the funnel's schema-repair round never streams; any non-streaming
+     * fallback) must still never pop its prose in as one blob — the settled
+     * content rides the typewriter under the SAME stream key, and any dock
+     * waits for the release to drain, so the prose visibly LEADS and the
+     * question follows, exactly like a streamed turn. */
+    const paceSettledProse = async (
+      content: string,
+      runId?: string | null,
+      at?: string,
+    ) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === streamId)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: streamId,
+                role: "assistant" as const,
+                content: "",
+                streaming: true,
+                at: new Date().toISOString(),
+              },
+            ],
+      )
+      typewriter.push(content)
+      await typewriter.drain()
+      finalizePreview(content, runId, at)
+    }
     try {
       const data = await streamChat<{
         assistant_message: QuestionMessage
@@ -2310,11 +2423,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             setLiveBookMessageId(streamId)
           }
         } else {
-          setMessages((prev) => prev.filter((m) => m.id !== streamId))
+          // Zero-delta turn (the funnel's repair round never streams): the
+          // echo rides the typewriter anyway — the dock waits for it to
+          // drain, so the prose leads and the question follows (打字机律).
+          const settledEcho = questionEcho(message)
+          if (settledEcho) {
+            await paceSettledProse(settledEcho)
+          } else {
+            setMessages((prev) => prev.filter((m) => m.id !== streamId))
+          }
         }
-        // The streamed bubble (when one exists) already carries the echo —
+        // The streamed (or last-gate-paced) bubble already carries the echo —
         // the dock handler must not duplicate it as a second message.
-        await handleAssistantMessage(message, { echoCarried: streamedAny })
+        await handleAssistantMessage(message, {
+          echoCarried: streamedAny || !!questionEcho(message),
+        })
       } else if (streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
         // the envelope content + run id are authoritative).
@@ -2324,8 +2447,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           message.created_at,
         )
       } else {
-        setMessages((prev) => prev.filter((m) => m.id !== streamId))
-        await handleAssistantMessage(message)
+        // Zero-delta prose reply: same last-gate pacing as the dock branch.
+        const settled = (message.content ?? "").trim()
+        if (settled) {
+          await paceSettledProse(
+            message.content ?? "",
+            message.workflow_run_id,
+            message.created_at,
+          )
+          await handleAssistantMessage(message, { echoCarried: true })
+        } else {
+          setMessages((prev) => prev.filter((m) => m.id !== streamId))
+          await handleAssistantMessage(message)
+        }
       }
     } catch (e) {
       typewriter.flush()
@@ -2501,11 +2635,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         id: optimisticId,
         role: "assistant",
         content: "",
-        qa: {
-          question: question.content ?? "",
-          answer: option.label,
-          muted: false,
-        },
+        qa: buildQaBlock(question, option.label, false),
         at: new Date().toISOString(),
       },
     ])
@@ -2558,10 +2688,30 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       setThinkingPhase(null)
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
       const followUp = data.follow_up
+      // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the
+      // funnel's repair round never streams) paces its prose through the
+      // preview bubble BEFORE the archive splice — the echo visibly leads,
+      // the settled rows follow.
+      let followUpPaced = false
+      if (followUp && !previewStreamed) {
+        const settled =
+          followUp.question && !followUp.answer
+            ? questionEcho(followUp)
+            : (followUp.content ?? "").trim()
+        if (settled) {
+          followUpPaced = true
+          typewriter.push(settled)
+          await typewriter.drain()
+        }
+      }
       setMessages((prev) =>
         prev.flatMap((m) => {
           if (m.id === optimisticId)
-            return answeredRow ? [{ ...answeredRow, id: crypto.randomUUID() }] : []
+            // Keep the optimistic block's KEY — a fresh id unmounts the DOM
+            // node and replays the entrance animation (the 2026-09-08
+            // post-typewriter QA flicker: same content, new node, one blink).
+            // "At its own index" means same index AND same key.
+            return answeredRow ? [{ ...answeredRow, id: m.id }] : []
           if (m.id === previewId)
             return [
               {
@@ -2574,7 +2724,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }),
       )
       if (followUp) {
-        await handleAssistantMessage(followUp, { echoCarried: previewStreamed })
+        await handleAssistantMessage(followUp, {
+          echoCarried: previewStreamed || followUpPaced,
+        })
       }
     } catch (e) {
       // The stream helper rejects with the server's detail (the JSON path's
@@ -3647,7 +3799,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       <QuestionDock
         kind="question"
         plain
-        question={pillQuestion.content ?? ""}
+        question={bareQuestion(pillQuestion)}
         options={pillQuestion.question?.options ?? []}
         onAnswer={handleOptionAnswer}
         answering={answering}
@@ -3691,35 +3843,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       />
     ) : null
-  // The folded 打勾 (ADR-051): while a run is live and the history region is
-  // closed, ONE shimmer status line docks above the input. A pending
-  // INTERRUPT question (workflow_run_id set) owns the dock instead — its
-  // pill carries the run's own ask; a non-interrupt options question morphs
-  // the input row away (阻塞形态 ADR-053 R1) but the shimmer keeps breathing
-  // under its pill. Click = expand the step log — it opens the history,
-  // whose RunTaskList stays the only checklist.
-  const runStatusRow =
-    phase === "running" && !terminal && !pillQuestion?.workflow_run_id && !historyOpen ? (
-      <RunStatusRow
-        steps={steps}
-        runStartedAt={runCreatedAt}
-        hasUploads={hasUploads}
-        narrativeFallback={
-          assets.some(
-            (a) =>
-              a.processing_status === "pending" ||
-              a.processing_status === "processing",
-          )
-            ? t("results.stepper.transcribing")
-            : t("results.stepper.queued")
-        }
-        onClick={() => {
-          // Dock form only: expands the step log into the history region.
-          // In the panel the flow is already on — the row is display-only.
-          if (dock) setHistoryOpen(true)
-        }}
-      />
-    ) : null
+  // (RunStatusRow retired 2026-09-08, user ruling: the message flow's
+  // RunTaskList is always on screen in the new three-form machine — the
+  // panel's scroller is resident, the dock's history floats one tap away —
+  // so the folded shimmer line docked above the input was a pure duplicate
+  // of the narrative row. ONE progress surface: the in-flow checklist.)
   const inputBody = (
     <>
       {/* Staged attachments — the upload lifecycle lives here (never
@@ -4083,30 +4211,25 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             </p>
           )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
-              the container owns ONLY the resident input row (+ the run
-              status shimmer / staged chips bands when present) — the
-              history region floats as its own layer above, the question as
-              its own pill. **Collapsed = stadium** (rounded-full 例外 #4 —
-              the FLORA Chat-bar anatomy): bare input row = rounded-full;
-              any second band (status shimmer / chips) morphs back to
-              rounded-xl, radius transitions with the box. dock-surface
+              the container owns ONLY the resident input row (+ the staged
+              chips band when present) — the history region floats as its
+              own layer above, the question as its own pill. dock-surface
               (2026-08-15 走查拍板): translucent enough that the canvas's dot
               grid reads through the frost; hairline only, NO shadow — the
               dock is the composer's third parking spot and inherits its
               hero-flat rule (without the ring the glass edge dissolves into
               the canvas). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04 翻回):
               while an OPTIONS question is pending the input row morphs
-              away — with no status band the container is empty, so the
+              away — with no second band the container is empty, so the
               whole box hides rather than leaving a frost sliver (the
               editor stays mounted inside, DOM-owned draft intact). */}
           <div
             className={cn(
               "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
               inputRadius,
-              pillDock && !runStatusRow && "hidden"
+              pillDock && "hidden"
             )}
           >
-            {runStatusRow}
             {/* The input row morphs away while an options question is
                 pending (ADR-053 R1 阻塞形态) — CSS-hidden, NOT unmounted:
                 the editor keeps its DOM-owned draft across the morph. The

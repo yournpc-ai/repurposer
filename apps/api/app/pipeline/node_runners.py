@@ -638,7 +638,12 @@ class Interrupt(NodeBase):
         # answer and wakes the run — even "how much longer?" small talk.
         # Accepted tradeoff (2026-08-20 ruling): no intent screen on the
         # answer path; a mis-fired direction is correctable in the next turn.
-        payload = QuestionPayload(kind="question", options=options, allow_freeform=True)
+        # The bare question rides the payload too (ask 三分解剖 ②) — with no
+        # framing prose the content IS the question, and the echo replay
+        # reads the equality as "no echo" (never a duplicate line).
+        payload = QuestionPayload(
+            kind="question", question=question_text, options=options, allow_freeform=True
+        )
         async with AsyncSessionLocal() as s:
             message, bailed_run_ids = await dock_interrupt_question(
                 s,

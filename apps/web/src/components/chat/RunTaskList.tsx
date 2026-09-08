@@ -1,22 +1,23 @@
 /** RunTaskList — the run's task list (the Claude Code anatomy): ONE
  * persistent block — pinned bottom-most in the message flow while the run
- * is live, the archive of it once terminal. THE HEADER IS THE ANCHOR
- * (2026-09-05 层级裁决): `☷ title · elapsed` is itself the expand/collapse
- * toggle — CC's `* Creating… (2m 45s)` line, never a separate row — and the
- * steps render FLAT under it (the retired "Preparation · n steps" group row
- * was a fake middle level, 层级错乱). Live defaults open (the user watches
- * the work check off, CC's in-flight pose); the terminal frame settles the
- * SAME line into the summary state — rows folded, chevron stays, one click
- * re-opens the flat receipt (CC's "Thought for 42s (ctrl+o to expand)") —
- * and the completion prose follows over SSE. Between header and checklist
- * one narrative line (碎碎念) — the running step's stage hint shimmering +
- * its own elapsed: the full form of FLORA's "Running node…" action line
- * (the dock's RunStatusRow is its collapsed twin). Row text is
- * BUILDER-WRITTEN: spec.summary arrives preset from the server (the static
- * task name / slot tag) and is rewritten with the quantified line when the
- * step completes — the frontend renders spec fields, never kind→copy
- * dictionaries. The only frontend copy left is the PROGRESSIVE fallback
- * (stage hints / kind progressive) for the live narrative line. */
+ * is live, the archive of it once terminal. THE DYNAMIC ROW IS THE WHOLE
+ * CHROME (2026-09-08 user ruling, twice — first merge, then the register
+ * correction): the single row is the CC status line in ONE quiet register
+ * — text-xs muted — and IT is the expand/collapse anchor. LIVE: ● shimmer
+ * narrative (what's happening NOW — the text is dynamic by definition) +
+ * its own stage elapsed. TERMINAL: the SAME line's receipt form — ✓ plan
+ * title · total elapsed, same size same gray (降灰 reads as quiet, never
+ * the retired header's text-sm/font-medium/ListChecks register — that
+ * second row was the one ordered deleted, not archived). The steps render
+ * FLAT under the one row (the "Preparation · n steps" group row died the
+ * same way). Live defaults open (the user watches the work check off, CC's
+ * in-flight pose); the terminal frame settles folded, one click re-opens
+ * the flat receipt — and the completion prose follows over SSE. Row text
+ * is BUILDER-WRITTEN: spec.summary arrives preset from the server (the
+ * static task name / slot tag) and is rewritten with the quantified line
+ * when the step completes — the frontend renders spec fields, never
+ * kind→copy dictionaries. The only frontend copy left is the PROGRESSIVE
+ * fallback (stage hints / kind progressive) for the live narrative. */
 
 import { useEffect, useState } from "react"
 import type { TFunction } from "i18next"
@@ -25,7 +26,6 @@ import {
   ChevronDown,
   ChevronUp,
   CircleHelp,
-  ListChecks,
   Loader2,
   Minus,
   Square,
@@ -40,8 +40,8 @@ import type { WorkflowStep } from "@/lib/types"
 /** Ticking clock for the elapsed counters — null until mounted (SSR-safe:
  * the server render and the first client render both show no elapsed), and
  * frozen once `live` goes false (the terminal frame keeps its last read).
- * Shared by the checklist, the folded status row AND the dock's ThinkingRow
- * (one clock, one hydration contract — 2026-09-05 减法批). */
+ * Shared by the checklist's row AND the dock's ThinkingRow (one clock, one
+ * hydration contract — 2026-09-05 减法批). */
 export function useNow(live: boolean): number | null {
   const [now, setNow] = useState<number | null>(null)
   useEffect(() => {
@@ -65,12 +65,12 @@ export function formatElapsed(ms: number): string {
   return `${h}h ${m % 60}m`
 }
 
-/** The live narrative's step pick + progressive copy chain (shared by the
- * full checklist's 碎碎念 line and the folded status row): the running step
- * wins; a parked interrupt (review tier) has no running step and reads
- * through the same chain ("waiting for your direction", not the queued
- * fallback). Copy chain: the runner's stage hint → the kind's progressive
- * form → the preset task name → the raw kind.
+/** The live narrative's step pick + progressive copy chain (the dynamic
+ * row's reading material): the running step wins; a parked interrupt
+ * (review tier) has no running step and reads through the same chain
+ * ("waiting for your direction", not the queued fallback). Copy chain: the
+ * runner's stage hint → the kind's progressive form → the preset task name
+ * → the raw kind.
  * Honesty carve-out (2026-09-04): the preprocess node's "Analyzing your
  * uploads…" is a lie on a zero-upload (copy-writer) run — it validates
  * material and admits the writer lift, so it reads the generic
@@ -103,7 +103,7 @@ export function RunTaskList({
   hasUploads,
 }: {
   steps: WorkflowStep[]
-  /** The plan's summary line — the header's resting title. */
+  /** The plan's summary line — the receipt row's resting title. */
   title: string
   runStartedAt: string | null
   terminal: boolean
@@ -137,10 +137,11 @@ export function RunTaskList({
   const stageElapsed =
     now != null && runningMs != null ? formatElapsed(now - runningMs) : null
 
-  // The header IS the anchor: userOpen null = follow the pose — open while
-  // live (CC's in-flight checklist), folded summary once terminal. The
-  // settle resets an untouched toggle so the archive always lands on the
-  // one-line receipt; an explicit post-settle click still re-opens it.
+  // THE dynamic row IS the anchor (2026-09-08 层级翻案): userOpen null =
+  // follow the pose — open while live (CC's in-flight checklist), folded
+  // receipt once terminal. The settle resets an untouched toggle so the
+  // archive always lands on the one-line receipt; an explicit post-settle
+  // click still re-opens it.
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   useEffect(() => {
     if (terminal) setUserOpen(null)
@@ -149,53 +150,40 @@ export function RunTaskList({
 
   return (
     <div className="w-full">
-      {/* Header — the ✻ line AND the expand anchor (层级裁决): title +
-          total elapsed + trailing chevron; one click folds/unfolds the flat
-          checklist below. A resting title, never the running step's name —
-          "current activity" belongs to the narrative line alone. */}
+      {/* THE ONE ROW — the dynamic action line, ONE quiet register in both
+          states (text-xs muted): live = ● shimmer narrative + its stage
+          clock; terminal = the SAME line's receipt form (✓ title · total
+          elapsed — never the retired header's text-sm/font-medium). It is
+          itself the expand/collapse toggle for the flat checklist below. */}
       <button
         type="button"
         onClick={() => setUserOpen(!open)}
-        className="flex w-full items-center gap-2.5 rounded-md text-left text-sm transition-colors hover:bg-accent/50"
+        className="flex w-full items-center gap-2.5 rounded-md text-left text-xs text-muted-foreground transition-colors hover:bg-accent/50"
       >
-        <ListChecks className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span
-          className={cn(
-            "min-w-0 truncate font-medium",
-            terminal && "text-muted-foreground",
-          )}
-        >
-          {title}
+        {terminal ? (
+          <Check className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+        )}
+        <span className={cn("min-w-0 truncate", !terminal && "shimmer")}>
+          {terminal ? title : (narrativeLabel ?? narrativeFallback)}
         </span>
-        {elapsed ? (
-          <span className="shrink-0 text-sm text-muted-foreground">
-            {elapsed}
+        {(terminal ? elapsed : stageElapsed) ? (
+          <span className="shrink-0 tabular-nums">
+            {terminal ? elapsed : stageElapsed}
           </span>
         ) : null}
         {open ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 shrink-0" />
         ) : (
-          <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronUp className="h-3 w-3 shrink-0" />
         )}
       </button>
 
-      {/* Narrative line (碎碎念) — the Claude Code status line: ONE live row
-          naming what's happening now + its own elapsed, replaced per stage.
-          Live only — the terminal frame owns its own summary pose. */}
-      {!terminal ? (
-        <div className="mt-2.5 flex items-center gap-2.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-          <span className="shimmer min-w-0 truncate">
-            {narrativeLabel ?? narrativeFallback}
-          </span>
-          {stageElapsed ? <span className="shrink-0">{stageElapsed}</span> : null}
-        </div>
-      ) : null}
-
-      {/* The checklist — FLAT (the group row was a fake middle level): every
-          step is a sibling row, new runtime fan-out rows (render steps)
-          append at the bottom as they're born. Hidden in the terminal
-          summary pose; the header's chevron re-opens the full receipt. */}
+      {/* The checklist — FLAT under the one row: every step is a sibling
+          row, new runtime fan-out rows (render steps) append at the bottom
+          as they're born. Folded in the terminal receipt pose; the row's
+          chevron re-opens the full receipt. */}
       {open ? (
         <div className="mt-3 flex flex-col gap-2">
           {steps.map((step) => (
@@ -242,54 +230,5 @@ function TaskRow({ step }: { step: WorkflowStep }) {
           : label}
       </MarkerContent>
     </Marker>
-  )
-}
-
-/** RunStatusRow — the folded 打勾 (ADR-051, the Claude Code collapsed form /
- * FLORA "Running node…"): ONE shimmer status line docked above the input
- * while a run is live and the history region is closed. Click = expand the
- * step log — the history's RunTaskList is the ONLY checklist; this row
- * never grows a second one. A square child of the dock's frosted container
- * (D4 一体容器): no fill / rounding of its own. */
-export function RunStatusRow({
-  steps,
-  runStartedAt,
-  narrativeFallback,
-  hasUploads,
-  onClick,
-}: {
-  steps: WorkflowStep[]
-  runStartedAt: string | null
-  /** What the line says when no step is running yet (assets processing /
-   * the run still queued) — the caller knows which. */
-  narrativeFallback: string
-  /** Same honest-preprocess switch as the full list. */
-  hasUploads: boolean
-  onClick: () => void
-}) {
-  const { t } = useTranslation()
-  const now = useNow(true)
-  const { running, waiting, label } = runNarrative(steps, t, hasUploads)
-  const startedMs = runStartedAt ? Date.parse(runStartedAt) : null
-  const elapsed =
-    now != null && startedMs != null ? formatElapsed(now - startedMs) : null
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={t("results.dock.history")}
-      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-muted-foreground hover:bg-accent/50"
-    >
-      {waiting && !running ? (
-        <CircleHelp className="h-3.5 w-3.5 shrink-0 text-primary" />
-      ) : (
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-      )}
-      <span className="shimmer min-w-0 flex-1 truncate">
-        {label ?? narrativeFallback}
-      </span>
-      {elapsed ? <span className="shrink-0 tabular-nums">{elapsed}</span> : null}
-      <ChevronUp className="h-3.5 w-3.5 shrink-0" />
-    </button>
   )
 }

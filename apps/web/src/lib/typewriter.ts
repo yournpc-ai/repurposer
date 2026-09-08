@@ -13,6 +13,14 @@
 export function createTypewriter(append: (text: string) => void) {
   let buffer = ""
   let timer: ReturnType<typeof setInterval> | null = null
+  let drainWaiters: (() => void)[] = []
+
+  const settleDrain = () => {
+    if (buffer) return
+    const waiters = drainWaiters
+    drainWaiters = []
+    for (const resolve of waiters) resolve()
+  }
 
   const tick = () => {
     if (!buffer) return
@@ -21,12 +29,22 @@ export function createTypewriter(append: (text: string) => void) {
     const n = Math.max(2, Math.ceil(buffer.length / 10))
     append(buffer.slice(0, n))
     buffer = buffer.slice(n)
+    settleDrain()
   }
 
   return {
     push(text: string) {
       buffer += text
       if (!timer) timer = setInterval(tick, 24)
+    },
+    /** Resolves once every buffered char has been released (flush resolves
+     * too) — the zero-delta last gate awaits it before landing a dock, so
+     * the prose visibly LEADS and the question follows (打字机律). */
+    drain(): Promise<void> {
+      if (!buffer) return Promise.resolve()
+      return new Promise((resolve) => {
+        drainWaiters.push(resolve)
+      })
     },
     /** Release everything remaining and stop the clock. */
     flush() {
@@ -39,6 +57,7 @@ export function createTypewriter(append: (text: string) => void) {
         buffer = ""
         append(rest)
       }
+      settleDrain()
     },
   }
 }

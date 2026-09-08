@@ -125,6 +125,42 @@ class TestDeadEnds:
         assert extract(['{"action": "generate", "outputs": []}']) == ""
 
 
+class TestNullSkipsPair:
+    """A ``null`` value on one watched key skips the pair — it never kills
+    the stream while another prose key is still coming (打字机律 2026-09-08:
+    every ask verdict carries ``"answer": null``, and dying on it popped the
+    framing prose in as one blob at the envelope)."""
+
+    def test_null_then_nested_prose(self):
+        text = (
+            '{"action": "ask", "answer": null, '
+            '"ask": {"prose": "Framing survives.", "question": "Topic?"}}'
+        )
+        assert extract([text], keys=("answer", "prose")) == "Framing survives."
+
+    def test_null_skip_every_split(self):
+        text = (
+            '{"action": "ask", "answer": null, '
+            '"ask": {"prose": "Framing survives.", "question": "Topic?"}}'
+        )
+        assert split_every_way(text, keys=("answer", "prose")) == "Framing survives."
+
+    def test_null_literal_split(self):
+        """The `null` literal itself splits across chunks."""
+        text = '{"answer": null, "prose": "later."}'
+        assert split_every_way(text, keys=("answer", "prose")) == "later."
+
+    def test_null_only_still_zero(self):
+        """A verdict whose prose keys are all null emits nothing (and no
+        longer needs the dead latch to do so)."""
+        assert extract(['{"action": "start", "answer": null, "tasks": []}']) == ""
+
+    def test_number_still_dead(self):
+        """The conservative rule stands: a non-string, non-null surprise
+        latches the extractor off silently."""
+        assert extract(['{"answer": 42, "prose": "never."}'], keys=("answer", "prose")) == ""
+
+
 class TestDoneLatch:
     def test_nothing_after_closing_quote(self):
         ext = ProseDeltaExtractor(("answer",))

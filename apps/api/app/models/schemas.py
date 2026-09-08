@@ -356,13 +356,30 @@ class QuestionProposal(BaseModel):
         """The pre-convergence schema carried a ``kind`` field ('choice' was
         the only value the LLM ever produced) and the LLM keeps the habit —
         the field is gone (every agent question is a plain question), so the
-        key drops on read."""
+        key drops on read. Loose nulls read as their empty defaults (读容忍):
+        the model writes ``"prose": null`` / ``"options": null`` when it
+        means to skip them, and a schema rejection there costs the funnel's
+        repair round — which never streams (打字机律 2026-09-08: the prose
+        would pop in as one blob at the envelope)."""
         if isinstance(data, dict):
             data = dict(data)
             data.pop("kind", None)
+            for nullable in ("prose", "default_path"):
+                if data.get(nullable) is None:
+                    data[nullable] = ""
+            if data.get("options") is None:
+                data["options"] = []
         return data
 
     type: Literal["ask"] = "ask"
+    # 框架散文 (2026-09-08, ask 三分解剖 ①): the agent's speech around the
+    # question — 认领 the request + why this ONE question decides quality +
+    # the default path woven in naturally (提问策略 ③'s visible surface —
+    # the 09-04 ruling retired the dock's default-path row precisely because
+    # "正常对话即可", and this field IS the 正常对话). Streams as the turn's
+    # echo; the question field stays the bare question (the dock title).
+    # Empty only on code-composed questions (caption mode, interrupts).
+    prose: str = ""
     question: str
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
@@ -370,7 +387,8 @@ class QuestionProposal(BaseModel):
     # brief-ledger slot this question fills (the pre-run router sets it; the
     # chat loop's shape C leaves it null — post-run questions never backfill
     # a brief). ``default_path`` is 提问策略 ③'s schema tooth: the skip
-    # path, rendered as the dock's muted second line.
+    # path, consumed by the dock's × and the interjection reminder tail —
+    # the prose carries it visibly, the field keeps it machine-readable.
     slot: Literal["topic", "audience", "tone"] | None = None
     default_path: str = ""
 
@@ -984,6 +1002,12 @@ class QuestionPayload(BaseModel):
         return data
 
     kind: Literal["task_book", "question"]
+    # The BARE question (ask 三分解剖 ②): the dock's title, the QA archive's
+    # Q line, and the reminder tail's quoted question. ``content`` carries the
+    # framing prose (解剖 ①) when the ask brought one, else the bare question
+    # itself (legacy rows, code-composed questions — read tolerance: every
+    # consumer falls back to ``content`` when this is empty).
+    question: str = ""
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
     # The dock's credits quotation (BILLING §7): task_book only, stamped at
@@ -999,8 +1023,9 @@ class QuestionPayload(BaseModel):
     # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
     # None on every question that is not a brief ask (caption mode, direction
     # interrupts, post-run shape C). ``default_path`` is the schema tooth of
-    # 提问策略 ③: what happens when the user skips — rendered as the dock's
-    # muted second line, so every question is visibly safe to skip.
+    # 提问策略 ③: what happens when the user skips — the framing prose
+    # (``content``) carries it visibly; the field keeps it machine-readable
+    # for the dock's × and the interjection reminder tail.
     slot: Literal["topic", "audience", "tone"] | None = None
     default_path: str = ""
     # 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
@@ -1008,6 +1033,13 @@ class QuestionPayload(BaseModel):
     # (valued slots with provenance) instead of blank form fields. Frozen
     # with the question row; every re-dock stamps the fresh merge.
     brief: BriefLedger | None = None
+    # 任务书行自完备 (2026-09-08, 方案 B): task_book only — the ADR-043
+    # derived preview ("you'll get") stamped at dock time. With the chain on
+    # the row's `intent` column and this on the payload, the docked row IS
+    # the whole plan card — the SSE envelope needs no pending-brief refetch
+    # (that GET stays the recovery seat). Read tolerance: absent on rows
+    # docked before the seal.
+    derived: list[dict] = Field(default_factory=list)
 
 
 class PendingBrief(BaseModel):

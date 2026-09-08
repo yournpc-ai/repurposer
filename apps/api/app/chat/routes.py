@@ -179,8 +179,13 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
         try:
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
+                # "prose" = the ask verdict's framing speech (ask 三分解剖 ①,
+                # nested inside the ask object at extractable depth 2) — it
+                # streams exactly like the draft echo's "answer".
                 extractor = ProseDeltaExtractor(
-                    ("answer",) if prepared.book_path else ("text", "summary")
+                    ("answer", "prose")
+                    if prepared.book_path
+                    else ("text", "summary", "prose")
                 )
 
                 async def on_delta(fragment: str) -> None:
@@ -235,10 +240,10 @@ async def _answer_stream(
     instant blob. Wire is identical — ``assistant.delta`` prose previews,
     ``assistant.thinking`` keepalives / phase labels, one terminal frame
     (``answer.completed`` = the full AnswerResponse, ``answer.failed`` =
-    the JSON path's error as a frame). The extractor listens on all three
-    prose keys (``answer`` / ``text`` / ``summary``) — whichever field the
-    continuation's verdict carries streams; the others never appear at
-    extractable depth.
+    the JSON path's error as a frame). The extractor listens on all four
+    prose keys (``answer`` / ``text`` / ``summary`` / ``prose`` — the ask
+    verdict's framing speech) — whichever field the continuation's verdict
+    carries streams; the others never appear at extractable depth.
     """
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -247,7 +252,7 @@ async def _answer_stream(
 
         try:
             async with AsyncSessionLocal() as db:
-                extractor = ProseDeltaExtractor(("answer", "text", "summary"))
+                extractor = ProseDeltaExtractor(("answer", "text", "summary", "prose"))
 
                 async def on_delta(fragment: str) -> None:
                     text = extractor.feed(fragment)

@@ -2,7 +2,9 @@
 
 The intent agents answer with one structured JSON verdict whose user-facing
 prose lives in a string field (``answer`` for the book path's InferredIntent,
-``text`` / ``summary`` for the chat loop's IntentResult). When the LLM call
+``text`` / ``summary`` for the chat loop's IntentResult, ``prose`` for the
+ask verdict's framing speech — nested inside the ``ask`` object, still at
+extractable depth). When the LLM call
 streams, the raw JSON arrives character by character; this extractor watches
 the accumulating stream and yields the prose field's *decoded* content as it
 grows, so the chat surface can typewriter the answer while the verdict is
@@ -17,9 +19,13 @@ Design rules (pressure-tested 2026-08-04):
 - **Think-block skip**: an optional leading ``<think>…</think>`` preamble is
   discarded before structural scanning, so example JSON inside the model's
   reasoning can never trigger capture.
-- **Non-string values go dead**: ``"answer": null`` (draft/start verdicts)
-  latches the extractor off — zero deltas, the final envelope lands as one
-  piece exactly like the non-streaming path.
+- **A `null` value skips the pair, never kills the stream**: several prose
+  keys are watched at once (``answer`` / ``text`` / ``summary`` / ``prose``),
+  and every ask verdict carries ``"answer": null`` — one key's null must not
+  latch the extractor off while another key's prose is still coming
+  (打字机律 2026-09-08: dying on the null popped the whole framing prose in
+  as one blob at the envelope). Any OTHER non-string value (number / bool /
+  object / array) still goes dead — a surprise never produces a wrong preview.
 - **Any surprise goes dead**: malformed escapes, control characters, or
   structural confusion disable the extractor silently. Worst case is no
   preview — never wrong preview.
@@ -42,6 +48,7 @@ _SIMPLE_ESCAPES = {
 _SCANNING = "scanning"  # structural scan, looking for a target key
 _AFTER_KEY = "after_key"  # a string token completed; expect ':' (key) or not
 _EXPECT_VALUE = "expect_value"  # target key confirmed; expect its value
+_EXPECT_NULL = "expect_null"  # consuming a target key's `null` literal
 _CAPTURING = "capturing"  # inside the prose string, decoding
 _DONE = "done"  # prose string closed; never emit again
 
@@ -76,6 +83,7 @@ class ProseDeltaExtractor:
         # Capture state.
         self._escape_buf = ""  # incomplete escape sequence across chunks
         self._high_surrogate: int | None = None  # \uD800-\uDBFF awaiting its low
+        self._null_buf = ""  # `null` literal in progress (a skipped pair)
         self._out: list[str] = []  # decoded chars ready to emit
 
     @property
@@ -133,15 +141,33 @@ class ProseDeltaExtractor:
         """Brace/string tracking + target-key detection (non-capture states)."""
         if self._state == _EXPECT_VALUE:
             # Dedicated sub-state: no structural tracking — the next non-ws
-            # char either opens the prose string or latches the extractor off.
+            # char either opens the prose string, starts a `null` literal
+            # (skipped, the scan resumes), or latches the extractor off.
             if char in " \t\r\n":
                 return
             if char == '"':
                 self._state = _CAPTURING
                 self._escape_buf = ""
                 return
-            # null / number / bool / object / array — not prose.
+            if char == "n":
+                # A null value on THIS key: the pair carries no prose — skip
+                # it and keep scanning. Several prose keys are watched at
+                # once and every ask verdict carries "answer": null; one
+                # key's null must never kill another key's prose.
+                self._state = _EXPECT_NULL
+                self._null_buf = "n"
+                return
+            # number / bool / object / array — not prose.
             self._dead = True
+            return
+        if self._state == _EXPECT_NULL:
+            self._null_buf += char
+            if self._null_buf == "null":
+                self._state = _SCANNING
+                self._null_buf = ""
+                return
+            if not "null".startswith(self._null_buf):
+                self._dead = True
             return
 
         if self._in_string:

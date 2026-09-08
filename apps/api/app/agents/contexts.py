@@ -285,8 +285,11 @@ async def _build_context(
     if pending is not None:
         # A still-open question (e.g. pick-only, no freeform): the agent must
         # not re-ask it nor ignore it — the next message may be its answer.
+        # The BARE question is the precise referent here (ask 三分解剖 ②);
+        # the framing prose that content may carry is noise for this block.
+        bare = (pending.question or {}).get("question") or pending.content
         lines.append(
-            f"Pending question awaiting the user's answer: {pending.content}"
+            f"Pending question awaiting the user's answer: {bare}"
         )
         options = (pending.question or {}).get("options") or []
         if options:

@@ -168,6 +168,28 @@ def _draft_from_persona_echo(text: str) -> str:
     )
 
 
+def _bare_question(message: Message) -> str:
+    """The question row's BARE question (ask 三分解剖 ②): the payload's
+    ``question`` when the row carries one, else its content (legacy rows and
+    prose-less questions store the bare question AS the content — read
+    tolerance, same doctrine as the payload's other upgrades)."""
+    return (message.question or {}).get("question") or message.content or ""
+
+
+def _ask_content(ask: QuestionProposal) -> str:
+    """The question row's content (ask 三分解剖 ①): the framing prose when
+    the ask brings one. A TEXT ask (options empty — it never docks, 形态律
+    ADR-053 R1) keeps its bare question IN the speech: the message IS the
+    whole ask, prose + question; an options ask's question rides the dock's
+    title (payload ②), so the content stays the prose alone."""
+    prose = ask.prose.strip()
+    if not prose:
+        return ask.question
+    if not ask.options:
+        return f"{prose}\n\n{ask.question}"
+    return prose
+
+
 def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
     """插话提醒尾 (ADR-053 R2): an interjection turn's reply ends with a
     code-composed reminder — the still-pending question plus its default
@@ -827,11 +849,13 @@ async def _dock_question(
 ) -> tuple[Message, list[UUID]]:
     """Raise a new pending question (ask 落库): at most one pending per
     conversation, so any still-open question retires as superseded first.
-    The question's human text lives in ``content`` — it enters the LLM
-    context history naturally and becomes the answered question's Q line once
-    answered. Returns the new message plus the run ids whose parked
-    interrupt was cascade-bailed by the supersede (finalized by the caller
-    after its commit)."""
+    The agent's speech lives in ``content`` — the framing prose when the ask
+    brings one (ask 三分解剖 ①), else the bare question — entering the LLM
+    context history naturally; the bare question rides the payload's
+    ``question`` field (解剖 ② — dock title, QA archive, reminder tail).
+    Returns the new message plus the run ids whose parked interrupt was
+    cascade-bailed by the supersede (finalized by the caller after its
+    commit)."""
     bailed_run_ids = await _settle_open_questions(
         db,
         conversation_id,
@@ -943,6 +967,11 @@ async def sync_task_book_question(
     # never baked into content, which is user-facing prose (the answered
     # question renders it verbatim). The LLM context line re-appends them (keys are
     # the agent's vocabulary).
+    # 任务书行自完备 (2026-09-08, 方案 B): the chain stamps the row's `intent`
+    # column and the derived preview the payload — the docked row IS the
+    # whole plan card (the B3 brief stamp's precedent: frozen with the row,
+    # re-stamped every dock), and the SSE envelope needs no pending-brief
+    # refetch to render it.
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
@@ -952,7 +981,9 @@ async def sync_task_book_question(
             reasons=reasons or [],
             brief=brief,
             estimate_credits=estimate,
+            derived=derived or [],
         ),
+        intent=intent.model_dump(mode="json"),
     )
     # Draft graph (ADR-057 K5 — 图先展示后运行): the docked chain stamps the
     # canvas's preview as DRAFT nodes through the birthplace's own compile
@@ -1799,12 +1830,19 @@ async def _book_turn(
                 ),
                 derived=stored.derived if stored else [],
             ).model_dump(mode="json")
+            # ask 三分解剖 (2026-09-08): the row's content carries the framing
+            # prose (解剖 ① — it streams as the turn's echo and replays in the
+            # flow); the bare question rides the payload (解剖 ② — dock title,
+            # QA archive, reminder tail). Prose-less asks (a model that skips
+            # the field) fall back to content = the bare question, the legacy
+            # shape every consumer still reads.
             assistant_message, bailed_run_ids = await _dock_question(
                 db,
                 conversation_id,
-                intent.ask.question,
+                _ask_content(intent.ask),
                 QuestionPayload(
                     kind="question",
+                    question=intent.ask.question,
                     options=intent.ask.options,
                     allow_freeform=intent.ask.allow_freeform,
                     slot=intent.ask.slot,
@@ -1937,6 +1975,7 @@ async def _book_turn(
                     topic_ask["question"],
                     QuestionPayload(
                         kind="question",
+                        question=topic_ask["question"],
                         options=[],
                         allow_freeform=True,
                         slot="topic",
@@ -1963,7 +2002,7 @@ async def _book_turn(
         if pending_q is not None:
             content += _reminder_tail(
                 text,
-                pending_q.content or "",
+                _bare_question(pending_q),
                 (pending_q.question or {}).get("default_path"),
             )
         assistant_message = await _create_message(
@@ -2031,6 +2070,7 @@ async def _book_turn(
                 caption_question.question,
                 QuestionPayload(
                     kind="question",
+                    question=caption_question.question,
                     options=caption_question.options,
                     allow_freeform=caption_question.allow_freeform,
                 ),
@@ -2236,15 +2276,16 @@ async def _propose_turn(
         # Ask 落库 (N-18): the agent's question becomes the docked
         # question (task_book questions are raised solely by the book path,
         # never by the agent — LLM proposes, code adjudicates).
-        # default_path rides as the dock's muted line (提问策略 ③); slot
-        # stays None — a post-run question never backfills the brief
-        # (book-path handshake only).
+        # ask 三分解剖: content carries the framing prose (the turn's echo),
+        # the bare question rides the payload; slot stays None — a post-run
+        # question never backfills the brief (book-path handshake only).
         assistant_message, bailed_run_ids = await _dock_question(
             db,
             conversation_id,
-            proposal.question,
+            _ask_content(proposal),
             QuestionPayload(
                 kind="question",
+                question=proposal.question,
                 options=proposal.options,
                 allow_freeform=proposal.allow_freeform,
                 default_path=proposal.default_path,
@@ -2413,11 +2454,17 @@ async def _propose_turn(
     elif not proposal.tasks:
         # N-18 migration: the pre-ask "tasks=[] ask back" maps onto a
         # freeform ask (no options, free-text replies resume onto it).
+        ask_back = proposal.summary or _ASK_BACK_TEXT
         assistant_message, bailed_run_ids = await _dock_question(
             db,
             conversation_id,
-            proposal.summary or _ASK_BACK_TEXT,
-            QuestionPayload(kind="question", options=[], allow_freeform=True),
+            ask_back,
+            QuestionPayload(
+                kind="question",
+                question=ask_back,
+                options=[],
+                allow_freeform=True,
+            ),
             intent=proposal.model_dump(mode="json"),
         )
     elif (
@@ -2457,6 +2504,7 @@ async def _propose_turn(
             caption_question.question,
             QuestionPayload(
                 kind="question",
+                question=caption_question.question,
                 options=caption_question.options,
                 allow_freeform=caption_question.allow_freeform,
             ),
@@ -2558,7 +2606,7 @@ async def _propose_turn(
                 assistant_message.content or ""
             ) + _reminder_tail(
                 text,
-                pending.content or "",
+                _bare_question(pending),
                 (pending.question or {}).get("default_path"),
             )
     return assistant_message, run_id, bailed_run_ids, settled_question

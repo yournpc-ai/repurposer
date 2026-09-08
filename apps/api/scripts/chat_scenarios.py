@@ -557,6 +557,14 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
           "the rootless wish docks the topic ask first (never an empty book)", msg1)
     check(bool((q1.get("default_path") or "").strip()),
           "the default path rides as the schema tooth (策略③)", q1)
+    # ask 三分解剖 (2026-09-08): content = 框架散文（①，认领+理由+default
+    # path 织入），payload.question = 裸问题（②，dock 标题 / QA 归档 / 提醒
+    # 尾读它）。散文缺字段时 content 回退裸问题——那即是回归信号。
+    check(bool((q1.get("question") or "").strip()),
+          "the bare question rides the payload (解剖② — dock title's source)", q1)
+    check(has_prose(msg1) and (msg1.get("content") or "") != q1.get("question"),
+          "the framing prose IS the message content (解剖① — the ask's echo)",
+          (msg1.get("content") or "")[:200])
     options = q1.get("options") or []
     check(len(options) == 0 or 2 <= len(options) <= 3,
           "options: 3 one-word picks (2 only for a genuinely binary choice), "
@@ -633,6 +641,16 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
     check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
           "the review card stamps the merged brief into the payload", ftopic)
+    # 任务书行自完备（方案 B, 2026-09-08）：dock 行自带链（intent 列）+ 派生
+    # 预览（payload derived）——SSE envelope 的行即整张计划卡，前端活路不再
+    # 取 pending_brief（那 GET 退回恢复座）。
+    check(bool(((msg2.get("intent") or {}).get("tasks")) or []),
+          "the dock row self-carries the chain (intent column)",
+          msg2.get("intent"))
+    row_derived = (msg2.get("question") or {}).get("derived")
+    check(isinstance(row_derived, list) and len(row_derived) >= 1,
+          "the dock row self-carries the derived preview (payload)",
+          msg2.get("question"))
 
     # 草稿图（ADR-057 K5——图先展示后运行）：dock 即 stamp——draft 节点 +
     # 任务书 document + 逐节点估价，零消耗直到 start。
@@ -735,6 +753,10 @@ async def s3_interjection_keeps_pending(ctx: Ctx) -> None:
           "the reply ends with the code-composed reminder tail", content[-200:])
     check(default_path in content,
           "the tail carries the ask's default path verbatim", content[-200:])
+    check(bool((q1.get("question") or "").strip())
+          and q1["question"] in content,
+          "the tail quotes the BARE question (解剖②), not the framing prose",
+          content[-200:])
     res = await ctx.conversation(pid)
     check((res.json().get("pending_question") or {}).get("id") == msg1["id"],
           "the ask stays pending through the interjection", res.json())
@@ -1429,6 +1451,11 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     follow = ans.json().get("follow_up") or {}
     check(is_task_book_dock(follow),
           "A: the answer replays the stashed proposal into a task book", follow)
+    # 任务书行自完备（方案 B）：answer 轮的 follow_up 行同样自带链——前端
+    # 从 envelope 直渲计划卡，无需 pending_brief 二次拉取。
+    check(bool(((follow.get("intent") or {}).get("tasks")) or []),
+          "A: the follow-up row self-carries the chain (intent column)",
+          follow.get("intent"))
     book = await pending_book(ctx, pid)
     check(((book or {}).get("intent") or {}).get("caption_mode") == "bilingual",
           "A: the picked mode rides pending_brief end-to-end", book)
@@ -1661,6 +1688,26 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check(len(deltas) > 0, "draft turn streams the plan echo")
     check("".join(deltas) == echo, "echo deltas == persisted intent.answer",
           f"{''.join(deltas)!r} vs {echo!r}")
+
+    # Ask turn (ask 三分解剖): the framing prose streams as deltas exactly
+    # like the draft echo (the extractor's "prose" key) — the envelope's
+    # content IS that prose, and the bare question rides the payload (the
+    # structured dock never streams, it lands with the envelope).
+    pid2 = await ctx.new_project("S10 sse ask streaming")
+    deltas, completed, failed = await ctx.chat_stream(pid2, "I want a social post.")
+    check(failed is None, "ask turn has no turn.failed", failed)
+    check(completed is not None, "ask turn ends with turn.completed")
+    msg = completed["assistant_message"]
+    q = msg.get("question") or {}
+    check(q.get("kind") == "question", "the bare wish docks the ask", msg)
+    content = (msg.get("content") or "")
+    check(len(deltas) > 0, "ask turn streams the framing prose", q)
+    check("".join(deltas) == content,
+          "prose deltas == envelope content (解剖① streams like the draft echo)",
+          f"{''.join(deltas)!r} vs {content!r}")
+    check(bool((q.get("question") or "").strip())
+          and content != q["question"],
+          "the bare question rides the payload, distinct from the prose", q)
 
 
 # ---- S11 整条源规则 + materialize 注入矩阵 ----------------------------------------------
