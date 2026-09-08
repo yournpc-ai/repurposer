@@ -56,6 +56,28 @@ wait_for_url() {
 # --- free the dev ports ----------------------------------------------------
 kill_port 8000 "backend"
 kill_port 3000 "frontend"
+kill_port 3001 "render"
+
+# --- kill stale workers BEFORE starting a new one ----------------------------
+# 2026-09-08 lesson (a Sunday orphan + the day's worker shared the queue):
+# the worker has NO port, so kill_port never saw it — every dev.sh run
+# spawned ANOTHER worker, and the stale-code orphan kept claiming steps via
+# SKIP LOCKED (its step terminals never back-wrote the graph — run COMPLETED
+# while canvas nodes stayed "running" forever). Check and kill FIRST.
+worker_pids() { pgrep -f "\-m app\.worker" 2>/dev/null || true; }
+STALE_WORKERS=$(worker_pids)
+if [ -n "$STALE_WORKERS" ]; then
+  echo "Killing stale worker process(es): $(echo $STALE_WORKERS | tr '\n' ' ')"
+  # TERM first (let an in-flight transaction settle), KILL whatever is left.
+  # shellcheck disable=SC2086
+  kill $STALE_WORKERS 2>/dev/null
+  sleep 2
+  STILL_THERE=$(worker_pids)
+  if [ -n "$STILL_THERE" ]; then
+    # shellcheck disable=SC2086
+    kill -9 $STILL_THERE 2>/dev/null || true
+  fi
+fi
 
 # --- PostgreSQL ------------------------------------------------------------
 if port_in_use 5432; then
@@ -150,6 +172,15 @@ check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv r
 check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
 check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && pnpm dev )"                                                   || DEAD=1
 check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                      || DEAD=1
+# Unique-worker guard (2026-09-08): a healthy env has exactly ONE worker
+# pair (the `uv run` wrapper + its venv child). Anything more is an orphan
+# pair claiming steps with stale code — say so loudly with the offenders.
+WORKER_COUNT=$(worker_pids | wc -l | tr -d ' ')
+if [ "$WORKER_COUNT" -gt 2 ]; then
+  echo "⚠ $WORKER_COUNT worker processes detected (expected 2 = wrapper + child) — orphans will claim steps with STALE code:"
+  pgrep -fl "\-m app\.worker"
+  DEAD=1
+fi
 if [ "$DEAD" -ne 0 ]; then
   echo "⚠ One or more services failed to start — the environment is NOT whole."
 fi
