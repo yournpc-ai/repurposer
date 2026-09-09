@@ -27,10 +27,6 @@ export interface ChatTurnBody {
   project_id: string
   message: string
   mentions?: { type: string; id: string; label: string }[]
-  /** The canvas's focused product (ADR-041 D8 焦点注入): rides the turn as
-   * one context line AND persists on the user message row — the rebuilt
-   * history renders the gray focus prefix row after a refresh. */
-  focus_output?: { id: string; label: string }
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
   attachments?: {
@@ -59,6 +55,20 @@ export interface StreamChatOptions {
    * labels its thinking row from the phase and leaves it untouched on bare
    * keepalives. */
   onThinking?: (payload: { phase?: string }) => void
+  /** The ask verdict's pill payload the moment its object closes in the
+   * stream (2026-09-09 用户拍板——「选项该和这句话一起来」; object-level
+   * trust: the ask object's prose key streams first, so question/options/
+   * default_path are complete when the echo ends — the verdict's brief tail
+   * is still generating). Preview-dock the pill from this frame; the
+   * terminal envelope stays authoritative (envelope always wins), and a
+   * flipped / failed turn rolls the preview back. */
+  onQuestionPreview?: (payload: {
+    question?: string | null
+    options?: { id: string; label: string }[]
+    allow_freeform?: boolean
+    slot?: string | null
+    default_path?: string | null
+  }) => void
 }
 
 /** Answer endpoint payload (the answer doubles as resume). */
@@ -101,10 +111,12 @@ function streamTurn<T>(
     signal,
     onDelta,
     onThinking,
+    onQuestionPreview,
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
     onThinking?: (payload: { phase?: string }) => void
+    onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
   },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -154,6 +166,12 @@ function streamTurn<T>(
           onDelta?.(data.text)
         } else if (msg.event === "assistant.thinking") {
           onThinking?.(JSON.parse(msg.data) as { phase?: string })
+        } else if (msg.event === "question.preview") {
+          onQuestionPreview?.(
+            JSON.parse(msg.data) as Parameters<
+              NonNullable<StreamChatOptions["onQuestionPreview"]>
+            >[0],
+          )
         } else if (msg.event === terminal.completed) {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === terminal.failed) {
@@ -179,13 +197,16 @@ function streamTurn<T>(
  * 验收批): the answer's continuation is an LLM turn (a slot answer resumes
  * the book path), so an option click gets the same wire as a typed turn —
  * the endpoint Accept-negotiates exactly like POST /chat, and this wrapper
- * only names its terminal events. */
+ * only names its terminal events. The ask preview rides along too
+ * (2026-09-09 对称拍板): a follow-up ask previews its pill mid-stream,
+ * same as the chat turn's first ask. */
 export function streamAnswer<T>(
   messageId: string,
   body: AnswerTurnBody,
   handlers: {
     onDelta?: (text: string) => void
     onThinking?: (payload: { phase?: string }) => void
+    onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
   },
 ): Promise<T> {
   return streamTurn(
@@ -203,12 +224,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking },
+    { signal, onDelta, onThinking, onQuestionPreview },
   )
 }

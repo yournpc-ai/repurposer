@@ -5,13 +5,13 @@
  * pill's corner (right-aligned, stacked below — the ADR-056 canvas-chrome
  * slot). Content = the 出生证明 only: producing step → the estimate/actual
  * 对账尺 (ADR-055 credits) → source asset → read-only spec line → model
- * facts, plus the two action doors (download / publish). NEVER an editing
- * surface — 修订只经 chat (chat 修订恒胜), parameter forms are FLORA's
- * half we deliberately did not port. */
+ * facts, plus the two action doors (download-or-copy / publish). NEVER an
+ * editing surface — 修订只经 chat (chat 修订恒胜), parameter forms are
+ * FLORA's half we deliberately did not port. */
 
 import { useEffect, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Download, Send, X } from "lucide-react"
+import { Copy, Download, Send, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn, formatDuration } from "@/lib/utils"
@@ -208,16 +208,29 @@ export function OutputInspector({
       )}
 
       {/* Action doors — the same single channel as the card's bar/⋯ menu
-          (no second action home; destructive ops stay in the ⋯ menu). */}
+          (no second action home; destructive ops stay in the ⋯ menu). The
+          primary speaks the product's verb: copy for text, download for
+          media (2026-09-09 走查拍板). */}
       <div className="mt-4 flex gap-2">
-        <Button
-          variant="outline"
-          className="h-9 flex-1"
-          onClick={() => onAction(output, "download")}
-        >
-          <Download className="size-4" />
-          {t("results.canvas.download")}
-        </Button>
+        {output.type === "post" || output.type === "article" ? (
+          <Button
+            variant="outline"
+            className="h-9 flex-1"
+            onClick={() => onAction(output, "copy")}
+          >
+            <Copy className="size-4" />
+            {t("chat.copy")}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            className="h-9 flex-1"
+            onClick={() => onAction(output, "download")}
+          >
+            <Download className="size-4" />
+            {t("results.canvas.download")}
+          </Button>
+        )}
         <Button className="h-9 flex-1" onClick={() => onAction(output, "publish")}>
           <Send className="size-4" />
           {t("results.canvas.publish")}

@@ -28,7 +28,7 @@ export type FlowEdgeSemantic = "lineage" | "dependency"
  * business): open / focus (2026-08-17 走查拍板, Lovart 解剖). No preview —
  * the video plays inline and the big player is the hover expand. Graph
  * operations (run / rewire) are permanently banned from it. */
-export type FlowOutputAction = "open" | "download" | "publish" | "delete" | "focus"
+export type FlowOutputAction = "open" | "copy" | "download" | "publish" | "delete" | "focus"
 
 /** Asset-node actions (results canvas, 2026-08-17): the source file's own
  * business — download / delete / reprocess. ("open" never travels this
@@ -164,11 +164,16 @@ export interface FlowViewProps {
    * surface tracks it so a node click selects what the user is LOOKING at
    * (the lightbox / dossier / focus follow the shown member). */
   onDisplayChange?: (nodeId: string, outputId: string) => void
-  /** Card-face prompt direct edit (ADR-057 K4): the card reports the new
-   * program; the surface opens the pricing confirmation (锚定受影响子图 +
-   * 估价随行) — nothing touches the graph until the confirmed turn rides
-   * the chat channel (零旁路). */
+  /** Card-face prompt direct edit (ADR-057 K4; ADR-058 deterministic): the
+   * card reports the new program; the surface opens the pricing
+   * confirmation (锚定受影响子图 + 估价随行) — nothing touches the graph
+   * until the confirm's CODE-built edit_prompt + run lands. */
   onPromptEdit?: (nodeId: string, text: string) => void
+  /** The edit's optimistic echo (ADR-058 乐观回显): while the confirm is
+   * open or the stamp is in flight, the edited node's card face shows the
+   * user's verbatim program instead of the domain's last-stamped one —
+   * never a revert flash. Null = no pending edit. */
+  pendingProgram?: { nodeId: string; text: string } | null
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void

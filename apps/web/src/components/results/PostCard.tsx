@@ -1,8 +1,11 @@
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { apiPost } from "@/lib/api"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import { AssetActionBar } from "./AssetActionBar"
+import { outputFullText } from "./outputText"
 
 import type { Output } from "@/lib/types"
 
@@ -12,21 +15,17 @@ interface PostCardProps {
 }
 
 export function PostCard({ output, onRegenerate }: PostCardProps) {
+  const { t } = useTranslation()
   const content = output.payload.content || ""
   const hashtags = output.payload.hashtags || []
 
-  const handleDownload = () => {
-    if (!content) return
-    const text = [content, hashtags.join(" ")].filter(Boolean).join("\n\n")
-    const blob = new Blob([text], { type: "text/markdown" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `post-${output.id}.md`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
+  // A post is pasted, not downloaded (2026-09-09 走查拍板 — the .md
+  // download retired everywhere; the clipboard is the product's verb).
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(outputFullText(output))
+      .then(() => toast.success(t("chat.copied")))
+      .catch(() => toast.error(t("common.requestFailed")))
   }
 
   const handleRegenerate = async () => {
@@ -45,7 +44,7 @@ export function PostCard({ output, onRegenerate }: PostCardProps) {
       <div className="mb-3 flex items-center justify-between">
         <Badge variant="outline" className="rounded-md">{output.language?.toUpperCase()}</Badge>
         <AssetActionBar
-          onDownload={handleDownload}
+          onCopy={handleCopy}
           onRegenerate={handleRegenerate}
         />
       </div>

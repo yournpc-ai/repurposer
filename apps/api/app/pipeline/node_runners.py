@@ -694,7 +694,7 @@ class Plan(NodeBase):
         counts = Counter(s.type for s in slots)
         zh = target_language.startswith("zh")
         type_labels = {
-            "post": "LinkedIn 帖子" if zh else "LinkedIn post",
+            "post": "帖子" if zh else "post",
             "quotes": "名言卡" if zh else "quotes card",
             "carousel": "轮播图" if zh else "carousel",
             "article": "文章" if zh else "article",

@@ -164,13 +164,12 @@ class ChatMention(BaseModel):
 
 
 class FocusRef(BaseModel):
-    """The canvas product a turn is pointed at (ADR-041 D8 焦点注入).
+    """The canvas product a turn was pointed at (ADR-041 D8 焦点注入).
 
-    Rides the turn as one context line (an instruction naming no other target
-    resolves to it) and persists on the user message ({id, label},
-    denormalized like mentions) so the rebuilt history renders the gray
-    focus prefix row after a refresh. Not a second intent entry: the mention
-    registry stays the definite-reference channel.
+    WRITE-RETIRED (ADR-058): pointing is an @-mention chip now — the mention
+    registry is the one definite-reference channel. The shape stays so old
+    message rows still validate on READ (messages.focus_output → the rebuilt
+    history's gray focus prefix row); nothing writes it anymore.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -306,9 +305,27 @@ class TaskListProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_null_name(cls, data: Any) -> Any:
+        """读容忍 (打字机律牙①): the LLM writes "name": null when it means
+        to skip it — a rejection here costs the funnel's repair round,
+        which never streams (the prose would pop in as one blob)."""
+        if isinstance(data, dict) and data.get("name") is None:
+            data = dict(data)
+            data.pop("name", None)
+        return data
+
     type: Literal["task_list"] = "task_list"
     tasks: list[TaskItem] = Field(default_factory=list)
     summary: str
+    # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
+    # run's deliverable, in the interface language ("中文 LinkedIn 帖子" /
+    # "Chinese LinkedIn post"). It titles the run's receipt and completion
+    # line — display copy comes from the proposer's FRESH reading of the
+    # turn, never from a frozen-params template. "" = unnamed (readers fall
+    # back to the chain-derived label).
+    name: str = ""
 
 
 class EditOp(BaseModel):
@@ -423,9 +440,21 @@ class WiringProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_null_name(cls, data: Any) -> Any:
+        """读容忍 — same null seat as TaskListProposal.name."""
+        if isinstance(data, dict) and data.get("name") is None:
+            data = dict(data)
+            data.pop("name", None)
+        return data
+
     type: Literal["wiring"] = "wiring"
     ops: list[dict] = Field(default_factory=list)
     summary: str
+    # LLM 建图时命名 (ADR-058): same seat as TaskListProposal.name — the
+    # revision run's compact deliverable name, "" = unnamed.
+    name: str = ""
 
 
 IntentProposal = Annotated[
@@ -481,9 +510,10 @@ class ChatRequest(BaseModel):
 
     The backend locates or creates the project conversation, builds the
     context, and dispatches any background work. Asset-scoped conversations
-    are retired (ADR-041 D8 — 产物对话归 dock + 焦点注入): a product the user
-    points at rides as ``focus_output`` (one context line), never as a
-    separate conversation scope.
+    are retired (ADR-041 D8 — 产物对话归 dock); pointing at a product is an
+    @-mention chip on the message (ADR-058 — focus_output write-retired, old
+    rows still read back on the history response), never a separate
+    conversation scope.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -492,10 +522,6 @@ class ChatRequest(BaseModel):
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
-    # The canvas's focused product (ADR-041 D8 焦点注入): the output the user
-    # last pointed at. Carried per turn (one context line on the chat loop)
-    # and persisted on the user message — the history's focus prefix row.
-    focus_output: FocusRef | None = None
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
     # The review panel's current task book (the user may have hand-edited the
@@ -836,6 +862,18 @@ class InferredIntent(BaseModel):
         # default apply instead of failing validation.
         if data.get("tasks") is None:
             data.pop("tasks", None)
+        # Same null tolerance for ``name`` (ADR-058 — the LLM writes null on
+        # start/ask/answer verdicts; 打字机律牙①: a rejection costs the
+        # funnel's repair round, which never streams).
+        if data.get("name") is None:
+            data.pop("name", None)
+        # Same null tolerance for ``tasks_explicit`` (2026-09-09 实测: ask
+        # verdicts habitually write null here — three repair rounds observed
+        # in one day, each costing ~15s and diverging the stream from the
+        # envelope; an ask has no tasks to be explicit about, so the False
+        # default is the honest read).
+        if data.get("tasks_explicit") is None:
+            data.pop("tasks_explicit", None)
         # 2026-08-05 restructure leftover: legacy stored books carry
         # book-level ``language`` / ``language_explicit`` — strip on read.
         for retired in ("language", "language_explicit"):
@@ -948,6 +986,13 @@ class InferredIntent(BaseModel):
     # the value). Code merges by source precedence; a slot you leave out
     # (or set null) keeps its stored value. Null for start/answer verdicts.
     brief: BriefLedger | None = None
+    # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
+    # book's deliverable, in the interface language ("中文 LinkedIn 帖子" /
+    # "Chinese LinkedIn post") — it titles the run's receipt and completion
+    # line. Display copy comes from the proposer's FRESH reading of the
+    # turn, never from a frozen-params template. "" = unnamed (readers fall
+    # back to the chain-derived label). Null-equivalent for start/ask/answer.
+    name: str = ""
 
 
 class TaskBookEstimate(BaseModel):
@@ -2517,6 +2562,28 @@ class DubRequest(BaseModel):
 class GenerateResponse(BaseModel):
     """Result of ``POST /projects/{id}/generate`` (202 Accepted) — typed so
     the contract can evolve under schema protection (B3: was a bare dict)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: UUID
+    status: WorkflowStatus
+
+
+class GraphReviseRequest(BaseModel):
+    """The card-face prompt direct edit (ADR-058 — deterministic graph action,
+    not a chat turn): rewrite ONE node's program with the user's verbatim
+    words and re-fill it with its downstream. Ops are constructed by code —
+    zero intent recognition (the node id is structurally exact), zero chat
+    messages (the node's own state cycle is the whole feedback)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: UUID
+    prompt: str = Field(min_length=1)
+
+
+class GraphReviseResponse(BaseModel):
+    """Result of ``POST /projects/{id}/graph/revise`` (202 Accepted)."""
 
     model_config = ConfigDict(extra="forbid")
 

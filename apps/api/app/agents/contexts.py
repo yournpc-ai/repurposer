@@ -110,15 +110,15 @@ async def _build_context(
     recent: list[Message],
     mentions: list[ChatMention],
     pending: Message | None,
-    focus_output_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
     rounds + the mention list. Not a chat-history dump. ``pending`` (the
     conversation's still-open question, if any) is queried by the caller —
     this module assembles, it never queries the chat store's question
-    lifecycle. ``focus_output_id`` is the canvas's pointed-at product
-    (ADR-041 D8 焦点注入) — one context line, never a conversation scope."""
+    lifecycle. Pointing at a product is an @mention (ADR-058 — the canvas
+    focus mechanism retired into the mentions registry); the mention block
+    below carries the definite id."""
     lines = [
         f"Project: {project.title} (id={project.id}, language={project.language})",
     ]
@@ -168,7 +168,6 @@ async def _build_context(
         .scalars()
         .all()
     )
-    node_id_by_output: dict[str, str] = {}
     if graph_nodes:
         graph_edges = list(
             (
@@ -193,8 +192,6 @@ async def _build_context(
             output_ids = spec.get("output_ids") or []
             if output_ids:
                 row += f" | products: {len(output_ids)}"
-                for oid in output_ids:
-                    node_id_by_output[str(oid)] = str(n.id)
             downstream = children.get(str(n.id)) or []
             if downstream:
                 row += f" | downstream: {', '.join(downstream)}"
@@ -229,26 +226,6 @@ async def _build_context(
             # gets answered from real step states, not guessed.
             lines.append("Latest run steps:")
             lines.extend(progress)
-
-    if focus_output_id is not None:
-        # 焦点注入 (ADR-041 D8): the canvas's pointed-at product joins as ONE
-        # line — the default target for instructions naming no other output.
-        # A stale id (the output left the visible set) drops silently.
-        focused = next(
-            (o for o in outputs if str(o.id) == str(focus_output_id)), None
-        )
-        if focused is not None:
-            one_liner = _output_one_liner(focused)
-            lines.append(
-                f"Current focus output: {focused.type} id={focused.id}"
-                + (f": {one_liner}" if one_liner else "")
-            )
-            # The focus's owning NODE rides along (ADR-057): a wiring
-            # revision targets the node, not the product — the agent reads
-            # the definite id here instead of resolving it itself.
-            focus_node = node_id_by_output.get(str(focused.id))
-            if focus_node is not None:
-                lines.append(f"Focus's graph node: id={focus_node}")
 
     if recent:
         lines.append("Recent rounds:")

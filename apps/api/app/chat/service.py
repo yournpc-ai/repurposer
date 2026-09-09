@@ -3,8 +3,8 @@
 A conversation is the universal container — always project-scoped (the
 original prompt plus project-level follow-ups). Asset-scoped conversations
 are retired (ADR-041 D8): product chat lives in the project conversation,
-and the product the user points at rides each turn as ``focus_output``
-(焦点注入 — one context line, never a scope).
+and the product the user points at rides the message as an @-mention chip
+(ADR-058 — the focus_output transport is write-retired, old rows read back).
 
 The public surface is intentionally tiny: ``chat()`` takes a user message,
 locates or creates the right conversation, assembles deterministic context,
@@ -303,6 +303,8 @@ async def _create_run_from_tasks(
     summary: str,
     caption_mode: str | None = None,
     instruction: str | None = None,
+    name: str | None = None,
+    on_phase=None,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace.
 
@@ -317,9 +319,25 @@ async def _create_run_from_tasks(
     ``instruction`` overrides the run's task-book instruction (default = the
     summary): the wiring revision path pins the edited node program here
     (the writers' GenerationContext.instruction steers the rewrite).
+
+    ``name`` = the proposer's fresh naming of the run (ADR-058 — LLM 建图时
+    命名), stored on run.context via TaskSpec; the receipt title and the
+    completion line read it instead of any frozen-params template.
+
+    ``on_phase`` (SSE turns only): the run is about to be born — emit the
+    ``creating_run`` phase label so the dock's status line never goes dark
+    between the echo and the run's arrival (回合后半段也有状态所有者).
     """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
+    if not (name or "").strip():
+        # 二源律的可观测座 (ADR-058): the fallback chain label is legal but
+        # silent — count every run an LLM proposal SHOULD have named and
+        # didn't, so the unnamed rate is visible instead of the frozen-params
+        # template quietly coming back.
+        logger.info("unnamed_proposal", path="chat_dispatch", project_id=str(project.id))
+    if on_phase is not None:
+        await on_phase(THINKING_PHASE_CREATING_RUN)
     try:
         run = await create_run(
             db,
@@ -330,6 +348,7 @@ async def _create_run_from_tasks(
                 instruction=instruction or summary,
                 scope="full",
                 caption_mode=caption_mode,
+                name=name or None,
             ),
         )
     except CreditsInsufficientError as exc:
@@ -1331,6 +1350,13 @@ async def answer_question(
                     # Same labelled beat as the chat path's start branch
                     # (_book_turn): the run is about to be born.
                     await on_phase(THINKING_PHASE_CREATING_RUN)
+                if not (intent.name or "").strip():
+                    # Same observability seat as _create_run_from_tasks
+                    # (ADR-058): the book SHOULD carry the router's name.
+                    logger.info(
+                        "unnamed_proposal", path="book_start",
+                        project_id=str(project.id),
+                    )
                 run = await create_run(
                     db,
                     project,
@@ -1355,6 +1381,9 @@ async def answer_question(
                         # the InferredIntent — the chat path's caption-mode
                         # question stores it on the intent (RECIPES §4.7).
                         caption_mode=intent.caption_mode,
+                        # The router's fresh naming of the book (ADR-058) —
+                        # the receipt title and completion line read it.
+                        name=intent.name or None,
                     ),
                 )
             except ToolRejected as exc:
@@ -1447,6 +1476,8 @@ async def answer_question(
                     ),
                 ),
                 recent=history[-5:],
+                on_delta=on_delta,
+                on_phase=on_phase,
             )
 
     await db.commit()
@@ -1690,6 +1721,11 @@ async def _book_turn(
         file_language=(first_file.meta or {}).get("language") if first_file else None,
         material_excerpt=material_excerpt,
     )
+    if on_phase is not None:
+        # Real phase switch: the router call below is the turn's long black
+        # box — the status row reads "understanding" until the verdict's own
+        # beat (creating_run / the envelope) takes over.
+        await on_phase(THINKING_PHASE_UNDERSTANDING)
     if on_delta is not None:
         intent = await intent_router.call_stream(
             on_delta=on_delta, on_reasoning=on_reasoning, **infer_kwargs
@@ -2104,10 +2140,31 @@ async def _book_turn(
         stashed_mode = _resolved_caption_mode(project)
         if stashed_mode is not None:
             intent = intent.model_copy(update={"caption_mode": stashed_mode})
+    # Inherit the previous dock's NAME on an identical-chain re-dock
+    # (2026-09-09 取证: a bare confirmation the router misjudged as a draft
+    # re-proposes the SAME chain with name=null — the plan card's header and
+    # the run receipt then fall back to the frozen-params label the 二源律
+    # bans. The inherited name IS the LLM's own earlier naming of the same
+    # work — preserving it invents nothing).
+    if (
+        not (intent.name or "").strip()
+        and stored is not None
+        and stored.intent is not None
+        and (stored.intent.name or "").strip()
+        and [t.model_dump(mode="json") for t in intent.tasks]
+        == [t.model_dump(mode="json") for t in stored.intent.tasks]
+    ):
+        intent = intent.model_copy(update={"name": stored.intent.name})
     # The birth prompt freezes at the first dock (stored.prompt wins on every
     # later write) — the ledger is the accumulated state now, the prompt is
     # only the book's birth narrative (Start's instruction fallback).
     birth_prompt = stored.prompt if stored and stored.prompt else text
+    if on_phase is not None:
+        # Real phase switch (相位通道用起来, 2026-09-09): the verdict is in
+        # and the dock-work starts — ledger write + sync_task_book_question +
+        # the draft-graph stamp (compile + estimate folds) are the seconds
+        # between the echo's last character and the plan card's arrival.
+        await on_phase(THINKING_PHASE_DRAFTING)
     project.pending_brief = PendingBrief(
         prompt=birth_prompt,
         intent=intent,
@@ -2138,9 +2195,9 @@ async def _propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
-    focus_output_id: UUID | None = None,
     on_delta=None,
     on_reasoning=None,
+    on_phase=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3):
     assemble context, single intent call, adjudicate, record the reply.
@@ -2184,7 +2241,6 @@ async def _propose_turn(
             recent,
             mentions,
             pending,
-            focus_output_id,
         )
         if project
         else {"text": ""}
@@ -2195,6 +2251,10 @@ async def _propose_turn(
     )
     disposition = "none"
     try:
+        if on_phase is not None:
+            # Same labelled beat as the book path's router call (the status
+            # row's label is the CURRENT phase, never a frozen word).
+            await on_phase(THINKING_PHASE_UNDERSTANDING)
         if on_delta is not None:
             # Chat SSE: stream the verdict; raw fragments feed the prose
             # preview extractor. Repair rounds stay non-streaming (the funnel
@@ -2323,6 +2383,7 @@ async def _propose_turn(
                         caption_mode=await _derive_chat_caption_mode(
                             db, project, retry.proposal.tasks, text
                         ),
+                        name=retry.proposal.name or None, on_phase=on_phase,
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -2414,7 +2475,8 @@ async def _propose_turn(
                 if op.get("op") == "edit_prompt" and op.get("prompt")
             )
             return await _create_run_from_tasks(
-                db, project, tasks, p.summary, instruction=instruction or None
+                db, project, tasks, p.summary, instruction=instruction or None,
+                name=p.name or None, on_phase=on_phase,
             )
 
         try:
@@ -2442,6 +2504,7 @@ async def _propose_turn(
                         caption_mode=await _derive_chat_caption_mode(
                             db, project, retry.proposal.tasks, text
                         ),
+                        name=retry.proposal.name or None, on_phase=on_phase,
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -2530,6 +2593,7 @@ async def _propose_turn(
             run_id = await _create_run_from_tasks(
                 db, project, proposal.tasks, proposal.summary,
                 caption_mode=caption_mode,
+                name=proposal.name or None, on_phase=on_phase,
             )
             assistant_content = proposal.summary
         except ValueError as e:
@@ -2576,6 +2640,7 @@ async def _propose_turn(
                         caption_mode=await _derive_chat_caption_mode(
                             db, project, retry.proposal.tasks, text
                         ),
+                        name=retry.proposal.name or None, on_phase=on_phase,
                     )
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
@@ -2681,9 +2746,9 @@ async def prepare_chat_turn(
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
-        focus_output=(
-            request.focus_output.model_dump(mode="json") if request.focus_output else None
-        ),
+        # focus_output 写退役 (ADR-058): pointing at a product is an @mention
+        # now; old rows keep their stored focus_output (读容忍 — the history
+        # replay still renders their gray prefix row), new rows never write it.
     )
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
@@ -2818,6 +2883,15 @@ async def prepare_chat_turn(
 # "Thinking…" with zero information (user ruling: the label earns its place
 # only when the activity structurally differs from thinking).
 THINKING_PHASE_CREATING_RUN = "creating_run"
+# The router/agent call is the turn's long black box (10–60s) — name the
+# beat so the status line's label is the CURRENT phase, never a frozen
+# "Thinking" (2026-09-09 用户实拍: 状态行从未换过词——creating_run 之外
+# 没有任何相位发射).
+THINKING_PHASE_UNDERSTANDING = "understanding"
+# The verdict is a draft — ledger write + book dock + the draft-graph stamp
+# (compile + estimate folds) fill the seconds between the echo's end and
+# the plan card's arrival (the window the 10s-gap forensics named).
+THINKING_PHASE_DRAFTING = "drafting"
 
 
 async def execute_chat_turn(
@@ -2873,9 +2947,9 @@ async def execute_chat_turn(
             request.message,
             request.mentions,
             prepared.history[-6:],
-            focus_output_id=(request.focus_output.id if request.focus_output else None),
             on_delta=on_delta,
             on_reasoning=on_reasoning,
+            on_phase=on_phase,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message

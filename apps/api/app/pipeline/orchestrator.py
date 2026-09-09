@@ -157,6 +157,12 @@ class TaskSpec(BaseModel):
     # None = the recipe doesn't need a caption mode, or the user hasn't
     # been asked yet (the chat safety net's path).
     caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
+    # The run's display name (ADR-058 — LLM 建图时命名): a compact noun
+    # phrase written by the proposing agent at birth, stored verbatim on
+    # run.context; the dock's receipt title and completion line read it.
+    # None on typed/legacy paths → the display layer falls back to the
+    # chain-derived label. Display copy NEVER derives from frozen params.
+    name: str | None = None
 
 
 def first_task_language(tasks: list[TaskItem] | None) -> str | None:

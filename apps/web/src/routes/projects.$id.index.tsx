@@ -2,15 +2,16 @@ import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft } from "lucide-react"
+import { toast } from "sonner"
 
 import { ArticleCard } from "@/components/results/ArticleCard"
 import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { ClipDetailModal } from "@/components/results/ClipDetailModal"
-import { TextDetailModal } from "@/components/results/TextDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
+import { outputFullText } from "@/components/results/outputText"
 import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
 import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
@@ -106,6 +107,13 @@ interface WorkflowRun {
     persona_id?: string | null
     instruction?: string | null
     tone_settings?: Record<string, unknown> | null
+    /** The proposer's fresh naming of the run (ADR-058 — LLM 建图时命名);
+     * absent on typed/legacy paths (readers fall back to the chain label). */
+    name?: string | null
+    /** "node_revise" = a card-face edit's deterministic node rerun — the
+     * dock stays silent about it (ADR-058: zero messages, the node's own
+     * state cycle is the feedback). */
+    origin?: string | null
   } | null
   cost: Record<string, number> | null
   steps: WorkflowStep[]
@@ -232,7 +240,7 @@ function ProjectDetailPage() {
   // mounted as-is.
   const [detailOutput, setDetailOutput] = useState<Output | null>(null)
   const [publishOutput, setPublishOutput] = useState<Output | null>(null)
-  const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null)
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
 
   const fetchGraph = useCallback(async () => {
     const graphRes = await apiFetch(`/api/v1/projects/${projectId}/graph`, { toast: false })
@@ -335,7 +343,7 @@ function ProjectDetailPage() {
     setGraph(null)
     setDetailOutput(null)
     setPublishOutput(null)
-    setFocusedOutputId(null)
+    setSelectedOutputId(null)
   }, [projectId])
 
   // Re-point the modal/focus state at the freshest rows after every refetch
@@ -346,35 +354,21 @@ function ProjectDetailPage() {
     const byId = new Map(outputsList.map((o) => [o.id, o]))
     setDetailOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
     setPublishOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
-    setFocusedOutputId((prev) => (prev && !byId.has(prev) ? null : prev))
+    setSelectedOutputId((prev) => (prev && !byId.has(prev) ? null : prev))
   }, [outputsList])
-
-  const focusedOutputChip = useMemo(() => {
-    const output = outputsList.find((o) => o.id === focusedOutputId)
-    if (!output) return null
-    return {
-      id: output.id,
-      label: outputMentionLabel(
-        output,
-        t(`chat.derivativeTypes.${output.type}`, {
-          defaultValue: t("results.tabs.clips"),
-        }),
-      ),
-    }
-  }, [outputsList, focusedOutputId, t])
 
   // Canvas handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
   // rfNodes/rfEdges memo keys on them — plain closures rebuilt the whole
-  // graph on every unrelated re-render (SSE ticks, focus changes).
+  // graph on every unrelated re-render (SSE ticks, selection changes).
   const handleOutputClick = useCallback((output: Output) => {
-    setFocusedOutputId(output.id)
-    // 单击 = detail modal 旧逻辑原样 (D5): clips with a render open the
-    // detail view; text products (post / article) open the reader
-    // (2026-09-06 — their cards only preview 12 lines and the old click
-    // target was the inline EDIT textarea, so long-form had no reading
-    // surface at all); every product click also becomes the dock's focus.
+    // Click = canvas SELECTION (the selected ring + the dossier swap-in —
+    // ADR-058: pointing at a product in chat is an @mention, no hidden
+    // focus state) + the clip's player modal. Text products (post /
+    // article) open NOTHING — the card itself is the reader (in-place
+    // scroll + inline edit since 2026-09-08); the dossier carries the
+    // details.
+    setSelectedOutputId(output.id)
     if (output.type === "clip" && output.files.video) setDetailOutput(output)
-    else if (output.type === "post" || output.type === "article") setDetailOutput(output)
   }, [])
 
   const handleOutputAction = useCallback(async (output: Output, action: FlowOutputAction) => {
@@ -383,7 +377,28 @@ function ProjectDetailPage() {
       return
     }
     if (action === "focus") {
-      setFocusedOutputId(output.id)
+      // 在对话中指认 = an @output chip in the dock's editor (ADR-058: the
+      // one pointing mechanism — visible in the user's own sentence, the
+      // chip's three laws hold). No hidden focus state.
+      dockRef.current?.insertMention({
+        type: "output",
+        id: output.id,
+        label: outputMentionLabel(
+          output,
+          t(`chat.derivativeTypes.${output.type}`, {
+            defaultValue: t("results.tabs.clips"),
+          }),
+        ),
+      })
+      return
+    }
+    if (action === "copy") {
+      // The text product's primary verb: the full text (title + body +
+      // hashtags, outputFullText's one composition) to the clipboard.
+      navigator.clipboard
+        .writeText(outputFullText(output))
+        .then(() => toast.success(t("chat.copied")))
+        .catch(() => toast.error(t("common.requestFailed")))
       return
     }
     if (action === "download") downloadOutput(output)
@@ -392,10 +407,10 @@ function ProjectDetailPage() {
       const res = await apiDelete(`/api/v1/outputs/${output.id}`)
       if (!res.ok) return
       setDetailOutput((prev) => (prev?.id === output.id ? null : prev))
-      setFocusedOutputId((prev) => (prev === output.id ? null : prev))
+      setSelectedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
-  }, [handleOutputClick, fetchResults])
+  }, [handleOutputClick, fetchResults, t])
 
   // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
@@ -418,20 +433,54 @@ function ProjectDetailPage() {
     }
   }, [projectId, fetchResults])
 
-  // Hover prompt 框 send (ADR-051 F): the card's revision ask rides the
-  // dock's chat channel with the product pinned as the one-shot focus
-  // (zero new execution channel — the ask is a plain chat turn).
-  const handleRevise = useCallback((output: Output, text: string) => {
-    dockRef.current?.sendRevision(text, {
-      id: output.id,
-      label: outputMentionLabel(
-        output,
-        t(`chat.derivativeTypes.${output.type}`, {
-          defaultValue: t("results.tabs.clips"),
-        }),
-      ),
-    })
-  }, [t])
+  // The card-face prompt direct edit's deterministic dispatch (ADR-058):
+  // the pricing confirmation's Start posts the graph revision — code-built
+  // edit_prompt + run, zero intent recognition, NOT a chat turn (the dock
+  // stays silent; the node's own state cycle on the canvas is the
+  // feedback). Resolves true when the run started; failure surfaces here
+  // (the confirm card reverts its display on false).
+  const handleGraphRevise = useCallback(
+    async (nodeId: string, text: string): Promise<boolean> => {
+      let res: Response
+      try {
+        res = await apiPost(
+          `/api/v1/projects/${projectId}/graph/revise`,
+          { node_id: nodeId, prompt: text },
+          { toast: false }
+        )
+      } catch {
+        // apiFetch RETHROWS network-level failures (no response to parse) —
+        // the confirm card must still hear it (失败才开口, ADR-058): toast
+        // here and let the surface revert the optimistic program.
+        toast.error(t("common.networkError"))
+        return false
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          detail?: unknown
+        }
+        const detail = body?.detail
+        const credits =
+          typeof detail === "object" && detail !== null && (detail as { code?: string }).code === "credits.insufficient"
+            ? (detail as { balance: number; required: number })
+            : null
+        toast.error(
+          credits
+            ? t("credits.insufficient", { balance: credits.balance, required: credits.required })
+            : typeof detail === "string" && detail
+              ? detail
+              : t("common.requestFailed")
+        )
+        return false
+      }
+      // Refetch now: the fresh latest_run flips runActive, the page SSE
+      // attaches, and the node's own state cycle (stale → queued → running
+      // → filled) renders from the first beat.
+      await fetchResults()
+      return true
+    },
+    [projectId, fetchResults, t]
+  )
 
   // Canvas draft-confirm card Start (ADR-057 K5 — 确认 = 节点锚定): the
   // desktop confirm beat rides the dock's ONE start path (the task_book
@@ -853,6 +902,9 @@ function ProjectDetailPage() {
           ? completedRunTasks
           : [{ tool: "select_clips", params: {} }],
         specific_instruction: completedRun.context?.instruction,
+        // The run's LLM name (ADR-058) — the receipt title survives the
+        // refresh verbatim instead of falling back to the chain label.
+        name: completedRun.context?.name,
       })
     : undefined
 
@@ -860,6 +912,7 @@ function ProjectDetailPage() {
     ? normalizeIntent({
         tasks: runTasks.length ? runTasks : [{ tool: "select_clips", params: {} }],
         specific_instruction: latestRun?.context?.instruction,
+        name: latestRun?.context?.name,
       })
     : pendingBrief?.intent
       ? // A parked task book always wins — it IS the live confirmation
@@ -988,14 +1041,14 @@ function ProjectDetailPage() {
             steps={latestRun?.steps ?? []}
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
-            onRevise={handleRevise}
+            onNodeRevise={handleGraphRevise}
             onDraftConfirm={handleDraftConfirm}
             onAssetAction={handleAssetAction}
-            focusedOutputId={focusedOutputId}
+            selectedOutputId={selectedOutputId}
             onPaneClick={() => {
-              // 点画布空白 = 回中性: history 收起 + 焦点清除 (D4/D8).
+              // 点画布空白 = 回中性: history 收起 + 选中清除.
               dockRef.current?.closeHistory()
-              setFocusedOutputId(null)
+              setSelectedOutputId(null)
             }}
           />
         </div>
@@ -1069,14 +1122,18 @@ function ProjectDetailPage() {
         initialDerived={pendingBrief?.derived}
         initialReasons={pendingBrief?.reasons}
         initialRunId={
-          runActive
-            ? latestRun.id
-            : !pendingBrief && completedRun
-              ? completedRun.id
-              : undefined
+          // A node-originated run (ADR-058 — the card-face edit's
+          // deterministic revision) never attaches to the dock: zero
+          // messages, zero receipts — the node's own state cycle on the
+          // canvas is the whole feedback.
+          latestRun?.context?.origin === "node_revise"
+            ? undefined
+            : runActive
+              ? latestRun.id
+              : !pendingBrief && completedRun
+                ? completedRun.id
+                : undefined
         }
-        focusOutput={focusedOutputChip}
-        onFocusChange={(id) => setFocusedOutputId(id)}
         onComplete={handleDockComplete}
         // A dock-started run (confirm / prose / 修订): refetch NOW — the
         // fresh latest_run flips runActive, the page SSE attaches, and the
@@ -1086,6 +1143,14 @@ function ProjectDetailPage() {
         // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
           void fetchResults()
+        }}
+        // K5 图先展示后运行: a book dock / bail changes the draft graph
+        // server-side — refetch so the `hasDraftGraph` flip gate sees it
+        // (the desktop world must morph on the book's arrival, before any
+        // run; without this the flip only ever fired on the first run and
+        // the chain preview never showed — 2026-09-09 取证).
+        onDraftGraphChange={() => {
+          void fetchGraph()
         }}
       />
 
@@ -1104,25 +1169,16 @@ function ProjectDetailPage() {
         />
       )}
 
-      {detailOutput &&
-        (detailOutput.type === "post" || detailOutput.type === "article" ? (
-          <TextDetailModal
-            output={detailOutput}
-            open
-            onOpenChange={(open) => {
-              if (!open) setDetailOutput(null)
-            }}
-          />
-        ) : (
-          <ClipDetailModal
-            output={detailOutput}
-            open
-            onOpenChange={(open) => {
-              if (!open) setDetailOutput(null)
-            }}
-            onRegenerate={fetchResults}
-          />
-        ))}
+      {detailOutput && (
+        <ClipDetailModal
+          output={detailOutput}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetailOutput(null)
+          }}
+          onRegenerate={fetchResults}
+        />
+      )}
 
       {publishOutput && (
         <PublishDialog

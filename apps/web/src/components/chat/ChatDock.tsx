@@ -24,7 +24,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  CircleHelp,
   Crosshair,
   Eraser,
   FileText,
@@ -32,7 +31,6 @@ import {
   Image as ImageIcon,
   Images,
   Languages,
-  Loader2,
   Mic2,
   Minus,
   Music,
@@ -58,7 +56,6 @@ import {
 import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
-import { BrandLoader } from "@/components/BrandLoader"
 import { LogoMark } from "@/components/LogoMark"
 import {
   assetTypeKind,
@@ -119,6 +116,7 @@ import {
 import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
+import { StatusLine } from "@/components/chat/StatusLine"
 import type { IntentSlot, Output } from "@/lib/types"
 import {
   fileIconFor,
@@ -159,6 +157,10 @@ export interface InferredIntent {
    * it only round-trips so Start doesn't drop the user's choice (the
    * server treats a missing mode as "not mentioned", never "retracted"). */
   caption_mode?: "bilingual" | "source_only" | "target_only" | null
+  /** The proposer's fresh naming of the run/book (ADR-058 — LLM 建图时命名):
+   * a compact noun phrase in the interface language; "" = unnamed (readers
+   * fall back to the chain-derived label). */
+  name?: string
 }
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
@@ -348,6 +350,9 @@ export function normalizeIntent(raw: unknown): InferredIntent {
     specific_instruction: (data.specific_instruction as string | null) ?? null,
     caption_mode:
       (data.caption_mode as InferredIntent["caption_mode"]) ?? null,
+    // The proposer's fresh naming (ADR-058): "" = unnamed → readers fall
+    // back to the chain-derived label.
+    name: typeof data.name === "string" ? data.name : "",
   }
 }
 
@@ -466,9 +471,10 @@ interface OverlayMessage {
   streaming?: boolean
   /** Answered-question item (a settled question collapsing into the flow). */
   qa?: { question: string; answer: string; muted: boolean; detail?: string }
-  /** The canvas product this turn was pointed at (ADR-041 D8): rendered as
-   * the gray focus prefix row above the user bubble. Persisted server-side
-   * (messages.focus_output), so the rebuilt history stays honest. */
+  /** The canvas product this turn was pointed at (ADR-041 D8, WRITE-RETIRED
+   * ADR-058 — pointing is an @mention chip now): old server rows still carry
+   * messages.focus_output, and the rebuilt history keeps rendering their gray
+   * focus prefix row (read tolerance, never written again). */
   focus?: { id: string; label: string }
   /** A turn-failure system row (turn.failed / transport error): renders as
    * the gray MetaRow, never a toast. Local-only — the server commits nothing
@@ -519,6 +525,12 @@ interface QuestionMessage {
   question: QuestionPayload | null
   answer: QuestionAnswer | null
   workflow_run_id: string | null
+  /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
+   * but the verdict's tail — and with it the row's server-side birth — is
+   * still generating, so this id does NOT exist server-side yet. A click
+   * stashes and fires at the envelope's authoritative dock; a flip or
+   * turn.failed rolls the preview back. Never persisted anywhere. */
+  preview?: boolean
   created_at?: string
 }
 
@@ -716,14 +728,6 @@ interface ChatDockProps {
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm phase, lands straight on the step flow. */
   initialRunId?: string | null
-  /** The canvas's focused product (ADR-041 D8 焦点注入): rendered as a gray
-   * meta row in the flow (待发焦点尾行), carried on the next turn as
-   * `focus_output` — one context line server-side AND persisted on the user
-   * message (the history's focus prefix row). One-shot: consumed on send. */
-  focusOutput?: { id: string; label: string } | null
-  /** Focus lifecycle: the overlay consumes the focus on send (null) and
-   * restores it on a failed-turn rollback (the consumed id). */
-  onFocusChange?: (outputId: string | null) => void
   /** The run reached a terminal-success state while this dock was watching
    * — the page refetches so the landed products show. */
   onComplete: (runId: string | null) => void | Promise<void>
@@ -732,6 +736,13 @@ interface ChatDockProps {
    * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
    * from the first beat, not only at terminal. One-shot per run. */
   onRunStarted?: (runId: string) => void | Promise<void>
+  /** The draft graph changed server-side (a task_book docked → stamped, or
+   * a task_book bailed → torn down) — the page refetches the graph so the
+   * form flip's `hasDraftGraph` gate sees it (ADR-057 K5 图先展示后运行:
+   * the desktop world morphs on the draft graph's arrival, BEFORE any run
+   * — without this channel the flip only ever fires on the first run and
+   * the chain preview never shows). */
+  onDraftGraphChange?: () => void | Promise<void>
   /** The panel's tucked-away state AND parking geometry (panel form only)
    * — the page offsets the canvas's top-right zoom pill clear of the panel
    * only when it can actually be covered (docked = full-height; float
@@ -740,19 +751,13 @@ interface ChatDockProps {
 }
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
- * closes the history region and clears the focus). */
+ * closes the history region). */
 export interface ChatDockHandle {
   closeHistory: () => void
-  /** Insert an @-mention chip into the input (results canvas node clicks —
-   * the @workflow_step 本面限定候选源, ADR-041 D8). No-op when the editor
-   * isn't mounted. */
+  /** Insert an @-mention chip into the input (results canvas's 在对话中指认
+   * — the ONE pointing mechanism, ADR-058; also the @workflow_step 本面限定
+   * 候选源, ADR-041 D8). No-op when the editor isn't mounted. */
   insertMention: (mention: ChatMention) => void
-  /** Canvas hover prompt 框 (ADR-051 F): send a revision ask as a plain chat
-   * turn with the product pinned as the turn's focus (the bubble carries the
-   * focus prefix row as its permanent record). Zero new execution channel —
-   * it IS the dock's send path. No-op while a turn/run is in flight; a failed
-   * turn rolls the bubble back and returns the draft to the dock's input. */
-  sendRevision: (text: string, focus: { id: string; label: string }) => void
   /** Canvas draft-confirm card's Start (ADR-057 K5): the desktop confirm
    * beat — identical to the dock pill's Start (the task_book question's
    * start answer, the only start path; guards and failure surfaces ride
@@ -890,42 +895,6 @@ function TurnErrorRow({ text }: { text: string }) {
   )
 }
 
-function StepMarker({
-  status,
-  label,
-  error,
-}: {
-  status: string
-  label: string
-  error?: string | null
-}) {
-  const icon =
-    status === "running" ? (
-      <Loader2 className="animate-spin text-primary" />
-    ) : status === "done" ? (
-      // Plain check, no green (invideo reference): done is the neutral
-      // resting state, not a success badge — only failure carries color.
-      <Check className="text-muted-foreground" />
-    ) : status === "failed" ? (
-      <X className="text-destructive" />
-    ) : status === "waiting" ? (
-      // Interrupt parked for a human answer (期 4) — a question, not work.
-      <CircleHelp className="text-primary" />
-    ) : (
-      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-    )
-
-  return (
-    <MetaRow
-      icon={icon}
-      shimmer={status === "running"}
-      destructive={status === "failed"}
-    >
-      {status === "failed" && error ? `${label} — ${error}` : label}
-    </MetaRow>
-  )
-}
-
 /** User message — the only bubbled element in the flow (rounded, muted).
  * The opening prompt carries the project's source materials as attachments;
  * an attachment-only message (files dropped into the chat) skips the text
@@ -999,21 +968,25 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
   )
 }
 
-/** The thinking row — label only (2026-09-06 user ruling: the live "· 3s"
- * elapsed countdown is retired, a bare "Thinking…" shimmer carries the
- * phase; the run-level clocks live on RunTaskList's header/receipt, not
- * here). */
+/** The thinking row's animation slot (2026-09-09 user ruling): the brand
+ * mark was retired as visual noise, and the slot reserves a CODE SEAM only
+ * — renders nothing (zero width, zero gap; a sized placeholder box showed
+ * up as dead space in front of the label). The future animation drops in
+ * here. */
+function ThinkingMark() {
+  return null
+}
+
+/** The dock's thinking seat of the shared StatusLine (2026-09-09 一座两行):
+ * label only (2026-09-06 user ruling: the live "· 3s" elapsed countdown is
+ * retired, a bare phase shimmer carries it; run-level clocks live on
+ * RunTaskList's row, not here). The label is the LIVE phase (Thinking… →
+ * Creating your workflow…), never a frozen word. */
 function ThinkingRow({ label }: { label: string }) {
   return (
     <Message align="start">
       <MessageContent>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {/* The brand fill-sweep (one stream fanning out) instead of a
-              generic spinner — same loader as the processing tiles. */}
-          <BrandLoader className="h-5 w-5" />
-          {/* Same text shimmer the running step markers use. */}
-          <span className="shimmer">{label}</span>
-        </div>
+        <StatusLine label={label} leading={<ThinkingMark />} />
       </MessageContent>
     </Message>
   )
@@ -1110,10 +1083,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   initialDerived,
   initialReasons,
   initialRunId,
-  focusOutput = null,
-  onFocusChange,
   onComplete,
   onRunStarted,
+  onDraftGraphChange,
   onPanelStateChange,
 }, ref) {
   const { t } = useTranslation()
@@ -1222,24 +1194,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     closeHistory: () => setHistoryOpen(false),
     insertMention: (mention: ChatMention) =>
       editorRef.current?.insertMention(mention),
-    sendRevision: (text: string, focus: { id: string; label: string }) => {
-      const trimmed = text.trim()
-      if (!trimmed || chatBusy || isStarting) return
-      const rollbackId = crypto.randomUUID()
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: rollbackId,
-          role: "user",
-          content: trimmed,
-          focus,
-          at: new Date().toISOString(),
-        },
-      ])
-      // Your own send opens the flow — the reply lands there.
-      raiseHistory()
-      void sendChat(trimmed, { rollbackId, draft: trimmed, focus })
-    },
     // Canvas draft-confirm card (ADR-057 K5): the desktop confirm beat —
     // it IS the dock's Start (same answer channel, same guards, same
     // credits-grey-row failure surface). No-op while a turn/run is in
@@ -1310,14 +1264,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [input, setInput] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
-  // The thinking row covers ONLY send → first delta (its own design intent,
-  // :3422): once a streaming preview has existed this turn the preview IS
-  // the progress indicator, and the row must never come back — a settle
-  // window (the pre-seal row's legacy `await fetchPendingBrief()` fallback;
-  // 方案 B 后活路零拉取) still has
-  // chatBusy=true with no `streaming` message, and a `!streaming`-derived
-  // gate re-opens there and flashes the row below the finished text.
-  const [previewSeen, setPreviewSeen] = useState(false)
+  // The typewriter's busy flag (2026-09-09 用户拍板——打字机途中不需要
+  // thinking): prose in motion IS the turn's activity evidence, so the
+  // status row renders only while the turn is busy AND no prose is visibly
+  // flowing (send → first delta, and the structured tail after the echo
+  // drains). The typewriter fires the busy/idle edge (idle after a grace,
+  // so burst gaps don't strobe the row).
+  const [proseActive, setProseActive] = useState(false)
   // The editor is DOM-owned (MentionEditor): `input`/`mentions` are its
   // onChange mirrors, kept only as the send payload; the live-text ref backs
   // the failed-turn rollback's "don't clobber fresh typing" guard.
@@ -1363,10 +1316,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   const firstMessageSentRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
+  /** A click on the ask PREVIEW pill, stashed until the envelope docks the
+   * persisted row (2026-09-09 用户拍板「选项该和这句话一起来」): the
+   * preview's id doesn't exist server-side yet, so the choice registers
+   * optimistically here and fires for real at the envelope's dock. */
+  const stashedAnswerRef = useRef<{
+    optionId: string
+    optimisticId: string
+  } | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
   const onRunStartedRef = useRef(onRunStarted)
   onRunStartedRef.current = onRunStarted
+  const onDraftGraphChangeRef = useRef(onDraftGraphChange)
+  onDraftGraphChangeRef.current = onDraftGraphChange
 
   const { steps, status, terminal, createdAt: runCreatedAt } = useRunEvents(runId)
   // Ref mirror: sendChat's async continuation must read the live terminal
@@ -1375,12 +1338,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     terminalRef.current = terminal
   }, [terminal])
-  // Same mirroring for the focus prop: the failed-turn rollback restores the
-  // consumed focus only when the user hasn't re-pointed meanwhile.
-  const focusOutputRef = useRef(focusOutput)
-  useEffect(() => {
-    focusOutputRef.current = focusOutput
-  }, [focusOutput])
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
@@ -1508,6 +1465,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     id: `${m.id}-echo`,
                     role: "assistant",
                     content: m.content ?? "",
+                    // The start's workflow_run_id rides the replay (parity
+                    // with the plain-row branch): the receipt's birthing-
+                    // message anchor reads it. Today the anchor lands on
+                    // runStartAt regardless (this echo's `at` is the book's
+                    // dock time, always pre-run) — the stamp keeps that true
+                    // by registration instead of by accident.
+                    runId: m.workflow_run_id,
                     at: m.created_at,
                   })
                 }
@@ -1725,6 +1689,45 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void onRunStartedRef.current?.(runId)
   }, [])
 
+  const taskLabel = useCallback(
+    (task: TaskItem) => {
+      const meta = TOOL_META[task.tool]
+      let label = meta ? t(meta.labelKey) : task.tool
+      const lang = meta?.langParam ? task.params[meta.langParam] : undefined
+      if (typeof lang === "string" && lang) {
+        label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
+      }
+      if (typeof task.params.count === "number") label += ` ×${task.params.count}`
+      if (task.params.bilingual === true) {
+        label += ` · ${t("generationOverlay.derive.bilingual")}`
+      }
+      return label
+    },
+    [t]
+  )
+
+  const summarizeBook = useCallback(
+    (book: InferredIntent) => book.tasks.map(taskLabel).join(", "),
+    [taskLabel]
+  )
+
+  /** Display-copy law (ADR-058): the proposer's fresh LLM name leads; the
+   * chain-derived label is the fallback for unnamed (legacy) intents. */
+  const titleOf = useCallback(
+    (book: InferredIntent) => book.name || summarizeBook(book),
+    [summarizeBook],
+  )
+
+  const planSummary = useMemo(() => titleOf(intent), [intent, titleOf])
+
+  /** The receipt/recap title (ADR-058): stamped from the BIRTHING proposal
+   * at run birth — the run's own truth, immune to later intent drift (a
+   * chat-dispatch turn never touches the dock's book state; the next
+   * refinement book must not retitle an archived receipt). Null = fall back
+   * to the live book's title (book-confirm starts are fresh by construction). */
+  const [runTitleOverride, setRunTitleOverride] = useState<string | null>(null)
+  const runTitle = runTitleOverride ?? planSummary
+
   /** Land the user-level shortfall as the in-flow grey row (BILLING §7 — the
    * 422's typed form, never a toast): the meta:"error" seat turn.failed
    * already uses. The question stays docked (the server settled nothing and
@@ -1790,6 +1793,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         const answered = ((await res.json()) as { answered_question: QuestionMessage }).answered_question
         if (!answered.workflow_run_id) throw new Error("Generation failed")
+        // Stamp the receipt title from the BIRTHING book (ADR-058): every
+        // run-birth path writes the override, so a later run never inherits
+        // an earlier run's title (the chat-dispatch path stamps from the
+        // envelope's proposal; the Start gesture's birth truth IS the
+        // docked book).
+        setRunTitleOverride(titleOf(intent))
         landOnStartedRun(answered.workflow_run_id)
         return
       }
@@ -1829,6 +1838,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         )
       }
       const data = (await res.json()) as { run_id: string }
+      // Same override stamp as the answer path above (ADR-058).
+      setRunTitleOverride(titleOf(intent))
       setRunId(data.run_id)
       setPhase("running")
       void onRunStartedRef.current?.(data.run_id)
@@ -1840,7 +1851,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // is exactly how "typed an answer, send does nothing" happens.
       setIsStarting(false)
     }
-  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, landOnStartedRun, pushCreditsGreyRow])
+  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, titleOf, landOnStartedRun, pushCreditsGreyRow])
 
   /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
    * NON-blocking — the input group stays live below it, so "don't start" is
@@ -1854,9 +1865,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Chain edits (ADR-043): panel controls mutate the task list directly —
   // the same data structure the intent router proposes, so the edited chain
   // rides the next refine turn as prior_intent and Start ships it verbatim.
+  // Any hand edit CLEARS the LLM-minted name (2026-09-09 拍板, ADR-058):
+  // the proposal named the work IT proposed — once the user's hand touches
+  // the chain (flip the language dropdown, add/remove a row), that name no
+  // longer vouches for the work, so the deterministic label (read from the
+  // CURRENT params, therefore honest) takes over until the next LLM turn
+  // re-names. No reconciliation — the name simply steps aside.
+  const clearName = (prev: InferredIntent) => (prev.name ? { name: "" } : {})
   const updateTaskParams = (index: number, patch: Record<string, unknown>) =>
     setIntent((prev) => ({
       ...prev,
+      ...clearName(prev),
       tasks: prev.tasks.map((task, i) =>
         i === index ? { ...task, params: { ...task.params, ...patch } } : task
       ),
@@ -1874,38 +1893,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           .find((v): v is string => typeof v === "string" && !!v)
         params[meta.langParam] = prevailing ?? "en"
       }
-      return { ...prev, tasks: [...prev.tasks, { tool, params }] }
+      return {
+        ...prev,
+        ...clearName(prev),
+        tasks: [...prev.tasks, { tool, params }],
+      }
     })
 
   const removeTask = (index: number) =>
     setIntent((prev) => ({
       ...prev,
+      ...clearName(prev),
       tasks: prev.tasks.filter((_, i) => i !== index),
     }))
-
-  const taskLabel = useCallback(
-    (task: TaskItem) => {
-      const meta = TOOL_META[task.tool]
-      let label = meta ? t(meta.labelKey) : task.tool
-      const lang = meta?.langParam ? task.params[meta.langParam] : undefined
-      if (typeof lang === "string" && lang) {
-        label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
-      }
-      if (typeof task.params.count === "number") label += ` ×${task.params.count}`
-      if (task.params.bilingual === true) {
-        label += ` · ${t("generationOverlay.derive.bilingual")}`
-      }
-      return label
-    },
-    [t]
-  )
-
-  const summarizeBook = useCallback(
-    (book: InferredIntent) => book.tasks.map(taskLabel).join(", "),
-    [taskLabel]
-  )
-
-  const planSummary = useMemo(() => summarizeBook(intent), [intent, summarizeBook])
 
   /** Honest preprocess copy (chat-flow-sequencing 验收 5): with zero file
    * uploads the preprocess node validates material / admits the writer
@@ -2184,6 +2184,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
+        // A book docked — the server stamped the draft graph in the same
+        // transaction: tell the page so its flip gate sees it (K5 图先展示
+        // 后运行 — the world morphs on the draft graph, not just on runs).
+        void onDraftGraphChangeRef.current?.()
         // 任务书行自完备 (2026-09-08, 方案 B): the docked row IS the whole
         // plan card — the chain on the row's `intent` column, the derived
         // preview + brief + reasons + estimate on the payload. The live
@@ -2237,6 +2241,56 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * keeps the "written live" feel); the terminal turn.completed envelope is
    * authoritative and FINALIZES THE PREVIEW IN PLACE — same React key, no
    * remount — so a docking task book never makes the text flicker. */
+  /** Roll the ask-preview artifacts back (a flipped verdict / turn.failed /
+   * abort): the preview pill and any stashed click's optimistic block never
+   * existed server-side, so they simply disappear. The envelope's happy
+   * paths either REPLACE the preview pill with the persisted row (zero
+   * visual change) or CONSUME the stash at the fire site. */
+  const discardPreviewArtifacts = () => {
+    const stashed = stashedAnswerRef.current
+    if (stashed) {
+      stashedAnswerRef.current = null
+      setAnswering(false)
+      setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
+    }
+    setPendingQuestion((prev) => (prev?.preview ? null : prev))
+  }
+
+  /** Preview-dock the pill the moment the ask object closes stream-side —
+   * its prose already typed above, the pill's whole payload exists, and the
+   * verdict's brief tail is still generating (2026-09-09 用户拍板「选项该
+   * 和这句话一起来」). The envelope re-docks the persisted row
+   * authoritatively (identical payload in the happy path → zero visual
+   * change); a flip / turn.failed rolls the preview back (the discard
+   * sites). Both streams dock through here (chat turn / answer
+   * continuation — questions 2..N ride the answer wire). The options-empty
+   * guard mirrors 形态律 R1: a text question never docks — the envelope
+   * settles it as plain prose, and an undocked preview leaves no stuck pill
+   * behind (a preview pill has no ×). */
+  const dockQuestionPreview = (
+    id: string,
+    payload: {
+      question?: string | null
+      options?: { id: string; label: string }[]
+    },
+  ) => {
+    if (!payload.question) return
+    if ((payload.options ?? []).length === 0) return
+    setPendingQuestion({
+      id,
+      content: "",
+      question: {
+        kind: "question",
+        question: payload.question,
+        options: payload.options ?? [],
+      },
+      answer: null,
+      workflow_run_id: null,
+      created_at: new Date().toISOString(),
+      preview: true,
+    })
+  }
+
   const sendChat = async (
     text: string,
     opts?: {
@@ -2261,21 +2315,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       rollbackMentions?: ChatMention[]
       /** Consumed attachment chips return to the input group on failure. */
       rollbackStaged?: StagedUpload[]
-      /** The turn's focus, captured at send time (the prop clears on
-       * consume); on failure it returns to the canvas/dock. */
-      focus?: { id: string; label: string } | null
-      rollbackFocus?: { id: string; label: string } | null
     }
   ) => {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     setChatBusy(true)
-    setPreviewSeen(false)
+    setProseActive(false)
     setThinkingPhase(null)
     const streamId = crypto.randomUUID()
     let streamedAny = false
     const appendDelta = (delta: string) => {
-      if (!streamedAny) setPreviewSeen(true)
       streamedAny = true
       setMessages((prev) =>
         prev.some((m) => m.id === streamId)
@@ -2294,7 +2343,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             ]
       )
     }
-    const typewriter = createTypewriter(appendDelta)
+    const typewriter = createTypewriter(appendDelta, setProseActive)
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount. */
     const finalizePreview = (content?: string, runId?: string | null, at?: string) =>
@@ -2353,7 +2402,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           message: text,
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
-          focus_output: (opts?.focus ?? focusOutput) ?? undefined,
           persona_id: opts?.personaId,
           prior_intent:
             phase === "confirm" && intentReady
@@ -2371,6 +2419,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             // as-is (the row keeps shimmering at its last real phase).
             if (payload.phase) setThinkingPhase(payload.phase)
           },
+          onQuestionPreview: (payload) =>
+            dockQuestionPreview(`preview-${streamId}`, payload),
         }
       )
       // Envelope wins: release any buffered prose, then land the turn.
@@ -2385,7 +2435,39 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // is the option-choice UI — a task_book start (chat text or pill)
         // is a gesture, not a Q&A. The record = echo 散文 + this user
         // message + the run receipt line.
-        finalizePreview(undefined, undefined, data.assistant_message.created_at)
+        discardPreviewArtifacts()
+        //
+        // The runId stamp doubles as the receipt's anchor (ADR-058 ordering
+        // fix): a chat-dispatch turn births the run BEFORE the echo row
+        // exists server-side, so the echo's created_at postdates the run's —
+        // the terminal receipt must anchor after the birthing echo, never
+        // above it (the "回复掉到收据下面" scramble).
+        if (streamedAny) {
+          finalizePreview(undefined, data.run_id, data.assistant_message.created_at)
+        } else {
+          // Zero-delta start (the funnel's repair round never streams): the
+          // echo paces through the typewriter BEFORE the run lands — the
+          // 打字机律's last gate holds on the start path too, otherwise a
+          // repaired turn pops its echo as one blob (or drops it entirely).
+          const settled = (data.assistant_message.content ?? "").trim()
+          if (settled) {
+            await paceSettledProse(
+              data.assistant_message.content ?? "",
+              data.run_id,
+              data.assistant_message.created_at,
+            )
+          } else {
+            setMessages((prev) => prev.filter((m) => m.id !== streamId))
+          }
+        }
+        // The receipt titles the RUN by its birthing proposal (ADR-058):
+        // the echo row carries the fresh intent server-side — its LLM name
+        // leads, the chain label falls back. The dock's own intent state is
+        // NOT touched (a chat-dispatch turn is not a book edit).
+        if (data.assistant_message.intent) {
+          const birthTitle = titleOf(normalizeIntent(data.assistant_message.intent))
+          if (birthTitle) setRunTitleOverride(birthTitle)
+        }
         landOnStartedRun(data.run_id)
         return
       }
@@ -2435,12 +2517,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         // The streamed (or last-gate-paced) bubble already carries the echo —
         // the dock handler must not duplicate it as a second message.
+        // echoCarried ≡ streamedAny (2026-09-09 单派生): every prose path —
+        // model deltas AND paceSettledProse — rides the same typewriter
+        // funnel whose append flips streamedAny, so at this point the var IS
+        // the flag ("the preview bubble carries the echo"). The old
+        // `streamedAny || !!questionEcho(message)` recomputed the same fact.
+        // The envelope retires the preview pill first: the real row
+        // REPLACES it inside (happy path) — on a flip to a text question
+        // (R1 early return, never docks) the preview must not linger.
+        setPendingQuestion((prev) => (prev?.preview ? null : prev))
         await handleAssistantMessage(message, {
-          echoCarried: streamedAny || !!questionEcho(message),
+          echoCarried: streamedAny,
         })
+        // A click stashed on the PREVIEW pill fires NOW on the persisted row
+        // (2026-09-09 用户拍板「选项该和这句话一起来」): the optimistic QA
+        // block's id is reused inside (no remount), and a flipped option set
+        // retires the stash cleanly instead. A task_book dock carries no
+        // matching option — the override path retires it the same way.
+        const stashed = stashedAnswerRef.current
+        if (stashed) {
+          await handleOptionAnswer(stashed.optionId, message)
+        }
       } else if (streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
         // the envelope content + run id are authoritative).
+        discardPreviewArtifacts()
         finalizePreview(
           message.content ?? "",
           message.workflow_run_id,
@@ -2448,6 +2549,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         )
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
+        discardPreviewArtifacts()
         const settled = (message.content ?? "").trim()
         if (settled) {
           await paceSettledProse(
@@ -2455,7 +2557,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             message.workflow_run_id,
             message.created_at,
           )
-          await handleAssistantMessage(message, { echoCarried: true })
+          await handleAssistantMessage(message, { echoCarried: streamedAny })
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== streamId))
           await handleAssistantMessage(message)
@@ -2463,6 +2565,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     } catch (e) {
       typewriter.flush()
+      discardPreviewArtifacts()
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stopped mid-stream: the partial preview settles as static text
         // (the server may still finish the turn server-side).
@@ -2493,11 +2596,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           const kept = new Set(prev.map((s) => s.localId))
           return [...prev, ...chips.filter((c) => !kept.has(c.localId))]
         })
-      }
-      // The consumed focus returns too — unless the user already pointed at
-      // another product while the turn was failing (their newer click wins).
-      if (opts?.rollbackFocus && !focusOutputRef.current) {
-        onFocusChange?.(opts.rollbackFocus.id)
       }
       // The failure itself lands in the flow as a gray system row (never a
       // toast — turn.failed is a fact of the conversation). The server
@@ -2561,6 +2659,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 aspect?: "9:16" | "1:1" | "16:9" | null
                 caption_bilingual?: boolean
                 instruction?: string | null
+                name?: string | null
               } | null
             } | null
           }
@@ -2583,6 +2682,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   aspect: runCtx.aspect,
                   caption_bilingual: runCtx.caption_bilingual,
                   specific_instruction: runCtx.instruction,
+                  // The run's LLM name (ADR-058) — the receipt title
+                  // survives the refresh verbatim.
+                  name: runCtx.name,
                 })
               )
               landOnStartedRun(run.id)
@@ -2618,27 +2720,84 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * preview message, the terminal frame's envelope replaces it 真值裁决).
    * Failure rolls the optimistic block back and re-docks the question (the
    * server settled nothing). */
-  const handleOptionAnswer = async (optionId: string) => {
-    if (!pendingQuestion || answering) return
-    const question = pendingQuestion
+  const handleOptionAnswer = async (
+    optionId: string,
+    questionOverride?: QuestionMessage,
+  ) => {
+    const question = questionOverride ?? pendingQuestion
+    if (!question) return
     const option = question.question?.options?.find((o) => o.id === optionId)
-    if (!option) return
-    const optimisticId = crypto.randomUUID()
+    // A click on the PREVIEW pill (the ask object closed but the verdict's
+    // tail — and with it the row's server-side birth — is still generating,
+    // so the row's id doesn't exist yet): register the choice NOW with the
+    // same optimistic anatomy, and the envelope's dock fires the real
+    // answer on the persisted row (the fire sites: sendChat's dock branch
+    // for Q1, handleOptionAnswer's follow_up branch for Q2..N). The
+    // optimistic block's id is REUSED at fire time so its DOM node never
+    // remounts (the 2026-09-08 flicker lesson). This branch sits ABOVE the
+    // answering guard (2026-09-09 对称拍板): on the answer wire the preview
+    // arrives while the CURRENT answer is still streaming (answering=true)
+    // — the stash starts no stream, it waits for the envelope's fire site,
+    // and the pill's own disappearance at stash time is the double-click
+    // guard.
+    if (question.preview && !questionOverride) {
+      if (!option) return // a preview pill click always names a known option
+      const optimisticId = crypto.randomUUID()
+      stashedAnswerRef.current = { optionId, optimisticId }
+      setAnswering(true)
+      setPendingQuestion(null)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: optimisticId,
+          role: "assistant",
+          content: "",
+          qa: buildQaBlock(question, option.label, false),
+          at: new Date().toISOString(),
+        },
+      ])
+      raiseHistory()
+      return
+    }
+    if (!questionOverride && answering) return
+    if (!option) {
+      // The envelope's re-docked row may carry a DIFFERENT option set than
+      // the preview the user clicked (a repair flip rewrote the question) —
+      // retire the stashed optimistic block, nothing fires.
+      if (questionOverride) {
+        const stashed = stashedAnswerRef.current
+        if (stashed) {
+          stashedAnswerRef.current = null
+          setAnswering(false)
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== stashed.optimisticId),
+          )
+        }
+      }
+      return
+    }
+    const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
+    stashedAnswerRef.current = null
     const previewId = `answer-preview-${optimisticId}`
     setAnswering(true)
     setChatBusy(true)
-    setPreviewSeen(false)
+    setProseActive(false)
+    setThinkingPhase(null)
     setPendingQuestion(null)
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: optimisticId,
-        role: "assistant",
-        content: "",
-        qa: buildQaBlock(question, option.label, false),
-        at: new Date().toISOString(),
-      },
-    ])
+    setMessages((prev) =>
+      prev.some((m) => m.id === optimisticId)
+        ? prev // the preview-stash's block already carries the QA anatomy
+        : [
+            ...prev,
+            {
+              id: optimisticId,
+              role: "assistant",
+              content: "",
+              qa: buildQaBlock(question, option.label, false),
+              at: new Date().toISOString(),
+            },
+          ],
+    )
     raiseHistory()
     // Typewriter pacing (same reason as sendChat — 2026-08-05 fix): the
     // reasoning model tends to deliver the echo in one coarse chunk right
@@ -2646,10 +2805,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // which is the exact symptom this stream exists to kill.
     let previewStreamed = false
     const typewriter = createTypewriter((text) => {
-      if (!previewStreamed) {
-        previewStreamed = true
-        setPreviewSeen(true)
-      }
+      previewStreamed = true
       setMessages((prev) =>
         prev.some((m) => m.id === previewId)
           ? prev.map((m) =>
@@ -2666,7 +2822,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               },
             ],
       )
-    })
+    }, setProseActive)
     try {
       const data = await streamAnswer<{
         answered_question: QuestionMessage
@@ -2676,6 +2832,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         onThinking: (payload) => {
           if (payload.phase) setThinkingPhase(payload.phase)
         },
+        // Q2..N 对称 (2026-09-09): the continuation's follow-up ask closes
+        // its object mid-stream just like the chat turn's first ask — dock
+        // its pill NOW; the envelope re-docks authoritatively below.
+        onQuestionPreview: (payload) =>
+          dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
       })
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
@@ -2692,14 +2853,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // funnel's repair round never streams) paces its prose through the
       // preview bubble BEFORE the archive splice — the echo visibly leads,
       // the settled rows follow.
-      let followUpPaced = false
       if (followUp && !previewStreamed) {
         const settled =
           followUp.question && !followUp.answer
             ? questionEcho(followUp)
             : (followUp.content ?? "").trim()
         if (settled) {
-          followUpPaced = true
           typewriter.push(settled)
           await typewriter.drain()
         }
@@ -2724,9 +2883,38 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }),
       )
       if (followUp) {
+        // The envelope retires the preview pill: the real row REPLACES it
+        // inside handleAssistantMessage (identical payload, zero visual
+        // change) — and on a flip (the follow-up lands as a text question /
+        // plain prose and never docks) the preview must not linger (it has
+        // no ×).
+        setPendingQuestion((prev) => (prev?.preview ? null : prev))
+        // echoCarried ≡ previewStreamed (2026-09-09 单派生): a paced
+        // zero-delta follow-up rides the same typewriter, whose callback
+        // flips previewStreamed — `previewStreamed || followUpPaced` was the
+        // same fact said twice.
         await handleAssistantMessage(followUp, {
-          echoCarried: previewStreamed || followUpPaced,
+          echoCarried: previewStreamed,
         })
+        // A click stashed on the follow-up's PREVIEW pill fires NOW on the
+        // persisted row (sendChat's dock branch 同款): the optimistic
+        // block's id is reused inside; a flipped option set / a non-question
+        // follow-up retires the stash cleanly at the override's
+        // option-not-found seat. (The cast defeats the `= null` narrowing
+        // above: the stash lands RE-ENTRANTLY via the preview pill's click
+        // while this frame awaits the stream — the shared ref is live
+        // across the await even when TS's control flow can't see it.)
+        const stashed = stashedAnswerRef.current as {
+          optionId: string
+          optimisticId: string
+        } | null
+        if (stashed) {
+          await handleOptionAnswer(stashed.optionId, followUp)
+        }
+      } else {
+        // No follow-up at all — a pre-clicked preview never got its row:
+        // retire the stash (and any lingering preview pill).
+        discardPreviewArtifacts()
       }
     } catch (e) {
       // The stream helper rejects with the server's detail (the JSON path's
@@ -2737,6 +2925,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // (双路同语义 with the typed Start).
       typewriter.flush()
       setThinkingPhase(null)
+      // A failed turn retires every ask-preview artifact too — a stashed
+      // next-click's optimistic block and the preview pill never existed
+      // server-side (the original question restores just below).
+      discardPreviewArtifacts()
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
       )
@@ -2763,6 +2955,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const handleBailQuestion = async () => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
+    const wasTaskBook = pendingQuestion.question?.kind === "task_book"
     try {
       const res = await apiFetch(
         `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
@@ -2772,6 +2965,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const data = (await res.json()) as { answered_question: QuestionMessage }
       const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
+      // A task_book bail tears the draft graph down server-side — the page
+      // morphs back to the chat world (K5 条款: bail 拆图).
+      if (wasTaskBook) void onDraftGraphChangeRef.current?.()
       pushAnsweredQuestion(data.answered_question)
       if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
@@ -2822,9 +3018,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if ((!text && ready.length === 0) || chatBusy || isStarting || answering) return
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
-    // One-shot focus (D8 修订): captured for the echo + the turn, then
-    // consumed — the message's prefix row becomes its permanent record.
-    const sentFocus = focusOutput
     const rollbackId = crypto.randomUUID()
     setMessages((prev) => [
       ...prev,
@@ -2833,7 +3026,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         role: "user",
         content: text,
         assets: sentAssets,
-        focus: sentFocus ?? undefined,
         at: new Date().toISOString(),
       },
     ])
@@ -2842,7 +3034,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // retry/removal — it never rides a message.
     editorRef.current?.clear()
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
-    if (sentFocus) onFocusChange?.(null)
     // Your own send opens the flow — the reply lands there.
     raiseHistory()
     void sendChat(text, {
@@ -2859,8 +3050,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         status: "uploaded" as const,
       })),
       rollbackStaged: ready,
-      focus: sentFocus,
-      rollbackFocus: sentFocus,
     })
   }
 
@@ -2911,24 +3100,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
   // The remaining recall triggers (hidden-state law above): a docking
-  // question (question / task_book) and a canvas focus pin are NEW information
-  // — the dock must surface for them even if the user tucked it away. A
-  // focus does not OPEN the history (2026-08-16 走查拍板 below), it only
-  // recalls the dock's input group.
+  // question (question / task_book) is NEW information — the dock must
+  // surface for it even if the user tucked it away.
   useEffect(() => {
     if (pillQuestion) setDockHidden(false)
   }, [pillQuestion])
   useEffect(() => {
     if (phase === "confirm" && intentReady && !chatBusy) setDockHidden(false)
   }, [phase, intentReady, chatBusy])
-  useEffect(() => {
-    if (focusOutput) setDockHidden(false)
-  }, [focusOutput])
-  // Canvas focus does NOT pop the history (2026-08-16 走查拍板): the focus
-  // chip shows in the input group and its gray row lands in the flow — that
-  // is the acknowledgment; force-opening the history on every card click
-  // reads as a jump-scare (worst when a detail modal just opened over it).
-  // Agent speech (above) remains the only auto-open trigger.
 
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real
@@ -2948,7 +3127,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     | { kind: "message"; message: OverlayMessage }
     | { kind: "terminal" }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
-    if (phase !== "running" || runStartAt == null) return null
+    // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
+    // fixed block is dead): the pre-snapshot window (runStartAt == null —
+    // the run is attached but the SSE's first frame hasn't arrived) renders
+    // the SAME live pose with the chrome pinned bottom-most (+∞) and the
+    // task list's narrativeFallback standing in for the steps.
+    if (phase !== "running") return null
     type Timed = { t: number; order: number; unit: RunStreamUnit }
     const timed: Timed[] = []
     let order = 0
@@ -2957,7 +3141,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // would leave a dead slot (null or a stale "Starting" banner) between
     // the messages and the receipt (2026-09-05 spacing fix).
     if (!terminal) {
-      timed.push({ t: runStartAt, order: order++, unit: { kind: "header" } })
+      timed.push({
+        t: runStartAt ?? Number.POSITIVE_INFINITY,
+        order: order++,
+        unit: { kind: "header" },
+      })
     }
     const undated: OverlayMessage[] = []
     for (const m of messages) {
@@ -2966,9 +3154,42 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
     }
     // Pinned bottom-most while live (the +∞ sort key); on terminal the list
-    // settles right after the header as the run's archive.
+    // settles as the run's archive. The anchor is NOT runStartAt+1 (ADR-058
+    // ordering fix): a chat-dispatch turn persists the run BEFORE its echo
+    // row, so the echo's created_at postdates the run's — the receipt must
+    // settle right after the birthing echo (the earliest message stamped
+    // with this run's id), never above it. Book-path starts predate the run
+    // with their echo, so the max() keeps the legacy anchor there.
+    //
+    // PARITY TABLE (2026-09-09 — pinned so the next editor never re-derives
+    // it; every birth path must keep its cell true):
+    //  path                        live (envelope)                refresh (replay)
+    //  A. chat task_list dispatch  echo stamped via               plain row carries
+    //     (echo postdates run)     finalizePreview(runId) ✓      workflow_run_id ✓
+    //  B. G-1 prose-confirm start  paceSettledProse stamps        echo replay stamped
+    //     (echo = the answered     runId; its `at` re-anchors    runId (registered);
+    //      book row, its created_  to the book's dock time      `at` = dock time
+    //      at predates the run)    (pre-run) → anchor runStartAt (pre-run) → same ✓
+    //  C. typed Start / answer-    no echo message exists →
+    //     start                    anchor = runStartAt ✓ (both)
+    //  D. node_revise              dock never attaches (initialRunId gated) ✓
+    // The anchor rule is the UNIFICATION, not a special case: after BOTH the
+    // run's birth and its birthing message — max(), never plain "after the
+    // echo" (on path B that would land the receipt above the user's own
+    // start-confirmation message).
+    let archiveAnchor = runStartAt
+    if (terminal && runStartAt != null) {
+      const stamped = messages
+        .filter((m) => m.runId === runId && m.at)
+        .map((m) => Date.parse(m.at as string))
+        .filter((t) => !Number.isNaN(t))
+      if (stamped.length) archiveAnchor = Math.max(runStartAt, Math.min(...stamped))
+    }
     timed.push({
-      t: terminal ? runStartAt + 1 : Number.POSITIVE_INFINITY,
+      t:
+        terminal && archiveAnchor != null
+          ? archiveAnchor + 1
+          : Number.POSITIVE_INFINITY,
       order: order++,
       unit: { kind: "taskList" },
     })
@@ -2976,7 +3197,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // Anchor just after the last step so post-run replies sort BELOW the
       // terminal markers.
       const lastStepT = Math.max(
-        runStartAt,
+        runStartAt ?? 0,
         ...steps.map((s) =>
           Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
         ),
@@ -2989,13 +3210,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // Undated messages (fresh optimistic sends) are chronologically NOW —
       // they land above the pinned task list while the run is live.
       if (!terminal && units[units.length - 1]?.kind === "taskList") {
-        units.splice(units.length - 1, 0, { kind: "message", message: m })
+        let insertAt = units.length - 1
+        // Pre-snapshot the header pins at +∞ too — undated messages land
+        // above BOTH chrome rows, never wedged between them.
+        if (runStartAt == null && units[insertAt - 1]?.kind === "header") {
+          insertAt--
+        }
+        units.splice(insertAt, 0, { kind: "message", message: m })
       } else {
         units.push({ kind: "message", message: m })
       }
     }
     return units
-  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal])
+  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, runId])
 
   // Refresh path: the start confirmation rebuilds from history as a pre-run
   // QA archive ABOVE the header — the header's summary stand-in (attach /
@@ -3454,7 +3681,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             <PlanVersionChip
               n={index + 1}
               book={version.book}
-              summary={summarizeBook(version.book)}
+              summary={titleOf(version.book)}
               expanded={expandedVersion === index}
               onToggle={() =>
                 setExpandedVersion(
@@ -3557,7 +3784,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                                       </span>
                                       <span className="text-muted-foreground">
                                         {" · "}
-                                        {planSummary}
+                                        {runTitle}
                                       </span>
                                     </div>
                                   </div>
@@ -3584,7 +3811,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                               // separate style in disguise).
                               <AssistantText
                                 text={t("chat.runReady", {
-                                  summary: planSummary,
+                                  summary: runTitle,
                                 })}
                               />
                             ) : (
@@ -3614,7 +3841,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                                   )}
                                   <RunTaskList
                                     steps={steps}
-                                    title={planSummary}
+                                    title={runTitle}
                                     runStartedAt={runCreatedAt}
                                     terminal={terminal}
                                     hasUploads={hasUploads}
@@ -3638,133 +3865,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </>
                 ) : (
                   <>
-                {/* Running (legacy fixed block, pre-snapshot window): the
-                    confirmed plan collapses to a summary line (attach /
-                    legacy paths rebuild it from the run context). */}
-                {phase === "running" && (
-                  <>
-                    <MessageScrollerItem>
-                      <Message align="start">
-                        <MessageContent>
-                          <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent">
-                              <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                            </span>
-                            <div className="min-w-0 truncate text-sm">
-                              <span className="font-medium">
-                                {t("generationOverlay.title")}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {" · "}
-                                {planSummary}
-                              </span>
-                            </div>
-                          </div>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                    <MessageScrollerItem>
-                      <Message align="start">
-                        <MessageContent>
-                          <div className="w-full space-y-4">
-                            <p className="text-sm leading-relaxed">
-                              {t("generationOverlay.startingLine")}
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {/* Run still queued (assets processing / worker
-                                  hasn't claimed it): no workflow steps exist
-                                  yet, so stand in with a friendly marker —
-                                  otherwise the flow looks dead on attach. */}
-                              {steps.length === 0 && !terminal && (
-                                <StepMarker
-                                  status="running"
-                                  label={
-                                    assets.some(
-                                      (a) =>
-                                        a.processing_status === "pending" ||
-                                        a.processing_status === "processing"
-                                    )
-                                      ? t("results.stepper.transcribing")
-                                      : t("results.stepper.queued")
-                                  }
-                                />
-                              )}
-                              {steps.map((step) => (
-                                <StepMarker
-                                  key={step.id}
-                                  status={step.status}
-                                  label={
-                                    // Same chain as RunCard: live summary →
-                                    // friendly stage copy → kind fallback.
-                                    // Zero-upload preprocess reads the
-                                    // generic "Preparing generation…"
-                                    // (hasUploads honesty, 2026-09-04).
-                                    step.summary ||
-                                    (step.kind === "preprocess" && !hasUploads
-                                      ? t("results.stepper.prepare")
-                                      : step.stage
-                                        ? t(`results.stepper.${step.stage}`, {
-                                            defaultValue: "",
-                                          })
-                                        : "") ||
-                                    t(`chat.stepKinds.${step.kind}`, {
-                                      defaultValue: step.kind,
-                                    })
-                                  }
-                                  error={step.error}
-                                />
-                              ))}
-                              {terminal && status !== "failed" && (
-                                // Same pipeline as AssistantText (the legacy
-                                // window must not diverge in prose style).
-                                <Streamdown
-                                  mode="static"
-                                  className="pt-2 text-sm leading-relaxed"
-                                >
-                                  {t("chat.runReady", { summary: planSummary })}
-                                </Streamdown>
-                              )}
-                              {terminal && status === "failed" && (
-                                <div className="pt-2">
-                                  <MetaRow destructive>
-                                    {t("generationOverlay.failed")}
-                                  </MetaRow>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  </>
-                )}
-
-                {/* Conversation below the pinned regions (legacy layout).
-                    A superseded plan version's chip sits right after the
-                    echo bubble whose turn produced it; the live book is the
-                    bottom-most card. */}
+                {/* Conversation (non-running phases; the running phase renders
+                    through runStreamUnits — ONE path, the legacy fixed block
+                    is dead 2026-09-09). A superseded plan version's chip sits
+                    right after the echo bubble whose turn produced it; the
+                    live book is the bottom-most card. */}
                 {messages.map(renderConversationMessage)}
                   </>
                 )}
 
-                {/* The PENDING canvas focus — a gray tail row, not a message
-                    yet (D8 修订): it rides the next send and lands as that
-                    message's persisted prefix row. */}
-                {focusOutput ? (
-                  <MessageScrollerItem>
-                    <FocusRow label={focusOutput.label} />
-                  </MessageScrollerItem>
-                ) : null}
-
-                {/* Thinking row covers send → first delta; once a preview
-                    bubble has existed this turn it IS the progress indicator
-                    (previewSeen) — even after it settles static: the docked
-                    book's settle await keeps chatBusy true, and a
-                    streaming-derived gate would flash the row back below
-                    the finished text (2026-09-06 首回合闪烁根修). The label
-                    follows the server's phase frames (理解中 → 创建 workflow),
-                    falling back to the static copy when no phase arrived. */}
-                {chatBusy && !previewSeen && (
+                {/* The turn's status line owns every window where NO prose
+                    is visibly flowing (2026-09-09 用户拍板——打字机途中不需
+                    要 thinking): prose in motion IS the activity evidence,
+                    so the row hides while the typewriter speaks and returns
+                    the moment the echo drains and the structured tail
+                    (ops/tasks JSON → dispatch → run birth) still needs a
+                    status owner (the 死窗 the whole-turn gate was built to
+                    kill; the typewriter's busy/idle edge drives it, idle
+                    after a grace so burst gaps don't strobe). The label
+                    follows the server's phase frames (thinking →
+                    creating_run), falling back to the static copy when no
+                    phase arrived. */}
+                {chatBusy && !proseActive && (
                   <MessageScrollerItem>
                     <ThinkingRow
                       label={
@@ -3803,7 +3925,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         options={pillQuestion.question?.options ?? []}
         onAnswer={handleOptionAnswer}
         answering={answering}
-        onBail={handleBailQuestion}
+        onBail={pillQuestion.preview ? undefined : handleBailQuestion}
         bailLabel={
           pillQuestion.workflow_run_id
             ? t("questionDock.bail")

@@ -106,7 +106,7 @@ def intent_router_system() -> str:
         "  - Copy-writer tasks (write_post / write_quotes / write_carousel /\n"
         "    write_article) can draft from the user prompt + persona style\n"
         "    alone. No attached file required. When the user asks\n"
-        "    'write a post about leadership / 一条关于领导力的 LinkedIn 帖 /\n"
+        "    'write a post about leadership / 一条关于领导力的帖子 /\n"
         "    给我3 张金句卡 about AI / draft me a carousel on healthcare'\n"
         "    with no material, action='draft' is correct — never\n"
         "    'answer' away into 'please attach material'.\n"
@@ -145,7 +145,10 @@ def intent_router_system() -> str:
         "the source material is, when one is present (a talk, a podcast "
         "episode, a meeting recording — judged from the user's own words or "
         "the filename), and the plan you understood as a natural paraphrase "
-        "(the work, languages, counts the user named). Sentence 2: what "
+        "(the work, languages, counts the user named — and ONLY what the "
+        "user named: never invent a platform or venue ('LinkedIn', 'X', "
+        "'newsletter') the user never said — a post is just a post until "
+        "the user names where it lives). Sentence 2: what "
         "'done' looks like + the single next step — the success definition "
         "rides the prose, never a form field (顾问姿态 law 3). "
         "FREE PHRASING (2026-09-08 拍板): these instructions prescribe the "
@@ -268,7 +271,7 @@ def intent_router_system() -> str:
         "  - NO-MATERIAL CASE (2026-08-24): when the chain has no source "
         "    material (no attached file, no pasted content), this field "
         "    is the most important slot for copy-writer chains — it "
-        "    carries the user's TOPIC + ANGLE verbatim (e.g. 'a LinkedIn "
+        "    carries the user's TOPIC + ANGLE verbatim (e.g. 'a "
         "    post about leadership for first-time founders', '3 "
         "    motivational quote cards about AI in healthcare', 'a "
         "    6-slide carousel on the future of remote work'). The writer "
@@ -289,6 +292,12 @@ def intent_router_system() -> str:
         "Null for start/answer verdicts.\n"
         "- confidence: 0.0-1.0 indicating how clearly the intent was "
         "expressed.\n"
+        "- name: a compact noun phrase naming the book's deliverable in the "
+        "interface language — 2-6 words, e.g. '中文帖子' / "
+        "'English post' / '德语配音版'. It titles the run's "
+        "receipt and completion line. Name the WORK (the chain's "
+        "deliverable), never a bare tool name. Set to null for action "
+        "'start', 'ask', or 'answer'.\n"
         "- Key order: emit 'answer' as the FIRST key of the JSON object — "
         "it streams to the user while the rest of the object generates "
         "(null for 'start' and 'ask').\n\n"
@@ -331,7 +340,8 @@ def chat_intent_system() -> str:
         '"pending_disposition": "answer" | "skip" | "none"} where PROPOSAL '
         "is exactly one of five shapes:\n"
         'A. {"type": "task_list", "tasks": [{"tool": "<name>", "params": {...}}], '
-        '"summary": "<one user-facing sentence>"} — run NEW work (something '
+        '"summary": "<one user-facing sentence>", "name": "<the run\'s '
+        'deliverable name>"} — run NEW work (something '
         "the graph does not have yet: a new language version, a new output "
         "type, a first generation). Only use tools from the list below; "
         "tasks is never empty (when you need to ask the user first, use "
@@ -364,7 +374,8 @@ def chat_intent_system() -> str:
         "of an existing output, or small talk. Nothing is dispatched, no "
         "run starts, no question docks.\n"
         'E. {"type": "wiring", "ops": [<wiring op>, ...], '
-        '"summary": "<one user-facing sentence>"} — the user wants to CHANGE '
+        '"summary": "<one user-facing sentence>", "name": "<the run\'s '
+        'deliverable name>"} — the user wants to CHANGE '
         "something the graph already HAS (revise a node's direction, rewrite "
         "a post that exists, re-cut the selection, redo a language version "
         "differently). The context's Graph section names every node with "
@@ -382,7 +393,7 @@ def chat_intent_system() -> str:
         "- Never invent tools, ops, or params not in the lists.\n"
         "- Shape E vs shape A (the boundary that keeps the graph honest): "
         "E revises what EXISTS — the target node is in the Graph section "
-        "(or is the focus's node) and the ask changes its direction, "
+        "and the ask changes its direction, "
         "wording, or parameters. A creates what does NOT exist — a new "
         "language version nobody made, a new output type, more of a kind "
         "(e.g. '再来一条德语 post' when no German post exists). When a "
@@ -401,6 +412,11 @@ def chat_intent_system() -> str:
         "named pair is ambiguous, ask (shape C).\n"
         "- Prefer the fewest tasks/ops that express the instruction.\n"
         "- summary is written for the user, in the user's language.\n"
+        "- name (shapes A and E only): a compact noun phrase naming the "
+        "run's deliverable in the interface language — 2-6 words, e.g. "
+        "'中文帖子' / 'English post' / '德语配音版'. It "
+        "titles the run's receipt and completion line. Name the WORK, "
+        "never repeat the summary sentence, never a bare tool name.\n"
         "- Shape D is ONLY for messages that request information, not "
         "work. If the user asks you to do anything (create, rewrite, "
         "translate, dub, trim, remove, ...), propose shape A or B — never "
@@ -458,9 +474,6 @@ def chat_intent_system() -> str:
         "workflow_step mention points at one pipeline step (e.g. the clip "
         "selection or a per-language dub) and has no id param — treat its "
         "label as the definite target of the requested change.\n"
-        "- When the context names a current focus output, an edit or work "
-        "request that names no other target (no mention, no explicit "
-        "reference) targets the focus output.\n"
         "- Key order: within the proposal object, emit the user-facing "
         "prose field FIRST ('summary' for shapes A/B, 'text' for shape D) "
         "— it streams to the user while the rest of the JSON generates."

@@ -4,7 +4,7 @@ Conversations are the universal container for multi-turn interaction, but the
 public API hides conversation management behind a single ``POST /api/v1/chat``
 endpoint. The backend locates or creates the project conversation from
 ``project_id`` (project scope only — the asset scope is retired, ADR-041 D8;
-a pointed-at product rides as ``focus_output``).
+a pointed-at product rides the message as an @-mention chip, ADR-058).
 
 Transport (chat SSE): the endpoint content-negotiates on the ``Accept``
 header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
@@ -41,7 +41,7 @@ from app.chat.service import (
     list_conversation_messages,
     prepare_chat_turn,
 )
-from app.chat.stream_extract import ProseDeltaExtractor
+from app.chat.stream_extract import AskObjectWatcher, ProseDeltaExtractor
 from app.providers.llm.minimax import MiniMaxError
 from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
@@ -84,6 +84,27 @@ async def get_conversation(
 def _sse(event: str, data: str) -> str:
     """One SSE frame (same wire format as the run-events stream)."""
     return f"event: {event}\ndata: {data}\n\n"
+
+
+def _question_preview_frame(payload: dict) -> str:
+    """The ``question.preview`` frame for one closed ask object (2026-09-09
+    用户拍板——「选项该和这句话一起来」). Both turn pumps share the shape:
+    the pill's whole payload (question/options/allow_freeform/slot/
+    default_path) has closed the moment the echo's last character streams —
+    the verdict's brief tail is still generating, but the pill can dock."""
+    return _sse(
+        "question.preview",
+        json.dumps(
+            {
+                "question": payload.get("question"),
+                "options": payload.get("options") or [],
+                "allow_freeform": payload.get("allow_freeform", True),
+                "slot": payload.get("slot"),
+                "default_path": payload.get("default_path"),
+            },
+            ensure_ascii=False,
+        ),
+    )
 
 
 _HEARTBEAT_SECONDS = 15
@@ -187,8 +208,23 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     if prepared.book_path
                     else ("text", "summary", "prose")
                 )
+                # ask 预览帧 (2026-09-09 用户拍板——「选项该和这句话一起
+                # 来」): the ask object's internal key order puts prose first,
+                # so the pill's whole payload (question/options/default_path)
+                # has closed the moment the echo's last character streams —
+                # preview-dock it NOW instead of waiting out the verdict's
+                # brief-ledger tail. The terminal envelope stays
+                # authoritative; the client rolls the preview back on a flip
+                # or turn.failed.
+                ask_previews: list[dict] = []
+                ask_watcher = AskObjectWatcher(ask_previews.append)
 
                 async def on_delta(fragment: str) -> None:
+                    ask_watcher.feed(fragment)
+                    while ask_previews:
+                        await queue.put(
+                            _question_preview_frame(ask_previews.pop(0))
+                        )
                     text = extractor.feed(fragment)
                     if text:
                         await queue.put(
@@ -244,6 +280,11 @@ async def _answer_stream(
     prose keys (``answer`` / ``text`` / ``summary`` / ``prose`` — the ask
     verdict's framing speech) — whichever field the continuation's verdict
     carries streams; the others never appear at extractable depth.
+
+    The ask watcher rides along too (2026-09-09 对称拍板): questions 2..N
+    of the 每轮一问 sequence all arrive as answer-continuation follow-ups —
+    they get the same ``question.preview`` early dock as the chat turn's
+    first ask, never the envelope-late pill.
     """
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -253,8 +294,15 @@ async def _answer_stream(
         try:
             async with AsyncSessionLocal() as db:
                 extractor = ProseDeltaExtractor(("answer", "text", "summary", "prose"))
+                ask_previews: list[dict] = []
+                ask_watcher = AskObjectWatcher(ask_previews.append)
 
                 async def on_delta(fragment: str) -> None:
+                    ask_watcher.feed(fragment)
+                    while ask_previews:
+                        await queue.put(
+                            _question_preview_frame(ask_previews.pop(0))
+                        )
                     text = extractor.feed(fragment)
                     if text:
                         await queue.put(

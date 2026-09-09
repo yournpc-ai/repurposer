@@ -23,8 +23,6 @@ import { useEffect, useState } from "react"
 import type { TFunction } from "i18next"
 import {
   Check,
-  ChevronDown,
-  ChevronUp,
   CircleHelp,
   Loader2,
   Minus,
@@ -36,6 +34,8 @@ import { useTranslation } from "react-i18next"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { cn } from "@/lib/utils"
 import type { WorkflowStep } from "@/lib/types"
+
+import { StatusLine } from "./StatusLine"
 
 /** Ticking clock for the elapsed counters — null until mounted (SSR-safe:
  * the server render and the first client render both show no elapsed), and
@@ -150,35 +150,25 @@ export function RunTaskList({
 
   return (
     <div className="w-full">
-      {/* THE ONE ROW — the dynamic action line, ONE quiet register in both
-          states (text-xs muted): live = ● shimmer narrative + its stage
-          clock; terminal = the SAME line's receipt form (✓ title · total
-          elapsed — never the retired header's text-sm/font-medium). It is
+      {/* THE ONE ROW — the run's seat of the shared StatusLine (2026-09-09
+          一座两行): live = shimmer narrative + its stage clock; terminal =
+          the SAME line's receipt form (✓ title · total elapsed). It is
           itself the expand/collapse toggle for the flat checklist below. */}
-      <button
-        type="button"
+      <StatusLine
+        label={terminal ? title : (narrativeLabel ?? narrativeFallback)}
+        active={!terminal}
+        leading={
+          terminal ? (
+            <Check className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+          )
+        }
+        trailing={(terminal ? elapsed : stageElapsed) || null}
         onClick={() => setUserOpen(!open)}
-        className="flex w-full items-center gap-2.5 rounded-md text-left text-xs text-muted-foreground transition-colors hover:bg-accent/50"
-      >
-        {terminal ? (
-          <Check className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-        )}
-        <span className={cn("min-w-0 truncate", !terminal && "shimmer")}>
-          {terminal ? title : (narrativeLabel ?? narrativeFallback)}
-        </span>
-        {(terminal ? elapsed : stageElapsed) ? (
-          <span className="shrink-0 tabular-nums">
-            {terminal ? elapsed : stageElapsed}
-          </span>
-        ) : null}
-        {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
-        ) : (
-          <ChevronUp className="h-3 w-3 shrink-0" />
-        )}
-      </button>
+        open={open}
+        quiet
+      />
 
       {/* The checklist — FLAT under the one row: every step is a sibling
           row, new runtime fan-out rows (render steps) append at the bottom

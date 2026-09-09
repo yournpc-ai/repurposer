@@ -571,13 +571,20 @@ async def apply_wiring_ops(
     settle_frames_with_edges([nodes[nid] for nid in newborn_ids], placed, edges)
 
     # Land the batch: deletions (edges cascade structurally), then the new
-    # rows, then the edited rows (ORM-tracked already).
+    # rows, then the edited rows (ORM-tracked already). TWO flushes, nodes
+    # strictly before edges (2026-09-09 取证): the UOW only orders inter-
+    # table inserts through relationship()s and these tables have none — a
+    # single mixed flush let the edge INSERT precede the node's (SQLA
+    # 2.0.51, vacuum-reproduced) and FK-violated at random (轮盘赌, born at
+    # K1). The explicit stage boundary makes the order structural — never
+    # merge the flushes back.
     for node_id in pending_delete:
         row = await db.get(GraphNode, node_id)
         if row is not None:
             await db.delete(row)
     for node in nodes.values():
         db.add(node)
+    await db.flush()
     for edge in edges:
         db.add(edge)
     await db.flush()

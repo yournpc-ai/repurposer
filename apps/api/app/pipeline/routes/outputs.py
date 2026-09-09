@@ -16,10 +16,10 @@ from app.tools.revise.agents import reviser
 from app.providers.llm.minimax import MiniMaxError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
+    ChatMention,
     ChatRequest,
     DubRequest,
     FeedbackRequest,
-    FocusRef,
     OutputResponse,
     RenderStatus,
     TranslateCaptionsRequest,
@@ -441,12 +441,15 @@ async def regenerate_output(
             ),
             # Asset-scoped conversations are retired (ADR-041 D8): the card's
             # Regenerate click IS the pointing gesture, so the output rides as
-            # the turn's focus — the intent rule "an instruction naming no
-            # other target resolves to the focus output" does the addressing.
-            focus_output=FocusRef(
-                id=output_id,
-                label=_output_one_liner(output) or output.type,
-            ),
+            # an @-mention chip (ADR-058 — the definite-reference channel; the
+            # pinned id resolves the revision target deterministically).
+            mentions=[
+                ChatMention(
+                    type="output",
+                    id=str(output_id),
+                    label=_output_one_liner(output) or output.type,
+                )
+            ],
         ),
     )
 

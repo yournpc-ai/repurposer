@@ -33,6 +33,8 @@ Design rules (pressure-tested 2026-08-04):
 
 from __future__ import annotations
 
+import json
+
 _SIMPLE_ESCAPES = {
     '"': '"',
     "\\": "\\",
@@ -300,3 +302,185 @@ class ProseDeltaExtractor:
         if self._high_surrogate is not None:
             self._out.append("�")
             self._high_surrogate = None
+
+
+# AskObjectWatcher states.
+_ASK_SCANNING = "scanning"  # structural scan, looking for the top-level "ask" key
+_ASK_AFTER_TOKEN = "after_token"  # a string token completed; expect ':' or not
+_ASK_EXPECT_VALUE = "expect_value"  # the "ask" key's colon seen; expect its value
+_ASK_IN_OBJECT = "in_object"  # buffering the ask object's raw chars
+_ASK_DONE = "done"  # fired (or resolved this verdict has no ask) — never again
+
+
+class AskObjectWatcher:
+    """Feed raw verdict fragments; fires once when the top-level ``ask``
+    object CLOSES, with its parsed payload (book-path ask previews).
+
+    Object-level trust boundary (2026-09-09 用户拍板——「选项该和这句话一
+    起来」): the ask object's internal key order puts ``prose`` first, so by
+    the time the echo's last character streams, ``question`` / ``options`` /
+    ``default_path`` have ALREADY closed inside the same object — the pill's
+    whole payload exists while the verdict's brief-ledger tail is still
+    generating. Parsing the closed subtree (a real ``json.loads`` of the
+    complete object — never a partial guess) lets the SSE pump preview-dock
+    the question pill seconds earlier; the terminal envelope stays
+    authoritative, exactly like the prose preview (envelope always wins, a
+    flipped or failed turn rolls the preview back client-side).
+
+    Same discipline as the extractor: any surprise goes dead SILENTLY —
+    ``"ask": null`` (a non-ask verdict), a structural hiccup, or a parse
+    failure means no preview, never a wrong preview. The chat loop's flat
+    shape C carries no top-level ``ask`` key (its ``"ask"`` is a *value* of
+    ``type``, which never matches the key scan), so the watcher is inert
+    there by construction.
+    """
+
+    def __init__(self, on_ask) -> None:
+        self._on_ask = on_ask
+        self._state = _ASK_SCANNING
+        self._dead = False
+        self._depth = 0
+        self._close_depth = 0  # the depth the ask object must return to
+        self._in_string = False
+        self._escaped = False
+        self._key_buf = ""
+        self._key_depth = 0
+        self._buf: list[str] = []
+        # Think-preamble skip (start-of-stream only — same rule as the
+        # extractor's, so example JSON inside the reasoning never triggers).
+        self._prelude = ""
+        self._prelude_done = False
+        self._think_skip = False
+
+    @property
+    def dead(self) -> bool:
+        return self._dead or self._state == _ASK_DONE
+
+    def feed(self, chunk: str) -> None:
+        if self.dead:
+            return
+        for char in chunk:
+            self._step(char)
+            if self.dead:
+                return
+
+    def _step(self, char: str) -> None:
+        if not self._prelude_done:
+            self._step_prelude(char)
+            return
+        if self._state == _ASK_IN_OBJECT:
+            self._step_object(char)
+            return
+        self._step_structural(char)
+
+    def _step_prelude(self, char: str) -> None:
+        self._prelude += char
+        if self._think_skip:
+            if self._prelude.endswith(_THINK_CLOSE):
+                self._prelude = ""
+                self._prelude_done = True
+                self._think_skip = False
+            return
+        stripped = self._prelude.lstrip()
+        if stripped == "" or _THINK_OPEN.startswith(stripped):
+            return
+        if stripped.startswith(_THINK_OPEN):
+            self._think_skip = True
+            return
+        self._prelude_done = True
+        buffered, self._prelude = self._prelude, ""
+        for buffered_char in buffered:
+            self._step_structural(buffered_char)
+
+    def _step_structural(self, char: str) -> None:
+        if self._state == _ASK_EXPECT_VALUE:
+            if char in " \t\r\n":
+                return
+            if char == "{":
+                self._buf = ["{"]
+                self._close_depth = self._depth
+                self._depth += 1
+                self._state = _ASK_IN_OBJECT
+                return
+            # "ask": null / anything-not-an-object — no ask this verdict.
+            self._dead = True
+            return
+
+        if self._in_string:
+            if self._escaped:
+                self._escaped = False
+                if self._state == _ASK_SCANNING:
+                    self._key_buf += char
+            elif char == "\\":
+                self._escaped = True
+            elif char == '"':
+                self._in_string = False
+                if self._state == _ASK_SCANNING:
+                    self._state = _ASK_AFTER_TOKEN
+            else:
+                if self._state == _ASK_SCANNING:
+                    self._key_buf += char
+            return
+
+        if char == '"':
+            self._in_string = True
+            if self._state == _ASK_SCANNING:
+                self._key_buf = ""
+                self._key_depth = self._depth
+            return
+        if char in "{[":
+            self._depth += 1
+            if self._state == _ASK_AFTER_TOKEN:
+                self._state = _ASK_SCANNING
+            return
+        if char in "}]":
+            self._depth -= 1
+            if self._depth < 0:
+                self._dead = True
+                return
+            if self._state == _ASK_AFTER_TOKEN:
+                self._state = _ASK_SCANNING
+            return
+
+        if self._state == _ASK_AFTER_TOKEN:
+            if char in " \t\r\n":
+                return
+            if char == ":":
+                self._state = (
+                    _ASK_EXPECT_VALUE
+                    if self._key_buf == "ask" and 1 <= self._key_depth <= 2
+                    else _ASK_SCANNING
+                )
+                return
+            self._state = _ASK_SCANNING
+
+    def _step_object(self, char: str) -> None:
+        self._buf.append(char)
+        if self._in_string:
+            if self._escaped:
+                self._escaped = False
+            elif char == "\\":
+                self._escaped = True
+            elif char == '"':
+                self._in_string = False
+            return
+        if char == '"':
+            self._in_string = True
+            return
+        if char in "{[":
+            self._depth += 1
+            return
+        if char in "}]":
+            self._depth -= 1
+            if self._depth == self._close_depth:
+                # The ask object's matching close — the subtree is complete.
+                self._state = _ASK_DONE
+                try:
+                    payload = json.loads("".join(self._buf))
+                except Exception:  # noqa: BLE001 — no preview, never wrong
+                    self._dead = True
+                    return
+                if isinstance(payload, dict):
+                    self._on_ask(payload)
+            elif self._depth < self._close_depth:
+                self._dead = True

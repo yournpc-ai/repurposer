@@ -15,6 +15,8 @@ from app.models.schemas import (
     GenerateResponse,
     GraphEdgeResponse,
     GraphNodeResponse,
+    GraphReviseRequest,
+    GraphReviseResponse,
     OutputResponse,
     ProjectCreate,
     ProjectGraphResponse,
@@ -391,6 +393,101 @@ async def get_project_graph(
         "nodes": resp_nodes,
         "edges": [GraphEdgeResponse.model_validate(e) for e in edges],
     }
+
+
+@router.post(
+    "/{project_id}/graph/revise",
+    response_model=GraphReviseResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def revise_graph_node(
+    project_id: UUID,
+    request: GraphReviseRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> GraphReviseResponse:
+    """The card-face prompt direct edit's deterministic dispatch (ADR-058):
+    the revision IS a graph mutation, not a chat turn — ops are constructed
+    by CODE (``edit_prompt`` the named node with the user's verbatim program
+    + ``run`` the node and its downstream), land through the graph's ONLY
+    write door, and the run births through the ONLY birthplace. Zero intent
+    recognition (the node id is structurally exact), zero chat messages —
+    the node's own state cycle (stale → queued → running → done, the graph
+    frame's live read) is the whole feedback, so the run is stamped
+    ``origin: node_revise`` for every display surface to stay silent about.
+    """
+    project = await get_project_for_user(db, project_id, UUID(str(current_user.id)))
+    node = await db.get(GraphNode, request.node_id)
+    if node is None or UUID(str(node.project_id)) != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Node not found")
+
+    from app.pipeline.graph_revise import tasks_for_graph_nodes
+    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+
+    try:
+        delta = await apply_wiring_ops(
+            db,
+            project_id,
+            [
+                {"op": "edit_prompt", "node": str(request.node_id), "prompt": request.prompt},
+                {"op": "run", "nodes": [str(request.node_id)]},
+            ],
+        )
+        run_nodes = list(
+            (
+                await db.execute(
+                    select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {str(n.id): n for n in run_nodes}
+        ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
+        tasks = tasks_for_graph_nodes(ordered)
+        if not tasks:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "The node's subgraph has nothing executable.",
+            )
+        run = await create_run(
+            db,
+            project,
+            TaskSpec(
+                tasks=tasks,
+                target_language=first_task_language(tasks) or project.language or "en",
+                # The edited program IS the instruction (the writers' steering
+                # line) — the same pin as the chat wiring path's.
+                instruction=request.prompt,
+                scope="full",
+            ),
+        )
+    except CreditsInsufficientError as exc:
+        # Same structured shortfall payload as /generate and the chat
+        # dispatch (BILLING §7) — the confirm card renders it in place.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "credits.insufficient",
+                "balance": exc.balance,
+                "required": exc.required,
+            },
+        ) from exc
+    except WiringRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    except ValueError as exc:
+        # Birthplace rejects (active-run guard, requires gates) — 422 as-is.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    run.context = {**(run.context or {}), "origin": "node_revise"}
+    project.status = ProjectStatus.PROCESSING
+    await db.commit()
+    await db.refresh(run)
+    return GraphReviseResponse(run_id=run.id, status=run.status)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  Copy,
   Download,
   FileText,
   Files,
@@ -68,8 +69,12 @@ export interface FlowCardData extends Record<string, unknown> {
   onDisplayChange?: (nodeId: string, outputId: string) => void
   /** Card-face prompt direct edit (ADR-057 K4): the card reports the new
    * program; the surface opens the pricing confirmation (锚定子图 + 估价)
-   * — nothing touches the graph until the confirmed turn rides chat. */
+   * — nothing touches the graph until the confirm's CODE-built ops land. */
   onPromptEdit?: (nodeId: string, text: string) => void
+  /** The edit's optimistic echo (ADR-058): while the confirm is open or
+   * the stamp is in flight, the program region shows the user's verbatim
+   * text instead of the domain's last stamp — never a revert flash. */
+  pendingProgram?: string | null
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -823,9 +828,11 @@ function TextProductRegion({
         <button
           type="button"
           onClick={(e) => {
-            // Entering inline edit is NOT the node-select gesture — a
-            // select opens the TextDetailModal reader (2026-09-06); same
-            // stopPropagation contract as the toolbar buttons.
+            // Entering inline edit is NOT the node-select gesture — a node
+            // click selects (the dossier swaps in); the card itself is the
+            // reader (in-place scroll + inline edit — the separate reader
+            // modal retired 2026-09-09). Same stopPropagation contract as
+            // the toolbar buttons.
             e.stopPropagation()
             setEditing(true)
           }}
@@ -904,13 +911,19 @@ function ProgramRegion({
   node,
   editable,
   onPromptEdit,
+  pendingProgram,
 }: {
   node: FlowNode
   editable?: boolean
   onPromptEdit?: (nodeId: string, text: string) => void
+  pendingProgram?: string | null
 }) {
   const { t } = useTranslation()
-  const prompt = node.spec?.prompt
+  const stampedPrompt = node.spec?.prompt
+  // 乐观回显 (ADR-058): while the edit is pending (confirm open / stamp in
+  // flight), the card face shows the user's verbatim program — sending
+  // never reverts the display to the old stamp.
+  const prompt = pendingProgram ?? stampedPrompt
   const params = node.spec?.params ?? null
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(prompt ?? "")
@@ -1045,6 +1058,7 @@ function GraphCard({
   onExpandMedia,
   onDisplayChange,
   onPromptEdit,
+  pendingProgram,
 }: {
   node: FlowNode
   selected: boolean
@@ -1052,6 +1066,7 @@ function GraphCard({
   onExpandMedia?: FlowCardData["onExpandMedia"]
   onDisplayChange?: FlowCardData["onDisplayChange"]
   onPromptEdit?: FlowCardData["onPromptEdit"]
+  pendingProgram?: FlowCardData["pendingProgram"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
@@ -1089,7 +1104,11 @@ function GraphCard({
   // ── factsbar ──────────────────────────────────────────────────────────
   const info: string[] = []
   if (output) {
-    if (output.language) {
+    // The language fact is earned only where it isn't self-evident (2026-
+    // 09-09 走查拍板): a text product's language IS its content — never
+    // restate it on the bar; a clip's dub language can't be seen without
+    // playing, so media keeps it (as does the quiet node's params below).
+    if (output.language && !isText) {
       info.push(t(`languages.${output.language}`, { defaultValue: output.language }))
     }
     const clipAspect = output.aspect ?? null
@@ -1124,7 +1143,13 @@ function GraphCard({
         : true
   const actions: { action: FlowOutputAction; Icon: typeof Download; label: string }[] = []
   if (output && !renderActive) {
-    if (canDownload) {
+    // The primary action speaks the product's verb (2026-09-09 走查拍板):
+    // a text product is PASTED somewhere (LinkedIn, a newsletter) — its
+    // first action is Copy; media files are downloaded. (A .md download of
+    // a post was the old default — retired, nobody opens one.)
+    if (isText) {
+      actions.push({ action: "copy", Icon: Copy, label: t("chat.copy") })
+    } else if (canDownload) {
       actions.push({
         action: "download",
         Icon: Download,
@@ -1209,6 +1234,7 @@ function GraphCard({
             node.status !== "running"
           }
           onPromptEdit={onPromptEdit}
+          pendingProgram={pendingProgram}
         />
       </div>
 
@@ -1281,36 +1307,56 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
   // offset parks each circle fully outside the card with a 12px gap.
   const inBase = node.kind === "document" ? 16 : 60
   const outBase = 40
+  // Edge anchor = the circle's CENTER (2026-09-09 实测收编): xyflow anchors
+  // a handle at its OUTER rim in the position direction (Position.Right →
+  // rect.right, Position.Left → rect.left), so a 28px handle-circle misses
+  // its own center by a radius. The Handle is therefore a 0×0 invisible
+  // point parked AT the center (its rim IS its center), and the visible
+  // circle is a sibling div carrying the same offsets as before — the
+  // stroke now lands inside the anchor, whose fill hides the line's tail
+  // exactly as the FLORA anatomy intends.
   return (
     <>
       {ports.in.map((type, i) => {
         const Icon = PORT_ICON[type]
+        const offset = inBase + i * 34
         return (
-          <Handle
-            key={`in:${type}`}
-            id={`in:${type}`}
-            type="target"
-            position={Position.Left}
-            className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: "auto", bottom: inBase + i * 34, left: -40 }}
-          >
-            <Icon />
-          </Handle>
+          <div key={`in:${type}`}>
+            <Handle
+              id={`in:${type}`}
+              type="target"
+              position={Position.Left}
+              className="!h-0 !min-h-0 !w-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
+              style={{ top: "auto", bottom: offset + 14, left: -26, transform: "none" }}
+            />
+            <div
+              className={cn("flow-port", `flow-port-${type}`)}
+              style={{ top: "auto", bottom: offset, left: -40 }}
+            >
+              <Icon />
+            </div>
+          </div>
         )
       })}
       {ports.out.map((type, i) => {
         const Icon = PORT_ICON[type]
+        const offset = outBase + i * 34
         return (
-          <Handle
-            key={`out:${type}`}
-            id={`out:${type}`}
-            type="source"
-            position={Position.Right}
-            className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: outBase + i * 34, right: -40 }}
-          >
-            <Icon />
-          </Handle>
+          <div key={`out:${type}`}>
+            <Handle
+              id={`out:${type}`}
+              type="source"
+              position={Position.Right}
+              className="!h-0 !min-h-0 !w-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
+              style={{ top: offset + 14, right: -26, transform: "none" }}
+            />
+            <div
+              className={cn("flow-port", `flow-port-${type}`)}
+              style={{ top: offset, right: -40 }}
+            >
+              <Icon />
+            </div>
+          </div>
         )
       })}
     </>
@@ -1322,7 +1368,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1360,6 +1406,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onExpandMedia={onExpandMedia}
           onDisplayChange={onDisplayChange}
           onPromptEdit={onPromptEdit}
+          pendingProgram={pendingProgram}
         />
       ) : (
         <ThumbCard

@@ -41,7 +41,7 @@ carousel_writer: Agent[CarouselResponse] = Agent(
     prompt="carousel.j2",
     schema=CarouselResponse,
     system=(
-        "You are a LinkedIn carousel copy expert."
+        "You are a social carousel copy expert. "
         "You only output valid JSON with no additional commentary."
     ),
     temperature=0.4,

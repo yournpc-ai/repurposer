@@ -125,12 +125,12 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="write_post",
-            description="Write a LinkedIn long-form post from the talk",
+            description="Write a long-form social post from the talk",
             behavior="probabilistic",
             params_model=CopyWriterParams,
             summary_templates={
-                "en": "Wrote a LinkedIn post · {word_count} word{word_count_s}",
-                "zh": "写好了 LinkedIn 帖子 · {word_count} 词",
+                "en": "Wrote a post · {word_count} word{word_count_s}",
+                "zh": "写好了帖子 · {word_count} 词",
             },
         ),
         ToolEntry(
@@ -145,7 +145,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="write_carousel",
-            description="Write a LinkedIn carousel (slide deck copy)",
+            description="Write a social carousel (slide deck copy)",
             behavior="probabilistic",
             params_model=WriteCarouselParams,
             summary_templates={

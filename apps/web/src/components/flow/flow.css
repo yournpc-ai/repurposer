@@ -69,6 +69,7 @@
  * reference flow (ctx) is told from a material text flow ONLY by this glyph
  * (Files vs T, 2026-09-09). */
 .flow-port {
+  position: absolute;
   width: 28px !important;
   height: 28px !important;
   min-width: 0 !important;

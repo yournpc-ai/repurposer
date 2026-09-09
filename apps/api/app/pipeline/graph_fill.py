@@ -311,7 +311,7 @@ async def stamp_draft_graph(
     db: AsyncSession,
     project: Project,
     tasks: list,
-    ui_language: str,
+    ui_language: str | None = None,
 ) -> None:
     """Draft stamp (ADR-057 K5) — the docked task book's graph twin.
 
@@ -377,7 +377,11 @@ async def stamp_draft_graph(
         project,
         steps,
         run=None,
-        ui_language=ui_language,
+        # None-tolerant at the boundary (2026-09-09): callers pass the
+        # request-context locale bare, which is None for a client without
+        # Accept-Language — compose_spec_prompt's .startswith crashed the
+        # whole book turn. Same default seat as stamp_run_graph above.
+        ui_language=ui_language or "en",
         draft=True,
         book_text=book_text,
     )

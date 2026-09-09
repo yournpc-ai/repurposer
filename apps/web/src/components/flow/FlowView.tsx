@@ -247,6 +247,7 @@ export function FlowView({
   onExpandMedia,
   onDisplayChange,
   onPromptEdit,
+  pendingProgram = null,
   onPaneClick,
   navigation = "fit",
   controls = false,
@@ -311,6 +312,10 @@ export function FlowView({
         onExpandMedia,
         onDisplayChange,
         onPromptEdit,
+        pendingProgram:
+          pendingProgram && pendingProgram.nodeId === n.id
+            ? pendingProgram.text
+            : null,
       },
       draggable: false,
       connectable: false,
@@ -343,7 +348,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

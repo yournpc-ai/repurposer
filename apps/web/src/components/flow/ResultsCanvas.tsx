@@ -79,10 +79,13 @@ export interface ResultsCanvasProps {
   /** A product node's factsbar action (download / delete in the bar;
    * publish / open / focus ride the ⋯ menu — all one channel). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
-  /** The revision chat channel (ADR-051 F 通道律; ADR-057 K4): the pricing
-   * confirmation's confirmed turn rides it into the dock's chat with the
-   * node's displayed product pinned as the one-shot focus. */
-  onRevise?: (output: Output, text: string) => void
+  /** The card-face prompt direct edit's deterministic dispatch (ADR-058):
+   * the pricing confirmation's Start calls it with the node id + the user's
+   * verbatim program — the surface posts the graph revision (code-built
+   * edit_prompt + run) and refetches. NOT a chat turn: zero messages in
+   * the dock — the node's own state cycle is the feedback. Resolves true
+   * when the run started. */
+  onNodeRevise?: (nodeId: string, text: string) => Promise<boolean>
   /** The draft-confirm card's Start (ADR-057 K5 — 确认 = 节点锚定): the
    * surface rides it to the dock's one start path (the imperative
    * handle — the task_book question's start answer; same guards, same
@@ -91,10 +94,11 @@ export interface ResultsCanvasProps {
   /** An asset node's factsbar action (download / delete / reprocess) — the
    * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
-  /** The dock-focused product id — its node carries the selected ring. */
-  focusedOutputId?: string | null
+  /** The canvas-selected product id — its node carries the selected ring
+   * (canvas SELECTION, not a chat focus — ADR-058). */
+  selectedOutputId?: string | null
   /** Pane-only click (node clicks excluded) — back to neutral: the surface
-   * collapses the dock's history and clears the focus (D4/D8). */
+   * collapses the dock's history and clears the selection. */
   onPaneClick?: () => void
   /** Extra classes for the top-right canvas chrome (2026-09-06): the zoom
    * pill's Panel AND the OutputInspector share one corner and one
@@ -113,10 +117,10 @@ export function ResultsCanvas({
   steps,
   onOutputClick,
   onOutputAction,
-  onRevise,
+  onNodeRevise,
   onDraftConfirm,
   onAssetAction,
-  focusedOutputId = null,
+  selectedOutputId = null,
   onPaneClick,
   controlsClassName,
   className,
@@ -427,15 +431,18 @@ export function ResultsCanvas({
     [outputById, onOutputAction],
   )
 
-  // ── Prompt direct edit → the pricing confirmation (ADR-057 K4) ────────
+  // ── Prompt direct edit → the pricing confirmation (ADR-057 K4; ADR-058
+  // deterministic dispatch) ───────────────────────────────────────────────
   // The card-face program region reports a new program; NOTHING touches
   // the graph here — the confirm card anchors at the edited node (world
   // space, riding pan/zoom like the prototype's scene C), names the
   // affected subgraph (本节点 ∪ 图边下游) as chips, prices it by folding
-  // each node's own quote, and soft-compares the balance. Only the
-  // confirmed turn rides the chat channel (零旁路 — the surface's onRevise
-  // channel, with the node's displayed product pinned as the one-shot
-  // focus so the agent lands edit_prompt on THIS node, never a guess).
+  // each node's own quote, and soft-compares the balance. The confirmed
+  // Start calls the surface's onNodeRevise: CODE-built edit_prompt + run
+  // (the node id is structurally exact — zero intent recognition), NOT a
+  // chat turn. While the edit is pending (confirm open / awaiting the
+  // stamp), the node's card face keeps showing the user's verbatim program
+  // (pendingProgram — 乐观回显, never a revert flash).
   const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
   const handlePromptEdit = useCallback((nodeId: string, text: string) => {
     setPromptEdit({ nodeId, text })
@@ -517,6 +524,16 @@ export function ResultsCanvas({
   useEffect(() => {
     if (promptEdit && !editedNode) setPromptEdit(null)
   }, [promptEdit, editedNode])
+  // The stamp's arrival clears the pending program: after a successful
+  // dispatch the graph refetch brings the node stamped with the SAME
+  // verbatim text (edit_prompt 钢印), and the card face's pending display
+  // hands over to the domain truth seamlessly.
+  useEffect(() => {
+    if (!promptEdit || !editedNode) return
+    if ((editedNode.spec?.prompt ?? "").trim() === promptEdit.text.trim()) {
+      setPromptEdit(null)
+    }
+  }, [promptEdit, editedNode])
 
   const promptEditBlast = useMemo(() => {
     if (!promptEdit) return null
@@ -566,15 +583,15 @@ export function ResultsCanvas({
     return () => window.removeEventListener("keydown", onKey)
   }, [promptEdit])
 
-  const handlePromptEditConfirm = useCallback(() => {
+  const handlePromptEditConfirm = useCallback(async () => {
     if (!promptEdit) return
-    const node = nodeById.get(promptEdit.nodeId)
-    const outputs = node?.outputs ?? []
-    const output =
-      outputById.get(displayedRef.current.get(promptEdit.nodeId) ?? "") ?? outputs[0]
-    setPromptEdit(null)
-    if (output) onRevise?.(output, promptEdit.text)
-  }, [promptEdit, nodeById, outputById, onRevise])
+    const ok = (await onNodeRevise?.(promptEdit.nodeId, promptEdit.text)) ?? false
+    // Success keeps promptEdit alive — it IS the card face's optimistic
+    // program until the stamp arrives (the clear-on-stamp effect above).
+    // Failure (credits shortfall / active run / a reject — the surface
+    // toasted) reverts the display to the domain truth: nothing landed.
+    if (!ok) setPromptEdit(null)
+  }, [promptEdit, onNodeRevise])
 
   const promptEditOverlay =
     promptEdit && editedNode && promptEditBlast ? (
@@ -740,7 +757,7 @@ export function ResultsCanvas({
           ) : null
         }
         className="h-full"
-        selectedId={focusedOutputId ? (nodeIdByOutputId.get(focusedOutputId) ?? null) : null}
+        selectedId={selectedOutputId ? (nodeIdByOutputId.get(selectedOutputId) ?? null) : null}
         onPaneClick={handlePaneClick}
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
@@ -748,6 +765,7 @@ export function ResultsCanvas({
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}
+        pendingProgram={promptEdit}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its

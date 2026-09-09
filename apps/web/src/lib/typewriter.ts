@@ -10,16 +10,43 @@
  *
  * Client-side only: use inside event handlers / effects, never during SSR.
  */
-export function createTypewriter(append: (text: string) => void) {
+export function createTypewriter(
+  append: (text: string) => void,
+  /** Fires on the busy↔idle edge (2026-09-09 thinking 门槛): while the
+   * typewriter has anything left to say, the prose in motion IS the turn's
+   * activity evidence and chrome status lines (the thinking row) must hide;
+   * only when it runs dry does the turn need a status owner again. Idle is
+   * reported after a short grace so natural burst gaps in the model's
+   * output don't strobe the chrome. */
+  onActiveChange?: (active: boolean) => void,
+) {
   let buffer = ""
   let timer: ReturnType<typeof setInterval> | null = null
   let drainWaiters: (() => void)[] = []
+  let active = false
+  let idleTimer: ReturnType<typeof setTimeout> | null = null
+  const IDLE_GRACE_MS = 400
+
+  const setActive = (next: boolean) => {
+    if (active === next) return
+    active = next
+    onActiveChange?.(next)
+  }
+
+  const markMaybeIdle = () => {
+    if (buffer || idleTimer) return
+    idleTimer = setTimeout(() => {
+      idleTimer = null
+      if (!buffer) setActive(false)
+    }, IDLE_GRACE_MS)
+  }
 
   const settleDrain = () => {
     if (buffer) return
     const waiters = drainWaiters
     drainWaiters = []
     for (const resolve of waiters) resolve()
+    markMaybeIdle()
   }
 
   const tick = () => {
@@ -34,7 +61,12 @@ export function createTypewriter(append: (text: string) => void) {
 
   return {
     push(text: string) {
+      if (idleTimer) {
+        clearTimeout(idleTimer)
+        idleTimer = null
+      }
       buffer += text
+      if (buffer) setActive(true)
       if (!timer) timer = setInterval(tick, 24)
     },
     /** Resolves once every buffered char has been released (flush resolves
@@ -48,6 +80,10 @@ export function createTypewriter(append: (text: string) => void) {
     },
     /** Release everything remaining and stop the clock. */
     flush() {
+      if (idleTimer) {
+        clearTimeout(idleTimer)
+        idleTimer = null
+      }
       if (timer) {
         clearInterval(timer)
         timer = null
@@ -57,6 +93,7 @@ export function createTypewriter(append: (text: string) => void) {
         buffer = ""
         append(rest)
       }
+      setActive(false)
       settleDrain()
     },
   }

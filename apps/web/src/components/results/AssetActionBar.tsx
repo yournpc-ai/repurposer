@@ -1,10 +1,11 @@
-import { Download, Pencil, RefreshCw, Send } from "lucide-react"
+import { Copy, Download, Pencil, RefreshCw, Send } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 
 interface AssetActionBarProps {
   onEdit?: () => void
+  onCopy?: () => void
   onDownload?: () => void
   onRegenerate?: () => void
   onPublish?: () => void
@@ -16,6 +17,7 @@ interface AssetActionBarProps {
 
 export function AssetActionBar({
   onEdit,
+  onCopy,
   onDownload,
   onRegenerate,
   onPublish,
@@ -37,6 +39,16 @@ export function AssetActionBar({
           title={t("chat.resultActions.edit")}
         >
           <Pencil className="h-4 w-4" />
+        </Button>
+      )}
+      {onCopy && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onCopy}
+          title={t("chat.copy")}
+        >
+          <Copy className="h-4 w-4" />
         </Button>
       )}
       {onDownload && (
