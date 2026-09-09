@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
@@ -9,17 +7,8 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { isAuthenticated } from "@/lib/auth"
 import { UNAUTHORIZED_EVENT } from "@/lib/api"
+import { AuthContext } from "@/lib/auth-context"
 import { LoginDialog } from "@/components/LoginDialog"
-
-interface AuthContextValue {
-  isAuthenticated: boolean
-  loginOpen: boolean
-  setLoginOpen: (open: boolean) => void
-  requireAuth: (callback?: () => void | Promise<void>) => void | Promise<void>
-  refreshAuth: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 
 const PUBLIC_PATHS = new Set(["/"])
 
@@ -115,12 +104,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider")
-  }
-  return ctx
 }

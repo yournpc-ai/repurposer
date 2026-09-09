@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Coins } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import {
   Popover,
   PopoverContent,

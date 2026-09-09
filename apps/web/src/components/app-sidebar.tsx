@@ -34,7 +34,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import { getUser } from "@/lib/auth"
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import { LogoMark } from "@/components/LogoMark"
 
 const navItems = [

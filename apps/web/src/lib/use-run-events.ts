@@ -118,8 +118,12 @@ export function useRunEvents(
         }
       },
       onclose: () => {
-        // Server closed the stream (terminal state). Never retry.
-        throw new Error("stream closed")
+        // Server closed the stream (terminal state). Return normally — the
+        // library then disposes and never retries. THROWING HERE IS A RETRY
+        // LOOP: the throw is routed into onerror as a generic error, and any
+        // onerror return other than a throw schedules a reconnect (2026-09-10
+        // forensics: a settled run's stream was re-opened every ~1s per
+        // subscriber, visible as a steady 3s GET /runs/{id}/events cadence).
       },
       onerror: (err) => {
         // Stop auto-retry on auth/terminal; network errors retry by default.

@@ -23,7 +23,7 @@ import { apiFetch } from "@/lib/api"
 import { setLocale, type Locale } from "@/lib/i18n"
 import { useTheme, type Theme } from "@/lib/theme/ThemeProvider"
 import { clearAuth, getUser } from "@/lib/auth"
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import { useSettingsDialog } from "@/components/settings/SettingsDialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 

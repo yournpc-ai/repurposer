@@ -402,7 +402,7 @@ function normalizeBriefSlot<T>(raw: unknown): BriefSlot<T> {
 
 /** Tolerate a missing/partial brief payload (old question rows pre-B3 carry
  * no `brief` key — read tolerance only, never written back). */
-export function normalizeBrief(raw: unknown): BriefLedger | null {
+function normalizeBrief(raw: unknown): BriefLedger | null {
   if (!raw || typeof raw !== "object") return null
   const data = raw as Record<string, unknown>
   return {

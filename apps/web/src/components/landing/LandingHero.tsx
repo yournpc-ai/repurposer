@@ -9,7 +9,7 @@ import {
 } from "@/components/landing/motion"
 import { HeroWaves } from "@/components/landing/HeroWaves"
 import { MagneticLink } from "@/components/landing/MagneticLink"
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 
 /**
  * Landing hero: headline choreography over an atmosphere layer.

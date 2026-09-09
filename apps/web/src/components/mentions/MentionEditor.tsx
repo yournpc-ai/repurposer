@@ -37,7 +37,7 @@ import { MentionPicker } from "@/components/mentions/MentionPicker"
 /** An "@" at line start or after whitespace opens the picker; the capture
  * group is the filter query. The whitespace guard keeps email-style text
  * ("name@host") from false-triggering; Unicode letters match CJK titles. */
-export const MENTION_TRIGGER = /(?:^|\s)@([\p{L}\p{N}_-]*)$/u
+const MENTION_TRIGGER = /(?:^|\s)@([\p{L}\p{N}_-]*)$/u
 
 export interface MentionEditorHandle {
   /** Insert a mention chip at the active "@query" (replacing it), else at

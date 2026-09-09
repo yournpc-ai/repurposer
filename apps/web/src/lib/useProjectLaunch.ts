@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import type { ChatMention } from "@/lib/mentions"
 
 /**

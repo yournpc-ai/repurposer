@@ -5,7 +5,7 @@ import { useNavigate } from "@tanstack/react-router"
 
 import { MagneticLink } from "@/components/landing/MagneticLink"
 import { softEase, useReducedMotion } from "@/components/landing/motion"
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 
 /**
  * Final CTA: inverted --inverse panel that scales in on scroll, a fan of

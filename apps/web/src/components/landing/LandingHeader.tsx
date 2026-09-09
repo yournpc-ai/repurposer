@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useReducedMotion } from "@/components/landing/motion"
 import { LogoMark } from "@/components/LogoMark"

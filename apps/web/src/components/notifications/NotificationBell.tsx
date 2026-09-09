@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Bell, ExternalLink } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { useAuth } from "@/components/AuthProvider"
+import { useAuth } from "@/lib/auth-context"
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
 import { Button } from "@/components/ui/button"
 import {
