@@ -307,6 +307,10 @@
 | 二 09-08 | **积分计算验证**（hold→capture→release 全链对账：估价贴 vs 实扣逐配方核、失败不扣费复证、负余额路径、孤儿 hold 缺口 P1 修复验证 + `reconcile_credits.py` 四类恒等式复跑） | 每 run = 1 hold + N capture + 1 release 分毫不差；对账尺全绿 |
 | 三 09-09 | **边界与回归**（多语言 / 移动端 dock / 空态 / 权限门；chat_scenarios 12 条核心 story 复跑 + 回归 harness 全绿）+【验收】🎯 **全链测试就绪** | 支付批动工前产品处于"敢收钱"状态 |
 
+> **2026-09-09 同日插单：展示文案二源律批（ADR-058 + 简报 `tasks/done/display-copy-law-node-revise.md`）当日收口**——测试批走查逮到卡面 prompt 直改的连环五伤（回闪 / 死窗 / 收据 "Post (English)" 漂移 / 排序错乱 / 收官句同名错），取证定位后用户三条拍板同日落：**① 展示文案二源律**（命名类文案只许 LLM 建图时命名或世界自证，冻参模板永禁——参数降级为不可见执行事实，「文字核对」问题类消失）**② 卡面直改 = 确定性图动作零 dock 消息**（新端点 `POST /projects/{id}/graph/revise`，ops 代码构建，节点状态周期 = 全部反馈，乐观回显永不回闪；ADR-057 §6 通道律翻案）**③ focus 全层退役归 @mention**（ADR-041 D8 翻案，写门关读容忍留）。同批：thinking 行整回合化 + `creating_run` 相位接入 chat 路径（死窗修复）+ 打字机律最后闸门补齐 start 分支 + 终态收据排序锚修订（`max(run 出生, 生产回声)+1`）。挂账入需求池：步骤级 LLM 命名（per-task name 全量形态）/ stub 塌缩 / mobile OutputChatCard 核对。**同日第三方 review 复查五处收口**：① Start 出生路径补盖标题章（连续 run 不继承前题）② 页面侧两条重建路径补读 `run.context.name`（刷新不再回退冻参标签）③ 卡面直改网络失败补 toast（失败才开口）④ 版本 chip 改读 `titleOf` ⑤ **手改撤名拍板落地**（计划卡任何手改即清 `name`，回退读当前参数的诚实标签）；**未命名计数日志两座已加**（`unnamed_proposal`）；**步骤级命名批拍板「下批就做」**。**同晚状态行两拍板落地**：① **打字机途中不需要 thinking**——行渲染门 = `chatBusy && !proseActive`（打字机忙/闲边沿驱动，闲态 400ms 宽限不闪行），死窗期（回声排干→信封）照旧有主；② **状态行一座两行**——消息流一切瞬态「现在在干什么」行 = 同一个 `StatusLine` 组件（dock thinking 座 + RunTaskList 动态行座），label 恒为当下相位/叙事。**同晚 ask 预览帧落地（「选项该和这句话一起来」）**：`AskObjectWatcher` 在 ask 对象闭合即推 `question.preview` 帧——pill 不再等 brief 尾巴（实测 ~10s → 随散文落字即达），preview 期点击寄存、信封发射，翻案/失败全回滚。
+>
+> **2026-09-10 走查修复群（同日验收全绿）**：① **P0：图持久化分裂 flush（ADR-059）**——S3 剧本 `turn.failed` 500（`graph_edges_to_node_fkey` 违反），四层取证坐实 SQLAlchemy 2.0.51 无 relationship 不排序裸 FK 混插（K1 潜伏 4 天）；写口两段 flush（节点 strictly 先于边），probe4 复证序列 + S3 复跑全绿。② **answer 路径 preview 对称**——answer 流同挂 `AskObjectWatcher`，连答 Q2..N 同享 `question.preview`；跨 await 点选寄存（`stashedAnswerRef`）+ 文字问永不预览 dock。③ **打字机律牙①补漏**——`tasks_explicit` null 读容忍，修复轮拍动归零（12/12 复跑修复轮 0，此前 ~3 次/日 × ~15s）。④ **同名链静默重挂继承 LLM 命名**（二源律合规——保住的是 LLM 自己的名，乱序回合的 "Post (English)" 冻标签断根）+ **draft 图翻转通道**（`onDraftGraphChange`：pre-run draft 图到达即触发桌面形态翻转，此前无触发 = 用户看到"乱序 + 画布只有一节点"的瞬态根因）。⑤ **相位三拍用起来**（「通道打通的就用起来」翻案 09-08 撤销判词）：understanding → drafting → creating_run，thinking 行内容永冻（「不是动画，而是 content」）断根；行首 logo 退役预留零宽缝（`ThinkingMark` render null）。⑥ **连线对准 port 圆心**——xyflow Handle 锚矩形外缘 + 默认 5px min-height 残余，改 0×0 隐形 Handle 泊圆心（`!min-h-0`），CDP 两次实测像素级对齐。⑦ **post 渠道中立 + echo 防编造律（ADR-060）**——六处 LinkedIn 固化点全中和（工具描述 / step 摘要 / 类型标签 / 例句 / 命名示例 / writer 人设），回声只回述用户说过的；保留 pack 内部名 / 发布婉拒示例 / landing 营销；实测模糊两轮全链 `LinkedIn present: False`。⑧ **裸 "yes" 误判挂账关闭**——用户判词：LLM 该理解裸肯定，词表短路 = 画蛇添足（入 CHAT_ARCH 禁止清单）；误判伤害面已由 ④ 双修复堵上。同批潜伏修复：`stamp_draft_graph` 的 None-locale 崩溃（无 Accept-Language 客户端 500）。QA 块内容宽（`w-fit` + 右侧 padding 计 chip 内凹）。**验证**：API+worker 重启后剧本/探针/实况三轮全绿（本批验证由 Claude 自跑，用户特许）。
+
 ### 第十一周（09-10 ~ 09-23，自 10-02 提前）：**支付实际开发 + 分发联调**
 
 > 在 W7 落定的积分+支付联合架构上接入实际支付商 + LinkedIn / TikTok OAuth 发布链路。**⚠️ 入驻审批跑道收紧**（08-14 提交 → 09-01 前须确认沙盒到位）——未过审则第一周切 mock / 合同流对接，真联调吃批内第二周；开发者权限同理。
@@ -437,6 +441,9 @@
 | ~~孤儿 hold 回收（project 删除即解冻 / reaper）~~ | — | — | **✅ 09-05 当日兑现（P1 不跨夜）**：删除端点同事务退未结 hold（非 RUNNING）+ 收官路径台账自结算（`_release_orphaned_hold`，run/项目已删双路）+ `finalize_stuck_runs` 大小写潜伏 bug 修复（`'RUNNING'` 死匹配从未生效）；剧本 S15 锁删除路径（RUNNING 在途归 worker 收官）；dev 存量 7 笔按业务决定不手工补（尺子 ○ known-open 豁免）——条目关闭 |
 | ~~对话工作流升级（B1 改名批 + B2 brief 账本/ask + B3 预填评审卡）~~ | — | — | **已排期（2026-09-03 拍板，W7 即日动工 09-03~09-08，ADR-052）——条目关闭** |
 | ~~research 节点试点（有界 loop 节点，B4）~~ | — | — | **已排期（2026-09-03 拍板「立即」，随对话工作流批 09-09~09-10）——条目关闭** |
+| 步骤级 LLM 命名（per-task `name`） | P2 | 展示文案二源律（✅ ADR-058，09-09）——run 级 name 已通，本行补 step 级 | **09-09 拍板「下批就做」**（排期窗口待指认）：09-09 用户判词的全量形态「tasks 的步骤也是 LLM 命名就没有文字核对问题」；本批 `taskLabel` 链推导已收窄为回退 + 手改撤名已落，步骤名全量 LLM 化 = name 进 TaskItem + builder 钢印位 + RunTaskList/打勾流读法 |
+| stub 塌缩（"No source material" 行） | P2 | 无 | 09-09 同批挂账：无素材 writer-only run 的 stub 行应塌缩不渲染 |
+| mobile OutputChatCard 核对 | P2 | 无 | 09-09 同批挂账：focus 退役与 runTitle 章名后移动端产物卡读法一致性核对 |
 
 ### 可选需求
 

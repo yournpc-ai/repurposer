@@ -33,7 +33,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 ## 4. 机制纪律
 
 - **注册面唯一在前端**：前端 `MENTION_REGISTRY`（picker 候选源 + icon + i18n）是唯一注册面——服务端**无按类型注册表**：mentions 经 `_build_context` 无类型通用透传注入 intent context，指认解析由 LLM 按 prompt 规则用 id 完成。新类型 = 前端一条注册项（+ 需要时一条 prompt 规则），禁一次性分支。
-- **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（composer / chat dock——生成 overlay 底排在结果期就地转为底部 dock，ADR-041；产物微调会话并入 dock + 焦点注入）；候选源差异走 `MentionContext`（面的数据喂注册表源），禁每面各起 textarea / 自养 picker。
+- **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（composer / chat dock——生成 overlay 底排在结果期就地转为底部 dock，ADR-041；产物微调会话并入 dock，指认 = @output mention——focus 机制已退役，ADR-058）；候选源差异走 `MentionContext`（面的数据喂注册表源），禁每面各起 textarea / 自养 picker。
 - **chip 三律**：可见（内联 chip 带 ×）/ 发送即消费 / × 即纯化（无状态跨发送残留）。
 - **服务端解析唯一发生地**：mention 的机械效果（上下文富化、指认注入）只在服务端发生；前端永不构建 prior。
 - **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。

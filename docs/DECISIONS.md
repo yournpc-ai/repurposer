@@ -788,12 +788,12 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Decision**:
 1. **结果画布 = 桌面/iPad 默认中心**：项目页收官态 = FlowView 渲染当前 run 拓扑 + 最新产物（真节点真边，output 节点 = 产物卡：媒体内联自播（视频静音循环）/ 分数+top-pick / 磨砂操作条（下载/发布，hover 放大开大屏））。多 tab 结果页与"结果网格为默认中心"退役；网格重构件降级为移动端列表渲染件复用。
 2. **进度不进图**（2026-08-31 ADR-051 收窄为「**步骤叙事**不进图」）：打勾流是唯一步骤叙事进度面（run 进度图排产撤销）——形态 2026-09-08 定为流内单行动态行 + 平铺步骤（活态 status line / 终态收据同一行，CHAT_ARCH §8.7；曾有的折叠状态行同批退役）；**产物占位/填充 = 图的内容不是进度**（derived preview 确定性投影，run 开始即物化、产物落地原地填充）；收官转场 = 遮罩淡出 + 消息区上收 + 画布按 `seq` 编译序诞生回放——动画 = 真实事件投影不变；输入组全程零位移；断线重连 / 历史打开直接呈现终态不播回放。
-3. **底部 dock（2026-08-13 修订：一体容器 + 灰行入流）**：chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（同一消息机器内脏不动）。dock 可见性三态（2026-09-02 ADR-051 条款 7 修订：原「只有两态」加 hidden）——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在**同一磨砂容器内**向上生长（容器独占圆角与玻璃；摘要卡条 / 焦点 chip / 三态机退役；2026-09-02 条款 8 拆粘：一体容器收窄为历史区+输入组，问句 dock 拆出为独立浮层 pill，免责行钉在输入组旁常驻耳语（位置 2026-09-06 翻案为输入组**上方**——FAUNA parity，见条款 8 与条款 6）），hidden = 用户手势收成右下角 LogoMark 磨砂圆点（唤回触发 = agent 发声 / 待决提问 / 焦点注入——只能藏静态输入组，藏不住新信息）；**agent 发声（新回复落流）历史必自动展开——焦点设置不撑开历史（2026-08-16 走查修订：chip 即反馈，焦点灰行照旧入流，点卡开详情 modal 时历史乱弹是 jump-scare）**；点画布空白 = 回中性（历史收起 + 焦点清除，pane 级事件，节点点击不触发）。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap、焦点事件）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。一个输入组停靠位（2026-08-31 ADR-051 修订）：首页 composer / 结果 dock（原第三停靠位 overlay 底排随 fullscreen 壳退役）。**页级两态形态机**（2026-09-02 ADR-051 条款 7）：首个 run 前 dock = 居中全屏 chat（full 形态，舞台占满页面上部），首个 run 到达收拢变形为底部 dock——同一台消息机器，纯布局形态，输入组零位移。
-4. **产物节点 toolbar 合法化，边界说死**（2026-08-17 走查修订：节点解剖统一）：单击 = detail modal 旧逻辑原样，publish modal 保留；过程节点永无 toolbar；toolbar 装图操作（运行 / 接线）永久禁区。**节点解剖 = caption 恒为类型 icon + 类型名（左上，右槽恒空）+ 媒体区 + 卡下磨砂工具条**：一切信息位（语言 / 分辨率 / 时长 / 画幅）住工具条左区——时长住条内、永不作为视频浮层角标（媒体角标只剩 score），分辨率从媒体元素实读（`onLoadedMetadata` / `naturalWidth`），不立硬编码表；divider 隔信息位与动作位（下载 / 删除 = 条内仅有的两个动作），删除右侧"⋯"开二级菜单（发布 / 打开 / 在对话中指认），菜单带层级故同走雾面玻璃；**工具条宽度不限、信息永不省略**（08-17 三轮走查拍板）——条随内容自然撑开、卡下居中对称悬出，截断/省略号/title 兜底全部撤销（此前 max-w-full 卡宽 + 信息无 overflow-hidden 的组合曾让文字穿透 flex 序与图标层叠）；**产物卡 lane 208 → 280 同轮放大**（9:16 → 498 媒体高，源视频素材节点同宽 280）。素材节点同解剖（文件名 / 时长 / 分辨率 + 下载 / 删除 + ⋯ 重处理），动作归 surface 所有；删除产物 = `DELETE /outputs/{id}`（连存储对象一起清，fork 派生行不陪葬）。ChatModal / AssetChatModal 退役——产物对话归 dock + 焦点注入；工作面"舞台 / 检视器"页面区方案取消（detail modal 保留使检视器冗余）。
-5. **密度三档 + 渲染单元**（2026-08-12 修订；2026-08-19 名词节点收窄；**2026-09-07 ADR-057 翻案**：`canvas_key` / 过程脊 / `canvas_hidden` 补丁族火化——画布直读持久图，step 住节点内部，名词收窄精神升级为结构事实）：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 名词密度（素材 + 任务书文本节点 + 产物主角）；~~run 期无图~~（2026-08-31 ADR-051 翻案：fullscreen 壳退役后 run 期画布活——占位卡 run 开始即物化 + 折叠打勾随行）。**画布渲染单元 ≠ 执行单元**：step 全量落库（成本 / 重跑 / 血缘靠它），画布按节点类自描述聚合渲染——`canvas_key` 同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书，dock-surface 雾面玻璃文本节点，对应 FLORA 文本节点形态）；**过程动词永不上图**（select_clips / dub / add_music 授予全移除，translate_clip 08-15 先例推广——每个动词都是其产物的属性），无键折"过程脊"组节点（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step），`canvas_hidden`（render；prelude——preprocess/persona_bootstrap，2026-08-19 二轮 R1：plan 的上游与下游折进同一脊会使可见图成环、任务书沉进产物列，prelude 改 hidden 后资产喂边走下游兜底到任务书）永不上图、状态原地投影到产物卡（失败/渲染中 = 卡的原地态，不是独立节点）。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。判定任一节点只问："它是名词吗？"——动词一律折脊。
+3. **底部 dock（2026-08-13 修订：一体容器 + 灰行入流）**：chat 外壳从全屏 dialog 转 Mac-Dock 式居中悬浮输入组（同一消息机器内脏不动）。dock 可见性三态（2026-09-02 ADR-051 条款 7 修订：原「只有两态」加 hidden）——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在**同一磨砂容器内**向上生长（容器独占圆角与玻璃；摘要卡条 / 焦点 chip / 三态机退役；2026-09-02 条款 8 拆粘：一体容器收窄为历史区+输入组，问句 dock 拆出为独立浮层 pill，免责行钉在输入组旁常驻耳语（位置 2026-09-06 翻案为输入组**上方**——FAUNA parity，见条款 8 与条款 6）），hidden = 用户手势收成右下角 LogoMark 磨砂圆点（唤回触发 = agent 发声 / 待决提问——只能藏静态输入组，藏不住新信息）；**agent 发声（新回复落流）历史必自动展开——点卡选择不撑开历史（2026-08-16 走查修订：点卡开详情 modal 时历史乱弹是 jump-scare）**；点画布空白 = 回中性（历史收起 + 选择清除，pane 级事件，节点点击不触发）。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。一个输入组停靠位（2026-08-31 ADR-051 修订）：首页 composer / 结果 dock（原第三停靠位 overlay 底排随 fullscreen 壳退役）。**页级两态形态机**（2026-09-02 ADR-051 条款 7）：首个 run 前 dock = 居中全屏 chat（full 形态，舞台占满页面上部），首个 run 到达收拢变形为底部 dock——同一台消息机器，纯布局形态，输入组零位移。
+4. **产物节点 toolbar 合法化，边界说死**（2026-08-17 走查修订：节点解剖统一）：单击 = detail modal 旧逻辑原样，publish modal 保留；过程节点永无 toolbar；toolbar 装图操作（运行 / 接线）永久禁区。**节点解剖 = caption 恒为类型 icon + 类型名（左上，右槽恒空）+ 媒体区 + 卡下磨砂工具条**：一切信息位（语言 / 分辨率 / 时长 / 画幅）住工具条左区——时长住条内、永不作为视频浮层角标（媒体角标只剩 score），分辨率从媒体元素实读（`onLoadedMetadata` / `naturalWidth`），不立硬编码表；divider 隔信息位与动作位（下载 / 删除 = 条内仅有的两个动作），删除右侧"⋯"开二级菜单（发布 / 打开 / 在对话中指认），菜单带层级故同走雾面玻璃；**工具条宽度不限、信息永不省略**（08-17 三轮走查拍板）——条随内容自然撑开、卡下居中对称悬出，截断/省略号/title 兜底全部撤销（此前 max-w-full 卡宽 + 信息无 overflow-hidden 的组合曾让文字穿透 flex 序与图标层叠）；**产物卡 lane 208 → 280 同轮放大**（9:16 → 498 媒体高，源视频素材节点同宽 280）。素材节点同解剖（文件名 / 时长 / 分辨率 + 下载 / 删除 + ⋯ 重处理），动作归 surface 所有；删除产物 = `DELETE /outputs/{id}`（连存储对象一起清，fork 派生行不陪葬）。ChatModal / AssetChatModal 退役——产物对话归 dock（指认走 @mention，ADR-058）；工作面"舞台 / 检视器"页面区方案取消（detail modal 保留使检视器冗余）。
+5. **密度三档 + 渲染单元**（2026-08-12 修订；2026-08-19 名词节点收窄；**2026-09-07 ADR-057 翻案**：`canvas_key` / 过程脊 / `canvas_hidden` 补丁族火化——画布直读持久图，step 住节点内部，名词收窄精神升级为结构事实）：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 名词密度（素材 + 任务书文本节点 + 产物主角）；~~run 期无图~~（2026-08-31 ADR-051 翻案：fullscreen 壳退役后 run 期画布活——占位卡 run 开始即物化 + 折叠打勾随行）。**画布渲染单元 ≠ 执行单元**：step 全量落库（成本 / 重跑 / 血缘靠它），画布按节点类自描述聚合渲染——`canvas_key` 同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的任务书，dock-surface 雾面玻璃文本节点，对应 FLORA 文本节点形态）；**过程动词永不上图**（select_clips / dub / add_music 授予全移除，translate_clip 08-15 先例推广——每个动词都是其产物的属性），无键折"过程脊"组节点（干预 = 点产物卡选择 + @mention 指认（ADR-058）/ 脊内步骤 pill 走 @workflow_step），`canvas_hidden`（render；prelude——preprocess/persona_bootstrap，2026-08-19 二轮 R1：plan 的上游与下游折进同一脊会使可见图成环、任务书沉进产物列，prelude 改 hidden 后资产喂边走下游兜底到任务书）永不上图、状态原地投影到产物卡（失败/渲染中 = 卡的原地态，不是独立节点）。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。判定任一节点只问："它是名词吗？"——动词一律折脊。
 6. **导航门禁修订**（修订 ADR-036 补记 1）：缩放 = 导航不是编辑——配方卡说明书锁 fit；结果画布开放 pan / zoom（minimap 退役：稀疏小图无导航价值）；拓扑编辑手势任何面物理缺席。
-7. **移动端 = UI in chat**：不渲染 canvas（< iPad 宽度）；对话沉底与桌面 dock 同心智；一回合一张 RunCard（卡头血缘摘要行 + 可展开过程脊 + 产物缩略条 + chips）；点缩略图进全屏查看器（家族滑动 + 底部迷你输入条）；点卡即焦点免 @。卡片种类注册表制：计划 / 操作 / 结果三型。
-8. **焦点 = 一次性消费 + 落库**（2026-08-13 修订 N-36「不落库」）：画布点选产物 → 下一轮 chat 携带 `focus_output {id,label}`（context 一行不变），发送即消费（再改再点，点画布空白即清，失败回滚即还）；**焦点持久化在用户消息上**（`messages.focus_output`）——历史回读时该消息上方渲染焦点前缀灰行，刷新后流不撒谎。
+7. **移动端 = UI in chat**：不渲染 canvas（< iPad 宽度）；对话沉底与桌面 dock 同心智；一回合一张 RunCard（卡头血缘摘要行 + 可展开过程脊 + 产物缩略条 + chips）；点缩略图进全屏查看器（家族滑动 + 底部迷你输入条）。卡片种类注册表制：计划 / 操作 / 结果三型。
+8. ~~焦点 = 一次性消费 + 落库~~（**2026-09-09 ADR-058 翻案：focus 机制全层退役，指认统一归 @output mention chip**——请求字段 / 焦点注入 / prompt 规则全删，画布点卡 = 纯选择 + 详情；`messages.focus_output` 列读容忍保留，旧行历史回放照渲染灰行前缀，永不新写）。
 9. **复核门**：小白复述测试周五（08-14）照跑——裁决问题从"血缘板是否升正"改为"结果画布是否转正"；不过则结果网格回退为默认中心（组件不删），canvas 降为检视入口，零浪费。
 
 **Consequences**:
@@ -1278,7 +1278,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    | ④ | processor 加工 | 只有参数，无 LLM prompt | render / 剪辑物化 / 字幕摊铺 |
    | ⑤ | agent 有界 loop | 三护栏原样（ADR-052 B4） | research |
 5. **端口法则**（ElevenLabs 实测定稿；**2026-09-08 MiniMax 收编——外延伸 + 图标芯片**）：**进 = 消费区域最左下角，出 = 生产区域最右上角**；同侧多口从角起堆叠。连线 = 上下文/数据流（类型化：video / audio / text / ctx 虚线），不是执行顺序装饰。不可见 Handle（`!h-0 !w-0 !opacity-0`）时代终结。端口形态 = 20px 圆形图标芯片骑卡缘（中心 ~4px 在卡外——连线点外延伸，边永不吃进卡面），glyph = 流的类型（video=Clapperboard / audio=AudioLines / text=FileText / ctx=AtSign 虚线环——@ 与连线是同一引用的两视图，MENTIONS 同典）。
-6. **prompt 直改 + 确认**（用户拍板）：节点卡上的 prompt 直接编辑 = 一次 wiring op（`edit_prompt`），发送 = 定价确认（估价随行）→ 只重跑该节点与其下游。**骑 `POST /chat` 唯一通道**（焦点预钉的修订回合，ADR-051 条款 4 的通道律不变），永不开新执行通道。节点面永无模型选择器 / SKU 货架（ADR-051 条款 5 不变）；runtime 事实（模型/参数/耗时）住卡外 factsbar，不住节点卡内。
+6. **prompt 直改 + 确认**（用户拍板；**通道 2026-09-09 ADR-058 修订**）：节点卡上的 prompt 直接编辑 = 一次 wiring op（`edit_prompt`），发送 = 定价确认（估价随行）→ 只重跑该节点与其下游。~~骑 `POST /chat` 唯一通道~~（ADR-058 翻案：直改是确定性手势不是意图——ops 代码构建，走 `POST /projects/{id}/graph/revise`，dock 零消息、节点状态周期 = 全部反馈；chat 唯一**意图**面不变）。节点面永无模型选择器 / SKU 货架（ADR-051 条款 5 不变）；runtime 事实（模型/参数/耗时）住卡外 factsbar，不住节点卡内。
 7. **投影层火化清单**（五补丁连根拔）：`canvas_hidden` / `canvas_key` / 过程脊 spine / 脊收编（ADR-051 条款 4 后半）/ R1 下游游走（`resolveAssetFeedTargets`）——全部死于「**显示模型 = 领域模型，零投影**」。步骤永不上图（ADR-041 D5 名词收窄的精神升级为结构事实：step 住节点内部，画布从图直读，无从投影）；过程动词永不上图不变；打勾流仍是唯一步骤叙事进度面（dock 内，不动）。
 8. **语义账本塌缩**：hold / release 永不上 UI；台账用户面只显**花费 / 赠送 / 充值**三族，行 = per-run-event 语义行（「Post 修订 −3」）；CreditsPill popover 的裸 kind 列表同批改写。逐节点估价 = 卡面空态位；确认合计 = 受影响子图 fold（同一个 fold、同一份 PRICING、同一个比例——三面同源纪律不变，BILLING §7）。
 9. **agent 言语律**：agent 的话必须是**世界状态的函数，不是剧本的函数**——禁 manual-speak（「点它卡上的 prompt 直接改」式 UI 教学永禁）、禁内部词汇（wiring op / spec / 程序 / 任务书等工程词永不出 agent 之口，同事口吻）；动作状态 = **一句话原位变化**（进行态 → 完成态同一行 morph，不叠行——2026-09-08 起由 RunTaskList 单行动态行承载，CHAT_ARCH §8.7）。
@@ -1299,3 +1299,54 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 简报 `docs/tasks/done/graph-as-product.md`；原型 `scratch/node-ux-proposal.html` 为形态对照件（不走 React 直译，解剖以简报为准）。
 
 **Related**: ADR-035（第 2 条翻案为「能力完备、手势缺席」）、ADR-036 / ADR-041 / ADR-051（投影模型条款就地翻案）、ADR-043（derived preview 投影随草稿图退役）、ADR-052（任务书并入图感知层；有界 loop 不变）、ADR-055（计费内核不动；§7 展示面改写）、ADR-039（四算子与四层地图不动）、ADR-016（clip-spec 唯一渲染契约不动）、ADR-040（配方 = 提示词不变——配方卡预填模板 = 草稿图的一种出生方式）
+
+## ADR-058: 展示文案二源律 + 卡面直改 = 确定性图动作零消息 + focus 退役归 @mention + 整回合状态行
+
+**Status**: Decided (2026-09-09)
+
+**Context**: 一次真实用户走查（四截图实证）把同族伤口一次点亮：用户在 Post 卡面把 prompt 改成 "Write post, in Chinese" 点发送——① 卡面回闪旧程序 "Write post, in EN"（直改骑 chat 通道，无乐观回显）；② 回声 "Drafting a Chinese LinkedIn post..." 之后进入死窗——thinking 行只活到首个 delta，结构化尾巴（提案 JSON → dispatch → run 出生）没有任何状态主，用户以为「回复完了」；③ 任务列表突然出现，收据标题却是 "Post (English)"——读的是 dock 陈旧 intent state 而非 run 真值（投影漂移：系统手里有对的话——run 步骤说 "Post · ZH"、提案 summary 说 Chinese——然后把它扔了）；④ 终态消息排序错乱（runStreamUnits 假设回声先于 run 出生——book 路径成立，chat dispatch 回合是先建 run 后落回声，created_at 倒挂，回声掉到收据下面）；⑤ 收官句 "Your Post (English) is ready" 同款漂移。根因归纳两条：**可以让 LLM 命名的展示文案被写死**（"Post (English)" = 冻参模板在说话——参数一说话就有「参数与文案对账」问题，thinking 行同病）；**卡面直改是确定性手势却绕道 LLM 意图通道**（既丢用户字面程序，又制造回声/收据/完成行三份多余言语）。用户拍板原话：「是在打补丁，我们似乎把一些可以让 llm 生成的文案，写得太死了」「节点级 run，dock 应该不产生任何消息——loading 加载也有，prompt 也变了，产物也变了，谁看不出来？」「删除 working focus，只走 prompt mention」。
+
+**Decision**:
+
+1. **展示文案二源律（参数文案解绑）**：一切用户可见的命名类文案只有两个合法来源——① **LLM 建图时命名**：提案携带 `name`（2-6 词名词短语、界面语言、命名作品不命名工具——TaskListProposal / WiringProposal / InferredIntent 三家同字段，null/空 = 未命名，读容忍同打字机律牙①）；② **世界自证**：产物徽标、节点状态、真实数字（facts 量化摘要与默认值保持确定性，不动）。**冻参模板永禁**（"Post (English)" 式参数拼接标签）——参数降级为不可见执行事实，永不说话；参数一不说话，「文字核对」问题类整体消失，无需任何对账机制。
+2. **收据 / 收官句读 run 真值，不读 dock state**：回执标题 = 生产该 run 的提案的 name——chat 回合在信封时刻从回声行的 `intent` 列盖章（`runTitleOverride`，回声行服务端恒带生产它的提案）；刷新路径从 `run.context.name` 重建（TaskSpec.name → context 模型导出）；无 name 的旧 run 回退链推导标签（读容忍，不 retroactive 命名）。
+3. **卡面 prompt 直改 = 确定性图动作，dock 零消息**（就地修订 ADR-057 §6 通道律）：直改不是意图、是手势——ops 由**代码构建**（`edit_prompt` + `run`），走新端点 `POST /projects/{id}/graph/revise`（202；经 `apply_wiring_ops` 唯一写门、`create_run` 唯一出生口不变），**不骑 POST /chat**。dock 零消息：无回声、无收据、无完成行——节点自身状态周期就是全部反馈（loading 在、prompt 变了、产物变了）。卡面**乐观回显**（`pendingProgram`：编辑确认后卡面恒显用户字面程序，stamp 对齐即收，永不回闪）；定价确认（锚定受影响子图 + 估价随行，ADR-057 §6 前半）不动。run 盖章 `context.origin = "node_revise"`（页面据此不把它当上流焦点 run）。chat 唯一**意图**面不变——意图识别的唯一入口仍是 POST /chat；确定性手势不经过意图层。
+4. **focus 退役归 @mention**（就地翻案 ADR-041 D8）：指认产物 = @output mention chip（既有确定性解算通道，MENTIONS 注册表），焦点机制全层火化——`ChatRequest.focus_output` 字段删除（写门关闭）、contexts 焦点注入块删除、intent prompt 焦点规则删除、outputs regenerate 改骑 mention、画布点卡 = 纯选择 + 详情（「在对话中指认」动作 = 插 mention chip）。`messages.focus_output` 列与 `FocusRef` 保留**读容忍**（旧行历史回放照渲染灰行前缀），永不新写。
+5. **整回合状态行 + 相位接入**（死窗修复；**同晚用户二轮拍板精确化——打字机途中不需要 thinking**）：状态行渲染于「回合忙 **且** 无散文在可视流动」的一切窗口——发送 → 首个 delta、回声排干后 → 信封（结构化尾巴 → dispatch → run 出生）；**打字机说话途中它隐藏**（散文在动 = 活在干活的证据已经在，一段话说完、下个动作 pending 时才需要它）。驱动 = 打字机的忙/闲边沿（`createTypewriter` 第二参，闲态带宽限防抖——模型吐字的天然阵发间隔不闪行）；`previewSeen` 门删除。服务端相位帧（thinking → `creating_run`）接入 chat 路径（`_create_run_from_tasks` 带 `on_phase`）。**打字机律最后闸门补齐**：零 delta 开局（funnel 修复轮）的 start 路径此前漏闸——回声照样走打字机节拍排干才落 run，禁整段瞬移（闸门现在覆盖 dock / start / prose 全三分支）。**状态行一座两行（同晚拍板）**：消息流里一切「现在在干什么」的瞬态行 = 同一个 `StatusLine` 组件（dock thinking 座 + RunTaskList 动态行座），label 恒为当下相位/叙事，永不只是 "Thinking" 一个冻词。
+6. **排序锚修订**：终态收据锚定 = `max(run 出生时刻, 生产回声时刻) + 1`——book 路径回声先于 run（旧锚不变、向后兼容），chat dispatch 回合 run 先于回声（收据落回声之下）；回声行在信封时刻盖章 runId 作锚。
+
+**Consequences**:
+
+- schemas：三家提案增 `name`；`ChatRequest.focus_output` 删除；新增 `GraphReviseRequest/Response`。
+- prompts：chat_intent 形态 A/E 与 intent_router 增 `name` 字段规则；焦点目标规则删除。
+- 新端点 `POST /projects/{id}/graph/revise`；outputs regenerate 的 ChatRequest 构造改 mentions。
+- 前端：ChatDock `runTitle = runTitleOverride ?? planSummary`（planSummary = `intent.name || 链推导`）；thinking 行整回合 + previewSeen 删除；focus props / sendRevision / focus 载荷全删（FocusRow 留作旧行回放）；ResultsCanvas `onNodeRevise` + `pendingProgram` 乐观回显 + stamp 对齐自清；项目页 `handleGraphRevise`（credits 422 typed toast）。
+- 挂账（简报登记，不在本批）：步骤级 LLM 命名（per-task name——「tasks 的步骤也是 LLM 命名」的全量形态，下一命名批）；stub 塌缩（"No source material" 行）；mobile OutputChatCard 核对。
+- 打勾流步骤标签（`taskLabel` 链推导）在本批**收窄为回退**——name 优先；步骤标签全量 LLM 化随挂账批推进。
+
+**Related**: ADR-057（§6 通道律就地修订；图内核 / 写门 / 出生口不变）、ADR-041（D8 焦点退役；dock 体系其余不动）、ADR-051（条款 5 模型事实陈列禁令不动——本条解绑的是冻参模板，不是事实陈列）、ADR-052（双引擎分离不变——确定性手势不进对话引擎）、打字机律三牙（CLAUDE.md composer 契约段；本批补其 start 路径闸门）、CHAT_ARCH §5/§8.6/§8.7（现在时改写）
+
+## ADR-059: 图持久化分裂 flush 律——SQLAlchemy 无 relationship 不排序裸 FK 混插
+
+**Status**: Decided (2026-09-10)
+
+**Context**: 剧本 S3 复跑逮到 `turn.failed` 500——`graph_edges_to_node_fkey` 违反，`stamp_transcript_node` 落图时边先于父节点插入。四层取证（真 API 复现 / 进程内复现 / 最小复现 + session spy / 真空对照）坐实根因：**SQLAlchemy 2.0.51 的 UOW 只通过 `relationship()` 排序跨表插入，裸 ForeignKey 列不参与排序**——两表新行在同一 flush 混插时，子行可能先于父行（真空测试实证）。graph_nodes / graph_edges 之间恰无 relationship 挂接，K1 出生的单 flush persist 从此潜伏 4 天，撞上混插顺序才爆。
+
+**Decision**:
+1. **写口分阶段 flush**：`graph_store.persist`（图唯一写口）分两段 flush——nodes strictly 先于 edges，代码带「永不合并回去」注释。不是"这次顺序碰巧对"，是把排序从 ORM 骰子收归写口纪律。
+2. **律**：同 session 内跨表**新行**若无 relationship 挂接，写口必须分阶段 flush；禁赌 UOW 的排序行为——它只对 relationship 负责，不对 FK 列负责。
+
+**Consequences**: probe4（session spy）复证正确 `[GraphNode]→[GraphEdge]` flush 序列；S3 复跑全绿。此律适用于一切未来多表同事务写口（新模块登记时自查）。
+
+## ADR-060: echo 防编造律 + post 渠道中立——agent 永不发明用户没说过的平台
+
+**Status**: Decided (2026-09-10)
+
+**Context**: 用户走查逮到回声 "…a LinkedIn post on…"——该用户全程没提过任何平台。LinkedIn 固化点散在六处模型可见/用户可见座位：`write_post`/`write_carousel` 工具描述、step 完成摘要、book_summary 类型标签（"LinkedIn post"）、router prompt 例句、命名示例、writer 人设模板（post.j2/carousel.j2/agents.py）——LLM 从工具描述与例句学到 "post = LinkedIn" 再回述给用户，用户摸不着头脑。用户判词：「我们现在是一个世界级 agent，并且 post 不再内部限定为 linkedin」。
+
+**Decision**:
+1. **echo 防编造律入 prompt**：回声解剖增一条——只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**（"LinkedIn" / "X" / "newsletter"）；a post is just a post until the user names where it lives。
+2. **固化点全量渠道中立化**：工具描述（"long-form social post"）、step 摘要（"Wrote a post"）、类型标签（"post"/"帖子"）、例句与命名示例、writer 人设（"social post for professional audiences"）全部去 LinkedIn。
+3. **保留位**：`linkedin-longform` 技能包内部名（包体本身渠道中立，仅 body 经 contexts 进 prompt）；发布婉拒示例（用户真问「发到 LinkedIn」时的应答教学）；landing 营销文案（营销面按设计讲渠道）。渠道的合法来源 = 用户点名 / 渠道授权（发布层，POSITIONING 落地时），永不是默认值。
+
+**Consequences**: 实测复现位（"I want a social post." 模糊两轮）全链 `LinkedIn present: False`——echo / 提问 / follow-up echo / intent name 干净。「参数/默认永不说用户没说的话」与 ADR-058 二源律同族：默认值是执行事实，不是叙事。
