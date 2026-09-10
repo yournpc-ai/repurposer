@@ -1303,8 +1303,10 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
   }
   // The consumption region sits above the factsbar band (document has no
   // band — its region is the card bottom); production starts under the
-  // caption band. 34px stacking clears the 28px circles; the 40px side
-  // offset parks each circle fully outside the card with a 12px gap.
+  // caption band. 34px stacking clears the 28px circles; the 34px side
+  // offset parks each circle fully outside the card with a 6px gap
+  // (ElevenLabs measured, 2026-09-10 — their circle hugs the border at
+  // ~1/4-diameter clearance; the old 12px gap read as adrift at 100% zoom).
   const inBase = node.kind === "document" ? 16 : 60
   const outBase = 40
   // Edge anchor = the circle's RIM (2026-09-10 ElevenLabs 解剖收编): xyflow
@@ -1329,7 +1331,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
             type="target"
             position={Position.Left}
             className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: "auto", bottom: offset, left: -40 }}
+            style={{ top: "auto", bottom: offset, left: -34 }}
           >
             <Icon />
           </Handle>
@@ -1345,7 +1347,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
             type="source"
             position={Position.Right}
             className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: offset, right: -40 }}
+            style={{ top: offset, right: -34 }}
           >
             <Icon />
           </Handle>
