@@ -63,26 +63,39 @@ export function clipNodeHeight(aspect?: string | null): number {
 
 /** Text-product body height by preview line count (post / article — no
  * baked media): padding + optional title + clamped body + hashtag band.
- * Preview height cap 2–12 lines (2026-09-06 ruling — the canvas preview
- * carries a real reading burden before the reader opens); the cap bounds
- * the NODE's height only — the full body SCROLLS inside it (2026-09-08:
- * line-clamp truncation retired for in-place scroll, nowheel+nopan). */
+ * The line cap is DERIVED FROM THE NODE'S OWN FRAME RESERVATION
+ * (2026-09-10 用户拍板——内容长度驱动卡高): taller reservations show more
+ * lines, and by construction the body never exceeds the reservation, so
+ * settled columns never overlap for ANY generation of nodes (the 2026-09-06
+ * 2–12 band becomes the 440-reservation's derived value, unchanged for
+ * nodes born under it). The cap bounds the NODE's height only — the full
+ * body SCROLLS inside it (2026-09-08: line-clamp truncation retired for
+ * in-place scroll, nowheel+nopan). */
 export function textBodyHeight(lineCount: number, hasTitle: boolean): number {
-  const clamped = Math.max(2, Math.min(lineCount, 12))
+  const clamped = Math.max(2, lineCount)
   const lineHeight = 18 // text-xs leading-relaxed ≈ 18px per line
   const titleHeight = hasTitle ? 22 : 0
   const hashtagsHeight = 20 // one-row hashtag band
   return 12 + titleHeight + clamped * lineHeight + hashtagsHeight + 12
 }
 
+/** How many preview lines fit inside a frame reservation, by the same
+ * anatomy math as textBodyHeight (inverse of it). A 440 reservation → 12
+ * lines (the legacy band); 560 (the 2026-09-10 raise) → 18. */
+export function textLineCap(frameH: number, hasTitle: boolean): number {
+  const bodyPx = frameH - PRODUCT_LABEL_PX - PROGRAM_REGION_PX - PRODUCT_TOOLBAR_PX
+  const titleHeight = hasTitle ? 22 : 0
+  return Math.max(2, Math.floor((bodyPx - 12 - titleHeight - 20 - 12) / 18))
+}
+
 /** Estimate visible lines from the body at the text card's width (~312px
  * inside the 340 text card, text-xs): ~68 chars per line for Latin, ~44 for
- * CJK. */
+ * CJK. The caller clamps with textLineCap (reservation-derived). */
 export function textLineCount(body: string, hasTitle: boolean): number {
   const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(body)
   const charsPerLine = cjk ? 44 : 68
   const bodyLines = Math.max(1, Math.ceil(body.length / charsPerLine))
-  return Math.min(12, Math.max(2, (hasTitle ? 1 : 0) + bodyLines))
+  return Math.max(2, (hasTitle ? 1 : 0) + bodyLines)
 }
 
 /** The graph node's content-driven render size (ADR-057 K3): width = the
@@ -121,7 +134,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   if (isText) {
     const title = first.publishing.title ?? (first.payload.title as string | undefined) ?? null
     const body = (first.payload.content as string | undefined) ?? ""
-    const lines = textLineCount(body, !!title)
+    const lines = Math.min(textLineCount(body, !!title), textLineCap(frame?.h ?? 440, !!title))
     return {
       width,
       height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX,

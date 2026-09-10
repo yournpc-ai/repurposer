@@ -213,7 +213,12 @@ _FRESH_COLUMN_RISE = 126
 _FRAME_CLASS: dict[str, tuple[int, int]] = {
     "asset": (280, 260),
     "document": (260, 200),
-    "text": (340, 440),
+    # 440 → 560 (2026-09-10 用户拍板——内容长度驱动卡高): the taller text
+    # reservation derives an 18-line preview cap (was 12) client-side; the
+    # cap is computed FROM each node's own reservation, so nodes born under
+    # 440 keep their 12-line guarantee — append-only 保序律 covers size law
+    # changes without migration.
+    "text": (340, 560),
     "clip": (280, 660),
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
