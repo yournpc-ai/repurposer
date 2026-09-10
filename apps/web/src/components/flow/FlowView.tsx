@@ -249,6 +249,7 @@ export function FlowView({
   onPromptEdit,
   pendingProgram = null,
   onPaneClick,
+  straightEdges = false,
   navigation = "fit",
   controls = false,
   controlsClassName,
@@ -338,6 +339,7 @@ export function FlowView({
         data: {
           semantic: e.semantic,
           edgeType: e.edgeType,
+          straight: straightEdges,
           drawDelay: bornAt >= 0 ? bornAt * BIRTH_STAGGER_MS + 240 : null,
           active:
             nodes.find((n) => n.id === e.to)?.status === "running" ||
@@ -348,7 +350,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram, straightEdges])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

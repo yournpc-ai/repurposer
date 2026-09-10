@@ -1727,11 +1727,6 @@ async def _book_turn(
         file_language=(first_file.meta or {}).get("language") if first_file else None,
         material_excerpt=material_excerpt,
     )
-    if on_phase is not None:
-        # Real phase switch: the router call below is the turn's long black
-        # box — the status row reads "understanding" until the verdict's own
-        # beat (creating_run / the envelope) takes over.
-        await on_phase(THINKING_PHASE_UNDERSTANDING)
     if on_delta is not None:
         intent = await intent_router.call_stream(
             on_delta=on_delta, on_reasoning=on_reasoning, **infer_kwargs
@@ -2257,10 +2252,6 @@ async def _propose_turn(
     )
     disposition = "none"
     try:
-        if on_phase is not None:
-            # Same labelled beat as the book path's router call (the status
-            # row's label is the CURRENT phase, never a frozen word).
-            await on_phase(THINKING_PHASE_UNDERSTANDING)
         if on_delta is not None:
             # Chat SSE: stream the verdict; raw fragments feed the prose
             # preview extractor. Repair rounds stay non-streaming (the funnel
@@ -2889,11 +2880,6 @@ async def prepare_chat_turn(
 # "Thinking…" with zero information (user ruling: the label earns its place
 # only when the activity structurally differs from thinking).
 THINKING_PHASE_CREATING_RUN = "creating_run"
-# The router/agent call is the turn's long black box (10–60s) — name the
-# beat so the status line's label is the CURRENT phase, never a frozen
-# "Thinking" (2026-09-09 用户实拍: 状态行从未换过词——creating_run 之外
-# 没有任何相位发射).
-THINKING_PHASE_UNDERSTANDING = "understanding"
 # The verdict is a draft — ledger write + book dock + the draft-graph stamp
 # (compile + estimate folds) fill the seconds between the echo's end and
 # the plan card's arrival (the window the 10s-gap forensics named).
@@ -2914,11 +2900,13 @@ async def execute_chat_turn(
     preview channel; ``on_reasoning`` receives reasoning fragments as a
     liveness signal; ``on_phase`` receives thinking-phase labels at REAL
     phase-switch points — a start verdict about to birth the run =
-    "creating_run" (the ONLY labelled phase: the router's own inference is
-    opaque thinking, labelling it "understanding your request" restated
-    "Thinking" with zero information — 2026-09-04 验收翻案) so the client can
-    label its thinking row. None (the JSON path, repair rounds,
-    answer_question's continuation) keeps today's one-shot calls.
+    "creating_run", a draft verdict's ledger/book/stamp tail = "drafting".
+    The base label is "Thinking…" (2026-09-10 用户拍板: thinking 为主 — the
+    router's own inference IS the opaque thinking window; "understanding"
+    restated it with zero information and, emitted at the call's head, it
+    froze the row for the whole call — 09-09 加、09-10 撤). None (the JSON
+    path, repair rounds, answer_question's continuation) keeps today's
+    one-shot calls.
     """
     if prepared.interrupt_reply is not None:
         assistant_message = prepared.interrupt_reply

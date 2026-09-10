@@ -180,6 +180,10 @@ export interface FlowViewProps {
   /** "fit" (default) = bounded surface, zoom locked; "explore" = lineage
    * board (zoom / pan / pinch unlocked). */
   navigation?: FlowNavigation
+  /** Straight center-to-center edge strokes (2026-09-10 用户拍板, graph
+   * canvas) — the default bezier's horizontal tangents over the port law's
+   * large vertical deltas read as wild arcs that "miss" the circle. */
+  straightEdges?: boolean
   /** Canvas navigation controls (2026-08-19 — the project page's top-right
    * swap: app chrome out, canvas controls in): a frosted zoom pill (− / %
    * = fit / +) parked top-right. Explore surfaces only — a fit-locked

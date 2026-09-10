@@ -1117,7 +1117,6 @@ const zh: Resources = {
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
-      understanding: "正在理解你的需求…",
       drafting: "正在起草计划…",
       creating_run: "正在创建你的 workflow…",
     },

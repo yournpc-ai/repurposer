@@ -3665,7 +3665,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.content ? (
               <AssistantText text={m.content} streaming={m.streaming} />
             ) : null}
-            {m.runId ? (
+            {/* 单一渲染面律 (2026-09-10 用户实拍「消息错乱」取证): the
+                ATTACHED run renders ONLY through runStreamUnits (live
+                checklist → terminal receipt at the run anchors) — never
+                inline here. The stamp on the birthing row is an ANCHOR
+                marker, not a render trigger: the book-confirm start stamps
+                the pre-run book row, whose inline card would render the same
+                run ABOVE the user's start message while the units render it
+                again below (the #157 scramble — two surfaces, two SSE
+                subscriptions, two step snapshots). Detached runs (older
+                history the dock no longer attaches) keep the inline archive
+                — it is their only surface. */}
+            {m.runId && m.runId !== runId ? (
               <Message align="start">
                 <MessageContent>
                   <RunCard runId={m.runId} projectId={projectId} />

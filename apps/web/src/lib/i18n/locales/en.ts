@@ -1172,7 +1172,6 @@ const en = {
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
-      understanding: "Understanding your request…",
       drafting: "Drafting the plan…",
       creating_run: "Creating your workflow…",
     },
