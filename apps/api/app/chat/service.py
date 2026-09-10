@@ -852,6 +852,12 @@ def _match_option(text: str, options: list[Option]) -> Option | None:
     for index, option in enumerate(options):
         if normalized == option.id.strip().lower():
             return option
+        # Positional letter — the dock badge renders a/b/c by index, never the
+        # raw id (2026-09-10: the LLM may spell ids as slugs like
+        # "tech_innovation"), so a typed letter must resolve by position even
+        # for older rows whose stored ids are slugs.
+        if normalized == chr(ord("a") + index):
+            return option
         if normalized == str(index + 1):
             return option
         if normalized == option.label.strip().lower():

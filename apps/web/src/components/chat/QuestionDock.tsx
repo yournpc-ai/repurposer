@@ -247,7 +247,7 @@ function OptionForm({
         // Full-width rows, not pills: long option labels must wrap inside
         // the card (the old button row let them bleed past the right edge).
         <div className="mt-3 flex flex-col gap-2">
-          {options.map((option) => (
+          {options.map((option, index) => (
             <Button
               key={option.id}
               variant="ghost"
@@ -263,8 +263,14 @@ function OptionForm({
                   : "bg-card"
               )}
             >
+              {/* The badge is the POSITIONAL letter (a/b/c…), never the raw
+                  option id — the id is a transport fact the LLM may spell as
+                  a slug ("tech_innovation"), which used to overflow this 20px
+                  tile and bleed across the card (2026-09-10). The letter is
+                  also the typed-answer channel: _match_option resolves it
+                  positionally server-side. */}
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium uppercase text-muted-foreground">
-                {option.id}
+                {String.fromCharCode(97 + index)}
               </span>
               <span className="min-w-0 break-words">{option.label}</span>
               {answering && pickedId === option.id ? (
