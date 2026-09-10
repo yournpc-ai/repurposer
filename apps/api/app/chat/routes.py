@@ -33,6 +33,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Conversation, User
 from app.chat.service import (
+    THINKING_PHASE_DRAFTING,
     answer_question,
     chat,
     execute_chat_turn,
@@ -108,6 +109,30 @@ def _question_preview_frame(payload: dict) -> str:
 
 
 _HEARTBEAT_SECONDS = 15
+
+
+def _make_plan_beat():
+    """相位完整律 (2026-09-10 用户拍板——「一直是 thinking」根本不是一个完整
+    功能): the verdict's PLAN ARRAY streaming ("tasks" / "ops") is a REAL
+    phase — the row's beat moves to `drafting` the moment the plan's first
+    key opens instead of waiting out the whole call. For zero-prose turns
+    (start verdicts, prose-last key orders) it is the ONLY mid-call beat.
+    Bare-quote keys can only appear as JSON syntax (string values escape
+    their quotes), so a plain substring scan over a rolling tail is
+    false-positive-free. Fires once per turn."""
+    state = {"done": False, "tail": ""}
+
+    def feed(fragment: str) -> bool:
+        if state["done"]:
+            return False
+        window = state["tail"] + fragment
+        hit = '"tasks"' in window or '"ops"' in window
+        state["tail"] = window[-16:]
+        if hit:
+            state["done"] = True
+        return hit
+
+    return feed
 
 
 def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
@@ -218,12 +243,20 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 # or turn.failed.
                 ask_previews: list[dict] = []
                 ask_watcher = AskObjectWatcher(ask_previews.append)
+                plan_beat = _make_plan_beat()
 
                 async def on_delta(fragment: str) -> None:
                     ask_watcher.feed(fragment)
                     while ask_previews:
                         await queue.put(
                             _question_preview_frame(ask_previews.pop(0))
+                        )
+                    if plan_beat(fragment):
+                        await queue.put(
+                            _sse(
+                                "assistant.thinking",
+                                json.dumps({"phase": THINKING_PHASE_DRAFTING}),
+                            )
                         )
                     text = extractor.feed(fragment)
                     if text:
@@ -296,12 +329,20 @@ async def _answer_stream(
                 extractor = ProseDeltaExtractor(("answer", "text", "summary", "prose"))
                 ask_previews: list[dict] = []
                 ask_watcher = AskObjectWatcher(ask_previews.append)
+                plan_beat = _make_plan_beat()
 
                 async def on_delta(fragment: str) -> None:
                     ask_watcher.feed(fragment)
                     while ask_previews:
                         await queue.put(
                             _question_preview_frame(ask_previews.pop(0))
+                        )
+                    if plan_beat(fragment):
+                        await queue.put(
+                            _sse(
+                                "assistant.thinking",
+                                json.dumps({"phase": THINKING_PHASE_DRAFTING}),
+                            )
                         )
                     text = extractor.feed(fragment)
                     if text:

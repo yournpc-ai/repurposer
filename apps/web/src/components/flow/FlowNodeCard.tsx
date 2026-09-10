@@ -419,10 +419,9 @@ function ThumbCard({
               { action: "delete", Icon: Trash2, label: t("common.delete") },
             ]}
             menuItems={[
-              ...(expandable
-                ? [{ action: "open", label: t("results.canvas.open") }]
-                : []),
-              { action: "reprocess", label: t("results.canvas.reprocess") },
+              // ⋯ 菜单全量退役（2026-09-10 用户拍板——所有 toolbar 的 ⋯ 都去掉：
+              // open 与悬停放大/卡点击同源，reprocess 暂无召回路径；空数组 =
+              // 既有 length 守卫不渲染 ⋯。真有第二操作时往这里加回一行。
             ]}
             moreLabel={t("results.canvas.more")}
             onAction={handleBarAction}
@@ -1126,9 +1125,6 @@ function GraphCard({
   }
 
   const hasVideo = !!output?.files.video
-  const shownThumbUrl = output
-    ? toAbsoluteUrl(output.files.image ?? output.publishing.cover_image_url ?? null)
-    : null
   const renderActive =
     !!output &&
     output.type === "clip" &&
@@ -1160,15 +1156,9 @@ function GraphCard({
   }
   const menuItems: { action: string; label: string }[] = output
     ? [
-        ...(output.type === "clip" && hasVideo
-          ? [{ action: "publish", label: t("results.canvas.publish") }]
-          : []),
-        ...(hasVideo || shownThumbUrl
-          ? [{ action: "open", label: t("results.canvas.open") }]
-          : []),
-        // 指认项退役（2026-09-10 用户拍板：文本产物卡的 ⋯ 只剩它 = 「没操作」，
-        // 先隐藏；@ 直接敲覆盖同一通道）。空菜单 = 既有 length 守卫自动
-        // 不渲染 ⋯；clips 的 publish/open 仍在，真有操作的菜单不受影响。
+        // ⋯ 菜单全量退役（2026-09-10 用户拍板——所有 toolbar 的 ⋯ 都去掉；
+        // publish 待发布层实装时再回这里）。空菜单 = 既有 length 守卫
+        // 自动不渲染 ⋯。
       ]
     : []
   const handleBarAction = (action: string) => {
@@ -1303,14 +1293,27 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
       </>
     )
   }
-  // The consumption region sits above the factsbar band (document has no
-  // band — its region is the card bottom); production starts under the
-  // caption band. 34px stacking clears the 28px circles; the 34px side
-  // offset parks each circle fully outside the card with a 6px gap
+  // The consumption anchor's VERTICAL seat follows the consumed region
+  // (2026-09-10 用户拍板——红圈裁定): media flows (video/audio) feed the
+  // CONTENT region, so their in-ports park TOP-left under the caption band
+  // (the content region's left edge — ElevenLabs' media-high/text-low stack);
+  // text/ctx flows feed the PROMPT region, parking BOTTOM-left above the
+  // factsbar band (document has no band — its region is the card bottom).
+  // Each region stacks its own ports by 34px (clears the 28px circles); the
+  // 34px side offset parks each circle fully outside the card with a 6px gap
   // (ElevenLabs measured, 2026-09-10 — their circle hugs the border at
   // ~1/4-diameter clearance; the old 12px gap read as adrift at 100% zoom).
-  const inBase = node.kind === "document" ? 16 : 60
+  const inTextBase = node.kind === "document" ? 16 : 60
+  const inMediaBase = 40
   const outBase = 40
+  const inMediaIdx = new Map<string, number>()
+  const inTextIdx = new Map<string, number>()
+  let mediaCount = 0
+  let textCount = 0
+  for (const t of ports.in) {
+    if (t === "video" || t === "audio") inMediaIdx.set(t, mediaCount++)
+    else inTextIdx.set(t, textCount++)
+  }
   // Edge anchor = the circle's RIM (2026-09-10 ElevenLabs 解剖收编): xyflow
   // natively anchors a handle at its OUTER RIM in the position direction
   // (Position.Right → rect.right, Position.Left → rect.left) — so the visible
@@ -1323,9 +1326,12 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
   // the second was a straightjacket for a problem the rim solves natively.
   return (
     <>
-      {ports.in.map((type, i) => {
+      {ports.in.map((type) => {
         const Icon = PORT_ICON[type]
-        const offset = inBase + i * 34
+        const isMedia = type === "video" || type === "audio"
+        const style = isMedia
+          ? { top: inMediaBase + (inMediaIdx.get(type) ?? 0) * 34, left: -34 }
+          : { top: "auto" as const, bottom: inTextBase + (inTextIdx.get(type) ?? 0) * 34, left: -34 }
         return (
           <Handle
             key={`in:${type}`}
@@ -1333,7 +1339,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
             type="target"
             position={Position.Left}
             className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: "auto", bottom: offset, left: -34 }}
+            style={style}
           >
             <Icon />
           </Handle>

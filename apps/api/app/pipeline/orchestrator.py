@@ -481,17 +481,27 @@ def _compile_task_list(
                 "(recording, or transcript + photos) was found."
             )
 
-    # Modifiers run after the nodes named in their `after` constraints (when
-    # present in this graph) and after the previous modifier — never in
-    # parallel with each other. No edges at all = act on existing clips.
-    prev_modifier_idx: int | None = None
+    # 变体并行律 (2026-09-10 用户拍板——语言变体是并行不是前后): modifiers
+    # run after the nodes named in their `after` constraints (when present in
+    # this graph) plus any caption MUTATOR upstream (remove_filler morphs the
+    # shared render_spec in place — a variant must see the cleaned captions,
+    # so the mutator stays an input). Variants NEVER chain off a sibling
+    # variant: the old "after the previous modifier — never in parallel"
+    # serialization made a language fan-out (translate EN/ZH/FR + dub ES) a
+    # serial chain where each translation consumed the PREVIOUS TRANSLATION's
+    # output instead of the source's. Variants fork new outputs and mutate
+    # nothing, so parallel is race-free; mutators register in
+    # _CAPTION_MUTATORS. No edges at all = act on existing clips.
+    _CAPTION_MUTATORS = {"remove_filler"}
+    prev_mutator_idx: int | None = None
     for item, entry in modifiers:
         node_cls = NODE_KINDS[entry.name]
         params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
         inputs = [skill_node_idx[name] for name in node_cls.after if name in skill_node_idx]
-        if prev_modifier_idx is not None:
-            inputs.append(prev_modifier_idx)
-        prev_modifier_idx = len(nodes)
+        if prev_mutator_idx is not None:
+            inputs.append(prev_mutator_idx)
+        if entry.name in _CAPTION_MUTATORS:
+            prev_mutator_idx = len(nodes)
         spec = params.model_dump(mode="json") if params else {}
         # Sibling-distinguishing tag for the language fan-out (two
         # translate_clip tasks, e.g. DE+FR, must not both read "翻译字幕"

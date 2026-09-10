@@ -1277,7 +1277,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    | ③ | generator 生成 | **prompt 在卡面 = 程序** | 写 Post / 配音 / 配乐 / 选段编剧 |
    | ④ | processor 加工 | 只有参数，无 LLM prompt | render / 剪辑物化 / 字幕摊铺 |
    | ⑤ | agent 有界 loop | 三护栏原样（ADR-052 B4） | research |
-5. **端口法则**（ElevenLabs 实测定稿；**2026-09-08 MiniMax 收编——外延伸 + 图标芯片**）：**进 = 消费区域最左下角，出 = 生产区域最右上角**；同侧多口从角起堆叠。连线 = 上下文/数据流（类型化：video / audio / text / ctx 虚线），不是执行顺序装饰。不可见 Handle（`!h-0 !w-0 !opacity-0`）时代终结。端口形态 = 20px 圆形图标芯片骑卡缘（中心 ~4px 在卡外——连线点外延伸，边永不吃进卡面），glyph = 流的类型（video=Clapperboard / audio=AudioLines / text=FileText / ctx=AtSign 虚线环——@ 与连线是同一引用的两视图，MENTIONS 同典）。
+5. **端口法则**（ElevenLabs 实测定稿；**2026-09-08 MiniMax 收编——外延伸 + 图标芯片**；**2026-09-10 双修订**）：**进 = 按消费区域分位，出 = 生产区域最右上角**；同侧多口从角起堆叠。**修订一（红圈裁定——进分位细分）**：媒体流（video/audio）的消费区域 = 内容区，锚在**内容区左上**（caption 带下，ElevenLabs 媒体高文本低同构）；文本流（text/ctx）的消费区域 = 提示词区，锚在**提示词区左下**（factsbar 带上）——视频边不再一律沉到最左下角。**修订二（圆缘贝塞尔）**：连线锚 = 圆缘（cx±r, cy）非圆心——可见 28px 圆即 Handle，xyflow 原生锚 = 把手矩形位方向外缘，贝塞尔水平切线出源右缘、入目标左缘，整条线插在圆边界上（ElevenLabs 丝滑解剖）；09-09 的 0×0 圆心 ghost 与 09-10 上午的圆心直线同日退役。圆与卡边间隙 6px（约 1/4 直径贴边比例）。连线 = 上下文/数据流（类型化：video / audio / text / ctx 虚线），不是执行顺序装饰。不可见 Handle（`!h-0 !w-0 !opacity-0`）时代终结。端口形态 = 28px 圆形图标芯片（glyph = 流的类型（video=Clapperboard / audio=AudioLines / text=FileText / ctx=AtSign 虚线环——@ 与连线是同一引用的两视图，MENTIONS 同典）。
 6. **prompt 直改 + 确认**（用户拍板；**通道 2026-09-09 ADR-058 修订**）：节点卡上的 prompt 直接编辑 = 一次 wiring op（`edit_prompt`），发送 = 定价确认（估价随行）→ 只重跑该节点与其下游。~~骑 `POST /chat` 唯一通道~~（ADR-058 翻案：直改是确定性手势不是意图——ops 代码构建，走 `POST /projects/{id}/graph/revise`，dock 零消息、节点状态周期 = 全部反馈；chat 唯一**意图**面不变）。节点面永无模型选择器 / SKU 货架（ADR-051 条款 5 不变）；runtime 事实（模型/参数/耗时）住卡外 factsbar，不住节点卡内。
 7. **投影层火化清单**（五补丁连根拔）：`canvas_hidden` / `canvas_key` / 过程脊 spine / 脊收编（ADR-051 条款 4 后半）/ R1 下游游走（`resolveAssetFeedTargets`）——全部死于「**显示模型 = 领域模型，零投影**」。步骤永不上图（ADR-041 D5 名词收窄的精神升级为结构事实：step 住节点内部，画布从图直读，无从投影）；过程动词永不上图不变；打勾流仍是唯一步骤叙事进度面（dock 内，不动）。
 8. **语义账本塌缩**：hold / release 永不上 UI；台账用户面只显**花费 / 赠送 / 充值**三族，行 = per-run-event 语义行（「Post 修订 −3」）；CreditsPill popover 的裸 kind 列表同批改写。逐节点估价 = 卡面空态位；确认合计 = 受影响子图 fold（同一个 fold、同一份 PRICING、同一个比例——三面同源纪律不变，BILLING §7）。
@@ -1312,7 +1312,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 2. **收据 / 收官句读 run 真值，不读 dock state**：回执标题 = 生产该 run 的提案的 name——chat 回合在信封时刻从回声行的 `intent` 列盖章（`runTitleOverride`，回声行服务端恒带生产它的提案）；刷新路径从 `run.context.name` 重建（TaskSpec.name → context 模型导出）；无 name 的旧 run 回退链推导标签（读容忍，不 retroactive 命名）。
 3. **卡面 prompt 直改 = 确定性图动作，dock 零消息**（就地修订 ADR-057 §6 通道律）：直改不是意图、是手势——ops 由**代码构建**（`edit_prompt` + `run`），走新端点 `POST /projects/{id}/graph/revise`（202；经 `apply_wiring_ops` 唯一写门、`create_run` 唯一出生口不变），**不骑 POST /chat**。dock 零消息：无回声、无收据、无完成行——节点自身状态周期就是全部反馈（loading 在、prompt 变了、产物变了）。卡面**乐观回显**（`pendingProgram`：编辑确认后卡面恒显用户字面程序，stamp 对齐即收，永不回闪）；定价确认（锚定受影响子图 + 估价随行，ADR-057 §6 前半）不动。run 盖章 `context.origin = "node_revise"`（页面据此不把它当上流焦点 run）。chat 唯一**意图**面不变——意图识别的唯一入口仍是 POST /chat；确定性手势不经过意图层。
 4. **focus 退役归 @mention**（就地翻案 ADR-041 D8）：指认产物 = @output mention chip（既有确定性解算通道，MENTIONS 注册表），焦点机制全层火化——`ChatRequest.focus_output` 字段删除（写门关闭）、contexts 焦点注入块删除、intent prompt 焦点规则删除、outputs regenerate 改骑 mention、画布点卡 = 纯选择 + 详情（「在对话中指认」动作 = 插 mention chip）。`messages.focus_output` 列与 `FocusRef` 保留**读容忍**（旧行历史回放照渲染灰行前缀），永不新写。
-5. **整回合状态行 + 相位接入**（死窗修复；**同晚用户二轮拍板精确化——打字机途中不需要 thinking**）：状态行渲染于「回合忙 **且** 无散文在可视流动」的一切窗口——发送 → 首个 delta、回声排干后 → 信封（结构化尾巴 → dispatch → run 出生）；**打字机说话途中它隐藏**（散文在动 = 活在干活的证据已经在，一段话说完、下个动作 pending 时才需要它）。驱动 = 打字机的忙/闲边沿（`createTypewriter` 第二参，闲态带宽限防抖——模型吐字的天然阵发间隔不闪行）；`previewSeen` 门删除。服务端相位帧（thinking → `creating_run`）接入 chat 路径（`_create_run_from_tasks` 带 `on_phase`）。**打字机律最后闸门补齐**：零 delta 开局（funnel 修复轮）的 start 路径此前漏闸——回声照样走打字机节拍排干才落 run，禁整段瞬移（闸门现在覆盖 dock / start / prose 全三分支）。**状态行一座两行（同晚拍板）**：消息流里一切「现在在干什么」的瞬态行 = 同一个 `StatusLine` 组件（dock thinking 座 + RunTaskList 动态行座），label 恒为当下相位/叙事，永不只是 "Thinking" 一个冻词。
+5. **整回合状态行 + 相位接入**（死窗修复；**同晚用户二轮拍板精确化——打字机途中不需要 thinking**）：状态行渲染于「回合忙 **且** 无散文在可视流动」的一切窗口——发送 → 首个 delta、回声排干后 → 信封（结构化尾巴 → dispatch → run 出生）；**打字机说话途中它隐藏**（散文在动 = 活在干活的证据已经在，一段话说完、下个动作 pending 时才需要它）。驱动 = 打字机的忙/闲边沿（`createTypewriter` 第二参，闲态带宽限防抖——模型吐字的天然阵发间隔不闪行）；`previewSeen` 门删除。服务端相位帧（thinking → `creating_run`）接入 chat 路径（`_create_run_from_tasks` 带 `on_phase`）。**打字机律最后闸门补齐**：零 delta 开局（funnel 修复轮）的 start 路径此前漏闸——回声照样走打字机节拍排干才落 run，禁整段瞬移（闸门现在覆盖 dock / start / prose 全三分支）。**状态行一座两行（同晚拍板）**：消息流里一切「现在在干什么」的瞬态行 = 同一个 `StatusLine` 组件（dock thinking 座 + RunTaskList 动态行座），label 恒为当下相位/叙事，永不只是 "Thinking" 一个冻词。**2026-09-10 相位完整律（用户拍板——「一直是 thinking」根本不是一个完整功能）**：相位扩展为 thinking → drafting → creating_run 三拍；`drafting` 由**计划数组流拍**驱动——`_make_plan_beat()` 监听判决流原文，裸引号键 `"tasks"`/`"ops"` 一旦出现即发一拍（裸引号键只能是 JSON 语法——字符串值内的引号必转义，子串扫描零误报；滚动 16 字符尾窗覆盖跨片拆分）。零散文回合（start 判决、散文殿后键序、修复轮）的唯一中途拍就是它；同日 `understanding` 相位二次退役（09-09 加 = 零信息相位、09-10 头部发拍 = 另一种形式的冻结），base "Thinking…" 是 LLM 黑盒期的诚实占位。
 6. **排序锚修订**：终态收据锚定 = `max(run 出生时刻, 生产回声时刻) + 1`——book 路径回声先于 run（旧锚不变、向后兼容），chat dispatch 回合 run 先于回声（收据落回声之下）；回声行在信封时刻盖章 runId 作锚。
 
 **Consequences**:
@@ -1350,3 +1350,17 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. **保留位**：`linkedin-longform` 技能包内部名（包体本身渠道中立，仅 body 经 contexts 进 prompt）；发布婉拒示例（用户真问「发到 LinkedIn」时的应答教学）；landing 营销文案（营销面按设计讲渠道）。渠道的合法来源 = 用户点名 / 渠道授权（发布层，POSITIONING 落地时），永不是默认值。
 
 **Consequences**: 实测复现位（"I want a social post." 模糊两轮）全链 `LinkedIn present: False`——echo / 提问 / follow-up echo / intent name 干净。「参数/默认永不说用户没说的话」与 ADR-058 二源律同族：默认值是执行事实，不是叙事。
+
+## ADR-061: 变体并行律——修饰节点是变体不是工序，caption 扇出恒并行
+
+**Status**: Decided (2026-09-10)
+
+**Context**: 用户走查 caption 项目抓到线性图：素材 → translate EN → translate ZH → translate FR → dub 一条链（截图实证 DB 里 translate→translate 边与正确的 materialize 扇出共存）。根因在 orchestrator 编译期的 `prev_modifier_idx`「永不并行」序列化——一切 modifier（translate / dub / remove_filler）被强制挂上一个 modifier 的输出，理由是「modifier 可能改写共享 render_spec，并行有竞争」。但这个理由只对**字幕 mutator**（remove_filler 就地改写共享 render_spec，走 apply_precomputed journal）成立；translate/dub 是**变体**——各自 fork 新产物、不改写任何共享状态，串行化纯属误伤。用户判词：「不是这个流程吧！应该是并行关系而不是前后」。
+
+**Decision**:
+
+1. **变体并行律**：修饰节点分两类——**变体**（translate_clip / dub_clip：消费 `after` 目标，fork 新输出，mutate nothing）与 **mutator**（`_CAPTION_MUTATORS = {"remove_filler"}`：就地改写共享 render_spec，后继节点必须看见它的输出）。编译期依赖 = 变体只挂自己的 `after` 目标 ∪ 既有 mutator（若有），**永不挂兄弟变体**——EN/ZH/FR 三译 + dub 全部并行扇出。
+2. **mutator 排序保留**：remove_filler 之后的一切 modifier 追加挂它的输出（共享 render_spec 的写后读序），这是原序列化里唯一真实的需求。
+3. **mutator 集合 = 显式注册**：`_CAPTION_MUTATORS` 常量登记，新增 mutator 型 modifier 必须入册（入册 = 声明「我改写共享状态」，编译器据此排序）；未入册的 modifier 默认变体语义（并行）。
+
+**Consequences**: 进程内编译验证：translate×3 + dub 扇出全部 `inputs=[materialize]`；加 remove_filler 后全部 `inputs=[materialize, remove_filler]`。旧草稿的链式边**数据保留**（草稿不可变），Start 时 `create_run` 按新律重编译 run 子图、图从 run 重盖章——用户按 Start 即见并行拓扑，无需迁移。图正确性从「编译器保守」升格为「编译器懂语义」：变体/mutator 之分就是数据流语义。
