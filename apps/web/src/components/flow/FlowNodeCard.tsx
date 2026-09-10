@@ -2,6 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
+  AtSign,
   AudioLines,
   ChevronLeft,
   ChevronRight,
@@ -9,7 +10,6 @@ import {
   Copy,
   Download,
   FileText,
-  Files,
   Image as ImageIcon,
   Images,
   Maximize2,
@@ -44,6 +44,7 @@ import type {
   FlowAssetInfo,
   FlowNode,
   FlowOutputAction,
+  OutPortType,
 } from "./types"
 
 export interface FlowCardData extends Record<string, unknown> {
@@ -53,10 +54,11 @@ export interface FlowCardData extends Record<string, unknown> {
   selected: boolean
   /** The node's visible ports (ADR-057 端口法则 — computed by FlowView from
    * the incident typed edges): in-ports stack from the consumption region's
-   * bottom-left corner, out-ports from the production region's top-right.
-   * Undefined = an untyped surface (the recipe 说明书 — the legacy
-   * invisible handles render instead). */
-  ports?: { in: GraphEdgeType[]; out: GraphEdgeType[] }
+   * bottom-left corner (typed by what the consumer takes), out-ports from
+   * the production region's top-right (typed by the node's own medium —
+   * 出锚语义律 2026-09-11). Undefined = an untyped surface (the recipe
+   * 说明书 — the legacy invisible handles render instead). */
+  ports?: { in: GraphEdgeType[]; out: OutPortType[] }
   /** Product-toolbar dispatch (ADR-041 D5) — the surface owns the actions. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
   /** Asset-toolbar dispatch (2026-08-17) — the surface owns asset actions. */
@@ -477,13 +479,16 @@ function StepCard({ node }: { node: FlowNode }) {
  * form). Parked on the same dot grid as the dock, so it takes the
  * dock-surface frost (the canvas's dots read through) + the hairline,
  * never a shadow: the produced text IS the body copy. 全文卡律 (2026-09-10
- * 判词④): the body renders the FULL text — never a clamp, never an
- * ellipsis (the frame is born at the text's height, server mirror:
- * graph_store._document_frame). The task_book's dock-time confirm beat
- * lives INSIDE the card (判词① — the retired floating overlay's anatomy:
- * price + balance soft-compare + Start), no Cancel: "don't start" is said
- * by not starting. Read-only on this surface — changing it happens in
- * chat. No factsbar, no program region. */
+ * 判词④) + 封顶滚动律 (2026-09-11): the body carries the FULL text — never
+ * a clamp, never an ellipsis — and SCROLLS in place past the card's cap
+ * (layout.ts DOCUMENT_MAX_H; the text product card's nowheel+nopan posture,
+ * so the estimate math can never push prose through the card's face or its
+ * confirm beat). The task_book's dock-time confirm beat lives INSIDE the
+ * card (判词① — the retired floating overlay's anatomy: price + balance
+ * soft-compare + Start) PINNED BELOW the scrollport — text can never flow
+ * behind it. No Cancel: "don't start" is said by not starting. Read-only on
+ * this surface — changing it happens in chat. No factsbar, no program
+ * region. */
 function DocumentCard({
   node,
   draftConfirm,
@@ -495,14 +500,16 @@ function DocumentCard({
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
-      <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl p-4 ring-foreground/10 ring-1">
-        {node.spec?.text ? (
-          <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
-        ) : (
-          <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
-        )}
+      <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-foreground/10 ring-1">
+        <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          {node.spec?.text ? (
+            <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
+          )}
+        </div>
         {draftConfirm ? (
-          <div className="mt-auto pt-4">
+          <div className="shrink-0 px-4 pt-3 pb-4">
             <EstimatePriceLine
               low={draftConfirm.low}
               high={draftConfirm.high}
@@ -1278,7 +1285,7 @@ function GraphCard({
     // The language fact is earned only where it isn't self-evident (2026-
     // 09-09 走查拍板): a text product's language IS its content — never
     // restate it on the bar; a clip's dub language can't be seen without
-    // playing, so media keeps it (as does the quiet node's params below).
+    // playing, so media keeps it.
     if (output.language && !isText) {
       info.push(t(`languages.${output.language}`, { defaultValue: output.language }))
     }
@@ -1288,13 +1295,13 @@ function GraphCard({
     if (duration !== null && duration > 0) info.push(`${duration}s`)
     const models = (output.model_facts ?? []).map((f) => f.model)
     info.push(...models)
-  } else {
-    // Un-run / quiet node: the params are the facts it already knows.
-    const params = node.spec?.params
-    const lang = params?.target_language as string | undefined
-    if (lang) info.push(t(`languages.${lang}`, { defaultValue: lang }))
-    if (typeof params?.aspect === "string" && params.aspect) info.push(params.aspect)
   }
+  // An un-run / quiet node carries NO factsbar chips (2026-09-11 用户拍板):
+  // its params restate what the caption already names (Translate captions
+  // ·FR + a "French" chip = the same fact twice) and the bar holds zero
+  // actions until a product lands — a buttonless bar is dead chrome, so the
+  // length guard below simply never lets it render. The band's reservation
+  // stays in the height math (geometry never shifts).
 
   const hasVideo = !!output?.files.video
   const renderActive =
@@ -1438,26 +1445,34 @@ function GraphCard({
 
 /** The port-law handles (ADR-057 §5; 2026-09-08 FLORA 收编——外置圆形锚点):
  * visible typed ports as 28px tinted circles parked FULLY OUTSIDE the card
- * with a 12px gap (the anchor floats off the node — edges attach at the
+ * with a 6px gap (the anchor floats off the node — edges attach at the
  * circle's center, the fill hides the line's inner half, so the stroke
  * touches the anchor and never the card face) — in = the consumption
  * region's bottom-left corner, stacked up; out = the production region's
- * top-right corner, stacked down. ONE anatomy for every type — the tinted
- * circle + the flow's glyph (video/audio carry the semantic hues, text/ctx
- * the neutral step). Every edge is solid, so the reference flow (ctx) is
- * told from a material text flow ONLY by this anchor's glyph. Glyph
- * vocabulary (2026-09-09 FLORA 收编): text = the letter T, video = the
- * camera, audio = the waveform; ctx = the overlapping documents (the
- * reference flow names its SOURCE). Untyped surfaces (the recipe 说明书)
- * keep the legacy invisible pair. */
-const PORT_ICON: Record<GraphEdgeType, typeof Clapperboard> = {
+ * top-right corner, stacked down. 出锚语义律 (2026-09-11 用户拍板): the OUT
+ * anchor names the NODE'S OWN production medium — one anchor, every out-edge
+ * leaves from it — while the IN anchor names what the consumer takes (the
+ * edge's carried type); an edge between different media reads "from X to Y"
+ * (video's rim → the transcript's T) and the transformation lives on the
+ * edge, never as a foreign glyph on the source. Glyph vocabulary
+ * (2026-09-09 FLORA 收编): text = the letter T, video = the camera, audio =
+ * the waveform; ctx = the at-sign (the reference flow — @ 与引用同典,
+ * MENTIONS 两视图; the 09-09 Files glyph read as "image" on canvas —
+ * retired 2026-09-11), living at the CONSUMING end only (出锚语义律 — the
+ * source's own anchor speaks its own medium); image = the still-visual
+ * family (render-side only, never an edge type). Every edge is solid, so a
+ * reference in-flow (ctx) is told from a material text in-flow ONLY by this
+ * anchor's glyph. Untyped surfaces (the recipe 说明书) keep the legacy
+ * invisible pair. */
+const PORT_ICON: Record<OutPortType, typeof Clapperboard> = {
   video: Video,
   audio: AudioLines,
   text: Type,
-  ctx: Files,
+  ctx: AtSign,
+  image: ImageIcon,
 }
 
-function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeType[]; out: GraphEdgeType[] } }) {
+function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeType[]; out: OutPortType[] } }) {
   if (!ports) {
     return (
       <>

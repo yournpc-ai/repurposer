@@ -10,6 +10,16 @@ import type { GraphEdgeType, GraphNodeKind, GraphNodeState } from "@/lib/types"
 
 export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
 
+/** 出锚语义律 (2026-09-11 用户拍板): the OUT anchor names the SOURCE's own
+ * production medium, never the edge's carried type — an edge reads "from
+ * <the source's medium> to <what the consumer takes>", so a video asset
+ * never sprouts a T (the transcript's text is born AT the transcript; the
+ * edge itself tells video → text). The IN anchor stays the edge's carried
+ * type. "image" is the render-side-only fifth value (the still-visual
+ * family — image/slides assets): it never crosses the wire as an edge
+ * type, it only names an out anchor. */
+export type OutPortType = GraphEdgeType | "image"
+
 /** Recipe surface: "asset" | "step" | "output". Graph canvas: the five
  * node types (asset is shared — the same media card on both surfaces). */
 export type FlowNodeKind = GraphNodeKind | "output" | "step"

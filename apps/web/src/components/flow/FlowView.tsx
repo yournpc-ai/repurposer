@@ -20,10 +20,28 @@ import "./flow.css"
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
 import { BIRTH_STAGGER_MS, flowNodeSize, layoutFlow } from "./layout"
-import type { FlowGroup, FlowViewProps, GraphEdgeType } from "./types"
+import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
+
+/** The port law's source half (出锚语义律, 2026-09-11 — see types.ts): a
+ * node's OUT anchor = its own production medium. Asset: its media type
+ * (image/slides = the still-visual family → "image"; transcript/file =
+ * prose → "text"). Document/agent: text. Generator/processor: the frame
+ * class names the product medium (graph_fill._frame_class_of — clip family
+ * = media, text family = prose). */
+function productionPort(n: FlowNode): OutPortType {
+  if (n.kind === "asset") {
+    const t = n.asset?.type ?? (n.spec?.asset_type as string | undefined)
+    if (t === "audio") return "audio"
+    if (t === "video") return "video"
+    if (t === "image" || t === "slides") return "image"
+    return "text"
+  }
+  if (n.kind === "document" || n.kind === "agent") return "text"
+  return n.spec?.frame_class === "text" ? "text" : "video"
+}
 
 /** The one fit recipe, shared by the ViewportController (auto-fit) and the
  * FlowControls pill (manual fit) — two hard-won parameter rules:
@@ -272,17 +290,23 @@ export function FlowView({
     const sizes = new Map(nodes.map((n) => [n.id, flowNodeSize(n)]))
     // The port law's data half (ADR-057): each node's visible handles derive
     // from its incident TYPED edges — in-ports stack from the consumption
-    // region's bottom-left corner, out-ports from the production region's
-    // top-right. Untyped surfaces (the recipe 说明书) carry no ports and
-    // keep the legacy invisible handles.
-    const portsByNode = new Map<string, { in: GraphEdgeType[]; out: GraphEdgeType[] }>()
+    // region's bottom-left corner typed by WHAT THE CONSUMER TAKES (the
+    // edge's carried type), out-ports from the production region's
+    // top-right typed by THE NODE'S OWN MEDIUM (出锚语义律 — one anchor per
+    // node, every out-edge leaves from it; productionPort above). Untyped
+    // surfaces (the recipe 说明书) carry no ports and keep the legacy
+    // invisible handles.
+    const nodeById = new Map(nodes.map((n) => [n.id, n]))
+    const portsByNode = new Map<string, { in: GraphEdgeType[]; out: OutPortType[] }>()
     for (const e of edges) {
       if (!e.edgeType) continue
       const target = portsByNode.get(e.to) ?? { in: [], out: [] }
       if (!target.in.includes(e.edgeType)) target.in.push(e.edgeType)
       portsByNode.set(e.to, target)
+      const src = nodeById.get(e.from)
+      const outType = src ? productionPort(src) : e.edgeType
       const source = portsByNode.get(e.from) ?? { in: [], out: [] }
-      if (!source.out.includes(e.edgeType)) source.out.push(e.edgeType)
+      if (!source.out.includes(outType)) source.out.push(outType)
       portsByNode.set(e.from, source)
     }
     // Newborn ids → stagger ranks in compile order (the reveal order IS the
@@ -349,10 +373,15 @@ export function FlowView({
         source: e.from,
         target: e.to,
         type: "flow",
-        // Typed flows land on their named ports (the visible handles);
-        // untyped surfaces fall back to the node's default handle pair.
+        // Typed flows land on their named ports (the visible handles): the
+        // source anchor = the source node's own production medium (出锚语义律),
+        // the target anchor = the carried type; untyped surfaces fall back
+        // to the node's default handle pair.
         ...(e.edgeType
-          ? { sourceHandle: `out:${e.edgeType}`, targetHandle: `in:${e.edgeType}` }
+          ? {
+              sourceHandle: `out:${nodeById.get(e.from) ? productionPort(nodeById.get(e.from)!) : e.edgeType}`,
+              targetHandle: `in:${e.edgeType}`,
+            }
           : {}),
         data: {
           semantic: e.semantic,

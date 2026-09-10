@@ -709,7 +709,7 @@ async def _stamp_graph_core(
             else None
         )
         reused = by_fill_key.get(key)
-        frame_class = _frame_class_of(fam_steps)
+        frame_class, frame_aspect = _frame_class_of(fam_steps)
         # A revise-headed family revisits an EXISTING node: the node's name,
         # its executable tool identity (spec.tool) and its structured params
         # (the slot the next revision re-runs from) stay the original
@@ -744,6 +744,7 @@ async def _stamp_graph_core(
                 **({} if revise_headed else {"params": _params_of(head)}),
                 "estimate": estimate,
                 "frame_class": frame_class,
+                **({"frame_aspect": frame_aspect} if frame_aspect else {}),
                 **({} if revise_headed else {"tool": head.kind}),
                 **(
                     {}
@@ -774,6 +775,7 @@ async def _stamp_graph_core(
                     "params": _params_of(head),
                     "estimate": estimate,
                     "frame_class": frame_class,
+                    **({"frame_aspect": frame_aspect} if frame_aspect else {}),
                     "tool": head.kind,
                     **(
                         {}
@@ -1024,13 +1026,25 @@ def _graph_kind_of(step: WorkflowStep) -> str:
     return "generator"
 
 
-def _frame_class_of(fam_steps: list[WorkflowStep]) -> str:
-    """The node's reserved-frame size class (graph_store._FRAME_CLASS): the
-    clip family's product region is the 9:16-capable media card; writers /
-    research reserve the text card. Assets / documents derive from kind."""
+def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
+    """The node's reserved-frame size class (graph_store._FRAME_CLASS) plus
+    the clip family's frame aspect (graph_store._CLIP_FRAME_H): writers /
+    research reserve the text card; a clip-family node reserves its
+    ASPECT-EXACT height — the chain's explicit aspect (select_clips' spec)
+    wins, otherwise "original" (比例跟源 — whole-source / transform chains
+    never reframe, tools/clips/materialize.py 2026-08-17 拍板), so a
+    full-video fork no longer reserves the 9:16 max it will never fill (the
+    660-reservation / 278-render dead-air walkthrough, 2026-09-11). The
+    aspect rides spec.frame_aspect — a FRAME-only key: never in _params_of's
+    factsbar whitelist, never read by the runtime tools (node.spec.aspect
+    stays the chain's own business). Assets / documents derive from kind."""
     if any(s.kind in _CLIP_FAMILY_KINDS for s in fam_steps):
-        return "clip"
-    return "text"
+        for s in fam_steps:
+            aspect = (s.spec or {}).get("aspect")
+            if aspect:
+                return "clip", str(aspect)
+        return "clip", "original"
+    return "text", None
 
 
 async def _existing_clip_producer_nodes(db: AsyncSession, project_id: UUID) -> list[UUID]:

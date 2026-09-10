@@ -241,17 +241,32 @@ _FRAME_CLASS: dict[str, tuple[int, int]] = {
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
 
+# The clip-class frame's aspect-exact heights (2026-09-11 — the fork-column
+# dead-air walkthrough): the fill stamps spec.frame_aspect
+# (graph_fill._frame_class_of — the chain's explicit aspect wins;
+# whole-source / transform chains = "original", 比例跟源, they never
+# reframe), and the reservation narrows to the aspect's own anatomy. The
+# math is ONE law with the client (layout.ts clipNodeHeight = caption 26 +
+# PRODUCT_THUMB_PX[aspect] + program 88 + bar 44; "original" rides the 16:9
+# default strip) — two mirrors cross-referenced, never a third copy (判词②).
+# 9:16 keeps the class's 660 (its 4px breath included); an unstamped clip
+# node keeps the class max — safe by construction.
+_CLIP_FRAME_H = {"9:16": 660, "1:1": 438, "16:9": 316, "original": 316}
+
 # The task-book document's role tag (graph_fill's stamps set it; the frame
 # law reads it for the dock-time confirm allowance). One home here — the
 # graph's role vocabulary is the door's business, never a magic string per
 # call site.
 _TASK_BOOK_ROLE = "task_book"
 
-# 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文，无摘要无浓缩): the
-# document card never truncates, so a text-bearing document's frame is BORN
-# at the text's full height (documents know their text at birth — the
-# transcript lands with ASR, the book's plan summary with the dock). The
-# line math is ONE law with the client's shared measurement
+# 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文，无摘要无浓缩) + 封顶
+# 滚动律 (2026-09-11): the document card never truncates — it carries the full
+# text and SCROLLS in place past the card's cap, so a text-bearing document's
+# frame is born at the text's full height CAPPED at _DOCUMENT_MAX_H (above the
+# cap the estimate only decides whether the cap binds, so its error can no
+# longer push prose past the frame — the 1.7× CJK underestimate that let a
+# 340s transcript tower ~3000px and bleed through the task book's confirm
+# beat). The line math is ONE law with the client's shared measurement
 # (apps/web/src/components/flow/layout.ts — the text card's chars-per-line
 # table, scaled proportionally to the document's narrower text width); two
 # mirrors cross-referenced, never a third copy (判词②).
@@ -262,6 +277,9 @@ _DOCUMENT_CAPTION_PX = 26  # NodeCaption band (= PRODUCT_LABEL_PX)
 # from birth; post-Start the card simply fills less of its reservation
 # (cards fill INTO frames, never the reverse).
 _DOCUMENT_CONFIRM_PX = 88
+# The cap — one law with the client mirror (layout.ts DOCUMENT_MAX_H); the
+# value = the text frame class's 560 reservation.
+_DOCUMENT_MAX_H = 560
 _CJK_RE = re.compile(r"[一-龥぀-ゟ゠-ヿ]")
 
 
@@ -276,7 +294,7 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
     h = _DOCUMENT_CAPTION_PX + 16 + lines * _DOCUMENT_LINE_PX + 16
     if spec.get("role") == _TASK_BOOK_ROLE:
         h += _DOCUMENT_CONFIRM_PX
-    return w, h
+    return w, min(h, _DOCUMENT_MAX_H)
 
 # 统一摆位律 (2026-09-09 拍板): ONE frame law owns every newborn's frame
 # (_assign_layout), and columns are DEPTH-pitched — x = depth × _PITCH,
@@ -296,6 +314,12 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
     cls = _KIND_FRAME_CLASS.get(kind) or str(spec.get("frame_class") or "") or "clip"
     if cls == "document":
         return _document_frame(spec)
+    if cls == "clip":
+        # The aspect-exact reservation when the fill stamped one
+        # (frame_aspect) — the class max stays the fallback for unstamped
+        # nodes (legacy rows, wiring-born nodes), safe by construction.
+        w, max_h = _FRAME_CLASS["clip"]
+        return w, _CLIP_FRAME_H.get(str(spec.get("frame_aspect") or ""), max_h)
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
 

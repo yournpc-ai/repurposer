@@ -27,7 +27,9 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
  * the card. The thumb keeps the clip's own frame — three aspect sizes, never
  * a forced crop (2026-08-14 ruling). The media fills the card edge to edge
  * (no inner padding), so the aspect heights are computed at the full lane
- * width (280 — the 208 lane read too narrow next to its toolbar). */
+ * width (280 — the 208 lane read too narrow next to its toolbar). The
+ * server mirrors this table for its aspect-exact frame reservations —
+ * graph_store._CLIP_FRAME_H (一条测量律两镜像互引, 判词②). */
 export const PRODUCT_THUMB_PX: Record<string, number> = {
   "9:16": 498,
   "1:1": 280,
@@ -98,15 +100,27 @@ export function textLineCount(body: string, hasTitle: boolean): number {
   return Math.max(2, (hasTitle ? 1 : 0) + bodyLines)
 }
 
-/** 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文): the document card
- * never truncates, so its render height derives from the FULL text. ONE
- * measurement law with the server's frame mirror
- * (apps/api/app/pipeline/graph_store.py _document_frame — the same
- * chars-per-line proportion off the text card's table, the same 18px line,
- * the same caption/padding anatomy; two mirrors cross-referenced, never a
- * third copy — 判词②). `confirm` reserves the task_book's dock-time confirm
- * anatomy (price + balance + Start button — the server reserves it from
- * birth; post-Start the card fills less of the frame). */
+/** The document card's height cap (2026-09-11 封顶滚动律 — the transcript
+ * tower walkthrough): 全文卡律 still holds (the body carries the FULL text,
+ * never a summary), but the CARD caps here and the body scrolls in place —
+ * the text product card's 2026-09-08 posture, now the document's too. Above
+ * the cap the estimate math's error stops mattering (it only decides WHETHER
+ * the cap binds), so a frame can never be outgrown and columns never overlap.
+ * ONE law with the server mirror graph_store._document_frame's
+ * _DOCUMENT_MAX_H — the value = the text frame class's 560 reservation. */
+export const DOCUMENT_MAX_H = 560
+
+/** 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文) + 封顶滚动律
+ * (2026-09-11): the document card never truncates — it renders the full text
+ * and SCROLLS when the need exceeds DOCUMENT_MAX_H (applied in graphNodeSize
+ * and in the server mirror, never here — this helper still answers the FULL
+ * need so both callers can cap it). ONE measurement law with the server's
+ * frame mirror (apps/api/app/pipeline/graph_store.py _document_frame — the
+ * same chars-per-line proportion off the text card's table, the same 18px
+ * line, the same caption/padding anatomy; two mirrors cross-referenced,
+ * never a third copy — 判词②). `confirm` reserves the task_book's dock-time
+ * confirm anatomy (price + balance + Start button — the server reserves it
+ * from birth; post-Start the card fills less of the frame). */
 export function documentTextHeight(text: string, confirm: boolean): number {
   const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(text)
   const charsPerLine = cjk ? 32 : 50 // the server's 228px-column values
@@ -132,15 +146,16 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     }
   }
   if (node.kind === "document") {
-    // 全文卡律: height = the full text's need, always content-derived
-    // (never the frame's mandate — new frames are born with exactly this
-    // via the server's mirror math, so the two agree; a legacy 200px frame
-    // may be outgrown, never the text). The confirm anatomy is reserved
-    // only while the book is actually draft (post-Start the card fills
-    // less — the frame's +88 is a reservation, not a mandate).
+    // 全文卡律 + 封顶滚动律: height = the full text's need CAPPED at
+    // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
+    // outgrows the reservation (new frames are born with exactly this via
+    // the server's mirror math, so the two agree; a legacy frame may be
+    // taller than the cap — extra whitespace, never overlap). The confirm
+    // anatomy is reserved only while the book is actually draft (post-Start
+    // the card fills less — the frame's +88 is a reservation, not a mandate).
     const text = (node.spec?.text as string | undefined) ?? ""
     const confirm = node.spec?.role === "task_book" && node.status === "draft"
-    return { width, height: documentTextHeight(text, confirm) }
+    return { width, height: Math.min(documentTextHeight(text, confirm), DOCUMENT_MAX_H) }
   }
   // generator / processor / agent: product region + program region + bar.
   const outputs = node.outputs ?? []

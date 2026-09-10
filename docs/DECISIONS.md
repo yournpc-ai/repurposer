@@ -1389,7 +1389,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Decision**:
 
 1. **动作住节点内（判词①）**：节点动作 = 节点内部解剖，浮卡形态全火化。draft 确认拍（K5）住进任务书文档卡（文本全文 + 估价 + 余额软对照 + Confirm & run，无 Cancel——「不开始」就是不开始）；promptEdit 定价确认住进 ProgramRegion（暂存程序行下就地展开：锚定子图 chips + 估价 + 余额 + Cancel/Confirm）。两张 ViewportPortal 卡连同锚位数学全删；事实经节点 data 通道下达（`draftConfirm` / `promptConfirm` payload），可见性计算留在 ResultsCanvas。
-2. **全文卡律（判词④）**：卡面内容 = 原文全文，永无摘要/浓缩/省略号。DocumentCard 去 clamp 全文渲染（转写稿 3000 字 = 1750px 卡，画布是文档面不是阅读器——文本产物卡本就全文滚动，天然合规）；**文档框出生即全文高**（graph_store `_document_frame`：documents 出生时文本已知——transcript 随 ASR、书随 dock——框高 = 26 + 16 + 行数×18 + 16，task_book 加 88 确认预留，列堆叠天然正确零重排）；**任务书文本 = 判决自身的计划散文**（`intent.answer`，二源律①——确定性浓缩组合对 transform 链失明且是「画蛇添足」；run-born 书 = 编译组合 ?? run.context.name）。**双面 back-write 律**：draft 模式 dock 拥有草稿书面（修订刷新散文，run-born 书面是历史不动）；run 模式 fill 只填空面（永不改写/抹除草稿散文）。
+2. **全文卡律（判词④）**：卡面内容 = 原文全文，永无摘要/浓缩/省略号。DocumentCard 全文渲染 + **封顶滚动**（ADR-067 翻案了此处原判词「转写稿 3000 字 = 1750px 卡」——卡高封顶 560，超出卡内就地滚动）；**文档框出生即全文需求高、封顶 560**（graph_store `_document_frame` ↔ layout.ts `documentTextHeight` 一条测量律两镜像互引，task_book 加 88 确认预留）；**任务书文本 = 判决自身的计划散文**（`intent.answer`，二源律①——确定性浓缩组合对 transform 链失明且是「画蛇添足」；run-born 书 = 编译组合 ?? run.context.name）。**双面 back-write 律**：draft 模式 dock 拥有草稿书面（修订刷新散文，run-born 书面是历史不动）；run 模式 fill 只填空面（永不改写/抹除草稿散文）。
 3. **测量封装（判词②）**：文本测量一条律两个镜像——client `layout.ts`（textLineCount / documentTextHeight）↔ server `graph_store._document_frame`，注释互引，永不出现第三份拷贝；卡内共享 = `EstimatePriceLine` 一个组件服务确认区/定价确认/草稿 chip 三处。
 4. **估价诚实面**：折叠中存在未报价节点（estimate NULL）时——全 NULL 折叠显示「估价随运行」（永不许诺 ≈0），部分折叠带开口「+」下界；节点草稿 chip 在 [0,0]（free/未报价）时不出场（免费节点不报价自己的脸）。
 
@@ -1439,3 +1439,33 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Related**: ADR-064（同批 schema 律族——方言归位是顺形律的传输层镜像：形状顺模型的写法，通道顺 provider 的边界）
 
+## ADR-067: 出锚语义律 + 封顶滚动律——源锚说自己的媒介，文档卡有视口纪律
+
+**Status**: Decided (2026-09-11)
+
+**Context**: 真实项目画布走查（340s 视频）三连：① 视频素材节点长出 T 出锚——边类型律把边的两端都染成承载类型，源节点被迫戴上自己不产出的类型；用户判词：一个 node 的出发点讲述「从什么类型到什么类型」，原视频不该有 T 锚点，两条边应从同一点出发。② transcript 文档卡 = 340s 全文 → ~3000px 巨塔。③ task book 卡的 Confirm & run 按钮被散文穿透（「隐隐约约的按钮」）——病根是估算镜像失真（CJK 假设 32 字/行，text-xs 实测 ~19 字/行 → 1.7× 低估）× 正文无溢出治理：真实文本溢出 style 钉死的估算卡高继续下流，穿过 mt-auto 钉在估算卡底的按钮与卡边界。用户处方：document 卡面应有最大高宽，超了 auto-y 滚动。
+
+**Decision**:
+
+1. **出锚语义律**：出锚 = 源节点**自身产出的媒介**（asset 按 asset_type：video→video / audio→audio / image、slides→image（渲染侧第五 glyph，从不过线）/ transcript、file→text；document、agent→text；generator、processor 按 frame_class：clip→video / text→text）——**一节点一出发锚，全部出边同点出发**；入锚 = 边的承载类型（消费方拿什么）。跨媒介边 = 「从 X 到 Y」的转译叙事，转换住在边上，源节点永不长外来 glyph。ctx 无例外——引用流的 Files glyph 只住消费端。染色：入锚 + 描边共享承载类型（线锚同色律守在消费端），出锚染源媒介——video→text 边从紫锚出发走中性线，这个「不一致」正是转译叙事本身。实现 = 纯客户端推导（FlowView `productionPort`，源锚集合 = 节点自身类型单例），服务器零改动；落库的 `from_port`/`to_port` 列无读者，维持旧值不动。
+2. **封顶滚动律**：全文卡律不变（永无摘要/浓缩/省略号——反对的是浓缩，不是滚动），但 document 卡高封顶 `DOCUMENT_MAX_H = 560`（= text 帧类预留），超出正文卡内就地滚动（nowheel+nopan+thin-scroll——文本产物卡 2026-09-08 姿态推广到 document 卡）；task_book 确认拍钉在**滚动区之外**的卡底（flex 列：caption / scrollport flex-1 / confirm shrink-0——散文永远穿不过按钮）。一条测量律两镜像同批封顶（layout.ts `DOCUMENT_MAX_H` ↔ graph_store `_DOCUMENT_MAX_H`）。ADR-063 判词④的「转写稿 3000 字 = 1750px 卡，画布是文档面不是阅读器」就此翻案——画布是文档面，但文档面也有视口纪律。
+
+**Consequences**: 封顶后行估算只决定「是否触顶」，估错无害（卡短一点、多滚一点，永不溢出）——列重叠与文本穿卡结构性消失；legacy 巨帧保留（append-only：旧图多留白，不重叠）。视频节点回到单相机锚；image 锚走中性色（无 `flow-port-image` 规则 = 基座中性，零 CSS 新增）。
+
+**Related**: ADR-057 §5（端口法则的出锚侧修订）、ADR-063（判词④的「出生即全文高」修订）、ADR-058（二源律——锚语义是节点身份叙事的一部分）
+
+## ADR-068: 画布走查三修——引用 glyph 可读性 + draft 卡无 factsbar + clip 帧 aspect 精确预留
+
+**Status**: Decided (2026-09-11)
+
+**Context**: 同一块草稿画布的三宗走查：① prepare 节点的 ctx 入锚 glyph 读成「图片」——一条 task book 的 T 出锚连线落到 Files（叠文件）图标上，用户问「从 T 过来咋就连接到了一个 image」；② 三个 fork 节点（Dub voice ·EN / Translate captions ·EN / ·FR）列间距巨大——clip 帧类一律预留 9:16 上限 660，而整片 fork 链比例跟源（materialize.py 2026-08-17 拍板：链无 clip 工具 = 比例跟源，"original"），draft 渲染 278 / done 渲染 316，死空 ~400px/节点且产物落地后依旧；③ draft 卡的 toolbar 只有一个「French」chip、零按钮——caption 已说「Translate captions ·FR」，chip 纯复述。用户判词：无实际按钮的 toolbar 压根不该渲染。
+
+**Decision**:
+
+1. **ctx glyph = AtSign**：引用流锚的 glyph 从 Files 换回 @（ADR-057 原词汇表——「@ 与连线是同一引用的两视图，MENTIONS 同典」）；2026-09-09 FLORA 收编的 Files 在画布上读作「image」，退役。中性色不变。
+2. **draft 卡无 factsbar**：未运行节点不再向 factsbar 塞参数 chip（language / aspect 全删）——参数复述 caption 已命名的事实是双重说话，无按钮的条是死 chrome；长度守卫自然不渲染。带宽预留留在高度数学里（几何永不动），产物落地时条随真实事实出生。
+3. **clip 帧 aspect 精确预留**：fill 的 `_frame_class_of` 返回 (class, aspect)——链上显式 aspect（select_clips spec）胜出，否则 "original"（整片/transform 链永不重取景）；盖章进 `spec.frame_aspect`（纯帧键——不入 `_params_of` factsbar 白名单，运行时工具不读；`node.spec.aspect` 仍是链自己的生意）。`_frame_of` 按 `_CLIP_FRAME_H`（9:16=660 / 1:1=438 / 16:9、original=316）收窄预留，与 layout.ts `clipNodeHeight` 一条律两镜像互引；未盖章 clip 节点回退类上限 660（wiring 出生的节点安全兜底）。
+
+**Consequences**: fork 列的节点间距从 ~406px 收到 ~62px（draft 278 + 预留 316），产物落地后卡高恰好填满预留；legacy 图保留旧帧（append-only——多留白，不重叠）。prepare 节点的 T→@ 读作「任务书文本作为引用流入」，不再读作「连到了一张图片」。
+
+**Related**: ADR-057 §5（端口法则 glyph 表修订）、ADR-067（出锚语义律——本次①是其可读性续集）、ADR-063 判词②（镜像纪律——_CLIP_FRAME_H 入镜）
