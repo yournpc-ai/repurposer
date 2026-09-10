@@ -67,7 +67,7 @@ from app.pipeline.step_context import (
     _truncate,
     collect_asset_media,
 )
-from app.pipeline.step_display import _set_summary
+from app.pipeline.step_display import _set_spec_field, _set_summary
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_persona,
@@ -153,6 +153,7 @@ class Preprocess(NodeBase):
         # copy — "正在分析…" reading on a ✓ row). Quantified by file count;
         # a material-free chain with no source says so instead of "0 assets".
         if not assets and not needs_material:
+            await _set_spec_field(node.id, "noop", True)
             await _set_summary(
                 node.id,
                 "无素材输入，直接生成"
@@ -207,6 +208,7 @@ class PersonaBootstrap(NodeBase):
         asset_texts = await collect_asset_texts(db, project.id)
         trimmed = [t[:20_000] for t in asset_texts if t and t.strip()]
         if not trimmed:
+            await _set_spec_field(node.id, "noop", True)
             await _set_summary(
                 node.id,
                 "没有文字素材，未建人设" if zh else "No text material — persona skipped",
@@ -488,6 +490,7 @@ class Understand(NodeBase):
                 )
                 db.add(row)
                 await db.flush()
+                await _set_spec_field(node.id, "noop", True)
                 await _set_summary(
                     node.id,
                     "无素材输入，跳过素材理解" if _display_zh(run, project, assets)
@@ -759,6 +762,7 @@ class Plan(NodeBase):
             )
             db.add(row)
             await db.flush()
+            await _set_spec_field(node.id, "noop", True)
             await _set_summary(
                 node.id,
                 "无素材输入，跳过分镜规划" if _display_zh(run, project, assets)

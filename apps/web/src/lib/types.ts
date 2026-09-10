@@ -237,6 +237,9 @@ export interface WorkflowStep {
   stage?: string | null
   /** Quantified one-liner (e.g. "Selected 3 clips · 87s total"). */
   summary?: string | null
+  /** The runner's structured "nothing to do" declaration (2026-09-10 receipt
+   * whisper tier) — stamped at the same seat as the "…skipped" summary. */
+  noop?: boolean | null
   /** Output row ids this node produced (RunCard inlines these on completion). */
   output_refs?: string[]
   /** DAG edges: upstream step ids (the run's execution DAG). */

@@ -2364,6 +2364,11 @@ class StepResponse(BaseModel):
     # Quantified one-liner from the registry summary_template (e.g. "Selected
     # 3 clips · 87s total"), lifted from spec["summary"] like stage.
     summary: str | None = None
+    # The runner's structured "nothing to do here" declaration (2026-09-10 —
+    # the receipt's whisper tier): stamped at the same seat as the "…skipped"
+    # summary line, so the client never string-matches. None ≠ False only on
+    # legacy rows.
+    noop: bool | None = None
     # Output row ids this node produced — the RunCard collects these on run
     # completion to inline the product cards (chat-loop-v2).
     output_refs: list[UUID] = Field(default_factory=list)

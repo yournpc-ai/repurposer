@@ -67,6 +67,7 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
         summary=(node.spec or {}).get("summary"),
+        noop=(node.spec or {}).get("noop") or None,
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         estimate_credits=estimate_credits,

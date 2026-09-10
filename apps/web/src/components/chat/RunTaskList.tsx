@@ -21,17 +21,9 @@
 
 import { useEffect, useState } from "react"
 import type { TFunction } from "i18next"
-import {
-  Check,
-  CircleHelp,
-  Loader2,
-  Minus,
-  Square,
-  X,
-} from "lucide-react"
+import { Check, CircleHelp, Loader2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { cn } from "@/lib/utils"
 import type { WorkflowStep } from "@/lib/types"
 
@@ -151,15 +143,26 @@ export function RunTaskList({
   return (
     <div className="w-full">
       {/* THE ONE ROW — the run's seat of the shared StatusLine (2026-09-09
-          一座两行): live = shimmer narrative + its stage clock; terminal =
-          the SAME line's receipt form (✓ title · total elapsed). It is
-          itself the expand/collapse toggle for the flat checklist below. */}
+          一座两行; 2026-09-10 层级重铸 — the receipt is the OWNER row): live
+          = shimmer narrative + its stage clock; terminal = the receipt pose
+          — ✓ STAMPS ONCE (the 16px circle chip — "the run succeeded"), the
+          title reads one notch brighter (the steps' parent, not their
+          sibling), total elapsed + chevron right. It is itself the
+          expand/collapse toggle for the railed checklist below. */}
       <StatusLine
-        label={terminal ? title : (narrativeLabel ?? narrativeFallback)}
+        label={
+          terminal ? (
+            <span className="font-medium text-foreground">{title}</span>
+          ) : (
+            (narrativeLabel ?? narrativeFallback)
+          )
+        }
         active={!terminal}
         leading={
           terminal ? (
-            <Check className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/12">
+              <Check className="h-2.5 w-2.5" />
+            </span>
           ) : (
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           )
@@ -170,12 +173,18 @@ export function RunTaskList({
         quiet
       />
 
-      {/* The checklist — FLAT under the one row: every step is a sibling
-          row, new runtime fan-out rows (render steps) append at the bottom
-          as they're born. Folded in the terminal receipt pose; the row's
-          chevron re-opens the full receipt. */}
+      {/* The checklist — the rail tree (2026-09-10 提案 A 拍板): a 1px guide
+          drops from the chip's center, the steps indent under it — parentage
+          is GEOMETRY, not repetition. Steps carry NO per-row ✓ (success is
+          the default and says nothing per row; the chip above already said
+          it once): live rows keep their spinner, failed rows open red,
+          waiting keeps its ?, pending stays a quiet dash. Voice tiers:
+          no-op rows (status skipped || spec.noop — the runner's structured
+          declaration, never a string match) read whisper + line-through
+          ("this step was crossed off the plan"); work rows keep the normal
+          muted register, their quantified values doing the talking. */}
       {open ? (
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-2 ml-[7px] flex flex-col gap-1.5 border-l border-foreground/15 pl-3.5">
           {steps.map((step) => (
             <TaskRow key={step.id} step={step} />
           ))}
@@ -186,39 +195,43 @@ export function RunTaskList({
 }
 
 function TaskRow({ step }: { step: WorkflowStep }) {
+  const noop = step.status === "skipped" || step.noop === true
   const icon =
     step.status === "running" ? (
       <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-    ) : step.status === "done" ? (
-      <Check className="h-3.5 w-3.5 text-muted-foreground" />
     ) : step.status === "failed" ? (
       <X className="h-3.5 w-3.5 text-destructive" />
     ) : step.status === "waiting" ? (
       <CircleHelp className="h-3.5 w-3.5 text-primary" />
-    ) : step.status === "skipped" ? (
-      <Minus className="h-3.5 w-3.5 text-muted-foreground/50" />
-    ) : (
-      <Square className="h-3 w-3 text-muted-foreground/50" />
-    )
+    ) : null
   // Builder-written text: done rows carry the runner's quantified rewrite,
   // everything else the creation-time preset (static task name / slot tag).
   const label = step.summary ?? step.kind
   return (
-    <Marker>
-      <MarkerIcon>{icon}</MarkerIcon>
-      <MarkerContent
+    <div className="flex items-baseline gap-2 text-xs">
+      {/* Fixed icon slot — present only where a marker means something
+          (running / failed / waiting), so the texts of unmarked rows share
+          the rail's left line. */}
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center self-center">
+        {icon}
+      </span>
+      <span
         className={cn(
-          "text-xs",
-          step.status === "done" && "text-muted-foreground",
-          step.status === "pending" && "text-muted-foreground/70",
-          step.status === "skipped" && "text-muted-foreground/60 line-through",
-          step.status === "failed" && "text-destructive"
+          "min-w-0 break-words",
+          noop
+            ? "text-meta-foreground line-through decoration-foreground/25"
+            : step.status === "done"
+              ? "text-muted-foreground"
+              : step.status === "failed"
+                ? "text-destructive"
+                : "text-muted-foreground/70",
+          step.status === "running" && "shimmer text-muted-foreground",
         )}
       >
         {step.status === "failed" && step.error
           ? `${label} — ${step.error}`
           : label}
-      </MarkerContent>
-    </Marker>
+      </span>
+    </div>
   )
 }

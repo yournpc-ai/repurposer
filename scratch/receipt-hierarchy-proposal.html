@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<!-- 收据展开态层级对照件（2026-09-10）——问题解剖 + 两个提案 + 活态变体。
+     数据 = 用户实拍 #162（Innovation post · 18s, 7 steps）。
+     对照件先例：scratch/node-ux-proposal.html（ADR-057）。 -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt hierarchy — 对照件</title>
+<style>
+  :root {
+    --page: #0f0f0f;          /* dark --background ≈ 0.12 */
+    --panel: #1c1c1c;         /* panel frost ≈ 0.21 step 的实底替身 */
+    --panel-edge: rgba(255,255,255,.10);
+    --fg: #f2f2f2;            /* 0.95 */
+    --fg-strong: #ffffff;
+    --muted: #a1a1a1;         /* 0.63 */
+    --meta: #6b6b6b;          /* 0.42 whisper */
+    --meta-dim: #555555;      /* no-op 行的更轻一档（提案） */
+    --rail: rgba(255,255,255,.14);
+    --accent-hover: rgba(255,255,255,.08);
+    --bad: #e5484d;
+    --note: #8a8a8a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--page); color: var(--fg);
+    font: 13px/1.55 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+    padding: 48px 24px 96px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 40px; }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--muted);
+       text-transform: uppercase; margin: 40px 0 4px; }
+  .why { color: var(--note); font-size: 12px; margin-bottom: 16px; max-width: 640px; }
+  .grid { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ————— 面板（chat panel 替身） ————— */
+  .panel {
+    width: 380px; background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 14px; padding: 18px 18px 22px;
+  }
+  .panel .cap { color: var(--meta); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; margin-bottom: 14px; }
+
+  /* ————— 现状解剖（= 截图 #162） ————— */
+  .cur .row { display: flex; align-items: baseline; gap: 8px; padding: 3px 0;
+    color: var(--muted); font-size: 12px; }
+  .cur .row .ck { width: 14px; text-align: center; flex: none; }
+  .cur .head { color: var(--muted); }       /* 头行与步骤同灰——问题 ① */
+  .cur .done { color: var(--fg); font-size: 13px; margin-top: 12px; }
+
+  /* 问题标注钉 */
+  .tag { position: relative; }
+  .tag::after {
+    content: attr(data-tag); position: absolute; left: calc(100% + 10px); top: 0;
+    color: var(--bad); font-size: 10.5px; white-space: nowrap; opacity: .9;
+  }
+
+  /* ————— 提案共用 ————— */
+  .rcpt { font-size: 12px; }
+  .rcpt .head {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 4px 6px; margin: 0 -6px; border-radius: 7px; cursor: pointer;
+    color: var(--fg);                     /* 头行提亮一档 = 父级 */
+  }
+  .rcpt .head:hover { background: var(--accent-hover); }
+  .rcpt .head .ck {
+    width: 16px; height: 16px; flex: none; border-radius: 50%;
+    background: rgba(255,255,255,.12); color: var(--fg);
+    display: flex; align-items: center; justify-content: center; font-size: 10px;
+  }
+  .rcpt .head .t { font-weight: 550; }
+  .rcpt .head .time { margin-left: auto; color: var(--meta); font-variant-numeric: tabular-nums; }
+  .rcpt .head .chev { color: var(--meta); font-size: 11px; }
+
+  /* 提案 A：导轨 + 缩进 */
+  .a .steps { margin: 2px 0 0 14px; padding-left: 14px; border-left: 1px solid var(--rail); }
+  /* 提案 B：无导轨，仅缩进 + 字声 */
+  .b .steps { margin: 2px 0 0 30px; }
+
+  .steps .st { display: flex; gap: 8px; padding: 2.5px 0; color: var(--muted); }
+  .steps .st .v { font-variant-numeric: tabular-nums; }
+  .steps .st.noop { color: var(--meta-dim); }        /* 没干活的行 = 耳语 */
+  .steps .st.work { color: var(--muted); }           /* 干活的行 = 正常灰 */
+  .steps .st.work .v { color: var(--fg); }           /* 量化值提到前景 */
+  .steps .st.fail { color: var(--bad); }
+
+  /* 活态 */
+  .live .head .dot { width: 7px; height: 7px; border-radius: 50%;
+    background: var(--fg); flex: none; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .live .head { color: var(--muted); }
+  .shimmer {
+    background: linear-gradient(90deg, var(--muted) 30%, var(--fg-strong) 50%, var(--muted) 70%);
+    background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+    color: transparent; animation: shim 2.2s linear infinite;
+  }
+  @keyframes shim { to { background-position: -200% 0; } }
+
+  /* ————— 变体 C/D：横线实验（Queue 参照） ————— */
+  /* C：头行装进发丝盒 + 头/步间一道发丝线（Queue 的 section 解剖） */
+  .c .head { border: 1px solid var(--rail); border-radius: 9px; padding: 7px 10px; margin: 0; }
+  .c .head:hover { background: var(--accent-hover); }
+  .c .steps { margin-top: 0; padding-top: 8px; border-left: 1px solid var(--rail);
+    border-top: none; }
+  .c .steps::before { content: ""; display: block; height: 1px; background: var(--rail);
+    margin: 0 0 6px -14px; width: calc(100% + 14px); }
+  /* D：逐步骤发丝线（iOS 清单式） */
+  .d .steps .st { border-bottom: 1px solid rgba(255,255,255,.07); padding: 6px 0; }
+  .d .steps .st:last-child { border-bottom: none; }
+  /* E：删除线（Queue 的 completed 语义） */
+  .e1 .steps .st { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35);
+    text-decoration-thickness: 1px; }
+  .e1 .steps .st { color: var(--meta-dim); }
+  .e2 .steps .st.noop { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.30); }
+
+  .legend { margin-top: 56px; border-top: 1px solid var(--rail); padding-top: 20px;
+    color: var(--note); font-size: 12px; max-width: 720px; }
+  .legend li { margin: 6px 0 6px 18px; }
+  .legend b { color: var(--muted); font-weight: 600; }
+  .kbd { background: rgba(255,255,255,.08); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>收据展开态 · 层级对照件</h1>
+  <p class="sub">数据 = 实拍 #162（Innovation post · 18s · 7 steps）。左侧现状，右侧提案。2026-09-10</p>
+
+  <h2>现状解剖</h2>
+  <p class="why">头行与 7 个步骤行同 ✓ 同灰同字号——8 行平权。4 行 "skipped"（没发生任何事）与 2 行真实产出等响度；✓ 重复 8 次 = 零信息。</p>
+  <div class="grid">
+    <div class="panel cur">
+      <div class="cap">Current — expanded</div>
+      <div class="row head tag" data-tag="① 头行 = 父级，却和步骤同 register">
+        <span class="ck">✓</span><span>Innovation post&ensp;18s&ensp;⌄</span>
+      </div>
+      <div class="row tag" data-tag="③ skipped 行与产出同响度"><span class="ck">✓</span><span>No source material — drafting directly</span></div>
+      <div class="row"><span class="ck">✓</span><span>No text material — persona skipped</span></div>
+      <div class="row"><span class="ck">✓</span><span>No source material — understanding skipped</span></div>
+      <div class="row"><span class="ck">✓</span><span>Pick a direction</span></div>
+      <div class="row"><span class="ck">✓</span><span>No source material — storyboard skipped</span></div>
+      <div class="row tag" data-tag="② 真实产出被 5:2 淹没"><span class="ck">✓</span><span>Wrote a post · 282 words · EN</span></div>
+      <div class="row"><span class="ck">✓</span><span>Passed · 3 checks</span></div>
+      <div class="done">Your Innovation post is ready — the results are on the canvas.</div>
+    </div>
+  </div>
+
+  <h2>提案 A — 导轨树（推荐）</h2>
+  <p class="why">✓ 只活一次（头行圆章）；步骤挂 1px 导轨 + 缩进（父子几何）；三步声级：产出行正常灰 + 量化值提前景 / no-op 行耳语降灰 / 失败行红。导轨 = 层级导引（文件树/Claude Code 同族），不是分隔线。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">A — expanded</div>
+      <div class="rcpt a">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="cap">A — collapsed（rest 态）</div>
+      <div class="rcpt a">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">›</span></div>
+      </div>
+      <p style="color:var(--meta);font-size:11px;margin-top:14px">收起时只剩一行：圆章 + 题名 + 总耗时。与现状同，但 ✓ 已有"盖章"语义。</p>
+    </div>
+  </div>
+
+  <h2>提案 B — 无导轨，纯字声</h2>
+  <p class="why">同 A 的 ✓ 单发与三级声，但去掉 1px 导轨、步骤整体缩进 30px（对齐标题文字左缘）。更素，层级全靠缩进与灰阶。若觉得导轨是多余笔画选这个。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">B — expanded</div>
+      <div class="rcpt b">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>活态变体（提案 A 的运行中解剖）</h2>
+  <p class="why">运行中头行 = 动态行（● shimmer 碎碎念 + 相位耗时 + 自身就是开关），步骤同挂导轨：已完成按声级、进行中 shimmer、未开始静默横线。失败行以红 ✗ 单独开口——这正是 ✓ 单发后失败才显眼的原因。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">A — running</div>
+      <div class="rcpt a live">
+        <div class="head"><span class="dot"></span><span class="shimmer">Writing your copy…</span><span class="time">5s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st work shimmer">Writing the post · EN</div>
+          <div class="st noop">— Check quality</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="cap">A — failed（对照）</div>
+      <div class="rcpt a">
+        <div class="head"><span class="ck" style="background:rgba(229,72,77,.25);color:var(--bad)">✗</span><span class="t">Innovation post</span><span class="time">9s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st fail">✗ Write the post — provider timeout</div>
+          <div class="st noop">— Check quality</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>变体 C — A + 头行发丝盒 + 头/步横线（Queue 式）</h2>
+  <p class="why">你截图里的 Queue 解剖：section 头装进发丝线圆角盒、盒下与条目间一道横线。注意横线在这里表达的是「头与子的分界」——而提案 A 的导轨已经表达了同一件事（围合）。两道机制说的是一句话。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">C — expanded（Queue 式横线）</div>
+      <div class="rcpt a c">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="cap">C — collapsed</div>
+      <div class="rcpt a c">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">›</span></div>
+      </div>
+      <p style="color:var(--meta);font-size:11px;margin-top:14px">盒在收起态其实最自洽——整张收据 = 一个可点盒。展开后盒 + 导轨 + 横线三层围合是否过多，是对比重点。</p>
+    </div>
+  </div>
+
+  <h2>变体 D — A + 逐步骤横线（iOS 清单式）</h2>
+  <p class="why">每行下一道发丝线。7 行 = 6 道多余笔画——行距本来就在分隔（家法：分隔来自间距与 token 阶），横线只增加噪点密度。放出来做反面参照。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">D — expanded（逐步骤横线）</div>
+      <div class="rcpt a d">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>变体 E — 删除线（Queue 的 completed 语义）</h2>
+  <p class="why">Queue 对 completed item 用 line-through + 降透明。搬进收据有两种读法：<b>E1 全行划线</b> = todo 语义（逐条勾销），但收据不是 todo——整列划掉读作「作废清单」，连 "Wrote a post · 282 words" 都被划；<b>E2 只划 no-op</b> = 「这一步被划掉了」——"understanding skipped" 配删除线语义恰好成立（计划里被划去的一步），产出行保持干净。E2 是我认为唯一站得住的用法。</p>
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">E1 — 全行划线（Queue 直译）</div>
+      <div class="rcpt a e1">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+      <p style="color:var(--meta);font-size:11px;margin-top:14px">产出也被划——收据成了作废清单。✗</p>
+    </div>
+    <div class="panel">
+      <div class="cap">E2 — 只划 no-op（推荐试看）</div>
+      <div class="rcpt a e2">
+        <div class="head"><span class="ck">✓</span><span class="t">Innovation post</span><span class="time">18s</span><span class="chev">⌄</span></div>
+        <div class="steps">
+          <div class="st noop">No source material — drafting directly</div>
+          <div class="st noop">No text material — persona skipped</div>
+          <div class="st noop">No source material — understanding skipped</div>
+          <div class="st work">Pick a direction</div>
+          <div class="st noop">No source material — storyboard skipped</div>
+          <div class="st work">Wrote a post · <span class="v">282 words</span> · EN</div>
+          <div class="st work">Passed · <span class="v">3 checks</span></div>
+        </div>
+      </div>
+      <p style="color:var(--meta);font-size:11px;margin-top:14px">「被划掉的一步」语义恰好成立；产出行与量化值完整。可与降灰叠加或替代降灰。</p>
+    </div>
+  </div>
+
+  <div class="legend">
+    <b>设计决策点（待拍板）</b>
+    <li><b>A vs B</b>：导轨是不是合法笔画。我方观点：导轨 = 树形层级导引（Claude Code / 文件树同族），不是分区隔线，不违「分隔来自间距与 token 阶」。</li>
+    <li><b>删除线</b>：E1（全划）否——收据不是 todo，产出不该被勾销；<b>E2（只划 no-op）可</b>——「被划掉的一步」语义恰合，且与降灰可叠加（划线表"未做"、降灰表"耳语"，一个表语义一个表声量）。</li>
+    <li><b>组件结论</b>：截图 = Vercel AI Elements 的 <span class="kbd">Queue</span>（Radix 风味）。核心 shadcn/ui（我们的 base-ui 版）无此类组件；Queue 只有 completed/pending 二态，无 running shimmer / failed / waiting / 读秒 / SSE——我们是 base-ui 栈且 RunTaskList 已自带全部 run 态机器，采纳 = 在外来壳里重建已有状态机。取视觉参照，不取代码。</li>
+    <li><b>✓ 单发</b>：步骤行去 ✓ 后，「全成」由头行圆章一次说完；失败行第一次获得对比度。</li>
+    <li><b>声级判定</b>：no-op 判定的服务端信号是现成的（summary 含 "skipped"/"drafting directly" 或 step 无 output_refs）——建议按 <span class="kbd">无产出 + skipped 语义</span> 降灰/划线，不认字符串。</li>
+    <li><b>守 09-05 退役裁定</b>：不把 4 行 prelude 折叠成 "Preparation · 4 steps" 假中间层——只降灰/划线，不重组。</li>
+  </div>
+
+</div>
+</body>
+</html>
