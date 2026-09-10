@@ -1166,7 +1166,9 @@ function GraphCard({
         ...(hasVideo || shownThumbUrl
           ? [{ action: "open", label: t("results.canvas.open") }]
           : []),
-        { action: "focus", label: t("results.canvas.focusNode") },
+        // 指认项退役（2026-09-10 用户拍板：文本产物卡的 ⋯ 只剩它 = 「没操作」，
+        // 先隐藏；@ 直接敲覆盖同一通道）。空菜单 = 既有 length 守卫自动
+        // 不渲染 ⋯；clips 的 publish/open 仍在，真有操作的菜单不受影响。
       ]
     : []
   const handleBarAction = (action: string) => {
