@@ -1058,6 +1058,11 @@ const en = {
       draftBody: "Generated when it runs",
       estimateSingle: "≈ {{count}} credits",
       estimateRange: "≈ {{low}}–{{high}} credits",
+      // 估价诚实面 (2026-09-10): unquoted nodes in the fold (transform
+      // chains price when their clips exist, mid-run) — never promise "≈ 0".
+      estimateOpen: "≈ {{count}}+ credits",
+      estimateRangeOpen: "≈ {{low}}–{{high}}+ credits",
+      estimateAtRun: "Priced at run time",
       queued: "Queued",
       skipped: "Skipped",
       runFailed: "Run failed",
@@ -1070,7 +1075,6 @@ const en = {
       // the node ∪ its downstream, priced by the fold of their quotes;
       // balance = the soft compare, 422 stays the fact source).
       promptEditing: "Prompt — editing",
-      confirmTitle: "Revise {{label}}",
       confirmBlastSingle: "Rerun this node",
       confirmBlast: "Rerun {{count}} nodes",
       confirmStart: "Confirm & run",

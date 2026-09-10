@@ -15,7 +15,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ViewportPortal } from "@xyflow/react"
 import {
   Clapperboard,
   Clock,
@@ -32,7 +31,6 @@ import {
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { cn, formatDuration } from "@/lib/utils"
 import type { GraphNode, Output, ProjectGraph, WorkflowStep } from "@/lib/types"
-import { Button } from "@/components/ui/button"
 import {
   MediaLightbox,
   type MediaChip,
@@ -444,8 +442,18 @@ export function ResultsCanvas({
   // stamp), the node's card face keeps showing the user's verbatim program
   // (pendingProgram — 乐观回显, never a revert flash).
   const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
+  // 动作住节点内 (判词①): the pricing confirm docks inside the node's
+  // program region now — this flag is its open/closed truth (promptEdit
+  // itself outlives it: after a successful confirm the staged text stays as
+  // the card face's optimistic program until the stamp arrives).
+  const [promptConfirmOpen, setPromptConfirmOpen] = useState(false)
   const handlePromptEdit = useCallback((nodeId: string, text: string) => {
     setPromptEdit({ nodeId, text })
+    setPromptConfirmOpen(true)
+  }, [])
+  const clearPromptEdit = useCallback(() => {
+    setPromptEdit(null)
+    setPromptConfirmOpen(false)
   }, [])
 
   // ── Draft-confirm card (ADR-057 K5 — 确认 = 节点锚定) ──────────────────
@@ -483,6 +491,13 @@ export function ResultsCanvas({
     )
     return [low, high]
   }, [draftNodes])
+  // 估价诚实面 (2026-09-10): unquoted draft nodes (estimate NULL — transform
+  // chains price only when their clips exist mid-run). The confirm face
+  // must never promise "≈ 0" for a chain that will charge at run time.
+  const draftUnquoted = useMemo(
+    () => draftNodes.filter((n) => n.estimateCredits == null).length,
+    [draftNodes],
+  )
   // 任务书密度律 mirror (ADR-054): the chain's TASK count gates the heavy
   // confirm, not the node count — the compile-injected materialize_source
   // is never a task (whole-source materialization, ADR-043), so a modifier-
@@ -522,8 +537,8 @@ export function ResultsCanvas({
   const editedNode = promptEdit ? (nodeById.get(promptEdit.nodeId) ?? null) : null
   // A refresh / delete vanishing the anchor node closes the card.
   useEffect(() => {
-    if (promptEdit && !editedNode) setPromptEdit(null)
-  }, [promptEdit, editedNode])
+    if (promptEdit && !editedNode) clearPromptEdit()
+  }, [promptEdit, editedNode, clearPromptEdit])
   // The stamp's arrival clears the pending program: after a successful
   // dispatch the graph refetch brings the node stamped with the SAME
   // verbatim text (edit_prompt 钢印), and the card face's pending display
@@ -531,9 +546,9 @@ export function ResultsCanvas({
   useEffect(() => {
     if (!promptEdit || !editedNode) return
     if ((editedNode.spec?.prompt ?? "").trim() === promptEdit.text.trim()) {
-      setPromptEdit(null)
+      clearPromptEdit()
     }
-  }, [promptEdit, editedNode])
+  }, [promptEdit, editedNode, clearPromptEdit])
 
   const promptEditBlast = useMemo(() => {
     if (!promptEdit) return null
@@ -569,7 +584,9 @@ export function ResultsCanvas({
       (sum, n) => sum + (n.estimateCredits?.[1] ?? n.estimateCredits?.[0] ?? 0),
       0,
     )
-    return { affected, low, high }
+    // 估价诚实面: unquoted nodes in the blast (same law as the draft fold).
+    const unquoted = affected.filter((n) => n.estimateCredits == null).length
+    return { affected, low, high, unquoted }
   }, [promptEdit, graph, nodeById])
 
   // Esc closes (the edit textarea has already unmounted by the time the
@@ -577,144 +594,62 @@ export function ResultsCanvas({
   useEffect(() => {
     if (!promptEdit) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPromptEdit(null)
+      if (e.key === "Escape") clearPromptEdit()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [promptEdit])
+  }, [promptEdit, clearPromptEdit])
 
   const handlePromptEditConfirm = useCallback(async () => {
     if (!promptEdit) return
     const ok = (await onNodeRevise?.(promptEdit.nodeId, promptEdit.text)) ?? false
     // Success keeps promptEdit alive — it IS the card face's optimistic
-    // program until the stamp arrives (the clear-on-stamp effect above).
+    // program until the stamp arrives (the clear-on-stamp effect above) —
+    // but the confirm block itself closes: the gesture is spent.
     // Failure (credits shortfall / active run / a reject — the surface
     // toasted) reverts the display to the domain truth: nothing landed.
-    if (!ok) setPromptEdit(null)
-  }, [promptEdit, onNodeRevise])
+    if (ok) setPromptConfirmOpen(false)
+    else clearPromptEdit()
+  }, [promptEdit, onNodeRevise, clearPromptEdit])
 
-  const promptEditOverlay =
-    promptEdit && editedNode && promptEditBlast ? (
-      <ViewportPortal>
-        <div
-          className="dock-surface pointer-events-auto absolute z-20 w-64 rounded-xl p-3.5 ring-1 ring-foreground/10"
-          style={{
-            left: editedNode.frame?.x ?? 0,
-            top: (editedNode.frame?.y ?? 0) - 12,
-            transform: "translateY(-100%)",
-          }}
-        >
-          <p className="text-[13px] font-semibold">
-            {t("results.canvas.confirmTitle", { label: editedNode.label })}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-            <span>
-              {promptEditBlast.affected.length === 1
-                ? t("results.canvas.confirmBlastSingle")
-                : t("results.canvas.confirmBlast", {
-                    count: promptEditBlast.affected.length,
-                  })}
-            </span>
-            {promptEditBlast.affected.map((n) => (
-              <span
-                key={n.id}
-                className="rounded bg-inset px-1.5 py-0.5 text-[10px] whitespace-nowrap"
-              >
-                {n.label}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2.5 text-xs tabular-nums">
-            {promptEditBlast.low === promptEditBlast.high
-              ? t("results.canvas.estimateSingle", { count: promptEditBlast.low })
-              : t("credits.range", {
-                  low: promptEditBlast.low,
-                  high: promptEditBlast.high,
-                })}
-            {balanceNow != null && (
-              <span
-                className={cn(
-                  "ml-1 text-[11px]",
-                  balanceNow < promptEditBlast.low
-                    ? "text-destructive"
-                    : "text-meta-foreground",
-                )}
-              >
-                · {t("credits.balance")} {balanceNow.toLocaleString()}
-              </span>
-            )}
-          </p>
-          <div className="mt-3 flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => setPromptEdit(null)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button size="sm" className="h-8" onClick={handlePromptEditConfirm}>
-              {t("results.canvas.confirmStart")}
-            </Button>
-          </div>
-        </div>
-      </ViewportPortal>
-    ) : null
+  // 动作住节点内 (2026-09-10 判词①): the pricing confirmation and the
+  // draft world's confirm beat both dock INSIDE their nodes now — the
+  // surface only computes the payloads; the program region / the book card
+  // render them in place (both ViewportPortal floating cards retired —
+  // one less anchor-math pair, and the gesture lives where the eye is).
+  const promptConfirmPayload =
+    promptEdit && promptConfirmOpen && editedNode && promptEditBlast
+      ? {
+          nodeId: promptEdit.nodeId,
+          blastLabels: promptEditBlast.affected.map((n) => n.label),
+          blastSingle: promptEditBlast.affected.length === 1,
+          low: promptEditBlast.low,
+          high: promptEditBlast.high,
+          unquoted: promptEditBlast.unquoted,
+          balance: balanceNow,
+          onConfirm: handlePromptEditConfirm,
+          onCancel: clearPromptEdit,
+        }
+      : null
 
-  // The draft world'S confirm beat (ADR-057 K5): resident while the docked
-  // book's draft graph is up, anchored above the task-book document node —
-  // the prototype's confirmCard anatomy (title / price + balance soft
-  // compare / Start), no Cancel (non-blocking doctrine: "don't start" is
-  // said by not starting — chat revises, walking away keeps the book
-  // honestly pending).
-  const draftConfirmOverlay =
-    draftConfirmVisible && draftEstimate ? (
-      <ViewportPortal>
-        <div
-          className="dock-surface pointer-events-auto absolute z-20 w-64 rounded-xl p-3.5 ring-1 ring-foreground/10"
-          style={{
-            left: taskBookDoc?.frame?.x ?? 0,
-            top: (taskBookDoc?.frame?.y ?? 0) - 12,
-            transform: "translateY(-100%)",
-          }}
-        >
-          <p className="text-[13px] font-semibold">{t("results.canvas.taskBook")}</p>
-          <p className="mt-2 text-xs tabular-nums">
-            {draftEstimate[0] === draftEstimate[1]
-              ? t("results.canvas.estimateSingle", { count: draftEstimate[0] })
-              : t("credits.range", {
-                  low: draftEstimate[0],
-                  high: draftEstimate[1],
-                })}
-            {balanceNow != null && (
-              <span
-                className={cn(
-                  "ml-1 text-[11px]",
-                  balanceNow < draftEstimate[0]
-                    ? "text-destructive"
-                    : "text-meta-foreground",
-                )}
-              >
-                · {t("credits.balance")} {balanceNow.toLocaleString()}
-              </span>
-            )}
-          </p>
-          <div className="mt-3 flex justify-end">
-            <Button size="sm" className="h-8" onClick={() => onDraftConfirm?.()}>
-              {t("results.canvas.confirmStart")}
-            </Button>
-          </div>
-        </div>
-      </ViewportPortal>
-    ) : null
+  const draftConfirmPayload =
+    draftConfirmVisible && draftEstimate
+      ? {
+          low: draftEstimate[0],
+          high: draftEstimate[1],
+          unquoted: draftUnquoted,
+          balance: balanceNow,
+          onConfirm: () => onDraftConfirm?.(),
+        }
+      : null
 
   // Pane click = back to neutral: the dossier closes with the focus (D4/D8),
   // and a pending pricing confirmation dismisses with it.
   const handlePaneClick = useCallback(() => {
     setInspectedId(null)
-    setPromptEdit(null)
+    clearPromptEdit()
     onPaneClick?.()
-  }, [onPaneClick])
+  }, [clearPromptEdit, onPaneClick])
 
   // The dossier's asset facts (出生证明 lineage) come from the graph's own
   // asset nodes — one source, zero second fetch.
@@ -748,14 +683,6 @@ export function ResultsCanvas({
         settleKey={baselineReady && visible ? baselineKey : null}
         bornIds={bornIds}
         dots
-        overlay={
-          promptEditOverlay || draftConfirmOverlay ? (
-            <>
-              {promptEditOverlay}
-              {draftConfirmOverlay}
-            </>
-          ) : null
-        }
         className="h-full"
         selectedId={selectedOutputId ? (nodeIdByOutputId.get(selectedOutputId) ?? null) : null}
         onPaneClick={handlePaneClick}
@@ -766,6 +693,8 @@ export function ResultsCanvas({
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}
         pendingProgram={promptEdit}
+        promptConfirm={promptConfirmPayload}
+        draftConfirm={draftConfirmPayload}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its

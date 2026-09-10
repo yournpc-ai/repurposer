@@ -248,6 +248,8 @@ export function FlowView({
   onDisplayChange,
   onPromptEdit,
   pendingProgram = null,
+  promptConfirm = null,
+  draftConfirm = null,
   onPaneClick,
   navigation = "fit",
   controls = false,
@@ -316,6 +318,23 @@ export function FlowView({
           pendingProgram && pendingProgram.nodeId === n.id
             ? pendingProgram.text
             : null,
+        promptConfirm:
+          promptConfirm && promptConfirm.nodeId === n.id
+            ? {
+                blastLabels: promptConfirm.blastLabels,
+                blastSingle: promptConfirm.blastSingle,
+                low: promptConfirm.low,
+                high: promptConfirm.high,
+                unquoted: promptConfirm.unquoted,
+                balance: promptConfirm.balance,
+                onConfirm: promptConfirm.onConfirm,
+                onCancel: promptConfirm.onCancel,
+              }
+            : null,
+        draftConfirm:
+          draftConfirm && n.kind === "document" && n.spec?.role === "task_book"
+            ? draftConfirm
+            : null,
       },
       draggable: false,
       connectable: false,
@@ -348,7 +367,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

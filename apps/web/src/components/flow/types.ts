@@ -174,6 +174,31 @@ export interface FlowViewProps {
    * user's verbatim program instead of the domain's last-stamped one —
    * never a revert flash. Null = no pending edit. */
   pendingProgram?: { nodeId: string; text: string } | null
+  /** 动作住节点内 (2026-09-10 判词①): the prompt edit's pricing
+   * confirmation docks INSIDE the edited node's program region (the
+   * retired floating overlay) — the surface computes the blast (锚定子图)
+   * and the price, the region renders them under the staged program. */
+  promptConfirm?: {
+    nodeId: string
+    blastLabels: string[]
+    blastSingle: boolean
+    low: number
+    high: number
+    unquoted: number
+    balance: number | null
+    onConfirm: () => void
+    onCancel: () => void
+  } | null
+  /** 动作住节点内 (判词①): the draft world's confirm beat docks INSIDE the
+   * task-book document card (the retired floating card) — resident while
+   * the docked book's draft graph is up. */
+  draftConfirm?: {
+    low: number
+    high: number
+    unquoted: number
+    balance: number | null
+    onConfirm: () => void
+  } | null
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void

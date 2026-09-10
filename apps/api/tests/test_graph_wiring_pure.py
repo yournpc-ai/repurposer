@@ -667,6 +667,110 @@ async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
     assert "• Fact one" in doc.spec["text"]
 
 
+# ---- task book face (全文卡律 判词④: prose birth + 双面 back-write 律) ------
+
+
+def _post_chain():
+    plan = WorkflowStep(
+        id=uuid4(),
+        kind="plan",
+        seq=1,
+        spec={"task_book": {"slots": [{"type": "post"}], "target_language": "en"}},
+        estimate=None,
+    )
+    post = WorkflowStep(
+        id=uuid4(),
+        kind="write_post",
+        seq=2,
+        spec={"slot": {"type": "post"}, "slot_index": 0},
+        estimate=None,
+    )
+    post.inputs = [str(plan.id)]
+    plan.inputs = []
+    return [plan, post]
+
+
+def _book_node(db):
+    return next(
+        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "task_book"
+    )
+
+
+@pytest.mark.asyncio
+async def test_draft_book_born_with_full_prose_and_confirm_sized_frame():
+    project = Project(id=_PROJECT_ID)
+    db = _StubDb()
+    prose = "Four caption versions off your full demo video — EN, ZH, FR, ES."
+    await _stamp_graph_core(
+        db, project, _post_chain(), run=None, ui_language="en", draft=True, book_text=prose
+    )
+    book = _book_node(db)
+    assert book.spec["text"] == prose  # the LLM's own plan restatement, never a condensation
+    # 全文卡律 frame (server mirror of layout.ts documentTextHeight): 66
+    # Latin chars → ceil(66/50) = 2 lines → 26 + 16 + 36 + 16 + 88 (the
+    # dock-time confirm allowance) = 182.
+    assert book.layout["h"] == 182
+    assert book.layout["w"] == 260
+
+
+@pytest.mark.asyncio
+async def test_draft_restamp_refreshes_the_prose_but_run_fill_never_rewrites_it():
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    steps = _post_chain()
+    db = _StubDb(steps=steps)
+    await _stamp_graph_core(
+        db, project, steps, run=None, ui_language="en", draft=True, book_text="old prose"
+    )
+    # A revised chain re-docks: the dock owns the DRAFT face — refresh.
+    await _stamp_graph_core(
+        db, project, steps, run=None, ui_language="en", draft=True, book_text="new prose"
+    )
+    assert _book_node(db).spec["text"] == "new prose"
+    # Start's run fill (the deterministic composition is available here —
+    # "1 post · English") must NOT overwrite the docked promise.
+    await _stamp_graph_core(
+        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
+    )
+    assert _book_node(db).spec["text"] == "new prose"
+
+
+@pytest.mark.asyncio
+async def test_run_born_book_fills_an_empty_face_with_composition_or_run_name():
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    db = _StubDb(steps=_post_chain())
+    await _stamp_graph_core(
+        db, project, _post_chain(), run=run, ui_language="en", draft=False, book_text=None
+    )
+    assert _book_node(db).spec["text"] == "1 post · English"
+    # A transform chain carries no output slots — the deterministic
+    # composition is blind (None); the run's LLM-given name is the face.
+    plan, post = _post_chain()
+    plan.spec = {"task_book": {"slots": [], "target_language": "en"}}
+    named_run = WorkflowRun(
+        id=uuid4(), project_id=_PROJECT_ID, context={"name": "Multilingual caption versions"}
+    )
+    db2 = _StubDb(steps=[plan, post])
+    await _stamp_graph_core(
+        db2, project, [plan, post], run=named_run, ui_language="en", draft=False, book_text=None
+    )
+    assert _book_node(db2).spec["text"] == "Multilingual caption versions"
+
+
+def test_document_frame_full_text_math_cjk_latin_empty():
+    from app.pipeline.graph_store import _document_frame
+
+    # CJK 100 chars → ceil(100/32) = 4 lines → 26 + 16 + 72 + 16 = 130.
+    assert _document_frame({"text": "字" * 100}) == (260, 130)
+    # Latin 200 chars → ceil(200/50) = 4 lines — same height.
+    assert _document_frame({"text": "a" * 200}) == (260, 130)
+    # Empty text → the one-line floor; the task_book role adds the confirm
+    # allowance (+88).
+    assert _document_frame({"text": ""}) == (260, 26 + 16 + 18 + 16)
+    assert _document_frame({"text": "", "role": "task_book"}) == (260, 26 + 16 + 18 + 16 + 88)
+
+
 # ---- settle_frames_with_edges (the door's frame settle, 2026-09-08) ---------
 
 

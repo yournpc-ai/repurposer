@@ -1379,3 +1379,20 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 4. **自愈路径闭环**：旧草稿无需迁移——`scripts/restamp_draft_graph.py <project_id>` 从 `project.pending_brief`（Start 路径同一读出位）重放草稿盖章，对账撤陈旧边、fill key 碰撞复用节点，画布不起 run 即愈合；Start 的 run fill 同律对账。
 
 **Consequences**: b7ae9627 caption 项目实测：重盖后 11 边 → 8 边，恰好撤除 EN→ZH / ZH→FR / FR→dub 三条链式边，扇出与节点全保留（无孪生）。纯函数套件 +4 用例（断一条 / 翻转免幻影环 / 缺边拒收 / 同批新生摘除），36/36 全绿；另两件前两批滞后见证同批归位（ADR-059 两段 flush 计数、560 预留堆距）。「run fill never deletes」律语义收窄为**节点/历史**——成员内的拓扑宣称不属于历史，属于本次编译。
+
+## ADR-063: 动作住节点内 + 全文卡律 + 估价诚实面——卡面诚实三律
+
+**Status**: Decided (2026-09-10)
+
+**Context**: 一次 caption 画布走查三连拍：① confirm 之类动作不该单独起 UI（draft 确认卡与 promptEdit 定价确认卡是两张 ViewportPortal 浮卡，锚位数学各一份）——节点动作应做在节点内部；② 实现者提议「把 frame 行数律搬一份给 DocumentCard」被当场驳回——「这不是重复造轮子吗？？应该是封装」；③ transcript 卡 `line-clamp-6` 截断带省略号、padding 四边不齐——用户判词：「进了 node 卡面的东西，不要任何摘要和浓缩，必须是原文全文，不需要画蛇添足」。同场挖出的两宗失信：任务书节点对 transform 链是哑巴（`Plan.book_summary` 只认产物型 slot，translate/dub 不盖 slot → 书文本 None → 空卡；Start 时 run fill 的确定性组合还会把草稿散文**抹掉**）；确认卡许诺「≈ 0 credits」（transform 节点编译期报价 NULL——clips 不存在不可报价——报价折叠只加已报价子图，全 NULL 折叠显示 0 = 谎言）。
+
+**Decision**:
+
+1. **动作住节点内（判词①）**：节点动作 = 节点内部解剖，浮卡形态全火化。draft 确认拍（K5）住进任务书文档卡（文本全文 + 估价 + 余额软对照 + Confirm & run，无 Cancel——「不开始」就是不开始）；promptEdit 定价确认住进 ProgramRegion（暂存程序行下就地展开：锚定子图 chips + 估价 + 余额 + Cancel/Confirm）。两张 ViewportPortal 卡连同锚位数学全删；事实经节点 data 通道下达（`draftConfirm` / `promptConfirm` payload），可见性计算留在 ResultsCanvas。
+2. **全文卡律（判词④）**：卡面内容 = 原文全文，永无摘要/浓缩/省略号。DocumentCard 去 clamp 全文渲染（转写稿 3000 字 = 1750px 卡，画布是文档面不是阅读器——文本产物卡本就全文滚动，天然合规）；**文档框出生即全文高**（graph_store `_document_frame`：documents 出生时文本已知——transcript 随 ASR、书随 dock——框高 = 26 + 16 + 行数×18 + 16，task_book 加 88 确认预留，列堆叠天然正确零重排）；**任务书文本 = 判决自身的计划散文**（`intent.answer`，二源律①——确定性浓缩组合对 transform 链失明且是「画蛇添足」；run-born 书 = 编译组合 ?? run.context.name）。**双面 back-write 律**：draft 模式 dock 拥有草稿书面（修订刷新散文，run-born 书面是历史不动）；run 模式 fill 只填空面（永不改写/抹除草稿散文）。
+3. **测量封装（判词②）**：文本测量一条律两个镜像——client `layout.ts`（textLineCount / documentTextHeight）↔ server `graph_store._document_frame`，注释互引，永不出现第三份拷贝；卡内共享 = `EstimatePriceLine` 一个组件服务确认区/定价确认/草稿 chip 三处。
+4. **估价诚实面**：折叠中存在未报价节点（estimate NULL）时——全 NULL 折叠显示「估价随运行」（永不许诺 ≈0），部分折叠带开口「+」下界；节点草稿 chip 在 [0,0]（free/未报价）时不出场（免费节点不报价自己的脸）。
+
+**Consequences**: 纯函数 40/40（新增书面律 4 用例 + 文档框数学）；tsc 0；confirmTitle i18n 键随浮卡退役。transform 链的运行时报价（编译期 floor 估价——按时长×字幕密度启发式）= BILLING 层增强，登记需求池；转写节点 loading 出生改期（上传即落节点、状态随 ASR）= 同池；mention 扩族（transcript 候选）判词③ = 先不管。
+
+**Related**: ADR-057（K4/K5 形态就地修订——通道与写门不变）、ADR-058（二源律延伸——书文本取 LLM 散文、run 名兜底）、ADR-062（同批图律族）

@@ -24,6 +24,8 @@ born at the only birthplace (orchestrator.create_run), zero bypass.
 
 from __future__ import annotations
 
+import math
+import re
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -239,6 +241,43 @@ _FRAME_CLASS: dict[str, tuple[int, int]] = {
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
 
+# The task-book document's role tag (graph_fill's stamps set it; the frame
+# law reads it for the dock-time confirm allowance). One home here — the
+# graph's role vocabulary is the door's business, never a magic string per
+# call site.
+_TASK_BOOK_ROLE = "task_book"
+
+# 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文，无摘要无浓缩): the
+# document card never truncates, so a text-bearing document's frame is BORN
+# at the text's full height (documents know their text at birth — the
+# transcript lands with ASR, the book's plan summary with the dock). The
+# line math is ONE law with the client's shared measurement
+# (apps/web/src/components/flow/layout.ts — the text card's chars-per-line
+# table, scaled proportionally to the document's narrower text width); two
+# mirrors cross-referenced, never a third copy (判词②).
+_DOCUMENT_LINE_PX = 18  # text-xs leading-relaxed (same as the text card)
+_DOCUMENT_CAPTION_PX = 26  # NodeCaption band (= PRODUCT_LABEL_PX)
+# The task_book's dock-time confirm anatomy (price + balance + the Start
+# button): resident while the book is unconfirmed, so the frame reserves it
+# from birth; post-Start the card simply fills less of its reservation
+# (cards fill INTO frames, never the reverse).
+_DOCUMENT_CONFIRM_PX = 88
+_CJK_RE = re.compile(r"[一-龥぀-ゟ゠-ヿ]")
+
+
+def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
+    w, _ = _FRAME_CLASS["document"]
+    text = str(spec.get("text") or "")
+    # The text card's table is 44 CJK / 68 Latin chars per 312px of text
+    # width; the document's column is 228px — the same proportion (one law).
+    cjk = bool(_CJK_RE.search(text))
+    chars_per_line = 32 if cjk else 50
+    lines = max(1, math.ceil(len(text) / chars_per_line)) if text else 1
+    h = _DOCUMENT_CAPTION_PX + 16 + lines * _DOCUMENT_LINE_PX + 16
+    if spec.get("role") == _TASK_BOOK_ROLE:
+        h += _DOCUMENT_CONFIRM_PX
+    return w, h
+
 # 统一摆位律 (2026-09-09 拍板): ONE frame law owns every newborn's frame
 # (_assign_layout), and columns are DEPTH-pitched — x = depth × _PITCH,
 # never derived from a parent's right edge (mixed frame widths made
@@ -255,6 +294,8 @@ _PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 340 + 96
 
 def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
     cls = _KIND_FRAME_CLASS.get(kind) or str(spec.get("frame_class") or "") or "clip"
+    if cls == "document":
+        return _document_frame(spec)
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
 

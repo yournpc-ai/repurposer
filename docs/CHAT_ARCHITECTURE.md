@@ -276,7 +276,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 chat 的另一半是"改现有产物"。修订目标 = **图节点 id 的确定引用**（@ mention / 图断面上下文行，agent 永不在 run 内猜 scope——「Target clip not found」类失败结构性不可能）。边界判定：
 
-- 指令需要重新生成（改意图 / 改程序）→ **wiring ops**（§5）——`edit_prompt(node)` 改写程序行 + `run({node} ∪ downstream)`（下游由图边遍历确定）；卡面 prompt 直改 = 同一个 op、**确定性通道**（2026-09-09 ADR-058 通道翻案：定价确认卡锚定受影响子图、估价随行，确认后 ops 由代码构建走 `POST /projects/{id}/graph/revise`——直改是手势不是意图，**dock 零消息**，节点状态周期 = 全部反馈，卡面乐观回显永不回闪；chat 唯一意图面不变）。
+- 指令需要重新生成（改意图 / 改程序）→ **wiring ops**（§5）——`edit_prompt(node)` 改写程序行 + `run({node} ∪ downstream)`（下游由图边遍历确定）；卡面 prompt 直改 = 同一个 op、**确定性通道**（2026-09-09 ADR-058 通道翻案 + 2026-09-10 ADR-063 动作内化：定价确认住进程序区——锚定受影响子图 chips、估价随行就地展开，浮卡形态全火化，确认后 ops 由代码构建走 `POST /projects/{id}/graph/revise`——直改是手势不是意图，**dock 零消息**，节点状态周期 = 全部反馈，卡面乐观回显永不回闪；chat 唯一意图面不变）。
 - 指令能表达为对某个 output 的 clip-spec diff（trim / 字幕样式等参数精确指令）→ **edit ops** → Operation Model（operations 表）——作为**节点内部**的产物级精修存活。
 - 拿不准 → intent 反问（**反问是合法输出，不是失败**）。
 

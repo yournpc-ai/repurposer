@@ -1023,7 +1023,12 @@ async def sync_task_book_question(
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     try:
-        await stamp_draft_graph(db, project, intent.tasks, current_ui_language())
+        # 全文卡律 (判词④): the book doc's face = the verdict's own plan
+        # prose (intent.answer) — never the deterministic condensed
+        # composition (blind to transform chains).
+        await stamp_draft_graph(
+            db, project, intent.tasks, current_ui_language(), intent.answer
+        )
     except (ToolRejected, ValueError):
         logger.warning(
             "draft_graph_stamp_failed",
@@ -1344,7 +1349,12 @@ async def answer_question(
             from app.ui_locale import current_ui_language  # deferred
 
             try:
-                await stamp_draft_graph(db, project, tasks, current_ui_language())
+                # Same prose law as the dock (判词④): the confirmed intent's
+                # own answer is the face (a panel-edited chain keeps the
+                # docked prose — the edits ride the tasks, not the summary).
+                await stamp_draft_graph(
+                    db, project, tasks, current_ui_language(), intent.answer
+                )
             except (ToolRejected, ValueError):
                 await clear_draft_graph(db, UUID(str(project.id)))
             try:

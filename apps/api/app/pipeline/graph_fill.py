@@ -48,7 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import NODE_KINDS
-from app.pipeline.graph_store import apply_wiring_ops
+from app.pipeline.graph_store import _TASK_BOOK_ROLE, apply_wiring_ops
 from app.pipeline.outputs import compose_spec_prompt
 
 logger = structlog.get_logger()
@@ -70,10 +70,11 @@ _CLIP_FAMILY_KINDS = frozenset({
     "remove_filler", "add_music", "reframe_clip",
 })
 
-_TASK_BOOK_ROLE = "task_book"
 # 转写稿 document (ADR-057 document 型第二实例): the asset's ASR transcript /
 # extracted text as a first-class card. research brief (第三实例): the bounded
 # loop's closing artifact as its own card, fed by the agent node.
+# (_TASK_BOOK_ROLE's one home is graph_store — the door owns the graph's role
+# vocabulary.)
 _TRANSCRIPT_ROLE = "transcript"
 _RESEARCH_BRIEF_ROLE = "research_brief"
 _RESEARCH_BRIEF_KEY = "research_brief"
@@ -312,6 +313,7 @@ async def stamp_draft_graph(
     project: Project,
     tasks: list,
     ui_language: str | None = None,
+    book_text: str | None = None,
 ) -> None:
     """Draft stamp (ADR-057 K5) — the docked task book's graph twin.
 
@@ -324,6 +326,13 @@ async def stamp_draft_graph(
     place. Raises ToolRejected / ValueError on an uncompilable chain — the
     caller degrades exactly like the quote-less dock (and tears the stale
     preview down via ``clear_draft_graph``). Flush-only.
+
+    ``book_text`` (2026-09-10 全文卡律, 判词④): the book doc's face is the
+    plan's FULL summary prose — the draft verdict's own ``answer`` (the
+    LLM's plan restatement, 二源律①), passed by the dock. The deterministic
+    slot composition (Plan.book_summary) is the fallback only — it is blind
+    to transform chains (translate/dub carry no slot), and a condensed line
+    on the card face is the 画蛇添足 the ruling kills.
     """
     from app.models.schemas import IntentSlot  # deferred: schema leaf
     from app.pipeline.graph import known_output_types  # deferred: kernel leaf
@@ -361,17 +370,17 @@ async def stamp_draft_graph(
     ]
     for step, ns in zip(steps, node_specs, strict=True):
         step.inputs = [str(steps[i].id) for i in ns.inputs]
-    # The draft book's text — the same summary the runtime plan stamps
-    # (Plan.book_summary, one source): the run's back-write overwrites it
-    # with the identical composition, zero flicker.
-    parsed = [
-        IntentSlot.model_validate(s.spec["slot"])
-        for s in steps
-        if (s.spec or {}).get("slot")
-    ]
-    intent_slots = [s for s in parsed if s.type in known_output_types()]
-    target_language = first_task_language(tasks) or project.language or "en"
-    book_text = Plan.book_summary(intent_slots, target_language)
+    # The draft book's text: the dock's LLM prose wins (the parameter);
+    # the deterministic composition is the fallback for a prose-less caller.
+    if book_text is None:
+        parsed = [
+            IntentSlot.model_validate(s.spec["slot"])
+            for s in steps
+            if (s.spec or {}).get("slot")
+        ]
+        intent_slots = [s for s in parsed if s.type in known_output_types()]
+        target_language = first_task_language(tasks) or project.language or "en"
+        book_text = Plan.book_summary(intent_slots, target_language)
     await _stamp_graph_core(
         db,
         project,
@@ -637,6 +646,12 @@ async def _stamp_graph_core(
     prelude_steps = [s for s in steps if s.kind in _PRELUDE_KINDS]
     if book_text is None and not draft:
         book_text = _task_book_text(steps)
+        if book_text is None and run is not None:
+            # Transform chains carry no output slots — the deterministic
+            # composition is blind to them. The run's LLM-given name
+            # (ADR-058 二源律①, stamped into context at birth) is the
+            # honest fallback face, never an empty card.
+            book_text = (run.context or {}).get("name")
     book_newborn_id: UUID | None = None
     if task_book_node is None:
         if prelude_steps or draft:
@@ -656,10 +671,23 @@ async def _stamp_graph_core(
                 }
             )
     elif book_text or draft:
-        # A revised chain re-stamps the book — the runtime plan summary
-        # overwrites it at back-write time (same source, no flicker).
-        if not draft or not (task_book_node.spec or {}).get("run_id"):
-            task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
+        # 全文卡律 (判词④) 的双面书文本律:
+        if draft:
+            # The dock owns the DRAFT book's face: a re-docked / revised
+            # chain refreshes the prose (the LLM's latest plan restatement).
+            # A run-born book (spec.run_id) is history — the bail keeps it
+            # honest, untouched (the old guard's intent).
+            if book_text and not (task_book_node.spec or {}).get("run_id"):
+                task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
+        else:
+            # Run fill never rewrites the book's face — the draft's prose is
+            # the promise being executed. Only an EMPTY face (a run-born
+            # book) takes the compile's composition / the run's name: the old
+            # "same source, no flicker" back-write had TWO sources, and for
+            # transform chains the composition is None — it WIPED the draft's
+            # prose at Start.
+            if book_text and not (task_book_node.spec or {}).get("text"):
+                task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
     task_book_id = book_newborn_id or (
         UUID(str(task_book_node.id)) if task_book_node is not None else None
     )

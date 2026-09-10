@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandLoader } from "@/components/BrandLoader"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,6 +76,32 @@ export interface FlowCardData extends Record<string, unknown> {
    * the stamp is in flight, the program region shows the user's verbatim
    * text instead of the domain's last stamp — never a revert flash. */
   pendingProgram?: string | null
+  /** 动作住节点内 (2026-09-10 判词①): the prompt edit's pricing
+   * confirmation docks INSIDE the program region (the retired overlay's
+   * facts verbatim) — blast labels (锚定子图), the credit range, the
+   * balance soft-compare, and the two gestures. */
+  promptConfirm?: {
+    blastLabels: string[]
+    blastSingle: boolean
+    low: number
+    high: number
+    /** 估价诚实面: unquoted nodes in the blast (estimate_credits null —
+     * transform chains price mid-run). */
+    unquoted: number
+    balance: number | null
+    onConfirm: () => void
+    onCancel: () => void
+  } | null
+  /** 动作住节点内 (判词①): the draft world's confirm beat docks INSIDE the
+   * task-book document card (the retired floating card's anatomy) — the
+   * chain's total estimate + the balance + the Start gesture. */
+  draftConfirm?: {
+    low: number
+    high: number
+    unquoted: number
+    balance: number | null
+    onConfirm: () => void
+  } | null
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -449,18 +476,53 @@ function StepCard({ node }: { node: FlowNode }) {
 /** The document node's card (ADR-057 — the task book, the FLORA text-node
  * form). Parked on the same dot grid as the dock, so it takes the
  * dock-surface frost (the canvas's dots read through) + the hairline,
- * never a shadow: the produced text IS the body copy. Read-only on this
- * surface — changing it happens in chat. No factsbar, no program region. */
-function DocumentCard({ node }: { node: FlowNode }) {
+ * never a shadow: the produced text IS the body copy. 全文卡律 (2026-09-10
+ * 判词④): the body renders the FULL text — never a clamp, never an
+ * ellipsis (the frame is born at the text's height, server mirror:
+ * graph_store._document_frame). The task_book's dock-time confirm beat
+ * lives INSIDE the card (判词① — the retired floating overlay's anatomy:
+ * price + balance soft-compare + Start), no Cancel: "don't start" is said
+ * by not starting. Read-only on this surface — changing it happens in
+ * chat. No factsbar, no program region. */
+function DocumentCard({
+  node,
+  draftConfirm,
+}: {
+  node: FlowNode
+  draftConfirm?: FlowCardData["draftConfirm"]
+}) {
+  const { t } = useTranslation()
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
-      <div className="dock-surface min-h-0 flex-1 rounded-xl p-4 ring-foreground/10 ring-1">
+      <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl p-4 ring-foreground/10 ring-1">
         {node.spec?.text ? (
-          <p className="line-clamp-6 text-xs leading-relaxed">{node.spec.text}</p>
+          <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
         ) : (
           <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
         )}
+        {draftConfirm ? (
+          <div className="mt-auto pt-4">
+            <EstimatePriceLine
+              low={draftConfirm.low}
+              high={draftConfirm.high}
+              unquoted={draftConfirm.unquoted}
+              balance={draftConfirm.balance}
+            />
+            <div className="mt-2.5 flex justify-end">
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  draftConfirm.onConfirm()
+                }}
+              >
+                {t("results.canvas.confirmStart")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -857,6 +919,54 @@ function TextProductRegion({
  * queued reads 排队中 without the price (already committed); a landed-empty
  * node (research — its product is internal) reads its summary line in the
  * same body. */
+/** The one estimate+balance price line (判词② 封装 — the confirm region /
+ * the pricing confirm / the draft chip all read it): the 估价诚实面
+ * (2026-09-10) — when unquoted nodes ride the fold (transform chains price
+ * only once their clips exist, mid-run), the line says so: an all-null
+ * total is "Priced at run time" (never the lie "≈ 0"), a partial fold
+ * carries the open "+" bound. `balance` = the soft compare (destructive
+ * when short). */
+function EstimatePriceLine({
+  low,
+  high,
+  unquoted = 0,
+  balance,
+  className,
+}: {
+  low: number
+  high: number
+  unquoted?: number
+  balance?: number | null
+  className?: string
+}) {
+  const { t } = useTranslation()
+  return (
+    <p className={cn("text-xs tabular-nums", className)}>
+      {unquoted > 0 && high === 0 ? (
+        <span className="text-muted-foreground">{t("results.canvas.estimateAtRun")}</span>
+      ) : unquoted > 0 ? (
+        low === high
+          ? t("results.canvas.estimateOpen", { count: low })
+          : t("results.canvas.estimateRangeOpen", { low, high })
+      ) : low === high ? (
+        t("results.canvas.estimateSingle", { count: low })
+      ) : (
+        t("credits.range", { low, high })
+      )}
+      {!(unquoted > 0 && high === 0) && balance != null && (
+        <span
+          className={cn(
+            "ml-1 text-[11px]",
+            balance < low ? "text-destructive" : "text-meta-foreground",
+          )}
+        >
+          · {t("credits.balance")} {balance.toLocaleString()}
+        </span>
+      )}
+    </p>
+  )
+}
+
 function QuietBody({ node }: { node: FlowNode }) {
   const { t } = useTranslation()
   const est = node.estimateCredits
@@ -867,7 +977,10 @@ function QuietBody({ node }: { node: FlowNode }) {
           <span className="text-[11px] text-muted-foreground">
             {t("results.canvas.draftBody")}
           </span>
-          {est ? (
+          {/* A [0,0] fold = a free node (or one whose mid-run children are
+              unquoted — materialize's render fan-out) — its face stays
+              quiet; only a real price earns the chip (估价诚实面). */}
+          {est && (est[0] > 0 || est[1] > 0) ? (
             <span className="rounded bg-inset px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
               {est[0] === est[1]
                 ? t("results.canvas.estimateSingle", { count: est[0] })
@@ -911,11 +1024,13 @@ function ProgramRegion({
   editable,
   onPromptEdit,
   pendingProgram,
+  promptConfirm,
 }: {
   node: FlowNode
   editable?: boolean
   onPromptEdit?: (nodeId: string, text: string) => void
   pendingProgram?: string | null
+  promptConfirm?: FlowCardData["promptConfirm"]
 }) {
   const { t } = useTranslation()
   const stampedPrompt = node.spec?.prompt
@@ -988,10 +1103,10 @@ function ProgramRegion({
     <div
       className={cn(
         "shrink-0 px-3 py-2 transition-colors",
-        editable && !editing && "cursor-text hover:bg-accent/50",
+        editable && !editing && !promptConfirm && "cursor-text hover:bg-accent/50",
       )}
       onClick={(e) => {
-        if (!editable || editing) return
+        if (!editable || editing || promptConfirm) return
         // Entering the draft is NOT the node-select gesture.
         e.stopPropagation()
         setEditing(true)
@@ -1041,6 +1156,61 @@ function ProgramRegion({
           {prompt}
         </p>
       )}
+      {promptConfirm && !editing ? (
+        // 动作住节点内 (判词①): the pricing confirmation docks here — the
+        // staged program above (the card face already reads it), the blast
+        // chips (锚定子图), the estimate + balance, and the two gestures.
+        <div
+          className="mt-2 border-t border-foreground/8 pt-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+            <span>
+              {promptConfirm.blastSingle
+                ? t("results.canvas.confirmBlastSingle")
+                : t("results.canvas.confirmBlast", { count: promptConfirm.blastLabels.length })}
+            </span>
+            {promptConfirm.blastLabels.map((label, i) => (
+              <span
+                key={i}
+                className="rounded bg-inset px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+          <EstimatePriceLine
+            className="mt-2"
+            low={promptConfirm.low}
+            high={promptConfirm.high}
+            unquoted={promptConfirm.unquoted}
+            balance={promptConfirm.balance}
+          />
+          <div className="mt-2.5 flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={(e) => {
+                e.stopPropagation()
+                promptConfirm.onCancel()
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              className="h-8"
+              onClick={(e) => {
+                e.stopPropagation()
+                promptConfirm.onConfirm()
+              }}
+            >
+              {t("results.canvas.confirmStart")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1058,6 +1228,7 @@ function GraphCard({
   onDisplayChange,
   onPromptEdit,
   pendingProgram,
+  promptConfirm,
 }: {
   node: FlowNode
   selected: boolean
@@ -1066,6 +1237,7 @@ function GraphCard({
   onDisplayChange?: FlowCardData["onDisplayChange"]
   onPromptEdit?: FlowCardData["onPromptEdit"]
   pendingProgram?: FlowCardData["pendingProgram"]
+  promptConfirm?: FlowCardData["promptConfirm"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
@@ -1227,6 +1399,7 @@ function GraphCard({
           }
           onPromptEdit={onPromptEdit}
           pendingProgram={pendingProgram}
+          promptConfirm={promptConfirm}
         />
       </div>
 
@@ -1380,7 +1553,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1409,7 +1582,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
       {node.kind === "step" ? (
         <StepCard node={node} />
       ) : node.kind === "document" ? (
-        <DocumentCard node={node} />
+        <DocumentCard node={node} draftConfirm={draftConfirm} />
       ) : isGraphCard ? (
         <GraphCard
           node={node}
@@ -1419,6 +1592,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onDisplayChange={onDisplayChange}
           onPromptEdit={onPromptEdit}
           pendingProgram={pendingProgram}
+          promptConfirm={promptConfirm}
         />
       ) : (
         <ThumbCard

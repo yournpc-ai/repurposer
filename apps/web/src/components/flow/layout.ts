@@ -98,6 +98,22 @@ export function textLineCount(body: string, hasTitle: boolean): number {
   return Math.max(2, (hasTitle ? 1 : 0) + bodyLines)
 }
 
+/** 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文): the document card
+ * never truncates, so its render height derives from the FULL text. ONE
+ * measurement law with the server's frame mirror
+ * (apps/api/app/pipeline/graph_store.py _document_frame — the same
+ * chars-per-line proportion off the text card's table, the same 18px line,
+ * the same caption/padding anatomy; two mirrors cross-referenced, never a
+ * third copy — 判词②). `confirm` reserves the task_book's dock-time confirm
+ * anatomy (price + balance + Start button — the server reserves it from
+ * birth; post-Start the card fills less of the frame). */
+export function documentTextHeight(text: string, confirm: boolean): number {
+  const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(text)
+  const charsPerLine = cjk ? 32 : 50 // the server's 228px-column values
+  const lines = text ? Math.max(1, Math.ceil(text.length / charsPerLine)) : 1
+  return 26 + 16 + lines * 18 + 16 + (confirm ? 88 : 0)
+}
+
 /** The graph node's content-driven render size (ADR-057 K3): width = the
  * settled frame's (a size class fact), height = the anatomy's content math
  * — a node fills INTO its reserved frame as products land (draft → quiet
@@ -116,7 +132,15 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     }
   }
   if (node.kind === "document") {
-    return { width, height: frame?.h ?? fallback.height }
+    // 全文卡律: height = the full text's need, always content-derived
+    // (never the frame's mandate — new frames are born with exactly this
+    // via the server's mirror math, so the two agree; a legacy 200px frame
+    // may be outgrown, never the text). The confirm anatomy is reserved
+    // only while the book is actually draft (post-Start the card fills
+    // less — the frame's +88 is a reservation, not a mandate).
+    const text = (node.spec?.text as string | undefined) ?? ""
+    const confirm = node.spec?.role === "task_book" && node.status === "draft"
+    return { width, height: documentTextHeight(text, confirm) }
   }
   // generator / processor / agent: product region + program region + bar.
   const outputs = node.outputs ?? []

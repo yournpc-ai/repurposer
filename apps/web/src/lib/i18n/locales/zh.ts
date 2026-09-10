@@ -1010,6 +1010,11 @@ const zh: Resources = {
       draftBody: "运行后生成",
       estimateSingle: "约 {{count}} 积分",
       estimateRange: "约 {{low}}–{{high}} 积分",
+      // 估价诚实面 (2026-09-10): 折叠中存在未估价节点（transform 链在产物
+      // 存在时才能报价）——永不许诺「约 0」。
+      estimateOpen: "约 {{count}}+ 积分",
+      estimateRangeOpen: "约 {{low}}–{{high}}+ 积分",
+      estimateAtRun: "估价随运行",
       queued: "排队中",
       skipped: "已跳过",
       runFailed: "运行失败",
@@ -1021,7 +1026,6 @@ const zh: Resources = {
       // （受影响子图 = 本节点 ∪ 图边下游，价格 = 各节点估价 fold；
       // 余额 = 软对照，422 仍是事实源）。
       promptEditing: "提示词——修改中",
-      confirmTitle: "修订 {{label}}",
       confirmBlastSingle: "重跑此节点",
       confirmBlast: "重跑 {{count}} 个节点",
       confirmStart: "确认开始",

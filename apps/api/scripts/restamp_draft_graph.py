@@ -58,7 +58,14 @@ async def main() -> None:
             return
         from app.pipeline.graph_fill import stamp_draft_graph  # deferred: import cycle
 
-        await stamp_draft_graph(db, project, list(pending.intent.tasks), args.lang)
+        # 判词④ prose law: the docked verdict's own answer is the face.
+        await stamp_draft_graph(
+            db,
+            project,
+            list(pending.intent.tasks),
+            args.lang,
+            pending.intent.answer,
+        )
         await db.commit()
         logger.info(
             "restamp_done",
