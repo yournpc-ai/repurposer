@@ -1277,7 +1277,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    | ③ | generator 生成 | **prompt 在卡面 = 程序** | 写 Post / 配音 / 配乐 / 选段编剧 |
    | ④ | processor 加工 | 只有参数，无 LLM prompt | render / 剪辑物化 / 字幕摊铺 |
    | ⑤ | agent 有界 loop | 三护栏原样（ADR-052 B4） | research |
-5. **端口法则**（ElevenLabs 实测定稿；**2026-09-08 MiniMax 收编——外延伸 + 图标芯片**；**2026-09-10 双修订**）：**进 = 按消费区域分位，出 = 生产区域最右上角**；同侧多口从角起堆叠。**修订一（红圈裁定——进分位细分）**：媒体流（video/audio）的消费区域 = 内容区，锚在**内容区左上**（caption 带下，ElevenLabs 媒体高文本低同构）；文本流（text/ctx）的消费区域 = 提示词区，锚在**提示词区左下**（factsbar 带上）——视频边不再一律沉到最左下角。**修订二（圆缘贝塞尔）**：连线锚 = 圆缘（cx±r, cy）非圆心——可见 28px 圆即 Handle，xyflow 原生锚 = 把手矩形位方向外缘，贝塞尔水平切线出源右缘、入目标左缘，整条线插在圆边界上（ElevenLabs 丝滑解剖）；09-09 的 0×0 圆心 ghost 与 09-10 上午的圆心直线同日退役。圆与卡边间隙 6px（约 1/4 直径贴边比例）。连线 = 上下文/数据流（类型化：video / audio / text / ctx 虚线），不是执行顺序装饰。不可见 Handle（`!h-0 !w-0 !opacity-0`）时代终结。端口形态 = 28px 圆形图标芯片（glyph = 流的类型（video=Clapperboard / audio=AudioLines / text=FileText / ctx=AtSign 虚线环——@ 与连线是同一引用的两视图，MENTIONS 同典）。
+5. **端口法则**（ElevenLabs 实测定稿；**2026-09-08 MiniMax 收编——外延伸 + 图标芯片**；**2026-09-10 双修订**）：**进 = 消费区域的左下角（一条角律两个区域），出 = 生产区域最右上角**；同侧多口从角起堆叠。**修订一（红圈裁定——进分位细分）**：媒体流（video/audio）的消费区域 = 内容区，锚在**内容区左下角**（PROMPT 分界上 16px，底锚上堆）；文本流（text/ctx）的消费区域 = 提示词区，锚在**提示词区左下**（factsbar 带上）——视频边不再一律沉到卡最左下角。首读实现把媒体锚放在内容区**左上**（误读「左下角」+ 误引 ElevenLabs 媒体高位同构），用户同日红圈复勘纠正——ElevenLabs 的 media-high 不是本律。**修订二（圆缘贝塞尔）**：连线锚 = 圆缘（cx±r, cy）非圆心——可见 28px 圆即 Handle，xyflow 原生锚 = 把手矩形位方向外缘，贝塞尔水平切线出源右缘、入目标左缘，整条线插在圆边界上（ElevenLabs 丝滑解剖）；09-09 的 0×0 圆心 ghost 与 09-10 上午的圆心直线同日退役。圆与卡边间隙 6px（约 1/4 直径贴边比例）。连线 = 上下文/数据流（类型化：video / audio / text / ctx 虚线），不是执行顺序装饰。不可见 Handle（`!h-0 !w-0 !opacity-0`）时代终结。端口形态 = 28px 圆形图标芯片（glyph = 流的类型（video=Clapperboard / audio=AudioLines / text=FileText / ctx=AtSign 虚线环——@ 与连线是同一引用的两视图，MENTIONS 同典）。
 6. **prompt 直改 + 确认**（用户拍板；**通道 2026-09-09 ADR-058 修订**）：节点卡上的 prompt 直接编辑 = 一次 wiring op（`edit_prompt`），发送 = 定价确认（估价随行）→ 只重跑该节点与其下游。~~骑 `POST /chat` 唯一通道~~（ADR-058 翻案：直改是确定性手势不是意图——ops 代码构建，走 `POST /projects/{id}/graph/revise`，dock 零消息、节点状态周期 = 全部反馈；chat 唯一**意图**面不变）。节点面永无模型选择器 / SKU 货架（ADR-051 条款 5 不变）；runtime 事实（模型/参数/耗时）住卡外 factsbar，不住节点卡内。
 7. **投影层火化清单**（五补丁连根拔）：`canvas_hidden` / `canvas_key` / 过程脊 spine / 脊收编（ADR-051 条款 4 后半）/ R1 下游游走（`resolveAssetFeedTargets`）——全部死于「**显示模型 = 领域模型，零投影**」。步骤永不上图（ADR-041 D5 名词收窄的精神升级为结构事实：step 住节点内部，画布从图直读，无从投影）；过程动词永不上图不变；打勾流仍是唯一步骤叙事进度面（dock 内，不动）。
 8. **语义账本塌缩**：hold / release 永不上 UI；台账用户面只显**花费 / 赠送 / 充值**三族，行 = per-run-event 语义行（「Post 修订 −3」）；CreditsPill popover 的裸 kind 列表同批改写。逐节点估价 = 卡面空态位；确认合计 = 受影响子图 fold（同一个 fold、同一份 PRICING、同一个比例——三面同源纪律不变，BILLING §7）。
@@ -1363,4 +1363,19 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 2. **mutator 排序保留**：remove_filler 之后的一切 modifier 追加挂它的输出（共享 render_spec 的写后读序），这是原序列化里唯一真实的需求。
 3. **mutator 集合 = 显式注册**：`_CAPTION_MUTATORS` 常量登记，新增 mutator 型 modifier 必须入册（入册 = 声明「我改写共享状态」，编译器据此排序）；未入册的 modifier 默认变体语义（并行）。
 
-**Consequences**: 进程内编译验证：translate×3 + dub 扇出全部 `inputs=[materialize]`；加 remove_filler 后全部 `inputs=[materialize, remove_filler]`。旧草稿的链式边**数据保留**（草稿不可变），Start 时 `create_run` 按新律重编译 run 子图、图从 run 重盖章——用户按 Start 即见并行拓扑，无需迁移。图正确性从「编译器保守」升格为「编译器懂语义」：变体/mutator 之分就是数据流语义。
+**Consequences**: 进程内编译验证：translate×3 + dub 扇出全部 `inputs=[materialize]`；加 remove_filler 后全部 `inputs=[materialize, remove_filler]`。旧草稿的链式边**数据保留**（草稿不可变），Start / 重盖时由边对账律（ADR-062）撤除——本律落地当天的「Start 即自愈」论断在边层被证伪（`have_edge` 只去重新增、run fill 永不删除），对账律是该论断的成立条件。图正确性从「编译器保守」升格为「编译器懂语义」：变体/mutator 之分就是数据流语义。
+
+## ADR-062: 边对账律——盖章拥有其成员间的一切边，编译不再发射的边经 disconnect 撤回
+
+**Status**: Decided (2026-09-10)
+
+**Context**: ADR-061 落地后复核自愈路径，发现边层有一个结构性缺口：`_stamp_graph_core` 的 `have_edge` 只对**新增**去重，「run fill never deletes」律又保一切历史——于是旧编译器（modifier 链式律）落库的链式边在新编译（并行扇出）重盖时**永不撤除**，新旧两套边并存，画布把「执行早已并行」的链显示成线性。节点层有 orphan sweep（草稿重盖撕掉消失槽位的草稿节点），边层没有对应物——「Start 即见并行拓扑」在边层不成立。同日用户走查实证：修复部署后画布仍是线性链。
+
+**Decision**:
+
+1. **边对账律**：盖章（draft stamp / run fill 同律）**拥有其成员集合内的一切边**——成员 = 本次编译填充的节点 ∪ 素材节点 ∪ 任务书 / 研究简报文档。现存边中两端都在成员集内、而本次编译不再发射的，一律经写门撤回（retract）。一端在成员集外的边（他 run 历史 / 转写稿文档 / 修订布线）永不属于本次盖章的事务。
+2. **`disconnect` 写门手势**：撤回走唯一写口 `apply_wiring_ops` 的新 op（三元组 from/to/type 定位；缺边即 WiringRejected 严格门；同批新生边只从工作集摘除、不下 DELETE——瞬态对象不入库）。它是**编译器内部手势**——prompt 目录永不列它，chat 提案永不发射它。
+3. **对账序：disconnect 领先批首**——写门的环检查走工作边集，拓扑翻转（旧 B→A 陈旧、新 A→B 要连）必须在 connect 校验时看到**撤回后**的集合，否则被幻影环误杀。
+4. **自愈路径闭环**：旧草稿无需迁移——`scripts/restamp_draft_graph.py <project_id>` 从 `project.pending_brief`（Start 路径同一读出位）重放草稿盖章，对账撤陈旧边、fill key 碰撞复用节点，画布不起 run 即愈合；Start 的 run fill 同律对账。
+
+**Consequences**: b7ae9627 caption 项目实测：重盖后 11 边 → 8 边，恰好撤除 EN→ZH / ZH→FR / FR→dub 三条链式边，扇出与节点全保留（无孪生）。纯函数套件 +4 用例（断一条 / 翻转免幻影环 / 缺边拒收 / 同批新生摘除），36/36 全绿；另两件前两批滞后见证同批归位（ADR-059 两段 flush 计数、560 预留堆距）。「run fill never deletes」律语义收窄为**节点/历史**——成员内的拓扑宣称不属于历史，属于本次编译。

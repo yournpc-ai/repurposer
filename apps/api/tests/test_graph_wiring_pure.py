@@ -9,7 +9,11 @@ belongs to a manual e2e run (the chat_scenarios wiring assertions), not here.
 Covered:
 - apply_wiring_ops happy path: add_node (+after shorthand edges), port-law
   edge-type derivation, born states (asset done / others draft), 定居取景
-  layout (existing frames never move), GraphDelta contents, single flush
+  layout (existing frames never move), GraphDelta contents, two-stage flush
+  (nodes strictly before edges — ADR-059)
+- disconnect (ADR-062 边对账律的写门手势): severs exactly one typed triple,
+  missing triple rejected, a same-batch newborn edge drops without a DELETE,
+  and a disconnect-led batch frees the cycle check for a topology flip
 - op schema-shape rejection (pydantic) and every domain rejection: dangling
   reference / self-loop / incompatible ports / cycle / duplicate edge /
   edit_prompt on wrong kind / edit_prompt while running / unknown nodes
@@ -205,7 +209,9 @@ async def test_add_node_with_after_derives_edge_state_layout():
     assert newborn.layout["x"] == 436
     assert newborn.layout["y"] == -126
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
-    assert db.flush_count == 1
+    # TWO flushes (ADR-059 分裂 flush 律): nodes strictly before edges — the
+    # UOW never orders bare-FK inserts, so the door stages them.
+    assert db.flush_count == 2
 
 
 @pytest.mark.asyncio
@@ -348,6 +354,73 @@ async def test_edit_prompt_rejections():
         await apply_wiring_ops(
             _StubDb(), _PROJECT_ID, [{"op": "edit_prompt", "node": uuid4(), "prompt": "x"}]
         )
+
+
+@pytest.mark.asyncio
+async def test_disconnect_severs_one_typed_flow():
+    a, b, c = _node("asset", state="done", spec={"asset_type": "video"}), _node("generator"), _node("generator")
+    stale = _edge(b.id, c.id, "video")
+    keep = _edge(a.id, c.id, "video")
+    db = _StubDb(nodes=[a, b, c], edges=[stale, keep])
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [{"op": "disconnect", "from_node": b.id, "to_node": c.id, "edge_type": "video"}],
+    )
+    # The stale chain edge is DELETEd (a persisted row), the fan-out edge
+    # survives untouched, and a re-read sees exactly the surviving edge.
+    assert db.deleted == [stale]
+    assert [(e.from_node, e.to_node) for e in db.edges] == [(a.id, c.id)]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_frees_the_cycle_check_for_a_topology_flip():
+    # 边对账序 (ADR-062): disconnects lead the stamp's batch, so the connect
+    # of a flipped direction (old B→A stale, new A→B wanted) is checked
+    # against the POST-retraction set — never rejected as a phantom cycle.
+    a, b = _node("generator"), _node("generator")
+    db = _StubDb(nodes=[a, b], edges=[_edge(b.id, a.id, "video")])
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [
+            {"op": "disconnect", "from_node": b.id, "to_node": a.id, "edge_type": "video"},
+            {"op": "connect", "from_node": a.id, "to_node": b.id, "edge_type": "video"},
+        ],
+    )
+    assert [(e.from_node, e.to_node) for e in db.edges] == [(a.id, b.id)]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_missing_edge_rejected():
+    a, b = _node("generator"), _node("generator")
+    db = _StubDb(nodes=[a, b], edges=[_edge(a.id, b.id, "video")])
+    # Wrong type on an existing pair is still a miss (the triple is the key).
+    with pytest.raises(WiringRejected, match="disconnect"):
+        await apply_wiring_ops(
+            db, _PROJECT_ID, [{"op": "disconnect", "from_node": a.id, "to_node": b.id, "edge_type": "text"}]
+        )
+    assert db.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_disconnect_a_same_batch_newborn_edge_just_drops_it():
+    a = _node("asset", state="done", spec={"asset_type": "video"})
+    newborn_id = uuid4()
+    db = _StubDb(nodes=[a])
+    # A birth-then-sever within one batch: the after-edge never lands, and
+    # no DELETE hits the database (the row was never persisted — the door
+    # must not db.delete a transient object).
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [
+            {"op": "add_node", "id": newborn_id, "kind": "generator", "spec": {"prompt": "p"}, "after": [a.id]},
+            {"op": "disconnect", "from_node": a.id, "to_node": newborn_id, "edge_type": "video"},
+        ],
+    )
+    assert db.edges == []
+    assert db.deleted == []
 
 
 @pytest.mark.asyncio
@@ -660,7 +733,11 @@ def test_settle_frames_chain_grows_right_not_down():
     assert writer.layout["x"] == 436
     assert writer.layout["y"] == -126
     assert verify_free_second.layout["x"] == 436
-    assert verify_free_second.layout["y"] == -126 + 440 + 24
+    # The sibling stack's gap derives from the frame-class RESERVATION
+    # (text = 560 since 2026-09-10 卡高内容驱动, was 440), never from the
+    # node's provisional layout h — the fixture's 440 is deliberately stale
+    # to prove the reservation drives.
+    assert verify_free_second.layout["y"] == -126 + 560 + 24
 
 
 def test_settle_frames_parent_chain_one_link_per_pass():

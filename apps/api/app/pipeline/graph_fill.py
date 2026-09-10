@@ -792,7 +792,10 @@ async def _stamp_graph_core(
     )
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
+    want_edge: set[tuple[str, str, str]] = set()
+
     def connect(from_id: UUID, to_id: UUID, edge_type: str) -> None:
+        want_edge.add((str(from_id), str(to_id), edge_type))
         if (str(from_id), str(to_id), edge_type) in have_edge or from_id == to_id:
             return
         have_edge.add((str(from_id), str(to_id), edge_type))
@@ -881,12 +884,49 @@ async def _stamp_graph_core(
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
 
+    # ── 7b. Edge reconciliation among the stamp's own members (边对账律,
+    # ADR-062, 2026-09-10): the compiled topology OWNS every edge whose both
+    # endpoints it claims — an existing edge the compile no longer emits is
+    # a stale topology claim (born when an older compiler's law differed —
+    # e.g. the pre-ADR-061 modifier chain), and the grow-only run fill would
+    # otherwise carry it forever (have_edge only dedupes adds). Scope is the
+    # ownership boundary: edges with an endpoint outside the claimed set
+    # (other runs' history, transcript docs, revision wiring) are never the
+    # stamp's business. Orphan-swept draft nodes self-exclude (they are
+    # never in the claimed set, so their cascaded edges can't be mis-counted
+    # as stale and double-deleted — the door would raise on the missing row).
+    claimed: set[str] = {str(nid) for nid in node_id_by_key.values()}
+    claimed.update(str(nid) for nid in asset_node_ids)
+    for nid in (task_book_id, brief_doc_id, research_node_id):
+        if nid is not None:
+            claimed.add(str(nid))
+    # Disconnects lead the batch: the door's cycle check walks the working
+    # edge set, so a topology flip (old B→A stale, new A→B wanted) must see
+    # the post-retraction set when its connect is checked — stale edges only
+    # ever join reused (pre-existing) nodes, never this batch's newborns.
+    disconnect_ops: list[dict[str, Any]] = []
+    for e in existing_edges:
+        triple = (str(e.from_node), str(e.to_node), str(e.edge_type))
+        if (
+            triple[0] in claimed
+            and triple[1] in claimed
+            and triple not in want_edge
+        ):
+            disconnect_ops.append(
+                {
+                    "op": "disconnect",
+                    "from_node": UUID(triple[0]),
+                    "to_node": UUID(triple[1]),
+                    "edge_type": triple[2],
+                }
+            )
+
     # ── ONE batch — the graph's only write door ───────────────────────────
     # Adds carry pinned ids and every connect references them, so the door's
     # frame settle (画布定居取景) sees the FINAL edge set: the chain is born
     # left→right with full edge knowledge, never stacked-then-repaired.
-    if ops:
-        await apply_wiring_ops(db, project_id, ops)
+    if disconnect_ops or ops:
+        await apply_wiring_ops(db, project_id, disconnect_ops + ops)
     if book_newborn_id is not None:
         task_book_node = await db.get(GraphNode, book_newborn_id)
 

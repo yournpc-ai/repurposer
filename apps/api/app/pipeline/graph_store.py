@@ -91,6 +91,21 @@ class DeleteNodeOp(BaseModel):
     node: UUID
 
 
+class DisconnectOp(BaseModel):
+    """Sever one typed flow. The stamp reconciliation's seat (2026-09-10
+    边对账律, ADR-062): the compiled topology owns every edge among its own
+    members — an edge the compile no longer emits is retracted through this
+    op, never left lingering next to the new set (the run-fill's grow-only
+    law covers nodes/history, never a stale topology claim). A compiler-
+    internal gesture: the prompt catalog never lists it, chat proposals
+    never emit it."""
+
+    op: Literal["disconnect"]
+    from_node: UUID
+    to_node: UUID
+    edge_type: Literal["video", "audio", "text", "ctx"]
+
+
 class RunOp(BaseModel):
     """Fill nodes (an execution event, not a graph write). ``nodes`` None =
     the batch's affected subgraph; the resolved set always closes over
@@ -102,13 +117,14 @@ class RunOp(BaseModel):
 
 
 WiringOp = Annotated[
-    AddNodeOp | ConnectOp | EditPromptOp | DeleteNodeOp | RunOp,
+    AddNodeOp | ConnectOp | DisconnectOp | EditPromptOp | DeleteNodeOp | RunOp,
     Field(discriminator="op"),
 ]
 
 WIRING_OPS: dict[str, type[BaseModel]] = {
     "add_node": AddNodeOp,
     "connect": ConnectOp,
+    "disconnect": DisconnectOp,
     "edit_prompt": EditPromptOp,
     "delete_node": DeleteNodeOp,
     "run": RunOp,
@@ -398,6 +414,10 @@ async def apply_wiring_ops(
         .scalars()
         .all()
     )
+    # Persistent-at-load edges (disconnect needs the distinction: a pre-
+    # existing row takes a real DELETE, a same-batch newborn just drops out
+    # of the working list before it ever lands).
+    persisted_edge_ids = {id(e) for e in edges}
 
     def children_of(node_id: UUID) -> list[UUID]:
         return [UUID(str(e.to_node)) for e in edges if UUID(str(e.from_node)) == node_id]
@@ -517,6 +537,24 @@ async def apply_wiring_ops(
                 add_edge(parent_id, UUID(str(node.id)), None, None, None)
         elif isinstance(op, ConnectOp):
             add_edge(op.from_node, op.to_node, op.edge_type, op.from_port, op.to_port)
+        elif isinstance(op, DisconnectOp):
+            match = next(
+                (
+                    e
+                    for e in edges
+                    if UUID(str(e.from_node)) == op.from_node
+                    and UUID(str(e.to_node)) == op.to_node
+                    and e.edge_type == op.edge_type
+                ),
+                None,
+            )
+            if match is None:
+                raise WiringRejected(
+                    f"disconnect: no {op.edge_type} edge {op.from_node} → {op.to_node}"
+                )
+            edges.remove(match)
+            if id(match) in persisted_edge_ids:
+                await db.delete(match)
         elif isinstance(op, EditPromptOp):
             node = nodes.get(op.node)
             if node is None:
@@ -600,6 +638,7 @@ __all__ = [
     "AddNodeOp",
     "ConnectOp",
     "DeleteNodeOp",
+    "DisconnectOp",
     "EditPromptOp",
     "GraphDelta",
     "RunOp",

@@ -37,7 +37,7 @@ import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
 import type {
   FlowAssetAction,
   FlowAssetInfo,
@@ -1293,18 +1293,26 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
       </>
     )
   }
-  // The consumption anchor's VERTICAL seat follows the consumed region
-  // (2026-09-10 用户拍板——红圈裁定): media flows (video/audio) feed the
-  // CONTENT region, so their in-ports park TOP-left under the caption band
-  // (the content region's left edge — ElevenLabs' media-high/text-low stack);
-  // text/ctx flows feed the PROMPT region, parking BOTTOM-left above the
-  // factsbar band (document has no band — its region is the card bottom).
-  // Each region stacks its own ports by 34px (clears the 28px circles); the
-  // 34px side offset parks each circle fully outside the card with a 6px gap
-  // (ElevenLabs measured, 2026-09-10 — their circle hugs the border at
-  // ~1/4-diameter clearance; the old 12px gap read as adrift at 100% zoom).
+  // The consumption anchor's VERTICAL seat = the consumed region's BOTTOM-
+  // LEFT corner (2026-09-10 用户拍板——红圈裁定，一条角律两个区域): media
+  // flows (video/audio) feed the CONTENT region, so their in-ports park at
+  // the content region's bottom-left — 16px above the PROMPT divider,
+  // stacking upward; text/ctx flows feed the PROMPT region, parking 16px
+  // above the factsbar band (document has no band — its region is the card
+  // bottom). The first red-circle reading (content TOP-left, 09-10 上午) was
+  // the implementer's misread of 「内容区域的左下角」 — the user re-circled
+  // the bottom corner same-day; ElevenLabs' media-high stack is NOT the law
+  // here. Each region stacks its own ports by 34px (clears the 28px
+  // circles); the 34px side offset parks each circle fully outside the card
+  // with a 6px gap (ElevenLabs measured, 2026-09-10 — their circle hugs the
+  // border at ~1/4-diameter clearance; the old 12px gap read as adrift at
+  // 100% zoom).
   const inTextBase = node.kind === "document" ? 16 : 60
-  const inMediaBase = 40
+  // Bottom furniture of a media-consuming card (generator/processor/agent):
+  // factsbar band + program region, then the 16px inset into the content
+  // region — the corner seat. Media in-ports never occur on document/asset
+  // kinds (the port law's accepts), so one base covers every real seat.
+  const inMediaBase = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
   const outBase = 40
   const inMediaIdx = new Map<string, number>()
   const inTextIdx = new Map<string, number>()
@@ -1329,9 +1337,11 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
       {ports.in.map((type) => {
         const Icon = PORT_ICON[type]
         const isMedia = type === "video" || type === "audio"
-        const style = isMedia
-          ? { top: inMediaBase + (inMediaIdx.get(type) ?? 0) * 34, left: -34 }
-          : { top: "auto" as const, bottom: inTextBase + (inTextIdx.get(type) ?? 0) * 34, left: -34 }
+        // Both families bottom-anchor at their region's corner and stack
+        // upward (34px per sibling of the same family).
+        const base = isMedia
+          ? inMediaBase + (inMediaIdx.get(type) ?? 0) * 34
+          : inTextBase + (inTextIdx.get(type) ?? 0) * 34
         return (
           <Handle
             key={`in:${type}`}
@@ -1339,7 +1349,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
             type="target"
             position={Position.Left}
             className={cn("flow-port", `flow-port-${type}`)}
-            style={style}
+            style={{ top: "auto", bottom: base, left: -34 }}
           >
             <Icon />
           </Handle>
