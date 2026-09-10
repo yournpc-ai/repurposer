@@ -743,7 +743,6 @@ export function ResultsCanvas({
         nodes={nodes}
         edges={edges}
         navigation="explore"
-        straightEdges
         controls
         controlsClassName={controlsClassName}
         settleKey={baselineReady && visible ? baselineKey : null}

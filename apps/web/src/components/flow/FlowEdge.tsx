@@ -18,12 +18,6 @@ export interface FlowEdgeData extends Record<string, unknown> {
    * riding the path (SSE status-driven, 2026-08-19; the all-edge ant march
    * retired). */
   active: boolean
-  /** Graph canvas (2026-09-10 用户拍板): a straight center-to-center stroke.
-   * The default bezier's horizontal tangents over a large vertical delta
-   * (top-anchored OUT port → bottom-anchored IN port) read as a wild arc
-   * that "misses" the port even when it lands dead-center. The recipe
-   * surface keeps the bezier (its deltas are modest). */
-  straight?: boolean
 }
 
 export type FlowEdgeType = Edge<FlowEdgeData>
@@ -44,16 +38,14 @@ export function FlowEdge({
   targetPosition,
   data,
 }: EdgeProps<FlowEdgeType>) {
-  const [path] = data?.straight
-    ? [`M${sourceX},${sourceY} L${targetX},${targetY}`]
-    : getBezierPath({
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
-      })
+  const [path] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  })
   // Same latch as the node card's: the surface clears the birth delay on
   // its next commit — the draw class must outlive the dashed-march keyframe
   // (a follow-up frame must not cut it), and a continuously-applied class

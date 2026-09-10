@@ -1307,56 +1307,48 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
   // offset parks each circle fully outside the card with a 12px gap.
   const inBase = node.kind === "document" ? 16 : 60
   const outBase = 40
-  // Edge anchor = the circle's CENTER (2026-09-09 实测收编): xyflow anchors
-  // a handle at its OUTER rim in the position direction (Position.Right →
-  // rect.right, Position.Left → rect.left), so a 28px handle-circle misses
-  // its own center by a radius. The Handle is therefore a 0×0 invisible
-  // point parked AT the center (its rim IS its center), and the visible
-  // circle is a sibling div carrying the same offsets as before — the
-  // stroke now lands inside the anchor, whose fill hides the line's tail
-  // exactly as the FLORA anatomy intends.
+  // Edge anchor = the circle's RIM (2026-09-10 ElevenLabs 解剖收编): xyflow
+  // natively anchors a handle at its OUTER RIM in the position direction
+  // (Position.Right → rect.right, Position.Left → rect.left) — so the visible
+  // 28px circle IS the Handle, and the bezier's horizontal tangent exits the
+  // source's right rim and enters the target's left rim, plugging INTO the
+  // circle's edge (the ElevenLabs silk: the full curve stays visible and
+  // docks at the boundary). Center-anchoring (0×0 ghost handle, 09-09) and
+  // the center-to-center straight line (09-10 上午) both retired same-day:
+  // the first made the stroke dive under the circle fill and read as a miss,
+  // the second was a straightjacket for a problem the rim solves natively.
   return (
     <>
       {ports.in.map((type, i) => {
         const Icon = PORT_ICON[type]
         const offset = inBase + i * 34
         return (
-          <div key={`in:${type}`}>
-            <Handle
-              id={`in:${type}`}
-              type="target"
-              position={Position.Left}
-              className="!h-0 !min-h-0 !w-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
-              style={{ top: "auto", bottom: offset + 14, left: -26, transform: "none" }}
-            />
-            <div
-              className={cn("flow-port", `flow-port-${type}`)}
-              style={{ top: "auto", bottom: offset, left: -40 }}
-            >
-              <Icon />
-            </div>
-          </div>
+          <Handle
+            key={`in:${type}`}
+            id={`in:${type}`}
+            type="target"
+            position={Position.Left}
+            className={cn("flow-port", `flow-port-${type}`)}
+            style={{ top: "auto", bottom: offset, left: -40 }}
+          >
+            <Icon />
+          </Handle>
         )
       })}
       {ports.out.map((type, i) => {
         const Icon = PORT_ICON[type]
         const offset = outBase + i * 34
         return (
-          <div key={`out:${type}`}>
-            <Handle
-              id={`out:${type}`}
-              type="source"
-              position={Position.Right}
-              className="!h-0 !min-h-0 !w-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
-              style={{ top: offset + 14, right: -26, transform: "none" }}
-            />
-            <div
-              className={cn("flow-port", `flow-port-${type}`)}
-              style={{ top: offset, right: -40 }}
-            >
-              <Icon />
-            </div>
-          </div>
+          <Handle
+            key={`out:${type}`}
+            id={`out:${type}`}
+            type="source"
+            position={Position.Right}
+            className={cn("flow-port", `flow-port-${type}`)}
+            style={{ top: offset, right: -40 }}
+          >
+            <Icon />
+          </Handle>
         )
       })}
     </>
