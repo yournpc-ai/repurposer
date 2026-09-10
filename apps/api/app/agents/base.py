@@ -68,6 +68,14 @@ AssembleResult = tuple[dict[str, Any], list[MediaInput]]
 # reasoning fragments, sync or async.
 DeltaCallback = Callable[[str], Awaitable[None] | None]
 
+# Repair-round visibility (2026-09-11 服务感): the funnel's one structural
+# event — "the first proposal was schema-rejected, the repair round is
+# running" — surfaced so the caller can say so (the chat layer labels the
+# thinking row) instead of letting the repair window read as frozen
+# thinking. Reserved funnel kwarg ``on_repair``: popped before assemble,
+# exactly like ``repair_feedback`` — it never reaches the assemble inputs.
+RepairCallback = Callable[[], Awaitable[None] | None]
+
 
 def trim_texts(texts: list[str]) -> list[str]:
     """Return non-empty texts trimmed to a safe length."""
@@ -155,7 +163,9 @@ class Agent(Generic[OutT]):
         ``repair_feedback`` is a reserved funnel kwarg (it never reaches
         ``assemble``): adjudication feedback from the caller — e.g. the chat
         loop's registry/compile rejection — rides the same structured echo
-        as the schema-repair round.
+        as the schema-repair round. ``on_repair`` is the second reserved
+        kwarg: a callback fired once when the repair round starts (repair
+        visibility, 2026-09-11).
         """
         return await self._funnel(ctx)
 
@@ -166,6 +176,7 @@ class Agent(Generic[OutT]):
         on_reasoning: DeltaCallback | None = None,
     ) -> OutT:
         repair_feedback = ctx.pop("repair_feedback", None)
+        on_repair: RepairCallback | None = ctx.pop("on_repair", None)
         template_kwargs, media = self.assemble(**ctx)
         if self.packs:
             from app.agents.contexts import pack_instructions  # deferred: contexts pulls the chat/pipeline assembly layer
@@ -176,7 +187,7 @@ class Agent(Generic[OutT]):
             user_prompt += _repair_echo(str(repair_feedback))
         logger.info("agent_call_started", agent=self.name, media_count=len(media))
         try:
-            result = await self._attempt(user_prompt, media, on_delta, on_reasoning)
+            result = await self._attempt(user_prompt, media, on_delta, on_reasoning, on_repair)
         except MiniMaxError:
             if self.fallback is None:
                 raise
@@ -196,12 +207,15 @@ class Agent(Generic[OutT]):
         media: list[MediaInput],
         on_delta: DeltaCallback | None = None,
         on_reasoning: DeltaCallback | None = None,
+        on_repair: RepairCallback | None = None,
     ) -> OutT:
         """One pass through the Model boundary, plus the ONE bounded repair
         round: a schema rejection comes back with the structured echo
         appended to the same user message. The repair round never streams —
         two interleaved delta streams for one bubble is a worse failure than
-        a text swap at the envelope (N-26)."""
+        a text swap at the envelope (N-26). ``on_repair`` fires once as the
+        round starts — the caller's visibility hook, never a retry trigger.
+        """
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.system},
             self._user_message(user_prompt, media),
@@ -214,6 +228,10 @@ class Agent(Generic[OutT]):
                 agent=self.name,
                 error=str(first_error),
             )
+            if on_repair is not None:
+                notified = on_repair()
+                if notified is not None:
+                    await notified
             repair_prompt = user_prompt + _repair_echo(str(first_error))
             repair_messages: list[dict[str, Any]] = [
                 {"role": "system", "content": self.system},

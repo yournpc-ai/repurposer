@@ -105,10 +105,13 @@ def _assemble_book_turn(
             slot = getattr(brief, name)
             if slot.value:
                 lines.append(f"- {name}: {slot.value} ({slot.source})")
-        if brief.constraints.value:
+        if brief.constraints:
+            # 顺形律 (ADR-064): constraints = 来源化条目数组；装配面只渲染
+            # 条目文本（逐项来源对路由判断无增量，user-stated 约束已由
+            # merge 的 precedence 保证存活）。
             lines.append(
-                f"- constraints: {', '.join(brief.constraints.value)} "
-                f"({brief.constraints.source})"
+                "- constraints: "
+                + ", ".join(c.value for c in brief.constraints if c.value)
             )
         # The material line always renders — the root judgment reads it.
         lines.append(f"- material: {brief.material_state.value or 'none'}")

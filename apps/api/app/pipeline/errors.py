@@ -52,8 +52,11 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "zh": "暂时连不上 AI 服务，请稍后重试",
     },
     "ai_unreadable": {
-        "en": "The AI returned an unusable answer — please try again",
-        "zh": "AI 返回了无法使用的回答，请重试",
+        # 第一人称认领 (2026-09-11 服务感): the two-strike schema rejection's
+        # terminal line owns the failure instead of blaming "the AI" as a
+        # third party — the assistant IS the speaker here.
+        "en": "My answer came back unusable — that's on me, not you. Please try again.",
+        "zh": "我给出的回答没法用——是我的问题，请再试一次",
     },
     "voice_unavailable": {
         "en": "The voice service is unavailable right now — please try again later",

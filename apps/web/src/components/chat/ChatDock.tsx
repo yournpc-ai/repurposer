@@ -1254,8 +1254,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
   // Thinking-phase label (chat-flow-sequencing C): set from the server's
-  // labelled assistant.thinking frames ({phase: "understanding" |
-  // "creating_run"}), cleared per turn — bare keepalive frames never touch
+  // labelled assistant.thinking frames ({phase: "drafting" |
+  // "creating_run" | "repairing"}), cleared per turn — bare keepalive frames
+  // never touch
   // it, and without a phase the row falls back to chat.thinking.
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
 

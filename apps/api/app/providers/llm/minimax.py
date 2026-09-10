@@ -89,6 +89,56 @@ class MusicGenerationResult:
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
+class _ThinkStripper:
+    """Stateful streaming filter swallowing ONE leading ``<think>…</think>``
+    block from the delta channel (``_clean_json``'s regex is the same rule
+    for assembled text).
+
+    Provider dialects are normalized HERE at the Model seam (2026-09-11 用户
+    拍板): upstream consumers (prose extractor / ask watcher / plan beat)
+    only ever see clean payload text, so a second provider's reasoning
+    dialect gets normalized in ITS client, never upstream. Tag-split safe: a
+    tag may straddle chunk boundaries — while undecided we hold back a tail
+    shorter than the tag. Once real payload starts, the filter is a pure
+    pass-through (a mid-stream ``<think>`` is literal text — the same
+    start-only rule as ``_clean_json``).
+    """
+
+    _OPEN = "<think>"
+    _CLOSE = "</think>"
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._state = "prelude"  # prelude | in_think | payload
+
+    def feed(self, fragment: str) -> str:
+        """Consume a raw content fragment; return the clean portion (maybe '')."""
+        if self._state == "payload":
+            return fragment
+        self._buf += fragment
+        if self._state == "in_think":
+            idx = self._buf.find(self._CLOSE)
+            if idx == -1:
+                # Keep only a tail that could be a split close tag; the rest
+                # is swallowed reasoning (bounded memory on long thinks).
+                self._buf = self._buf[-(len(self._CLOSE) - 1):]
+                return ""
+            self._state = "payload"
+            out, self._buf = self._buf[idx + len(self._CLOSE):], ""
+            return out
+        # prelude: decide think vs payload (leading whitespace tolerated).
+        stripped = self._buf.lstrip()
+        if not stripped or self._OPEN.startswith(stripped):
+            return ""  # undecided — keep buffering
+        if stripped.startswith(self._OPEN):
+            self._state = "in_think"
+            self._buf = stripped[len(self._OPEN):]
+            return self.feed("")  # the close tag may already be buffered
+        self._state = "payload"
+        out, self._buf = self._buf, ""
+        return out
+
+
 class MiniMaxError(Exception):
     """MiniMax API error.
 
@@ -228,17 +278,24 @@ class MiniMaxClient:
         ``response_model``, parsed from the accumulated text exactly like
         ``generate``).
 
+        The ``on_delta`` channel is dialect-clean: a leading ``<think>``
+        preamble is stripped at this seam (``_ThinkStripper``) before any
+        fragment reaches a consumer — upstream layers never learn the
+        provider's reasoning dialect.
+
         Spike-verified (2026-08-04): MiniMax streams fine with
         ``response_format: json_object``; ``stream_options.include_usage``
         delivers usage in a final choice-less chunk so ADR-025 metering is
-        preserved. A ``<think>`` preamble may precede the JSON — consumers of
-        ``on_delta`` must tolerate it (the extractor keys off JSON depth).
+        preserved.
 
         Retry policy differs from ``generate``: tenacity can't express "retry
         only until a side effect", so the loop is manual — retries happen
         only before the first ``on_delta`` call (a retry after emitted deltas
         would double-send preview text downstream); mid-stream failures raise
         MiniMaxError and callers take the same fallback paths as today.
+        Because the stripper swallows the think preamble, ``emitted`` flips
+        only when clean PAYLOAD text was actually delivered — a retry after a
+        think-only prefix is safe and allowed.
         """
         if not self.api_key:
             raise MiniMaxError("MINIMAX_API_KEY not configured")
@@ -260,6 +317,7 @@ class MiniMaxClient:
             if attempt:
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
+            stripper = _ThinkStripper()
             usage: dict | None = None
             try:
                 async with httpx.AsyncClient(timeout=120) as client:
@@ -305,8 +363,14 @@ class MiniMaxClient:
                                 continue
                             accumulated += fragment
                             if on_delta is not None:
+                                clean = stripper.feed(fragment)
+                                if not clean:
+                                    # Still inside (or undecided on) the think
+                                    # preamble — nothing reaches consumers, so
+                                    # the retry guard stays unburned.
+                                    continue
                                 emitted = True
-                                result = on_delta(fragment)
+                                result = on_delta(clean)
                                 if result is not None:
                                     await result
             except (httpx.TransportError, MiniMaxError) as exc:

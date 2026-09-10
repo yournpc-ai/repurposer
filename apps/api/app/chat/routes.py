@@ -275,8 +275,8 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
 
                 async def on_phase(phase: str) -> None:
                     # A REAL phase switch (chat-flow-sequencing C): a labelled
-                    # thinking frame ({"phase": "understanding" |
-                    # "creating_run"}) — the dock's thinking row shows the
+                    # thinking frame ({"phase": "drafting" | "creating_run" |
+                    # "repairing"}) — the dock's thinking row shows the
                     # phase copy instead of the static fallback. The bare {}
                     # keepalive frames above never carry a phase and never
                     # touch the client's label.

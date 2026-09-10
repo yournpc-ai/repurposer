@@ -51,7 +51,8 @@ export interface StreamChatOptions {
   onDelta?: (text: string) => void
   /** Model-activity frame: fires with `{}` as a pure keepalive (reasoning
    * fragments / non-prose JSON chunks — drive the indicator, never render),
-   * or with `{phase: "creating_run"}` at a REAL phase switch — the client
+   * or with `{phase: "drafting" | "creating_run" | "repairing"}` at a REAL
+   * phase switch — the client
    * labels its thinking row from the phase and leaves it untouched on bare
    * keepalives. */
   onThinking?: (payload: { phase?: string }) => void

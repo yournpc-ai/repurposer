@@ -19,6 +19,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 def canonical_json_hash(value: dict) -> str:
@@ -813,14 +816,76 @@ class BriefLedger(BaseModel):
     quality. ``material_state`` is code-stamped at write time (assets with
     files → attached; pasted text material → pasted; else none) — the router
     READS it in the ledger block for the root judgment, never proposes it.
+
+    顺形律 (2026-09-11，ADR-064): ``constraints`` = 来源化条目的**数组**
+    (``list[BriefSlot[str]]``)，不是对象包数组——实测（M3 十七次复跑 +
+    tool-calling spike 六次）模型的第一直觉写法恒为对象数组，「对象包数组」
+    形状曾造成 schema 两连败杀死整回合。schema 顺着模型的自然写法设计；
+    读容忍只兜底存量/跑偏形状，不承担正典形状的分歧。
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_constraints(cls, data: Any) -> Any:
+        """归一化 constraints 的来路形状（顺形律的边界兜底）:
+
+        1. 旧槽形状 ``{"value": [...], "source": ...}``（对象包数组，含
+           存量 pending_brief 行）→ 逐项展开、来源继承；
+        2. 裸字符串条目 ``["keep 1:1"]`` → 逐项包 ``{"value": s}``；
+        3. 条目 source 不在枚举内（模型自造词如 "explicit"）→ 降
+           ``inferred``（永不把来路不明的值升格成 user-stated）；
+        4. 完全无法辨认 → 删键按无意见处理（簿记字段不杀回合）。
+        """
+        if not isinstance(data, dict):
+            return data
+        raw = data.get("constraints")
+        if raw is None:
+            if "constraints" in data:
+                # 打字机律牙①同律：显式 null = 无意见，删键让默认值生效，
+                # 不为一个簿记槽烧修复轮。
+                data = dict(data)
+                data.pop("constraints")
+            return data
+        data = dict(data)
+        items: list[Any] = []
+        if isinstance(raw, dict):  # 旧槽形状：对象包数组 / 对象包字符串
+            source = raw.get("source")
+            value = raw.get("value")
+            values = value if isinstance(value, list) else ([value] if value else [])
+            items = [{"value": v, "source": source} for v in values]
+        elif isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, BriefSlot):
+                    # 已是类型化实例（代码侧构造路径）——原样放行。
+                    items.append(item)
+                elif isinstance(item, str):
+                    items.append({"value": item})
+                elif isinstance(item, dict):
+                    items.append(item)
+        else:
+            data.pop("constraints")
+            return data
+        known_sources = {s.value for s in BriefSlotSource}
+        normalized: list[Any] = []
+        for item in items:
+            if isinstance(item, BriefSlot):
+                normalized.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source")
+            if source is not None and source not in known_sources:
+                item = {**item, "source": BriefSlotSource.INFERRED.value}
+            normalized.append(item)
+        data["constraints"] = normalized
+        return data
+
     topic: BriefSlot[str] = Field(default_factory=BriefSlot)
     audience: BriefSlot[str] = Field(default_factory=BriefSlot)
     tone: BriefSlot[str] = Field(default_factory=BriefSlot)
-    constraints: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
+    constraints: list[BriefSlot[str]] = Field(default_factory=list)
     material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
     # Code-owned roll of the slots already asked once this book phase (一轮
     # 一问决定槽， bounded: each slot asks at most once — the second rootless
@@ -909,6 +974,23 @@ class InferredIntent(BaseModel):
             "clip_count_explicit",
         ):
             data.pop(retired, None)
+        # 校验分层律 (2026-09-11, ADR-064): the brief ledger is ADVISORY
+        # bookkeeping — after its own shape normalization it still fails to
+        # parse, drop the field and let the turn live (the critical payload
+        # — action / tasks / answer / ask / name, the things that drive a
+        # paid run — stays strict above). Losing one ledger update is
+        # harmless: the next turn re-proposes, and the raw messages are
+        # still there. The drop is logged, never silent.
+        brief = data.get("brief")
+        if brief is not None:
+            try:
+                BriefLedger.model_validate(brief)
+            except Exception:
+                logger.warning(
+                    "brief_ledger_dropped",
+                    brief=json.dumps(brief, default=str)[:500],
+                )
+                data["brief"] = None
         return data
 
     action: Literal["ask", "draft", "answer", "start"] = Field(

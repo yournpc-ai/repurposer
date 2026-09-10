@@ -86,25 +86,6 @@ class TestDeadEnds:
     def test_object_value(self):
         assert extract(['{"answer": {"nested": true}}']) == ""
 
-    def test_think_preamble(self):
-        text = (
-            '<think>The user wants JSON with an "answer" key.</think>'
-            '{"answer": "Real."}'
-        )
-        assert extract([text]) == "Real."
-
-    def test_think_preamble_with_example_json(self):
-        """Example JSON inside the think block must never trigger capture."""
-        text = (
-            '<think>I should reply like {"answer": "FAKE"}</think>'
-            '{"answer": "Real."}'
-        )
-        assert extract([text]) == "Real."
-
-    def test_think_preamble_split(self):
-        text = '<think>reasoning {"answer": "FAKE"}</think>{"answer": "Real."}'
-        assert split_every_way(text) == "Real."
-
     def test_op_param_text_never_captured(self):
         """edit_ops params carry a text key at depth >= 3 — must not leak."""
         text = (

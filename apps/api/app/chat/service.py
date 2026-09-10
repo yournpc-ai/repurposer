@@ -388,7 +388,36 @@ _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.USER_STATED: 2,
 }
 
-_LEDGER_SLOTS = ("topic", "audience", "tone", "constraints", "material_state")
+_LEDGER_SCALAR_SLOTS = ("topic", "audience", "tone", "material_state")
+
+
+def _constraint_key(text: str) -> str:
+    """constraints 归并键：归一化条目文本（大小写/空白不敏感）。"""
+    return " ".join(text.split()).lower()
+
+
+def _merge_constraints(
+    proposed: list[BriefSlot[str]], stored: list[BriefSlot[str]]
+) -> list[BriefSlot[str]]:
+    """constraints 合并（顺形律 2026-09-11, ADR-064）= keyed union：键 = 归一化
+    条目文本，同文本冲突按逐项 precedence（user-stated > inferred > default，
+    与标量槽同一把尺——用户亲口说的约束永不被推断顶掉）。顺序 = stored 原序
+    + 新条目追加（账本稳定可读）。"""
+    merged = list(stored)
+    index = {
+        _constraint_key(item.value): i for i, item in enumerate(merged) if item.value
+    }
+    for item in proposed:
+        if not item.value:
+            continue
+        key = _constraint_key(item.value)
+        existing_idx = index.get(key)
+        if existing_idx is None:
+            index[key] = len(merged)
+            merged.append(item)
+        elif _SOURCE_RANK[item.source] >= _SOURCE_RANK[merged[existing_idx].source]:
+            merged[existing_idx] = item
+    return merged
 
 
 def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
@@ -401,17 +430,21 @@ def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
       so user-stated is never reverse-overwritten by inference or defaults
       (含 repair 重试与 ask 答复回填), while the user re-stating a slot
       (user-stated again) always wins — chat 修订恒胜.
+    - scalar slots (topic/audience/tone/material_state) replace per-slot;
+      constraints 是数组槽，按条目 keyed union（同一把 precedence 尺逐项
+      应用，ADR-064 顺形律）。
     """
     if update is None:
         return stored
     merged = stored.model_copy(deep=True)
-    for field_name in _LEDGER_SLOTS:
+    for field_name in _LEDGER_SCALAR_SLOTS:
         proposed: BriefSlot = getattr(update, field_name)
         if proposed is None or proposed.value is None:
             continue
         current: BriefSlot = getattr(merged, field_name)
         if _SOURCE_RANK[proposed.source] >= _SOURCE_RANK[current.source]:
             setattr(merged, field_name, proposed)
+    merged.constraints = _merge_constraints(update.constraints, merged.constraints)
     return merged
 
 
@@ -1739,7 +1772,10 @@ async def _book_turn(
     )
     if on_delta is not None:
         intent = await intent_router.call_stream(
-            on_delta=on_delta, on_reasoning=on_reasoning, **infer_kwargs
+            on_delta=on_delta,
+            on_reasoning=on_reasoning,
+            on_repair=_repair_phase_callback(on_phase),
+            **infer_kwargs,
         )
     else:
         intent = await intent_router.call(**infer_kwargs)
@@ -2269,6 +2305,7 @@ async def _propose_turn(
             result = await chat_intent_agent.call_stream(
                 message=text, context=context,
                 on_delta=on_delta, on_reasoning=on_reasoning,
+                on_repair=_repair_phase_callback(on_phase),
             )
         else:
             result = await chat_intent_agent.call(message=text, context=context)
@@ -2894,6 +2931,23 @@ THINKING_PHASE_CREATING_RUN = "creating_run"
 # (compile + estimate folds) fill the seconds between the echo's end and
 # the plan card's arrival (the window the 10s-gap forensics named).
 THINKING_PHASE_DRAFTING = "drafting"
+# The first proposal was schema-rejected and the funnel's repair round is
+# running (2026-09-11 服务感): that window used to read as frozen thinking —
+# the row now says the answer is being reworked, in first person.
+THINKING_PHASE_REPAIRING = "repairing"
+
+
+def _repair_phase_callback(on_phase):
+    """Map the funnel's repair-round signal (``on_repair``) onto the SSE
+    phase pipe. None-safe: the one-shot JSON path has no phase pipe, so the
+    reserved kwarg stays unset and the repair round runs silent there."""
+    if on_phase is None:
+        return None
+
+    async def _emit() -> None:
+        await on_phase(THINKING_PHASE_REPAIRING)
+
+    return _emit
 
 
 async def execute_chat_turn(

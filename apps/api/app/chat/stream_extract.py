@@ -14,11 +14,11 @@ before — the deltas are a preview channel only, never the source of truth.
 Design rules (pressure-tested 2026-08-04):
 - **Depth-gated keys**: a target key is accepted only at object depth 1–2
   (bare proposal shape or the ``{"proposal": {...}}`` wrapper). This rejects
-  ``<think>`` preambles (depth 0) and deeply nested lookalikes like
-  ``ops[i].params.text`` (depth ≥ 3).
-- **Think-block skip**: an optional leading ``<think>…</think>`` preamble is
-  discarded before structural scanning, so example JSON inside the model's
-  reasoning can never trigger capture.
+  deeply nested lookalikes like ``ops[i].params.text`` (depth ≥ 3).
+- **Provider dialects never reach this layer** (2026-09-11 用户拍板): a
+  ``<think>`` reasoning preamble is stripped at the Model seam
+  (``providers/llm/minimax._ThinkStripper``) before any fragment arrives —
+  feeding raw provider text here is a caller bug.
 - **A `null` value skips the pair, never kills the stream**: several prose
   keys are watched at once (``answer`` / ``text`` / ``summary`` / ``prose``),
   and every ask verdict carries ``"answer": null`` — one key's null must not
@@ -54,11 +54,6 @@ _EXPECT_NULL = "expect_null"  # consuming a target key's `null` literal
 _CAPTURING = "capturing"  # inside the prose string, decoding
 _DONE = "done"  # prose string closed; never emit again
 
-# A think preamble is only skipped at the very start of the stream (matches
-# _clean_json's assumption in the MiniMax client).
-_THINK_OPEN = "<think>"
-_THINK_CLOSE = "</think>"
-
 
 class ProseDeltaExtractor:
     """Feed raw JSON fragments, get back decoded prose deltas."""
@@ -76,11 +71,6 @@ class ProseDeltaExtractor:
         # Candidate-key tracking.
         self._key_buf = ""
         self._key_depth = 0
-
-        # Think-preamble skip (start-of-stream only).
-        self._prelude = ""  # accumulates until think/payload decision
-        self._prelude_done = False
-        self._think_skip = False
 
         # Capture state.
         self._escape_buf = ""  # incomplete escape sequence across chunks
@@ -109,35 +99,10 @@ class ProseDeltaExtractor:
     # State machine
 
     def _step(self, char: str) -> None:
-        if not self._prelude_done:
-            self._step_prelude(char)
-            return
         if self._state == _CAPTURING:
             self._step_capture(char)
             return
         self._step_structural(char)
-
-    def _step_prelude(self, char: str) -> None:
-        """Skip an optional leading ``<think>…</think>`` block."""
-        self._prelude += char
-        if self._think_skip:
-            if self._prelude.endswith(_THINK_CLOSE):
-                self._prelude = ""
-                self._prelude_done = True
-                self._think_skip = False
-            return
-        # Not (or no longer) a think preamble: decide from what's buffered.
-        stripped = self._prelude.lstrip()
-        if stripped == "" or _THINK_OPEN.startswith(stripped):
-            return  # still could become a think block — keep buffering
-        if stripped.startswith(_THINK_OPEN):
-            self._think_skip = True
-            return
-        # Real payload (JSON or a markdown fence) — replay buffered chars.
-        self._prelude_done = True
-        buffered, self._prelude = self._prelude, ""
-        for buffered_char in buffered:
-            self._step_structural(buffered_char)
 
     def _step_structural(self, char: str) -> None:
         """Brace/string tracking + target-key detection (non-capture states)."""
@@ -346,11 +311,6 @@ class AskObjectWatcher:
         self._key_buf = ""
         self._key_depth = 0
         self._buf: list[str] = []
-        # Think-preamble skip (start-of-stream only — same rule as the
-        # extractor's, so example JSON inside the reasoning never triggers).
-        self._prelude = ""
-        self._prelude_done = False
-        self._think_skip = False
 
     @property
     def dead(self) -> bool:
@@ -365,32 +325,10 @@ class AskObjectWatcher:
                 return
 
     def _step(self, char: str) -> None:
-        if not self._prelude_done:
-            self._step_prelude(char)
-            return
         if self._state == _ASK_IN_OBJECT:
             self._step_object(char)
             return
         self._step_structural(char)
-
-    def _step_prelude(self, char: str) -> None:
-        self._prelude += char
-        if self._think_skip:
-            if self._prelude.endswith(_THINK_CLOSE):
-                self._prelude = ""
-                self._prelude_done = True
-                self._think_skip = False
-            return
-        stripped = self._prelude.lstrip()
-        if stripped == "" or _THINK_OPEN.startswith(stripped):
-            return
-        if stripped.startswith(_THINK_OPEN):
-            self._think_skip = True
-            return
-        self._prelude_done = True
-        buffered, self._prelude = self._prelude, ""
-        for buffered_char in buffered:
-            self._step_structural(buffered_char)
 
     def _step_structural(self, char: str) -> None:
         if self._state == _ASK_EXPECT_VALUE:

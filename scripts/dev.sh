@@ -53,31 +53,44 @@ wait_for_url() {
   return 1
 }
 
-# --- free the dev ports ----------------------------------------------------
+# --- kill previous service instances -----------------------------------------
+# 2026-09-11 用户拍板：dev.sh 启动 = 干净 slate——全机每个服务只剩本次启动
+# 的一个实例（一对：包装器 + 本体）。端口杀（kill_port）只拿到监听者本人：
+# 包装器（uv run / pnpm / npm exec）与 watcher 父进程（tsx watch——它还会把
+# 被杀的子进程原地复活）全部漏网（当日实测：render 躺着一对上次的孤儿
+# watcher、web 躺着一个没抢到端口的旧 vite）；uvicorn --reload 的 spawn 子
+# 进程反过来不带识别字符串。所以两趟模式杀（TERM → KILL）在前、端口杀殿后
+# ——端口杀兜的正是 spawn 子进程这类无特征监听者。
+# 注意：模式杀认 argv 特征串，与仓库外同命令行的进程（别的 tsx watch
+# src/server.ts 项目）会误伤——本机开发约定下可接受。
+SERVICE_PATTERNS=(
+  "uvicorn app\.main"        # API：uv run 包装器 + reload 主进程
+  "\-m app\.worker"          # worker：无端口，只能模式杀（2026-09-08 孤儿教训）
+  "src/server\.ts"           # render：tsx watch 父与 node 子 argv 同串
+  "vite/bin/vite\.js dev"    # web：vite 本体（pnpm 包装器随子进程退出）
+)
+
+kill_service_families() {
+  local signal=$1 pattern pids
+  for pattern in "${SERVICE_PATTERNS[@]}"; do
+    pids=$(pgrep -f "$pattern" 2>/dev/null)
+    if [ -n "$pids" ]; then
+      echo "Killing $pattern: $(echo $pids | tr '\n' ' ')"
+      # shellcheck disable=SC2086
+      kill "$signal" $pids 2>/dev/null
+    fi
+  done
+}
+
+kill_service_families -TERM
+sleep 2
+# TERM 幸存者 + tsx watch 复活竞态，一律 KILL 收尾。
+kill_service_families -9
+
+# 端口杀殿后（uvicorn reload 的 spawn 子进程只有端口认得它）。
 kill_port 8000 "backend"
 kill_port 3000 "frontend"
 kill_port 3001 "render"
-
-# --- kill stale workers BEFORE starting a new one ----------------------------
-# 2026-09-08 lesson (a Sunday orphan + the day's worker shared the queue):
-# the worker has NO port, so kill_port never saw it — every dev.sh run
-# spawned ANOTHER worker, and the stale-code orphan kept claiming steps via
-# SKIP LOCKED (its step terminals never back-wrote the graph — run COMPLETED
-# while canvas nodes stayed "running" forever). Check and kill FIRST.
-worker_pids() { pgrep -f "\-m app\.worker" 2>/dev/null || true; }
-STALE_WORKERS=$(worker_pids)
-if [ -n "$STALE_WORKERS" ]; then
-  echo "Killing stale worker process(es): $(echo $STALE_WORKERS | tr '\n' ' ')"
-  # TERM first (let an in-flight transaction settle), KILL whatever is left.
-  # shellcheck disable=SC2086
-  kill $STALE_WORKERS 2>/dev/null
-  sleep 2
-  STILL_THERE=$(worker_pids)
-  if [ -n "$STILL_THERE" ]; then
-    # shellcheck disable=SC2086
-    kill -9 $STILL_THERE 2>/dev/null || true
-  fi
-fi
 
 # --- PostgreSQL ------------------------------------------------------------
 if port_in_use 5432; then
@@ -172,20 +185,33 @@ check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv r
 check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
 check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && pnpm dev )"                                                   || DEAD=1
 check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                      || DEAD=1
-# Unique-worker guard (2026-09-08): a healthy env has exactly ONE worker
-# pair (the `uv run` wrapper + its venv child). Anything more is an orphan
-# pair claiming steps with stale code — say so loudly with the offenders.
-WORKER_COUNT=$(worker_pids | wc -l | tr -d ' ')
-if [ "$WORKER_COUNT" -gt 2 ]; then
-  echo "⚠ $WORKER_COUNT worker processes detected (expected 2 = wrapper + child) — orphans will claim steps with STALE code:"
-  pgrep -fl "\-m app\.worker"
-  DEAD=1
-fi
+# Unique-instance guard (2026-09-08 worker 孤儿教训，2026-09-11 推广到全家):
+# 启动前已两趟模式杀，此刻每个服务家族的匹配进程都该只属于本次启动——
+# 超出预期计数 = 孤儿/复活，大声说出来并列 offender。
+# 预期计数：API 2（uv run 包装器 + uvicorn 主进程；reload 的 spawn 子进程
+# 不带特征串，不计）、worker 2、render 2（tsx watch 父 + node 子）、web 1
+# （vite 本体；pnpm 包装器 argv 无特征）。
+family_count() { pgrep -f "$1" 2>/dev/null | wc -l | tr -d ' '; }
+check_family() {
+  local pattern=$1 name=$2 max=$3 count
+  count=$(family_count "$pattern")
+  if [ "$count" -gt "$max" ]; then
+    echo "  ⚠ $name: $count processes match '$pattern' (expected ≤ $max) — orphans will run STALE code:"
+    pgrep -fl "$pattern"
+    DEAD=1
+  fi
+}
+check_family "uvicorn app\.main"     "API   " 2
+check_family "\-m app\.worker"       "worker" 2
+check_family "src/server\.ts"        "render" 2
+check_family "vite/bin/vite\.js dev" "web   " 1
 if [ "$DEAD" -ne 0 ]; then
   echo "⚠ One or more services failed to start — the environment is NOT whole."
 fi
 
 # --- cleanup ---------------------------------------------------------------
-trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$RENDER_PID" "$WEB_PID" 2>/dev/null; exit' INT TERM
+# Ctrl+C 也要干净：先杀本次启动的四个 PID，再按家族模式清场——包装器死了
+# 不保证 spawn 子进程 / watcher 跟着死，不留任何能给下次启动添乱的东西。
+trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$RENDER_PID" "$WEB_PID" 2>/dev/null; sleep 1; kill_service_families -9; exit' INT TERM
 
 wait

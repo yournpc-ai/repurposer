@@ -1891,11 +1891,71 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
     check(out.topic.value == "new angle",
           "same-rank updates land (fresh inference over stale)", out.topic)
 
-    # 5. constraints is one slot — the list rides as the value, same rules.
-    stored = ledger(constraints=slot(["keep it under 200 words"], Src.USER_STATED))
-    out = merge_brief(ledger(constraints=slot(["add hashtags"], Src.INFERRED)), stored)
-    check(out.constraints.value == ["keep it under 200 words"],
-          "user-stated constraints survive inference", out.constraints)
+    # 5. constraints 是数组槽（ADR-064 顺形律）——按条目 keyed union：新条目
+    #    追加、同文本冲突逐项 precedence（user-stated 永不反向覆盖）、归一化
+    #    键大小写/空白不敏感。
+    stored = ledger(constraints=[slot("keep it under 200 words", Src.USER_STATED)])
+    out = merge_brief(
+        ledger(constraints=[
+            slot("add hashtags", Src.INFERRED),
+            slot("Keep it under 200  words", Src.INFERRED),  # 同键不同来源
+        ]),
+        stored,
+    )
+    check(
+        [c.value for c in out.constraints]
+        == ["keep it under 200 words", "add hashtags"],
+        "constraints keyed union: new item appends, same-key user-stated survives",
+        out.constraints,
+    )
+    check(
+        out.constraints[0].source == Src.USER_STATED,
+        "per-item precedence: a same-key inferred item never demotes user-stated",
+        out.constraints,
+    )
+    # 同键重申恒胜（user-stated ≥ user-stated — 与标量槽同尺）。
+    out = merge_brief(
+        ledger(constraints=[slot("keep it under 100 words", Src.USER_STATED)]),
+        out,
+    )
+    check(
+        [c.value for c in out.constraints]
+        == ["keep it under 100 words", "add hashtags"],
+        "the user re-stating a constraint wins (chat 修订恒胜)",
+        out.constraints,
+    )
+    # 旧槽形状（对象包数组/对象包字符串）读容忍——存量 pending_brief 行。
+    legacy = BriefLedger.model_validate(
+        {"constraints": {"value": ["a", "b"], "source": "user-stated"}}
+    )
+    check(
+        [c.value for c in legacy.constraints] == ["a", "b"]
+        and all(c.source == Src.USER_STATED for c in legacy.constraints),
+        "legacy object-wrapped constraints normalize on read",
+        legacy.constraints,
+    )
+    legacy_str = BriefLedger.model_validate(
+        {"constraints": {"value": "one long sentence", "source": "inferred"}}
+    )
+    check(
+        [c.value for c in legacy_str.constraints] == ["one long sentence"],
+        "object-wrapped bare-string constraints normalize on read",
+        legacy_str.constraints,
+    )
+    bare = BriefLedger.model_validate({"constraints": ["keep 1:1"]})
+    check(
+        [c.value for c in bare.constraints] == ["keep 1:1"],
+        "bare-string items normalize",
+        bare.constraints,
+    )
+    made_up = BriefLedger.model_validate(
+        {"constraints": [{"value": "x", "source": "explicit"}]}
+    )
+    check(
+        made_up.constraints[0].source == Src.INFERRED,
+        "an off-enum source coerces to inferred (never overclaims user-stated)",
+        made_up.constraints,
+    )
 
     # 6. update=None returns the stored ledger (start/answer verdicts carry
     #    no proposal); the merge never mutates the stored input in place.

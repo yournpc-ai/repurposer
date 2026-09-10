@@ -1396,3 +1396,46 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 纯函数 40/40（新增书面律 4 用例 + 文档框数学）；tsc 0；confirmTitle i18n 键随浮卡退役。transform 链的运行时报价（编译期 floor 估价——按时长×字幕密度启发式）= BILLING 层增强，登记需求池；转写节点 loading 出生改期（上传即落节点、状态随 ASR）= 同池；mention 扩族（transcript 候选）判词③ = 先不管。
 
 **Related**: ADR-057（K4/K5 形态就地修订——通道与写门不变）、ADR-058（二源律延伸——书文本取 LLM 散文、run 名兜底）、ADR-062（同批图律族）
+
+## ADR-064: 顺形律 + 校验分层律——schema 顺着模型的自然写法设计，校验严格度随数据关键度分层
+
+**Status**: Decided (2026-09-11)
+
+**Context**: 生产逮到 caption 配方卡全灭：回声送达后卡在 "Drafting the plan…"，终态 turn.failed「The AI returned an unusable answer」。17 次 LLM 复现取证（`scratch/repro_caption_router.py`）定位到 `brief.constraints` 形状两连击：模型的第一直觉写法是**来源化条目数组** `[{"value":…, "source":…}]`（6/6 spike 全这么写），而 schema 要的是「对象包数组」`BriefSlot[list[str]]`（`{"value": [...], "source":…}`）——strike 1「Input should be an object」；修复轮模型改成对象包一整句字符串——strike 2「Input should be a valid array」→ MiniMaxSchemaError → 回合死。两宗失信叠加：① 失败全有或全无——一条簿记字段的形状错杀掉整个回合（散文已送达、判决本可用）；② 修复窗不可见——thinking 冻结读秒，用户不知道我们在修。
+
+**Decision**:
+
+1. **顺形律**：schema 设计顺着模型的自然 JSON 写法，不再靠读容忍扛错误形状。模型的第一直觉写法就是正典——`BriefLedger.constraints` 从 `BriefSlot[list[str]]` 改形为 `list[BriefSlot[str]]`（一个约束一个对象）。边界归一化只接存量与明显来路（旧对象包数组逐项展开 / 裸字符串包装 / off-enum 来源降 inferred——永不把来路不明的值升格 user-stated）；不是给畸形形状发签证。
+2. **校验分层律**：校验严格度 ∝ 数据关键度。关键载荷（action / tasks / answer / ask / name——驱动付费运行）= 严格 + 修复轮；brief 账本 = 咨询性簿记——归一化后仍无法解析时**丢字段不杀回合**（`BriefLedger.model_validate` try/except → structlog warning + `brief=None`，回合照活）。
+3. **constraints 合并 = 键控并集**（`_constraint_key` 归一化 + `_SOURCE_RANK` 逐项优先级 + 存储序追加），装配面只渲染条目文本。
+
+**Consequences**: 两种曾杀死生产的形状现在直接解析；纯函数套件 test_brief_ledger_pure（11 用例：正典形状 / 旧对象包两种 / 裸字符串 / off-enum 降级 / 不可辨认按无意见 / typed 实例放行 / garbled 账本丢字段不杀回合 / 关键载荷仍严格拒收）。前端零改动（BriefLedger 卡面类型本就不含 constraints）。S12 case 5 改为键控并集矩阵。
+
+## ADR-065: 服务感两拍——修复轮相位帧 + 失败行第一人称认领
+
+**Status**: Decided (2026-09-11)
+
+**Context**: ADR-064 取证时的两宗失信里，形状是病根，体感是伤口：修复轮窗口 thinking 冻结（用户盯着 "Drafting the plan…" 读秒，不知道模型第一稿被拒、正在重修）；终态失败行把失败推给第三方「The AI returned an unusable answer」——而说话的就是 assistant 自己。用户判词：「即使我们自己有问题也应该说出来」——【服务感】= 动作有叙述、失败有认领。
+
+**Decision**:
+
+1. **修复轮相位帧**：漏斗新增保留 kwarg `on_repair`（与 `repair_feedback` 同款纪律——`_funnel` 弹出、永不进 assemble；纯函数套件 4 用例：干净通过不触发 / 修复轮恰好触发一次 / 二拒信号后仍传播 / sync 回调兼容）。chat 层把它映射到 SSE 相位管道：`THINKING_PHASE_REPAIRING = "repairing"`，两处 `call_stream` 座（book path / propose path）经 `_repair_phase_callback` 接入；前端 `thinkingPhases.repairing` 双语（en "That answer didn't come out right — reworking it…" / zh「刚才的回答没组织好，我重新整理一下…」）。一次性 JSON 路径无相位管道，kwarg 缺省静默。
+2. **失败行第一人称认领**：`USER_ERROR_LINES["ai_unreadable"]` 改写为第一人称认领 + 诚实下一步（en "My answer came back unusable — that's on me, not you. Please try again." / zh「我给出的回答没法用——是我的问题，请再试一次」）。说话者 = assistant，失败归自己，不归 "the AI" 第三方。
+
+**Consequences**: 修复窗从冻结读秒变为有名有姓的相位；两连击终态的措辞与 ADR-064 的结构性修复互为表里（形状顺形后两连击本身应绝迹，措辞是它万一再现时的诚实面）。相位帧纪律不变：bare keepalive 不碰标签、相位只在真实切换点发射。
+
+## ADR-066: provider 方言归 client 层——think 块剥除的位置律
+
+**Status**: Decided (2026-09-11)
+
+**Context**: M3 的 `<think>` 思考块混在 content 通道到达，原先的剥除状态机住在上层（stream_extract 的 ProseDeltaExtractor / AskObjectWatcher 各一份前奏态）。用户判词：「我们还会支持其他模型的，所以对 <think> 的这种处理应该做在 minimax client 层，而不是上层，这样换 provider 的 llm 就不会误处理 think。」
+
+**Decision**:
+
+1. **方言关在 Model 边界**：`_ThinkStripper` 住进 `providers/llm/minimax.py`（三态 prelude/in_think/payload，tag 跨片安全——尾部 holdback `len(_CLOSE)-1`；有界内存；start-only 规则与 `_clean_json` 对齐），`generate_stream` 每次重试新建实例过滤 `on_delta`。上层（extractor / watchers / plan beat）永远不见方言——stream_extract 的 think 常量和前奏态机全删。
+2. **换 provider 的契约**：新 provider client 实现自己的方言归一化（思考块 / 特殊标记），上层契约 = 干净载荷流。
+
+**Consequences**: 纯函数套件 test_think_stripper_pure 9 用例（split_every_way 模糊 / think 内假 JSON / 非 tag 的 `<thinkx` 放行 / 流中段字面 think）。副作用红利：plan beat 不再被 think 块内的 `"tasks"` 误触发，重试护栏收紧（`emitted` 只数干净载荷）。
+
+**Related**: ADR-064（同批 schema 律族——方言归位是顺形律的传输层镜像：形状顺模型的写法，通道顺 provider 的边界）
+

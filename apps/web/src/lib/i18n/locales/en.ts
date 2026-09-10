@@ -550,7 +550,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "Upload your original video here.",
       promptTemplate:
-        "From the uploaded full video (demo source 1:1), make 4 multilingual caption versions — each a separate clip, source untouched: EN original (English voice + English single-line captions, keep 1:1 frame); ZH bilingual (Chinese translation on the main line at font ×0.82 with English original below at ×0.55, translation_track; title overlays translated to Chinese); FR single-line (French single-line captions, original soundtrack stays untouched); ES dub (replace original audio with my cloned voice from the source, ES single-line captions; keep my voice fingerprint — no stock narrator). Caption font size scales with frame (skin default 68 → 38 at 1:1), 8% side margins. Bilingual uses stack layout with only the translation track + a smaller English line — no stacked wall. All versions stay at 1:1 source frame, letterboxed, never cropped.",
+        "Caption my video in Chinese and French — Chinese as bilingual subtitles — and dub a Spanish version in my own voice.",
       promptHint:
         "Send it as is, or try “bilingual captions”, “French captions”, “add a German version”…",
     },
@@ -562,7 +562,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "Upload your original video here.",
       promptTemplate:
-        "From the uploaded full video, make 3 voice-cloned dub versions — each a separate clip, source untouched: ZH dub (replace original audio with my cloned voice from the source, ZH single-line captions), FR dub (same, French), ES dub (same, Spanish). All 3 keep my voice fingerprint — no stock narrator. The original soundtrack stays as a reference layer below the main track so I can hear how natural the clone sounds. Keep the 1:1 source frame, letterboxed, never cropped. Caption font size scales with frame (skin default 68 → 38 at 1:1), 8% side margins. Audio re-times to ASR word-level timestamps — no drift.",
+        "Dub my video into Chinese, French, and Spanish — in my own voice, not a stock narrator.",
       promptHint:
         "Send it as is, or try “dub it in Mandarin instead”, “add a German version”…",
     },
@@ -634,7 +634,7 @@ const en = {
       inputTitle: "Script and photos",
       inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
-        "From the uploaded transcript (talk write-up + a set of photos, or a slide deck PDF/PPT), make one stills slideshow: visuals = photo sequence (or deck page images), cut by the transcript's logical sections, each photo holds full-frame while captions advance — no animation or transitions (that's for CapCut); captions = single-line replacement (catalog 6 presets: clean-bottom / karaoke-highlight / fade-in / pop-in / slide-up / stacking), font size scales with frame (skin default 68 → 38 at 16:9), 8% side margins, preserve semantic units from the transcript (don't chop mid-thought); audio = silent version first (voice-clone path comes later), with a background music loop; align_stills estimates the reading-pace timeline, mirror of ASR word-level timestamps. Output = 1 landscape 16:9 video (keep source frame, no cropping); duration driven by transcript length and photo count.",
+        "Turn my transcript and photos into a slideshow video — photos follow the sections, with captions and background music.",
       promptHint:
         "Send it as is, or try “shorter”, “use the slide deck instead”, “add more photos”…",
     },
@@ -646,7 +646,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
-        "From the uploaded long talk recording (large mid-shot stage talk works best), cut 3-5 highlight clips — each a separate vertical 9:16 clip: selection = highest information-density moments (concluding statements, key data points, most resonant lines); agent flags the top pick (the one to post first); vertical framing = camera follows the speaker automatically (reframe_clip dynamic mode), speaker centered upper-middle, caption space below — not fixed center-crop; captions = single-line replacement (catalog 6 presets), font size scales with frame (skin default 68), 8% side margins — no stacking; aspect conversion = 9:16 scales by frame height, source frame letterboxed via object-contain, no crop. Output = 3-5 short clips, each 15-60 seconds; original video untouched.",
+        "Cut the best moments of my talk into 3 vertical clips — the camera follows the speaker, captions included.",
       promptHint:
         "Send it as is, or try “make them landscape”, “cut a few more”…",
     },
@@ -657,7 +657,7 @@ const en = {
       inputTitle: "Input video",
       inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
-        "From the uploaded two-person conversation recording (landscape left-right interview / talk show works best), cut 2-4 vertical reframe clips — each a separate 9:16 clip: speaker switching = static-reframe mode: detect who's currently speaking (left or right), cut to that person; transitions must be smooth (min dwell + easing), no jarring hard cuts; vertical framing = single speaker centered upper-middle, caption space below — don't try to fit both in frame; captions = single-line replacement (catalog 6 presets), font size scales with frame, 8% side margins; aspect conversion = 9:16 object-contain, letterboxed, source frame preserved. Output = 2-4 vertical clips, each covering one complete turn switch (question → answer); original video untouched.",
+        "Recut my two-person interview into vertical clips — the camera follows whoever is speaking.",
       promptHint:
         "Send it as is, or try “cut a few more”, “cover the full interview”, “faster pace”…",
     },
@@ -1178,6 +1178,7 @@ const en = {
     thinkingPhases: {
       drafting: "Drafting the plan…",
       creating_run: "Creating your workflow…",
+      repairing: "That answer didn't come out right — reworking it…",
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
