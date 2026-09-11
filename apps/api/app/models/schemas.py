@@ -371,6 +371,14 @@ class QuestionProposal(BaseModel):
     "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
     question. The LLM only ever raises a plain question — a task_book question
     is raised by the chat book path, never by the agent.
+
+    ADR-071 ⑤ 方向裁定 (2026-09-11): the provider call sends
+    ``response_format: json_object`` — this schema NEVER reaches the model;
+    it is the parse-side contract only. The model-facing field spec lives in
+    the prompt templates (``app/prompts/chat/intent_router_system.j2``'s ask
+    rule / ``chat_intent_system.j2``'s shape C) — those are the single
+    source; the comments here MIRROR them for humans. Edit the templates
+    first, then sync this mirror.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -406,6 +414,11 @@ class QuestionProposal(BaseModel):
     # Empty only on code-composed questions (caption mode, interrupts).
     prose: str = ""
     question: str
+    # Options (提问策略 ② mirror): 3 concrete one-word values sourced from the
+    # user's persona / project context, TRANSLATED into the interface language
+    # (drop to 2 only for a genuinely binary choice); empty only when no
+    # sensible options exist (a freeform ask). Freeform input always stays
+    # available alongside.
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
     # ADR-052 B2 (ask 一等动作, the shared question shape): ``slot`` names the
@@ -827,6 +840,13 @@ class BriefLedger(BaseModel):
     tool-calling spike 六次）模型的第一直觉写法恒为对象数组，「对象包数组」
     形状曾造成 schema 两连败杀死整回合。schema 顺着模型的自然写法设计；
     读容忍只兜底存量/跑偏形状，不承担正典形状的分歧。
+
+    ADR-071 ⑤ signpost (2026-09-11): the model-facing brief spec (which
+    slots exist, emit-only-what-you-have-a-view-on, source precedence
+    user-stated > inferred > default) lives in
+    ``app/prompts/chat/intent_router_system.j2``'s brief rule — the schema
+    never reaches the model (json_object response format, parse-side only).
+    Edit the template first, then sync this mirror.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1019,7 +1039,11 @@ class InferredIntent(BaseModel):
     )
     answer: str | None = Field(
         default=None,
-        description="Direct answer text when action is 'answer'. Null for draft.",
+        description=(
+            "The user-facing reply: the direct answer when action is "
+            "'answer'; the plan-introducing echo prose when action is "
+            "'draft'. Null for 'start' and 'ask'."
+        ),
     )
     material_text: str | None = Field(
         default=None,
@@ -1043,6 +1067,9 @@ class InferredIntent(BaseModel):
         default=None,
         description="Free-form instruction distilled from the prompt. Null for 'answer'/'start'/'ask'.",
     )
+    # No consumers anywhere (verified 2026-09-11, ADR-071) — kept on the
+    # schema for read tolerance (the model may still emit it); the prompts
+    # no longer ask for it. Delete on the next schema-breaking batch.
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     tasks_explicit: bool = Field(
         default=False,

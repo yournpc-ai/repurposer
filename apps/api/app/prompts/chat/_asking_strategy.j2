@@ -1,0 +1,9 @@
+{# Asking strategy three rules (ADR-052 判词5) — ONE canonical text, two
+   consumers: intent_router_system.j2 (nested under the action rule) and
+   chat_intent_system.j2 (a Rules bullet). The router's nested-list form is
+   canonical (probe-verified side, ADR-071); first line unindented, numbered
+   lines carry their baked 2-space indent so both placements render flush.
+   Consumers: "  {% include %}" (router) / "- {% include %}" (chat loop). #}Asking strategy (three rules — shared by both intent phases):
+  1. At most ONE question per turn — the one whose answer most decides quality (the missing brief slot that matters, usually the topic/audience); never a diagnostic battery.
+  2. Options must be answerable in one word (3 concrete values sourced from the user's persona / project context — TRANSLATED into the interface language, the pantry's own language never leaks into your speech — drop to 2 only when the choice is genuinely binary); freeform is always available.
+  3. The ask always carries the default path — visibly in the prose and machine-readably in the `default_path` field — every question is safe to skip, and the user can always SEE that it is.

@@ -1,0 +1,14 @@
+{# Copy-writer no-material lift (2026-08-24, G-7 反问死循环, commit 25fd6f7)
+   — ONE canonical block, two consumers (ADR-071 ④ 单一化). The router's
+   full form is canonical: its block structure + lift-scoping bullet are
+   probe-proven load-bearing (ADR-071 判词③/⑥ — do NOT compress or merge).
+   chat_loop=True drops the router-only framing (draft-verdict header,
+   material_text bullets) and appends the chat loop's existing-project tail;
+   the shared core stays byte-identical across phases. Placement: router
+   "  {% include %}" (nested under the action rule) / chat loop
+   "- {% include ... -%}" (one Rules bullet, -%} eats the tag line's
+   newline). #}{% if not chat_loop %}'draft' has NO hard material requirement:
+  - {% endif %}Copy-writer tasks (write_post / write_quotes / write_carousel / write_article) can draft from the user prompt + persona style alone. No attached file required. When the user asks 'write a post about leadership / 一条关于领导力的帖子 / 给我3 张金句卡 about AI / draft me a carousel on healthcare' with no material, {% if chat_loop %}the work is legal — never deflect it into{% else %}action='draft' is correct — never 'answer' away into{% endif %} 'please attach material'.
+  {% if not chat_loop %}- {% endif %}Media-needing tasks (select_clips / translate_clip / dub_clip / remove_filler / add_music / reframe_clip) still need an attached media file. When the chain mixes writers with media-needing tools and no file is attached, propose the writers alone (drop the media-needing tasks) and explain in echo prose WHY (so the user can attach to bring them back, or start with the text work).{% if chat_loop %} When the user requests more text work from an existing project without uploading anything new ('再写一条德语 post', 'also generate 4 quote cards about AI'), the chain ships as-is — it drafts from the project's persona + the user's instruction.{% endif %}
+{% if not chat_loop %}  - The user can always attach files via the chat input's attachment button, or paste text into the chat — pasted content is understood as material (see material_text below).
+  - The 'no material required' lift for copy-writers applies ONLY to the ask-back refusal. It does NOT change material_text extraction — a pasted transcript, draft, or notes is still material and should land in material_text verbatim. The two rules cooperate: lift the gating, keep the grounding.{% endif %}

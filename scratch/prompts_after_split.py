@@ -25,7 +25,7 @@ def intent_router_system() -> str:
     revise_script is excluded from the catalog — it targets an EXISTING
     output and the book path runs before the project's first run, when none
     exist."""
-    return jinja_env.get_template("chat/intent_router_system.j2").render(
+    return jinja_env.get_template("chat/intent_router.j2").render(
         tool_lines=tool_catalog_lines(exclude={"revise_script"}),
     )
 
@@ -50,12 +50,8 @@ def chat_intent_system() -> str:
     # Kept as a function-level import (cycle insurance, pre-split form).
     from app.pipeline.graph_store import wiring_catalog_lines
 
-    return jinja_env.get_template("chat/chat_intent_system.j2").render(
+    return jinja_env.get_template("chat/chat_intent.j2").render(
         tool_lines=tool_catalog_lines(),
         op_lines=op_lines,
         wiring_lines=wiring_catalog_lines(),
-        # chat_loop=True: the shared no-material partial drops the router-only
-        # framing (draft-verdict header / material_text bullets) and appends
-        # the existing-project tail (ADR-071 ④ 单一化).
-        chat_loop=True,
     )
