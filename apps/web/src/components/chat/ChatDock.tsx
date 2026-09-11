@@ -3308,10 +3308,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // confirm dock can hide. Restored sessions have no echo bubble — the card
   // stays pinned. K5 形态裁定 (简报「dock 任务书卡保留至图节点接管确认节拍后
   // 退役」): the DESKTOP panel form retires the card — the draft graph IS
-  // the book's face (图先展示后运行: the chain, its per-node quotes, and the
-  // confirm beat all live on the canvas), so the panel renders only the
-  // echo prose. The mobile dock keeps the card (prohibition #13 — no
-  // canvas below iPad width — the dock is its only plan surface).
+  // the book's face (图先展示后运行: the chain and its per-node quotes live
+  // on the canvas), so the panel renders only the echo prose. (The confirm
+  // beat went dual-seat 2026-09-11, ADR-070: the dock pill is back in the
+  // panel form — this gate is about the CARD only.) The mobile dock keeps
+  // the card (prohibition #13 — no canvas below iPad width — the dock is
+  // its only plan surface).
   const planCardVisible = phase === "confirm" && intentReady && form !== "panel"
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
@@ -3955,13 +3957,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
   // Cancel (non-blocking question = no negative action, stadium 化同批).
   // 任务书密度律 (ADR-054): HEAVY rendering only — a one-task book's
-  // confirm is the next chat message, no pill. K5 形态裁定: the DESKTOP
-  // panel form retires the pill too — the canvas's draft-confirm card
-  // (anchored at the task-book document node, 估价随行) IS the confirm
-  // beat there; the mobile dock keeps it (no canvas).
+  // confirm is the next chat message, no pill. 2026-09-11 user ruling
+  // (ADR-063 K5 partial reversal): the pill is BACK in the desktop panel
+  // form too — at the confirm moment nobody notices a button on the
+  // canvas; the canvas task-book card keeps its own Confirm & run as the
+  // second seat of the same beat (both ride handleStartGeneration).
   const taskBookEstimate = pendingQuestion?.question?.estimate_credits?.total
   const taskBookDock =
-    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook && form !== "panel" ? (
+    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook ? (
       <QuestionDock
         kind="task_book"
         plain
@@ -4035,11 +4038,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             target — Enter sends, IME guarded inside the component. */}
         <MentionEditor
           ref={editorRef}
-          placeholder={
-            phase === "confirm"
-              ? t("generationOverlay.chatPlaceholderConfirm")
-              : t("generationOverlay.chatPlaceholder")
-          }
+          // ONE fixed placeholder in every phase (2026-09-11 user ruling):
+          // a phase-aware swap (confirm → "Ask me to adjust the plan…")
+          // costs more mental load than it guides — the confirm pill right
+          // above already says what the next step is.
+          placeholder={t("generationOverlay.chatPlaceholder")}
           mentionContext={mentionContext}
           onChange={handleEditorChange}
           onSubmit={handleSend}

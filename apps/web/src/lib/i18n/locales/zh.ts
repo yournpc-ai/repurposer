@@ -1276,7 +1276,6 @@ const zh: Resources = {
     // 即虚假承诺（虚构 SKU 禁令同样适用于 placeholder 文案）；FAUNA 原串
     // 的 '/' 半句只有在 slash 真落地那天才配进文案。
     chatPlaceholder: "输入 @ 引用节点，描述你的修改想法",
-    chatPlaceholderConfirm: "告诉我怎么调整计划…",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

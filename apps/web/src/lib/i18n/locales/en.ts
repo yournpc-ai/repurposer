@@ -1337,7 +1337,6 @@ const en = {
     // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
     // half earns its seat only if slash commands ever ship.
     chatPlaceholder: "Use '@' to mention nodes and describe changes",
-    chatPlaceholderConfirm: "Ask me to adjust the plan…",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",

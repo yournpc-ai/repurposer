@@ -529,7 +529,9 @@ function DocumentCard({
                   draftConfirm.onConfirm()
                 }}
               >
-                {t("results.canvas.confirmStart")}
+                {/* Same beat, same words as the dock pill (2026-09-11):
+                    one action = one label — the echo prose says "Start". */}
+                {t("generationOverlay.confirm")}
               </Button>
             </div>
           </div>
