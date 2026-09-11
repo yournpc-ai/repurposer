@@ -1388,7 +1388,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 
-1. **动作住节点内（判词①）**：节点动作 = 节点内部解剖，浮卡形态全火化。draft 确认拍（K5）住进任务书文档卡（文本全文 + 估价 + 余额软对照 + Confirm & run，无 Cancel——「不开始」就是不开始）；promptEdit 定价确认住进 ProgramRegion（暂存程序行下就地展开：锚定子图 chips + 估价 + 余额 + Cancel/Confirm）。两张 ViewportPortal 卡连同锚位数学全删；事实经节点 data 通道下达（`draftConfirm` / `promptConfirm` payload），可见性计算留在 ResultsCanvas。
+1. **动作住节点内（判词①）**：节点动作 = 节点内部解剖，浮卡形态全火化。draft 确认拍（K5）住进任务书文档卡（文本全文 + 估价 + 余额软对照 + Confirm & run，无 Cancel——「不开始」就是不开始）；promptEdit 定价确认住进 ProgramRegion（暂存程序行下就地展开：锚定子图 chips + 估价 + 余额 + Cancel/Confirm）。两张 ViewportPortal 卡连同锚位数学全删；事实经节点 data 通道下达（`draftConfirm` / `promptConfirm` payload），可见性计算留在 ResultsCanvas。**（2026-09-11 ADR-070 收窄：K5 的「桌面确认拍只住节点内」翻案——dock pill 回座三形态，节点内确认降为同一拍的第二座。）**
 2. **全文卡律（判词④）**：卡面内容 = 原文全文，永无摘要/浓缩/省略号。DocumentCard 全文渲染 + **封顶滚动**（ADR-067 翻案了此处原判词「转写稿 3000 字 = 1750px 卡」——卡高封顶 560，超出卡内就地滚动）；**文档框出生即全文需求高、封顶 560**（graph_store `_document_frame` ↔ layout.ts `documentTextHeight` 一条测量律两镜像互引，task_book 加 88 确认预留）；**任务书文本 = 判决自身的计划散文**（`intent.answer`，二源律①——确定性浓缩组合对 transform 链失明且是「画蛇添足」；run-born 书 = 编译组合 ?? run.context.name）。**双面 back-write 律**：draft 模式 dock 拥有草稿书面（修订刷新散文，run-born 书面是历史不动）；run 模式 fill 只填空面（永不改写/抹除草稿散文）。
 3. **测量封装（判词②）**：文本测量一条律两个镜像——client `layout.ts`（textLineCount / documentTextHeight）↔ server `graph_store._document_frame`，注释互引，永不出现第三份拷贝；卡内共享 = `EstimatePriceLine` 一个组件服务确认区/定价确认/草稿 chip 三处。
 4. **估价诚实面**：折叠中存在未报价节点（estimate NULL）时——全 NULL 折叠显示「估价随运行」（永不许诺 ≈0），部分折叠带开口「+」下界；节点草稿 chip 在 [0,0]（free/未报价）时不出场（免费节点不报价自己的脸）。
@@ -1484,4 +1484,42 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 修订指认粒度到段落，agent 永不用猜「这段」是哪段；失败卡的叙事与 dock RunTaskList 的失败行同源同文（同一条 `user_error_line`）。大屏编辑器路线正式关闭（用户拍板）——卡面编辑能力 = 直改程序（K4）+ 选区钉给 agent 两通道，手工改字只是逃生舱。
 
 **Related**: ADR-058（mention 注册表指认族——quote 是其首个字段扩展）、ADR-065（服务感失败行——本次把它搬上画布）、ADR-057 K4（卡面直改——与选区引用并列为卡面两修订通道）、MENTIONS §3（闸门——quote 是字段不是新类型）
+
+## ADR-070: 确认拍回座 dock + placeholder 恒定律——下一步住在用户看着的地方
+
+**Status**: Decided (2026-09-11)
+
+**Context**: 产品试用截图取证：桌面 panel 形态任务书 dock 后，echo 散文说 "review the plan and hit Start"，但 ADR-063 K5 裁定把确认 pill 闸出 panel 形态——唯一 Start 住在画布任务书卡的 "Confirm & run" 按钮上。四重断裂：① 散文指的按钮在 chat 里不存在；② 按钮名（Confirm & run）与散文动词（Start）不一致；③ 确认期 placeholder（"Ask me to adjust the plan…"）只承诺「改」的路径，已存在的文字确认路径（G-1：chat 里说 "start"）无人告知；④ 被指认的画布按钮可能被 float 面板遮住（fitView panel-blind，画布探索导航的设计使然）。用户判词：「用户怎么可能在这一刻去注意到什么 canvas 上的按钮」；对动态 placeholder：「就固定用一开始那句，心智负担超很多」。
+
+**Decision**:
+
+1. **确认拍双座**：task_book 确认 pill 回座**三形态全形态**（撤 ChatDock 的 `form !== "panel"` 闸）——dock pill = 主座（确认时刻用户看着的地方是 chat），画布任务书卡的确认钮保留为同一拍的第二座（同 ride `handleStartGeneration`；用户正在画布上审图时就地可起）。ADR-063 判词① K5 子句就此收窄：节点内确认仍在，但不再是桌面唯一座。密度律（ADR-054）不动——单任务书仍纯散文确认、无 pill。
+2. **一个动作一个词**：画布任务书卡按钮文案并入 dock pill 同款 `generationOverlay.confirm`（"Start generation"），echo 散文的 "Start" 有所实指；promptEdit 定价确认的 "Confirm & run" 不动（那是另一个动作——确认一次卡面直改）。
+3. **placeholder 恒定律**：dock 输入框 placeholder 一切相位恒为 `chatPlaceholder`（"Use '@' to mention nodes and describe changes"）——相位感知切换的引导价值抵不过它的心智负担；确认期「下一步是什么」由确认 pill 自己说。`chatPlaceholderConfirm` i18n 键退役。
+4. **echo prompt 松绑**：`prompts.py` DENSITY 段不再硬编码 "card + Start button" 双指认——Start 钮恒在 dock（全形态），计划的评审面表述为表面中立（计划卡或画布草稿图，均可审）。
+
+**Consequences**: 确认时刻的唯一下一步在它被读到的同一表面上有钮可点；散文、按钮、placeholder 三处词汇归一。已知悬案登记不治：draft 图到达的单次 fitView 是 panel-blind 的，窄屏/长链下节点（含任务书卡）可渲染进 float 面板遮罩区——pill 回座后该遮罩不再阻塞确认，画布取景律留待画布走查批。验证（tsc / 产品试用）归用户。
+
+**Related**: ADR-063（判词① K5 子句收窄）、ADR-054（密度律不变）、ADR-058（二源律——散文指认表面中立化同精神）
+
+## ADR-071: prompt 工程结构律 + 零硬编码默认链——j2 单一化、考古不出 token、规则减负
+
+**Status**: Decided (2026-09-11)
+
+**Context**: 用户判词「prompts.py 太不灵活」——工程结构僵硬与行为教条双确诊：① 两座 200 行 Python 字符串字面量（隐式拼接 + 手工 `\n`，编辑 = 字符串手术）；② 双胞胎规则 6 处且已不同形（言语语言 / 提问三律 / 无素材 / 目标语言 / 命名 / mention——改一处漏一处 = 相位漂移）；③ 考古沉积进 token——翻案史（"the prior reflex was the bug" 类）把被否决的旧模式摆进模型上下文；④ schema Field 描述与 prompt 散文双文档且已漂移（实证：`answer` 描述 "Null for draft" 是错的——draft 的 echo 散文恰恰骑 answer）；⑤ 默认链硬编码（vague → 固定四件套）与现实冲突——用户判词：「不同的 chat 不同的 graph 流程都不一样，不要出现任何硬编码，信息通过动态上下文工程来」。
+
+**Decision**:
+
+1. **结构律**：chat 两个 system prompt 住 `app/prompts/chat/*_system.j2`（与全站 agent prompt 同一 jinja_env 基建；`*_system` 后缀区分 `app/prompts/` 根下同名的 user-turn 模板），真·双消费共享段 = `_*.j2` partial 单一定义两处 `{% include %}`——**五件**：speech_language / translate_target / naming / asking_strategy（提问三律，router 嵌套列表形为正典）/ writers_no_material（router 全块为正典 + `{% if chat_loop %}` 相位分支承载 chat loop 的 existing-project 尾巴）；动态目录行（tool / op / wiring lines）作 render 变量注入；`prompts.py` 降级为薄装配包装（函数签名不变，零调用点改动）。机械迁移必须 byte-identical——`scratch/prompt_split_diff.py` 渲染对比脚本卡死（before = 拆分前快照）；后续每次编辑性改动同律——router 侧渲染 byte-diff 卡死，chat_intent 侧 unified diff 审 delta。mention 规则与 key order 不抽：前者从来不是双胞胎（旧 router prompt 无 mention 块，查快照实证），后者两相位字段名不同（answer vs summary/text），是合理分叉。
+2. **零硬编码默认链**：链的形状永不写死在 prompt——"Default chain when the request is vague" 规则**整条删除**（先改为「从上下文判断」的灵活版，探针实测后对 vague 引导做减法到底：模型有工具目录的 when-to-use 描述与上下文，vague 请求的判断不需要专条）；`tasks_explicit` 语义不变（false = 默认提案的来源簿记）。
+3. **考古不出 token 律**：日期 / ADR 编号 / 翻案史永不进模型可见文本——出处住模板头 `{# #}` 注释与本文档；模型只见规则的当前态。**例外判例**：看似考古的行可能有**语义承重**——「lift applies ONLY to the ask-back refusal」限定弹（原附 "(the prompt below would have refused…)" 考古括注）被当沉积删除后裸愿望误判抬头；剥考古括注、留限定本体（终态模板保留此弹 + "The two rules cooperate: lift the gating, keep the grounding."）。
+4. **规则减负**（git provenance 考古 + **探针 A/B 双闸**后执行）：死字段 `confidence` 删出 prompt（零消费方实证；schema 字段留作读容忍）；风格脚手架三禁令 + never-reuse 并入 FREE PHRASING 一条（meta-preamble 有 G-7 harness 事故出身 a16d53a，保留 banned literal 作例）；目标语言 worked examples 3→2（同源护栏本体保留——62631fd 事故修复）；参数骑行四规则并一；NO-MATERIAL CASE 九行→两行；answer/draft 例表每类 →3，start 例表 6 条全量保留（中文例防语言锚定）；EXCEPTION 1/2 并入 Disclosure 段；vague 默认链整条删除（判词②）。**保留不动**：碎键不起跑（62631fd）/ never invent platform（ADR-060）/ subtitles vs dubbing / whole-source vs highlights（ADR-043）/ presented chain 保全 / 提问三律 / 出书门槛 / key order（打字机律牙）/ pending-question 段 / **no-material 块的块结构（标题 + 子弹组）与 lift 限定弹**（判词③例外）/ echo 块近逐字旧构（考古 tag 剥除、ADR-070 换面中性 Start 句、Disclosure 命名）。
+5. **prompt 散文 = 模型契约单一事实源，schema = 人类侧镜像（方向裁定，前提证伪后反转）**：原设想「字段文档住 schema、prompt 只留跨字段规则」被实测证伪——provider 调用发 `response_format: {"type": "json_object"}`（`providers/llm/minimax.py`），Pydantic schema（含全部 Field 描述）**从不发送给模型**，纯做解析侧校验；模型唯一可见的形状规格 = prompt 散文。故方向反转：prompt 模板是模型契约的唯一事实源，schemas.py 注释做准确镜像 + 路标（QuestionProposal / BriefLedger 已立："edit the template first, then sync this mirror"），answer 描述漂移已修、confidence 标注无消费方。**阶段 2 已探，判负关账（2026-09-12，`scratch/spike_json_schema.py`）**：MiniMax M3 hosted **接受但完全无视** `json_schema` response format——裸 prompt（散文形状规格全删）4/4 输出自由发明结构（`{"intent": {...}}` 包装、自造字段），必需顶层字段全缺席，schema 对生成零指导。对照组事实（`spike_native_toolcall` 两轮 18 次）：同一 provider 的 **tool_calls 通道的 parameters schema 模型是遵循的**（5/6 直接过校验）——结构化约束在 M3 上唯一有效的载体是 tool_calls 通道，json_schema 是摆设。故本裁定为终态：prompt 散文 = 模型契约单一事实源不动摇；未来若要消灭 schema 拒收失败类，路径 = 原生 tool-calling 迁移（spike 已正、方向用户已拍「值得做」，~11% 截断率由「JSON parse 失败按 schema 拒收走修复轮」吸收）——独立迁移批，不在本 ADR 范围。顺带修方向裁定中发现的真 bug：chat_intent shape C 骨架缺 `default_path`——schema 注释明确其为两相位共用的 skip 路径牙（dock × 与插话提醒消费），只有 `slot` 是 chat loop 留 null；骨架已补。
+6. **prompt 减肥必须过探针闸，且探针必须轮转（双重流程律，本次回归的教训）**：① **任何 prompt delta 靠探针实测，不靠文本推理**——bisect 仪器 = `scratch/router_ab_probe.py`（合成上下文直调 router，old/new/s1 同 ctx 对比）：三个探针（start 判决 / slot 握手 / 裸愿望）+ **上下文必须复刻剧本真人设状态**（剧本用户 `persona_exists: False`——带人设的探针曾给出 16/16 假绿）。② **探针调用必须 round-robin 交错，禁按变体顺序连跑**——provider 状态以分钟尺度漂移，顺序批把「变体」与「时间」混杂（实证：s1 = 旧 prompt + 纯删除，在顺序批下测得比旧差——方向不可信，揭露此前全部测量的混杂；改轮转后差距的大头蒸发）。轮转终测：start 判决 old 9/12 / new 10/12 / s1 11/12（平）；裸愿望 old 12/12 / new 11/12 / s1 11/12（近平，残差 = 每 12 次约 1 次混血形状）。③ **冗余与限定不是脂肪，小型 open 模型的指令遵循靠它们承重**——bisect 中真正承重的 delta = no-material 块结构 + lift 限定弹 + start 例表 + echo 块结构，四处已全部复原进终态模板；s1（旧 + 纯删除）并不优于终态 new，减肥不再收窄。
+7. **混血形状代码侧顺形（断根修复）**：`draft + tasks=[] + ask 对象在场` 是模型表达「我得先问」的自然混血——链裁决**无回 ask 的活路**（repair 只认非空有效链，retry 改判 ask 也算失败）→ 必落拒答行。`service.py` 出书前加读容忍：该形状直接重读为 ask 判决（ask 分支自有误触/已问轮转护栏接手）。**从此该形状的 prompt 侧残差方差（判词⑥的 ~1/12）代价归零**——任何 prompt 版本下它都落座提问，永不落拒答行。**扩座（2026-09-12 全量剧本猎，S5）**：任何 ask 判决（直判或混血翻转）在仍有待决行（任务书或普通问题）时一律转**插话形态**（ask 散文落普通回答 + 普通问题待决时带提醒尾，待决行保持敞开）——docking 会 supersede 任务书行、使确认成孤儿：书行死而 `project.pending_brief` 活，派发读「无待决书」把后续轮路由进 chat loop，"looks good, start" 落成 bare-run wiring 空转、run 永不起（S5 实证：碎字母 → slip-ask dock → 书行被顶 → 确认消息被当 slip 的答复吃掉）。**同猎修复 `_constraint_key` 数字归 `#`**：S12 矩阵（同键重申恒胜）出生即红——场景与实现同生于 66d2e1d，实现只归一大小写/空白，"under 200 words" 与 "under 100 words" 永不同键；数字归一后同维度重申同键、逐项 precedence 原位替换，不攒自相矛盾的双条目。**第二颗牙（同日，S10）**：`draft + tasks=[] + 无 ask + answer 在场` 是混血的对偶——模型把能力/元问题的回答写进 echo、走错 action 字段；此前它必烧修复轮落拒答行，且 echo 已流式播出 → 信封换面（stream-swap，用户先读到完整回答再看它变成「我做不到」）。重读为 answer 判决：播出的散文即最终内容，无拒答无换面——严格优于它替换的必降级结局（空链永不可 dock）。
+8. **被跳过槽位的推断值不算根（S2 语义缝）**：出书门槛 `has_root` 收窄——topic 槽已在 asked 簿（用户 × 跳过 = 已选默认路径）时，只有 user-stated 的 topic 才算根；模型推断的 topic 不再把书重新有根化、绕过 draft_from_persona 的代码宣言（reason + code echo 双缺席曾是 S2 的失败形态）。素材在场仍经 material_state 成根（infer-from-material 路径不受影响）；用户后补原话永远算根。
+
+**Consequences**: 验收三阶段——byte-identical（机械拆分）→ 渲染级 unified diff（减负 delta 可审）→ 轮转探针 A/B + 剧本（S1/S2/S9/S11）。探针意外收获：**slot 握手在旧 prompt 下也有 ~1/3 flaky**（brief=None 拒提案，新旧同率、新略优 21/30 vs 11/30）——既有薄弱面，登记为后续加固候选（与本次减肥无关）。行为面残留方差 = 既有模型方差，非本批引入。挂账落地一件（2026-09-12）：工具名枚举的漂移报警 = `ToolEntry.needs_media_file` 旗标（零行为元数据，人工标定 6 件）+ `tests/test_prompt_registry_consistency_pure.py`（media-needing / writers 两枚举与注册表对账 + 全模板枚举名注册校验）——no-material 块的散文枚举不动（探针实证承重）。派生轴的坑：MEDIA∪TRANSCRIPT 会误纳 align_stills（requires=(TRANSCRIPT,) 却为无录音场景而生），故旗标人工标定、测试对账而非自动派生。start 判决 flake 的 prompt 否定律探针**判负即撤**（contrapositive 行：A 探针 9/12 vs 旧 9/12，零增益零扰动）——该 flake 实证非 prompt 杠杆可解，残留为模型侧既有方差（~2-3/12，新旧同率）。全量剧本终态 15/15。上线前迭代（T1–T3，2026-09-12）：**T1** = 判词⑤ 阶段2 spike（判负关账，见上）；**T2** = prompt gate 扶正 `scripts/prompt_gate.py`（三探针绝对阈值 A≥8/B≥8/C≥10，判负先复跑再用 A/B 仪器 bisect，永不调阈值迁就回归），部署前仪式入 CLAUDE.md Testing（纯函数 pytest → prompt gate → 全量剧本）；**T3** = slot 握手加固 prompt 尝试**判负即撤**（强制令行 B 探针 6/12 反劣化，撤回后 10/12 回基线）——取证发现 B miss 的一部分是模型把 brief 写成**无槽名的来源化条目数组**（校验分层正确丢字段），该形状天然有损（无槽名无法映射 topic/audience），代码侧顺形无路，残留 ~1/6–1/3 方差挂账为模型侧课题。
+
+**Related**: ADR-052（提问三律 / 出书门槛——内容不变）、ADR-054（密度律）、ADR-058 / ADR-060（命名与防编造——保留）、ADR-064（顺形律——brief 形状指导保留）、ADR-070（同批 echo 松绑的下游）
 
