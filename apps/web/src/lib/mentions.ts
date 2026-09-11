@@ -31,11 +31,15 @@ import i18n from "@/lib/i18n"
 
 /** An @ entity reference pinned to a definite id — same name, same shape as
  * the backend `ChatMention` schema (NAMING §1). `"recipe"` is a render
- * residue for historical messages — unregistered, never creatable. */
+ * residue for historical messages — unregistered, never creatable.
+ * `quote` (2026-09-11 — 选区引用): an output mention may pin the exact
+ * PASSAGE the user selected on the card face (段落级指认 — the agent never
+ * guesses which sentence "改这段" means). */
 export interface ChatMention {
   type: "asset" | "output" | "transcript_segment" | "workflow_step" | "recipe"
   id: string
   label: string
+  quote?: string
 }
 
 /** One picker row. `hint` is the muted subtitle (asset: the file kind);

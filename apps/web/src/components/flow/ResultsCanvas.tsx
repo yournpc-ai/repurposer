@@ -77,6 +77,10 @@ export interface ResultsCanvasProps {
   /** A product node's factsbar action (download / delete in the bar;
    * publish / open / focus ride the ⋯ menu — all one channel). */
   onOutputAction?: (output: Output, action: FlowOutputAction) => void
+  /** 选区引用 (2026-09-11 — 段落级指认): a passage was selected on a text
+   * product's card face and pinned — the surface inserts an @output chip
+   * carrying the quote into the dock. */
+  onQuoteOutput?: (output: Output, quote: string) => void
   /** The card-face prompt direct edit's deterministic dispatch (ADR-058):
    * the pricing confirmation's Start calls it with the node id + the user's
    * verbatim program — the surface posts the graph revision (code-built
@@ -115,6 +119,7 @@ export function ResultsCanvas({
   steps,
   onOutputClick,
   onOutputAction,
+  onQuoteOutput,
   onNodeRevise,
   onDraftConfirm,
   onAssetAction,
@@ -429,6 +434,15 @@ export function ResultsCanvas({
     [outputById, onOutputAction],
   )
 
+  // 选区引用: id → the real Output (the surface composes the chip's label).
+  const handleQuoteOutput = useCallback(
+    (id: string, quote: string) => {
+      const output = outputById.get(id)
+      if (output) onQuoteOutput?.(output, quote)
+    },
+    [outputById, onQuoteOutput],
+  )
+
   // ── Prompt direct edit → the pricing confirmation (ADR-057 K4; ADR-058
   // deterministic dispatch) ───────────────────────────────────────────────
   // The card-face program region reports a new program; NOTHING touches
@@ -689,6 +703,7 @@ export function ResultsCanvas({
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
         onOutputAction={handleOutputAction}
+        onQuoteOutput={handleQuoteOutput}
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}

@@ -164,6 +164,11 @@ class ChatMention(BaseModel):
     type: Literal["asset", "output", "transcript_segment", "workflow_step", "recipe"]
     id: str
     label: str
+    # 段落级指认 (2026-09-11 — 选区引用): an output mention may pin the exact
+    # PASSAGE the user selected on the card face ("把这段改狠一点" — the agent
+    # never guesses which sentence). Absent = the whole output is the referent
+    # (the pre-quote behavior; old rows read tolerantly).
+    quote: str | None = None
 
 
 class FocusRef(BaseModel):

@@ -280,6 +280,12 @@ async def _build_context(
     if mentions:
         lines.append("Mentions (definite references):")
         for m in mentions:
-            lines.append(f"- {m.type} id={m.id} label={m.label}")
+            line = f"- {m.type} id={m.id} label={m.label}"
+            if m.quote:
+                # 段落级指认 (2026-09-11 — 选区引用): the pinned passage rides
+                # the mention line verbatim (capped — the card selection is
+                # user truth, the context budget is not).
+                line += f' — the user pinned this exact passage: "{m.quote[:500]}"'
+            lines.append(line)
 
     return {"text": "\n".join(lines)}

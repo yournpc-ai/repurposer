@@ -711,7 +711,7 @@ interface ChatDockProps {
    * restored sessions — the conversation is already on the server. */
   firstMessage?: {
     text: string
-    mentions: { type: string; id: string; label: string }[]
+    mentions: { type: string; id: string; label: string; quote?: string }[]
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
@@ -1192,8 +1192,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }, [form])
   useImperativeHandle(ref, () => ({
     closeHistory: () => setHistoryOpen(false),
-    insertMention: (mention: ChatMention) =>
-      editorRef.current?.insertMention(mention),
+    // A pin arriving from the canvas (在对话中指认 / 选区引用) is new
+    // information the user must SEE — recall the hidden dock, then chip in.
+    insertMention: (mention: ChatMention) => {
+      setDockHidden(false)
+      editorRef.current?.insertMention(mention)
+    },
     // Canvas draft-confirm card (ADR-057 K5): the desktop confirm beat —
     // it IS the dock's Start (same answer channel, same guards, same
     // credits-grey-row failure surface). No-op while a turn/run is in
@@ -2295,7 +2299,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const sendChat = async (
     text: string,
     opts?: {
-      mentions?: { type: string; id: string; label: string }[]
+      mentions?: { type: string; id: string; label: string; quote?: string }[]
       personaId?: string
       /** Files staged in the input group, sent with this turn — persisted on
        * the user message row so a refresh re-renders the chips. */

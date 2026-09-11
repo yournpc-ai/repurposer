@@ -1052,6 +1052,9 @@ const zh: Resources = {
       // render 失败原地投影在产物卡上（永不是独立节点）；重试通道 = chat dock（D8）。
       // 渲染中由 BrandLoader 独自表达，不落状态行。
       renderFailed: "渲染失败——在下方说一句重试。",
+      // 选区引用（2026-09-11——段落级指认）：产物卡上划选文本浮出的钉选钮——
+      // 钉选进入 dock 成为带引文的 @output chip，agent 修订的正是这一段。
+      quotePassage: "引用这段",
       // 悬停媒体控件：展开（左上）打开 lightbox；声音（右上）切换内联视频的静音。
       expand: "展开",
       mute: "静音",

@@ -412,6 +412,25 @@ function ProjectDetailPage() {
     }
   }, [handleOutputClick, fetchResults, t])
 
+  // 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
+  // text product's card face and pinned 「引用这段」 — the dock gets an
+  // @output chip carrying the quote, and the AGENT revises that passage (the
+  // pinned passage is the revision's scope; manual editing stays the escape
+  // hatch, never the story).
+  const handleQuoteOutput = useCallback((output: Output, quote: string) => {
+    dockRef.current?.insertMention({
+      type: "output",
+      id: output.id,
+      label: outputMentionLabel(
+        output,
+        t(`chat.derivativeTypes.${output.type}`, {
+          defaultValue: t("results.tabs.clips"),
+        }),
+      ),
+      quote,
+    })
+  }, [t])
+
   // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
   // here: the card opens the lightbox directly).
@@ -1041,6 +1060,7 @@ function ProjectDetailPage() {
             steps={latestRun?.steps ?? []}
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
+            onQuoteOutput={handleQuoteOutput}
             onNodeRevise={handleGraphRevise}
             onDraftConfirm={handleDraftConfirm}
             onAssetAction={handleAssetAction}

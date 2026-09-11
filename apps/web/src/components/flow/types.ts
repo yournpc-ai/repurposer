@@ -161,6 +161,11 @@ export interface FlowViewProps {
   /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
    * surface owns the actions; the card only reports them. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
+   * text product's card face and pinned it — the surface inserts an @output
+   * chip carrying the quote into the dock. Absent = the quote pill never
+   * renders (recipe manual surface). */
+  onQuoteOutput?: (outputId: string, quote: string) => void
   /** Asset-node toolbar dispatch (results canvas, 2026-08-17) — the surface
    * owns download / delete / reprocess; the card only reports them. When
    * absent the asset node renders NO toolbar (recipe manual surface). */

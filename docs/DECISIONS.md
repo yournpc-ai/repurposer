@@ -1469,3 +1469,19 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: fork 列的节点间距从 ~406px 收到 ~62px（draft 278 + 预留 316），产物落地后卡高恰好填满预留；legacy 图保留旧帧（append-only——多留白，不重叠）。prepare 节点的 T→@ 读作「任务书文本作为引用流入」，不再读作「连到了一张图片」。
 
 **Related**: ADR-057 §5（端口法则 glyph 表修订）、ADR-067（出锚语义律——本次①是其可读性续集）、ADR-063 判词②（镜像纪律——_CLIP_FRAME_H 入镜）
+
+## ADR-069: 段落级指认 + 失败人话行——卡面划选钉进 dock，失败卡读烤好的人话行
+
+**Status**: Decided (2026-09-11)
+
+**Context**: MiniMax Design 竞品走查：选中识别体验获认可（划选即知你在指哪段），但大屏展开编辑器被用户否决（「我们先不做」）——用户判词：**用户得能在 chat 里通过 mention 指定这一段怎么改，而不是自己手动改，这才是 agent 的意义**。同批走查发现：failed 卡只说泛化的「运行失败」，而 orchestrator 早已把烤好的人话行（`user_error_line`，ADR-065 服务感两拍）写进 step.error——画布卡面读不到它。
+
+**Decision**:
+
+1. **选区引用（段落级指认）**：文本产物卡（post/article）读体恢复可选——读体从 `<button>` 改 `div[role=button]`（button 吞文本选区，2026-09-08「滚动 + 直选」姿态被它静默破坏；键盘 Enter/Space 进编辑的平价路径保留）；划出段落在**区域右下角**浮「引用这段」pill（region 级 absolute 锚定，**永不进 scrollport**——进滚动区会随文滚动并在 overflow 边被裁）。点击 → dock 插入**带 quote 的 @output chip**：`ChatMention` 双端加 `quote` 字段（null = 整体指认，旧行读容忍同打字机律牙①）；chip 序列化 = ``@label "quote"``（散文与历史行都留住指认对象）；编辑器 chip 内联渲染截断 muted 引文（说清指哪段，不只指哪个产物）；dataset round-trip 保回滚重插不丢引文。服务端：mention block 行附 `the user pinned this exact passage`（500 字截断——卡面选区是用户真值，上下文预算不是）；prompt 规则钉死语义：**the passage IS the revision's scope**——新程序修订那一段，永不盲目重写全文。引文出生截断 200 字（一两句的生意——更长是整体 mention 的活）。`insertMention` 召回隐藏 dock（chip = 新信息，召回律）；pill 的 mousedown preventDefault（不得在 click 读选区前塌掉它）。范围：文本产物（post/article）——transcript 文档卡不在此列（其选区 = 未来剪辑 primitive）；手动 in-place 编辑保留为逃生舱，永不是故事主线。
+2. **失败人话行**：node 失败态卡读 `spec.error`——`sync_graph_node_for_step` 聚合出 failed 时从 failed family step 把烤好的人话行誊入 `node.spec.error`（bake-at-write、UI locale 于失败时刻，与 step summary 同纪律）；**家族恢复即清**（重跑不留陈旧墓志铭）。泛化「运行失败」降级为前 error 行旧数据的回退。
+
+**Consequences**: 修订指认粒度到段落，agent 永不用猜「这段」是哪段；失败卡的叙事与 dock RunTaskList 的失败行同源同文（同一条 `user_error_line`）。大屏编辑器路线正式关闭（用户拍板）——卡面编辑能力 = 直改程序（K4）+ 选区钉给 agent 两通道，手工改字只是逃生舱。
+
+**Related**: ADR-058（mention 注册表指认族——quote 是其首个字段扩展）、ADR-065（服务感失败行——本次把它搬上画布）、ADR-057 K4（卡面直改——与选区引用并列为卡面两修订通道）、MENTIONS §3（闸门——quote 是字段不是新类型）
+

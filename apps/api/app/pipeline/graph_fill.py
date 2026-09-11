@@ -1163,6 +1163,23 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
         .all()
     )
     node.state = _aggregate_family([str(s.status) for s in family])
+    # 失败人话行原地表达 (2026-09-11): the failed card reads the family's
+    # baked human line (the orchestrator's user_error_line on the failed
+    # step), never the generic 「运行失败」 — spec.error is bake-at-write
+    # (UI locale at fail time, same discipline as step summaries) and clears
+    # the moment the family recovers (a rerun never leaves a stale epitaph).
+    if node.state == "failed":
+        failed_step = next((s for s in family if s.status == "failed" and s.error), None)
+        error_line = (failed_step.error or "")[:500] if failed_step else None
+    else:
+        error_line = None
+    if error_line != ((node.spec or {}).get("error") or None):
+        node.spec = {
+            **(node.spec or {}),
+            **({"error": error_line} if error_line else {}),
+        }
+        if not error_line:
+            node.spec.pop("error", None)
     # The task-book document's text rides the plan step's runtime book — the
     # refined book_summary overwrites the compile-time fallback when planning
     # lands (same source as the stamp, no flicker).

@@ -1104,6 +1104,10 @@ const en = {
       // separate node); the retry channel is the chat dock (D8). An active
       // render speaks through the BrandLoader alone — no status line.
       renderFailed: "Render failed — ask below to retry.",
+      // 选区引用 (2026-09-11 — 段落级指认): the pill a text selection on a
+      // product card offers — the pin rides into the dock as an @output chip
+      // carrying the quoted passage; the agent revises THAT passage.
+      quotePassage: "Quote this",
       // Hover media affordances: expand (top-left) opens the lightbox;
       // sound (top-right) flips the inline video's ambient mute.
       expand: "Expand",

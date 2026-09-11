@@ -261,6 +261,7 @@ export function FlowView({
   selectedId = null,
   onSelect,
   onOutputAction,
+  onQuoteOutput,
   onAssetAction,
   onExpandMedia,
   onDisplayChange,
@@ -334,6 +335,7 @@ export function FlowView({
         selected: n.id === selectedId,
         ports: portsByNode.get(n.id),
         onOutputAction,
+        onQuoteOutput,
         onAssetAction,
         onExpandMedia,
         onDisplayChange,
@@ -396,7 +398,7 @@ export function FlowView({
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm])
+  }, [nodes, edges, selectedId, bornIds, onOutputAction, onQuoteOutput, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

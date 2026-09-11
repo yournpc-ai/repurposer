@@ -26,7 +26,7 @@ import i18n from "@/lib/i18n"
 export interface ChatTurnBody {
   project_id: string
   message: string
-  mentions?: { type: string; id: string; label: string }[]
+  mentions?: { type: string; id: string; label: string; quote?: string }[]
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
   attachments?: {

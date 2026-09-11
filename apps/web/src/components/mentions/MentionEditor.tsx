@@ -76,11 +76,17 @@ function normalizeEmpty(el: HTMLElement) {
 }
 
 /** Serialize the editable DOM into prompt text: text nodes verbatim, chips
- * as `@label`, block boundaries as newlines. */
+ * as `@label` (a quoted chip — 选区引用 — carries its pinned passage inline
+ * as `@label "passage"`, so the sentence and the history both keep what the
+ * user pointed at), block boundaries as newlines. */
 function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ""
   if (!(node instanceof HTMLElement)) return ""
-  if (node.dataset.mentionType) return `@${node.dataset.mentionLabel ?? ""}`
+  if (node.dataset.mentionType) {
+    const base = `@${node.dataset.mentionLabel ?? ""}`
+    const quote = node.dataset.mentionQuote
+    return quote ? `${base} "${quote}"` : base
+  }
   if (node.tagName === "BR") return "\n"
   const inner = Array.from(node.childNodes).map(serializeNode).join("")
   // Block elements (Enter/shift-Enter lines) are newline-separated.
@@ -116,6 +122,9 @@ export function MentionEditor({
       type: node.dataset.mentionType as ChatMention["type"],
       id: node.dataset.mentionId ?? "",
       label: node.dataset.mentionLabel ?? "",
+      // The pinned passage round-trips through the DOM (选区引用 — a rollback
+      // re-insert keeps it; absent = the whole entity is the referent).
+      ...(node.dataset.mentionQuote ? { quote: node.dataset.mentionQuote } : {}),
     }))
     onChange(text, mentions)
   }, [onChange])
@@ -130,12 +139,24 @@ export function MentionEditor({
       chip.dataset.mentionType = mention.type
       chip.dataset.mentionId = mention.id
       chip.dataset.mentionLabel = mention.label
+      if (mention.quote) chip.dataset.mentionQuote = mention.quote
       chip.className =
         "mx-0.5 inline-flex items-baseline gap-0.5 rounded-md bg-muted px-1 text-foreground"
 
       const label = document.createElement("span")
       label.textContent = `@${mention.label}`
       chip.appendChild(label)
+
+      // 选区引用: the pinned passage shows as a muted snippet — the chip
+      // says WHICH PART, not just which product (display-truncated only;
+      // the dataset carries the full quote).
+      if (mention.quote) {
+        const quote = document.createElement("span")
+        const snippet = mention.quote.replace(/\s+/g, " ").trim()
+        quote.textContent = `“${snippet.length > 24 ? `${snippet.slice(0, 24)}…` : snippet}”`
+        quote.className = "text-muted-foreground"
+        chip.appendChild(quote)
+      }
 
       const remove = document.createElement("button")
       remove.type = "button"

@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
   AtSign,
@@ -61,6 +61,10 @@ export interface FlowCardData extends Record<string, unknown> {
   ports?: { in: GraphEdgeType[]; out: OutPortType[] }
   /** Product-toolbar dispatch (ADR-041 D5) — the surface owns the actions. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
+  /** 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
+   * text product's card face and pinned it — the surface inserts an @output
+   * chip carrying the quote into the dock. */
+  onQuoteOutput?: (outputId: string, quote: string) => void
   /** Asset-toolbar dispatch (2026-08-17) — the surface owns asset actions. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
   /** Media expand dispatch — the surface opens the lightbox for the node.
@@ -759,13 +763,22 @@ function MediaProductRegion({
  * rendered inside the card (these types have no baked image/video) — the
  * card itself is the readable text card (Gamma/Tome-style). The product's
  * own content stays directly editable in place (a product-level text edit —
- * 改字免费即时, persisted via PUT /outputs; never a program change). */
+ * 改字免费即时, persisted via PUT /outputs; never a program change).
+ * 选区引用 (2026-09-11 用户拍板 — 段落级指认): selecting a passage in the
+ * read body offers 「引用这段」 — the pin rides into the dock as an @output
+ * chip WITH the quoted passage (the agent revises THAT passage; manual
+ * editing stays the escape hatch, never the story). The read body is a DIV,
+ * never a <button> — buttons swallow text selection (the 09-08 "scrolls +
+ * selects directly" posture was silently broken by the button), and a
+ * selection-owning click never enters edit mode. */
 function TextProductRegion({
   output,
   tourTargets,
+  onQuote,
 }: {
   output: Output
   tourTargets?: boolean
+  onQuote?: (quote: string) => void
 }) {
   const { t } = useTranslation()
   const title = output.publishing.title ?? (output.payload.title as string | undefined) ?? null
@@ -780,6 +793,31 @@ function TextProductRegion({
   const [draft, setDraft] = useState(body)
   const [saving, setSaving] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 选区引用: the live passage selection inside the read body (null = none).
+  // Captured on mouse-up; cleared when the document selection collapses or
+  // leaves the body.
+  const [quoteSelection, setQuoteSelection] = useState<string | null>(null)
+  const readBodyRef = useRef<HTMLDivElement>(null)
+
+  /** The selection inside the read body, if any (both ends must live here —
+   * a drag ending outside the card is not a quote). */
+  const readSelection = useCallback((): string | null => {
+    const el = readBodyRef.current
+    const sel = window.getSelection()
+    if (!el || !sel || sel.isCollapsed || sel.rangeCount === 0) return null
+    if (!el.contains(sel.anchorNode) || !el.contains(sel.focusNode)) return null
+    const text = sel.toString().replace(/\s+/g, " ").trim()
+    return text || null
+  }, [])
+
+  useEffect(() => {
+    // The pill follows the selection's life: gone when the selection
+    // collapses or moves elsewhere (a click into the dock must not leave a
+    // stale pill on the card).
+    const handler = () => setQuoteSelection((prev) => (readSelection() ? prev : null))
+    document.addEventListener("selectionchange", handler)
+    return () => document.removeEventListener("selectionchange", handler)
+  }, [readSelection])
 
   useEffect(() => {
     setDraft(body)
@@ -858,7 +896,7 @@ function TextProductRegion({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      className="relative flex min-h-0 flex-1 flex-col"
       data-tour={tourTargets ? "results-video" : undefined}
       onClick={(e) => {
         // Editing the text area should not select the node — the canvas's
@@ -893,18 +931,34 @@ function TextProductRegion({
           )}
         />
       ) : (
-        <button
-          type="button"
+        <div
+          ref={readBodyRef}
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             // Entering inline edit is NOT the node-select gesture — a node
             // click selects (the dossier swaps in); the card itself is the
             // reader (in-place scroll + inline edit — the separate reader
             // modal retired 2026-09-09). Same stopPropagation contract as
-            // the toolbar buttons.
+            // the toolbar buttons. A click that OWNS a text selection is the
+            // quote gesture (选区引用), never an edit entry.
             e.stopPropagation()
+            if (readSelection()) return
             setEditing(true)
           }}
-          className={cn(contentClass, "cursor-text")}
+          onMouseUp={() => {
+            // The quote pill appears only when a real passage is selected.
+            setQuoteSelection(readSelection())
+          }}
+          onKeyDown={(e) => {
+            // role="button" parity — the retired <button> entered edit mode
+            // on Enter/Space; the div must not lose the keyboard path.
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              setEditing(true)
+            }
+          }}
+          className={cn(contentClass, "cursor-text select-text")}
         >
           {title ? (
             <p className="mb-1 line-clamp-1 text-sm font-medium leading-snug">{title}</p>
@@ -915,8 +969,32 @@ function TextProductRegion({
               {clipped.map((h) => `#${h}`).join(" ")}
             </p>
           ) : null}
-        </button>
+        </div>
       )}
+      {/* 选区引用 pill: pinned to the REGION's bottom-right, never inside the
+          scrollport (it would ride the text as it scrolls and clip at the
+          overflow edge). */}
+      {quoteSelection && onQuote && !editing ? (
+        <button
+          type="button"
+          // mousedown must not collapse the selection before the click
+          // reads it; the pill never selects the node (same contract as the
+          // toolbar buttons).
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation()
+            // One cap, at birth (选区引用): the passage is user truth; 200
+            // chars covers a sentence or two — a longer need is the
+            // whole-output mention's job.
+            onQuote(quoteSelection.slice(0, 200))
+            setQuoteSelection(null)
+            window.getSelection()?.removeAllRanges()
+          }}
+          className="nodrag absolute right-2 bottom-2 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
+        >
+          {t("results.canvas.quotePassage")}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -1005,7 +1083,12 @@ function QuietBody({ node }: { node: FlowNode }) {
         </span>
       ) : node.status === "failed" ? (
         <span className="px-3 text-[11px] leading-snug text-destructive">
-          {t("results.canvas.runFailed")}
+          {/* 失败人话行 (2026-09-11): the family's baked line (spec.error —
+              user_error_line at fail time) speaks in place; the generic
+              「运行失败」 is the fallback for pre-error rows only. */}
+          {typeof node.spec?.error === "string" && node.spec.error
+            ? node.spec.error
+            : t("results.canvas.runFailed")}
         </span>
       ) : (
         // done with no visible product (research): the summary line is the
@@ -1231,6 +1314,7 @@ function GraphCard({
   node,
   selected,
   onOutputAction,
+  onQuoteOutput,
   onExpandMedia,
   onDisplayChange,
   onPromptEdit,
@@ -1240,6 +1324,7 @@ function GraphCard({
   node: FlowNode
   selected: boolean
   onOutputAction?: FlowCardData["onOutputAction"]
+  onQuoteOutput?: FlowCardData["onQuoteOutput"]
   onExpandMedia?: FlowCardData["onExpandMedia"]
   onDisplayChange?: FlowCardData["onDisplayChange"]
   onPromptEdit?: FlowCardData["onPromptEdit"]
@@ -1368,7 +1453,17 @@ function GraphCard({
         {running && <span aria-hidden className="node-fill-wipe" />}
         {output ? (
           isText ? (
-            <TextProductRegion output={output} tourTargets={node.tourTargets} />
+            <TextProductRegion
+              output={output}
+              tourTargets={node.tourTargets}
+              // 选区引用: undefined where the surface owns no quote channel
+              // (the recipe manual) — the pill never renders there.
+              onQuote={
+                onQuoteOutput
+                  ? (quote) => onQuoteOutput(output.id, quote)
+                  : undefined
+              }
+            />
           ) : (
             <MediaProductRegion
               node={node}
@@ -1384,7 +1479,10 @@ function GraphCard({
         )}
         {failed && output ? (
           <p className="shrink-0 px-3 py-1.5 text-[11px] leading-snug text-destructive">
-            {t("results.canvas.runFailed")}
+            {/* 失败人话行 — same baked line as the quiet body. */}
+            {typeof node.spec?.error === "string" && node.spec.error
+              ? node.spec.error
+              : t("results.canvas.runFailed")}
           </p>
         ) : null}
         {!failed && renderFailed ? (
@@ -1568,7 +1666,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1603,6 +1701,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           node={node}
           selected={selected}
           onOutputAction={onOutputAction}
+          onQuoteOutput={onQuoteOutput}
           onExpandMedia={onExpandMedia}
           onDisplayChange={onDisplayChange}
           onPromptEdit={onPromptEdit}
