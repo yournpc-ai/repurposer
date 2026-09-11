@@ -108,6 +108,14 @@ class ToolEntry(BaseModel):
     # the UI language, never the material's.
     summary_templates: dict[str, str] = {}
     seat: bool = False  # registered-but-not-implemented (no node yet)
+    # Needs an uploaded media FILE (video/audio/image) — never satisfiable by
+    # pasted text (ADR-071 挂账 alarm 的注册表侧事实源, 2026-09-12):
+    # display/proposal metadata only (zero behavior change); the prompt's
+    # no-material enumeration is drift-checked against this by
+    # tests/test_prompt_registry_consistency_pure.py. align_stills is the
+    # designed counter-example — requires=(TRANSCRIPT,) yet serves the
+    # NO-recording case, so TRANSCRIPT membership is NOT this axis.
+    needs_media_file: bool = False
 
 
 TOOL_REGISTRY: dict[str, ToolEntry] = {
@@ -116,6 +124,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="select_clips",
             description="Cut highlight clips from the source media (batch re-cut)",
+            needs_media_file=True,
             behavior="probabilistic",
             params_model=SelectClipsParams,
             summary_templates={
@@ -176,6 +185,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="dub_clip",
             description="Dub existing clips with the persona's cloned voice into a target language, then re-render",
+            needs_media_file=True,
             behavior="probabilistic",
             params_model=DubClipParams,
             summary_templates={
@@ -186,6 +196,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="translate_clip",
             description="Translate existing clips' captions into another language, then re-render",
+            needs_media_file=True,
             behavior="probabilistic",
             params_model=TranslateClipParams,
             summary_templates={
@@ -196,6 +207,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="remove_filler",
             description="Remove filler words and repeated takes from existing clips, then re-render",
+            needs_media_file=True,
             behavior="deterministic",
             summary_templates={
                 "en": "Removed {filler_count} filler{filler_count_s} · {repeat_count} repeated take{repeat_count_s}",
@@ -205,6 +217,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="add_music",
             description="Score existing clips with a music bed, then re-render",
+            needs_media_file=True,
             behavior="deterministic",
             params_model=AddMusicParams,
             summary_templates={
@@ -216,6 +229,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             name="reframe_clip",
             description="Reframe existing clips for the output aspect — the camera sits on "
             "whoever is talking, or follows a moving speaker — then re-render",
+            needs_media_file=True,
             behavior="deterministic",
             params_model=ReframeClipParams,
             summary_templates={

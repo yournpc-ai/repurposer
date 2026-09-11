@@ -39,6 +39,7 @@ is a new intent and the question stays pending.
 """
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -391,9 +392,15 @@ _SOURCE_RANK: dict[BriefSlotSource, int] = {
 _LEDGER_SCALAR_SLOTS = ("topic", "audience", "tone", "material_state")
 
 
+_CONSTRAINT_DIGITS = re.compile(r"\d+")
+
+
 def _constraint_key(text: str) -> str:
-    """constraints 归并键：归一化条目文本（大小写/空白不敏感）。"""
-    return " ".join(text.split()).lower()
+    """constraints 归并键：归一化条目文本（大小写/空白不敏感，数字归 #——
+    同一约束维度的重申同键：'keep it under 200 words' 与 'keep it under 100
+    words' 是一条约束的两次说法，重申走逐项 precedence 原位替换，不攒出自相
+    矛盾的双条目。S12 矩阵即此键的规格）。"""
+    return _CONSTRAINT_DIGITS.sub("#", " ".join(text.split()).lower())
 
 
 def _merge_constraints(
@@ -1649,6 +1656,14 @@ async def _book_turn(
     # answer exit's reply gets the reminder tail). A pending task_book is
     # this path's own confirmation target (G-1), never a judgment subject.
     pending_q = await latest_pending_question(db, conversation_id)
+    # Remember a pending task_book before the null below (ADR-071 判词⑦'s
+    # hybrid flip reads it): docking a fresh plain question would supersede
+    # the book row and orphan the confirmation (S5, 2026-09-12).
+    book_pending = (
+        pending_q is not None
+        and pending_q.workflow_run_id is None
+        and (pending_q.question or {}).get("kind") == "task_book"
+    )
     if pending_q is not None and (
         pending_q.workflow_run_id is not None
         or (pending_q.question or {}).get("kind") != "question"
@@ -1838,6 +1853,57 @@ async def _book_turn(
             await db.flush()
             settled_pending = pending_q
             pending_q = None
+
+    # 顺形 read-tolerance (2026-09-11, ADR-071 判词⑦): the model's natural
+    # hybrid for "I must ask first" sometimes arrives as action='draft'
+    # carrying the ask object with an EMPTY task list. The chain
+    # adjudication below has no path back to ask (the repair round only
+    # accepts a non-empty valid chain — a corrected ask verdict counts as
+    # failure), so the shape would burn the repair round and degrade to the
+    # refusal line despite an obviously-ask intent. Re-read it as the ask
+    # verdict it is; the ask branch's own guards (misfire / asked-roll)
+    # take it from there.
+    if (
+        intent.action == "draft"
+        and not intent.tasks
+        and intent.ask is not None
+        and intent.ask.question.strip()
+    ):
+        intent.action = "ask"
+    # 判词⑦ 扩座 (2026-09-12, S5): ANY ask while a question is still pending
+    # is an interjection, never a new dock — docking supersedes the pending
+    # row, and for a task_book that orphans the confirmation: the book's row
+    # dies while project.pending_brief stays alive, the dispatch then reads
+    # "no pending book" and routes turns to the chat loop, where "looks
+    # good, start" becomes a bare-run wiring no-op (the run never starts).
+    # Land the ask's framing prose as a plain answer instead (with the
+    # reminder tail when a plain question is pending, ADR-053 R2); the
+    # pending row stays open and the user's next message resumes it — a
+    # would-be brief answer simply rides the next revision turn.
+    if (
+        intent.action == "ask"
+        and intent.ask is not None
+        and intent.ask.question.strip()
+        and (book_pending or pending_q is not None)
+    ):
+        intent.action = "answer"
+        intent.answer = intent.ask.prose or intent.ask.question
+    # 判词⑦ 第二颗牙 (2026-09-12, S10): the answer-carrying twin of the
+    # hybrid — action='draft' with an EMPTY chain, no ask object, and the
+    # reply written into the echo (the model answering a capability/meta
+    # question through the wrong action field). Today it burns the repair
+    # round and degrades to the refusal line, and because the echo already
+    # STREAMED, the envelope then swaps the user's bubble mid-read
+    # (stream-swap). Re-read it as the answer verdict it is: the streamed
+    # prose IS the final content, no refusal, no swap. Strictly better than
+    # the guaranteed degrade it replaces — an empty chain can never dock.
+    if (
+        intent.action == "draft"
+        and not intent.tasks
+        and intent.ask is None
+        and (intent.answer or "").strip()
+    ):
+        intent.action = "answer"
 
     # Chain adjudication (ADR-043): the registry validates the proposed task
     # list — one bounded repair round on rejection (the funnel's reserved
@@ -2032,7 +2098,19 @@ async def _book_turn(
         else:
             has_root = (
                 bool((merged_brief.topic.value or "").strip())
-                or merged_brief.material_state.value != "none"
+                # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
+                # user skipped the topic ask is not a root — the skip chose
+                # the default path (draft-from-persona, reason + code echo),
+                # and an inferred re-root silently bypasses both. Only the
+                # user's own words re-root a skipped slot. (With material
+                # attached the next clause roots the book anyway, so the
+                # infer-from-material path is untouched.)
+                and (
+                    merged_brief.topic.source == BriefSlotSource.USER_STATED
+                    or "topic" not in merged_brief.asked
+                )
+            ) or (
+                merged_brief.material_state.value != "none"
                 or (
                     intent.tasks_explicit
                     and bool((intent.specific_instruction or "").strip())
