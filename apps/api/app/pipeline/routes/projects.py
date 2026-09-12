@@ -2,7 +2,7 @@
 
 import io
 import zipfile
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import Integer, cast, delete, or_, select
@@ -343,6 +343,48 @@ async def get_project_graph(
             if str(e.from_node) not in hidden_modifier_ids
             and str(e.to_node) not in hidden_modifier_ids
         ]
+    # A3-lite (2026-09-13 演示冻结期, ADR-072 批 A3 边改造的读面先行): the
+    # material-flow reading 源 → 文档 → 装配 — the transcript document fed the
+    # consumers' text (ASR words drive selection + captions + the writers'
+    # source text), but the legacy stamp left it a LEAF (consumers wired from
+    # the asset = "the execution truth"). Synthesize the transcript → consumer
+    # text edge at READ time (display only, zero graph writes): for every
+    # video/text flow out of the transcript's asset, the document carries the
+    # same flow's text leg. Formal rewiring lands with 批 A3 (the two-station
+    # edge design).
+    asset_node_by_asset = {
+        str((n.spec or {}).get("asset_id")): str(n.id)
+        for n in nodes
+        if n.kind == "asset" and (n.spec or {}).get("asset_id")
+    }
+    have_edge_triples = {
+        (str(e.from_node), str(e.to_node), str(e.edge_type)) for e in edges
+    }
+    for n in nodes:
+        if n.kind != "document" or (n.spec or {}).get("role") != "transcript":
+            continue
+        asset_node_id = asset_node_by_asset.get(str((n.spec or {}).get("asset_id") or ""))
+        if asset_node_id is None:
+            continue
+        # Snapshot: synthesized edges append to `edges` — never iterate a
+        # list being grown (and the appended rows are dicts, not ORM rows).
+        for e in list(edges):
+            if str(e.from_node) != asset_node_id or str(e.edge_type) not in ("video", "text"):
+                continue
+            triple = (str(n.id), str(e.to_node), "text")
+            if triple in have_edge_triples or str(e.to_node) == str(n.id):
+                continue
+            have_edge_triples.add(triple)
+            edges.append(
+                {
+                    "id": uuid4(),
+                    "from_node": n.id,
+                    "from_port": "out:text",
+                    "to_node": e.to_node,
+                    "to_port": "in:text",
+                    "edge_type": "text",
+                }
+            )
     if not nodes:
         return {"nodes": [], "edges": []}
 
