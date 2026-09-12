@@ -31,6 +31,56 @@ from app.agents.registry import translator
 
 UNIT_WORDS = 10  # words per translation unit (display re-chunks by 7 anyway)
 
+# The artifact's spec key on its owning graph node (批 A2; the document
+# station's node in 批 A3 — the runner reads doc-first, node-second).
+TRANSLATION_ARTIFACT_KEY = "translation"
+
+
+def translation_source_hash(
+    track: list[dict[str, Any]],
+    title_text: str,
+    target_language: str,
+    style_hint: str | None,
+) -> str:
+    """Content address for one clip's translation input (批 A2 复用钩):
+    the source cue times + words, the title source, the target language and
+    the persona style hint. The TRANSLATED text is never hashed (editing the
+    translation must NOT bust the cache — 改字后重渲染不再买翻译); a source
+    change (reprocess shifts words or timing) does."""
+    import hashlib
+    import json
+
+    payload = {
+        "lang": target_language,
+        "style": style_hint or "",
+        "title": title_text,
+        "cues": [
+            [float(c.get("start") or 0), float(c.get("end") or 0), str(c.get("text") or "")]
+            for c in track
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+
+
+def find_reusable_translation(
+    artifact: dict[str, Any] | None, output_id: str, source_hash: str
+) -> dict[str, Any] | None:
+    """The reuse lookup: the clip's cached entry iff its source hash matches
+    (user-edited rows are a HIT — the edit IS the artifact's content)."""
+    if not isinstance(artifact, dict):
+        return None
+    clips = artifact.get("clips")
+    if not isinstance(clips, dict):
+        return None
+    entry = clips.get(output_id)
+    if not isinstance(entry, dict) or entry.get("source_hash") != source_hash:
+        return None
+    if not isinstance(entry.get("rows"), list):
+        return None
+    return entry
+
 
 def _group_units(cues: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Chunk word cues into fixed-size translation units, preserving order."""

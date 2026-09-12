@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.registry import translator
 from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import RenderStatus
-from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
+from app.models.tables import GraphNode, Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError, propagate_key
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bounds
@@ -45,9 +45,13 @@ from app.pipeline.morph import (
 )
 from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
 from app.tools.captions.procedure import (
-    translate_caption_track,
-    translate_caption_units,
+    TRANSLATION_ARTIFACT_KEY,
+    build_translation_cues,
+    find_reusable_translation,
+    spread_translation_cues,
     translate_text,
+    translation_source_hash,
+    unit_translation_cues,
 )
 
 
@@ -111,27 +115,69 @@ class TranslateClip(NodeBase):
         await _guard_target_differs_from_source(
             db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
         )
+        # 译文 artifact 复用钩 (ADR-072 批 A2): the cue rows live on the graph
+        # node's spec (persistent across runs — a re-render revision reads
+        # them, translator capture 0). Hash = source cue times+words + title +
+        # language; the TRANSLATED text is never hashed — the user's edit of
+        # the 译文 IS the artifact's content (改字后重渲染不再买翻译).
+        from app.pipeline.graph_fill import (  # deferred: import cycle
+            merge_translation_artifact,
+        )
+
+        gnode_id = (node.spec or {}).get("graph_node_id")
+        gnode = (
+            await db.get(GraphNode, UUID(str(gnode_id))) if gnode_id else None
+        )
+        artifact = (
+            (gnode.spec or {}).get(TRANSLATION_ARTIFACT_KEY) if gnode else None
+        )
         touched: list[UUID] = []
         for output in clips:
             spec = output.render_spec
             track = (spec or {}).get("caption_track") or []
             if not track:
                 continue
+            title = dict(spec.get("title") or {})
+            title_src = (
+                str(title.get("text") or "")
+                if title.get("enabled") and str(title.get("text") or "").strip()
+                else ""
+            )
+            source_hash = translation_source_hash(track, title_src, lang, None)
+            cached = find_reusable_translation(artifact, str(output.id), source_hash)
             try:
-                if bilingual:
-                    # 双语对照轨: the original word-level track stays; the
-                    # translation lands as unit-level cues on
-                    # translation_track (renderer pairs them by time).
-                    translation = await translate_caption_units(track, lang)
+                if cached is not None:
+                    rows = cached["rows"]
+                    title_text = str((cached.get("title") or {}).get("text") or "")
                 else:
-                    new_track = await translate_caption_track(track, lang)
-                # The title overlay translates along — a subtitled clip with
-                # an untranslated title card reads broken (dub 2026-08-09).
-                title = dict(spec.get("title") or {})
-                if title.get("enabled") and str(title.get("text") or "").strip():
-                    title["text"] = await translate_text(
-                        str(title["text"]), lang, style_hint="a short video title overlay"
+                    rows = await build_translation_cues(track, lang)
+                    # The title overlay translates along — a subtitled clip
+                    # with an untranslated title card reads broken (dub
+                    # 2026-08-09 同款).
+                    title_text = (
+                        await translate_text(
+                            title_src, lang, style_hint="a short video title overlay"
+                        )
+                        if title_src
+                        else ""
                     )
+                    if gnode is not None:
+                        # Persist per clip as it lands (own session): a retry
+                        # mid-loop never re-buys the clips already translated.
+                        await merge_translation_artifact(
+                            UUID(str(gnode.id)),
+                            {
+                                str(output.id): {
+                                    "source_hash": source_hash,
+                                    "title": (
+                                        {"source": title_src, "text": title_text}
+                                        if title_src
+                                        else None
+                                    ),
+                                    "rows": rows,
+                                }
+                            },
+                        )
             except MiniMaxError as e:
                 # Provider failure after the client's own retries — still
                 # transient at step level (W3 retry budget applies).
@@ -139,10 +185,15 @@ class TranslateClip(NodeBase):
                     f"caption translate failed: {e}",
                     user_key=propagate_key(e, "provider_unavailable"),
                 ) from e
+            if title_text:
+                title["text"] = title_text
             if bilingual:
+                # 双语对照轨: the original word-level track stays; the
+                # translation lands as unit-level cues on
+                # translation_track (renderer pairs them by time).
                 new_spec = {
                     **spec,
-                    "translation_track": translation,
+                    "translation_track": unit_translation_cues(rows, lang),
                     "title": title,
                     "target_language": lang,
                 }
@@ -151,7 +202,7 @@ class TranslateClip(NodeBase):
                 # single-language (the translation becomes THE track).
                 new_spec = {
                     **spec,
-                    "caption_track": new_track,
+                    "caption_track": spread_translation_cues(rows, lang),
                     "translation_track": [],
                     "title": title,
                     "target_language": lang,

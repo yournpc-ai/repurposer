@@ -24,11 +24,18 @@ from starlette.concurrency import run_in_threadpool
 
 from app.providers.llm.minimax import MiniMaxError
 from app.models.schemas import AssetType
-from app.models.tables import Asset, Output, Persona, Project
+from app.models.tables import Asset, GraphNode, Output, Persona, Project
 from app.metering import record_media_usage
 from app.pipeline.errors import TransientNodeError, propagate_key
-from app.tools.captions.procedure import translate_caption_track, translate_text
-from app.tools.dub.dubbing import DubAssemblyError, group_units, synthesize_aligned_track
+from app.tools.captions.procedure import (
+    TRANSLATION_ARTIFACT_KEY,
+    build_translation_cues,
+    find_reusable_translation,
+    spread_translation_cues,
+    translate_text,
+    translation_source_hash,
+)
+from app.tools.dub.dubbing import DubAssemblyError, synthesize_aligned_track
 from app.providers.storage import download_to_temp, get_output_path, output_url, save
 from app.providers.voice import VoiceError, clone_voice, extract_audio
 
@@ -56,11 +63,68 @@ def _persona_style_hint(persona: Persona | None) -> str | None:
     return "; ".join(parts) or None
 
 
+async def translate_dub_script(
+    db: AsyncSession,
+    output: Output,
+    track: list[dict[str, Any]],
+    title_text: str,
+    target_language: str,
+    style_hint: str | None,
+    *,
+    graph_node_id: Any = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """The dub DOCUMENT station (ADR-072 批 A2 接缝): the translated script
+    as unit cue rows + the translated title. The rows are the reusable
+    artifact — cached on the graph node's ``spec.translation`` keyed by the
+    source hash (source cue times+words + title + language + persona style
+    hint); a hit (including USER-EDITED rows — the edit is the content)
+    skips the translator entirely. ``graph_node_id=None`` (the editor sync
+    endpoint) always translates fresh. Raises MiniMaxError on provider
+    failure (the caller maps it onto the error contract)."""
+    source_hash = translation_source_hash(track, title_text, target_language, style_hint)
+    artifact = None
+    if graph_node_id is not None:
+        gnode = await db.get(GraphNode, graph_node_id)
+        artifact = (gnode.spec or {}).get(TRANSLATION_ARTIFACT_KEY) if gnode else None
+    cached = find_reusable_translation(artifact, str(output.id), source_hash)
+    if cached is not None:
+        return cached["rows"], str((cached.get("title") or {}).get("text") or "")
+
+    rows = await build_translation_cues(track, target_language, style_hint=style_hint)
+    # The title card is part of the spec too — a dubbed clip with an
+    # untranslated title reads broken (2026-08-09, dub contrast pack).
+    new_title_text = (
+        await translate_text(title_text, target_language, style_hint=style_hint)
+        if title_text
+        else ""
+    )
+    if graph_node_id is not None:
+        from app.pipeline.graph_fill import (  # deferred: import cycle
+            merge_translation_artifact,
+        )
+
+        await merge_translation_artifact(
+            graph_node_id,
+            {
+                str(output.id): {
+                    "source_hash": source_hash,
+                    "title": (
+                        {"source": title_text, "text": new_title_text} if title_text else None
+                    ),
+                    "rows": rows,
+                }
+            },
+        )
+    return rows, new_title_text
+
+
 async def synthesize_dub(
     db: AsyncSession,
     output: Output,
     project: Project,
     target_language: str,
+    *,
+    graph_node_id: Any = None,
 ) -> dict[str, Any]:
     """Dub ``output`` into ``target_language`` with the cloned voice; returns
     the new render_spec. Raises HTTPException on missing inputs/provider errors."""
@@ -129,20 +193,29 @@ async def synthesize_dub(
             await db.get(Persona, project.persona_id) if project.persona_id else None
         )
         style_hint = _persona_style_hint(persona)
-        new_track = await translate_caption_track(
-            track, target_language, style_hint=style_hint
-        )
-        # The title card is part of the spec too — a dubbed clip with an
-        # untranslated title reads broken (2026-08-09, dub contrast pack).
         title = spec.get("title") or {}
         title_text = str(title.get("text") or "").strip()
-        new_title_text = (
-            await translate_text(title_text, target_language, style_hint=style_hint)
-            if title.get("enabled") and title_text
-            else ""
+        title_src = title_text if title.get("enabled") and title_text else ""
+        rows, new_title_text = await translate_dub_script(
+            db,
+            output,
+            track,
+            title_src,
+            target_language,
+            style_hint,
+            graph_node_id=graph_node_id,
         )
+        new_track = spread_translation_cues(rows, target_language)
 
-        units = group_units(new_track)
+        # Synthesis units = the translation rows directly (the seam's unit
+        # spans ARE the fit windows — the retired spread→re-chunk double
+        # grouping derived the same union but with boundaries smeared across
+        # row edges).
+        units = [
+            {"text": str(r["text"]), "start": float(r["start"]), "end": float(r["end"])}
+            for r in rows
+            if str(r["text"]).strip()
+        ]
         if not units:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Clip has no captions to dub")
         audio_bytes, ext, sped_up, total_end = await synthesize_aligned_track(

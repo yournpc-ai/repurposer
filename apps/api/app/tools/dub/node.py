@@ -105,10 +105,17 @@ class DubClip(NodeBase):
         await _guard_target_differs_from_source(
             db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
         )
+        # 译文 artifact 复用钩 (ADR-072 批 A2): the graph node id threads into
+        # the doc-station seam — a cached/edited dub script (hash hit) skips
+        # the translator, only the TTS/assembly re-runs (重渲染不再买翻译).
+        gnode_id = (node.spec or {}).get("graph_node_id")
+        graph_node_id = UUID(str(gnode_id)) if gnode_id else None
         touched: list[UUID] = []
         for output in clips:
             try:
-                new_spec = await synthesize_dub(db, output, project, lang)
+                new_spec = await synthesize_dub(
+                    db, output, project, lang, graph_node_id=graph_node_id
+                )
             except TransientNodeError:
                 # Transient failures are the step's, not the clip's — bubble up
                 # for step-level retry instead of skipping the clip (W3).

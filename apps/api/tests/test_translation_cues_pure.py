@@ -15,6 +15,11 @@ returns a fixed CaptionTranslation. Covers the seam's three surfaces:
   word-split, carries the lang tag, empty translations drop out.
 - Wrapper parity: the two public translators are EXACTLY seam + view (zero
   behavior change — the runners keep calling them until 批 A2).
+- 批 A2 reuse hook: ``translation_source_hash`` is deterministic, keyed on
+  source cue times+words / title / language / style hint, and NEVER on the
+  translated text (a user edit must not bust the cache);
+  ``find_reusable_translation`` hits per clip on hash match, misses on
+  drift, and tolerates malformed artifacts.
 """
 
 from types import SimpleNamespace
@@ -25,9 +30,11 @@ from app.tools.captions import procedure
 from app.tools.captions.procedure import (
     UNIT_WORDS,
     build_translation_cues,
+    find_reusable_translation,
     spread_translation_cues,
     translate_caption_track,
     translate_caption_units,
+    translation_source_hash,
     unit_translation_cues,
 )
 
@@ -145,3 +152,41 @@ async def test_wrappers_are_seam_plus_view(monkeypatch: pytest.MonkeyPatch):
     assert bilingual == [
         {"start": 0.0, "end": UNIT_WORDS * 0.5, "text": "bonjour le monde", "lang": "fr"}
     ]
+
+
+# ── 批 A2: the reuse hook ────────────────────────────────────────────────
+
+
+def test_source_hash_deterministic_and_source_sensitive():
+    track = _word_track(["hello", "world"])
+    base = translation_source_hash(track, "Title", "fr", None)
+    assert translation_source_hash(track, "Title", "fr", None) == base
+    # A source word change busts it (reprocess / different material)…
+    assert translation_source_hash(_word_track(["hello", "there"]), "Title", "fr", None) != base
+    # …a timing shift busts it (the artifact's spans would be stale)…
+    assert translation_source_hash(_word_track(["hello", "world"], step=0.6), "Title", "fr", None) != base
+    # …the title, the language and the persona register each bust it.
+    assert translation_source_hash(track, "Other", "fr", None) != base
+    assert translation_source_hash(track, "Title", "de", None) != base
+    assert translation_source_hash(track, "Title", "fr", "terse") != base
+
+
+def test_find_reusable_hit_miss_and_tolerance():
+    track = _word_track(["a", "b"])
+    sh = translation_source_hash(track, "", "fr", None)
+    artifact = {
+        "clips": {
+            "o1": {"source_hash": sh, "rows": [{"start": 0.0, "end": 1.0, "source": "a b", "text": "édité"}]},
+            # A second clip drifts independently (per-clip reuse).
+            "o2": {"source_hash": "stale", "rows": []},
+        }
+    }
+    hit = find_reusable_translation(artifact, "o1", sh)
+    assert hit is not None and hit["rows"][0]["text"] == "édité"
+    assert find_reusable_translation(artifact, "o1", "other-hash") is None
+    assert find_reusable_translation(artifact, "o2", sh) is None
+    assert find_reusable_translation(artifact, "missing", sh) is None
+    # Malformed / absent artifacts tolerate to a miss, never a crash.
+    assert find_reusable_translation(None, "o1", sh) is None
+    assert find_reusable_translation({"clips": "bogus"}, "o1", sh) is None
+    assert find_reusable_translation({"clips": {"o1": {"source_hash": sh}}}, "o1", sh) is None

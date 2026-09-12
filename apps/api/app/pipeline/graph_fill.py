@@ -43,13 +43,15 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import cast, func, select, update
+from sqlalchemy.dialects.postgresql import JSONB, array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import NODE_KINDS
 from app.pipeline.graph_store import _TASK_BOOK_ROLE, apply_wiring_ops
 from app.pipeline.outputs import compose_spec_prompt
+from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 
 logger = structlog.get_logger()
 
@@ -163,6 +165,41 @@ def _aggregate_family(states: list[str]) -> str:
     if any(s == "done" for s in states):
         return "running"
     return "queued"
+
+
+async def merge_translation_artifact(
+    node_id: UUID, clip_entries: dict[str, Any]
+) -> None:
+    """Persist freshly translated cue rows onto the node's translation
+    artifact (批 A2 — ADR-072 两站拆分). Own-session read-modify-write (the
+    step_display jsonb discipline: never the runner session — its post-runner
+    commit would flush a stale in-memory dict and clobber the merge), merging
+    per-clip entries into the existing artifact so sibling clips survive.
+    Mid-run by design: the translator's tokens are paid the moment the call
+    lands — losing the artifact to a later failure would re-buy them."""
+    from app.models.database import AsyncSessionLocal  # deferred: session home
+
+    async with AsyncSessionLocal() as s:
+        row = await s.get(GraphNode, node_id)
+        if row is None:
+            return
+        artifact = dict((row.spec or {}).get(TRANSLATION_ARTIFACT_KEY) or {})
+        clips = dict(artifact.get("clips") or {})
+        clips.update(clip_entries)
+        artifact["clips"] = clips
+        await s.execute(
+            update(GraphNode)
+            .where(GraphNode.id == node_id)
+            .values(
+                spec=func.jsonb_set(
+                    GraphNode.spec,
+                    pg_array([TRANSLATION_ARTIFACT_KEY]),
+                    func.to_jsonb(cast(artifact, JSONB)),
+                    True,
+                )
+            )
+        )
+        await s.commit()
 
 
 async def stamp_asset_node(

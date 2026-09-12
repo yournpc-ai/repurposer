@@ -28,7 +28,6 @@ from app.providers.voice import synthesize
 
 logger = structlog.get_logger()
 
-_UNIT_WORDS = 10  # synthesis unit granularity (mirrors caption units)
 _RATE = 32000  # MiniMax T2A output sample rate (audio_setting)
 _GAP_ALLOW_S = 0.8  # a unit may eat this much of the following pause
 _SPEED_MAX = 1.35  # fastest re-synthesis (beyond = unnatural speech)
@@ -42,24 +41,6 @@ class DubAssemblyError(Exception):
 
     # Assembly failures surface with the voice family line (pipeline/errors.py).
     user_key = "voice_unavailable"
-
-
-def group_units(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Chunk word-level cues into timed synthesis units (~``_UNIT_WORDS`` each)."""
-    units: list[dict[str, Any]] = []
-    for i in range(0, len(cues), _UNIT_WORDS):
-        chunk = cues[i : i + _UNIT_WORDS]
-        text = " ".join(str(c.get("text", "")).strip() for c in chunk).strip()
-        if not text:
-            continue
-        units.append(
-            {
-                "text": text,
-                "start": float(chunk[0]["start"]),
-                "end": float(chunk[-1]["end"]),
-            }
-        )
-    return units
 
 
 def clip_time_mapper(segments: list[dict[str, Any]] | None) -> Any:
