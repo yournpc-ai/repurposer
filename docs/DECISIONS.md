@@ -1523,3 +1523,30 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Related**: ADR-052（提问三律 / 出书门槛——内容不变）、ADR-054（密度律）、ADR-058 / ADR-060（命名与防编造——保留）、ADR-064（顺形律——brief 形状指导保留）、ADR-070（同批 echo 松绑的下游）
 
+
+------
+
+## ADR-072: 画布三族 + 两站拆分 + 任务书节点下线——画布 = 过程图与改点暴露
+
+**Status**: Decided (2026-09-12)，已拍板待实施（施工简报 `docs/tasks/graph-canvas-three-families.md`；前端 ctx→T 入锚折叠与 @ glyph 退役已随拍板当日落地，tsc 绿）
+
+**Context**: 画布走查三伤连根——① 线与锚歪（出生动画 transform 污染 xyflow 挂载期 `getBoundingClientRect` 测量，事后无重测）；② 节点左舷冒出 @ 锚（task_book → 每节点的 ctx 叙事边）；③ PROMPT 区只有一行参数复读（`compose_spec_prompt` 拼装的假程序）。讨论中用户立下画布公理：**图 = 我们替用户完成任务的过程图，并暴露过程中用户可能想知道和修改的点**——筛子 = 每个元素回答「用户在这儿能知道什么、能改什么」，答不上就降级或删；prompt 测试 = 「改这段话，产出会变吗」，不会变的就是假杠杆。用户拓扑判词：transcript → 派生译文文档 → 派生成片；task_book 节点不该存在。MiniMax Design 节点划分（文本/表格/图片/视频/音频——按媒介不按生成方式，深度编辑面与驻留卡分离）互证。
+
+**Decision**:
+
+1. **节点三族 + 内部层**：画布可见节点收敛为**源（asset）/ 文档（document）/ 装配（assemble）**三族；旧五型的 generator/processor/agent 之分（= 节点内部怎么实现）退役为出生史维度，不再决定卡种。分类轴 = 流程位置 × 程序本质（无程序 / 参数程序 / 散文程序）。
+2. **文档族两解剖**：**散文档**（transcript / 译文 / 配音稿 / post / article / research brief——文字层直改，封顶滚动 + 选区引用现成）与**表格档**（结构化行列，单元格级确定性修改）。**两层诚实模型**：文字层可改、时间轴层冻结（词级时间戳不动；时间轴错了走素材 reprocess）；改字 → 下游 stale 徽标（机制现成）。
+3. **翻译/配音两站拆分**：`translate_clip` / `dub_clip` 各拆为「文本站（文档节点：译文/配音稿，语言杠杆，**无 prompt 位**）→ 装配站（字幕/配音成片卡）」。红利：翻错一个词改文字、**只重渲染不重买翻译**；估价更诚实（翻译 token 记文档站、渲染记装配站）。
+4. **分镜表升格为表格档节点**（clips 链：transcript → 分镜表 → clips 装配卡）——回答「为什么是这三条」；用户原话挂分镜表（选段决策发生处），clips 卡纯化为装配族；单元格改 = 确定性 op（删行 = 弃选、改时间窗 = 重切）。
+5. **task_book 画布节点下线**：任务书是计划，图就是计划的显形——计划的照片不挂在计划的执行里（同一份事实的第二个座位）。它承载的一切有真身：用户的话在 chat（出生与确认之地）、链 = 图结构、估价 = 节点折叠、确认手势 = dock pill 唯一座位（ADR-070 实证画布确认钮无人看见，ADR-063 判词①的卡内 confirm 同批翻案撤回）。`projects.pending_brief` 项目状态不动，dock「继续设置」复活路径不动。**ctx 边物种随之整体退役**（节点真正读的是上游工作产品，不是合同）——边全部回归真实物料流；@ glyph 永不上画布（ctx 入锚并入共享 T，前端已落）。
+6. **modifier 杠杆化**：`add_music` / `remove_filler` / `reframe_clip` 不再拥有画布节点——它们是装配卡的**结构化杠杆**（配乐 mood / 去口头禅开关 / 画幅）。杠杆行纪律：上行 ≤3 个定义性参数（改变「产物是什么」的）；只上行本 run 实际启用的（卡面不做能力货架，加能力归 chat/配方卡）；样式参数永不上杠杆行。每个杠杆 = 确定性参数级 wiring op（`set_param` 族）+ 程序区定价确认（ADR-058 通道分家延伸，零 LLM、零 dock 消息）。
+7. **materialize_source 折叠为消费节点内部 step**（render 同案先例）——画布上素材直连变换卡，打勾流里仍以 step 行可见。
+8. **PROMPT 区 = 散文程序节点挂用户原话**：`TaskItem` 加可选 `instruction`（router 逐任务**逐字摘录**用户原话——copy verbatim 永不改写，无枚举则 null）；无原话 = 区域不出现（`compose_spec_prompt` 参数回声整体退役，legacy 行读容忍）。散文修订恒走 chat；卡面散文直改（ADR-057 K4）语义不变。
+9. **样式覆写地基**（迟早会做样式修改）：默认样式 = persona 皮肤块（ADR-038 不变）；单点覆写 = 产物/节点 spec 级 `style_overrides` 键（数据层本批留好，UI 后做，形态 = 面板/overlay 非杠杆行）。
+10. **锚点测量污染修复**：出生动画（`flow-node-born` transform）不再包端口层——NodePorts 移出动画容器（或动画结束 `updateNodeInternals`），挂载期测量失真断根。
+11. **generator 不预留地基**：其他平台的 text/generator 之分 = 作者维度；我们的文档族散文程序（+ no-material lift + writer agent 群）已吸收之，作者身份 = 出生史徽标（model_facts 同源）不是卡种。未来「纯 prompt 生媒体」= 装配族 + 散文程序，矩阵已有其格。
+12. **MiniMax 三不抄**：「添加节点」菜单（图由 chat 生，手动布线永不开放）、多轨时间线剪辑（L3 铁律，导出剪映）、ComfyUI 工作流（开放式编排，拓扑代码定 ADR-028 不变）。
+
+**Consequences**: 批次切分 = 管线拆分批（两站 + materialize 折叠，先于 UI）→ 图模型批（book 下线 / ctx 退役 / 分镜表节点 / modifier 杠杆 / 三族 kind 词汇）→ UI 批（三族卡面 / 表格档 / 杠杆行 / 锚点修复）。prompt 面有改动（TaskItem.instruction 摘录规则）——prompt gate 必过。配方卡图形态全部改写（8 张逐张归位，见简报）；`FlowNode` kind 词汇前后端同改；legacy 数据（旧五型行 / ctx 边 / 书节点行）读容忍。**翻案注记**：ADR-057 K5（任务书 = 图上 document 节点）与 ADR-063 判词①（卡内 draft confirm）被本条 ⑤ 翻案；实施落地时 `CHAT_ARCHITECTURE.md` §5 与 `AGENT_ARCHITECTURE.md` §3/§4.5 的注记改写为现在时正文，本 ADR 保留决策史。
+
+**Related**: ADR-057（图即产品对象——三族是其用户面定型）/ ADR-058（二源律、通道分家——杠杆与零消息延伸）/ ADR-060（防编造——PROMPT 挂原话是其最强形态）/ ADR-061（变体并行律——两站拆分后不变）/ ADR-062（边对账律——ctx 撤边经 disconnect）/ ADR-067（端口法则——ctx 折叠修订）/ ADR-069（选区引用——文档卡修改面延伸）/ ADR-070（确认拍 dock——书节点下线的实证前提）

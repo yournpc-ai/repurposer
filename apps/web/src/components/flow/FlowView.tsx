@@ -298,11 +298,15 @@ export function FlowView({
     // surfaces (the recipe 说明书) carry no ports and keep the legacy
     // invisible handles.
     const nodeById = new Map(nodes.map((n) => [n.id, n]))
-    const portsByNode = new Map<string, { in: GraphEdgeType[]; out: OutPortType[] }>()
+    const portsByNode = new Map<string, { in: Exclude<GraphEdgeType, "ctx">[]; out: OutPortType[] }>()
     for (const e of edges) {
       if (!e.edgeType) continue
       const target = portsByNode.get(e.to) ?? { in: [], out: [] }
-      if (!target.in.includes(e.edgeType)) target.in.push(e.edgeType)
+      // The in-anchor vocabulary is T / video / audio ONLY (2026-09-12 用户
+      // 拍板): the ctx reference flow folds into the T anchor — no @ glyph
+      // ever lands on the canvas.
+      const inType = e.edgeType === "ctx" ? "text" : e.edgeType
+      if (!target.in.includes(inType)) target.in.push(inType)
       portsByNode.set(e.to, target)
       const src = nodeById.get(e.from)
       const outType = src ? productionPort(src) : e.edgeType
@@ -377,12 +381,13 @@ export function FlowView({
         type: "flow",
         // Typed flows land on their named ports (the visible handles): the
         // source anchor = the source node's own production medium (出锚语义律),
-        // the target anchor = the carried type; untyped surfaces fall back
-        // to the node's default handle pair.
+        // the target anchor = the carried type — with ctx folded into the
+        // shared T anchor (2026-09-12); untyped surfaces fall back to the
+        // node's default handle pair.
         ...(e.edgeType
           ? {
               sourceHandle: `out:${nodeById.get(e.from) ? productionPort(nodeById.get(e.from)!) : e.edgeType}`,
-              targetHandle: `in:${e.edgeType}`,
+              targetHandle: `in:${e.edgeType === "ctx" ? "text" : e.edgeType}`,
             }
           : {}),
         data: {

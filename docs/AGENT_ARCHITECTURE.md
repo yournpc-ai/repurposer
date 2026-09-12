@@ -133,6 +133,8 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
+> **（ADR-072 注，2026-09-12 拍板待实施）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖），但**画布用户面改由三族管辖**：源 / 文档（散文档 + 表格档）/ 装配（媒体产物 + 参数杠杆行），generator/processor/agent 卡种退役为出生史维度；materialize_source 折叠为消费节点内部 step，modifier（music/filler/reframe）收成装配卡杠杆，翻译/配音拆两站，分镜表升格表格档。施工简报 `docs/tasks/graph-canvas-three-families.md`。
+
 - **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
 

@@ -2,7 +2,6 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
-  AtSign,
   AudioLines,
   ChevronLeft,
   ChevronRight,
@@ -58,7 +57,7 @@ export interface FlowCardData extends Record<string, unknown> {
    * the production region's top-right (typed by the node's own medium —
    * 出锚语义律 2026-09-11). Undefined = an untyped surface (the recipe
    * 说明书 — the legacy invisible handles render instead). */
-  ports?: { in: GraphEdgeType[]; out: OutPortType[] }
+  ports?: { in: Exclude<GraphEdgeType, "ctx">[]; out: OutPortType[] }
   /** Product-toolbar dispatch (ADR-041 D5) — the surface owns the actions. */
   onOutputAction?: (outputId: string, action: FlowOutputAction) => void
   /** 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
@@ -1556,23 +1555,20 @@ function GraphCard({
  * (video's rim → the transcript's T) and the transformation lives on the
  * edge, never as a foreign glyph on the source. Glyph vocabulary
  * (2026-09-09 FLORA 收编): text = the letter T, video = the camera, audio =
- * the waveform; ctx = the at-sign (the reference flow — @ 与引用同典,
- * MENTIONS 两视图; the 09-09 Files glyph read as "image" on canvas —
- * retired 2026-09-11), living at the CONSUMING end only (出锚语义律 — the
- * source's own anchor speaks its own medium); image = the still-visual
- * family (render-side only, never an edge type). Every edge is solid, so a
- * reference in-flow (ctx) is told from a material text in-flow ONLY by this
- * anchor's glyph. Untyped surfaces (the recipe 说明书) keep the legacy
- * invisible pair. */
-const PORT_ICON: Record<OutPortType, typeof Clapperboard> = {
+ * the waveform; image = the still-visual family (render-side out anchor
+ * only, never an edge type). The ctx reference flow has NO glyph of its own
+ * (2026-09-12 用户拍板 — the @ anchor is banned from the canvas): it folds
+ * into the shared T in-anchor upstream (FlowView port derivation), so a
+ * node's left rail only ever shows T / video / audio. Untyped surfaces (the
+ * recipe 说明书) keep the legacy invisible pair. */
+const PORT_ICON: Record<Exclude<OutPortType, "ctx">, typeof Clapperboard> = {
   video: Video,
   audio: AudioLines,
   text: Type,
-  ctx: AtSign,
   image: ImageIcon,
 }
 
-function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeType[]; out: OutPortType[] } }) {
+function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<GraphEdgeType, "ctx">[]; out: OutPortType[] } }) {
   if (!ports) {
     return (
       <>
@@ -1644,7 +1640,10 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: GraphEdgeTyp
         )
       })}
       {ports.out.map((type, i) => {
-        const Icon = PORT_ICON[type]
+        // 出锚语义律: the out anchor speaks the node's own medium — ctx is
+        // structurally impossible here (productionPort never returns it);
+        // the fold is a type-level exhaustiveness guard, never a real case.
+        const Icon = PORT_ICON[type === "ctx" ? "text" : type]
         const offset = outBase + i * 34
         return (
           <Handle

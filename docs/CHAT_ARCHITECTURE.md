@@ -181,6 +181,8 @@ book path 的推理者是 **intent router**（四动作 verdict，ADR-052 B2）�
 
 ## 5. 物化：wiring ops → 持久图 → run 填充（ADR-057）
 
+> **（ADR-072 注，2026-09-12 拍板待实施）** 本节机制（wiring ops / apply_wiring_ops 唯一写口 / run 原地填充）不变，但图的用户面重划：task_book 文档节点下线（pending_brief 项目状态不动，确认拍 dock 唯一座位）、ctx 边物种退役（边 = 真实物料流）、节点卡种归三族（源/文档/装配）、翻译配音两站拆分、分镜表升格表格档、modifier 收成装配卡杠杆、PROMPT 区 = 散文程序节点挂用户原话。施工简报 `docs/tasks/graph-canvas-three-families.md`；落地后本节改写为现在时。
+
 **项目 = 一张持久可变图**（`graph_nodes` / `graph_edges`，owner = Pipeline，MODULE_ARCH §4）。chat 的全部产出统一为 **wiring ops**——`add_node` / `connect` / `edit_prompt` / `delete_node` / `run(_subgraph)`，初始生成 / 修订 / 新建同一组 op（「修订环」一词退役）；`apply_wiring_ops` 是唯一写口，chat 是唯一消费面，画布直读零投影（显示模型 = 领域模型——节点 id = 图行 id，边 = 图边，状态 = 行状态）。
 
 - **book path（draft 载荷）**：任务书 dock 即干跑出生地同款编译，把链 stamp 为 **draft 图**（`graph_fill.stamp_draft_graph`——图先展示后运行：节点空态 + 逐节点估价，零消耗直到 Start；bail / 编译失败经 `clear_draft_graph` 拆除）。任务书本身 = 图上的 **document 节点**（brief 账本机制不动——账本 = 对话引擎状态，document 节点 = 它的渲染落点）。

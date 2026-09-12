@@ -15,9 +15,10 @@ export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
  * <the source's medium> to <what the consumer takes>", so a video asset
  * never sprouts a T (the transcript's text is born AT the transcript; the
  * edge itself tells video → text). The IN anchor stays the edge's carried
- * type. "image" is the render-side-only fifth value (the still-visual
- * family — image/slides assets): it never crosses the wire as an edge
- * type, it only names an out anchor. */
+ * type — with ctx folded into the shared T anchor (2026-09-12 用户拍板:
+ * the @ glyph never lands on the canvas). "image" is the render-side-only
+ * fifth value (the still-visual family — image/slides assets): it never
+ * crosses the wire as an edge type, it only names an out anchor. */
 export type OutPortType = GraphEdgeType | "image"
 
 /** Recipe surface: "asset" | "step" | "output". Graph canvas: the five
@@ -126,8 +127,8 @@ export interface FlowEdge {
   from: string
   to: string
   /** Graph canvas (ADR-057 port law): the typed flow — colors the stroke
-   * (video / audio), text/ctx neutral (every edge solid — ctx, the
-   * reference flow, is told by the port glyph, not the stroke). */
+   * (video / audio), text/ctx neutral (every edge solid — the ctx reference
+   * flow folds into the shared T in-anchor; no @ glyph on canvas). */
   edgeType?: GraphEdgeType
   /** Recipe surface: derivation vs process order. */
   semantic?: FlowEdgeSemantic

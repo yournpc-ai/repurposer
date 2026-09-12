@@ -68,10 +68,10 @@
  * consuming end); the OUT anchor carries the SOURCE NODE's own medium — a
  * video→text edge leaves a video-tinted circle on a neutral line, and that
  * mismatch IS the "from video to text" story. video/audio carry the
- * semantic hues; text, ctx and image ride the neutral tint — every edge is
- * solid, so the reference flow (ctx) is told from a material text flow ONLY
- * by this glyph (@ vs T — AtSign since 2026-09-11; the Files glyph read as
- * "image" on canvas). */
+ * semantic hues; text and image ride the neutral tint — every edge is
+ * solid. The ctx reference flow folds into the shared T in-anchor
+ * (2026-09-12 用户拍板 — the @ glyph is banned from the canvas; a node's
+ * left rail only ever shows T / video / audio). */
 .flow-port {
   position: absolute;
   width: 28px !important;
