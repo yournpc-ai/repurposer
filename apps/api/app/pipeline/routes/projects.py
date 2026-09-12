@@ -310,6 +310,39 @@ async def get_project_graph(
             if str(e.from_node) not in hidden_book_ids
             and str(e.to_node) not in hidden_book_ids
         ]
+    # B4-lite (2026-09-13 演示冻结期, ADR-072 批 B4 的读面先行): morph
+    # modifiers (reframe / add_music / remove_filler) rewrite their producer's
+    # SAME output rows in place — the old five-type stamp gave them their own
+    # node and back-wrote the identical output_ids, so the canvas played one
+    # clip set twice (「又来了一遍」走查). Their terminal shape is a LEVER on
+    # the assemble card (批 B4), never a node. Read-filter them with a safety
+    # gate: only when every product is also claimed by a surviving node, or
+    # the node has no products yet — a product must never vanish from the
+    # canvas. Stamp/runner/data untouched.
+    _MODIFIER_TOOLS = {"reframe_clip", "add_music", "remove_filler"}
+    surviving_claims: set[str] = set()
+    for n in nodes:
+        if (n.spec or {}).get("tool") not in _MODIFIER_TOOLS:
+            surviving_claims.update(str(o) for o in (n.spec or {}).get("output_ids") or [])
+    hidden_modifier_ids = {
+        str(n.id)
+        for n in nodes
+        if (n.spec or {}).get("tool") in _MODIFIER_TOOLS
+        and (
+            not (n.spec or {}).get("output_ids")
+            or {
+                str(o) for o in (n.spec or {}).get("output_ids") or []
+            }.issubset(surviving_claims)
+        )
+    }
+    if hidden_modifier_ids:
+        nodes = [n for n in nodes if str(n.id) not in hidden_modifier_ids]
+        edges = [
+            e
+            for e in edges
+            if str(e.from_node) not in hidden_modifier_ids
+            and str(e.to_node) not in hidden_modifier_ids
+        ]
     if not nodes:
         return {"nodes": [], "edges": []}
 
