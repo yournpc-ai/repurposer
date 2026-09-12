@@ -60,7 +60,7 @@ from app.pipeline.graph import (
 from app.pipeline.graph_fill import stamp_run_graph, sync_graph_node_for_step
 from app.pipeline.recipes import RECIPE_QUOTE_FACTS, RECIPE_REGISTRY, RecipeEntry
 from app.pipeline.step_context import _estimate_facts
-from app.pipeline.tracks import assert_single_writer_per_track
+from app.pipeline.tracks import assert_single_writer_per_track, autofork_parallel_variants
 from app.platform.billing import (
     capture_step,
     check_hold,
@@ -513,6 +513,15 @@ def _compile_task_list(
             spec["summary"] = f"{base} · {lang.upper()}"
         nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
         seq += 1
+
+    # 多版本自动 fork (2026-09-13 演示实修): ≥2 translate/dub variants in
+    # one run = N INDEPENDENT versions — fork them all (recipe precedent,
+    # RECIPES §4.1 "all fork"; the chat path's LLM task list never sets it).
+    # Runs BEFORE the one-writer gate (forked steps are exempt there) and
+    # before the estimate loop below (fork/morph quote identically), and it
+    # rides the SAME compile the draft stamp uses — draft graph and run fill
+    # see identical specs, identical fill keys.
+    autofork_parallel_variants(nodes)
 
     # 质检环 (期 3): one verify node trails every generation executor — the
     # gate is the node's own declaration (needs_plan_prelude + produces_outputs:

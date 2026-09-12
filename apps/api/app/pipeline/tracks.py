@@ -259,6 +259,38 @@ def stale_tracks(
     ]
 
 
+# Fork-capable variant kinds. A run carrying ≥2 of them is a multi-version
+# fan-out (中英字幕版 + 法语版 + 西语配音版…): EVERY variant must fork —
+# the recipe precedent (RECIPES §4.1/§4.5 set fork:true on each) and, more
+# importantly, the 变体并行律's race-freedom claim depends on it: parallel
+# NON-fork morphs would read-modify-write the same rows' render_spec (a
+# lost-update race the one-writer gate only catches when the two writers
+# claim the SAME track — translate claims caption, dub claims dub, so a
+# translate∥dub pair raced right past it, 2026-09-13 演示实修).
+_VARIANT_KINDS = frozenset({"translate_clip", "dub_clip"})
+
+
+def autofork_parallel_variants(steps: Iterable[Any]) -> int:
+    """Flip every variant to ``fork`` when the run holds ≥2 of them.
+
+    Compile-time deterministic pass (duck-typed over ``_NodeSpec``:
+    kind/spec), run BEFORE the one-writer gate — a forked step is exempt
+    there, so the gate keeps its teeth for the genuinely ambiguous cases
+    (a morph writer that CANNOT fork colliding on a claimed track). A lone
+    variant keeps its in-place morph semantics (单版本直改, status quo).
+    Returns the count flipped (0/1-variant runs are untouched).
+    """
+    variants = [s for s in steps if s.kind in _VARIANT_KINDS]
+    if len(variants) < 2:
+        return 0
+    flipped = 0
+    for s in variants:
+        if not (s.spec or {}).get("fork"):
+            s.spec = {**(s.spec or {}), "fork": True}
+            flipped += 1
+    return flipped
+
+
 def assert_single_writer_per_track(
     steps: Iterable[tuple[str, dict | None]],
     is_producer: Callable[[str], bool],
