@@ -504,17 +504,20 @@ function DocumentCard({
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
       <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-foreground/10 ring-1">
-        {/* scroll-fade-y + pb-8 (2026-09-13 走查): mid-scroll text must never
-            hug the card's bottom edge — padding only pads the scroll-END, so
-            the fade dissolves the edge mid-scroll and the doubled bottom
-            padding holds the rest state (fade zone ≈ content padding, the
-            styles.css pairing law). */}
-        <div className="nowheel nopan thin-scroll scroll-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-8">
-          {node.spec?.text ? (
-            <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
-          ) : (
-            <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
-          )}
+        {/* 收边结构律 (2026-09-13 走查拍板): the padding lives on a WRAPPER
+            around the scrollport, never on the scrollport itself — scroll-
+            container padding only shows at scroll-end (mid-scroll content
+            slides into it), while the wrapper's bottom padding holds the
+            scrollport's box itself off the card edge in EVERY scroll state.
+            scroll-fade-y stays: the clip at the inset edge reads soft. */}
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="nowheel nopan thin-scroll scroll-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {node.spec?.text ? (
+              <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
+            )}
+          </div>
         </div>
         {draftConfirm ? (
           <div className="shrink-0 px-4 pt-3 pb-4">
