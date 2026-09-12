@@ -15,7 +15,15 @@ translation, however, only makes sense on whole lines/sentences. So we:
 Granularity stays word-level end-to-end, so nothing downstream changes. Target
 languages are space-delimited European languages (FR/DE/ES/IT/EN); a no-space
 result (e.g. CJK) degrades gracefully to a single cue for the whole unit.
-"""
+
+两站拆分 (ADR-072 批 A): ``build_translation_cues`` is the SEAM — the unit-level
+cue rows ({start, end, source, text}) are the DOCUMENT station's persistent,
+user-editable artifact; the ASSEMBLE station never calls the translator, it
+consumes the rows through the two deterministic views: ``spread_…`` (single
+track — word-level redistribution) and ``unit_…`` (bilingual — the whole row
+over its span). The two public translators below are thin wrappers over
+seam + view (zero behavior change); the runners switch to the seam directly
+when the artifact lands (批 A2)."""
 
 from typing import Any
 
@@ -71,16 +79,20 @@ async def translate_text(
     return translated.lines[0].strip() if translated.lines else ""
 
 
-async def translate_caption_track(
+async def build_translation_cues(
     cues: list[dict[str, Any]],
     target_language: str,
     style_hint: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Translate a word-level caption track into ``target_language``.
+    """The translation artifact (ADR-072 两站拆分的文档站产物): one row per
+    translation unit — ``{start, end, source, text}`` — the unit's source-time
+    span, its joined source text, and the translated line (stripped; may be
+    empty when the model returns nothing for a unit — the row survives so the
+    gap is visible and editable).
 
-    Returns a new word-level track (same shape as the input cues). Raises
-    ``MiniMaxError`` if the LLM call fails. ``style_hint`` = persona register
-    injection (dub 生产级, 2026-08-07).
+    This is the ONLY translator call site for caption translation; everything
+    downstream (single-track spread / bilingual unit cues) derives from these
+    rows deterministically. Raises ``MiniMaxError`` if the LLM call fails.
     """
     if not cues:
         return []
@@ -92,12 +104,69 @@ async def translate_caption_track(
         lines=unit_texts, target_language=target_language, style_hint=style_hint
     )
 
-    out: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for unit, text in zip(units, translated.lines, strict=False):
-        start = float(unit[0]["start"])
-        end = float(unit[-1]["end"])
-        out.extend(_redistribute(text, start, end, target_language))
+        rows.append(
+            {
+                "start": float(unit[0]["start"]),
+                "end": float(unit[-1]["end"]),
+                "source": " ".join(str(c["text"]).strip() for c in unit),
+                "text": text.strip(),
+            }
+        )
+    return rows
+
+
+def spread_translation_cues(
+    rows: list[dict[str, Any]], target_language: str
+) -> list[dict[str, Any]]:
+    """The assemble station's SINGLE-track view: each row's translated text
+    redistributed word-level across its span (the renderer's karaoke needs
+    word granularity)."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        out.extend(
+            _redistribute(
+                str(row["text"]), float(row["start"]), float(row["end"]), target_language
+            )
+        )
     return out
+
+
+def unit_translation_cues(
+    rows: list[dict[str, Any]], target_language: str
+) -> list[dict[str, Any]]:
+    """The assemble station's BILINGUAL view (ClipSpec.translation_track):
+    one cue per row, the whole translated line over its span — never
+    word-split (a bilingual line is read whole; karaoke stays on the
+    original words only). Empty translations drop out."""
+    return [
+        {
+            "start": float(row["start"]),
+            "end": float(row["end"]),
+            "text": str(row["text"]),
+            "lang": target_language,
+        }
+        for row in rows
+        if str(row["text"]).strip()
+    ]
+
+
+async def translate_caption_track(
+    cues: list[dict[str, Any]],
+    target_language: str,
+    style_hint: str | None = None,
+) -> list[dict[str, Any]]:
+    """Translate a word-level caption track into ``target_language``.
+
+    Returns a new word-level track (same shape as the input cues). Raises
+    ``MiniMaxError`` if the LLM call fails. ``style_hint`` = persona register
+    injection (dub 生产级, 2026-08-07). Thin wrapper over the seam
+    (``build_translation_cues``) + the single-track view.
+    """
+    return spread_translation_cues(
+        await build_translation_cues(cues, target_language, style_hint), target_language
+    )
 
 
 async def translate_caption_units(
@@ -111,29 +180,9 @@ async def translate_caption_units(
     This is the 双语对照轨 (ClipSpec.translation_track, 2026-08-14): the
     renderer pairs it with the word-level original track by time overlap and
     shows it as the primary line, so it must NOT be word-split (a bilingual
-    line is read whole; karaoke stays on the original words only).
+    line is read whole; karaoke stays on the original words only). Thin
+    wrapper over the seam + the bilingual view.
     """
-    if not cues:
-        return []
-
-    units = _group_units(cues)
-    unit_texts = [" ".join(str(c["text"]).strip() for c in unit) for unit in units]
-
-    translated = await translator.call(
-        lines=unit_texts, target_language=target_language, style_hint=style_hint
+    return unit_translation_cues(
+        await build_translation_cues(cues, target_language, style_hint), target_language
     )
-
-    out: list[dict[str, Any]] = []
-    for unit, text in zip(units, translated.lines, strict=False):
-        text = text.strip()
-        if not text:
-            continue
-        out.append(
-            {
-                "start": float(unit[0]["start"]),
-                "end": float(unit[-1]["end"]),
-                "text": text,
-                "lang": target_language,
-            }
-        )
-    return out
