@@ -1687,12 +1687,21 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         // speak inside the card, never on it.
         node.status === "skipped" && "opacity-40",
         node.status === "running" && "flow-node-running",
-        born !== undefined && "flow-node-born",
         selected && !isGraphCard && "rounded-md ring-2 ring-foreground/40",
       )}
-      style={born !== undefined ? { animationDelay: `${born * BIRTH_STAGGER_MS}ms` } : undefined}
     >
+      {/* 锚点测量律 (批C1 提前, 2026-09-13 演示走查): the root stays STATIC —
+          xyflow measures the handles (NodePorts) off this box at mount, and
+          the born keyframe's transform (translateY+scale) on this element
+          pollutes that measurement mid-animation; the final frame is
+          identity so no resize ever re-fires and the edges stay crooked
+          forever. The birth choreography rides the content wrapper instead;
+          ports keep the edge draw-on delay for their entrance. */}
       <NodePorts node={node} ports={ports} />
+      <div
+        className={cn("h-full w-full", born !== undefined && "flow-node-born")}
+        style={born !== undefined ? { animationDelay: `${born * BIRTH_STAGGER_MS}ms` } : undefined}
+      >
       {node.kind === "step" ? (
         <StepCard node={node} />
       ) : node.kind === "document" ? (
@@ -1716,6 +1725,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onAssetAction={onAssetAction}
         />
       )}
+      </div>
     </div>
   )
 }
