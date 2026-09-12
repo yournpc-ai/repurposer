@@ -504,7 +504,12 @@ function DocumentCard({
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
       <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-foreground/10 ring-1">
-        <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        {/* scroll-fade-y + pb-8 (2026-09-13 走查): mid-scroll text must never
+            hug the card's bottom edge — padding only pads the scroll-END, so
+            the fade dissolves the edge mid-scroll and the doubled bottom
+            padding holds the rest state (fade zone ≈ content padding, the
+            styles.css pairing law). */}
+        <div className="nowheel nopan thin-scroll scroll-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-8">
           {node.spec?.text ? (
             <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
           ) : (
