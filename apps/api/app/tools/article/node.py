@@ -7,6 +7,7 @@ from app.tools.article.agents import article_writer
 
 class WriteArticle(DerivativeWriterNode):
     kind = "write_article"
+    family = "document"  # 画布三族 (ADR-072 批 A3) — 散文档 (文章)
     task_name = "Write article"
     task_name_zh = "撰写文章"
     output_type = "article"

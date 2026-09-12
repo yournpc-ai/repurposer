@@ -28,6 +28,7 @@ from app.platform.project_context import resolve_persona
 
 class AddMusic(NodeBase):
     kind = "add_music"
+    family = "assemble"  # 画布三族 (ADR-072 批 A3) — modifier, 批 B4 杠杆化后不再盖章
     task_name = "Score clips"
     task_name_zh = "片段配乐"
     after = ("select_clips", "materialize_source")

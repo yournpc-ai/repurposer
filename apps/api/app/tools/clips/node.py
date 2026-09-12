@@ -122,6 +122,7 @@ async def resolve_render_source(
 
 class SelectClips(NodeBase):
     kind = "select_clips"
+    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 装配站 (切片)
     task_name = "Generate clips"
     task_name_zh = "生成短片"
     output_type = "clips"

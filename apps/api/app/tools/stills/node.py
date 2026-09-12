@@ -23,6 +23,7 @@ logger = structlog.get_logger()
 
 class AlignStills(NodeBase):
     kind = "align_stills"
+    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 折叠进下游 producer
     task_name = "Time transcript"
     task_name_zh = "对齐文字稿节奏"
     requires = (TRANSCRIPT,)

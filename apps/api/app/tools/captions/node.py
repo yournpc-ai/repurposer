@@ -57,6 +57,8 @@ from app.tools.captions.procedure import (
 
 class TranslateClip(NodeBase):
     kind = "translate_clip"
+    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 装配站 (字幕成片)
+    doc_station = "translation"  # 两站拆分: 文档站 = 译文稿 (ADR-072)
     task_name = "Translate captions"
     task_name_zh = "翻译字幕"
     # Acts on clips: this run's select_clips / materialize_source when one

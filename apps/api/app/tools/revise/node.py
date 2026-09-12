@@ -19,6 +19,7 @@ from app.tools.revise.procedure import revise_by_instruction
 
 class ReviseScript(NodeBase):
     kind = "revise_script"
+    family = "document"  # 画布三族 (ADR-072 批 A3) — 折叠进目标写手节点 (原地图变更)
     task_name = "Write script"
     task_name_zh = "撰写脚本"
     produces_outputs = True

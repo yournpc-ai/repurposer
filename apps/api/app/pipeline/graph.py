@@ -182,6 +182,21 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
+    # 画布三族 (ADR-072 批 A3): the node family this kind's stamps belong to —
+    # "document" (散文档/表格档) or "assemble" (装配站). Declared per node
+    # class (注册表纪律: 禁平行映射表 — this attribute replaced graph_fill's
+    # retired _graph_kind_of central mapping). Kinds that never own a stamp
+    # declare the family they FOLD INTO: revise_script rides its target
+    # writer's document node; materialize_source / align_stills ride the
+    # downstream producer's assemble node. The internal crew (app.pipeline.*)
+    # never stamps — the declaration is moot there.
+    family: str | None = None
+    # 两站拆分 (ADR-072): when set, the stamp derives a second DOCUMENT-station
+    # family (the translated script — cue rows, the persistent editable
+    # artifact) next to this kind's assemble station; the value is the doc's
+    # spec.role. First seats: translate_clip ("translation") / dub_clip
+    # ("dub_script").
+    doc_station: str | None = None
     # Internal topology node (ADR-043): compile-injected, never a registered
     # tool — users never say its name (materialize_source is the whole-
     # source materialization, the transform chain's implied object). The

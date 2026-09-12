@@ -8,6 +8,7 @@ from app.tools.posts.agents import post_writer
 
 class WritePost(DerivativeWriterNode):
     kind = "write_post"
+    family = "document"  # 画布三族 (ADR-072 批 A3) — 散文档 (帖子)
     task_name = "Write social post"
     task_name_zh = "撰写社交帖子"
     output_type = "post"

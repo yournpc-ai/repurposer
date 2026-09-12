@@ -1684,6 +1684,21 @@ def assert_runners_registered() -> None:
             )
         output_owners[node.output_type] = node.kind
 
+    # 画布三族 (ADR-072 批 A3): every non-internal tool-package node declares
+    # its stamp family (the declaration replaced the retired _graph_kind_of
+    # central mapping — 注册表纪律: 禁平行映射表). Folding kinds declare the
+    # family they fold INTO.
+    for node in NODE_KINDS.values():
+        if (
+            not type(node).__module__.startswith("app.pipeline.")
+            and not node.internal
+            and node.family not in ("document", "assemble")
+        ):
+            raise RuntimeError(
+                f"Node '{node.kind}': no canvas family declared "
+                "(family: document | assemble)"
+            )
+
     from app.agents.base import AGENTS, Agent  # deferred: metering-free leaf
 
     for node in NODE_KINDS.values():
