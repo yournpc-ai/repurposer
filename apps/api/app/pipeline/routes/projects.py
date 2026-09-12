@@ -291,6 +291,25 @@ async def get_project_graph(
         .scalars()
         .all()
     )
+    # B1-lite (2026-09-13 演示冻结期, ADR-072 批 B1 的读面先行): the task-book
+    # document and every edge touching it are filtered at READ time only —
+    # the canvas shows the pure material flow (源 → 文档 → 装配); the confirm
+    # beat's seat is the dock pill (ADR-070), the card's own Start was the
+    # redundant second seat. The stamp/runner/data are untouched — formal
+    # retirement (de-stamp + history cleanup) is 批 B1 after the freeze lifts.
+    hidden_book_ids = {
+        str(n.id)
+        for n in nodes
+        if n.kind == "document" and (n.spec or {}).get("role") == "task_book"
+    }
+    if hidden_book_ids:
+        nodes = [n for n in nodes if str(n.id) not in hidden_book_ids]
+        edges = [
+            e
+            for e in edges
+            if str(e.from_node) not in hidden_book_ids
+            and str(e.to_node) not in hidden_book_ids
+        ]
     if not nodes:
         return {"nodes": [], "edges": []}
 
