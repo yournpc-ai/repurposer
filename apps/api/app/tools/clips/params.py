@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 
 class SelectClipsParams(BaseModel):
-    count: int = Field(default=3, description="How many highlight clips to cut")
+    count: int = Field(default=1, description="How many highlight clips to cut")
     language: str | None = Field(
         default=None,
         description="ISO code for the clips' on-screen copy (titles). null = "

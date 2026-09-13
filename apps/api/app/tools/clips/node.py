@@ -131,7 +131,7 @@ class SelectClips(NodeBase):
     needs_plan_prelude = True
     requires = (MEDIA, TRANSCRIPT)
     produces_outputs = True
-    count_default = 3
+    count_default = 1
     count_limits = (1, 10)
     agents = (clip_writer, stills_editor, stills_editor_outline)
 
