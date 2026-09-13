@@ -37,7 +37,7 @@ import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -267,8 +267,9 @@ function MediaToolbar({
 /** The version pager (ADR-051 F2 mechanics, generalized 2026-09-07 from the
  * fork family to the node's slot siblings): the card's display AND its
  * action target flip among the node's REAL product rows. Rides the factsbar
- * band as its own pill, NEVER merged with the hover items switcher
- * (条目切换 ≠ 版本切换). */
+ * band as its own pill STACKED ABOVE the bar (2026-09-13 用户拍板 — the
+ * side-by-side row outgrew the card's width), NEVER merged with the hover
+ * items switcher (条目切换 ≠ 版本切换). */
 function VersionPager({
   current,
   total,
@@ -1217,18 +1218,35 @@ function ProgramRegion({
     onPromptEdit?.(node.id, text)
   }
 
+  // The media card's program region FILLS its reservation (2026-09-13 用户
+  // 拍板): the media region above is fixed-px (frame anatomy), so this
+  // region grows to absorb the leftover band height — the hover wash covers
+  // the whole area, never a white strip under the prompt. Text cards keep
+  // shrink-0: their body region is already the flex-1 slack absorber (same
+  // for the quiet/draft body's wrapper), so this region sits flush at the
+  // card bottom there.
+  const firstOutput = (node.outputs ?? [])[0]
+  const fillSlack =
+    !!firstOutput && firstOutput.type !== "post" && firstOutput.type !== "article"
+
   return (
     <div
       className={cn(
-        "shrink-0 px-3 py-2 transition-colors",
+        "px-3 py-2 transition-colors",
+        fillSlack ? "min-h-0 flex-1" : "shrink-0",
         editable && !editing && !promptConfirm && "cursor-text hover:bg-accent/50",
       )}
-      onClick={(e) => {
-        if (!editable || editing || promptConfirm) return
-        // Entering the draft is NOT the node-select gesture.
-        e.stopPropagation()
-        setEditing(true)
-      }}
+      // 2026-09-13 卡面直改入口暂时停用（用户拍板）: the editing anatomy
+      // (label + 3-row textarea + send row ≈112px) overflows the 88px
+      // program reservation — the send button poked past the card bottom.
+      // The click entry is commented out until the editing layout is
+      // redesigned; prompt revision still rides the chat dock meanwhile.
+      // onClick={(e) => {
+      //   if (!editable || editing || promptConfirm) return
+      //   // Entering the draft is NOT the node-select gesture.
+      //   e.stopPropagation()
+      //   setEditing(true)
+      // }}
     >
       <p className="text-meta text-[9px]">
         {editing ? t("results.canvas.promptEditing") : t("results.canvas.promptLabel")}
@@ -1539,13 +1557,21 @@ function GraphCard({
         />
       </div>
 
-      {/* The factsbar band under the card (外置律): runtime facts + actions
-          + the version pager — reserved even while quiet, geometry never
-          shifts. The stale badge rides the bar's left end (可重跑 — the
-          program moved after the product landed). */}
+      {/* The factsbar band under the card (外置律): runtime facts + actions,
+          with the version pager STACKED ABOVE the bar when the node holds
+          more than one product (2026-09-13 用户拍板 — never beside it: the
+          side-by-side row outgrew the card's width). One 8px rhythm
+          throughout: card → pager → bar. The band is reserved even while
+          quiet; the pager's extra row (PRODUCT_PAGER_PX) lands on the same
+          beat as the second version's arrival, one coherent reflow. The
+          stale badge rides the bar's left end (可重跑 — the program moved
+          after the product landed). */}
       <div
         data-tour={node.tourTargets ? "results-menu" : undefined}
-        className="flex h-[44px] shrink-0 items-start justify-center gap-2 pt-2"
+        className={cn(
+          "flex shrink-0 flex-col items-center gap-2 pt-2",
+          outputs.length > 1 ? "h-[88px]" : "h-[44px]",
+        )}
       >
         {outputs.length > 1 && (
           <VersionPager
@@ -1621,12 +1647,16 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
   // with a 6px gap (ElevenLabs measured, 2026-09-10 — their circle hugs the
   // border at ~1/4-diameter clearance; the old 12px gap read as adrift at
   // 100% zoom).
-  const inTextBase = node.kind === "document" ? 16 : 60
+  // The version pager's stacked row (2026-09-13 用户拍板) grows the factsbar
+  // band by PRODUCT_PAGER_PX when the node holds more than one product —
+  // both bottom-anchored corner seats ride the band, so both bases shift.
+  const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
+  const inTextBase = node.kind === "document" ? 16 : 60 + pagerPx
   // Bottom furniture of a media-consuming card (generator/processor/agent):
   // factsbar band + program region, then the 16px inset into the content
   // region — the corner seat. Media in-ports never occur on document/asset
   // kinds (the port law's accepts), so one base covers every real seat.
-  const inMediaBase = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
+  const inMediaBase = PRODUCT_TOOLBAR_PX + pagerPx + PROGRAM_REGION_PX + 16
   const outBase = 40
   const inMediaIdx = new Map<string, number>()
   const inTextIdx = new Map<string, number>()
