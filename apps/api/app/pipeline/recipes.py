@@ -30,11 +30,10 @@ graph the declared chain compiles to — both live in this file and are
 reviewed together (RECIPES §7.1).
 
 Recipe gallery v2 (ADR-048, 2026-08-23; 2026-08-24 text-tribe flip):
-the registry owns 8 cards, all ``live`` (text-tribe landed in the
-``bake_text_tribe_demos.py`` harvest 2026-08-24). ``"reserved"`` stays in
-the schema only because the registry ships with code (TOOL_REGISTRY 同款,
-NAMING §5, N-39) — never a real grid state again (RECIPES §10 retired the
-Soon pill with the bake landing).
+the registry owns 8 cards — 7 ``live`` + ``image-video`` parked
+``reserved`` (2026-09-13 ruling): it holds the last grid seat with a Soon
+pill, no hover chrome, no inspect overlay, until the stills chain earns
+its launch back. ``"reserved"`` flips back to ``"live"`` with one field.
 """
 
 from typing import Literal
@@ -224,9 +223,9 @@ _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 # Card order = insertion order (RECIPES §4, ADR-048 lineup: row 1 has video
 # sources, row 2 has text/image sources). The dub card is back to its own
 # seat — its capability was always there, the gallery just stopped showing
-# it (2026-08-10 配音降为字幕卡配音变体翻案，08-23 配音卡复座). The text-tribe
-# cards (social-post / quote-cards / carousel) are NOT registered yet — see
-# the file docstring and ``PENDING_BAKE_BLOCK`` below for the bake gate.
+# it (2026-08-10 配音降为字幕卡配音变体翻案，08-23 配音卡复座). 2026-09-13:
+# ``image-video`` parks LAST as the gallery's one ``reserved`` seat (Soon
+# pill, not clickable) — the seven live cards keep their relative order.
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     # R6: one video -> multilingual caption forks (the card showcases the
     # multilingual/caption capability ONLY — 2026-08-14 ruling: no
@@ -373,73 +372,6 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
             # the voice-clone moat. Re-adding the full 4-case pack would
             # mix translation evidence into the dub card; the subs card
             # owns the translation lineage.
-        ],
-    ),
-    # R2: transcript + photos -> stills slideshow + captions (estimated
-    # timeline via align_stills) + music. Voice path deferred to the
-    # voiceprint line (RECIPES §4.2, 2026-08-05 ruling). Slides slot added
-    # 2026-08-13: decks convert to page images in asset processing, folding
-    # the 课件 scenario into this card.
-    "image-video": RecipeEntry(
-        status="live",
-        input_slots=[
-            InputSlot(type="images"),
-            InputSlot(type="transcript"),
-            InputSlot(type="slides", required=False),
-        ],
-        tasks=[
-            TaskItem(tool="select_clips", params={}),
-            # The card sells "captions and music" (promise + template + the
-            # baked demo's add_music leg) — the declared chain names it, or
-            # the self-check's compile shape lies about the card.
-            TaskItem(tool="add_music", params={}),
-        ],
-        # The demo set is the WFT keynote's own material: a talk write-up
-        # (markdown — the card parses articles: PDF/Word/md/txt) + three
-        # on-site photos; the baked slideshow shows exactly these.
-        # aspect = the SOURCE frame (2026-08-17 ruling: a chain with no clip
-        # tool never changes the frame, so the demo follows the material —
-        # the photos are landscape 16:9). Baked by
-        # scripts/bake_image_video_demo.py.
-        aspect="16:9",
-        tags=["no-footage"],
-        flow=[
-            FlowStep(key="understand"),
-            FlowStep(key="plan"),
-            FlowStep(key="align_stills"),
-            FlowStep(key="select_clips"),
-            FlowStep(key="add_music"),
-            FlowStep(key="render"),
-        ],
-        example_assets=[
-            ExampleAsset(
-                kind="transcript",
-                url=f"{_DEMO}/uploads/demo-article.md",
-                label_key="demo_article",
-            ),
-            ExampleAsset(
-                kind="image",
-                url=f"{_DEMO}/uploads/teasers-photo-title.jpg",
-                label_key="demo_photos",
-            ),
-            ExampleAsset(
-                kind="image",
-                url=f"{_DEMO}/uploads/teasers-photo-industries.jpg",
-                label_key="demo_photos",
-            ),
-            ExampleAsset(
-                kind="image",
-                url=f"{_DEMO}/uploads/teasers-photo-outcomes.jpg",
-                label_key="demo_photos",
-            ),
-        ],
-        example_outputs=[
-            ExampleOutput(
-                kind="video",
-                url=f"{_DEMO}/outputs/image-video-preview-18833859.mp4",
-                poster_url=f"{_DEMO}/outputs/image-video-poster-2b1a8f81.jpg",
-                label_key="image_video_preview",
-            ),
         ],
     ),
     # 高光切片 (highlight-clips, RECIPES §4.3): long footage -> vertical
@@ -689,6 +621,78 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 poster_url=None,
                 label_key="carousel_output",
                 doc_format="carousel",
+            ),
+        ],
+    ),
+    # R2: transcript + photos -> stills slideshow + captions (estimated
+    # timeline via align_stills) + music. Voice path deferred to the
+    # voiceprint line (RECIPES §4.2, 2026-08-05 ruling). Slides slot added
+    # 2026-08-13: decks convert to page images in asset processing, folding
+    # the 课件 scenario into this card.
+    # Parked ``reserved`` (2026-09-13 ruling): the card holds the LAST grid
+    # seat with a Soon pill — no hover chrome, no inspect overlay — until
+    # the stills chain earns its launch back. The declared chain and the
+    # baked demo set stay in place, so flipping back to ``"live"`` is a
+    # one-field change.
+    "image-video": RecipeEntry(
+        status="reserved",
+        input_slots=[
+            InputSlot(type="images"),
+            InputSlot(type="transcript"),
+            InputSlot(type="slides", required=False),
+        ],
+        tasks=[
+            TaskItem(tool="select_clips", params={}),
+            # The card sells "captions and music" (promise + template + the
+            # baked demo's add_music leg) — the declared chain names it, or
+            # the self-check's compile shape lies about the card.
+            TaskItem(tool="add_music", params={}),
+        ],
+        # The demo set is the WFT keynote's own material: a talk write-up
+        # (markdown — the card parses articles: PDF/Word/md/txt) + three
+        # on-site photos; the baked slideshow shows exactly these.
+        # aspect = the SOURCE frame (2026-08-17 ruling: a chain with no clip
+        # tool never changes the frame, so the demo follows the material —
+        # the photos are landscape 16:9). Baked by
+        # scripts/bake_image_video_demo.py.
+        aspect="16:9",
+        tags=["no-footage"],
+        flow=[
+            FlowStep(key="understand"),
+            FlowStep(key="plan"),
+            FlowStep(key="align_stills"),
+            FlowStep(key="select_clips"),
+            FlowStep(key="add_music"),
+            FlowStep(key="render"),
+        ],
+        example_assets=[
+            ExampleAsset(
+                kind="transcript",
+                url=f"{_DEMO}/uploads/demo-article.md",
+                label_key="demo_article",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-title.jpg",
+                label_key="demo_photos",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-industries.jpg",
+                label_key="demo_photos",
+            ),
+            ExampleAsset(
+                kind="image",
+                url=f"{_DEMO}/uploads/teasers-photo-outcomes.jpg",
+                label_key="demo_photos",
+            ),
+        ],
+        example_outputs=[
+            ExampleOutput(
+                kind="video",
+                url=f"{_DEMO}/outputs/image-video-preview-18833859.mp4",
+                poster_url=f"{_DEMO}/outputs/image-video-poster-2b1a8f81.jpg",
+                label_key="image_video_preview",
             ),
         ],
     ),

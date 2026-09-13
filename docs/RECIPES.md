@@ -79,7 +79,7 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 | 2 | 金句卡 `quote-cards` | 金句叠卡 | 挑出最亮的几句话，叠成一张可以直接发的金句卡 | 录像 / 照片+文稿 / 纯文稿（合成类，宽槽三路径——v3 工程见简报） | ✅ Live |
 | 3 | 高光切片 `highlight-clips` | 竖屏短片 | 长视频里最好的几段剪成竖屏短片——镜头自动跟人，最值得先发的也标出来 | 长演讲录像（转化类，窄槽必填） | ✅ Live |
 | 4 | 多语言字幕 `multilingual-subs` | 多语言版本 | 为你的视频配上多语言字幕，单行或双语，观众按自己的语言看 | 演讲 · 会议录像（转化类，窄槽必填） | ✅ Live |
-| 5 | 图文视频 `image-video` | 图文轮播视频 | 没有录像——照片加文字稿，变成带字幕和音乐的轮播短片 | 文稿 + 照片 · 课件（合成类） | ✅ Live |
+| 5 | 图文视频 `image-video` | 图文轮播视频 | 没有录像——照片加文字稿，变成带字幕和音乐的轮播短片 | 文稿 + 照片 · 课件（合成类） | 🔜 Coming soon（reserved 占位末位，2026-09-13） |
 | 6 | 轮播图 `carousel` | 轮播幻灯 | 讲稿或课件要点，变成一叠可以翻页的图文幻灯 | 讲稿 · 课件要点（合成类，可空） | ✅ Live |
 | 7 | 访谈分镜 `reframe` | 竖屏短片 | 横屏双人对话重剪竖屏——镜头跟着说话人走 | 双人对谈录像（转化类，窄槽必填） | ✅ Live |
 | 8 | 社媒帖 `social-post` | 帖子长文 | 讲稿或长文，变成可以直接发的帖子——用你的风格写，发哪个平台你定 | 讲稿 · 论文 · 会议纪要（合成类，可空） | ✅ Live（demo 重修为风格对照，§4.6） |
@@ -94,7 +94,9 @@ slides（PPT 转图）          fade-in / pop-in / slide-up     无声：阅读�
 - **示例提示词教学位**（2026-08-14 二次修订，取代 variants desc）：左区「示例提示词」标题 + 按卡 `recipes.<id>.promptHint` 引导句（字幕卡点名「双语字幕」「中文字幕」「西语配音」示例）——变体教学从承诺句下的 desc 行移入提示词区，引导句不是控件的纪律不变（§7.2）。
 - **素材账单**：`demo/uploads/xy_2_15s.mp4`（WFT 登台演讲 530–545s 截取，960×960 方幅，"We Focus on Industries" 内容页稳定窗，已策展 2026-08-13）；预览 = 同选段 1:1 四案例对照包——EN 原声 + 中英双语对照 + FR 单行字幕 + ES 声纹配音——真管线跑出后由 `scripts/bake_subs_contrast.py` 收获（harvest 模式：run 产物 Output id 或本地 mp4 + 每案例独立 poster 帧，内容寻址入 demo/ 树；FR 单行版脚本侧产——run 级双语开关下管线 fork 出来都是双行）。
 
-### 4.2 图文视频卡（image-video，已 Live，扩 slides 槽）
+### 4.2 图文视频卡（image-video，reserved 占位中，扩 slides 槽）
+
+**2026-09-13 起 parked reserved**：卡面退到网格末位、挂 Soon 丸、不可点（无 hover chrome、无检视 overlay）——等图文链重挣发布质量再翻回 live（注册表单字段翻转，声明链与烘焙示例原样保留）。以下能力描述照旧。
 
 R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`align_stills` 阅读节奏词轴与 ASR 同构）。**输入槽扩 `slides`**：PPT/PDF 转页图已在跑（§0），课件场景并入本卡——"课件讲解"不单立卡：静态课件页 + 字幕 + 讲解音频/声纹对齐 = 三层正交架构内组合（slides 视觉底 × caption catalog × 音频/TTS 时间源）。**动画与转场不做**（L3 范围纪律，VIDEO_EDITOR；委托剪映/Premiere）。承诺句不得写"动态演示"。**画幅跟源**（2026-08-17 拍板）：本卡链无 clip 类技能 = 画面没倒手，输出比例跟素材原画幅（横版照片/课件 → 16:9）——示例片按源烘焙 16:9（照片满幅零裁剪），promptTemplate 点名「保持原画幅」（真实 run 经 intent router 考纲映射源形固定档兑现；任意源形由 renderer `original` 档兜底——整条材料化默认跟源）。
 
@@ -212,7 +214,7 @@ Recipe = {
 
 ### 7.3 布局与素材
 
-- home：composer 区下方卡片画廊（**v3，2026-08-27 拍板，ADR-048**）：**均匀 4 列网格**（`grid-cols-2 md:grid-cols-3 lg:grid-cols-4`，容器 max-w-6xl；MasonryGrid 瀑布流基座与 featured 跨列退役——排序即霸道序），卡序 = 注册表插入序 = **霸道序**（voice-dub → quote-cards → highlight-clips → multilingual-subs → image-video → carousel → reframe → social-post；行语义退役，网格从左到右自然落位）。**卡面 = 16:10 黑白灰工艺示意图封面**（inline SVG，左素材→右成品横向叙事；rest 静止 → hover 播过程动画 + Remix 丸居中 + expand 右上，均只开检视 overlay）+ **图下三行**（菜名 / promise 两行封顶 / 适用素材 meta 行）；badge 与类目 chip 退役（卡面不锁画幅、输入锚点归适用行），渠道名不上卡面（genre only——「社媒帖」非「LinkedIn 帖」，渠道 = 发布期变量：预填模板带默认渠道、chat 恒胜）。**网格零真实媒体**（无视频无 poster 无 preload——证据层 = overlay 示例 tab 的成对前后对比，升格为验收标准：拿不出真实成对示例的卡不进网格，Soon/reserved 形态退役）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、无 ring/border、无投影（封面 tile 底 = `bg-inset` 井，fill-first 准则）。
+- home：composer 区下方卡片画廊（**v3，2026-08-27 拍板，ADR-048**）：**均匀 4 列网格**（`grid-cols-2 md:grid-cols-3 lg:grid-cols-4`，容器 max-w-6xl；MasonryGrid 瀑布流基座与 featured 跨列退役——排序即霸道序），卡序 = 注册表插入序 = **霸道序**（multilingual-subs → voice-dub → highlight-clips → reframe → social-post → quote-cards → carousel → image-video——image-video 自 2026-09-13 parked reserved 守末位；行语义退役，网格从左到右自然落位）。**卡面 = 16:10 黑白灰工艺示意图封面**（inline SVG，左素材→右成品横向叙事；rest 静止 → hover 播过程动画 + Remix 丸居中 + expand 右上，均只开检视 overlay）+ **图下三行**（菜名 / promise 两行封顶 / 适用素材 meta 行）；badge 与类目 chip 退役（卡面不锁画幅、输入锚点归适用行），渠道名不上卡面（genre only——「社媒帖」非「LinkedIn 帖」，渠道 = 发布期变量：预填模板带默认渠道、chat 恒胜）。**网格零真实媒体**（无视频无 poster 无 preload——证据层 = overlay 示例 tab 的成对前后对比，升格为验收标准：拿不出真实成对示例的卡不进网格；Soon/reserved 形态曾随烘焙落地退役，2026-09-13 由 image-video 单卡重启——reserved 卡占末位挂 Soon 丸、不可点）。点击卡面开检视 overlay（唯一动作）；composer 的 @ picker 只有素材项，配方永不出现在句中（MENTIONS §3）。遵循 CLAUDE.md：rounded-lg、无 ring/border、无投影（封面 tile 底 = `bg-inset` 井，fill-first 准则）。
 - 预览资源必须**公开可读**（落地页匿名受众）：`apps/web/public/` 或对象存储公开前缀——现有 asset 端点全是登录态，不可用。
 - 素材策展总账：① demo talk（桶 `demo/` 树，✅ `demo/uploads/demo_talk.mp4` 11MB 单人 TED 风演讲——dub 对照包源）；② 双人访谈横屏视频（✅ `demo/uploads/xy_1.mp4` 17MB 左右对坐访谈，访谈分镜卡源）；③ PPT 大型登台演讲（✅ `demo/uploads/xy_2.mp4` 63MB 960×960 方幅 13min，高光切片卡源）＋ **15s 展示切片**（✅ `demo/uploads/xy_2_15s.mp4`，530–545s "We Focus on Industries" 内容页稳定窗，-14 LUFS 已归一，**多语言字幕卡展示源**，2026-08-13）；④ 各卡预览成片（能力兑现后跑真管线收获，烘成静态资源）。多张卡复用 1–2 场源演讲。
 
