@@ -1,4 +1,6 @@
-import type { FlowEdge, FlowNode, FlowNodeKind } from "./types"
+import { Position, type NodeHandle } from "@xyflow/react"
+
+import type { FlowEdge, FlowNode, FlowNodeKind, GraphEdgeType, OutPortType } from "./types"
 
 /** Fixed node dimensions per skin — layout is pure math with zero DOM
  * measurement (SSR-safe, no ResizeObserver feedback loops). Step pills are
@@ -69,6 +71,86 @@ export const DRAFT_BODY_PX = 120
  * frosted bar). */
 export const PRODUCT_LABEL_PX = 26
 export const PRODUCT_TOOLBAR_PX = 44
+
+/** The version pager's own band row (2026-09-13 用户拍板): when a node holds
+ * more than one product the pager stacks ABOVE the factsbar (never beside it
+ * — the side-by-side row outgrew the card's width), one more 8px gap + its
+ * 36px pill on top of the 44px factsbar band. Client-side addendum only:
+ * frames are born with zero outputs (统一摆位律 stamps the 44px band), so the
+ * server mirror never carries this row — the +44 lands on the same beat as
+ * the second version's arrival, one coherent reflow, never a quiet shift. */
+export const PRODUCT_PAGER_PX = 44
+
+/** Declared handle geometry (2026-09-13 深夜, the draft-time missing-edge
+ * 走查): the port law's numeric half, declared INTO the node payload so edge
+ * anchors never wait for xyflow's DOM measurement. xyflow rebuilds
+ * handleBounds only from a ResizeObserver pass and drops them whenever the
+ * controlled `nodes` prop arrives with fresh identities (every refetch) — a
+ * handle whose measure pass is lost keeps its edges invisible until remount
+ * (the asset's out:video at draft time, terminal remount the only healer).
+ * The port seats are pure math off the pinned box, so declare them:
+ * parseHandles adopts these bounds on every rebuild and the DOM measure
+ * degrades to a confirming backstop reading the same numbers. 判词② mirror:
+ * these constants ARE FlowNodeCard NodePorts' CSS seats (28px circle,
+ * left/right -34, 34px stack, bottom-anchored in-bases, out top 40) — the
+ * card keeps the visual seat, this is the data seat; change one, change
+ * both. */
+export const PORT_PX = 28
+export const PORT_SIDE_PX = 34
+export const PORT_STEP_PX = 34
+export const OUT_PORT_TOP_PX = 40
+export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
+export const inTextPortBasePx = (kind: FlowNodeKind): number =>
+  kind === "document" ? 16 : 60
+
+/** The node payload's declared handles (xyflow first-class `node.handles`).
+ * Undefined for portless nodes — their invisible fallback handles keep the
+ * DOM-measured path (static surfaces, no churn). x/y = the handle box's
+ * node-relative top-left (getHandleBounds semantics): in-ports sit
+ * bottom-anchored at their region's corner (y = H − base − circle), the out
+ * port top-anchored on the right (x = W + gap). */
+export function declaredHandles(
+  node: FlowNode,
+  size: { width: number; height: number },
+  ports?: { in: Exclude<GraphEdgeType, "ctx">[]; out: OutPortType[] } | null,
+): NodeHandle[] | undefined {
+  if (!ports) return undefined
+  const handles: NodeHandle[] = []
+  // The version pager's stacked row grows the factsbar band by
+  // PRODUCT_PAGER_PX when the node holds more than one product — both
+  // bottom-anchored in-port seats ride the band, so both bases shift (the
+  // NodePorts mirror applies the same offset; top-anchored out ports don't).
+  const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
+  let media = 0
+  let text = 0
+  for (const t of ports.in) {
+    const isMedia = t === "video" || t === "audio"
+    const base = isMedia
+      ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
+      : inTextPortBasePx(node.kind) + pagerPx + text++ * PORT_STEP_PX
+    handles.push({
+      id: `in:${t}`,
+      type: "target",
+      position: Position.Left,
+      x: -PORT_SIDE_PX,
+      y: size.height - base - PORT_PX,
+      width: PORT_PX,
+      height: PORT_PX,
+    })
+  }
+  ports.out.forEach((t, i) => {
+    handles.push({
+      id: `out:${t}`,
+      type: "source",
+      position: Position.Right,
+      x: size.width + PORT_SIDE_PX - PORT_PX,
+      y: OUT_PORT_TOP_PX + i * PORT_STEP_PX,
+      width: PORT_PX,
+      height: PORT_PX,
+    })
+  })
+  return handles
+}
 
 /** Clip-product card height by aspect (the graph canvas's media node):
  * caption + the aspect-exact thumb + the program region + the factsbar
@@ -202,6 +284,9 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
       height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX,
     }
   }
+  // The version pager's stacked row (2026-09-13 用户拍板): one extra band
+  // row above the factsbar once the node holds more than one product.
+  const pagerPx = outputs.length > 1 ? PRODUCT_PAGER_PX : 0
   const first = outputs[0]
   const isText = first.type === "post" || first.type === "article"
   if (isText) {
@@ -210,16 +295,17 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     const lines = Math.min(textLineCount(body, !!title), textLineCap(frame?.h ?? 440, !!title))
     return {
       width,
-      height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX,
+      height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX + pagerPx,
     }
   }
   // Never outgrow the born frame (the reservation law, 判词②): a node
   // stamped before the source dims were known keeps its conservative
   // frame — the card's media region caps to fit (FlowNodeCard mirrors the
   // cap), never an overlap. Frames born with dims are aspect-exact — the
-  // cap is inert.
+  // cap is inert. The pager row rides ON TOP of the capped frame (frames
+  // are born with zero outputs, so the reservation never carries it).
   const clipH = clipNodeHeight(first.aspect ?? null)
-  return { width, height: frame?.h ? Math.min(clipH, frame.h) : clipH }
+  return { width, height: (frame?.h ? Math.min(clipH, frame.h) : clipH) + pagerPx }
 }
 
 /** The asset node's content height from the source's real dims (media +

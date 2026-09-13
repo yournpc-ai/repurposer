@@ -1588,6 +1588,8 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Related**: ADR-073（失败收据态——本条 ② 收窄其「terminal 单元只随成功 run 落」）、ADR-048（字幕/配音分家——声明链本条追齐）、ADR-057（零投影直读——自愈 remount 的座位）、ADR-040（配方 = 提示词）
 
+**补记**（2026-09-13 当日晚，用户三图取证「终态回来了但 mid-run 还是全灭」——③ 的「mid-run 窗口由持续 refetch 覆盖」假设证伪，探针活捉根因并拔根）：**根因 = xyflow 的受控同步对身份churn丢弃测量**。每次 refetch 我们把 /graph JSON 重 map 成全新节点对象数组；`adoptUserNodes` 对 `checkEquality` 失败（对象身份变了）的节点重建内部态并**丢弃 `measured`**，wrapper 的 `visibility: hasDimensions ? visible : hidden` 随之落 hidden，等待 ResizeObserver 重测补回——而**盒子尺寸不变的节点永远等不到重测**（RO 只在尺寸变化时触发），隐形直到终态 remount；产物落地长高的卡（translate forks）被真 resize 逐个救回，所以用户看到「渲染时先跑两个出来」。**修法 = 钉死几何，不依赖测量**：`flowNodeSize` 的尺寸本来就是 frame 律算出的真值，同时以一等公民字段声明给 xyflow——`width`/`height`/`measured` 三件套随 rfNode 一起传；`adoptUserNodes` 原样保留 `userNode.measured`，且 `parseHandles` 只在 `userNode.measured` 存在时保留旧 `handleBounds`——重建后节点恒 visible、边锚恒在，DOM 测量退化为只会读到同一组数字的兜底校验。FlowView 一处改动（rfNodes 构造），终态 remount 降为纯兜底保留。复现验证：同配方同素材跑两轮——修复前首 step diff 落地 152ms 内 5 节点全 hidden、边归零；修复后全程 n=5 edges=5 零波动至终态。（探针：scratch/cdp_watch2.mjs + repro_vanish_*.py；scratch 项目已按 FK 序清理。）**同日二轮补记**（用户取证「没点 Start 时前面没连线，生成完就有了」——草案期 asset 出边全程缺席、终态 remount 才回）：同族病灶的边侧——`handleBounds` 同样只在 RO 测量里重建，测量票丢失的 handle 的边隐形到 remount；节点 visible 不代表 handle 已测（asset 卡在屏、其 out:video 的边全灭）。修法同构：**端口座位也声明进节点载荷**——`layout.ts declaredHandles`（端口几何纯数学：28px 圆 / 左右 -34 / 34px 叠距 / 入锚底锚定分区基线 / 出锚 top 40，判词② 与 NodePorts CSS 互引两座位）随 rfNode 传 `handles`；`parseHandles` 每次重建直接采信声明值，DOM 测量降为只会读到同一组数字的兜底。至此画布几何（盒 + 锚）零测量依赖，xyflow 的 RO 只负责确认我们没算错。
+
 ## ADR-075: 画布媒体跟源比例 + 分档加宽——真实像素是形状真值
 
 **Status**: Decided (2026-09-13)

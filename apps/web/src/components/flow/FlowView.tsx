@@ -19,7 +19,7 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
-import { BIRTH_STAGGER_MS, flowNodeSize, layoutFlow } from "./layout"
+import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
 const nodeTypes = { flowCard: FlowNodeCard }
@@ -347,6 +347,11 @@ export function FlowView({
         width: size.width,
         height: size.height,
         measured: { width: size.width, height: size.height },
+        // Declared port seats (the missing-edge half of the same 走查):
+        // parseHandles adopts these as handleBounds on every rebuild, so
+        // edges anchor from the first frame — DOM handle measurement becomes
+        // a confirming backstop, never the gate.
+        handles: declaredHandles(n, size, portsByNode.get(n.id)),
         // Explicit dims keep the DOM in lockstep with the layout math (fixed
         // sizes = pure-math layout, zero measurement).
         style: size,
