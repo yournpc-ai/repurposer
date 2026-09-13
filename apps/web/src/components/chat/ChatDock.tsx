@@ -54,6 +54,7 @@ import {
 } from "@/lib/credits"
 import { createTypewriter } from "@/lib/typewriter"
 import { useRunEvents } from "@/lib/use-run-events"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/LogoMark"
 import {
@@ -1104,6 +1105,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const full = form === "full"
   const dock = form === "dock"
   const panel = form === "panel"
+  const isMobile = useIsMobile()
   /** History region (dock D4 修订 — 一体容器两态): in the DOCK form the flow
    * lives INSIDE the input group's container, growing upward; closed = the
    * input group alone (the canvas owns the screen). Agent speech always
@@ -3326,7 +3328,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // panel form — this gate is about the CARD only.) The mobile dock keeps
   // the card (prohibition #13 — no canvas below iPad width — the dock is
   // its only plan surface).
-  const planCardVisible = phase === "confirm" && intentReady && form !== "panel"
+  // 2026-09-13 用户拍板 — desktop retires the card in EVERY form: the book's
+  // dock and the draft-graph stamp land in the same transaction, so the
+  // world flips full → panel one graph fetch later; rendering the card in
+  // the pre-flip full form made it FLASH in the message flow, then vanish
+  // with the morph. The confirm pill rides all three forms throughout, so
+  // the beat never loses its surface during the fetch window. The card is
+  // now exactly the canvas-less surface = mobile (both its forms).
+  const planCardVisible =
+    phase === "confirm" && intentReady && form !== "panel" && isMobile
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
