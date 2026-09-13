@@ -407,4 +407,12 @@ def fold_estimates(estimates: Any) -> dict:
         total["completion_tokens"][1] += int(est["completion_tokens"][1])
         for key, value in (est.get("units") or {}).items():
             total["units"][key] = total["units"].get(key, 0) + value
+    # Provider idempotency at the quotation seat: a rapid voice clone bills
+    # once per fresh voice (first T2A use of it), and one run clones at most
+    # one voice (the persona's bound sample) — each dub node's estimate
+    # declares its would-be clone, so a multi-dub fold must charge the first
+    # only. The metering ledger bills the same way (record_media_usage fires
+    # only on a voice_id miss), so quote ≡ meter for a language fan-out.
+    if "voice_clones" in total["units"]:
+        total["units"]["voice_clones"] = min(total["units"]["voice_clones"], 1.0)
     return total

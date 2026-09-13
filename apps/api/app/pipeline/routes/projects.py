@@ -360,15 +360,23 @@ async def get_project_graph(
     have_edge_triples = {
         (str(e.from_node), str(e.to_node), str(e.edge_type)) for e in edges
     }
+    # Snapshot the ORM edge rows ONCE before the document loop: synthesized
+    # edges append to `edges` as plain dicts — a per-document re-snapshot
+    # would feed those dicts back through attribute access on the next
+    # transcript's pass (≥2 transcripts → AttributeError → /graph 500,
+    # refresh-proof empty canvas). Synthesized rows start from a document
+    # node anyway, so the asset-edge filter would skip them; the ORM-only
+    # snapshot is semantically identical.
+    orm_edges = list(edges)
     for n in nodes:
         if n.kind != "document" or (n.spec or {}).get("role") != "transcript":
             continue
         asset_node_id = asset_node_by_asset.get(str((n.spec or {}).get("asset_id") or ""))
         if asset_node_id is None:
             continue
-        # Snapshot: synthesized edges append to `edges` — never iterate a
-        # list being grown (and the appended rows are dicts, not ORM rows).
-        for e in list(edges):
+        # Never iterate a list being grown — the synthesized rows are
+        # appended to `edges`, not to this ORM-only snapshot.
+        for e in orm_edges:
             if str(e.from_node) != asset_node_id or str(e.edge_type) not in ("video", "text"):
                 continue
             triple = (str(n.id), str(e.to_node), "text")

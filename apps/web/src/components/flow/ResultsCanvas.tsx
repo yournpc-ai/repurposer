@@ -52,6 +52,14 @@ export interface ResultsCanvasProps {
   /** The graph's one read frame (ADR-057). Null = not yet loaded — the
    * canvas stays empty behind the page's gate. */
   graph: ProjectGraph | null
+  /** Terminal self-heal epoch (2026-09-13 用户拍板 — xyflow store desync,
+   * the「node 消失、刷新才回」走查): the page bumps this ~0.6s after a run
+   * lands terminal; the FlowView keyed on it remounts, so a store left
+   * desynced by the run-tail refetch race (nodes/edges frozen empty until a
+   * manual reload) re-syncs from settled props. Cost: one viewport re-fit
+   * at terminal — the moment the user is reading the receipt, not dragging
+   * the canvas. */
+  healEpoch?: number
   /** The canvas is VISIBLE (the page's graph-world gate: first run OR a
    * docked book's draft graph, K5). The settle key (initial framing) joins
    * this with baselineReady: frame only when the visible, settled content
@@ -112,6 +120,7 @@ export interface ResultsCanvasProps {
 
 export function ResultsCanvas({
   graph,
+  healEpoch = 0,
   visible = false,
   baselineReady,
   baselineKey,
@@ -267,9 +276,11 @@ export function ResultsCanvas({
 
   // ── Output inspector (2026-09-06, FLORA node-detail parity) ─────────────
   // A product click summons its dossier, anchored under the zoom pill
-  // (right-aligned — the ADR-056 canvas-chrome slot). View state owned
-  // here by the canvas: selecting another product swaps in place, pane
-  // click / Esc / the row vanishing (delete / refresh) closes.
+  // (right-aligned — the ADR-056 canvas-chrome slot); only the centered
+  // player modal retired from the click beat (2026-09-13 二轮拍板).
+  // View state owned here by the canvas: selecting another product
+  // swaps in place, pane click / Esc / the row vanishing (delete / refresh)
+  // closes.
   const [inspectedId, setInspectedId] = useState<string | null>(null)
   const inspectedOutput = inspectedId ? (outputById.get(inspectedId) ?? null) : null
   useEffect(() => {
@@ -415,7 +426,9 @@ export function ResultsCanvas({
         return
       }
       // A graph card: click = dock focus (D8) + the dossier swap-in, on the
-      // product the pager is SHOWING (fallback = the node's first).
+      // product the pager is SHOWING (fallback = the node's first). The
+      // dossier opens for video products too (2026-09-13 二轮拍板——右侧
+      // 档案保留；退役的只有居中播放器 modal)。
       const outputs = node.outputs ?? []
       if (outputs.length === 0) return
       const output =
@@ -688,7 +701,12 @@ export function ResultsCanvas({
 
   return (
     <div className={cn("relative", className)}>
+      {/* key = the terminal self-heal epoch: a bump remounts the xyflow
+          world (fresh store, re-synced from settled props) — the frozen
+          empty layer the run-tail refetch race can leave never survives
+          the run (2026-09-13 用户拍板). */}
       <FlowView
+        key={healEpoch}
         nodes={nodes}
         edges={edges}
         navigation="explore"

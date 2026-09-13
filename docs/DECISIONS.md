@@ -1207,7 +1207,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 1. **概念三词 + 两层货币**：`credit`（积分 = 用户面唯一计价单位，en credits / zh 积分）/ `wallet`（`wallets` 表 = 余额 + 判定）/ `credit_transactions`（台账，append-only，ledger 是子系统概念名不上表名）。内部 USD 成本层（PRICING）原样保留作对账事实，**USD 永不直接上 UI**。
 2. **三表，Owner = 平台层**：`wallets`（user_id PK / balance / version 乐观锁）、`credit_transactions`（kind ∈ grant/purchase/hold/capture/release/refund/adjust；amount 有符号；`balance_after` 自校验链；`idempotency_key` UNIQUE 一等列——重试 / 重启 / webhook 重放天然去重）、`configs`（公共运营参数表，见 ④）。不往 `users` 加列，首登 lazy 开户 + grant。
 3. **扣费时序 = hold → capture → release**：`create_run` 折完报价按 **high 端** hold（不足 → 422 `credits.insufficient` + 入流灰行，用户级与 provider 级 402 严格两词）；step 终态在 metering 归并同点按 actual `capture`——**成功收全量（含内部重试），failed/skipped 不写行 = 失败不扣费**；run 终态 `release` 剩余。NULL 估价步骤 hold 按 0、结算照扣。
-4. **configs 表 + 单一消耗比例参数**：`CONFIG_REGISTRY`（key → default/类型/desc）是唯一事实源，表只存覆盖值，启动 reconcile 补插（seed_default_music 同款）；读取一个漏斗 `get_config()`，未知 key 报错。两分界：运营参数 → config 表；工程参数 → env `config.py` 不动。首批住户 `wallet.signup_grant=500` / `credits.per_cost_usd=300`——**消耗比例**（成本→积分，报价与实扣同源单点，调参不发版）；**购买比例**（钱→积分）是 W11 套餐定价的另一个决策，解耦。调参不动历史账（积分额落库即事实、USD 两侧各自为真）。
+4. **configs 表 + 单一消耗比例参数**：`CONFIG_REGISTRY`（key → default/类型/desc）是唯一事实源，表只存覆盖值，启动 reconcile 补插（seed_default_music 同款）；读取一个漏斗 `get_config()`，未知 key 报错。两分界：运营参数 → config 表；工程参数 → env `config.py` 不动。首批住户 `wallet.signup_grant` / `credits.per_cost_usd`——**消耗比例**（成本→积分，报价与实扣同源单点，调参不发版）；**购买比例**（钱→积分）是 W11 套餐定价的另一个决策，解耦。调参不动历史账（积分额落库即事实、USD 两侧各自为真）。
 5. **负余额允许**：NULL 估价步骤结算可击穿余额——如实显示负数，负额用户过不了下一次 hold。业界实证 = OpenRouter 余额可为负后硬停新请求（连免费档）、Replicate/fal 在途任务跑完照扣——gate at the start, never mid-flight 是行业共识；中途拦停催款（AWS 惊喜账单象限）无人采用。后手留档不实装（负额告警 / NULL 步骤保守上限 / 超预估 N 倍降 checkpoint）。
 6. **payment 边界（W11）**：适配器收 webhook 确认 → 购买比例换算 → 写 `kind=purchase, idempotency_key=provider_event_id`；订阅周期额度 = `kind=grant`。**台账永远不认识"钱"**——汇率换算全部发生在适配器边界，积分层结构对支付零预留（kind/ref 已留座位）。
 7. **模块家**：`platform/configs.py` + `platform/billing.py`（服务动词：get_or_create_wallet / credits_for_cost / check_hold / hold_run / capture_step / release_run / balance）+ `platform/routes.py` 挂 `/wallet`（W11 `platform/payments.py`）。orchestrator 三缝合点（create_run / execute_step 尾段 / maybe_finalize_run）调平台服务 = Distribution `_transition` 调 `create_notification` 同款缝。credits 展示全部序列化层派生（fold × 比例），不落列。
@@ -1550,3 +1550,38 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 批次切分 = 管线拆分批（两站 + materialize 折叠，先于 UI）→ 图模型批（book 下线 / ctx 退役 / 分镜表节点 / modifier 杠杆 / 三族 kind 词汇）→ UI 批（三族卡面 / 表格档 / 杠杆行 / 锚点修复）。prompt 面有改动（TaskItem.instruction 摘录规则）——prompt gate 必过。配方卡图形态全部改写（8 张逐张归位，见简报）；`FlowNode` kind 词汇前后端同改；legacy 数据（旧五型行 / ctx 边 / 书节点行）读容忍。**翻案注记**：ADR-057 K5（任务书 = 图上 document 节点）与 ADR-063 判词①（卡内 draft confirm）被本条 ⑤ 翻案；实施落地时 `CHAT_ARCHITECTURE.md` §5 与 `AGENT_ARCHITECTURE.md` §3/§4.5 的注记改写为现在时正文，本 ADR 保留决策史。
 
 **Related**: ADR-057（图即产品对象——三族是其用户面定型）/ ADR-058（二源律、通道分家——杠杆与零消息延伸）/ ADR-060（防编造——PROMPT 挂原话是其最强形态）/ ADR-061（变体并行律——两站拆分后不变）/ ADR-062（边对账律——ctx 撤边经 disconnect）/ ADR-067（端口法则——ctx 折叠修订）/ ADR-069（选区引用——文档卡修改面延伸）/ ADR-070（确认拍 dock——书节点下线的实证前提）
+
+------
+
+## ADR-073: run 期消息流时序律 + 清单两态默认折叠 + 起始 banner 退役
+
+**Status**: Decided (2026-09-13)
+
+**Context**: 产品试用截图取证三伤——① 方向选择题（期 4 interrupt）回答后，活态流里 QA 块排在「我开始生成了——」**上面**：起始行住在 taskList 单元内随它 +∞ 钉底，QA 按真实时间排序反而压过 run 的开场白（用户判词：QA 应该在起始行和「正在规划内容结构…」**之间**）；② 终态后 QA 块排在收据（✓ 题名 · 总耗时）**下面**：收据锚在 run 出生刻（ADR-058 排序锚），mid-run 生活全部掉到收据之下；③ 点击 Start 后消息流多一条「✓ 生成计划 · 题名」机器块（活态 header unit / pre-run QA stand-in）——用户判词「这个不应该在这种时候出现」。同批判词④：打勾流活态默认展开会把「正在做什么」埋进步骤树——单行动态行才是全部 at-a-glance。
+
+**Decision**:
+
+1. **起始行独立锚**：「我开始生成了——」从 taskList 单元拆出为独立单元，锚在 run 出生刻（pre-snapshot 窗口随 +∞ 钉底、序在 taskList 前）；活态 mid-run QA / 插话按真实时间落在起始行与钉底动态行之间。
+2. **收据锚在 run 结束刻**：终态 taskList（收据）锚 = lastStepT+1，terminal 单元（收官句）随其后——mid-run 生活（QA / 对话）恒在收据之上，ADR-058「收据永不高于生产回声」由构造成立（回声必 mid-run）。`workflow_run_id` 章不再是排序锚，只剩 detached run 内联归档（RunCard）的归属关联。
+3. **起始 banner 整体退役**：「✓ 生成计划 · 题名」块连 pre-run QA stand-in 的抑制逻辑（`hasPreRunQaArchive`）全删——点击 Start 的记录 = echo 散文 + 用户原话 + 起始行 + run 收据行，机器块零增量。`generationOverlay.title` i18n 键同葬。
+4. **清单两态默认折叠**：RunTaskList `open = userOpen ?? false`——live 也不再默认展开（翻案 2026-09-08「活态默认展开 CC in-flight 姿态」），单行动态行（● shimmer 叙事 + 阶段读秒）就是全部 at-a-glance，导轨树点击展开；terminal flip 仍重置未手切的 toggle，落档恒收一行收据。
+
+**Consequences**: QA 归档律不变（选项问回答坍缩成已答问题双层消息入流、task_book start 永不入 QA 块）——变的只是排序锚；方向问答的记录双座照旧（流内 QA 块 + interrupt 步骤行「方向：…」量化重写）。tsc 绿；产品验证归用户。
+
+**Related**: ADR-058（排序锚条款被本条 ② 取代；二源律不动）、ADR-053（问答机器——归档律不变）、ADR-051（dock 唯一壳）
+
+## ADR-074: 部分失败 = FAILED + 同语言编译期裁决双座 + 画布终态自愈
+
+**Status**: Decided (2026-09-13)
+
+**Context**: 同一张字幕配方卡走查三连伤（用户截图取证）：① 「中英双语」遇 en 源——router 在 ASR 落地前判意图（`file_language=None`：素材 19:26:55 创建、消息同秒发出、ASR 判出 en 是 6 秒后），按 prompt 语言猜源拟出 translate→en 死链，用户确认后 run 在步骤上才死；② 该 fork 红 ✗ 失败，run 却仍 COMPLETED——绿收据 +「做好了」收官句（`maybe_finalize_run` 的判定谓词是 2026-07-14 前 fork 时代写法：只数 generation 节点，fork 失败搭幸存兄弟便车）；③ 生成途中画布节点/边整体消失、刷新才回（探针在 scratch 项目复现同形冻结：run 尾部 refetch 重建全部节点时卡高正在变，xyflow store 重同步留下一层渲染输入未就位，refetch 循环全停后再无东西触发它）。同批判板：字幕卡声明链追齐 ADR-048 分家（西语配音腿移除，配音归 voice-dub 卡 / chat 点名）。
+
+**Decision**:
+
+1. **同语言编译期裁决双座**（一真值两座）：`_check_transform_targets`（morph.py）= 运行时同语护栏的编译期镜像——目标语言 = 实际面对的源语言即拒，修法指名且方向感知（zh 源双语目标 en / en 源目标 zh；语言未知静默，运行时护栏仍是兜底）。落 **chat 草案校验**（随既有修复环弹回 router 重拟，修复轮同查，再拒则 degrade 答话，永不 dock 死链）+ **出生地 422**（typed Start / 手改书面板，钱动之前拒）。判定所面对的源语言按运行时同一规则镜像：target_output_id 的 clip / 带 select_clips 链 → 源素材语言 / existing profile → 既有 clips / materialize profile → 录音素材。
+2. **部分失败判定收紧**：`maybe_finalize_run` 新谓词——**任何非 runtime-fanout 步骤 failed ⇒ run FAILED**（render fanout 排除照旧：一产物一步，渲染失败是画布卡上的产物级事实，永不是 run 判决）；旧 generation-only 谓词退役（被新谓词完全包含）。失败但有产物落地 = **部分失败**（落地 = done 且带 `output_refs` 的步骤——preprocess / understand / plan 等预备步不算， Prelude 跑完而工作全灭的 run 画布上什么都没有）：project → REVIEW（结果世界开在落地的产物上）；全灭才回 DRAFT。前端：收据红 ✗（ADR-073 失败收据态不变）；**收官句随成功 run 或有落地的部分失败 run 落**（前端门与判决同一真值：done + output_refs），部分失败说部分真相（`chat.runPartial` / `runPartialMore` 文案不变——命名首败步 + 人话 error，二源律照旧）；`onComplete` 完成 refetch 同门（有落地才交接，全灭不拉）。全灭 run 不推 terminal 单元（收据即失败面）。
+3. **画布终态自愈 remount**：run 落终态 ~0.6s 后页面 bump epoch，ResultsCanvas 按 key 重挂载 FlowView——xyflow store 从零按沉淀后的 props 重同步，失同步族（节点层 + 边层）在「告诉我做好了」时刻必愈。代价 = 终态 viewport 重新 fit 一次（用户彼时在读收据不在拖画布，拍板接受）；mid-run 窗口仍由 SSE step diff 的持续 refetch 覆盖。
+
+**Consequences**: 探查连出并同批修掉两个真 bug——`/graph` 在 ≥2 个转写文档时必 500（A3-lite 边合成把已合成的 dict 行当 ORM 行做属性访问；改循环外单次 ORM 快照，此前是刷新都救不回的永久空画布）与 `/results` 一次瞬断后 error 闩锁不清（占位卡死只能刷新；成功即清）。不新增 `WorkflowStatus.PARTIAL` 第三态（SSE terminal 集 / RunCard / project 映射的爆炸半径被拍板拒绝；项目列表徽章对部分失败读 failed = 诚实面）。验证归用户（compileall / tsc / 纯函数 pytest）；本批不碰 prompt 面（同语裁决与配方卡改的都是代码座与 UI 文案，`app/prompts/chat/` 未动），prompt gate 无新增义务。
+
+**Related**: ADR-073（失败收据态——本条 ② 收窄其「terminal 单元只随成功 run 落」）、ADR-048（字幕/配音分家——声明链本条追齐）、ADR-057（零投影直读——自愈 remount 的座位）、ADR-040（配方 = 提示词）

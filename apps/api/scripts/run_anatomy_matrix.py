@@ -5,7 +5,8 @@ four-layer evidence （数据 / 决策者 / 契约 / 渲染) per run.
 
 The matrix (one run per live card, honest default skin — no bake brand pin):
 - subs          multilingual-subs card: xy_2_15s → translate zh bilingual +
-                translate fr + dub es (all fork) — the caption family
+                translate fr (both fork) — the caption family (dub coverage
+                belongs to the voice-dub card's chain, 2026-09-13 split)
 - image-video   图文视频 card: demo-article.md + 3 teaser photos →
                 select_clips + add_music — the stills family
 - highlight     演讲短片 card: xy_2.mp4 FULL (780 s keynote) → select_clips +
@@ -63,9 +64,8 @@ CARDS = {
         "tasks": [
             {"tool": "translate_clip", "params": {"target_language": "zh", "bilingual": True, "fork": True}},
             {"tool": "translate_clip", "params": {"target_language": "fr", "fork": True}},
-            {"tool": "dub_clip", "params": {"target_language": "es", "fork": True}},
         ],
-        "instruction": "Add bilingual Chinese-English captions and French captions to my video, and dub one version in Spanish with my voice.",
+        "instruction": "Add bilingual Chinese-English captions and French captions to my video.",
     },
     "image-video": {
         "title": "anatomy: image-video",

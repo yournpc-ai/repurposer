@@ -1907,13 +1907,33 @@ async def _book_turn(
 
     # Chain adjudication (ADR-043): the registry validates the proposed task
     # list — one bounded repair round on rejection (the funnel's reserved
-    # kwarg), then degrade to an answer, never a docked broken book.
+    # kwarg), then degrade to an answer, never a docked broken book. The
+    # same-language adjudication rides the same door (2026-09-13): a
+    # translate/dub target that IS the faced source language is doomed by
+    # construction — the repair round sees the fix named ("中英双语 on an en
+    # source → target zh") and re-emits a runnable chain before the user
+    # ever confirms, instead of the chain dying mid-run at the step.
     if intent.action == "draft":
+        # Deferred imports (import cycle / request ctx) — hoisted ABOVE the
+        # try so the handler's repair round sees them bound: a validate_task_list
+        # rejection fires before the import line inside the try would run, and
+        # the repair round's own adjudication re-references both names
+        # (2026-09-13 实拍: UnboundLocalError → bare "Internal server error"
+        # frame, the answered question rolled back to pending).
+        from app.pipeline.morph import _check_transform_targets
+        from app.ui_locale import current_ui_language
+
         try:
             validate_task_list(intent.tasks)
             if not intent.tasks:
                 raise ToolRejected("empty task list")
-        except ToolRejected as first_error:
+            await _check_transform_targets(
+                db,
+                project,
+                intent.tasks,
+                zh=(current_ui_language() or "").startswith("zh"),
+            )
+        except (ToolRejected, ValueError) as first_error:
             repaired_intent: InferredIntent | None = None
             try:
                 retry = await intent_router.call(
@@ -1925,8 +1945,16 @@ async def _book_turn(
                 )
                 validate_task_list(retry.tasks)
                 if retry.tasks:
+                    # The repaired chain faces the same adjudication — a
+                    # repair that ignores the same-language fix never docks.
+                    await _check_transform_targets(
+                        db,
+                        project,
+                        retry.tasks,
+                        zh=(current_ui_language() or "").startswith("zh"),
+                    )
                     repaired_intent = retry
-            except (ToolRejected, MiniMaxError):
+            except (ToolRejected, MiniMaxError, ValueError):
                 pass
             if repaired_intent is not None:
                 intent = repaired_intent

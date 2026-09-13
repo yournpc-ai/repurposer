@@ -513,7 +513,7 @@ const zh: Resources = {
       promptTitle: "示例提示词",
       promptPlaceholder: "说说你想做什么…",
       send: "生成",
-      estimate: "典型消耗：约 {{low}}–{{high}} 积分",
+      estimate: "预计花费：约 {{low}}–{{high}} 积分",
     },
     "multilingual-subs": {
       title: "多语言字幕",
@@ -522,7 +522,7 @@ const zh: Resources = {
       inputTitle: "原始视频",
       inputHint: "在这里上传你的原视频。",
       promptTemplate:
-        "给我的视频配上中文和法语字幕——中文要中英双语对照——再用我自己的声音配一版西班牙语。",
+        "给我的视频配上中文和法语字幕——中文要中英双语对照。",
       promptHint: "直接发送，或者试试「中英双语」「法语版」「加德语」等。",
     },
     "voice-dub": {
@@ -1133,6 +1133,8 @@ const zh: Resources = {
     runFailed: "运行失败",
     /** 收官内容回复——FLORA 标准答案：说清什么做好了、在哪儿。无 recap、无下一步。 */
     runReady: "{{summary}} 做好了，结果在画布上。",
+    runPartial: "{{summary}} 部分完成——{{step}}没做成：{{error}}。已完成的在画布上。",
+    runPartialMore: "{{summary}} 部分完成——{{step}}等 {{count}} 步没做成：{{error}}。已完成的在画布上。",
     send: "发送",
     stop: "停止",
     undoLastEdit: "撤销上一步修改",
@@ -1221,7 +1223,6 @@ const zh: Resources = {
     noRecentChats: "暂无对话",
   },
   generationOverlay: {
-    title: "生成计划",
     planProse:
       "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
     planProseSingle:
@@ -1276,6 +1277,10 @@ const zh: Resources = {
     // 即虚假承诺（虚构 SKU 禁令同样适用于 placeholder 文案）；FAUNA 原串
     // 的 '/' 半句只有在 slash 真落地那天才配进文案。
     chatPlaceholder: "输入 @ 引用节点，描述你的修改想法",
+    // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
+    // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
+    // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
+    chatPlaceholderAssets: "输入 @ 引用素材，说说你想做什么",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

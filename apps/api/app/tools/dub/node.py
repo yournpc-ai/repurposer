@@ -63,7 +63,12 @@ class DubClip(NodeBase):
         compile time. A dub fan-out chained on this run's own clips node
         (select_clips or materialize_source — initial generation) is
         unquotable here: NULL (未估价)."""
-        if {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ())):
+        if (
+            {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ()))
+            # Same recipe-sticker exemption as translate (captions/node.py):
+            # the card quotes the declared typical source, not a live book.
+            and ctx.get("quote_scope") != "recipe"
+        ):
             return None
         clips = ctx["clips"]
         if not clips:

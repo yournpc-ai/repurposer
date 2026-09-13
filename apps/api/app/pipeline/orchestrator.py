@@ -39,6 +39,7 @@ from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
 from app.pipeline.morph import (
     INPLACE_MORPH_KINDS,
+    _check_transform_targets,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
 )
@@ -48,7 +49,6 @@ from app.pipeline.graph import (
     NODE_KINDS,
     Requirement,
     fold_estimates,
-    generation_node_kinds,
     node_for,
     node_for_output,
     runtime_fanout_kinds,
@@ -73,7 +73,6 @@ from app.tools import TOOL_REGISTRY, ToolEntry, strip_null_params, validate_task
 
 logger = structlog.get_logger()
 
-GENERATION_NODE_KINDS = generation_node_kinds()
 # Kinds whose terminal state is owned outside the worker topo walk (D2) —
 # node-declared (`runtime_fanout`), consumed here so a new fan-out kind needs
 # zero kernel edits. The SQL fragment is built from code constants only.
@@ -730,6 +729,13 @@ def compile_recipe_quote(entry: RecipeEntry) -> dict:
                 **RECIPE_QUOTE_FACTS,
                 "spec": ns.spec,
                 "input_kinds": [node_specs[i].kind for i in ns.inputs],
+                # The sticker quotes the DECLARED typical source
+                # (RECIPE_QUOTE_FACTS): its clips exist by declaration, so a
+                # clip-driven modifier (translate / dub / reframe) chained on
+                # this run's own clips node stays quotable here — the live
+                # book keeps its NULL (估价随运行) because there the clips
+                # are truly unborn at compile time.
+                "quote_scope": "recipe",
             }
         )
         for ns in node_specs
@@ -759,6 +765,14 @@ async def _check_birthplace_requires(
             raise ValueError(
                 f"Missing required input: {key} (needed by: {', '.join(owners)})"
             )
+    # Same-language adjudication (2026-09-13): a translate/dub target that
+    # IS the faced source language is doomed by construction — reject at the
+    # birthplace with the fix named (the confirm card's 422), never mid-run
+    # after money moved. The chat path's draft adjudication runs the same
+    # check with the router's repair round.
+    await _check_transform_targets(
+        db, project, task.tasks or [], zh=(task.ui_language or "").startswith("zh")
+    )
 
 
 # Birthplace rejection copy for the clips-media gate — fired by the ∀-check
@@ -1478,24 +1492,44 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             await db.commit()
             return
 
-        gen_nodes = [n for n in nodes if n.kind in GENERATION_NODE_KINDS]
-        any_failed = any(n.status == "failed" for n in nodes)
-        gen_failed_like = [n for n in gen_nodes if n.status in ("failed", "skipped")]
+        # The verdict (2026-09-13 用户拍板 — the pre-fork rule retires): ANY
+        # failed non-fanout step fails the run. The retired generation-only
+        # predicate (2026-07-14, before forks existed) let a dead translate /
+        # dub fork ride its surviving siblings to a green receipt + a 收官句 —
+        # a red ✗ step under a ✓ run (the「有报错却显示完成」走查). Render
+        # fanout stays excluded (one step per output; a failed render is a
+        # per-output fact the canvas card carries, never a run verdict — the
+        # same exclusion the active tally above keeps).
+        failed_verdict = [
+            n
+            for n in nodes
+            if n.status == "failed" and n.kind not in RUNTIME_FANOUT_KINDS
+        ]
+        # "Partial" = products landed — a done step WITH output_refs. Prep
+        # steps (preprocess / understand / plan) done don't count: a run whose
+        # work all died but whose prelude ran has nothing on the canvas.
+        any_landed = any(
+            n.status == "done" and bool(n.output_refs) for n in nodes
+        )
         project = await db.get(Project, run.project_id)
 
-        if any_failed and (not gen_nodes or len(gen_failed_like) == len(gen_nodes)):
-            first_error = next((n.error for n in nodes if n.status == "failed"), None)
+        if failed_verdict:
             run.status = WorkflowStatus.FAILED
-            run.error = first_error or "All outputs failed"
+            run.error = failed_verdict[0].error or "All outputs failed"
             # Failed runs must NOT leave the project stuck in PROCESSING
             # (the frontend hides destructive ops while it's "live" — a run
             # that won't recover keeps the user from deleting or retrying,
             # and there's no auto-recovery path: the worker either restarts
-            # and resumes the PENDING node, or it doesn't). Drop back to
-            # DRAFT so the user can either retry (a new message) or clean
-            # up (delete) — the failed run stays in the run row for history.
+            # and resumes the PENDING node, or it doesn't). A PARTIAL failure
+            # (products landed — their cards are on the canvas) drops to
+            # REVIEW so the results world opens on what landed; a total
+            # failure drops back to DRAFT so the user can either retry (a new
+            # message) or clean up (delete) — the failed run stays in the run
+            # row for history.
             if project is not None and project.status == ProjectStatus.PROCESSING:
-                project.status = ProjectStatus.DRAFT
+                project.status = (
+                    ProjectStatus.REVIEW if any_landed else ProjectStatus.DRAFT
+                )
                 project.updated_at = datetime.now(UTC)
         else:
             run.status = WorkflowStatus.COMPLETED

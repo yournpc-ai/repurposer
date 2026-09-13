@@ -21,7 +21,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef
 import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
-  Check,
   ChevronDown,
   ChevronUp,
   Crosshair,
@@ -469,8 +468,11 @@ interface OverlayMessage {
   /** Live SSE preview bubble: deltas append until the turn.completed
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
-  /** Answered-question item (a settled question collapsing into the flow). */
-  qa?: { question: string; answer: string; muted: boolean; detail?: string }
+  /** Answered-question item (a settled question collapsing into the flow).
+   * `questionId` = the settled row's id — the 提问机器不变量's join key:
+   * a question whose QA archive is in the flow is DECIDED and must never
+   * also render as the pending dock. */
+  qa?: { question: string; answer: string; muted: boolean; detail?: string; questionId?: string }
   /** The canvas product this turn was pointed at (ADR-041 D8, WRITE-RETIRED
    * ADR-058 — pointing is an @mention chip now): old server rows still carry
    * messages.focus_output, and the rebuilt history keeps rendering their gray
@@ -839,13 +841,11 @@ function BriefSlotRow({
 function MetaRow({
   icon,
   children,
-  destructive = false,
   shimmer = false,
   lines = 2,
 }: {
   icon?: React.ReactNode
   children: string
-  destructive?: boolean
   shimmer?: boolean
   lines?: 1 | 2
 }) {
@@ -859,7 +859,6 @@ function MetaRow({
       <MarkerContent
         className={cn(
           shimmer && "shimmer",
-          destructive && "text-destructive",
           clampable && !expanded && (lines === 1 ? "line-clamp-1" : "line-clamp-2"),
           clampable && "cursor-pointer"
         )}
@@ -1471,11 +1470,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     role: "assistant",
                     content: m.content ?? "",
                     // The start's workflow_run_id rides the replay (parity
-                    // with the plain-row branch): the receipt's birthing-
-                    // message anchor reads it. Today the anchor lands on
-                    // runStartAt regardless (this echo's `at` is the book's
-                    // dock time, always pre-run) — the stamp keeps that true
-                    // by registration instead of by accident.
+                    // with the plain-row branch): the stamp is the
+                    // run↔message association the detached-run archive
+                    // (inline RunCard) reads.
                     runId: m.workflow_run_id,
                     at: m.created_at,
                   })
@@ -1508,6 +1505,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     question: bareQuestion(m),
                     answer: display.text,
                     muted: display.muted,
+                    questionId: m.id,
                   },
                 })
               } else {
@@ -1672,7 +1670,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the history region in place (the lastAgentKey mechanism below).
   useEffect(() => {
     if (!terminal) return
-    if (status === "failed") {
+    // 收紧判定 (2026-09-13, ADR-074②): a PARTIAL failure is FAILED now but
+    // still hands off — its landed products must reach the canvas. Only a
+    // run that landed NOTHING (no done step with output_refs — prep steps
+    // don't count) skips the refetch: nothing new to show, the failed rows
+    // carry the error in-flow.
+    if (
+      status === "failed" &&
+      !steps.some((s) => s.status === "done" && (s.output_refs?.length ?? 0) > 0)
+    ) {
       return
     }
     void onCompleteRef.current(runIdRef.current)
@@ -2095,6 +2101,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     question: bareQuestion(message),
     answer,
     muted,
+    questionId: message.id,
   })
 
   const buildAnsweredQuestionRow = (
@@ -2442,11 +2449,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // message + the run receipt line.
         discardPreviewArtifacts()
         //
-        // The runId stamp doubles as the receipt's anchor (ADR-058 ordering
-        // fix): a chat-dispatch turn births the run BEFORE the echo row
-        // exists server-side, so the echo's created_at postdates the run's —
-        // the terminal receipt must anchor after the birthing echo, never
-        // above it (the "回复掉到收据下面" scramble).
+        // The runId stamp is the run↔message association (ADR-058): the
+        // birthing echo carries it so the detached-run archive (inline
+        // RunCard) and the replay's association stay truthful — the
+        // receipt's anchor no longer reads it (2026-09-13 时序拍板: the
+        // receipt tombstones at the run's END, which postdates every
+        // birthing row by construction).
         if (streamedAny) {
           finalizePreview(undefined, data.run_id, data.assistant_message.created_at)
         } else {
@@ -3073,8 +3081,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The dock's live form outside the confirm phase: a pending OPTIONS
   // question from the chat loop (task_book docks only while confirming; an
   // options-empty text question never docks — 形态律 ADR-053 R1).
+  // 提问机器不变量 (2026-09-13): the flow's QA archive is the record of a
+  // DECIDED question; the dock is the one PENDING decision — the pair never
+  // coexists. Every settle path already lands the QA (option click's
+  // optimistic block, typed autoResume / judged settlement's envelope,
+  // bail, a refresh's replay) — so if the docked row's QA is in the flow,
+  // the dock is settled no matter which side failed to retire it (a stale
+  // re-dock once sat under its own QA archive mid-stream, dimmed options
+  // and all). Heal the state AND gate the render on the same fact.
+  const dockSettled = pendingQuestion
+    ? messages.some((m) => m.qa?.questionId === pendingQuestion.id)
+    : false
+  useEffect(() => {
+    if (dockSettled) setPendingQuestion(null)
+  }, [dockSettled])
+
   const pillQuestion =
     pendingQuestion &&
+    !dockSettled &&
     pendingQuestion.question?.kind === "question" &&
     !pendingQuestion.answer &&
     (pendingQuestion.question?.options?.length ?? 0) > 0
@@ -3117,17 +3141,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real
   // time, and NEWER replies keep flowing BELOW it). Once the run's birth
-  // time is known, header / the task list / messages / terminal all sort by
-  // real time into a single walk: pre-run messages (the task-book reply,
-  // #2b) land above the run header. The run's steps render as ONE task list
-  // (2026-08-15, the CC task anatomy): pinned bottom-most while the run is
-  // live (new chat messages land above it), settled right after the header
-  // as the archive once terminal — step rows flip state in place instead of
-  // accumulating stepGroup bubbles. No run anchor (confirm phase,
+  // time is known everything sorts by real time into a single walk: the
+  // START LINE ("我开始生成了——") anchors at the run's birth, messages
+  // (the mid-run direction QA included) at their real time below it, and
+  // the task list's dynamic row pins bottom-most while the run is live
+  // (2026-09-13 时序拍板 — the start line is the run section's opener, not
+  // part of the pinned chrome, so a mid-run QA lands BETWEEN it and the
+  // dynamic row). Once terminal the start line is gone and the task list
+  // settles as the run's tombstone AT THE RUN'S END (same 拍板 — mid-run
+  // life sorts by real time ABOVE the receipt, never below it), the
+  // completion line right after. No run anchor (confirm phase,
   // pre-snapshot window) → the legacy fixed block + flat list below.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
   type RunStreamUnit =
-    | { kind: "header" }
+    | { kind: "startLine" }
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
     | { kind: "terminal" }
@@ -3141,15 +3168,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     type Timed = { t: number; order: number; unit: RunStreamUnit }
     const timed: Timed[] = []
     let order = 0
-    // The header (the starting banner / pre-run QA stand-in) is live-phase
-    // chrome: once terminal the receipt IS the archive header — pushing it
-    // would leave a dead slot (null or a stale "Starting" banner) between
-    // the messages and the receipt (2026-09-05 spacing fix).
+    // The start line is live-phase chrome: once terminal the receipt is the
+    // run's archive and the line would be a dead slot above it.
     if (!terminal) {
       timed.push({
         t: runStartAt ?? Number.POSITIVE_INFINITY,
         order: order++,
-        unit: { kind: "header" },
+        unit: { kind: "startLine" },
       })
     }
     const undated: OverlayMessage[] = []
@@ -3158,56 +3183,43 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (Number.isNaN(t)) undated.push(m)
       else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
     }
-    // Pinned bottom-most while live (the +∞ sort key); on terminal the list
-    // settles as the run's archive. The anchor is NOT runStartAt+1 (ADR-058
-    // ordering fix): a chat-dispatch turn persists the run BEFORE its echo
-    // row, so the echo's created_at postdates the run's — the receipt must
-    // settle right after the birthing echo (the earliest message stamped
-    // with this run's id), never above it. Book-path starts predate the run
-    // with their echo, so the max() keeps the legacy anchor there.
-    //
-    // PARITY TABLE (2026-09-09 — pinned so the next editor never re-derives
-    // it; every birth path must keep its cell true):
-    //  path                        live (envelope)                refresh (replay)
-    //  A. chat task_list dispatch  echo stamped via               plain row carries
-    //     (echo postdates run)     finalizePreview(runId) ✓      workflow_run_id ✓
-    //  B. G-1 prose-confirm start  paceSettledProse stamps        echo replay stamped
-    //     (echo = the answered     runId; its `at` re-anchors    runId (registered);
-    //      book row, its created_  to the book's dock time      `at` = dock time
-    //      at predates the run)    (pre-run) → anchor runStartAt (pre-run) → same ✓
-    //  C. typed Start / answer-    no echo message exists →
-    //     start                    anchor = runStartAt ✓ (both)
-    //  D. node_revise              dock never attaches (initialRunId gated) ✓
-    // The anchor rule is the UNIFICATION, not a special case: after BOTH the
-    // run's birth and its birthing message — max(), never plain "after the
-    // echo" (on path B that would land the receipt above the user's own
-    // start-confirmation message).
-    let archiveAnchor = runStartAt
-    if (terminal && runStartAt != null) {
-      const stamped = messages
-        .filter((m) => m.runId === runId && m.at)
-        .map((m) => Date.parse(m.at as string))
-        .filter((t) => !Number.isNaN(t))
-      if (stamped.length) archiveAnchor = Math.max(runStartAt, Math.min(...stamped))
-    }
+    // The run's end: the receipt (and the completion line after it) anchors
+    // here so everything that happened DURING the run — the direction QA,
+    // interleaved chat — stays above the receipt (2026-09-13 时序拍板; the
+    // birthing echo is mid-run life too, so the ADR-058 "receipt never
+    // above its birthing echo" law holds by construction). Steps that
+    // never started (cascade-skipped) fall back to the run's birth.
+    const lastStepT = terminal
+      ? Math.max(
+          runStartAt ?? 0,
+          ...steps.map((s) =>
+            Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
+          ),
+        )
+      : null
+    // Pinned bottom-most while live (the +∞ sort key); the tombstone at the
+    // run's end once terminal.
     timed.push({
-      t:
-        terminal && archiveAnchor != null
-          ? archiveAnchor + 1
-          : Number.POSITIVE_INFINITY,
+      t: lastStepT != null ? lastStepT + 1 : Number.POSITIVE_INFINITY,
       order: order++,
       unit: { kind: "taskList" },
     })
-    if (terminal) {
-      // Anchor just after the last step so post-run replies sort BELOW the
-      // terminal markers.
-      const lastStepT = Math.max(
-        runStartAt ?? 0,
-        ...steps.map((s) =>
-          Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
-        ),
-      )
-      timed.push({ t: lastStepT + 1, order: order++, unit: { kind: "terminal" } })
+    // The completion line follows a succeeded run OR a partial failure
+    // (2026-09-13 用户拍板 — 收紧判定, ADR-074②: the verdict now FAILS on
+    // any dead non-render step, and a partially-landed run still gets its
+    // honest closing line — the receipt's red ✗ stamps the run, the line
+    // names what didn't make it). A run where NOTHING landed pushes no
+    // terminal unit — its receipt header already carries the failure (red ✗
+    // stamp + red title, the reason on the failed step row inside the tree),
+    // and a separate "生成失败" item under it was a second surface saying
+    // less. "Landed" mirrors the verdict's own truth: a done step WITH
+    // output_refs — prep steps (preprocess / understand / plan) done don't
+    // count, a run whose work all died has nothing on the canvas.
+    const anyLanded = steps.some(
+      (s) => s.status === "done" && (s.output_refs?.length ?? 0) > 0,
+    )
+    if (terminal && lastStepT != null && (status !== "failed" || anyLanded)) {
+      timed.push({ t: lastStepT + 2, order: order++, unit: { kind: "terminal" } })
     }
     timed.sort((a, b) => a.t - b.t || a.order - b.order)
     const units: RunStreamUnit[] = timed.map((entry) => entry.unit)
@@ -3216,9 +3228,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // they land above the pinned task list while the run is live.
       if (!terminal && units[units.length - 1]?.kind === "taskList") {
         let insertAt = units.length - 1
-        // Pre-snapshot the header pins at +∞ too — undated messages land
+        // Pre-snapshot the start line pins at +∞ too — undated messages land
         // above BOTH chrome rows, never wedged between them.
-        if (runStartAt == null && units[insertAt - 1]?.kind === "header") {
+        if (runStartAt == null && units[insertAt - 1]?.kind === "startLine") {
           insertAt--
         }
         units.splice(insertAt, 0, { kind: "message", message: m })
@@ -3227,17 +3239,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     }
     return units
-  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, runId])
-
-  // Refresh path: the start confirmation rebuilds from history as a pre-run
-  // QA archive ABOVE the header — the header's summary stand-in (attach /
-  // legacy fallback) must not duplicate it.
-  const hasPreRunQaArchive = useMemo(
-    () =>
-      runStartAt != null &&
-      messages.some((m) => m.qa && m.at && Date.parse(m.at) < runStartAt),
-    [messages, runStartAt],
-  )
+  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, status])
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -3772,12 +3774,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 )}
 
                 {/* The flow (#5 chronology): once the run's birth time is
-                    known everything sorts into ONE timeline — run header at
-                    the run's birth, steps at started_at, messages at their
-                    real time, terminal markers last. A mid-run QA lands
-                    right after its interrupt step (before the render
-                    steps) and the assistant's follow-up stays below the QA
-                    — the Claude Code reference. Fallback (confirm phase /
+                    known everything sorts into ONE timeline — the start line
+                    at the run's birth, messages at their real time, the task
+                    list pinned bottom-most while live / tombstoned at the
+                    run's end once terminal, the completion line last. A
+                    mid-run QA lands between the start line and the dynamic
+                    row while live, and above the receipt once terminal —
+                    the Claude Code reference. Fallback (confirm phase /
                     pre-snapshot window): the legacy fixed block + flat
                     list below. */}
                 {runStreamUnits ? (
@@ -3786,33 +3789,48 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       if (unit.kind === "message") {
                         return renderConversationMessage(unit.message)
                       }
-                      if (unit.kind === "header") {
+                      if (unit.kind === "startLine") {
                         return (
-                          <MessageScrollerItem key="run-header">
-                            {hasPreRunQaArchive ? null : (
-                              <Message align="start">
-                                <MessageContent>
-                                  <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-3">
-                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent">
-                                      <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                                    </span>
-                                    <div className="min-w-0 truncate text-sm">
-                                      <span className="font-medium">
-                                        {t("generationOverlay.title")}
-                                      </span>
-                                      <span className="text-muted-foreground">
-                                        {" · "}
-                                        {runTitle}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </MessageContent>
-                              </Message>
-                            )}
+                          <MessageScrollerItem key="run-start-line">
+                            <Message align="start">
+                              <MessageContent>
+                                <p className="text-sm leading-relaxed">
+                                  {t("generationOverlay.startingLine")}
+                                </p>
+                              </MessageContent>
+                            </Message>
                           </MessageScrollerItem>
                         )
                       }
                       if (unit.kind === "terminal") {
+                        // The completion prose speaks the PARTIAL truth when
+                        // the run has casualties (2026-09-13 用户拍板 — 收紧
+                        // 判定): a dead non-render step now FAILS the run (the
+                        // receipt's red ✗ stamps it), and the closing line
+                        // names the failed step + its baked human error —
+                        // never a blanket "做好了" over a dead branch. Copy
+                        // sources stay lawful (二源律): the run title is the
+                        // LLM's name, the step label is the builder-written
+                        // preset, the error is the world's baked fact.
+                        const casualties = steps.filter((s) => s.status === "failed")
+                        const first = casualties[0]
+                        const firstError = (first?.error ?? "").replace(/[。．.!?！？\s]+$/, "")
+                        const completionText =
+                          casualties.length === 0
+                            ? t("chat.runReady", { summary: runTitle })
+                            : casualties.length === 1
+                              ? t("chat.runPartial", {
+                                  summary: runTitle,
+                                  step: first?.summary ?? first?.kind,
+                                  error: firstError,
+                                })
+                              : t("chat.runPartialMore", {
+                                  summary: runTitle,
+                                  step: first?.summary ?? first?.kind,
+                                  count: casualties.length,
+                                  extra: casualties.length - 1,
+                                  error: firstError,
+                                })
                         return (
                           <MessageScrollerItem
                             key="run-terminal"
@@ -3822,58 +3840,41 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                             // two messages (2026-09-05).
                             className="-mt-4"
                           >
-                            {status !== "failed" ? (
-                              // The SAME AssistantText pipeline as every
-                              // other assistant message (用户拍板： 收官句是
-                              // 普通回复消息——a hand-rolled <p> was a
-                              // separate style in disguise).
-                              <AssistantText
-                                text={t("chat.runReady", {
-                                  summary: runTitle,
-                                })}
-                              />
-                            ) : (
-                              <Message align="start">
-                                <MessageContent>
-                                  <MetaRow destructive>
-                                    {t("generationOverlay.failed")}
-                                  </MetaRow>
-                                </MessageContent>
-                              </Message>
-                            )}
+                            {/* Success + partial failure only (a fully-failed
+                                run — nothing landed — pushes no terminal
+                                unit; its receipt IS the failure surface).
+                                The SAME AssistantText pipeline as every other
+                                assistant message (用户拍板： 收官句是普通回复
+                                消息——a hand-rolled <p> was a separate style
+                                in disguise). */}
+                            <AssistantText text={completionText} />
                           </MessageScrollerItem>
                         )
                       }
                       // taskList — ONE persistent block (the CC anatomy):
-                      // header + narrative + the checklist flipping in place.
+                      // the dynamic row + the rail tree flipping in place.
                       if (unit.kind === "taskList") {
                         return (
                           <MessageScrollerItem key="run-task-list">
                             <Message align="start">
                               <MessageContent>
-                                <div className="w-full space-y-4">
-                                  {!terminal && (
-                                    <p className="text-sm leading-relaxed">
-                                      {t("generationOverlay.startingLine")}
-                                    </p>
-                                  )}
-                                  <RunTaskList
-                                    steps={steps}
-                                    title={runTitle}
-                                    runStartedAt={runCreatedAt}
-                                    terminal={terminal}
-                                    hasUploads={hasUploads}
-                                    narrativeFallback={
-                                      assets.some(
-                                        (a) =>
-                                          a.processing_status === "pending" ||
-                                          a.processing_status === "processing",
-                                      )
-                                        ? t("results.stepper.transcribing")
-                                        : t("results.stepper.queued")
-                                    }
-                                  />
-                                </div>
+                                <RunTaskList
+                                  steps={steps}
+                                  title={runTitle}
+                                  runStartedAt={runCreatedAt}
+                                  terminal={terminal}
+                                  failed={status === "failed"}
+                                  hasUploads={hasUploads}
+                                  narrativeFallback={
+                                    assets.some(
+                                      (a) =>
+                                        a.processing_status === "pending" ||
+                                        a.processing_status === "processing",
+                                    )
+                                      ? t("results.stepper.transcribing")
+                                      : t("results.stepper.queued")
+                                  }
+                                />
                               </MessageContent>
                             </Message>
                           </MessageScrollerItem>
@@ -4038,11 +4039,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             target — Enter sends, IME guarded inside the component. */}
         <MentionEditor
           ref={editorRef}
-          // ONE fixed placeholder in every phase (2026-09-11 user ruling):
-          // a phase-aware swap (confirm → "Ask me to adjust the plan…")
+          // ONE fixed placeholder per form (2026-09-11 user ruling): a
+          // phase-aware swap (confirm → "Ask me to adjust the plan…")
           // costs more mental load than it guides — the confirm pill right
-          // above already says what the next step is.
-          placeholder={t("generationOverlay.chatPlaceholder")}
+          // above already says what the next step is. The FORM split
+          // (2026-09-13): pre-canvas (full) there are no nodes to mention,
+          // so the copy names assets; the nodes version returns with the
+          // canvas (panel / dock).
+          placeholder={
+            full
+              ? t("generationOverlay.chatPlaceholderAssets")
+              : t("generationOverlay.chatPlaceholder")
+          }
           mentionContext={mentionContext}
           onChange={handleEditorChange}
           onSubmit={handleSend}

@@ -208,12 +208,15 @@ _DEMO = "https://repurposer.tos-ap-southeast-1.volces.com/demo"
 # cards (social-post / quote-cards / carousel) are NOT registered yet — see
 # the file docstring and ``PENDING_BAKE_BLOCK`` below for the bake gate.
 RECIPE_REGISTRY: dict[str, RecipeEntry] = {
-    # R6: one video -> multilingual caption forks + a voice-over dub (the card
-    # showcases the multilingual/caption capability ONLY — 2026-08-14 ruling:
-    # no clip-planning steps in the flow; the baked examples happen to be
+    # R6: one video -> multilingual caption forks (the card showcases the
+    # multilingual/caption capability ONLY — 2026-08-14 ruling: no
+    # clip-planning steps in the flow; the baked examples happen to be
     # highlight clips, but the card never sells 剪辑). Original voice stays —
-    # the human voice is the authenticity fingerprint. ADR-043 chain shape:
-    # transforms alone — the whole source materializes itself (no
+    # the human voice is the authenticity fingerprint. Captions ONLY
+    # (2026-09-13 ruling, catching up to the 2026-08-23 ADR-048 split in
+    # RECIPES §4.1): the ES voice-dub leg left the declared chain — dubbing
+    # belongs to the voice-dub card, or to a one-line chat ask. ADR-043 chain
+    # shape: transforms alone — the whole source materializes itself (no
     # select_clips, no highlight extraction); each language forks its own
     # derived row.
     "multilingual-subs": RecipeEntry(
@@ -228,10 +231,6 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 tool="translate_clip",
                 params={"target_language": "fr", "fork": True},
             ),
-            TaskItem(
-                tool="dub_clip",
-                params={"target_language": "es", "fork": True},
-            ),
         ],
         # The demo source is square (xy_2_15s, 960×960) — the card bakes 1:1
         # (2026-08-14 三档画幅: the card shows the frame the source keeps).
@@ -240,7 +239,6 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         flow=[
             FlowStep(key="materialize_source"),
             FlowStep(key="translate_clip", fanout=2),
-            FlowStep(key="dub_clip"),
             FlowStep(key="render"),
         ],
         example_assets=[
@@ -252,11 +250,13 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
         ],
         # Contrast pack (R6, 2026-08-14 four-case revision): the same 5s
         # segment as EN original + CN-EN bilingual (translation_track) + FR
-        # single-line + ES voice-cloned dub — harvested from a real pipeline
-        # run of this card's declared chain (translate zh bilingual + translate
-        # fr + dub es, all fork, at 1:1; FR produced script-side single-line)
-        # with dimension-derived caption sizing and per-language translated
-        # title overlays; per-case posters, content-hashed into the demo/ tree.
+        # single-line — harvested from a real pipeline run of this card's
+        # declared chain (translate zh bilingual + translate fr, both fork,
+        # at 1:1; FR produced script-side single-line) with dimension-derived
+        # caption sizing and per-language translated title overlays;
+        # per-case posters, content-hashed into the demo/ tree. The pack's
+        # fourth case (ES voice-cloned dub) lives on the voice-dub card —
+        # this card sells captions only (2026-09-13).
         example_outputs=[
             ExampleOutput(
                 kind="video",
@@ -275,12 +275,6 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
                 url=f"{_DEMO}/outputs/subs-contrast-fr-d6f7dce5.mp4",
                 poster_url=f"{_DEMO}/outputs/subs-contrast-fr-poster-6affb546.jpg",
                 label_key="subs_fr",
-            ),
-            ExampleOutput(
-                kind="video",
-                url=f"{_DEMO}/outputs/subs-contrast-es-dub-c4d1e436.mp4",
-                poster_url=f"{_DEMO}/outputs/subs-contrast-es-dub-poster-cf01bd16.jpg",
-                label_key="dub_es",
             ),
         ],
     ),

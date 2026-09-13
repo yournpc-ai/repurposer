@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Newspaper,
   Quote,
+  Send,
   Trash2,
   TriangleAlert,
   Type,
@@ -174,8 +175,8 @@ function MediaHoverButton({
  * one frosted bar (dock-surface + hairline, never bare icons) parked UNDER
  * the card — runtime facts on the left (filename / duration / resolution /
  * language / model — OutputInspector 同源), a hairline divider, then the
- * actions; node business (publish / open / focus / reprocess) lives in the
- * ⋯ menu at the right end. The bar hugs its content — width is NOT capped
+ * actions (copy-or-download + publish; the ⋯ menu is retired, 2026-09-10).
+ * The bar hugs its content — width is NOT capped
  * by the node and facts NEVER ellipsize (2026-08-17 二轮走查拍板): it
  * centers under the card and overhangs symmetrically when the facts are
  * long. */
@@ -1415,7 +1416,10 @@ function GraphCard({
     // The primary action speaks the product's verb (2026-09-09 走查拍板):
     // a text product is PASTED somewhere (LinkedIn, a newsletter) — its
     // first action is Copy; media files are downloaded. (A .md download of
-    // a post was the old default — retired, nobody opens one.)
+    // a post was the old default — retired, nobody opens one.) The second
+    // seat is Publish (2026-09-13 用户拍板 — it replaces Delete on the bar:
+    // the dossier's two doors moved onto the card when the video-click
+    // popup retired; product deletion lost its canvas home with this swap).
     if (isText) {
       actions.push({ action: "copy", Icon: Copy, label: t("chat.copy") })
     } else if (canDownload) {
@@ -1425,13 +1429,13 @@ function GraphCard({
         label: t("results.canvas.download"),
       })
     }
-    actions.push({ action: "delete", Icon: Trash2, label: t("common.delete") })
+    actions.push({ action: "publish", Icon: Send, label: t("results.canvas.publish") })
   }
   const menuItems: { action: string; label: string }[] = output
     ? [
         // ⋯ 菜单全量退役（2026-09-10 用户拍板——所有 toolbar 的 ⋯ 都去掉；
-        // publish 待发布层实装时再回这里）。空菜单 = 既有 length 守卫
-        // 自动不渲染 ⋯。
+        // 发布没有回这里——2026-09-13 直接坐上栏）。空菜单 = 既有
+        // length 守卫自动不渲染 ⋯。
       ]
     : []
   const handleBarAction = (action: string) => {

@@ -67,7 +67,7 @@ class Config(Base):                       # configs — 公共运营参数表（
                      （用户级 shortfall）            ✅ 失败不扣费（§6）
 ```
 
-1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=500`），`kind=grant, ref={source:"signup"}`。
+1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=10000`），`kind=grant, ref={source:"signup"}`。
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
 3. **实扣（capture）**：在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
 4. **释放（release）**：run 终态释放剩余（idem `run:{id}:release`）。
@@ -83,7 +83,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 ```python
 # configs 表注册项（app/platform/configs.py CONFIG_REGISTRY）
-"credits.per_cost_usd" = 300   # 每 $1 provider 成本 = 300 积分（默认）
+"credits.per_cost_usd" = 1000   # 每 $1 provider 成本 = 1000 积分（默认）
 # 估价侧: estimate(量) × PRICING × 比例 → credits [low, high]
 # 实扣侧: cost(量)     × PRICING × 比例 → credits 精确值
 ```
@@ -92,6 +92,8 @@ class Config(Base):                       # configs — 公共运营参数表（
 - **消耗比例 ≠ 购买比例**（钱→积分汇率是 W11 套餐定价的另一个决策，可独立做阶梯加赠）。
 - 调参不动历史账：transaction 的积分额落库即事实，USD 成本在 `workflow_steps.cost` 原样保留，两侧各自为真；只有估价贴数字随参数实时变（期望行为）。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
+- **voice_clones 报价幂等（2026-09-13）**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链不再虚高三倍克隆费。
+- **配方卡估价贴的可报价域（2026-09-13）**：translate / dub / reframe 挂在 materialize_source 上的链，live 任务书诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）——此前 multilingual-subs / voice-dub 两卡因此无贴纸。
 
 **公共 config 表（configs）**——运营参数的统一家（admin 预备），三条防腐纪律：
 

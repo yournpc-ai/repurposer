@@ -112,6 +112,16 @@ export function MentionEditor({
   const syncNow = useCallback(() => {
     const el = editorRef.current
     if (!el) return
+    // A deleted-to-empty editable keeps a ghost residue (a lone <br> or an
+    // empty text node — the browser's editing-line scaffolding): invisible,
+    // but it defeats the CSS :empty placeholder for the rest of the
+    // session (2026-09-13: @ → cancel → delete left the dock input
+    // placeholderless even with an empty value). Reset to a truly empty
+    // DOM at the funnel so the placeholder comes back; the guard mirrors
+    // normalizeEmpty but never eats intentional whitespace (no trim).
+    if (!el.textContent && !el.querySelector(`[${MENTION_ATTR}]`)) {
+      el.innerHTML = ""
+    }
     const text = Array.from(el.childNodes)
       .map(serializeNode)
       .join("")

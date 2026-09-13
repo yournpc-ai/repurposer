@@ -207,10 +207,10 @@ export function OutputInspector({
         </div>
       )}
 
-      {/* Action doors — the same single channel as the card's bar/⋯ menu
-          (no second action home; destructive ops stay in the ⋯ menu). The
-          primary speaks the product's verb: copy for text, download for
-          media (2026-09-09 走查拍板). */}
+      {/* Action doors — the same single channel as the card's bar (no
+          second action home). The primary speaks the product's verb: copy
+          for text, download for media (2026-09-09 走查拍板); publish is
+          the second seat both here and on the bar (2026-09-13 用户拍板). */}
       <div className="mt-4 flex gap-2">
         {output.type === "post" || output.type === "article" ? (
           <Button

@@ -8,7 +8,6 @@ import { ArticleCard } from "@/components/results/ArticleCard"
 import { CarouselCard } from "@/components/results/CarouselCard"
 import { ClipCard } from "@/components/results/ClipCard"
 import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
-import { ClipDetailModal } from "@/components/results/ClipDetailModal"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { outputFullText } from "@/components/results/outputText"
@@ -234,11 +233,10 @@ function ProjectDetailPage() {
   const [graph, setGraph] = useState<ProjectGraph | null>(null)
 
   // ── Product actions (ADR-041 D5/D8) ──────────────────────────────────
-  // The canvas's product nodes ARE the cards: click sets the dock focus
-  // (焦点注入) and opens the clip's detail modal; the action bar reports
-  // download / publish. Both modals are the old card-face logic,
-  // mounted as-is.
-  const [detailOutput, setDetailOutput] = useState<Output | null>(null)
+  // The canvas's product nodes ARE the cards: click is selection only
+  // (2026-09-13 用户拍板——视频点击后不再弹窗, the detail modal retired);
+  // the factsbar reports download / publish (the PublishDialog is the old
+  // card-face logic, mounted as-is).
   const [publishOutput, setPublishOutput] = useState<Output | null>(null)
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
 
@@ -259,6 +257,10 @@ function ProjectDetailPage() {
       if (!res.ok) throw new Error("Project not found")
       setResults(await res.json())
       if (graphRes.ok) setGraph((await graphRes.json()) as ProjectGraph)
+      // One successful pass clears any earlier transient failure — without
+      // this the error latch held the placeholder up past recovery and only
+      // a manual reload brought the canvas back (2026-09-13 走查).
+      setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load project")
     } finally {
@@ -335,13 +337,34 @@ function ProjectDetailPage() {
     if (latestRun?.status === "completed") setStickyCompletedRun(latestRun)
   }, [latestRun])
 
+  // Canvas self-heal (2026-09-13 用户拍板 — xyflow store desync, the
+  //「node 消失、刷新才回」走查): the run-tail refetch rebuilds every node
+  // while card heights are still settling (products landing), and xyflow's
+  // internal store can stay desynced once every refetch loop has stopped —
+  // a frozen empty layer only a manual reload healed. ~0.6s after the run
+  // lands terminal, bump the epoch: ResultsCanvas remounts the xyflow world
+  // (a fresh store re-syncs from settled props — the whole desync family,
+  // node AND edge layer). Cost: one viewport re-fit at the exact moment the
+  // user is reading the receipt. Rising edge only — the mount observation
+  // (a refreshed already-terminal project) never fires.
+  const [canvasEpoch, setCanvasEpoch] = useState(0)
+  const lastRunStatusRef = useRef<string | null>(null)
+  useEffect(() => {
+    const status = latestRun?.status ?? null
+    const prev = lastRunStatusRef.current
+    lastRunStatusRef.current = status
+    if (prev == null || prev === status) return
+    if (status !== "completed" && status !== "failed") return
+    const timer = setTimeout(() => setCanvasEpoch((e) => e + 1), 600)
+    return () => clearTimeout(timer)
+  }, [latestRun?.status])
+
   // Cross-project navigation (same route, new params — no remount): every
   // project-scoped latch resets, or the previous project's canvas/dock
   // would bleed into the new page while its results load.
   useEffect(() => {
     setStickyCompletedRun(null)
     setGraph(null)
-    setDetailOutput(null)
     setPublishOutput(null)
     setSelectedOutputId(null)
   }, [projectId])
@@ -352,7 +375,6 @@ function ProjectDetailPage() {
   const outputsList = useMemo(() => results?.outputs ?? [], [results])
   useEffect(() => {
     const byId = new Map(outputsList.map((o) => [o.id, o]))
-    setDetailOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
     setPublishOutput((prev) => (prev ? (byId.get(prev.id) ?? null) : null))
     setSelectedOutputId((prev) => (prev && !byId.has(prev) ? null : prev))
   }, [outputsList])
@@ -361,14 +383,11 @@ function ProjectDetailPage() {
   // rfNodes/rfEdges memo keys on them — plain closures rebuilt the whole
   // graph on every unrelated re-render (SSE ticks, selection changes).
   const handleOutputClick = useCallback((output: Output) => {
-    // Click = canvas SELECTION (the selected ring + the dossier swap-in —
-    // ADR-058: pointing at a product in chat is an @mention, no hidden
-    // focus state) + the clip's player modal. Text products (post /
-    // article) open NOTHING — the card itself is the reader (in-place
-    // scroll + inline edit since 2026-09-08); the dossier carries the
-    // details.
+    // Click = canvas SELECTION + the dossier swap-in (the inspector owns
+    // that half; 2026-09-13 二轮拍板: the right-side dossier STAYS — only
+    // the centered player modal retired from the click beat). ADR-058:
+    // pointing at a product in chat is an @mention, no hidden focus state.
     setSelectedOutputId(output.id)
-    if (output.type === "clip" && output.files.video) setDetailOutput(output)
   }, [])
 
   const handleOutputAction = useCallback(async (output: Output, action: FlowOutputAction) => {
@@ -406,7 +425,6 @@ function ProjectDetailPage() {
     else if (action === "delete") {
       const res = await apiDelete(`/api/v1/outputs/${output.id}`)
       if (!res.ok) return
-      setDetailOutput((prev) => (prev?.id === output.id ? null : prev))
       setSelectedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
@@ -1043,6 +1061,10 @@ function ProjectDetailPage() {
             className="h-full"
             controlsClassName={panelCoversCorner ? "md:!mr-[504px]" : undefined}
             graph={graph}
+            // Terminal self-heal (2026-09-13 用户拍板): bumps ~0.6s after a
+            // run lands terminal — remounts the xyflow world so a desynced
+            // store (the frozen empty canvas) never survives the run.
+            healEpoch={canvasEpoch}
             // The settle key's visibility half (2026-09-06): the canvas is
             // gated on graphLive, so initial framing joins it with the
             // baseline — partial fetch frames never frame.
@@ -1186,17 +1208,6 @@ function ProjectDetailPage() {
       {worldLive && (
         <CreditsPill
           refreshKey={latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"}
-        />
-      )}
-
-      {detailOutput && (
-        <ClipDetailModal
-          output={detailOutput}
-          open
-          onOpenChange={(open) => {
-            if (!open) setDetailOutput(null)
-          }}
-          onRegenerate={fetchResults}
         />
       )}
 

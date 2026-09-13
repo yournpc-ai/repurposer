@@ -10,9 +10,10 @@
  * the retired header's text-sm/font-medium/ListChecks register — that
  * second row was the one ordered deleted, not archived). The steps render
  * FLAT under the one row (the "Preparation · n steps" group row died the
- * same way). Live defaults open (the user watches the work check off, CC's
- * in-flight pose); the terminal frame settles folded, one click re-opens
- * the flat receipt — and the completion prose follows over SSE. Row text
+ * same way). BOTH poses default folded (2026-09-13 user ruling — the one
+ * dynamic row is the whole at-a-glance surface; the rail tree opens on
+ * click), the terminal frame always lands on the one-line receipt — and
+ * the completion prose follows over SSE. Row text
  * is BUILDER-WRITTEN: spec.summary arrives preset from the server (the
  * static task name / slot tag) and is rewritten with the quantified line
  * when the step completes — the frontend renders spec fields, never
@@ -91,6 +92,7 @@ export function RunTaskList({
   title,
   runStartedAt,
   terminal,
+  failed,
   narrativeFallback,
   hasUploads,
 }: {
@@ -99,6 +101,11 @@ export function RunTaskList({
   title: string
   runStartedAt: string | null
   terminal: boolean
+  /** The run's terminal failure pose (2026-09-13 user ruling): the receipt
+   * header itself carries the failure — red ✗ chip + red title — and the
+   * reason lives on the failed step row inside the rail tree. NO separate
+   * "generation failed" message item ever follows the receipt. */
+  failed: boolean
   /** What the narrative line says when no step is running yet (assets still
    * processing / the run still queued) — the caller knows which. */
   narrativeFallback: string
@@ -130,29 +137,39 @@ export function RunTaskList({
     now != null && runningMs != null ? formatElapsed(now - runningMs) : null
 
   // THE dynamic row IS the anchor (2026-09-08 层级翻案): userOpen null =
-  // follow the pose — open while live (CC's in-flight checklist), folded
-  // receipt once terminal. The settle resets an untouched toggle so the
-  // archive always lands on the one-line receipt; an explicit post-settle
-  // click still re-opens it.
+  // follow the pose — FOLDED in both poses (2026-09-13 user ruling: the
+  // one narrative row is the whole at-a-glance surface, live included; the
+  // rail tree is on-demand). The settle still resets an untouched toggle so
+  // the archive always lands on the one-line receipt; an explicit
+  // post-settle click re-opens it.
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   useEffect(() => {
     if (terminal) setUserOpen(null)
   }, [terminal])
-  const open = userOpen ?? !terminal
+  const open = userOpen ?? false
 
   return (
     <div className="w-full">
       {/* THE ONE ROW — the run's seat of the shared StatusLine (2026-09-09
           一座两行; 2026-09-10 层级重铸 — the receipt is the OWNER row): live
           = shimmer narrative + its stage clock; terminal = the receipt pose
-          — ✓ STAMPS ONCE (the 16px circle chip — "the run succeeded"), the
+          — the stamp STAMPS ONCE (the 16px circle chip — ✓ "the run
+          succeeded" / red ✗ "the run failed", 2026-09-13 失败态拍板), the
           title reads one notch brighter (the steps' parent, not their
-          sibling), total elapsed + chevron right. It is itself the
-          expand/collapse toggle for the railed checklist below. */}
+          sibling — red in the failed pose), total elapsed + chevron right.
+          It is itself the expand/collapse toggle for the railed checklist
+          below. */}
       <StatusLine
         label={
           terminal ? (
-            <span className="font-medium text-foreground">{title}</span>
+            <span
+              className={cn(
+                "font-medium",
+                failed ? "text-destructive" : "text-foreground",
+              )}
+            >
+              {title}
+            </span>
           ) : (
             (narrativeLabel ?? narrativeFallback)
           )
@@ -160,9 +177,18 @@ export function RunTaskList({
         active={!terminal}
         leading={
           terminal ? (
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/12">
-              <Check className="h-2.5 w-2.5" />
-            </span>
+            failed ? (
+              // The failed stamp — same 16px circle seat as the ✓, red-tinted
+              // (提案 A failed 变体): one mark says "the run failed", the
+              // failed step row inside the tree says why.
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-destructive/15">
+                <X className="h-2.5 w-2.5 text-destructive" />
+              </span>
+            ) : (
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/12">
+                <Check className="h-2.5 w-2.5" />
+              </span>
+            )
           ) : (
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           )

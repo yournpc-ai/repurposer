@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Message, Output, WorkflowStep
+from app.models.tables import Asset, Message, Output, WorkflowStep
 from app.models.tables import Project, WorkflowRun
 
 # Morph kinds that rewrite a clip's render_spec IN PLACE and re-render (the
@@ -197,6 +197,43 @@ async def _run_origin(db: AsyncSession, run: WorkflowRun) -> str:
     return "chat" if linked else "system"
 
 
+def _same_language_message(src_lang: str, *, zh: bool) -> str:
+    """The fix-naming same-language rejection line — ONE message, two seats
+    (the runtime guard's step error and the compile-time adjudication's
+    422 / router repair feedback). The bilingual hint follows the source's
+    direction (2026-09-13): on a zh source the 中英双语 target is en; on an
+    en source it is zh — the old fixed "target en" tail coached the exact
+    wrong move it was written to prevent."""
+    low = src_lang.lower()
+    if low == "zh":
+        hint = "（中英双语的目标应为 en）" if zh else " (for Chinese-English bilingual, target en)"
+    elif low == "en":
+        hint = "（中英双语的目标应为 zh）" if zh else " (for Chinese-English bilingual, target zh)"
+    else:
+        hint = ""
+    return (
+        f"源素材已经是{src_lang}——目标语言必须换一种{hint}。"
+        if zh
+        else f"The source is already {src_lang} — the target must be a different language{hint}."
+    )
+
+
+async def _clip_source_language(db: AsyncSession, output: Output) -> str | None:
+    """One clip's source language, the guard's precedence: the source asset's
+    ASR-detected ``meta.language``, then the caption cues' lang."""
+    asset_id = (output.source_ref or {}).get("asset_id")
+    if asset_id:
+        asset = await db.get(Asset, UUID(str(asset_id)))
+        if asset is not None:
+            raw = (asset.meta or {}).get("language")
+            if raw:
+                return str(raw)
+    track0 = (output.render_spec or {}).get("caption_track") or []
+    if track0 and track0[0].get("lang"):
+        return str(track0[0]["lang"])
+    return None
+
+
 async def _guard_target_differs_from_source(
     db: AsyncSession,
     clips: list[Output],
@@ -209,31 +246,126 @@ async def _guard_target_differs_from_source(
     中英双语 farce where the bilingual pair came out 繁体+简体 with no English
     anywhere (the intent router had defaulted target_language to the prompt's own
     language). Fail loud and name the fix — a silent same-language rewrite is
-    the banned posture. Source-language truth: the asset's ASR-detected
-    ``meta.language``, then the caption cues' lang. Raises plain ``ValueError``
-    — errors.py passes an exact ValueError's authored message through to the
-    step's user-facing line.
+    the banned posture. This is the LAST backstop: the same adjudication runs
+    earlier at the book/birthplace seats (``_check_transform_targets``) so a
+    doomed chain bounces before the user confirms; this seat covers stale
+    books and wiring-born runs. Raises plain ``ValueError`` — errors.py passes
+    an exact ValueError's authored message through to the step's user-facing
+    line.
     """
-    from app.models.tables import Asset  # local: tables already imported piecemeal
-
     for output in clips:
-        src_lang: str | None = None
-        asset_id = (output.source_ref or {}).get("asset_id")
-        if asset_id:
-            asset = await db.get(Asset, UUID(str(asset_id)))
-            if asset is not None:
-                raw = (asset.meta or {}).get("language")
-                src_lang = str(raw) if raw else None
-        if not src_lang:
-            track0 = (output.render_spec or {}).get("caption_track") or []
-            if track0 and track0[0].get("lang"):
-                src_lang = str(track0[0]["lang"])
+        src_lang = await _clip_source_language(db, output)
         if src_lang and src_lang.lower() == str(lang).lower():
-            raise ValueError(
-                f"源素材已经是{src_lang}——目标语言必须换一种（中英双语的目标应为 en）。"
-                if zh
-                else f"The source is already {src_lang} — the target must be a different language (for Chinese-English bilingual, target en)."
+            raise ValueError(_same_language_message(src_lang, zh=zh))
+
+
+# Transform kinds whose target_language faces a source language (the
+# compile-time adjudication's scope — same two the runtime guard covers).
+_TRANSFORM_TARGET_KINDS = ("translate_clip", "dub_clip")
+
+
+async def _faced_source_languages(
+    db: AsyncSession,
+    project: Project,
+    target_output_id: str | None,
+    *,
+    chain_has_select_clips: bool,
+) -> set[str]:
+    """The languages a translate/dub task would ACTUALLY face at run time
+    (compile-time mirror of the runtime targeting, one truth two seats):
+    the ``target_output_id``-scoped clip; a chain carrying select_clips →
+    the source recording's language (the run's clips are unborn at book
+    time and come from the assets, never from the project's older clips);
+    else the project's existing clips (the "existing" materialize profile),
+    else the project's recording assets (the materialize-whole-source
+    profile)."""
+    if target_output_id:
+        output = await db.get(Output, UUID(str(target_output_id)))
+        lang = (
+            await _clip_source_language(db, output)
+            if output is not None and output.project_id == project.id
+            else None
+        )
+        return {lang} if lang else set()
+
+    async def _asset_languages() -> set[str]:
+        assets = list(
+            (
+                await db.execute(
+                    select(Asset).where(
+                        Asset.project_id == project.id,
+                        Asset.file_url.isnot(None),
+                    )
+                )
             )
+            .scalars()
+            .all()
+        )
+        return {
+            lang
+            for asset in assets
+            if (lang := (asset.meta or {}).get("language"))
+        }
+
+    if chain_has_select_clips:
+        return await _asset_languages()
+    clips = list(
+        (
+            await db.execute(
+                select(Output).where(
+                    Output.project_id == project.id,
+                    Output.type == "clip",
+                    Output.render_spec.isnot(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    langs = {
+        lang
+        for output in clips
+        if (lang := await _clip_source_language(db, output))
+    }
+    if langs:
+        return langs
+    return await _asset_languages()
+
+
+async def _check_transform_targets(
+    db: AsyncSession, project: Project, tasks: list, *, zh: bool
+) -> None:
+    """Compile-time same-language adjudication (chat 修复环 + birthplace
+    422 两座): a translate/dub whose target IS the faced source language is
+    doomed by construction — reject it where the book is judged, naming the
+    fix, so the router's repair round (chat path) or the confirm card's 422
+    (typed path) lands on a runnable chain instead of failing mid-run after
+    money moved (2026-09-13 实拍: "中英双语" on an en source drafted
+    translate→en, confirmed, then died at the step). Unknown languages stay
+    silent (no false positives) — the runtime guard remains the backstop.
+    Raises plain ``ValueError`` (the caller wraps it for its own door)."""
+    faced: dict[str | None, set[str]] = {}
+    chain_has_select_clips = any(
+        getattr(t, "tool", None) == "select_clips" for t in tasks
+    )
+    for t in tasks:
+        if getattr(t, "tool", None) not in _TRANSFORM_TARGET_KINDS:
+            continue
+        params = getattr(t, "params", None) or {}
+        lang = params.get("target_language")
+        if not lang:
+            continue
+        scope = str(params["target_output_id"]) if params.get("target_output_id") else None
+        if scope not in faced:
+            faced[scope] = await _faced_source_languages(
+                db, project, scope, chain_has_select_clips=chain_has_select_clips
+            )
+        matched = next(
+            (src for src in faced[scope] if src.lower() == str(lang).lower()),
+            None,
+        )
+        if matched is not None:
+            raise ValueError(_same_language_message(matched, zh=zh))
 
 
 async def _fan_out_renders(

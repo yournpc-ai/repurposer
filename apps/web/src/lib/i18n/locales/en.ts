@@ -540,7 +540,7 @@ const en = {
       send: "Generate",
       /** 估价贴: the card's credits quotation on the typical source,
        * rendered above the send button (BILLING §7). */
-      estimate: "Typical cost: ~{{low}}–{{high}} credits",
+      estimate: "Estimated cost: ~{{low}}–{{high}} credits",
     },
     "multilingual-subs": {
       title: "Multilingual captions",
@@ -550,7 +550,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "Upload your original video here.",
       promptTemplate:
-        "Caption my video in Chinese and French — Chinese as bilingual subtitles — and dub a Spanish version in my own voice.",
+        "Caption my video in Chinese and French — Chinese as bilingual subtitles.",
       promptHint:
         "Send it as is, or try “bilingual captions”, “French captions”, “add a German version”…",
     },
@@ -1190,6 +1190,8 @@ const en = {
     /** Terminal completion reply — the FLORA standard answer: name what
      * became ready and where it lives. No recap, no next-step. */
     runReady: "Your {{summary}} is ready — the results are on the canvas.",
+    runPartial: "{{summary}} is partly done — {{step}} didn't make it: {{error}}. What's finished is on the canvas.",
+    runPartialMore: "{{summary}} is partly done — {{step}} + {{extra}} more steps didn't make it: {{error}}. What's finished is on the canvas.",
     send: "Send",
     stop: "Stop",
     undoLastEdit: "Undo last edit",
@@ -1278,7 +1280,6 @@ const en = {
     noRecentChats: "No conversations yet",
   },
   generationOverlay: {
-    title: "Generation plan",
     planProse:
       "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
     planProseSingle:
@@ -1337,6 +1338,12 @@ const en = {
     // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
     // half earns its seat only if slash commands ever ship.
     chatPlaceholder: "Use '@' to mention nodes and describe changes",
+    // The full form's sibling (2026-09-13 user ruling): pre-first-run the
+    // canvas doesn't exist yet, so there are no "nodes" to point at — the
+    // @ picker's candidates are assets only. Copy follows the world's
+    // truth per form; the nodes version returns once the canvas lands
+    // (panel / dock forms).
+    chatPlaceholderAssets: "Use '@' to mention assets and say what you want to make",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",

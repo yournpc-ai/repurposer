@@ -78,7 +78,13 @@ class TranslateClip(NodeBase):
         fan-out chained on this run's own clips node (select_clips or
         materialize_source — initial generation, RECIPES §4.1 字幕卡) is
         unquotable here: NULL (未估价)."""
-        if {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ())):
+        if (
+            {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ()))
+            # The recipe card's sticker quotes the DECLARED typical source
+            # (RECIPE_QUOTE_FACTS clips exist by declaration) — the guard is
+            # for the live book, where the clips are unborn at compile time.
+            and ctx.get("quote_scope") != "recipe"
+        ):
             return None
         clips = ctx["clips"]
         if not clips:

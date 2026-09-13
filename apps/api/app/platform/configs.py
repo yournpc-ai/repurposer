@@ -43,13 +43,13 @@ class ConfigDef:
 
 CONFIG_REGISTRY: dict[str, ConfigDef] = {
     "wallet.signup_grant": ConfigDef(
-        default=500,
+        default=10000,
         type=int,
         desc="Credits granted when a wallet is opened on first login "
         "(kind=grant, ref.source=signup).",
     ),
     "credits.per_cost_usd": ConfigDef(
-        default=300,
+        default=1000,
         type=int,
         desc="Credits per $1 of provider cost — the single consumption ratio "
         "shared by the estimate fold and captures (BILLING §4), so one edit "
