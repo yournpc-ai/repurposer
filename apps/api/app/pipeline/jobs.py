@@ -123,6 +123,21 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
         ),
         {"nid": node_id},
     )
+    # Graph back-write (ADR-057 K2) at the CLAIM seat: this UPDATE flips the
+    # step pending → running before execute_step's session ever loads it, so
+    # the orchestrator's own start-sync (its `status == "pending"` branch)
+    # is unreachable for every worker-claimed step — the owning graph node
+    # sat "queued" through the entire run (2026-09-13 走查实拍: 画布无 wipe、
+    # 无边上 packet,节点显示 Queued 而步骤已跑 3 分钟+). Re-aggregate the
+    # family here so the node flips to running atomically with the claim.
+    # The sync is flush-only; this commit carries claim + flip together.
+    step = await db.get(WorkflowStep, node_id)
+    if step is not None:
+        from app.pipeline.graph_fill import (  # deferred: registry-door order
+            sync_graph_node_for_step,
+        )
+
+        await sync_graph_node_for_step(db, step)
     await db.commit()
     return node_id
 
