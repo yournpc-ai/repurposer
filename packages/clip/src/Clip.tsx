@@ -28,7 +28,7 @@ import {
   videoTimeline,
 } from "./types";
 import { captionPreset, type CaptionEntrance } from "./captions";
-import { fontFamilyFor } from "./fonts";
+import { fontFamilyFor, CJK_FALLBACK_STACK } from "./fonts";
 
 /** Normalized center point -> absolute-position style (CSS translate / libass \pos). */
 function pointStyle(p: Point | null | undefined, fallback: Point): React.CSSProperties {
@@ -709,7 +709,10 @@ export const Clip: React.FC<{ spec: ClipSpec }> = ({ spec }) => {
           style={{
             textAlign: "center",
             color: "#ffffff",
-            fontFamily: "sans-serif",
+            // Sans by design (never the brand caption font) — but the
+            // CJK-safe stack: bare "sans-serif" tofu'd Chinese titles in
+            // the slim render container (no CJK glyphs at all, 2026-09-13).
+            fontFamily: CJK_FALLBACK_STACK,
             fontSize: Math.round((spec.title.size || 58) * (height / 1920)),
             fontWeight: 800,
             lineHeight: 1.15,

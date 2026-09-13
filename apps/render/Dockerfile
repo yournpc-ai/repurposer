@@ -7,12 +7,13 @@ FROM node:22-bookworm-slim
 
 # @remotion/renderer ships its own Chromium binary but launches it through
 # these system shared libs (headless Chrome runtime deps + base fonts).
+# fontconfig registers the vendored CJK font copied in below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
         libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
         libxrandr2 libgbm1 libxshmfence1 libasound2 libpango-1.0-0 \
         libcairo2 libatspi2.0-0 fonts-liberation fonts-noto-color-emoji \
-        ca-certificates \
+        fontconfig ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Pin pnpm to the repo's version (matches local; lockfile is v9.0). Without a
@@ -35,6 +36,14 @@ RUN pnpm install --filter @repurposer/render... --frozen-lockfile
 # Source for the render branch only.
 COPY packages/clip packages/clip
 COPY apps/render apps/render
+
+# Vendored CJK font (the D12 precedent — same SIL OFL Noto Sans SC the
+# api's quote-card baker vendors at apps/api/assets/fonts/): registered with
+# fontconfig so headless Chromium's per-character fallback has CJK glyphs AT
+# ALL. Without it the slim image's fonts are Latin-only (fonts-liberation)
+# and every Chinese title/caption bakes as tofu (口口口).
+COPY apps/api/assets/fonts /usr/share/fonts/opentype/noto-sc
+RUN fc-cache -f
 
 # NOTE: Remotion's headless Chromium (~90MB) is fetched lazily on the first
 # render, not baked at build time. Build-time downloads make the image build

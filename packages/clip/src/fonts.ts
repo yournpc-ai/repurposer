@@ -26,9 +26,20 @@ const LOADERS: Record<string, Loader> = {
 // fonts' many weights); the warning is just a perf hint.
 const OPTS: FontOpts = { subsets: ["latin"], ignoreTooManyRequestsWarning: true };
 
-/** Resolve a brand font key to a loaded font-family, or sans-serif fallback. */
+/** The brand families above are Latin-only, and their @font-face declares a
+ * latin unicode-range — so CJK codepoints never match them and fall through
+ * the stack per character. This stack is what catches them:
+ * 'Noto Sans SC' — the vendored OFL font the render container installs into
+ * fontconfig (apps/render Dockerfile; WITHOUT it the slim image has zero CJK
+ * glyphs and Chinese titles/captions bake as tofu 口口口), then the macOS /
+ * Windows dev-machine fonts, then generic sans. */
+export const CJK_FALLBACK_STACK =
+  "'Noto Sans SC', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+
+/** Resolve a brand font key to a loaded font-family stack (CJK fallback
+ * appended), or the CJK-safe sans stack when unbranded. */
 export function fontFamilyFor(key?: string | null): string {
   const load = key ? LOADERS[key] : undefined;
-  if (!load) return "sans-serif";
-  return load(undefined, OPTS).fontFamily;
+  if (!load) return CJK_FALLBACK_STACK;
+  return `${load(undefined, OPTS).fontFamily}, ${CJK_FALLBACK_STACK}`;
 }
