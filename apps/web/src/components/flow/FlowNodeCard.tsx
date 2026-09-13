@@ -640,7 +640,6 @@ function MediaProductRegion({
 
   return (
     <div
-      data-tour={node.tourTargets ? "results-video" : undefined}
       className={cn("group/media relative shrink-0", clipAspect ? "bg-black" : "bg-muted")}
       style={{ height: thumbPx }}
     >
@@ -738,7 +737,6 @@ function MediaProductRegion({
           below the card (2026-08-17 二轮走查拍板). */}
       {score !== null && !renderFailed && (
         <span
-          data-tour={node.tourTargets ? "results-score" : undefined}
           title={output.score?.reason ?? undefined}
           className={cn(
             "absolute bottom-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-medium",
@@ -802,11 +800,9 @@ function MediaProductRegion({
  * selection-owning click never enters edit mode. */
 function TextProductRegion({
   output,
-  tourTargets,
   onQuote,
 }: {
   output: Output
-  tourTargets?: boolean
   onQuote?: (quote: string) => void
 }) {
   const { t } = useTranslation()
@@ -926,7 +922,6 @@ function TextProductRegion({
   return (
     <div
       className="relative flex min-h-0 flex-1 flex-col"
-      data-tour={tourTargets ? "results-video" : undefined}
       onClick={(e) => {
         // Editing the text area should not select the node — the canvas's
         // onNodeClick handler would otherwise steal focus from the textarea.
@@ -1504,7 +1499,6 @@ function GraphCard({
           isText ? (
             <TextProductRegion
               output={output}
-              tourTargets={node.tourTargets}
               // 选区引用: undefined where the surface owns no quote channel
               // (the recipe manual) — the pill never renders there.
               onQuote={
@@ -1567,7 +1561,6 @@ function GraphCard({
           stale badge rides the bar's left end (可重跑 — the program moved
           after the product landed). */}
       <div
-        data-tour={node.tourTargets ? "results-menu" : undefined}
         className={cn(
           "flex shrink-0 flex-col items-center gap-2 pt-2",
           outputs.length > 1 ? "h-[88px]" : "h-[44px]",

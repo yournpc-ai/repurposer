@@ -1423,17 +1423,6 @@ const en = {
       recipesDesc:
         "Click a template — upload your own material, tweak the prompt to fit your needs, and generate the preset video effect.",
     },
-    results: {
-      scoreTitle: "Recommendation score",
-      scoreDesc:
-        "The AI scores each clip's hook, clarity and completeness. Higher scores are more worth posting first — the best one is marked Top pick.",
-      videoTitle: "Open the details",
-      videoDesc:
-        "Click a clip's card to open its details — with a ready-to-copy title, caption and hashtags for your social post.",
-      menuTitle: "Quick actions",
-      menuDesc:
-        "Every product card keeps its actions right under it — preview, download, or publish to social.",
-    },
   },
   notifications: {
     title: "Notifications",

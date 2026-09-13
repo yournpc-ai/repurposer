@@ -73,9 +73,6 @@ export interface ResultsCanvasProps {
    * later growth births. */
   baselineReady: boolean
   baselineKey: string
-  /** The output carrying the results tour's data-tour anchors (first ready
-   * product, chosen by the surface). */
-  tourOutputId?: string | null
   /** The dossier's producing-step lookup (latest run's steps — /results
    * payload, execution-ledger facts only). */
   steps?: WorkflowStep[]
@@ -124,7 +121,6 @@ export function ResultsCanvas({
   visible = false,
   baselineReady,
   baselineKey,
-  tourOutputId,
   steps,
   onOutputClick,
   onOutputAction,
@@ -220,7 +216,6 @@ export function ResultsCanvas({
         estimateCredits: n.estimate_credits ?? null,
         frame,
         topClipScore,
-        tourTargets: !!tourOutputId && outputs.some((o) => o.id === tourOutputId),
         order: i,
       }
     })
@@ -230,7 +225,7 @@ export function ResultsCanvas({
       edgeType: e.edge_type,
     }))
     return { nodes, edges }
-  }, [graph, tourOutputId, t])
+  }, [graph, t])
 
   // ── Birth choreography (ADR-036 补记 3, growth-driven since ADR-051) ────
   // The reveal is every graph GROWTH witnessed after the baseline: nodes

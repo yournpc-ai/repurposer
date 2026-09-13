@@ -1354,17 +1354,6 @@ const zh: Resources = {
       recipesDesc:
         "点开一张模板——上传你自己的素材，按需要微调提示词，就能生成预设效果的视频。",
     },
-    results: {
-      scoreTitle: "推荐分数",
-      scoreDesc:
-        "AI 从钩子、表达、完整度等维度给每条片段打分，分数越高越值得优先发布——最高分标记为「首发推荐」。",
-      videoTitle: "打开片段详情",
-      videoDesc:
-        "点击片段卡片即可打开详情——里面有可直接复制的标题、正文和话题标签，发社媒时直接用。",
-      menuTitle: "快捷操作",
-      menuDesc:
-        "产物卡片下方常驻快捷操作——预览、下载或发布到社交平台。",
-    },
   },
   notifications: {
     title: "通知",

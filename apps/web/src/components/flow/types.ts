@@ -119,8 +119,6 @@ export interface FlowNode {
    * the thumb letterboxes (black, object-contain) instead of cover-cropping.
    * Pair with a `size` pinned via thumbNodeSize so frame and media agree. */
   containThumb?: boolean
-  /** Carries the surface's data-tour anchors (first ready product only). */
-  tourTargets?: boolean
   /** Stable within-layer ordering key (step `seq` / node birth index) —
    * append-only growth stability: chat adds nodes, the graph only grows,
    * existing nodes never move (ADR-036). */

@@ -34,11 +34,9 @@ import type { Output } from "@/lib/types"
 interface ClipCardProps {
   output: Output
   isTopPick?: boolean
-  /** Puts the results tour's data-tour anchors on this card (first ready clip only). */
-  tourTargets?: boolean
 }
 
-export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
+export function ClipCard({ output, isTopPick }: ClipCardProps) {
   const { t, i18n } = useTranslation()
   const [detailOpen, setDetailOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
@@ -136,7 +134,6 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
       <Card className="group flex flex-col gap-0 overflow-hidden">
         {/* Thumbnail / player */}
         <div
-          data-tour={tourTargets ? "results-video" : undefined}
           className={cn(
             "relative w-full overflow-hidden bg-muted",
             frameAspect,
@@ -188,7 +185,6 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20" />
               {typeof clipState.score?.value === "number" && (
                 <div
-                  data-tour={tourTargets ? "results-score" : undefined}
                   className={cn(
                     "absolute left-2 top-2 z-20 rounded px-1.5 py-0.5 text-[10px] font-medium",
                     isTopPick
@@ -269,7 +265,6 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
                       variant="ghost"
                       size="icon-sm"
                       aria-label={t("clipMenu.more")}
-                      data-tour={tourTargets ? "results-menu" : undefined}
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>

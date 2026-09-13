@@ -799,7 +799,6 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**:
 - ADR-036 修订：第 3 条（run 进度图升正排产）退役为"结果画布"；补记 1 缩放门禁按面重划；补记 3 诞生编排定稿 = 生长驱动（画布挂载期间新生节点按编译序入场，水合首帧直出；2026-09-01 ADR-051 拍板，fullscreen 时代的「run 启动」「收官揭幕回放」两种触发一并退役）。FlowView 消费面 = 配方流程图 / 结果画布 /（复核中的）血缘板。
 - results-workspace 简报退役（中央区状态机 / 六屏 / 工作面三区被本条吸收改写；chips 双级派生 / 翻译两层 / Before-After / 焦点注入沿入新简报）；其 D5「配方身份贯穿三站」条款正式退役——ADR-040 后服务端永不见配方身份：打勾流皮肤用节点友好名、chips 按焦点产物派生，均不需要配方身份（本条同时关闭 ADR-040 的未决带出）。
-- 结果页 tour 锚点随画布重锚（`data-tour="results-*"` 挂产物节点卡）。
 - 移动端本期保留现有结果列表兜底；RunCard 增强排第三周。
 
 **Related**: ADR-035（可操作画布永久拒绝不变；第 3 条裁决口关闭）、ADR-036（本条修订其第 3 条与补记 1/3）、ADR-040（D5 条款退役的母因）、ADR-028（RunPlan）；简报 `docs/tasks/results-canvas.md`

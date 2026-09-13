@@ -26,8 +26,6 @@ import {
   type ResultsTab,
 } from "@/components/results/ResultsTabs"
 import { Button } from "@/components/ui/button"
-import { Tour, type TourStep } from "@/components/ui/tour"
-import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -35,42 +33,6 @@ import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 
 import type { IntentSlot, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
-
-/** A clip counts as tour-ready once its MP4 exists and no render is in
- * flight — the same condition ClipCard uses to leave its rendering state. */
-const isClipReady = (o: Output) =>
-  o.type === "clip" &&
-  !!o.files.video &&
-  o.render_status !== "pending" &&
-  o.render_status !== "rendering"
-
-/** First-visit results tour: separate seen key from the composer tour, same
- * content-hash rule (lib/tour.ts) — any step or copy change replays once. */
-const RESULTS_TOUR_KEY = "repurposer-results-tour-seen"
-
-const RESULTS_TOUR_STEPS: TourStepDef[] = [
-  {
-    target: "[data-tour='results-score']",
-    titleKey: "tour.results.scoreTitle",
-    descKey: "tour.results.scoreDesc",
-    side: "bottom",
-  },
-  {
-    target: "[data-tour='results-video']",
-    titleKey: "tour.results.videoTitle",
-    descKey: "tour.results.videoDesc",
-    side: "bottom",
-  },
-  {
-    target: "[data-tour='results-menu']",
-    titleKey: "tour.results.menuTitle",
-    descKey: "tour.results.menuDesc",
-    side: "bottom",
-    align: "end",
-  },
-]
-
-const RESULTS_TOUR_VERSION = tourVersionOf(RESULTS_TOUR_STEPS, tourCopy.results)
 
 interface AssetStatusEntry {
   id: string
@@ -204,18 +166,7 @@ function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState<Partial<Record<ResultsTab, boolean>>>({})
-  const [resultsTourOpen, setResultsTourOpen] = useState(false)
   const tabInitializedRef = useRef(false)
-  const resultsTourCheckedRef = useRef(false)
-  /** The tour's anchor poll — survives effect re-runs, cleared on success
-   * or unmount only. */
-  const tourPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  useEffect(
-    () => () => {
-      if (tourPollRef.current) clearInterval(tourPollRef.current)
-    },
-    []
-  )
 
   // ── Results canvas (ADR-041; ADR-051 画布优先) ───────────────────────
   // Desktop (≥768px = iPad up, D1/D10): the page is ALWAYS the canvas + the
@@ -537,51 +488,6 @@ function ProjectDetailPage() {
     await fetchResults()
   }
 
-  // First-visit results tour. Fires whenever a ready clip exists and no run
-  // is live — no matter how the user got here (fresh generation or straight
-  // from the projects list). Seen flag is its own localStorage key.
-  // Anchors: the canvas's first ready product node on desktop (ADR-041 —
-  // data-tour="results-*" live on the output card), the clip card in the
-  // mobile list world.
-  useEffect(() => {
-    if (resultsTourCheckedRef.current) return
-    if (loading || !results) return
-    if (runActive) return
-    if (!isMobile && !completedRun) return
-    if (!results.outputs.some(isClipReady)) return
-    resultsTourCheckedRef.current = true
-    try {
-      if (window.localStorage.getItem(RESULTS_TOUR_KEY) === RESULTS_TOUR_VERSION)
-        return
-    } catch {
-      return // storage unavailable — tour simply never auto-opens
-    }
-    if (isMobile && activeTab !== "clips") setActiveTab("clips")
-    // The canvas's node DOM lands a paint after the data (xyflow mounts
-    // client-only) — open once the anchor actually exists; if it never
-    // does, the tour closes itself silently (missing targets auto-skip).
-    // The poll lives in a ref, NOT the effect cleanup: a results refetch
-    // (the 2.5s render polling) re-runs this effect and a cleanup would
-    // kill the poll before the anchor appears.
-    let tries = 0
-    tourPollRef.current = setInterval(() => {
-      tries += 1
-      if (document.querySelector("[data-tour='results-menu']") || tries > 20) {
-        if (tourPollRef.current) clearInterval(tourPollRef.current)
-        tourPollRef.current = null
-        setResultsTourOpen(true)
-      }
-    }, 100)
-  }, [loading, results, runActive, activeTab, isMobile, completedRun])
-
-  const markResultsTourSeen = () => {
-    try {
-      window.localStorage.setItem(RESULTS_TOUR_KEY, RESULTS_TOUR_VERSION)
-    } catch {
-      // ignore — worst case the tour shows again next visit
-    }
-  }
-
   // Default to the first requested output tab once, when a generation is running.
   const runTasks = tasksFromRunContext(latestRun?.context)
   useEffect(() => {
@@ -733,13 +639,6 @@ function ProjectDetailPage() {
     ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0))
   )
 
-  // The results tour anchors to one fully-rendered clip — prefer the first
-  // that also has a score, so all three targets exist on the same card.
-  const readyClips = clips.filter(isClipReady)
-  const resultsTourClipId = (
-    readyClips.find((c) => typeof c.score?.value === "number") ?? readyClips[0]
-  )?.id
-
   const counts = {
     clips: clips.length,
     post: posts.length,
@@ -768,16 +667,6 @@ function ProjectDetailPage() {
 
   const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
   const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
-
-  // Results teaching tour: score → video area → "···" menu. Built per
-  // render from the static config so a language switch re-labels the steps.
-  const resultsTourSteps: TourStep[] = RESULTS_TOUR_STEPS.map((step) => ({
-    target: step.target,
-    side: step.side,
-    align: step.align,
-    title: t(step.titleKey),
-    description: t(step.descKey),
-  }))
 
   const renderSkeletons = (tab: ResultsTab) => {
     if (tab === "clips") {
@@ -839,7 +728,6 @@ function ProjectDetailPage() {
                 isTopPick={
                   topClipScore > 0 && clip.score?.value === topClipScore
                 }
-                tourTargets={clip.id === resultsTourClipId}
               />
             ))}
           </div>
@@ -1080,7 +968,6 @@ function ProjectDetailPage() {
               results?.project?.id === projectId && graph != null
             }
             baselineKey={projectId}
-            tourOutputId={resultsTourClipId}
             steps={latestRun?.steps ?? []}
             onOutputClick={handleOutputClick}
             onOutputAction={handleOutputAction}
@@ -1222,14 +1109,6 @@ function ProjectDetailPage() {
           }}
         />
       )}
-
-      <Tour
-        steps={resultsTourSteps}
-        open={resultsTourOpen}
-        onOpenChange={setResultsTourOpen}
-        onComplete={markResultsTourSeen}
-        onSkip={markResultsTourSeen}
-      />
     </div>
     </SoundMutexProvider>
   )
