@@ -58,6 +58,11 @@ export interface RecipePublic {
    * typical source — serialization-derived against the live ratio (a config
    * edit moves every sticker). null = unquoted chain. */
   estimate_credits?: [number, number] | null
+  /** Usage-priced sticker variant (per-second cards, e.g. voice-dub): rate
+   * per source-video second + the one-shot fee (voice clone, once per
+   * voice) — the fixed total's honest form when cost scales with source
+   * duration. Filled INSTEAD of estimate_credits. */
+  estimate_rate?: { per_second: number; one_shot: number } | null
 }
 
 /** Does a staged file cover a required input slot? The launch gate reads

@@ -142,6 +142,14 @@ async def create_asset_from_key(
         file_url=request.key,
         title=request.title,
         processing_status=AssetStatus.PENDING,
+        # The client-probed pixels (display-only aspect truth — the chain-head
+        # probe backfills when absent). Born with the row so stamp_asset_node
+        # below shapes the frame correctly from birth.
+        meta=(
+            {"width": request.width, "height": request.height}
+            if request.width and request.height
+            else {}
+        ),
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —

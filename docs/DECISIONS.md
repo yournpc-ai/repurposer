@@ -1584,4 +1584,23 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Consequences**: 探查连出并同批修掉两个真 bug——`/graph` 在 ≥2 个转写文档时必 500（A3-lite 边合成把已合成的 dict 行当 ORM 行做属性访问；改循环外单次 ORM 快照，此前是刷新都救不回的永久空画布）与 `/results` 一次瞬断后 error 闩锁不清（占位卡死只能刷新；成功即清）。不新增 `WorkflowStatus.PARTIAL` 第三态（SSE terminal 集 / RunCard / project 映射的爆炸半径被拍板拒绝；项目列表徽章对部分失败读 failed = 诚实面）。验证归用户（compileall / tsc / 纯函数 pytest）；本批不碰 prompt 面（同语裁决与配方卡改的都是代码座与 UI 文案，`app/prompts/chat/` 未动），prompt gate 无新增义务。
 
+**翻案注记**（2026-09-13 同日三轮，用户截图取证「还在渲染视频就告诉我做完了」）：② 的失败判定豁免**保留**（渲染失败仍是产物级事实），但活跃判定的同款豁免**翻案**——旧语义「渲染步永不撑住 run」（退役编排遗产：renders continued after the run completed）让 run 在翻译步落定即 COMPLETED，收据 + 收官句落在渲染中途。改：**渲染步计入活跃集合，run 终态 = 最后一条渲染落地**；渲染链在渲染落定处补调 `maybe_finalize_run`（渲染镜像不经 `execute_step`，此前无人替它收官）；启动扫尾 `finalize_stuck_runs` 同步摘豁免（reap 刚把渲染 re-pend，崩中渲染的 run 必须活过扫尾）。连带修补：`delete_output` 把 pending 渲染镜像落 skipped（行没了镜像永 pending = run 在新律下永不收官；running 镜像由完成路径自愈，不动）。副产品：渲染 metering 的 capture 从 release 之后归位到之前。前端零改动——SSE run 流本来活到终态帧，现在终态帧就是真相。
+
 **Related**: ADR-073（失败收据态——本条 ② 收窄其「terminal 单元只随成功 run 落」）、ADR-048（字幕/配音分家——声明链本条追齐）、ADR-057（零投影直读——自愈 remount 的座位）、ADR-040（配方 = 提示词）
+
+## ADR-075: 画布媒体跟源比例 + 分档加宽——真实像素是形状真值
+
+**Status**: Decided (2026-09-13)
+
+**Context**: 字幕卡走查第二轮（用户截图取证，接 ADR-074 同日批）：100% 缩放下产物视频节点太小，且不跟源比例——源文件取证 = 960×960 方形（keynote 录屏，16:9 内容自带上下黑边），渲染层忠实保源（materialize → translate×2 全程 960×960 出），但画布把 `render_spec.aspect == "original"` 一律按 16:9 默认条预留（280×158 媒体区），1:1 视频 object-contain 进 16:9 盒 = 两侧大黑边 + 面积缩水；素材节点同病。根因不是渲染是画布：整条栈从无源的真实像素——`asset.meta` 只记 words / language / speaker_map / prosody，"original" 的展示档在画布出生时刻无处可解。
+
+**Decision**（用户拍板 = 按宽高比分档加宽）:
+
+1. **真实像素入 meta**：`meta.width/height` 双座写入——① 客户端 staging 探测（`stagedFiles.probeMediaDims`：img naturalWidth / video loadedmetadata，与 chip 预览同一探头族）随创建载荷送达（`AssetCreateRequest.width/height` → `create_asset_from_key` 出生即写 meta，home composer 与 chat dock 两个上传座同批追齐），零赛跑；② 资产处理链头 `_content_hash_processor` PyAV 开容器兜底（API 路径上传 / 预探测旧行回填），探测在临时文件 unlink 之前、任何失败静默缺席。展示面事实，不入计费不入 prompt。
+2. **展示档解析一座**：`graph_store.display_aspect_class`（几何均值边界 0.75 / 1.334 取最近档——离比例保 contain 细边，永不裁剪内容）+ `resolve_source_aspect`（多源混形 → 返回 None 不猜，保 "original" 默认条）。三个消费座：① **stamp/fill 时刻**——graph_fill `_stamp_graph_core` 查源资产 meta 尺寸把 "original" 解析成真档（帧出生时就是对的，定居取景律不动）；② **片段出生时刻**——materialize_source 把展示档盖进 `ClipPayload.aspect`（fork 派生行随 payload 复制自然继承；`OutputResponse._derive_aspect` 的写点模式与图片产物同款，`render_spec.aspect` 渲染契约不动，读面永不补丁）；③ **素材节点出生**——`stamp_asset_node` 按资产自身 dims 盖 `spec.frame_aspect`。
+3. **分档加宽**：clip 车道 9:16 不动（280×498 媒体区）/ 1:1 → 340×340 / 16:9 → 400×225；素材节点同律（280/340/400 三档）。帧表改按档 (w,h)：`_CLIP_FRAME` / `_ASSET_FRAME`（max 档入 `_FRAME_CLASS`），`_PITCH` 随最大档 400+96。client 镜像（layout.ts `PRODUCT_THUMB_PX` / `displayAspectClass` / graphNodeSize 素材支 `assetDimsHeight`）同批追齐——判词② 一条测量律两镜像互引不变，永无第三份。
+4. **预留律牙（赛跑/旧行兜底）**：帧可能早于尺寸到达（API 路径上传 + 预探测旧项目）——卡面媒体区与 graphNodeSize 双双 cap 到出生帧预算（`frame.h` 减 label/program/toolbar 三段）， contain 细边回归但帧永不被撑破、列永不重叠；dims 全缺的 "original" 保 280×316 默认条（今日外观，零回归）。
+
+**Consequences**: 用户的 1:1 链从 280×158 黑边条变成 340×340 正形卡（媒体面积 ~4.6 倍），真 16:9 源 400×225；无尺寸旧行外观不变。渲染契约 / prompt 面零改动（prompt gate 无新增义务）。验证归用户（compileall / tsc / 纯函数 pytest）。
+
+**Related**: ADR-057（定居取景 / 零投影——帧律与测量镜像的座位）、ADR-072（节点五型——素材节点同律的依据）、ADR-074（同日走查批——本批是其第二轮取证）

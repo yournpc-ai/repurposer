@@ -326,13 +326,30 @@ export function FlowView({
         )
         .forEach((id, rank) => bornRanks.set(id, rank))
     }
-    const rfNodes: FlowCardNode[] = nodes.map((n) => ({
-      id: n.id,
-      type: "flowCard",
-      position: layout.positions.get(n.id) ?? { x: 0, y: 0 },
-      // Explicit dims keep the DOM in lockstep with the layout math (fixed
-      // sizes = pure-math layout, zero measurement).
-      style: flowNodeSize(n),
+    const rfNodes: FlowCardNode[] = nodes.map((n) => {
+      const size = flowNodeSize(n)
+      return {
+        id: n.id,
+        type: "flowCard",
+        position: layout.positions.get(n.id) ?? { x: 0, y: 0 },
+        // Pinned geometry (2026-09-13 走查取证, the mid-run vanish's root):
+        // we KNOW the box — the frame law computes it — so declare it as
+        // first-class dims, not just CSS. Every refetch maps fresh node
+        // objects; xyflow's adoptUserNodes drops `measured` on identity
+        // change and waits for the ResizeObserver to re-measure, and a node
+        // whose DOM box never changes size stays `visibility: hidden`
+        // forever (only the terminal remount healed it). Carrying `measured`
+        // survives every rebuild verbatim — and parseHandles preserves the
+        // previous handleBounds ONLY when userNode.measured is set, so edges
+        // keep their anchors too. DOM measurement degrades to a confirming
+        // backstop (it can only ever read these same numbers off the pinned
+        // wrapper style).
+        width: size.width,
+        height: size.height,
+        measured: { width: size.width, height: size.height },
+        // Explicit dims keep the DOM in lockstep with the layout math (fixed
+        // sizes = pure-math layout, zero measurement).
+        style: size,
       data: {
         node: n,
         bornIndex: bornRanks.get(n.id),
@@ -368,7 +385,8 @@ export function FlowView({
       },
       draggable: false,
       connectable: false,
-    }))
+      }
+    })
     const rfEdges: FlowEdgeType[] = edges.map((e) => {
       // An edge draws once a born endpoint enters (delay = the later birth).
       const from = bornRanks.get(e.from) ?? -1

@@ -148,6 +148,7 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
     identity) — never an asset failure.
     """
     h = hashlib.sha256()
+    dims: dict[str, int] = {}
     if asset.file_url:
         path = await download_to_temp(asset.file_url)
         if path is None:
@@ -156,6 +157,9 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
             with path.open("rb") as fh:
                 for chunk in iter(lambda: fh.read(1 << 20), b""):
                     h.update(chunk)
+            # Probe while the bytes are still local (the finally below
+            # deletes the temp copy).
+            dims = _probe_media_dims(asset, path)
         finally:
             path.unlink(missing_ok=True)
     else:
@@ -163,7 +167,32 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
         if not text.strip():
             return ProcessResult()
         h.update(text.encode("utf-8"))
-    return ProcessResult(meta={"content_sha256": h.hexdigest()})
+    return ProcessResult(meta={"content_sha256": h.hexdigest(), **dims})
+
+
+def _probe_media_dims(asset: Asset, path) -> dict[str, int]:
+    """``meta.width/height`` — the canvas's aspect truth (2026-09-13 用户拍板,
+    产物卡跟源比例): the frame law (graph_store) and the card shape both read
+    the source's real pixels. The chain head has the bytes local already — a
+    container-header open costs nothing. The API-upload path's backfill seat
+    (client uploads carry dims at creation); probe failure degrades to
+    absence (the default strip), never an asset failure."""
+    if asset.type not in (AssetType.VIDEO, AssetType.IMAGE) or path is None:
+        return {}
+    try:
+        import av  # faster-whisper dep; no system ffmpeg needed
+
+        with av.open(str(path)) as container:
+            stream = (
+                container.streams.video[0] if container.streams.video else None
+            )
+            if stream is None:
+                return {}
+            w = int(stream.codec_context.width or 0)
+            hgt = int(stream.codec_context.height or 0)
+            return {"width": w, "height": hgt} if w > 0 and hgt > 0 else {}
+    except Exception:
+        return {}
 
 
 async def _extract_text_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:

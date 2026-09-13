@@ -468,6 +468,14 @@ async def get_project_graph(
             asset = assets_by_id.get(str(spec.get("asset_id") or ""))
             if asset is not None:
                 asset_resp = AssetResponse.model_validate(asset)
+                # The canvas's aspect truth (2026-09-13 — 素材节点同律):
+                # the source's real pixels ride to the asset card's sizing
+                # (probed at upload / processing into meta.width/height).
+                asset_meta = asset.meta if isinstance(asset.meta, dict) else {}
+                aw, ah = asset_meta.get("width"), asset_meta.get("height")
+                if isinstance(aw, int) and isinstance(ah, int) and aw > 0 and ah > 0:
+                    asset_resp.width = aw
+                    asset_resp.height = ah
         node_outputs = sorted(
             (
                 outputs_by_id[str(oid)]

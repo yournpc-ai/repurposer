@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
+import { probeMediaDims } from "@/lib/stagedFiles"
 import { useAuth } from "@/lib/auth-context"
 import type { ChatMention } from "@/lib/mentions"
 
@@ -105,11 +106,17 @@ export function useProjectLaunch() {
                 upload_url: string
               }
 
-              const putRes = await fetch(upload_url, {
-                method: "PUT",
-                body: material,
-                headers: material.type ? { "Content-Type": material.type } : {},
-              })
+              // The PUT and the pixel probe run in parallel — the asset row
+              // is born with its real dims (产物卡跟源比例), so the canvas
+              // frame law shapes the node correctly from birth.
+              const [putRes, dims] = await Promise.all([
+                fetch(upload_url, {
+                  method: "PUT",
+                  body: material,
+                  headers: material.type ? { "Content-Type": material.type } : {},
+                }),
+                probeMediaDims(material),
+              ])
               // Direct-to-storage PUT bypasses apiFetch, so toast here.
               if (!putRes.ok) {
                 toast.error(t("composer.uploadFailed"))
@@ -120,7 +127,7 @@ export function useProjectLaunch() {
                 `/api/v1/projects/${project.id}/assets`,
                 {
                   method: "POST",
-                  body: { type, key, title: material.name },
+                  body: { type, key, title: material.name, ...(dims ?? {}) },
                 },
               )
               if (!assetRes.ok) throw new Error("Failed to create asset")

@@ -230,7 +230,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - **前端用 fetch-event-source**：原生 EventSource 不能带 Authorization header，这是实际坑。
 - **LISTEN/NOTIFY 后置**：内部 1s tail 在单 worker 规模足够；多实例部署再换 PG 通知桥，**客户端契约不变**。
 
-**前端实现**：`useRunEvents` hook 统一消费这条流，接项目页 dock 打勾流（2026-08-31 ADR-051：fullscreen 壳退役、dock 壳唯一形态；计划卡 HITL 确认 → 打勾流入流——活清单默认折叠（单行动态行 = 全部 at-a-glance，2026-09-13 ADR-073）钉消息流底，终态收成一行收据；输入组上方的折叠打勾行 2026-09-08 用户拍板退役，§8.7；run 期画布 = 持久图节点原地填充（ADR-057：图先展示后运行——dock 即 stamp 草稿图，run 把节点 queued→running 擦除→产物落地反写节点产物区，画布直读零投影；**节点态的 run 期活读 = 同一 SSE 的 step diff 驱动 graph refetch**，step 每次状态翻转都伴随节点反写，画布与清单同一拍））。轮询只保留给无 token 的匿名场景与"run 已终态但 clip 仍在渲染"的尾部阶段。
+**前端实现**：`useRunEvents` hook 统一消费这条流，接项目页 dock 打勾流（2026-08-31 ADR-051：fullscreen 壳退役、dock 壳唯一形态；计划卡 HITL 确认 → 打勾流入流——活清单默认折叠（单行动态行 = 全部 at-a-glance，2026-09-13 ADR-073）钉消息流底，终态收成一行收据；输入组上方的折叠打勾行 2026-09-08 用户拍板退役，§8.7；run 期画布 = 持久图节点原地填充（ADR-057：图先展示后运行——dock 即 stamp 草稿图，run 把节点 queued→running 擦除→产物落地反写节点产物区，画布直读零投影；**节点态的 run 期活读 = 同一 SSE 的 step diff 驱动 graph refetch**，step 每次状态翻转都伴随节点反写，画布与清单同一拍））。**渲染步撑住 run（ADR-074② 翻案，2026-09-13 三轮）**：run 终态 = 最后一条渲染落地，「run 已终态但 clip 仍在渲染」的尾部窗口结构性消失——终态帧即真相；轮询只保留给无 token 的匿名场景。
 
 **进度面**：进度 UI 只留打勾流一处（§8.7 单行动态行 = 唯一形态——活态 status line / 终态收据同一行；曾有的输入组折叠状态行 2026-09-08 退役）。`processing` 项目卡片直达 `/projects/$id`（`?overlay=run` 退役）：项目页 dock 自动 attach 到活 run（无确认阶段、无 intent 兜底推理，计划摘要行由 `latest_run.context` 重建）；run 排队/素材处理中（步骤流为空）动态行显示 transcribing/queued 占位。attach 的 run id 由页面 latch（不靠活态重判），避免页面自身 SSE refetch 把 run 翻成 completed 时打勾态中途卸载。
 

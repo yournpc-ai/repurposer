@@ -514,6 +514,8 @@ const zh: Resources = {
       promptPlaceholder: "说说你想做什么…",
       send: "生成",
       estimate: "预计花费：约 {{low}}–{{high}} 积分",
+      estimateRate: "每秒视频约 {{rate}} 积分 · 首次配音 +{{oneShot}}（克隆你的声音，只收一次）",
+      estimateRateSolo: "每秒视频约 {{rate}} 积分",
     },
     "multilingual-subs": {
       title: "多语言字幕",

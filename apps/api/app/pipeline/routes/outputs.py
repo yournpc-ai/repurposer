@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.tools.revise.agents import reviser
@@ -147,6 +148,19 @@ async def delete_output(
         await delete_file(key)
     await delete_file((output.publishing or {}).get("cover_image_url"))
     await db.delete(output)
+    # A never-started render mirror would orphan into eternal pending and hold
+    # its run open forever (ADR-074② 翻案: renders hold the run now) — the row
+    # it's waiting for is gone. Settle it skipped; a RUNNING mirror resolves
+    # itself (the in-flight render's guarded write matches 0 rows post-delete
+    # and the superseded mirror flips it done).
+    await db.execute(
+        text(
+            "UPDATE workflow_steps SET status = 'skipped', updated_at = now() "
+            "WHERE kind = 'render' AND status = 'pending' "
+            "AND spec->>'output_id' = :oid"
+        ),
+        {"oid": str(output_id)},
+    )
     await db.commit()
 
 

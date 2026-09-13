@@ -361,7 +361,19 @@ export function RecipeInspectOverlay({
                     typical source — the decision sees the price before the
                     send. Muted, tabular, never a badge (卡面禁令的 overlay
                     同律). */}
-                {card.estimate_credits ? (
+                {card.estimate_rate ? (
+                  <p className="text-center text-xs tabular-nums text-muted-foreground">
+                    {t(
+                      card.estimate_rate.one_shot > 0
+                        ? "recipes.inspect.estimateRate"
+                        : "recipes.inspect.estimateRateSolo",
+                      {
+                        rate: card.estimate_rate.per_second,
+                        oneShot: card.estimate_rate.one_shot,
+                      },
+                    )}
+                  </p>
+                ) : card.estimate_credits ? (
                   <p className="text-center text-xs tabular-nums text-muted-foreground">
                     {t("recipes.inspect.estimate", {
                       low: card.estimate_credits[0],

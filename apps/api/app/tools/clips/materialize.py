@@ -31,6 +31,7 @@ from app.models.tables import (
 )
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.graph import NodeBase, estimate_free
+from app.pipeline.graph_store import display_aspect_class
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.pipeline.step_context import _list_assets
 from app.pipeline.step_display import _set_summary, ui_lang_of
@@ -145,6 +146,23 @@ class MaterializeSource(NodeBase):
         # skips the clip rescues it via _pend_suppressed_base_renders).
         suppressed = await _later_inplace_morph_exists(db, run, node)
         spec_dict = spec.model_dump(mode="json")
+        # The display-class stamp for "original"-aspect chains (2026-09-13
+        # 用户拍板 — 产物卡跟源比例): the source's real pixels (probed into
+        # meta.width/height at upload / processing) name the card's display
+        # class; render_spec.aspect stays "original" (the render contract
+        # untouched). Explicit-aspect chains need no stamp — render_spec
+        # declares; dims unknown stay None (the default strip, read-tolerant).
+        src_meta = render_source.meta if isinstance(render_source.meta, dict) else {}
+        src_w, src_h = src_meta.get("width"), src_meta.get("height")
+        display_aspect = (
+            display_aspect_class(src_w, src_h)
+            if aspect == "original"
+            and isinstance(src_w, int)
+            and isinstance(src_h, int)
+            and src_w > 0
+            and src_h > 0
+            else None
+        )
         output = Output(
             project_id=project.id,
             workflow_step_id=node.id,
@@ -158,6 +176,7 @@ class MaterializeSource(NodeBase):
                 # No LLM mood pick here (no selection happened) — the schema
                 # default ("calm") rides, same as every reader's fallback.
                 duration=float(duration),
+                aspect=display_aspect,
             ).model_dump(mode="json"),
             source_ref={
                 "segment": segment.model_dump(mode="json"),

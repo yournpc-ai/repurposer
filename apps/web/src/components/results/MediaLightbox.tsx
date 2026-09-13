@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { downloadFile } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
+import { useSoundMutexHold } from "@/components/flow/sound-mutex"
 
 export interface MediaChip {
   Icon: LucideIcon
@@ -55,6 +56,10 @@ export function MediaLightbox({
   onOpenChange: (open: boolean) => void
 }) {
   const { t, i18n } = useTranslation()
+  // 全局声音指针 (2026-09-13): the lightbox plays with sound, so it holds
+  // the project mutex while open — every canvas inline video mutes; closing
+  // yields (no-op off-canvas, where no provider mounts).
+  useSoundMutexHold(!!data && data.kind === "video", "lightbox")
   return (
     <Dialog open={!!data} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-5xl">

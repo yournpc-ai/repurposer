@@ -26,6 +26,7 @@ transaction with an IntegrityError.
 from decimal import ROUND_HALF_UP, Decimal
 from datetime import datetime
 from uuid import UUID
+import math
 
 import structlog
 from sqlalchemy import exists, func, select, tuple_, update
@@ -72,6 +73,26 @@ def estimate_usd_range(fold: dict) -> tuple[float, float]:
         price_tokens(prompt_low, completion_low) + units_usd,
         price_tokens(prompt_high, completion_high) + units_usd,
     )
+
+
+def estimate_rate_credits(fold: dict, seconds: float, ratio: int) -> tuple[int, int]:
+    """Per-second RATE form of a folded estimate (BILLING §7 估价贴的用量计价
+    变体): the duration-scaled share ÷ the declared source seconds, ceiled so
+    the rate never under-promises — with the one-shot units (voice clone,
+    billed once per voice) split out. A fixed [low, high] total anchored on
+    the typical source misleads both ways for per-character-priced work
+    (TTS): the 15-second test reads 6000 and bails, the hour-long upload
+    reads it and under-budgets. Returns ``(per_second_credits,
+    one_shot_credits)``; ``(0, 0)`` = unquotable rate."""
+    _usd_low, usd_high = estimate_usd_range(fold)
+    if usd_high <= 0 or seconds <= 0:
+        return 0, 0
+    one_shot_usd = price_units(
+        {"voice_clones": (fold.get("units") or {}).get("voice_clones", 0.0)}
+    )
+    rate = math.ceil((usd_high - one_shot_usd) / seconds * ratio)
+    one_shot = math.ceil(one_shot_usd * ratio)
+    return max(rate, 0), one_shot
 
 
 def cost_usd(cost: dict | None) -> float:

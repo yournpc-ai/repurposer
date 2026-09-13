@@ -27,6 +27,7 @@ import { formatDuration, formatRelativeTime, cn } from "@/lib/utils"
 
 import { ClipDetailModal } from "./ClipDetailModal"
 import { PublishDialog } from "@/components/publish/PublishDialog"
+import { useSoundMutex, useSoundMutexHold } from "@/components/flow/sound-mutex"
 
 import type { Output } from "@/lib/types"
 
@@ -48,6 +49,13 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
   const [renderError, setRenderError] = useState<string | null>(output.render_error)
   const [isPlaying, setIsPlaying] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  // 全局声音指针 (2026-09-13 用户拍板): the playing video holds the
+  // project-wide sound mutex — another source unmuting flips `muted` here
+  // (sound off, playback continues); no provider off the project page →
+  // local fallback, behavior unchanged.
+  const mutexId = `clip:${output.id}`
+  const { muted } = useSoundMutex(mutexId)
+  useSoundMutexHold(isPlaying, mutexId)
 
   // Keep local state in sync if the parent re-renders with updated data.
   useEffect(() => {
@@ -156,6 +164,7 @@ export function ClipCard({ output, isTopPick, tourTargets }: ClipCardProps) {
               controls
               autoPlay
               playsInline
+              muted={muted}
               onEnded={() => setIsPlaying(false)}
               onPause={() => setIsPlaying(false)}
               onPlay={() => setIsPlaying(true)}

@@ -130,6 +130,41 @@ async def _mirror_render_node(
         )
 
 
+async def _finalize_owning_run(output_id: UUID) -> None:
+    """Render-terminal finalize hook (ADR-074② 翻案 2026-09-13): renders hold
+    their run open now, and the mirror step settles HERE (the render chain),
+    not in ``execute_step`` — so the render chain owes the run its last
+    finalize check. No-op while any sibling step is still active. Only the
+    done/failed paths call this: a superseded render's mirror just went done
+    but the morph's fresh render step is pending, so the run is still held —
+    and this path's own check would see that anyway."""
+    from app.pipeline.orchestrator import (  # deferred: rendering stays a leaf
+        maybe_finalize_run,
+    )
+
+    # One output can fan mirror rows across runs (an in-place morph re-render,
+    # a later run's morph on the same clip) and a claim flips every pending
+    # mirror — finalize EVERY owning run (terminal runs early-return inside).
+    # A LIMIT-1 pick could land on a stale run's row and leave the live run
+    # held open forever.
+    async with AsyncSessionLocal() as db:
+        run_ids = list(
+            (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT run_id FROM workflow_steps "
+                        "WHERE kind = 'render' AND spec->>'output_id' = :oid"
+                    ),
+                    {"oid": str(output_id)},
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for run_id in run_ids:
+        await maybe_finalize_run(run_id)
+
+
 async def _mirror_superseded_node(output_id: UUID, lang: str) -> None:
     """Terminal mirror for a render DISCARDED as superseded (a morph re-pended
     the row mid-render): only the RUNNING step — the morph's fresh render step
@@ -278,6 +313,7 @@ async def render_output(output_id: UUID) -> None:
             await _mirror_superseded_node(output_id, lang)
             return
         await _mirror_render_node(output_id, "done")
+        await _finalize_owning_run(output_id)
 
         # Best-effort cleanup of the previous render's objects. Only bare
         # keys are deletable; legacy /api/v1 paths and absolute URLs are
@@ -319,3 +355,4 @@ async def render_output(output_id: UUID) -> None:
             await _mirror_render_node(
                 output_id, "failed", user_line("render_failed", lang)
             )
+            await _finalize_owning_run(output_id)

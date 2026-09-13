@@ -120,6 +120,7 @@ import type { IntentSlot, Output } from "@/lib/types"
 import {
   fileIconFor,
   formatChipDuration,
+  probeMediaDims,
   useStagedFileMeta,
 } from "@/lib/stagedFiles"
 
@@ -2019,9 +2020,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         headers: material.type ? { "Content-Type": material.type } : {},
       })
       if (!putRes.ok) throw new Error("Failed to upload file")
+      // The pixel probe rides the same beat — the asset row is born with its
+      // real dims so the canvas frame law shapes its node from birth
+      // (产物卡跟源比例, 2026-09-13).
+      const dims = await probeMediaDims(material)
       const assetRes = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
         method: "POST",
-        body: { type: inferAssetType(material), key, title: material.name },
+        body: {
+          type: inferAssetType(material),
+          key,
+          title: material.name,
+          ...(dims ?? {}),
+        },
         toast: false,
       })
       if (!assetRes.ok) throw new Error("Failed to create asset")

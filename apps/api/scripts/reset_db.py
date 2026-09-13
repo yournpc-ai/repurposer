@@ -16,7 +16,13 @@ Everything else in the bucket (``{user_id}/uploads|outputs|personas|
 brand-media/...`` and any stray top-level prefix) is deleted, and every row
 is deleted from every table (users, projects, assets, outputs, operations,
 publications, workflow runs/steps, chat, music, channel accounts,
-notifications, verification codes).
+notifications, verification codes, the billing ledger — wallets +
+credit_transactions, ADR-055 — and the ``configs`` operating-parameter rows:
+factory settings ARE the CONFIG_REGISTRY defaults; the startup reconcile
+reinserts the rows and a missing row reads as the default via
+``get_config()``, so the wipe is the reset. One caveat: a RUNNING API
+process caches config values in memory — restart it if a pre-wipe override
+must stop serving immediately).
 
 Dry-run by default — prints the DB row counts and the storage plan (per
 top-level prefix: object count + bytes). Pass ``--yes`` to execute.
@@ -56,7 +62,9 @@ from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import (  # noqa: E402
     Asset,
     ChannelAccount,
+    Config,
     Conversation,
+    CreditTransaction,
     Message,
     Music,
     Notification,
@@ -67,6 +75,7 @@ from app.models.tables import (  # noqa: E402
     Publication,
     User,
     VerificationCode,
+    Wallet,
     WorkflowRun,
 )
 from app.pipeline.music import seed_default_music  # noqa: E402
@@ -103,8 +112,19 @@ def _plan() -> list[tuple[str, object]]:
         ("personas", Persona),
         ("music", Music),
         ("channel_accounts", ChannelAccount),
+        # The billing ledger (ADR-055) references users with NO ACTION FKs —
+        # it must die before them, or the users delete violates the FK and
+        # the whole wipe rolls back mid-plan.
+        ("credit_transactions", CreditTransaction),
+        ("wallets", Wallet),
         ("users", User),
         ("verification_codes", VerificationCode),
+        # Operating parameters, not user data — but factory settings ARE the
+        # CONFIG_REGISTRY defaults: wiping the rows resets every override
+        # (startup reconcile reinserts them; get_config reads a missing row
+        # as the default). A running process's in-memory cache keeps the old
+        # values until restart.
+        ("configs", Config),
     ]
 
 

@@ -13,27 +13,42 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   /** 配方说明书 step pills：小尺寸，不抢产物节点视觉权重。 */
   step: { width: 144, height: 48 },
   /** Document node (ADR-057 — the task book, the FLORA text-node form):
-   * the glass text card, a six-line relaxed body clamp. */
-  document: { width: 260, height: 200 },
+   * the glass text card; 2026-09-13 增大批 widens the lane 260 → 340
+   * (text/agent width — the measurement law's chars-per-line scales with
+   * the column, see documentTextHeight) and floors the fallback height at
+   * the DOCUMENT_MIN_H reading surface. */
+  document: { width: 340, height: 280 },
   generator: { width: 280, height: 268 },
   processor: { width: 280, height: 268 },
   agent: { width: 340, height: 268 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
- * 放大): a corner-info band above the card (type left / language right), the
- * media flush full-bleed inside the card, a padded interaction area under it
- * (the run's prompt), and the always-on action bar in a reserved band under
- * the card. The thumb keeps the clip's own frame — three aspect sizes, never
- * a forced crop (2026-08-14 ruling). The media fills the card edge to edge
- * (no inner padding), so the aspect heights are computed at the full lane
- * width (280 — the 208 lane read too narrow next to its toolbar). The
- * server mirrors this table for its aspect-exact frame reservations —
- * graph_store._CLIP_FRAME_H (一条测量律两镜像互引, 判词②). */
+ * 放大; 2026-09-13 用户拍板 分档加宽): a corner-info band above the card (type
+ * left / language right), the media flush full-bleed inside the card, a
+ * padded interaction area under it (the run's prompt), and the always-on
+ * action bar in a reserved band under the card. The thumb keeps the clip's
+ * own frame — three aspect sizes, never a forced crop (2026-08-14 ruling).
+ * The media fills the card edge to edge (no inner padding) at the ASPECT'S
+ * OWN lane width (9:16 → 280, 1:1 → 340, 16:9 → 400 — 横屏真正能看, the
+ * portrait tower stays put); the heights below are aspect-exact at those
+ * widths. The server mirrors this table for its per-aspect frame
+ * reservations — graph_store._CLIP_FRAME (一条测量律两镜像互引, 判词②). */
 export const PRODUCT_THUMB_PX: Record<string, number> = {
   "9:16": 498,
-  "1:1": 280,
-  "16:9": 158,
+  "1:1": 340,
+  "16:9": 225,
+}
+
+/** The display-class snap — mirror of graph_store.display_aspect_class
+ * (geometric-mean boundaries 0.75 / 4:3; nearest ratio, never a crop). The
+ * clip card never snaps client-side (its class is server-stamped on the
+ * payload); the ASSET card does (dims ride AssetResponse.width/height). */
+export function displayAspectClass(width: number, height: number): string {
+  const r = width / height
+  if (r < 0.75) return "9:16"
+  if (r < 1.334) return "1:1"
+  return "16:9"
 }
 
 /** Non-clip products (no aspect) get the 16:9 strip. */
@@ -57,7 +72,7 @@ export const PRODUCT_TOOLBAR_PX = 44
 
 /** Clip-product card height by aspect (the graph canvas's media node):
  * caption + the aspect-exact thumb + the program region + the factsbar
- * band. Width is the frame's (280 clip class). */
+ * band. Width is the frame's (per-aspect lane since 2026-09-13). */
 export function clipNodeHeight(aspect?: string | null): number {
   const thumb = (aspect && PRODUCT_THUMB_PX[aspect]) || PRODUCT_THUMB_DEFAULT_PX
   return PRODUCT_LABEL_PX + thumb + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX
@@ -110,6 +125,12 @@ export function textLineCount(body: string, hasTitle: boolean): number {
  * _DOCUMENT_MAX_H — the value = the text frame class's 560 reservation. */
 export const DOCUMENT_MAX_H = 560
 
+/** The document card's height FLOOR (2026-09-13 用户拍板 高度增大): a short
+ * text still gets a reading surface, never a 3-line stub — peer to the
+ * generator quiet body (~278). One law with the server mirror
+ * (graph_store._document_frame's _DOCUMENT_MIN_H). */
+export const DOCUMENT_MIN_H = 280
+
 /** 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文) + 封顶滚动律
  * (2026-09-11): the document card never truncates — it renders the full text
  * and SCROLLS when the need exceeds DOCUMENT_MAX_H (applied in graphNodeSize
@@ -123,7 +144,7 @@ export const DOCUMENT_MAX_H = 560
  * from birth; post-Start the card fills less of the frame). */
 export function documentTextHeight(text: string, confirm: boolean): number {
   const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(text)
-  const charsPerLine = cjk ? 32 : 50 // the server's 228px-column values
+  const charsPerLine = cjk ? 43 : 67 // the server's 308px-column values (340 frame, 2026-09-13 增大批 — was 32/50 at 228px)
   const lines = text ? Math.max(1, Math.ceil(text.length / charsPerLine)) : 1
   return 26 + 16 + lines * 18 + 16 + (confirm ? 88 : 0)
 }
@@ -138,10 +159,21 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   const fallback = FLOW_NODE_SIZE[node.kind]
   const width = frame?.w ?? fallback.width
   if (node.kind === "asset") {
+    // 素材节点同律 (2026-09-13 用户拍板): the source's real pixels shape the
+    // node — snapped to its display class's anatomy (media + caption + bar,
+    // ONE law with the server's graph_store._ASSET_FRAME mirror). Never
+    // outgrow the born frame: dims that landed after birth (API-path
+    // uploads) keep the conservative default reservation — the media flexes
+    // smaller inside (contain slivers), never an overlap.
+    const dimsH = assetDimsHeight(node.asset?.width, node.asset?.height)
+    const videoH =
+      dimsH != null
+        ? Math.min(dimsH, frame?.h ?? dimsH)
+        : VIDEO_ASSET_NODE_SIZE.height
     return {
       width,
       height: node.videoUrl
-        ? VIDEO_ASSET_NODE_SIZE.height
+        ? videoH
         : PRODUCT_LABEL_PX + 190 + PRODUCT_TOOLBAR_PX,
     }
   }
@@ -155,7 +187,9 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // the card fills less — the frame's +88 is a reservation, not a mandate).
     const text = (node.spec?.text as string | undefined) ?? ""
     const confirm = node.spec?.role === "task_book" && node.status === "draft"
-    return { width, height: Math.min(documentTextHeight(text, confirm), DOCUMENT_MAX_H) }
+    // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
+    // the body scrolls past the cap; short texts fill the floor with air.
+    return { width, height: Math.min(Math.max(documentTextHeight(text, confirm), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
   // generator / processor / agent: product region + program region + bar.
   const outputs = node.outputs ?? []
@@ -179,7 +213,26 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
       height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX,
     }
   }
-  return { width, height: clipNodeHeight(first.aspect ?? null) }
+  // Never outgrow the born frame (the reservation law, 判词②): a node
+  // stamped before the source dims were known keeps its conservative
+  // frame — the card's media region caps to fit (FlowNodeCard mirrors the
+  // cap), never an overlap. Frames born with dims are aspect-exact — the
+  // cap is inert.
+  const clipH = clipNodeHeight(first.aspect ?? null)
+  return { width, height: frame?.h ? Math.min(clipH, frame.h) : clipH }
+}
+
+/** The asset node's content height from the source's real dims (media +
+ * caption + bar) — the client mirror of graph_store._ASSET_FRAME. Null when
+ * dims are unknown (the caller keeps the legacy default). */
+function assetDimsHeight(
+  width?: number | null,
+  height?: number | null,
+): number | null {
+  if (!width || !height) return null
+  return (
+    PRODUCT_LABEL_PX + PRODUCT_THUMB_PX[displayAspectClass(width, height)] + ASSET_TOOLBAR_PX
+  )
 }
 
 /** A node's resolved size — the per-kind default unless the node pins an

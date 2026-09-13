@@ -541,6 +541,12 @@ const en = {
       /** 估价贴: the card's credits quotation on the typical source,
        * rendered above the send button (BILLING §7). */
       estimate: "Estimated cost: ~{{low}}–{{high}} credits",
+      /** Usage-priced sticker (per-second cards, e.g. voice-dub): rate per
+       * source-video second + the one-shot voice-clone fee — scales to the
+       * user's real upload in their head. Solo = no one-shot fee. */
+      estimateRate:
+        "~{{rate}} credits/sec of video · first dub +{{oneShot}} (voice clone, billed once)",
+      estimateRateSolo: "~{{rate}} credits/sec of video",
     },
     "multilingual-subs": {
       title: "Multilingual captions",

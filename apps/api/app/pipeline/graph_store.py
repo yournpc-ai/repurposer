@@ -220,6 +220,30 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 # agent reserves the clip maximum — safe by construction.
 _GAP_MAIN = 96
 _GAP_CROSS = 24
+
+# ---- display aspect classes (2026-09-13 用户拍板 — 产物卡跟源比例 + 分档加宽)
+# The source media's REAL pixels snap to the nearest of the three display
+# classes (geometric-mean boundaries: 0.75 sits between 9:16 and 1:1, 4:3
+# between 1:1 and 16:9 — the snap picks the least-bars box, off-ratios keep
+# their contain slivers, never a crop). "original"-aspect chains
+# (whole-source / transform, never reframe) resolve to the source's class at
+# stamp time when dims are known (meta.width/height — probed at upload /
+# processing); unknown dims keep the 16:9 default strip, read-tolerant.
+def display_aspect_class(width: int | float, height: int | float) -> str:
+    """One source's dims → its display class (nearest ratio, no crop)."""
+    r = width / height
+    if r < 0.75:
+        return "9:16"
+    if r < 1.334:
+        return "1:1"
+    return "16:9"
+
+
+def resolve_source_aspect(dims: list[tuple[int, int]]) -> str | None:
+    """The faced sources' ONE display class — mixed / unknown shapes stay
+    "original" (the conservative default strip), never a coin flip."""
+    classes = {display_aspect_class(w, h) for w, h in dims if w > 0 and h > 0}
+    return classes.pop() if len(classes) == 1 else None
 # A fresh column's first node RISES above its topmost parent (2026-09-09
 # 走查拍板, FLORA 同典): out-ports ride the parent's top-RIGHT (~54px from
 # its top: outBase 40 + half the 28px anchor), in-ports the child's
@@ -230,28 +254,55 @@ _GAP_CROSS = 24
 _FRESH_COLUMN_RISE = 126
 _FRAME_CLASS: dict[str, tuple[int, int]] = {
     "asset": (280, 260),
-    "document": (260, 200),
+    # 260 → 340 (2026-09-13 用户拍板——文字节点增大): the document joins the
+    # text/agent lane width; the pitch (496) is unaffected since the widest
+    # class stays the 400 clip. The measurement law's chars-per-line scales
+    # with the column (below); nodes born at 260 keep their stamped frame
+    # (append-only 保序律, the text-class precedent).
+    "document": (340, 200),
     # 440 → 560 (2026-09-10 用户拍板——内容长度驱动卡高): the taller text
     # reservation derives an 18-line preview cap (was 12) client-side; the
     # cap is computed FROM each node's own reservation, so nodes born under
     # 440 keep their 12-line guarantee — append-only 保序律 covers size law
     # changes without migration.
     "text": (340, 560),
-    "clip": (280, 660),
+    # The clip entry is the class MAX — the unstamped fallback (wiring-born
+    # nodes), safe by construction. Stamped clip nodes reserve their aspect's
+    # own anatomy via _CLIP_FRAME.
+    "clip": (400, 660),
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
 
-# The clip-class frame's aspect-exact heights (2026-09-11 — the fork-column
-# dead-air walkthrough): the fill stamps spec.frame_aspect
-# (graph_fill._frame_class_of — the chain's explicit aspect wins;
-# whole-source / transform chains = "original", 比例跟源, they never
-# reframe), and the reservation narrows to the aspect's own anatomy. The
-# math is ONE law with the client (layout.ts clipNodeHeight = caption 26 +
-# PRODUCT_THUMB_PX[aspect] + program 88 + bar 44; "original" rides the 16:9
-# default strip) — two mirrors cross-referenced, never a third copy (判词②).
-# 9:16 keeps the class's 660 (its 4px breath included); an unstamped clip
-# node keeps the class max — safe by construction.
-_CLIP_FRAME_H = {"9:16": 660, "1:1": 438, "16:9": 316, "original": 316}
+# The clip-class frame's per-aspect reservations (2026-09-11 aspect-exact
+# heights; 2026-09-13 用户拍板 分档加宽 — the lane WIDTH now follows the
+# aspect too: 横屏真正能看, the portrait tower stays put): the fill stamps
+# spec.frame_aspect (graph_fill._frame_class_of — the chain's explicit aspect
+# wins; whole-source / transform chains resolve "original" to the source's
+# display class when the source's real dims are known — meta.width/height,
+# unknown dims keep the "original" default strip). The math is ONE law with
+# the client (layout.ts clipNodeHeight = caption 26 + PRODUCT_THUMB_PX[aspect]
+# + program 88 + bar 44, media at the lane width) — two mirrors
+# cross-referenced, never a third copy (判词②). 9:16 keeps its 660 (the 4px
+# breath included); an unstamped clip node keeps the class max.
+_CLIP_FRAME: dict[str, tuple[int, int]] = {
+    "9:16": (280, 660),
+    "1:1": (340, 498),
+    "16:9": (400, 383),
+    # "original" with unknown dims — the legacy 280-wide 16:9 strip.
+    "original": (280, 316),
+}
+
+# Asset node frames by the source's display class (2026-09-13 — 素材节点同律,
+# media + caption 26 + toolbar 44): stamped at birth by stamp_asset_node from
+# meta.width/height (client-probed at upload; the chain-head probe backfills
+# API-path uploads too late for the frame — their nodes keep the default).
+# One law with the client mirror (layout.ts graphNodeSize's asset branch).
+_ASSET_FRAME: dict[str, tuple[int, int]] = {
+    "9:16": (280, 568),
+    "1:1": (340, 410),
+    "16:9": (400, 295),
+}
+_ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
 # The task-book document's role tag (graph_fill's stamps set it; the frame
 # law reads it for the dock-time confirm allowance). One home here — the
@@ -280,6 +331,10 @@ _DOCUMENT_CONFIRM_PX = 88
 # The cap — one law with the client mirror (layout.ts DOCUMENT_MAX_H); the
 # value = the text frame class's 560 reservation.
 _DOCUMENT_MAX_H = 560
+# The floor (2026-09-13 用户拍板 高度增大): a short text still gets a reading
+# surface, never a 3-line stub — peer to the generator quiet body (~278).
+# One law with the client mirror (layout.ts DOCUMENT_MIN_H).
+_DOCUMENT_MIN_H = 280
 _CJK_RE = re.compile(r"[一-龥぀-ゟ゠-ヿ]")
 
 
@@ -287,14 +342,17 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
     w, _ = _FRAME_CLASS["document"]
     text = str(spec.get("text") or "")
     # The text card's table is 44 CJK / 68 Latin chars per 312px of text
-    # width; the document's column is 228px — the same proportion (one law).
+    # width; the document's column is 308px (340 frame − 2×16 padding,
+    # 2026-09-13 增大批 — was 228px at 260) — the same proportion (one law),
+    # rounding DOWN so the frame errs tall (whitespace, never overflow):
+    # 44×308/312 → 43, 68×308/312 → 67.
     cjk = bool(_CJK_RE.search(text))
-    chars_per_line = 32 if cjk else 50
+    chars_per_line = 43 if cjk else 67
     lines = max(1, math.ceil(len(text) / chars_per_line)) if text else 1
     h = _DOCUMENT_CAPTION_PX + 16 + lines * _DOCUMENT_LINE_PX + 16
     if spec.get("role") == _TASK_BOOK_ROLE:
         h += _DOCUMENT_CONFIRM_PX
-    return w, min(h, _DOCUMENT_MAX_H)
+    return w, min(max(h, _DOCUMENT_MIN_H), _DOCUMENT_MAX_H)
 
 # 统一摆位律 (2026-09-09 拍板): ONE frame law owns every newborn's frame
 # (_assign_layout), and columns are DEPTH-pitched — x = depth × _PITCH,
@@ -307,19 +365,26 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
 # rendering of it, never the source of truth. Frames of projects born
 # before this law are replayed once by migration (see
 # migrations/versions/e7a9c1d35b28_depth_pitch_frames.py).
-_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 340 + 96
+_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 400 + 96
 
 
 def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
     cls = _KIND_FRAME_CLASS.get(kind) or str(spec.get("frame_class") or "") or "clip"
     if cls == "document":
         return _document_frame(spec)
+    if cls == "asset":
+        # The source's display class, stamped at birth when its dims were
+        # known — unknown dims keep the default reservation.
+        return _ASSET_FRAME.get(
+            str(spec.get("frame_aspect") or ""), _ASSET_FRAME_DEFAULT
+        )
     if cls == "clip":
         # The aspect-exact reservation when the fill stamped one
         # (frame_aspect) — the class max stays the fallback for unstamped
         # nodes (legacy rows, wiring-born nodes), safe by construction.
-        w, max_h = _FRAME_CLASS["clip"]
-        return w, _CLIP_FRAME_H.get(str(spec.get("frame_aspect") or ""), max_h)
+        return _CLIP_FRAME.get(
+            str(spec.get("frame_aspect") or ""), _FRAME_CLASS["clip"]
+        )
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
 

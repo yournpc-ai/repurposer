@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tabs"
 import { apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { formatDuration, cn } from "@/lib/utils"
+import { useSoundMutexHold } from "@/components/flow/sound-mutex"
 
 import type { Output } from "@/lib/types"
 
@@ -31,6 +32,9 @@ export function ClipDetailModal({
   onRegenerate,
 }: ClipDetailModalProps) {
   const { t } = useTranslation()
+  // 全局声音指针 (2026-09-13): the modal's controls-video is a sound source
+  // — hold the project mutex while open so every canvas/dock video mutes.
+  useSoundMutexHold(open, `clipdetail:${output.id}`)
   const [clipState, setClipState] = useState<Output>(output)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 

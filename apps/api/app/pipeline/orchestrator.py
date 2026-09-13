@@ -6,10 +6,13 @@ ready nodes (``jobs.claim_ready_node``) and executes them through
 ``execute_step``.
 
 Run-level semantics preserved from the retired run_generation:
-- "all failed or nothing" — a run only fails when every generation node
-  failed/was skipped (partial failures still complete the run);
+- the verdict (2026-09-13 ADR-074②, the pre-fork rule retired): ANY failed
+  non-fanout step fails the run — a partial failure (products landed) drops
+  the project to REVIEW, a total one to DRAFT;
 - run COMPLETED flips the project to REVIEW;
-- render nodes never hold a run open (they mirror the render chain, D2).
+- render nodes HOLD a run open (ADR-074② 同日三轮翻案: they mirror the
+  render chain, D2 — and the run's end waits for the last render, so the
+  receipt / closing line never lands mid-render).
 """
 
 import asyncio
@@ -75,9 +78,8 @@ logger = structlog.get_logger()
 
 # Kinds whose terminal state is owned outside the worker topo walk (D2) —
 # node-declared (`runtime_fanout`), consumed here so a new fan-out kind needs
-# zero kernel edits. The SQL fragment is built from code constants only.
+# zero kernel edits.
 RUNTIME_FANOUT_KINDS = runtime_fanout_kinds()
-_RUNTIME_FANOUT_SQL = ", ".join(f"'{k}'" for k in sorted(RUNTIME_FANOUT_KINDS))
 
 # Targeted-regen scopes: the generic "derivative" plus every copy-writer
 # output type (node-derived — a new writer package is targetable here with
@@ -1449,11 +1451,17 @@ async def _release_orphaned_hold(db: AsyncSession, run_id: UUID) -> None:
 
 
 async def maybe_finalize_run(run_id: UUID) -> None:
-    """Settle a run once no non-render node is active.
+    """Settle a run once no node is active — render fan-out included.
 
-    Render nodes are excluded from the active/failure tally (they mirror the
-    render chain and never hold a run open — same semantics as the retired
-    orchestration, where renders continued after the run completed).
+    Render nodes HOLD the run open (2026-09-13 ADR-074② 翻案): the run's end
+    is the receipt / closing-line tombstone (ADR-073②), so it must wait for
+    the last render — the retired orchestration's inheritance ("renders
+    continue after the run completes") let「做好了」land mid-render. Render
+    mirrors settle through the render chain (D2: ``outputs.render_status``
+    owns their lifecycle), so ``render_output`` re-invokes this finalizer
+    when a render lands. The fanout exemption survives ONLY in the failure
+    verdict below — a failed render is a per-output fact the canvas card
+    carries, never a run verdict.
     """
     async with AsyncSessionLocal() as db:
         run = await db.get(
@@ -1485,8 +1493,9 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             n
             for n in nodes
             # waiting counts as active: a interrupt parked for a human answer
-            # must never let the run settle (期 4).
-            if n.status in ("pending", "running", "waiting") and n.kind not in RUNTIME_FANOUT_KINDS
+            # must never let the run settle (期 4). Render fan-out steps count
+            # too (ADR-074② 翻案 — the run ends when the last render lands).
+            if n.status in ("pending", "running", "waiting")
         ]
         if active:
             await db.commit()
@@ -1497,9 +1506,10 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         # predicate (2026-07-14, before forks existed) let a dead translate /
         # dub fork ride its surviving siblings to a green receipt + a 收官句 —
         # a red ✗ step under a ✓ run (the「有报错却显示完成」走查). Render
-        # fanout stays excluded (one step per output; a failed render is a
-        # per-output fact the canvas card carries, never a run verdict — the
-        # same exclusion the active tally above keeps).
+        # fanout stays excluded from the FAILURE verdict (one step per output;
+        # a failed render is a per-output fact the canvas card carries, never
+        # a run verdict) — while the ACTIVE tally above no longer exempts it
+        # (ADR-074② 翻案: renders hold the run open to their own terminal).
         failed_verdict = [
             n
             for n in nodes
@@ -1638,6 +1648,10 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
 async def finalize_stuck_runs() -> None:
     """Finalize RUNNING runs whose nodes are all settled (crash recovery).
 
+    Render steps hold the run open here too (ADR-074② 翻案): the startup
+    reap just re-pended orphaned renders, so a crashed mid-render run must
+    survive this sweep and settle when the re-run lands.
+
     Case law in raw SQL: workflow_runs.status is a native enum storing the
     enum NAME ('RUNNING' — same convention as jobs.py's run claim), while
     workflow_steps.status is a lowercase varchar. A lowercase 'running'
@@ -1648,14 +1662,13 @@ async def finalize_stuck_runs() -> None:
         run_ids = (
             await db.execute(
                 text(
-                    f"""
+                    """
                     SELECT r.id FROM workflow_runs r
                     WHERE r.status = 'RUNNING'
                       AND NOT EXISTS (
                         SELECT 1 FROM workflow_steps pn
                         WHERE pn.run_id = r.id
                           AND pn.status IN ('pending', 'running', 'waiting')
-                          AND pn.kind NOT IN ({_RUNTIME_FANOUT_SQL})
                       )
                     """
                 )

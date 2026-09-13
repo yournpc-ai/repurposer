@@ -55,6 +55,10 @@ export interface FlowAssetInfo {
   file_url: string | null
   stream_url?: string | null
   duration_seconds?: number | null
+  /** The media's real pixels — the asset node's display-class sizing reads
+   * them (graphNodeSize, 素材节点同律 2026-09-13). */
+  width?: number | null
+  height?: number | null
 }
 
 export interface FlowNode {

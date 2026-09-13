@@ -43,7 +43,7 @@ class ConfigDef:
 
 CONFIG_REGISTRY: dict[str, ConfigDef] = {
     "wallet.signup_grant": ConfigDef(
-        default=10000,
+        default=100000,
         type=int,
         desc="Credits granted when a wallet is opened on first login "
         "(kind=grant, ref.source=signup).",

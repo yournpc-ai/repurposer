@@ -67,7 +67,7 @@ class Config(Base):                       # configs — 公共运营参数表（
                      （用户级 shortfall）            ✅ 失败不扣费（§6）
 ```
 
-1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=10000`），`kind=grant, ref={source:"signup"}`。
+1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=100000`，2026-09-13 自 10000 再上调），`kind=grant, ref={source:"signup"}`。
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
 3. **实扣（capture）**：在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
 4. **释放（release）**：run 终态释放剩余（idem `run:{id}:release`）。

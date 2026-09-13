@@ -49,7 +49,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import NODE_KINDS
-from app.pipeline.graph_store import _TASK_BOOK_ROLE, apply_wiring_ops
+from app.pipeline.graph_store import (
+    _TASK_BOOK_ROLE,
+    apply_wiring_ops,
+    display_aspect_class,
+    resolve_source_aspect,
+)
 from app.pipeline.outputs import compose_spec_prompt
 from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 
@@ -220,6 +225,18 @@ async def stamp_asset_node(
     ).scalar_one_or_none()
     if existing is not None:
         return existing
+    # 素材节点同律 (2026-09-13): the source's real dims (client-probed at
+    # upload → meta.width/height) shape its frame from birth — a 1:1 keynote
+    # recording no longer letterboxes into the 16:9 default strip. Dims
+    # unknown (API-path uploads — the chain-head probe lands after birth)
+    # keep the default reservation.
+    asset_meta = asset.meta if isinstance(asset.meta, dict) else {}
+    aw, ah = asset_meta.get("width"), asset_meta.get("height")
+    asset_frame_aspect = (
+        display_aspect_class(aw, ah)
+        if isinstance(aw, int) and isinstance(ah, int) and aw > 0 and ah > 0
+        else None
+    )
     delta = await apply_wiring_ops(
         db,
         project_id,
@@ -231,6 +248,11 @@ async def stamp_asset_node(
                     "asset_id": str(asset.id),
                     "asset_type": str(asset.type.value if hasattr(asset.type, "value") else asset.type),
                     "title": asset.title,
+                    **(
+                        {"frame_aspect": asset_frame_aspect}
+                        if asset_frame_aspect
+                        else {}
+                    ),
                 },
             }
         ],
@@ -491,6 +513,29 @@ async def _stamp_graph_core(
     project_id = UUID(str(project.id))
     run_id_str = str(run.id) if run is not None else None
 
+    # The canvas's aspect truth (2026-09-13 用户拍板 — 产物卡跟源比例 +
+    # 分档加宽): the project's media dims (probed at upload / processing into
+    # meta.width/height) let an "original"-aspect chain reserve the source's
+    # real display class at stamp time. Mixed / unknown shapes stay
+    # "original" (the conservative default strip), never a coin flip.
+    dims_rows = (
+        await db.execute(
+            select(Asset.meta).where(
+                Asset.project_id == project_id,
+                Asset.file_url.isnot(None),
+            )
+        )
+    ).scalars().all()
+    source_aspect = resolve_source_aspect(
+        [
+            (meta["width"], meta["height"])
+            for meta in dims_rows
+            if isinstance(meta, dict)
+            and isinstance(meta.get("width"), int)
+            and isinstance(meta.get("height"), int)
+        ]
+    )
+
     # ── 1. Classify the steps into node families ─────────────────────────
     # node_key → {"kind": graph kind, "steps": [step]}; every generation /
     # processor / agent step owns or joins a node; the prelude belongs to
@@ -747,6 +792,12 @@ async def _stamp_graph_core(
         )
         reused = by_fill_key.get(key)
         frame_class, frame_aspect = _frame_class_of(fam_steps)
+        # "original" resolves to the source's real display class when the
+        # source dims are known (比例跟源 — the card shapes itself to the
+        # material, never a black-bar default strip); unknown / mixed keeps
+        # the sentinel and its conservative reservation.
+        if frame_aspect == "original" and source_aspect is not None:
+            frame_aspect = source_aspect
         # A revise-headed family revisits an EXISTING node: the node's name,
         # its executable tool identity (spec.tool) and its structured params
         # (the slot the next revision re-runs from) stay the original

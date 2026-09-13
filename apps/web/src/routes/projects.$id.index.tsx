@@ -14,6 +14,7 @@ import { outputFullText } from "@/components/results/outputText"
 import { ChatDock, normalizeIntent, tasksFromRunContext, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
 import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
+import { SoundMutexProvider } from "@/components/flow/sound-mutex"
 import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/components/flow/types"
 import { PostCard } from "@/components/results/PostCard"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
@@ -973,6 +974,7 @@ function ProjectDetailPage() {
     // chrome (theme / language / notifications) lives in the studio shell —
     // 2026-08-19 走查拍板, confirmed to cover MOBILE too (nearest entry =
     // back to /projects).
+    <SoundMutexProvider>
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
       {/* Top-left chrome — a TWO-FORM machine (2026-09-02 形态机, driven by
           worldLive): pre-generation it is a plain back pill (icon + Projects);
@@ -1229,6 +1231,7 @@ function ProjectDetailPage() {
         onSkip={markResultsTourSeen}
       />
     </div>
+    </SoundMutexProvider>
   )
 }
 

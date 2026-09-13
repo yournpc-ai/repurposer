@@ -148,12 +148,28 @@ class RecipeEntry(BaseModel):
     status: Literal["live", "reserved"]
     input_slots: list[InputSlot] = Field(default_factory=list)
     tasks: list[TaskItem]
+    # 估价贴形态 (BILLING §7): "total" = the [low, high] total on the typical
+    # source (LLM-dominated cards — cost barely moves with source size);
+    # "per_second" = rate + one-shot split (usage-priced cards — TTS scales
+    # with source duration, so a 20-minute-anchored total misleads the
+    # 15-second test and the hour-long upload alike).
+    quote_form: Literal["total", "per_second"] = "total"
     # --- Public display projection (RECIPES §7.1) ---
     aspect: str = "9:16"
     tags: list[str] = Field(default_factory=list)  # shared recipes.tags.* keys
     flow: list[FlowStep] = Field(default_factory=list)
     example_assets: list[ExampleAsset] = Field(default_factory=list)
     example_outputs: list[ExampleOutput] = Field(default_factory=list)
+
+
+class EstimateRate(BaseModel):
+    """The per-second sticker payload (``quote_form="per_second"`` cards):
+    credits per source-video second + the one-shot fee riding alongside
+    (the voice clone — once per voice). The two parts price the two cost
+    SHAPES: a duration-scaled stream and a first-time fixed fee."""
+
+    per_second: int
+    one_shot: int
 
 
 class RecipePublic(BaseModel):
@@ -177,6 +193,10 @@ class RecipePublic(BaseModel):
     # the declared chain's estimate fold × the live consumption ratio, so one
     # config edit moves every sticker (调参三面同动). None = unquoted chain.
     estimate_credits: list[int] | None = None
+    # Usage-priced variant (``quote_form="per_second"``): the route fills
+    # THIS instead of estimate_credits — a per-second rate + one-shot fee,
+    # so the number scales to the user's real upload in their head.
+    estimate_rate: EstimateRate | None = None
 
 
 # 估价事实包 (BILLING §7): the typical-source quantities every recipe card's
@@ -291,6 +311,10 @@ RECIPE_REGISTRY: dict[str, RecipeEntry] = {
     "voice-dub": RecipeEntry(
         status="live",
         input_slots=[InputSlot(type="video")],
+        # TTS is per-character priced — a duration-anchored total scares the
+        # 15-second test and under-quotes the hour talk; the sticker quotes
+        # the rate + the once-per-voice clone fee instead (BILLING §7).
+        quote_form="per_second",
         tasks=[
             TaskItem(
                 tool="dub_clip",

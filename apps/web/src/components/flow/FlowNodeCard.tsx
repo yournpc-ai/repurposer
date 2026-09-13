@@ -16,7 +16,6 @@ import {
   Newspaper,
   Quote,
   Send,
-  Trash2,
   TriangleAlert,
   Type,
   Video,
@@ -38,7 +37,8 @@ import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
   FlowAssetInfo,
@@ -337,8 +337,10 @@ function ThumbCard({
   const { t } = useTranslation()
   const FallbackIcon = node.kind === "asset" ? FileText : Clapperboard
   // The inline video's ambient playback is muted by default (autoplay
-  // policy); the hover sound icon flips it.
-  const [muted, setMuted] = useState(true)
+  // policy); the hover sound icon flips it. 全局声音指针 (2026-09-13): the
+  // mute rides the project-wide mutex — unmuting here mutes every other
+  // media on the canvas (local-state fallback off-canvas).
+  const { muted, toggle: toggleMuted } = useSoundMutex(node.id)
   // Media facts for the toolbar are read off the loaded media itself — the
   // real pixels, never a hardcoded table.
   const [dims, setDims] = useState<string | null>(null)
@@ -353,8 +355,10 @@ function ThumbCard({
 
   // The asset toolbar (results canvas only — a node without the action
   // channel, e.g. the recipe manual, renders no bar): media facts on the
-  // left (filename / duration / resolution), then download / delete, and
-  // the node's own business (open / reprocess) in the ⋯ menu.
+  // left (filename / duration / resolution), then download ONLY — delete
+  // leaves every canvas toolbar (2026-09-13 二轮拍板, extending the same
+  // day's product-bar ruling: no node carries a destructive affordance;
+  // the delete API + handler branch stay retained like the products').
   const showBar = !!onAssetAction && !!asset
   const info: string[] = []
   if (node.detail) info.push(node.detail)
@@ -429,7 +433,7 @@ function ThumbCard({
           <MediaHoverButton
             className="right-2 top-2"
             label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
-            onClick={() => setMuted((v) => !v)}
+            onClick={toggleMuted}
           >
             {muted ? (
               <VolumeX className="h-3.5 w-3.5" />
@@ -449,7 +453,6 @@ function ThumbCard({
                 Icon: Download,
                 label: t("results.canvas.download"),
               },
-              { action: "delete", Icon: Trash2, label: t("common.delete") },
             ]}
             menuItems={[
               // ⋯ 菜单全量退役（2026-09-10 用户拍板——所有 toolbar 的 ⋯ 都去掉：
@@ -599,9 +602,24 @@ function MediaProductRegion({
       : []
   const hasVideo = !!output.files.video
   const videoUrl = hasVideo ? toAbsoluteUrl(output.files.video) : null
-  const [muted, setMuted] = useState(true)
+  // 全局声音指针 (2026-09-13): same mutex as the asset card — one sound
+  // source per project canvas.
+  const { muted, toggle: toggleMuted } = useSoundMutex(node.id)
   const clipAspect = output.aspect ?? null
-  const thumbPx = (clipAspect && PRODUCT_THUMB_PX[clipAspect]) || PRODUCT_THUMB_DEFAULT_PX
+  const wantedThumbPx =
+    (clipAspect && PRODUCT_THUMB_PX[clipAspect]) || PRODUCT_THUMB_DEFAULT_PX
+  // Never outgrow the born frame (the reservation law, 判词②): a node
+  // stamped before the source dims were known keeps its conservative frame —
+  // the media caps to the frame's budget (contain slivers return for that
+  // legacy/raced case), the next column-mate never bleeds. Frames born with
+  // dims are aspect-exact — the cap is inert. graphNodeSize mirrors it.
+  const frameThumbBudget = node.frame?.h
+    ? node.frame.h - PRODUCT_LABEL_PX - PROGRAM_REGION_PX - PRODUCT_TOOLBAR_PX
+    : null
+  const thumbPx =
+    frameThumbBudget != null
+      ? Math.min(wantedThumbPx, frameThumbBudget)
+      : wantedThumbPx
   // Render state projects onto the card in place: a failed render is the
   // CARD turning failed — never a separate node hanging off the graph; the
   // retry channel is the chat dock, so no toolbar action.
@@ -756,7 +774,7 @@ function MediaProductRegion({
         <MediaHoverButton
           className="right-2 top-2"
           label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
-          onClick={() => setMuted((v) => !v)}
+          onClick={toggleMuted}
         >
           {muted ? (
             <VolumeX className="h-3.5 w-3.5" />

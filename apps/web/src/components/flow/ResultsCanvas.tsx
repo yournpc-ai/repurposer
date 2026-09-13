@@ -180,6 +180,8 @@ export function ResultsCanvas({
                 file_url: asset.file_url,
                 stream_url: asset.stream_url,
                 duration_seconds: asset.duration_seconds,
+                width: asset.width,
+                height: asset.height,
               }
             : undefined,
           thumbUrl: asset?.type === "image" ? mediaUrl : null,

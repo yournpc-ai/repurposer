@@ -51,6 +51,42 @@ export interface StagedFileMeta {
   thumbUrl?: string
 }
 
+/** One-shot media-pixel probe for the upload payload (2026-09-13 用户拍板 —
+ * 产物卡跟源比例): the asset row is born with meta.width/height so the
+ * canvas's frame law shapes its node from birth (the server chain-head probe
+ * backfills API-path uploads). Video/image only; metadata-load cheap, every
+ * failure degrades to undefined (the default strip), never an upload block. */
+export function probeMediaDims(
+  file: File,
+): Promise<{ width: number; height: number } | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const done = (dims: { width: number; height: number } | undefined) => {
+      URL.revokeObjectURL(url)
+      resolve(dims && dims.width > 0 && dims.height > 0 ? dims : undefined)
+    }
+    if (file.type.startsWith("image/")) {
+      const el = new Image()
+      el.onload = () =>
+        done({ width: el.naturalWidth, height: el.naturalHeight })
+      el.onerror = () => done(undefined)
+      el.src = url
+      return
+    }
+    if (file.type.startsWith("video/")) {
+      const el = document.createElement("video")
+      el.preload = "metadata"
+      el.muted = true
+      el.onloadedmetadata = () =>
+        done({ width: el.videoWidth, height: el.videoHeight })
+      el.onerror = () => done(undefined)
+      el.src = url
+      return
+    }
+    done(undefined)
+  })
+}
+
 const keyOf = (file: File) => `${file.name}:${file.size}`
 
 /** Client-side metadata probe for a staged file. Local and cheap: images

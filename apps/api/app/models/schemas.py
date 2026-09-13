@@ -1302,6 +1302,12 @@ class AssetResponse(BaseModel):
     processing_status: AssetStatus
     processing_error: str | None = None
     duration_seconds: int | None = None
+    # The media's real pixels (meta.width/height — probed at upload /
+    # processing; the canvas's aspect truth). Populated post-validation at
+    # the serialization seats (a declared field would read the ORM's `meta`
+    # column name-by-name, so the seats stamp it).
+    width: int | None = None
+    height: int | None = None
     processed_at: datetime | None = None
     created_at: datetime
 
@@ -1335,6 +1341,14 @@ class AssetCreateRequest(BaseModel):
     type: AssetType
     # Original upload filename, used as the display title in the UI.
     title: str | None = None
+    # The canvas's aspect truth (2026-09-13 用户拍板 — 产物卡跟源比例):
+    # client-probed at staging (element metadata, same probe that feeds the
+    # chip), so the asset node is BORN with its real display class — the
+    # chain-head probe (asset_processing) backfills API-path uploads.
+    # Display-only (shapes a card, never a price), so client-reported is
+    # fine; the storage object itself is still verified above.
+    width: int | None = Field(default=None, gt=0, le=20000)
+    height: int | None = Field(default=None, gt=0, le=20000)
 
 
 class PersonaAssetCreateRequest(BaseModel):
@@ -2309,6 +2323,15 @@ class ClipPayload(BaseModel):
     title_options: list[str] = Field(default_factory=list)
     music_mood: str = "calm"
     duration: int = 30
+    # The display-class stamp for "original"-aspect chains (2026-09-13
+    # 用户拍板 — 产物卡跟源比例): at clip birth the source's real pixels name
+    # the display class ("9:16" / "1:1" / "16:9"), so the canvas card shapes
+    # itself to the material instead of the 16:9 default strip (黑边). The
+    # RENDER contract is untouched — render_spec.aspect stays "original";
+    # this feeds only OutputResponse._derive_aspect (same write-point
+    # pattern as image products). None when dims are unknown or the chain
+    # carries an explicit aspect (render_spec declares then).
+    aspect: str | None = None
 
 
 # ADR-030 rule 1: payload is the default home and a schema registry guards the

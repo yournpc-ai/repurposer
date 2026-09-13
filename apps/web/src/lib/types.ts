@@ -281,6 +281,10 @@ export interface GraphNodeAsset {
   file_url: string | null
   stream_url?: string | null
   duration_seconds?: number | null
+  /** The media's real pixels (meta.width/height — probed at upload /
+   * processing); the canvas's aspect truth for the asset node's shape. */
+  width?: number | null
+  height?: number | null
   created_at?: string
 }
 
