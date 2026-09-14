@@ -84,6 +84,33 @@ class WireTier(IntEnum):
     PROVIDER_NATIVE = 2  # provider-specific extras, declared per provider
 
 
+@dataclass(frozen=True)
+class ToolCall:
+    """One tool invocation from the provider's tool_calls channel — the
+    Tier-1 wire's verdict unit. ``arguments`` is the PARSED JSON object: a
+    fragment stream that fails to parse never reaches here — it raises
+    ``LLMSchemaError`` at the seam (truncation signature: finish_reason says
+    tool_calls but the arguments hit EOF) so the harness answers it with the
+    one feedback repair round, same class as any schema rejection."""
+
+    id: str | None
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True)
+class ToolGeneration:
+    """Provider-neutral result of a tool-formatted generation: ``content`` is
+    the prose channel (dialect-clean — the client's reasoning dialect is
+    already stripped at the seam), ``tool_calls`` the accumulated verdicts.
+    Empty ``tool_calls`` with prose is a LEGAL shape (tool_choice="auto",
+    the model chose to speak) — what that means is the caller's contract,
+    never the wire's."""
+
+    content: str
+    tool_calls: list[ToolCall]
+
+
 def pick_wire_tier(harness_max: WireTier, capabilities: ProviderCapabilities) -> WireTier:
     """The highest tier BOTH sides speak (harness 选双方共持最高层).
 

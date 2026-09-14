@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypeVar
 
 import httpx
@@ -22,6 +22,8 @@ from app.providers.llm.base import (
     LLMError,
     LLMSchemaError,
     ProviderCapabilities,
+    ToolCall,
+    ToolGeneration,
 )
 
 logger = structlog.get_logger()
@@ -142,6 +144,113 @@ class _ThinkStripper:
         self._state = "payload"
         out, self._buf = self._buf, ""
         return out
+
+
+def _parse_tool_arguments(name: str, raw: str, finish_reason: str | None) -> dict:
+    """Parse one tool call's accumulated argument text (ONE parse law for the
+    non-streaming object form and the streaming fragment form alike).
+
+    Empty text is a legal zero-argument call (``{}``). Unparseable text is
+    the TRUNCATION SIGNATURE (spike 2026-09-11/12: ~11% at the default token
+    budget — finish_reason says tool_calls but the arguments hit EOF) or
+    outright malformation; both are the schema class — ``LLMSchemaError`` so
+    the harness's one feedback repair round carries the reason back to the
+    model, never a blind re-roll, never a half-verdict.
+    """
+    if not raw:
+        return {}
+    try:
+        arguments = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise LLMSchemaError(
+            f"tool call {name!r} arguments did not parse "
+            f"(finish_reason={finish_reason}; truncation or malformation): {e}\n"
+            f"Raw: {raw[:500]}"
+        ) from e
+    if not isinstance(arguments, dict):
+        raise LLMSchemaError(
+            f"tool call {name!r} arguments are not a JSON object: {raw[:200]}"
+        )
+    return arguments
+
+
+def _tool_call_from_object(tc: dict, finish_reason: str | None) -> ToolCall:
+    """Parse one COMPLETE tool_calls[] object (the non-streaming form) —
+    same law as ``_ToolCallAccumulator.finish``: a missing function name is
+    wire-malformation (schema class), arguments go through the one parse law.
+    """
+    fn = tc.get("function") or {}
+    name = fn.get("name") or ""
+    if not name:
+        raise LLMSchemaError(
+            f"tool call {tc.get('id')!r} carried no function name "
+            f"(finish_reason={finish_reason})"
+        )
+    return ToolCall(
+        id=tc.get("id"),
+        name=name,
+        arguments=_parse_tool_arguments(name, fn.get("arguments") or "", finish_reason),
+    )
+
+
+@dataclass
+class _AccCall:
+    """One in-flight tool call inside ``_ToolCallAccumulator``."""
+
+    id: str | None = None
+    name: str | None = None
+    arg_parts: list[str] = field(default_factory=list)
+
+
+class _ToolCallAccumulator:
+    """Pure assembler for the streaming tool_calls dialect (OpenAI-compatible):
+    fragments arrive as ``delta.tool_calls[]`` entries keyed by ``index`` — a
+    call's ``id`` / ``name`` arrive once (its first fragment), the arguments
+    arrive as JSON text shards to concatenate. Pure state machine, no I/O:
+    the parse law lives in ``_parse_tool_arguments`` and fires only at
+    ``finish()``, so mid-stream fragments never raise.
+    """
+
+    def __init__(self) -> None:
+        self._calls: dict[int, _AccCall] = {}
+
+    def feed(self, deltas: list[dict]) -> list[str]:
+        """Consume one chunk's ``delta.tool_calls``; return the names of calls
+        whose name just became known — the ``on_tool_call`` hook's payload
+        (the phase-frame seam: T2's 「正在查曲库…」inspecting frames ride it)."""
+        named: list[str] = []
+        for tc in deltas:
+            idx = int(tc.get("index") or 0)
+            call = self._calls.setdefault(idx, _AccCall())
+            if tc.get("id"):
+                call.id = tc["id"]
+            fn = tc.get("function") or {}
+            if fn.get("name"):
+                if call.name is None:
+                    named.append(fn["name"])
+                call.name = fn["name"]
+            fragment = fn.get("arguments")
+            if fragment:
+                call.arg_parts.append(fragment)
+        return named
+
+    def finish(self, finish_reason: str | None) -> list[ToolCall]:
+        """Assemble the final calls in wire order (index ascending). A call
+        whose name never arrived is wire-malformation — same schema class as
+        an arguments parse failure."""
+        calls: list[ToolCall] = []
+        for idx in sorted(self._calls):
+            call = self._calls[idx]
+            if not call.name:
+                raise LLMSchemaError(
+                    f"tool call #{idx} never carried a function name "
+                    f"(finish_reason={finish_reason})"
+                )
+            arguments = _parse_tool_arguments(
+                call.name, "".join(call.arg_parts), finish_reason
+            )
+            calls.append(ToolCall(id=call.id, name=call.name, arguments=arguments))
+        return calls
 
 
 def _raise_for_status(
@@ -393,6 +502,222 @@ class MiniMaxClient:
                 raw_content=content[:1000],
             )
             raise LLMSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        # Same discipline as ``generate``: transport/HTTP hiccups only — a
+        # schema rejection (truncated/malformed tool arguments) is NEVER
+        # re-rolled blind here; the harness answers it with one feedback
+        # repair round.
+        retry=retry_if_not_exception_type(LLMSchemaError),
+        reraise=True,
+    )
+    async def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: float = 0.3,
+        thinking: bool = False,
+        tool_choice: str | dict = "auto",
+    ) -> ToolGeneration:
+        """Tier-1 wire format (ADR-077 判词④), non-streaming: the provider
+        picks from the declared ``tools`` (OpenAI-compatible function specs);
+        prose rides the content channel, verdicts ride tool_call arguments.
+
+        No ``response_format``: with tools declared, content is free prose,
+        not the JSON payload — the verdict contract moves to the arguments
+        channel (层只换线格式，永不动判决契约: the caller validates the
+        returned arguments against the same contract it holds today).
+        """
+        if not self.api_key:
+            raise LLMError("MINIMAX_API_KEY not configured")
+
+        payload: dict = {
+            "model": settings.minimax_model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": tool_choice,
+            "temperature": temperature,
+        }
+        if thinking:
+            payload["thinking"] = True
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            _raise_for_status(response)
+            data = response.json()
+
+        # ADR-025 metering: report usage to the bound workflow step (no-op when
+        # unbound). Done before validation — tokens were consumed either way.
+        from app.metering import record_usage
+
+        await record_usage(data.get("usage"))
+
+        choice = (data.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        finish_reason = choice.get("finish_reason")
+        # Prose is the content channel here — strip the reasoning dialect
+        # (start-only rule, same as _clean_json) but never markdown fences.
+        content = _THINK_BLOCK.sub("", message.get("content") or "").strip()
+        calls = [
+            _tool_call_from_object(tc, finish_reason)
+            for tc in message.get("tool_calls") or []
+        ]
+        return ToolGeneration(content=content, tool_calls=calls)
+
+    async def generate_stream_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: float = 0.3,
+        thinking: bool = False,
+        tool_choice: str | dict = "auto",
+        on_delta: Callable[[str], Awaitable[None] | None] | None = None,
+        on_reasoning: Callable[[str], Awaitable[None] | None] | None = None,
+        on_tool_call: Callable[[str], Awaitable[None] | None] | None = None,
+    ) -> ToolGeneration:
+        """Streaming twin of ``generate_with_tools`` (Tier-1 流式, spike 已验
+        形态 2026-09-11/12): prose fragments flow through ``on_delta``
+        dialect-clean (the think preamble is stripped at this seam — same
+        contract as ``generate_stream``); ``on_tool_call`` fires once per
+        call when its name first arrives — the phase-frame seam (T2's
+        「正在查曲库…」inspecting frames ride it); argument fragments
+        accumulate silently and surface only in the returned
+        ``ToolGeneration``.
+
+        Retry law mirrors ``generate_stream``: manual, and only before the
+        first downstream emission — ``emitted`` flips on the first delivered
+        prose fragment OR the first delivered tool-call name (a shown phase
+        frame is a side effect too). Truncation (finish_reason=tool_calls but
+        arguments hit EOF) raises ``LLMSchemaError`` after the stream drains —
+        prose already delivered stays delivered, and the harness's repair
+        round answers the verdict channel, exactly like a schema rejection
+        on the Tier-0 wire.
+        """
+        if not self.api_key:
+            raise LLMError("MINIMAX_API_KEY not configured")
+
+        payload: dict = {
+            "model": settings.minimax_model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": tool_choice,
+            "temperature": temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if thinking:
+            payload["thinking"] = True
+
+        emitted = False
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            if attempt:
+                await asyncio.sleep(min(2**attempt, 10))
+            accumulated = ""
+            stripper = _ThinkStripper()
+            accumulator = _ToolCallAccumulator()
+            usage: dict | None = None
+            finish_reason: str | None = None
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    ) as response:
+                        if response.status_code != 200:
+                            await response.aread()
+                            _raise_for_status(response)
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data = line[5:].strip()
+                            if not data or data == "[DONE]":
+                                continue
+                            try:
+                                chunk = json.loads(data)
+                            except json.JSONDecodeError:
+                                logger.warning("minimax_stream_bad_frame", frame=data[:200])
+                                continue
+                            if chunk.get("usage"):
+                                usage = chunk["usage"]
+                            choices = chunk.get("choices") or []
+                            if not choices:
+                                continue
+                            choice = choices[0]
+                            if choice.get("finish_reason"):
+                                finish_reason = choice["finish_reason"]
+                            delta = choice.get("delta") or {}
+                            reasoning = delta.get("reasoning_content")
+                            if reasoning and on_reasoning is not None:
+                                # Reasoning fragments are a liveness signal
+                                # only — never accumulated, never shown.
+                                result = on_reasoning(reasoning)
+                                if result is not None:
+                                    await result
+                            # Content and tool_calls are INDEPENDENT channels
+                            # in one chunk — never an elif: a tool-calls chunk
+                            # commonly carries no content at all.
+                            fragment = delta.get("content")
+                            if fragment:
+                                accumulated += fragment
+                                if on_delta is not None:
+                                    clean = stripper.feed(fragment)
+                                    if clean:
+                                        emitted = True
+                                        result = on_delta(clean)
+                                        if result is not None:
+                                            await result
+                            tool_deltas = delta.get("tool_calls") or []
+                            if tool_deltas:
+                                names = accumulator.feed(tool_deltas)
+                                if names and on_tool_call is not None:
+                                    for name in names:
+                                        emitted = True
+                                        result = on_tool_call(name)
+                                        if result is not None:
+                                            await result
+            except (httpx.TransportError, LLMError) as exc:
+                last_exc = exc
+                if emitted or attempt == 2:
+                    if isinstance(exc, LLMError):
+                        # Already keyed — re-raise intact, never re-wrap.
+                        raise
+                    raise LLMError(
+                        str(exc), user_key="provider_unreachable"
+                    ) from exc
+                continue
+            break
+        else:
+            if isinstance(last_exc, LLMError):
+                raise last_exc
+            raise LLMError(str(last_exc), user_key="provider_unreachable")
+
+        # ADR-025 metering (same contract as ``generate``: report before
+        # validation — tokens were consumed either way).
+        from app.metering import record_usage
+
+        await record_usage(usage)
+
+        content = _THINK_BLOCK.sub("", accumulated).strip()
+        # The truncation signature raises HERE (after the stream drained):
+        # schema class, so the harness's repair round answers it with
+        # feedback — never a blind client-side re-roll.
+        calls = accumulator.finish(finish_reason)
+        return ToolGeneration(content=content, tool_calls=calls)
 
     def _clean_json(self, raw: str) -> str:
         """Strip reasoning blocks and markdown fences from JSON payload."""
