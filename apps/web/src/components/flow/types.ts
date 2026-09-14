@@ -21,9 +21,12 @@ export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
  * crosses the wire as an edge type, it only names an out anchor. */
 export type OutPortType = GraphEdgeType | "image"
 
-/** Recipe surface: "asset" | "step" | "output". Graph canvas: the five
- * node types (asset is shared — the same media card on both surfaces). */
-export type FlowNodeKind = GraphNodeKind | "output" | "step"
+/** Graph canvas (GraphNodeKind): the v3 node types — five media values +
+ * the two transitional read-face words (modifier / materialize); asset
+ * rows arrive as their medium value with the joined `asset` dossier as
+ * the birth certificate (C4 read face). Recipe surface: its own three
+ * words — "asset" (a recipe's manual asset node) | "step" | "output". */
+export type FlowNodeKind = GraphNodeKind | "asset" | "output" | "step"
 
 /** Graph canvas node state (the graph row's own state vocabulary). The
  * recipe surface leaves status unset — its cards have no liveness. */

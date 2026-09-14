@@ -1057,6 +1057,10 @@ const en = {
       taskBook: "Task book",
       transcript: "Transcript",
       researchBrief: "Research brief",
+      // 两站拆分的文档站 (ADR-072, spec.role-derived — the doc station
+      // never carries a builder summary; its cue artifact is the content).
+      translationDoc: "Translation",
+      dubScriptDoc: "Dub script",
       document: "Document",
       // 词表 v3 fallback labels (ADR-076, C1 休眠键): a node's TYPE name
       // when it carries no builder/LLM summary — generic medium words,

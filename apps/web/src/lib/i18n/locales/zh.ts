@@ -1006,6 +1006,10 @@ const zh: Resources = {
       taskBook: "任务书",
       transcript: "转写稿",
       researchBrief: "调研简报",
+      // 两站拆分的文档站 (ADR-072, spec.role 派生——文档站不携 builder 摘要,
+      // cue artifact 即内容).
+      translationDoc: "译文稿",
+      dubScriptDoc: "配音稿",
       document: "文档",
       // 词表 v3 回退标签（ADR-076，C1 休眠键）：节点没有 builder/LLM 命名时
       // 读 TYPE 名——通用媒介词，永不是业务名（业务身份 = spec.summary /

@@ -260,23 +260,25 @@ export interface WorkflowStep {
  * orthogonal dimension; edges are typed flows (the port law: in = the
  * consumption region's bottom-left, out = the production region's
  * top-right). */
-// 词表 v3 过渡并集 (ADR-076, C1 休眠兼容): the legacy five kinds stay until
-// the server stamps the new vocabulary; the five MEDIUM values are generic
+// 词表 v3 (ADR-076, C5 收窄): the five MEDIUM values are generic
 // workflow-node concepts (never business words — 业务身份 = spec.summary +
 // spec.tool). Card anatomy derives from type directly (text/table → the
 // document card, image/video/audio → the media card); the program region
-// derives from spec.prototype.
+// derives from spec.prototype. The server's read face (routes/projects
+// _read_face, C4) maps every legacy row before it lands — asset rows arrive
+// as their medium × manual (the joined `asset` dossier is their birth
+// certificate), so the legacy five kinds never reach the client. The two
+// transitional words ride for rows whose node species retires later:
+// ``modifier`` (morph modifiers — 批 B4 退役) and ``materialize``
+// (pre-fold whole-source nodes — 历史清理收).
 export type GraphNodeKind =
-  | "asset"
-  | "document"
-  | "generator"
-  | "processor"
-  | "agent"
   | "text"
   | "table"
   | "image"
   | "video"
   | "audio"
+  | "modifier"
+  | "materialize"
 
 export type GraphNodeState =
   | "draft"

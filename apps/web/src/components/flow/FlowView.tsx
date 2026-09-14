@@ -26,25 +26,25 @@ const nodeTypes = { flowCard: FlowNodeCard }
 const edgeTypes = { flow: FlowEdge }
 
 /** The port law's source half (出锚语义律, 2026-09-11 — see types.ts): a
- * node's OUT anchor = its own production medium. Asset: its media type
- * (image/slides = the still-visual family → "image"; transcript/file =
- * prose → "text"). Document/agent: text. Generator/processor: the frame
- * class names the product medium (graph_fill._frame_class_of — clip family
- * = media, text family = prose). */
+ * node's OUT anchor = its own production medium. 词表 v3 媒介直出
+ * (ADR-076, C5 收窄 — the read face already mapped every row): the node
+ * type IS its production medium; text/table read prose, the three media
+ * name themselves. The transitional words (modifier/materialize — legacy
+ * rows) fall back to the frame class, and the recipe surface's manual
+ * asset node reads its own kind. */
 function productionPort(n: FlowNode): OutPortType {
-  // 词表 v3 媒介直出 (ADR-076, C1 休眠兼容 — the server stamps no new-type
-  // rows yet): the node type IS its production medium; text/table read
-  // prose, the three media name themselves. Legacy branches unchanged.
   if (n.kind === "video" || n.kind === "audio" || n.kind === "image") return n.kind
   if (n.kind === "text" || n.kind === "table") return "text"
   if (n.kind === "asset") {
-    const t = n.asset?.type ?? (n.spec?.asset_type as string | undefined)
+    // Recipe surface only (the graph canvas's asset rows arrive mapped).
+    const t = n.asset?.type
     if (t === "audio") return "audio"
     if (t === "video") return "video"
     if (t === "image" || t === "slides") return "image"
     return "text"
   }
-  if (n.kind === "document" || n.kind === "agent") return "text"
+  // modifier / materialize (transitional read-face words): the frame class
+  // names the product medium (clip family = media, text family = prose).
   return n.spec?.frame_class === "text" ? "text" : "video"
 }
 
@@ -389,7 +389,7 @@ export function FlowView({
               }
             : null,
         draftConfirm:
-          draftConfirm && n.kind === "document" && n.spec?.role === "task_book"
+          draftConfirm && n.spec?.role === "task_book"
             ? draftConfirm
             : null,
       },

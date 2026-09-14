@@ -336,7 +336,17 @@ function ThumbCard({
   onAssetAction?: FlowCardData["onAssetAction"]
 }) {
   const { t } = useTranslation()
-  const FallbackIcon = node.kind === "asset" ? FileText : Clapperboard
+  // The fallback glyph follows the dossier's asset type (graph canvas —
+  // the read face already mapped the row to its medium kind); the recipe
+  // surface's manual asset node keeps the prose default.
+  const asset = node.asset
+  const TypeIcon =
+    asset?.type === "video"
+      ? Clapperboard
+      : asset?.type === "image"
+        ? ImageIcon
+        : FileText
+  const FallbackIcon = asset ? TypeIcon : node.kind === "asset" ? FileText : Clapperboard
   // The inline video's ambient playback is muted by default (autoplay
   // policy); the hover sound icon flips it. 全局声音指针 (2026-09-13): the
   // mute rides the project-wide mutex — unmuting here mutes every other
@@ -346,13 +356,6 @@ function ThumbCard({
   // real pixels, never a hardcoded table.
   const [dims, setDims] = useState<string | null>(null)
   const expandable = !!(node.videoUrl || node.thumbUrl) && !!onExpandMedia
-  const asset = node.asset
-  const TypeIcon =
-    asset?.type === "video"
-      ? Clapperboard
-      : asset?.type === "image"
-        ? ImageIcon
-        : FileText
 
   // The asset toolbar (results canvas only — a node without the action
   // channel, e.g. the recipe manual, renders no bar): media facts on the
@@ -494,17 +497,35 @@ function StepCard({ node }: { node: FlowNode }) {
  * confirm beat). The task_book's dock-time confirm beat lives INSIDE the
  * card (判词① — the retired floating overlay's anatomy: price + balance
  * soft-compare + Start) PINNED BELOW the scrollport — text can never flow
- * behind it. No Cancel: "don't start" is said by not starting. Read-only on
- * this surface — changing it happens in chat. No factsbar, no program
- * region. */
+ * behind it. No Cancel: "don't start" is said by not starting. 最小产物尾
+ * (C5 已拍板): a text node holding products (the writer card's post-upgrade
+ * regression fix) gets a bottom factsbar — the version pager (版本累积现成
+ * 语义, the body follows the shown version) + copy + open-inspector; the
+ * quote-selection pill stays with the UI batch. */
 function DocumentCard({
   node,
   draftConfirm,
+  onOutputAction,
 }: {
   node: FlowNode
   draftConfirm?: FlowCardData["draftConfirm"]
+  onOutputAction?: FlowCardData["onOutputAction"]
 }) {
   const { t } = useTranslation()
+  const outputs = node.outputs ?? []
+  // The version pager's display member: null = the LATEST (the node's
+  // spec.text IS the newest version's content — the sync back-write); a
+  // flip pins an older version by id (refetch-stable).
+  const [displayId, setDisplayId] = useState<string | null>(null)
+  const output =
+    (displayId ? outputs.find((o) => o.id === displayId) : null) ??
+    outputs[outputs.length - 1]
+  const shownIdx = Math.max(0, outputs.findIndex((o) => o.id === output?.id))
+  const shownContent =
+    output && typeof (output.payload as { content?: unknown } | undefined)?.content === "string"
+      ? ((output.payload as { content: string }).content || null)
+      : null
+  const bodyText = shownContent ?? node.spec?.text
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
@@ -517,13 +538,46 @@ function DocumentCard({
             scroll-fade-y stays: the clip at the inset edge reads soft. */}
         <div className="flex min-h-0 flex-1 flex-col p-4">
           <div className="nowheel nopan thin-scroll scroll-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {node.spec?.text ? (
-              <p className="text-xs leading-relaxed whitespace-pre-wrap">{node.spec.text}</p>
+            {bodyText ? (
+              <p className="text-xs leading-relaxed whitespace-pre-wrap">{bodyText}</p>
             ) : (
               <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
             )}
           </div>
         </div>
+        {output ? (
+          // 最小产物尾 (C5): version pager + copy + open-inspector — the
+          // bar lives INSIDE the card (no external band — the in-port
+          // seats' 16px base never shifts).
+          <div className="flex shrink-0 items-center justify-end gap-2 px-4 pb-3">
+            {outputs.length > 1 && (
+              <VersionPager
+                current={shownIdx}
+                total={outputs.length}
+                onFlip={(delta) => {
+                  const next = outputs[shownIdx + delta]
+                  if (next) {
+                    setDisplayId(next.id === outputs[outputs.length - 1]?.id ? null : next.id)
+                  }
+                }}
+              />
+            )}
+            <MediaToolbar
+              info={[]}
+              actions={[
+                { action: "copy", Icon: Copy, label: t("chat.copy") },
+                { action: "open", Icon: Maximize2, label: t("results.canvas.open") },
+              ]}
+              menuItems={[]}
+              moreLabel={t("results.canvas.more")}
+              onAction={(action) => {
+                // 打开 OutputInspector = the surface's selection channel
+                // (the dossier swap-in, same door as the node click).
+                onOutputAction?.(output.id, action as FlowOutputAction)
+              }}
+            />
+          </div>
+        ) : null}
         {draftConfirm ? (
           <div className="shrink-0 px-4 pt-3 pb-4">
             <EstimatePriceLine
@@ -1125,14 +1179,16 @@ function QuietBody({ node }: { node: FlowNode }) {
   )
 }
 
-/** The program region (ADR-057 §5 — the card-face spec): generator/agent
- * nodes read their prompt — and on a node that has products (done / stale),
- * the region is DIRECTLY EDITABLE (K4, the prototype's scene-C anatomy):
- * click drafts in place, Enter sends, Esc cancels. Sending does NOT touch
- * the graph — it lifts the new program to the surface's pricing
- * confirmation (锚定子图 + 估价), and only the confirmed turn rides the
- * chat channel (零旁路). Processor nodes read their params as fact chips
- * (no LLM prompt — deterministic 工序, never editable here). */
+/** The program region (ADR-057 §5 — the card-face spec; ADR-076 程序区按
+ * prototype 门控, C5): GENERATOR cards read their prompt — and on a node
+ * that has products (done / stale), the region is DIRECTLY EDITABLE (K4,
+ * the prototype's scene-C anatomy): click drafts in place, Enter sends, Esc
+ * cancels. Sending does NOT touch the graph — it lifts the new program to
+ * the surface's pricing confirmation (锚定子图 + 估价), and only the
+ * confirmed turn rides the chat channel (零旁路). EDITOR/MANUAL cards
+ * render no prompt area — the composed echo's display side retires ahead
+ * of its builder (compose 本体 B5 才拆; the lever row lands with 批 B4) —
+ * only the slack absorber keeps the card's flex anatomy. */
 function ProgramRegion({
   node,
   editable,
@@ -1152,7 +1208,6 @@ function ProgramRegion({
   // flight), the card face shows the user's verbatim program — sending
   // never reverts the display to the old stamp.
   const prompt = pendingProgram ?? stampedPrompt
-  const params = node.spec?.params ?? null
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(prompt ?? "")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1182,37 +1237,6 @@ function ProgramRegion({
     return () => el.removeEventListener("wheel", stopWheel)
   }, [editing])
 
-  if (node.kind === "processor") {
-    const chips: string[] = []
-    if (params) {
-      const lang = params.target_language as string | undefined
-      if (lang) chips.push(t(`languages.${lang}`, { defaultValue: lang }))
-      if (typeof params.aspect === "string" && params.aspect) chips.push(params.aspect)
-      if (typeof params.mood === "string" && params.mood) chips.push(params.mood)
-    }
-    if (chips.length === 0) return null
-    return (
-      <div className="flex shrink-0 flex-wrap items-center gap-1 px-3 py-2">
-        {chips.map((chip, i) => (
-          <span
-            key={i}
-            className="rounded bg-inset px-1.5 py-0.5 text-[10px] whitespace-nowrap text-muted-foreground"
-          >
-            {chip}
-          </span>
-        ))}
-      </div>
-    )
-  }
-  if (!prompt && !editing) return null
-
-  const send = () => {
-    const text = draft.trim()
-    setEditing(false)
-    if (!text || text === (prompt ?? "").trim()) return
-    onPromptEdit?.(node.id, text)
-  }
-
   // The media card's program region FILLS its reservation (2026-09-13 用户
   // 拍板): the media region above is fixed-px (frame anatomy), so this
   // region grows to absorb the leftover band height — the hover wash covers
@@ -1223,6 +1247,23 @@ function ProgramRegion({
   const firstOutput = (node.outputs ?? [])[0]
   const fillSlack =
     !!firstOutput && firstOutput.type !== "post" && firstOutput.type !== "article"
+
+  // 程序区按 prototype 门控 (ADR-076, C5): only generator cards carry the
+  // prompt area. Editor/manual (and the prototype-less transitional words)
+  // keep the geometry — the reservation stays in the height math (geometry
+  // never shifts) and the slack absorber holds the flex anatomy; the lever
+  // row (批 B4) fills this seat later.
+  if (node.spec?.prototype !== "generator") {
+    return <div aria-hidden className={fillSlack ? "min-h-0 flex-1" : "shrink-0"} />
+  }
+  if (!prompt && !editing) return null
+
+  const send = () => {
+    const text = draft.trim()
+    setEditing(false)
+    if (!text || text === (prompt ?? "").trim()) return
+    onPromptEdit?.(node.id, text)
+  }
 
   return (
     <div
@@ -1539,15 +1580,12 @@ function GraphCard({
           // (the confirmation pins its product as the revision focus);
           // a queued/running node is executing its program (the wiring op
           // rejects it too), a draft has no product to pin (K5 owns it).
-          // ADR-076 过渡闸门 (one truth with the write door's EditPromptOp):
+          // ADR-076 闸门 (one truth with the write door's EditPromptOp):
           // the executing body's presence (spec.tool) marks an editable
-          // program — a tool-less document never offers the wash; the legacy
-          // two-kind fallback covers pre-v3 unstamped rows. 直改暂停期
+          // program — a tool-less document never offers the wash. 直改暂停期
           // (b367e94) 只驱动 hover wash 诚实.
           editable={
-            (!!node.spec?.tool ||
-              node.kind === "generator" ||
-              node.kind === "agent") &&
+            !!node.spec?.tool &&
             outputs.length > 0 &&
             node.status !== "queued" &&
             node.status !== "running"
@@ -1651,11 +1689,14 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
   // band by PRODUCT_PAGER_PX when the node holds more than one product —
   // both bottom-anchored corner seats ride the band, so both bases shift.
   const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
-  const inTextBase = node.kind === "document" ? 16 : 60 + pagerPx
-  // Bottom furniture of a media-consuming card (generator/processor/agent):
+  // 词表 v3 (C5): the 全文卡 family (text/table — the C1-dormant values,
+  // now the only document anatomy) takes the 16px text-port base; the
+  // mirror constant lives in layout.ts inTextPortBasePx (一条律两镜像).
+  const inTextBase = node.kind === "text" || node.kind === "table" ? 16 : 60 + pagerPx
+  // Bottom furniture of a media-consuming card (media × editor/generator):
   // factsbar band + program region, then the 16px inset into the content
-  // region — the corner seat. Media in-ports never occur on document/asset
-  // kinds (the port law's accepts), so one base covers every real seat.
+  // region — the corner seat. Media in-ports never occur on the 全文卡
+  // family (the port law's accepts), so one base covers every real seat.
   const inMediaBase = PRODUCT_TOOLBAR_PX + pagerPx + PROGRAM_REGION_PX + 16
   const outBase = 40
   const inMediaIdx = new Map<string, number>()
@@ -1736,14 +1777,15 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
   const bornLatchRef = useRef<number | undefined>(undefined)
   if (bornIndex !== undefined) bornLatchRef.current = bornIndex
   const born = bornLatchRef.current
+  // 词表 v3 媒介卡 (ADR-076, C5 收窄): the three media values by type +
+  // the two transitional read-face words (modifier / materialize — their
+  // products are media, their program region is gated off below).
   const isGraphCard =
-    node.kind === "generator" ||
-    node.kind === "processor" ||
-    node.kind === "agent" ||
-    // 词表 v3 媒介三值 (ADR-076, C1 休眠): the media card by type.
     node.kind === "video" ||
     node.kind === "image" ||
-    node.kind === "audio"
+    node.kind === "audio" ||
+    node.kind === "modifier" ||
+    node.kind === "materialize"
   return (
     <div
       className={cn(
@@ -1770,10 +1812,23 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
       >
       {node.kind === "step" ? (
         <StepCard node={node} />
-      ) : node.kind === "document" || node.kind === "text" || node.kind === "table" ? (
-        // 词表 v3 (ADR-076, C1 休眠): text/table derive the 全文卡 anatomy —
-        // the table card's own anatomy lands with the UI batch (C5).
-        <DocumentCard node={node} draftConfirm={draftConfirm} />
+      ) : node.asset ? (
+        // 素材卡 (C4 读面后资产行已是媒介 kind — the joined dossier is its
+        // birth certificate; the recipe surface's manual asset node carries
+        // no dossier and lands on the ThumbCard fallthrough below).
+        <ThumbCard
+          node={node}
+          onExpandMedia={onExpandMedia}
+          onAssetAction={onAssetAction}
+        />
+      ) : node.kind === "text" || node.kind === "table" ? (
+        // 词表 v3 (ADR-076, C5): text/table derive the 全文卡 anatomy —
+        // the table card's own anatomy lands with the UI batch.
+        <DocumentCard
+          node={node}
+          draftConfirm={draftConfirm}
+          onOutputAction={onOutputAction}
+        />
       ) : isGraphCard ? (
         <GraphCard
           node={node}

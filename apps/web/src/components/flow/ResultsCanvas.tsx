@@ -158,62 +158,59 @@ export function ResultsCanvas({
         w: Number(layout.w ?? 280),
         h: Number(layout.h ?? 260),
       }
-      if (n.kind === "asset") {
-        const asset = n.asset ?? null
-        const mediaUrl = toAbsoluteUrl(asset?.stream_url ?? asset?.file_url ?? null)
+      // 素材卡 (C4 读面后资产行已是媒介 kind — the joined asset dossier is
+      // the birth certificate): the card derives from the dossier, the kind
+      // passthrough keeps the medium's own frame/port semantics.
+      if (n.asset) {
+        const asset = n.asset
+        const mediaUrl = toAbsoluteUrl(asset.stream_url ?? asset.file_url ?? null)
         return {
           id: n.id,
-          kind: "asset",
-          label: t(`generationOverlay.assetTypes.${asset?.type ?? spec.asset_type ?? ""}`, {
-            defaultValue: String(asset?.type ?? spec.asset_type ?? "asset"),
+          kind: n.kind,
+          label: t(`generationOverlay.assetTypes.${asset.type ?? spec.asset_type ?? ""}`, {
+            defaultValue: String(asset.type ?? spec.asset_type ?? "asset"),
           }),
-          detail: asset?.title ?? spec.title ?? undefined,
-          asset: asset
-            ? {
-                id: asset.id,
-                type: asset.type,
-                title: asset.title,
-                file_url: asset.file_url,
-                stream_url: asset.stream_url,
-                duration_seconds: asset.duration_seconds,
-                width: asset.width,
-                height: asset.height,
-              }
-            : undefined,
-          thumbUrl: asset?.type === "image" ? mediaUrl : null,
-          videoUrl: asset?.type === "video" ? mediaUrl : null,
+          detail: asset.title ?? spec.title ?? undefined,
+          asset: {
+            id: asset.id,
+            type: asset.type,
+            title: asset.title,
+            file_url: asset.file_url,
+            stream_url: asset.stream_url,
+            duration_seconds: asset.duration_seconds,
+            width: asset.width,
+            height: asset.height,
+          },
+          thumbUrl: asset.type === "image" ? mediaUrl : null,
+          videoUrl: asset.type === "video" ? mediaUrl : null,
           frame,
           order: i,
         }
       }
-      if (n.kind === "document") {
-        return {
-          id: n.id,
-          kind: "document",
-          label:
-            spec.role === "task_book"
-              ? t("results.canvas.taskBook")
-              : spec.role === "transcript"
-                ? t("results.canvas.transcript")
-                : spec.role === "research_brief"
-                  ? t("results.canvas.researchBrief")
-                  : (spec.summary ?? t("results.canvas.document")),
-          detail: spec.summary ?? undefined,
-          spec,
-          frame,
-          order: i,
-        }
-      }
-      // generator / processor / agent — the graph card. 词表 v3 媒介值
-      // (ADR-076, C1 休眠) falls through here too: kind passthrough, the
-      // card dispatch re-derives the anatomy; the label falls back to the
-      // medium's own word (nodeType.*, legacy kinds miss the key and land
-      // on the default — 业务身份 = spec.summary 的座位, ADR-058 二源律).
+      // 词表 v3 (ADR-076, C5): the read face already mapped every row — the
+      // kind passthrough re-derives the anatomy at the card dispatch; the
+      // label falls back through the role-derived document names (the doc
+      // stations never carry spec.summary — ADR-072) to the medium's own
+      // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
       return {
         id: n.id,
         kind: n.kind,
-        label: spec.summary ?? t(`results.canvas.nodeType.${n.kind}`, { defaultValue: n.kind }),
+        label:
+          spec.summary ??
+          (spec.role === "task_book"
+            ? t("results.canvas.taskBook")
+            : spec.role === "transcript"
+              ? t("results.canvas.transcript")
+              : spec.role === "research_brief"
+                ? t("results.canvas.researchBrief")
+                : spec.role === "translation"
+                  ? t("results.canvas.translationDoc")
+                  : spec.role === "dub_script"
+                    ? t("results.canvas.dubScriptDoc")
+                    : spec.role
+                      ? t("results.canvas.document")
+                      : t(`results.canvas.nodeType.${n.kind}`, { defaultValue: n.kind })),
         status: n.state,
         spec,
         outputs,
@@ -415,21 +412,18 @@ export function ResultsCanvas({
     (id: string) => {
       const node = nodeById.get(id)
       if (!node) return
-      if (node.kind === "asset") {
+      if (node.asset) {
         // Source media nodes have no dock business — a click IS the
         // expand gesture (the lightbox; non-media assets no-op inside).
         handleExpandMedia(id)
         return
       }
-      if (node.kind === "document") {
-        // The task book is read on the card — no dock business; its confirm
-        // beat lives on the draft-confirm card anchored above it (K5).
-        return
-      }
       // A graph card: click = dock focus (D8) + the dossier swap-in, on the
       // product the pager is SHOWING (fallback = the node's first). The
       // dossier opens for video products too (2026-09-13 二轮拍板——右侧
-      // 档案保留；退役的只有居中播放器 modal)。
+      // 档案保留；退役的只有居中播放器 modal)。Document-family nodes
+      // without products (transcript / doc stations) are read on the card —
+      // the length guard below no-ops them.
       const outputs = node.outputs ?? []
       if (outputs.length === 0) return
       const output =
@@ -500,21 +494,15 @@ export function ResultsCanvas({
       nodes.filter(
         (n) =>
           n.status === "draft" &&
-          // 词表 v3 过渡并集 (ADR-076, C1 休眠): v3 rows by capability
-          // prototype (only generator/editor consume); the legacy three
-          // kinds stay the fallback for pre-v3 rows.
-          (n.spec?.prototype === "generator" ||
-            n.spec?.prototype === "editor" ||
-            n.kind === "generator" ||
-            n.kind === "processor" ||
-            n.kind === "agent"),
+          // 词表 v3 (ADR-076, C5): capability speaks through prototype —
+          // only generator/editor consume (manual nodes are content, the
+          // read face stamps prototype onto every row).
+          (n.spec?.prototype === "generator" || n.spec?.prototype === "editor"),
       ),
     [nodes],
   )
   const taskBookDoc = useMemo(
-    () =>
-      nodes.find((n) => n.kind === "document" && n.spec?.role === "task_book") ??
-      null,
+    () => nodes.find((n) => n.spec?.role === "task_book") ?? null,
     [nodes],
   )
   const draftEstimate = useMemo<[number, number] | null>(() => {
@@ -534,14 +522,11 @@ export function ResultsCanvas({
     [draftNodes],
   )
   // 任务书密度律 mirror (ADR-054): the chain's TASK count gates the heavy
-  // confirm, not the node count — the compile-injected materialize_source
-  // is never a task (whole-source materialization, ADR-043), so a modifier-
-  // only one-task book ([remove_filler] → 2 nodes) stays prose-confirmed.
-  // The price fold above keeps every node (materialize's cost is real).
-  const draftTaskCount = useMemo(
-    () => draftNodes.filter((n) => n.spec?.tool !== "materialize_source").length,
-    [draftNodes],
-  )
+  // confirm, not the node count. C2b folded the compile-injected
+  // materialize_source into its host family (it never grows a node), so
+  // the draft node count IS the task count — the dead materialize filter
+  // retired with the fold. The price fold above keeps every node.
+  const draftTaskCount = draftNodes.length
   const draftConfirmVisible =
     draftTaskCount >= 2 && taskBookDoc !== null && draftEstimate !== null
 
@@ -606,18 +591,14 @@ export function ResultsCanvas({
         }
       }
     }
-    // Only the runnable nodes carry a price (词表 v3 过渡并集, ADR-076:
-    // prototype generator/editor 或 legacy 三 kind) — asset/document/manual
-    // nodes never re-run (and in our topology are never downstream of a
-    // generator).
+    // Only the runnable nodes carry a price (词表 v3, ADR-076: prototype
+    // generator/editor — the read face stamps it onto every row) —
+    // asset/document/manual nodes never re-run (and in our topology are
+    // never downstream of a generator).
     const affected = [...seen].flatMap((id) => {
       const n = nodeById.get(id)
       return n &&
-        (n.spec?.prototype === "generator" ||
-          n.spec?.prototype === "editor" ||
-          n.kind === "generator" ||
-          n.kind === "processor" ||
-          n.kind === "agent")
+        (n.spec?.prototype === "generator" || n.spec?.prototype === "editor")
         ? [n]
         : []
     })
@@ -698,7 +679,7 @@ export function ResultsCanvas({
   const inspectorAssets = useMemo(
     () =>
       nodes.flatMap((n) =>
-        n.kind === "asset" && n.asset
+        n.asset
           ? [
               {
                 id: n.asset.id,

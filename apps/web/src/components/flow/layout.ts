@@ -5,33 +5,31 @@ import type { FlowEdge, FlowNode, FlowNodeKind, GraphEdgeType, OutPortType } fro
 /** Fixed node dimensions per skin — layout is pure math with zero DOM
  * measurement (SSR-safe, no ResizeObserver feedback loops). Step pills are
  * sized for a TWO-LINE label + one detail line (a truncated "Understand
- * the…" node is a bug, never a style — 2026-08-10). The five graph kinds
- * are fallbacks only — the graph canvas's nodes carry their server-settled
+ * the…" node is a bug, never a style — 2026-08-10). The kind rows are
+ * fallbacks only — the graph canvas's nodes carry their server-settled
  * `frame` (画布定居取景) and `graphNodeSize` computes the content-driven
- * render size inside the reservation. */
+ * render size inside the reservation. 词表 v3 (ADR-076, C5 收窄): the
+ * graph vocabulary is the five media values + the two transitional words;
+ * the recipe surface's own asset/step/output rows ride along. */
 export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: number }> = {
   asset: { width: 280, height: 260 },
   output: { width: 128, height: 216 },
   /** 配方说明书 step pills：小尺寸，不抢产物节点视觉权重。 */
   step: { width: 144, height: 48 },
-  /** Document node (ADR-057 — the task book, the FLORA text-node form):
-   * the glass text card; 2026-09-13 增大批 widens the lane 260 → 340
-   * (text/agent width — the measurement law's chars-per-line scales with
-   * the column, see documentTextHeight) and floors the fallback height at
-   * the DOCUMENT_MIN_H reading surface. */
-  document: { width: 340, height: 280 },
-  generator: { width: 280, height: 268 },
-  processor: { width: 280, height: 268 },
-  agent: { width: 340, height: 268 },
-  // 词表 v3 媒介五值 (ADR-076, C1 休眠 — the Record's completeness forces
-  // these rows; the graph canvas's server-settled frame supersedes them
-  // regardless): text/table inherit the document lane (全文卡 anatomy),
-  // image/video/audio the legacy generator card's box (media anatomy).
+  /** 全文卡 family (text/table — the 2026-09-13 增大批 lane, 260 → 340):
+   * the glass text card; the measurement law's chars-per-line scales with
+   * the column (see documentTextHeight), floor = the DOCUMENT_MIN_H
+   * reading surface. */
   text: { width: 340, height: 280 },
   table: { width: 340, height: 280 },
+  /** Media cards (the graph canvas's server-settled frame supersedes these
+   * regardless — the Record's completeness forces the rows): the media
+   * anatomy's box; modifier/materialize ride the same media card. */
   image: { width: 280, height: 268 },
   video: { width: 280, height: 268 },
   audio: { width: 280, height: 268 },
+  modifier: { width: 280, height: 268 },
+  materialize: { width: 280, height: 268 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
@@ -109,8 +107,12 @@ export const PORT_SIDE_PX = 34
 export const PORT_STEP_PX = 34
 export const OUT_PORT_TOP_PX = 40
 export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
-export const inTextPortBasePx = (kind: FlowNodeKind): number =>
-  kind === "document" ? 16 : 60
+/** 词表 v3 (C5): the 全文卡 family (text/table) in-text port base = 16 —
+ * its tail furniture lives INSIDE the card (the version pager never adds
+ * an external band), so the pager offset applies only to the media-card
+ * anatomies. Mirror of FlowNodeCard NodePorts' CSS seat (一条律两镜像). */
+export const inTextPortBasePx = (kind: FlowNodeKind, pagerPx = 0): number =>
+  kind === "text" || kind === "table" ? 16 : 60 + pagerPx
 
 /** The node payload's declared handles (xyflow first-class `node.handles`).
  * Undefined for portless nodes — their invisible fallback handles keep the
@@ -136,7 +138,7 @@ export function declaredHandles(
     const isMedia = t === "video" || t === "audio"
     const base = isMedia
       ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
-      : inTextPortBasePx(node.kind) + pagerPx + text++ * PORT_STEP_PX
+      : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
     handles.push({
       id: `in:${t}`,
       type: "target",
@@ -249,13 +251,14 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   const frame = node.frame
   const fallback = FLOW_NODE_SIZE[node.kind]
   const width = frame?.w ?? fallback.width
-  if (node.kind === "asset") {
-    // 素材节点同律 (2026-09-13 用户拍板): the source's real pixels shape the
-    // node — snapped to its display class's anatomy (media + caption + bar,
-    // ONE law with the server's graph_store._ASSET_FRAME mirror). Never
-    // outgrow the born frame: dims that landed after birth (API-path
-    // uploads) keep the conservative default reservation — the media flexes
-    // smaller inside (contain slivers), never an overlap.
+  // 素材节点 (C4 读面后 kind 已是媒介值 — the joined asset dossier is the
+  // birth certificate). 素材节点同律 (2026-09-13 用户拍板): the source's
+  // real pixels shape the node — snapped to its display class's anatomy
+  // (media + caption + bar, ONE law with the server's graph_store._ASSET_FRAME
+  // mirror). Never outgrow the born frame: dims that landed after birth
+  // (API-path uploads) keep the conservative default reservation — the
+  // media flexes smaller inside (contain slivers), never an overlap.
+  if (node.asset) {
     const dimsH = assetDimsHeight(node.asset?.width, node.asset?.height)
     const videoH =
       dimsH != null
@@ -268,7 +271,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
         : PRODUCT_LABEL_PX + 190 + PRODUCT_TOOLBAR_PX,
     }
   }
-  if (node.kind === "document" || node.kind === "text" || node.kind === "table") {
+  if (node.kind === "text" || node.kind === "table") {
     // 全文卡律 + 封顶滚动律: height = the full text's need CAPPED at
     // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
     // outgrows the reservation (new frames are born with exactly this via
@@ -276,15 +279,14 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // taller than the cap — extra whitespace, never overlap). The confirm
     // anatomy is reserved only while the book is actually draft (post-Start
     // the card fills less — the frame's +88 is a reservation, not a mandate).
-    // 词表 v3 (ADR-076, C1 休眠): text/table take this document anatomy.
     const text = (node.spec?.text as string | undefined) ?? ""
     const confirm = node.spec?.role === "task_book" && node.status === "draft"
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
     return { width, height: Math.min(Math.max(documentTextHeight(text, confirm), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
-  // generator / processor / agent + 词表 v3 媒介三值 (video/image/audio,
-  // C1 休眠): product region + program region + bar.
+  // 媒介卡 (video/image/audio + modifier/materialize 过渡词): product
+  // region + program region + bar.
   const outputs = node.outputs ?? []
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads
