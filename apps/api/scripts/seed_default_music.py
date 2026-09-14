@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import structlog  # noqa: E402
 
-from app.providers.llm.minimax import MiniMaxError  # noqa: E402
+from app.providers.llm.base import LLMError  # noqa: E402
 from app.pipeline.music import (  # noqa: E402
     DEFAULT_MUSIC_CATALOG,
     DEFAULTS_MODEL,
@@ -74,7 +74,7 @@ async def _main(moods: list[str] | None, *, force: bool) -> int:
         try:
             if await _seed_one(entry, force=force):
                 written += 1
-        except MiniMaxError as e:
+        except LLMError as e:
             print(f"  [FAIL] {entry['mood']}: {e}", file=sys.stderr)
             return 2
 

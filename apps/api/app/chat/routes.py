@@ -43,7 +43,7 @@ from app.chat.service import (
     prepare_chat_turn,
 )
 from app.chat.stream_extract import AskObjectWatcher, ProseDeltaExtractor
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
 from app.ui_locale import current_ui_language
@@ -141,7 +141,7 @@ def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
     HTTPException detail is client-facing by contract (4xx reasons the JSON
     path would surface). A STRUCTURED detail (the credits.insufficient
     payload, API.md §4) passes through as the object — the client renders
-    its typed form (the dock's grey row), never a repr'd dict. MiniMaxError
+    its typed form (the dock's grey row), never a repr'd dict. LLMError
     = the provider failed (no fabricated default book, 2026-08-14 裁定) —
     the localized provider line (errors.USER_ERROR_LINES) rides the frame;
     the raw 402/429/5xx text stays in structlog. Anything else is an
@@ -150,7 +150,7 @@ def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
     """
     if isinstance(exc, HTTPException):
         return exc.detail if isinstance(exc.detail, dict) else str(exc.detail)
-    if isinstance(exc, MiniMaxError):
+    if isinstance(exc, LLMError):
         return user_error_line(exc, ui_language)
     return "Internal server error"
 
@@ -407,7 +407,7 @@ async def send_chat_message(
     if "text/event-stream" not in request.headers.get("accept", ""):
         try:
             return await chat(db, UUID(str(current_user.id)), data)
-        except MiniMaxError as e:
+        except LLMError as e:
             # Provider failure on the one-shot path — same honesty rule as
             # the SSE frame: 502 with the localized line, never a fabricated
             # default book (editor dub endpoint precedent, routes/outputs).

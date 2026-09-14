@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import MusicGenerateRequest, MusicMetadataUpdate, MusicResponse
 from app.models.tables import Music, User
@@ -96,7 +96,7 @@ async def generate_music_endpoint(
             model=USER_MODEL,
             is_instrumental=data.is_instrumental,
         )
-    except MiniMaxError as e:
+    except LLMError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Music generation failed: {e}",

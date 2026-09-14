@@ -3,7 +3,7 @@
 One decision per iteration: search (a NEW query) / fetch (one result URL)
 / brief (close with the final artifact). The node owns the loop and the
 tool set; the agent only picks the next action over the evidence it can
-see. No declared fallback: a funnel failure propagates as MiniMaxError and
+see. No declared fallback: a funnel failure propagates as LLMError and
 the NODE degrades honestly (a caveated brief, the run continues) — a
 silent LLM-free "brief" here would fabricate grounding that never happened.
 """

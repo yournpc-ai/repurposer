@@ -5,7 +5,7 @@ MaterialUnderstanding (step 1), and its aggregate Storyboard slot (step 2):
 segment selection plus clip scripts in one call.
 """
 
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.models.schemas import (
     ClipPlans,
     GenerationContext,
@@ -36,11 +36,11 @@ def _assemble(
     ``title``) the agent selects from per clip.
     """
     if not asset_texts and not asset_media:
-        raise MiniMaxError("No source texts or media provided for clip planning")
+        raise LLMError("No source texts or media provided for clip planning")
     media = asset_media or []
     trimmed = trim_texts(asset_texts)
     if not trimmed and not media:
-        raise MiniMaxError("No usable text or media found")
+        raise LLMError("No usable text or media found")
 
     # Resolve the clips slot's argument ids to their text so the prompt
     # reads as guidance, not cross-references.

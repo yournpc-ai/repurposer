@@ -18,6 +18,7 @@ from tenacity import (
 )
 
 from app.config import settings
+from app.providers.llm.base import LLMError, LLMSchemaError
 
 logger = structlog.get_logger()
 
@@ -139,40 +140,12 @@ class _ThinkStripper:
         return out
 
 
-class MiniMaxError(Exception):
-    """MiniMax API error.
-
-    ``user_key`` names the localized user-facing line (pipeline/errors.py's
-    USER_ERROR_LINES) for when this surfaces on a failed step row — set at the
-    raise site by failure mode, propagated through wrapper layers via
-    ``propagate_key``."""
-
-    def __init__(self, message: str, *, user_key: str | None = None) -> None:
-        super().__init__(message)
-        self.user_key = user_key
-
-
-class MiniMaxSchemaError(MiniMaxError):
-    """Structured-output validation failed at the Model boundary (the raw
-    completion did not parse into ``response_model``).
-
-    Distinct from transport/HTTP failures so the harness can answer with its
-    one bounded repair round (structured echo, ADR-039 P3) — the only retry
-    with feedback. Tenacity here must NOT retry it (a blind re-roll); the
-    repair round replaces it. Transport failures stay tenacity-retried —
-    a transport concern, never repaired by the harness.
-    """
-
-    def __init__(self, message: str, *, user_key: str = "ai_unreadable") -> None:
-        super().__init__(message, user_key=user_key)
-
-
 def _raise_for_status(
     response: httpx.Response, *, unavailable_key: str = "provider_unavailable"
 ) -> None:
-    """``raise_for_status`` that speaks MiniMaxError.
+    """``raise_for_status`` that speaks LLMError.
 
-    Callers up the stack (intent agents, chat loop) all catch MiniMaxError to
+    Callers up the stack (intent agents, chat loop) all catch LLMError to
     degrade gracefully — a raw httpx.HTTPStatusError (402/429/5xx from the
     provider) would slip past every one of them and surface as a bare 500.
     Rate limiting gets its own user key (the honest "busy, try again" line);
@@ -183,7 +156,7 @@ def _raise_for_status(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise MiniMaxError(
+        raise LLMError(
             f"MiniMax HTTP {exc.response.status_code}: "
             f"{exc.response.text[:300]}",
             user_key=(
@@ -208,7 +181,7 @@ class MiniMaxClient:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         # Transport/HTTP hiccups only — a schema rejection is NEVER re-rolled
         # blind here; the harness answers it with one feedback repair round.
-        retry=retry_if_not_exception_type(MiniMaxSchemaError),
+        retry=retry_if_not_exception_type(LLMSchemaError),
         reraise=True,
     )
     async def generate(
@@ -220,7 +193,7 @@ class MiniMaxClient:
     ) -> T:
         """Generate structured output from MiniMax M3."""
         if not self.api_key:
-            raise MiniMaxError("MINIMAX_API_KEY not configured")
+            raise LLMError("MINIMAX_API_KEY not configured")
 
         payload: dict = {
             "model": settings.minimax_model,
@@ -260,7 +233,7 @@ class MiniMaxClient:
                 error=str(e),
                 raw_content=content[:1000],
             )
-            raise MiniMaxSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+            raise LLMSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
     async def generate_stream(
         self,
@@ -292,13 +265,13 @@ class MiniMaxClient:
         only until a side effect", so the loop is manual — retries happen
         only before the first ``on_delta`` call (a retry after emitted deltas
         would double-send preview text downstream); mid-stream failures raise
-        MiniMaxError and callers take the same fallback paths as today.
+        LLMError and callers take the same fallback paths as today.
         Because the stripper swallows the think preamble, ``emitted`` flips
         only when clean PAYLOAD text was actually delivered — a retry after a
         think-only prefix is safe and allowed.
         """
         if not self.api_key:
-            raise MiniMaxError("MINIMAX_API_KEY not configured")
+            raise LLMError("MINIMAX_API_KEY not configured")
 
         payload: dict = {
             "model": settings.minimax_model,
@@ -373,21 +346,21 @@ class MiniMaxClient:
                                 result = on_delta(clean)
                                 if result is not None:
                                     await result
-            except (httpx.TransportError, MiniMaxError) as exc:
+            except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
-                    if isinstance(exc, MiniMaxError):
+                    if isinstance(exc, LLMError):
                         # Already keyed — re-raise intact, never re-wrap.
                         raise
-                    raise MiniMaxError(
+                    raise LLMError(
                         str(exc), user_key="provider_unreachable"
                     ) from exc
                 continue
             break
         else:
-            if isinstance(last_exc, MiniMaxError):
+            if isinstance(last_exc, LLMError):
                 raise last_exc
-            raise MiniMaxError(str(last_exc), user_key="provider_unreachable")
+            raise LLMError(str(last_exc), user_key="provider_unreachable")
 
         # ADR-025 metering (same contract as ``generate``: report before
         # validation — tokens were consumed either way).
@@ -404,7 +377,7 @@ class MiniMaxClient:
                 error=str(e),
                 raw_content=content[:1000],
             )
-            raise MiniMaxSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
+            raise LLMSchemaError(f"Failed to validate response: {e}\nRaw: {content[:500]}")
 
     def _clean_json(self, raw: str) -> str:
         """Strip reasoning blocks and markdown fences from JSON payload."""
@@ -433,7 +406,7 @@ class MiniMaxClient:
         relying on MiniMax's expiring URLs.
         """
         if not self.api_key:
-            raise MiniMaxError("MINIMAX_API_KEY not configured")
+            raise LLMError("MINIMAX_API_KEY not configured")
 
         payload = {
             "model": "image-01",
@@ -457,7 +430,7 @@ class MiniMaxClient:
 
         base_resp = data.get("base_resp") or {}
         if base_resp.get("status_code") != 0:
-            raise MiniMaxError(
+            raise LLMError(
                 f"MiniMax image generation failed: {base_resp.get('status_msg')}",
                 user_key="provider_unavailable",
             )
@@ -490,7 +463,7 @@ class MiniMaxClient:
         persists them under ``assets/music/``.
         """
         if not self.api_key:
-            raise MiniMaxError("MINIMAX_API_KEY not configured")
+            raise LLMError("MINIMAX_API_KEY not configured")
 
         payload: dict = {
             "model": model,
@@ -514,7 +487,7 @@ class MiniMaxClient:
 
         base_resp = data.get("base_resp") or {}
         if base_resp.get("status_code") != 0:
-            raise MiniMaxError(
+            raise LLMError(
                 f"MiniMax music generation failed: {base_resp.get('status_msg')}",
                 user_key="provider_unavailable",
             )
@@ -523,7 +496,7 @@ class MiniMaxClient:
         extra = data.get("extra_info") or {}
         status = int(inner.get("status", 0))
         if status != 2:
-            raise MiniMaxError(
+            raise LLMError(
                 f"MiniMax music generation did not complete (status={status})",
                 user_key="provider_unavailable",
             )

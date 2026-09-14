@@ -28,7 +28,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import translator
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.models.schemas import RenderStatus
 from app.models.tables import GraphNode, Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
@@ -200,7 +200,7 @@ class TranslateClip(NodeBase):
                                 }
                             },
                         )
-            except MiniMaxError as e:
+            except LLMError as e:
                 # Provider failure after the client's own retries — still
                 # transient at step level (W3 retry budget applies).
                 raise TransientNodeError(

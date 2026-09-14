@@ -11,7 +11,7 @@ turn assembly only.
 text → a structured task book (language/outputs/tone) plus the four-action
 verdict (draft / ask / answer / start). Invoked only from the chat service's
 book path — first-turn projects and pending-task-book refinement turns.
-Provider failures propagate as MiniMaxError: the route boundary answers 502
+Provider failures propagate as LLMError: the route boundary answers 502
 with the localized provider line (2026-08-14 裁定 — a fabricated default
 book looks like a real plan and Start would spend a paid run on it; an
 honest failure beats a wrong plan, and the user_key taxonomy makes the

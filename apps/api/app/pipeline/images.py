@@ -14,7 +14,8 @@ from uuid import UUID
 
 import structlog
 
-from app.providers.llm.minimax import MiniMaxError, minimax_client
+from app.providers.llm.base import LLMError
+from app.providers.llm.minimax import minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Project
 from app.providers.storage import output_url, save_output
@@ -67,7 +68,7 @@ async def _save_minimax_image(
             image_bytes,
         )
         return output_url(relative_path)
-    except MiniMaxError as e:
+    except LLMError as e:
         logger.warning("minimax_image_failed", error=str(e), **log_ctx)
         return None
     except Exception as e:  # noqa: BLE001

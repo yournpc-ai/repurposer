@@ -14,7 +14,7 @@ from typing import Any
 
 import structlog
 
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.models.schemas import (
     CaptionTranslation,
     ExtractedPersonaMemory,
@@ -46,7 +46,7 @@ def _assemble_understand(
     beyond the ``has_time_axis`` / image-order facts.
     """
     if not source_blocks and not asset_media:
-        raise MiniMaxError("No source texts or media provided for understanding")
+        raise LLMError("No source texts or media provided for understanding")
     media = asset_media or []
     blocks = [
         {**b, "text": str(b.get("text") or "")[:MAX_CHARS_PER_TEXT]}
@@ -54,7 +54,7 @@ def _assemble_understand(
         if str(b.get("text") or "").strip()
     ]
     if not blocks and not media:
-        raise MiniMaxError("No usable text or media found")
+        raise LLMError("No usable text or media found")
     return {
         "source_blocks": blocks,
         "asset_media": media,
@@ -139,7 +139,7 @@ def _assemble_persona(
     asset_texts: list[str],
 ):
     if not asset_texts:
-        raise MiniMaxError("No source texts provided for persona generation")
+        raise LLMError("No source texts provided for persona generation")
     return (
         {
             "persona_name": persona_name,

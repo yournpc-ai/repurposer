@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.agents.base import Agent
-from app.providers.llm.minimax import MiniMaxSchemaError
+from app.providers.llm.base import LLMSchemaError
 
 
 class _Out(BaseModel):
@@ -29,7 +29,7 @@ def _assemble_no_args():
 
 
 class _StubClient:
-    """The first ``rejections`` generate calls raise MiniMaxSchemaError; the
+    """The first ``rejections`` generate calls raise LLMSchemaError; the
     next one succeeds. Records call count for the once-only assertions."""
 
     def __init__(self, rejections: int):
@@ -39,7 +39,7 @@ class _StubClient:
     async def generate(self, *, messages, response_model, temperature):
         self.calls += 1
         if self.calls <= self.rejections:
-            raise MiniMaxSchemaError("bad shape")
+            raise LLMSchemaError("bad shape")
         return response_model(answer="ok")
 
 
@@ -87,7 +87,7 @@ async def _run_second_rejection_propagates_after_the_signal():
         nonlocal fired
         fired += 1
 
-    with pytest.raises(MiniMaxSchemaError):
+    with pytest.raises(LLMSchemaError):
         await _agent("test_repair_exhausted", 2).call(on_repair=on_repair)
     assert fired == 1  # signalled the round, then the round failed — honest
 

@@ -142,7 +142,7 @@ async def build_translation_cues(
 
     This is the ONLY translator call site for caption translation; everything
     downstream (single-track spread / bilingual unit cues) derives from these
-    rows deterministically. Raises ``MiniMaxError`` if the LLM call fails.
+    rows deterministically. Raises ``LLMError`` if the LLM call fails.
     """
     if not cues:
         return []
@@ -210,7 +210,7 @@ async def translate_caption_track(
     """Translate a word-level caption track into ``target_language``.
 
     Returns a new word-level track (same shape as the input cues). Raises
-    ``MiniMaxError`` if the LLM call fails. ``style_hint`` = persona register
+    ``LLMError`` if the LLM call fails. ``style_hint`` = persona register
     injection (dub 生产级, 2026-08-07). Thin wrapper over the seam
     (``build_translation_cues``) + the single-track view.
     """

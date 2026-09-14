@@ -8,7 +8,7 @@ versioned with the code) / ``schema`` (output contract) / ``system`` /
 repair round on schema rejection → postprocess.
 
 Repair carries feedback, never a blind re-roll (ADR-039 P3): a schema
-rejection (``MiniMaxSchemaError``) comes back once with the structured echo
+rejection (``LLMSchemaError``) comes back once with the structured echo
 appended to the same user message; a second rejection is the call's failure.
 The same echo carries adjudication feedback from the caller (the chat loop's
 registry/compile rejections) via the reserved ``repair_feedback`` kwarg.
@@ -36,7 +36,8 @@ import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from app.providers.llm.minimax import MiniMaxClient, MiniMaxError, MiniMaxSchemaError, minimax_client
+from app.providers.llm.base import LLMError, LLMSchemaError
+from app.providers.llm.minimax import MiniMaxClient, minimax_client
 from app.models.schemas import MediaInput, Storyboard
 
 logger = structlog.get_logger()
@@ -143,7 +144,7 @@ class Agent(Generic[OutT]):
         self.media_text_fallback = media_text_fallback
         # Declared last-resort result builder (same discipline): called with
         # the assemble ctx when the funnel exhausted its repair round with a
-        # MiniMaxError — the fallback fires AFTER the repair round, never
+        # LLMError — the fallback fires AFTER the repair round, never
         # instead of it, and its result returns as-is (postprocess does NOT
         # run on it: a fallback builds a final-shaped result). None = raise
         # (the default).
@@ -188,14 +189,14 @@ class Agent(Generic[OutT]):
         logger.info("agent_call_started", agent=self.name, media_count=len(media))
         try:
             result = await self._attempt(user_prompt, media, on_delta, on_reasoning, on_repair)
-        except MiniMaxError:
+        except LLMError:
             if self.fallback is None:
                 raise
             logger.warning("agent_declared_fallback", agent=self.name)
             return self.fallback(**ctx)
         except Exception as e:  # noqa: BLE001
             logger.error("agent_call_failed", agent=self.name, error=str(e))
-            raise MiniMaxError(f"{self.name} failed: {e}") from e
+            raise LLMError(f"{self.name} failed: {e}") from e
         if self.postprocess is not None:
             result = self.postprocess(result, ctx)
         logger.info("agent_call_completed", agent=self.name)
@@ -222,7 +223,7 @@ class Agent(Generic[OutT]):
         ]
         try:
             return await self._generate(messages, user_prompt, media, on_delta, on_reasoning)
-        except MiniMaxSchemaError as first_error:
+        except LLMSchemaError as first_error:
             logger.warning(
                 "agent_schema_repair",
                 agent=self.name,
@@ -281,7 +282,7 @@ class Agent(Generic[OutT]):
                 response_model=self.schema,
                 temperature=self.temperature,
             )
-        except MiniMaxSchemaError:
+        except LLMSchemaError:
             # A schema rejection is NOT media brittleness — it belongs to the
             # repair round (with the media still attached, so media-derived
             # fields never get blind-labeled on a text-only retry).

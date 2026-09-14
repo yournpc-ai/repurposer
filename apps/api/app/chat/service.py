@@ -97,7 +97,7 @@ from app.pipeline.derivative_dispatch import (
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
 from app.platform.project_context import resolve_default_persona
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
@@ -1702,7 +1702,7 @@ async def _book_turn(
     if material_excerpt:
         material_excerpt = material_excerpt[:800]
 
-    # intent_router provider failures propagate as MiniMaxError — no fabricated
+    # intent_router provider failures propagate as LLMError — no fabricated
     # default book (2026-08-14 裁定: a wrong plan that looks real misleads,
     # and Start would spend a paid run on it); the route boundary turns it
     # into a 502 with the localized provider line. The presented book rides
@@ -1954,7 +1954,7 @@ async def _book_turn(
                         zh=(current_ui_language() or "").startswith("zh"),
                     )
                     repaired_intent = retry
-            except (ToolRejected, MiniMaxError, ValueError):
+            except (ToolRejected, LLMError, ValueError):
                 pass
             if repaired_intent is not None:
                 intent = repaired_intent
@@ -2417,7 +2417,7 @@ async def _propose_turn(
             result = await chat_intent_agent.call(message=text, context=context)
         proposal = result.proposal
         disposition = result.pending_disposition
-    except MiniMaxError:
+    except LLMError:
         proposal = None
 
     run_id: UUID | None = None
@@ -2538,7 +2538,7 @@ async def _propose_turn(
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
                     repaired = True
-            except (OpRejected, ToolRejected, ValueError, MiniMaxError):
+            except (OpRejected, ToolRejected, ValueError, LLMError):
                 pass
             if not repaired:
                 proposal = None
@@ -2659,7 +2659,7 @@ async def _propose_turn(
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
                     repaired = True
-            except (WiringRejected, ToolRejected, ValueError, MiniMaxError):
+            except (WiringRejected, ToolRejected, ValueError, LLMError):
                 pass
             if not repaired:
                 proposal = None
@@ -2795,7 +2795,7 @@ async def _propose_turn(
                     proposal = retry.proposal
                     assistant_content = retry.proposal.summary
                     repaired = True
-            except (ToolRejected, ValueError, MiniMaxError):
+            except (ToolRejected, ValueError, LLMError):
                 pass
             if not repaired:
                 proposal = None

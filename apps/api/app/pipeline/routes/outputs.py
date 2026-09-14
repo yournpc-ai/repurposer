@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.tools.revise.agents import reviser
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     ChatMention,
@@ -206,7 +206,7 @@ async def revise_output(
             feedback=feedback,
             persona=persona_context_from_row(persona),
         )
-    except MiniMaxError as e:
+    except LLMError as e:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -329,7 +329,7 @@ async def translate_captions(
 
     try:
         new_track = await translate_caption_track(track, data.target_language)
-    except MiniMaxError as e:
+    except LLMError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),

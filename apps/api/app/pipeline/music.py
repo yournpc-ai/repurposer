@@ -16,7 +16,8 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.providers.llm.minimax import MiniMaxError, minimax_client
+from app.providers.llm.base import LLMError
+from app.providers.llm.minimax import minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Music, Output
 from app.providers.storage import delete, exists, save, size
@@ -83,7 +84,7 @@ async def generate_music(
     The native ``/v1/music_generation`` call (see ``providers/llm/minimax.py``)
     returns a short-lived audio URL, so the bytes are downloaded immediately.
 
-    Raises ``MiniMaxError`` on any API/download failure.
+    Raises ``LLMError`` on any API/download failure.
     """
     result = await minimax_client.generate_music(
         prompt,
@@ -93,7 +94,7 @@ async def generate_music(
         audio_format=AUDIO_EXT,
     )
     if not result.audio_url:
-        raise MiniMaxError("MiniMax music generation returned no audio URL")
+        raise LLMError("MiniMax music generation returned no audio URL")
     await record_media_usage({"music_pieces": 1.0})
 
     async with httpx.AsyncClient(timeout=120) as client:

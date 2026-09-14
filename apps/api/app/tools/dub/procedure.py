@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.models.schemas import AssetType
 from app.models.tables import Asset, GraphNode, Output, Persona, Project
 from app.metering import record_media_usage
@@ -82,7 +82,7 @@ async def translate_dub_script(
     endpoint) always translates fresh. 迁移期读写纪律 (§3.5.5-3): the passed
     id is the ASM node's — resolve its spec.doc_node_id; read `doc or asm`
     (pre-v3 rows carried the artifact on the asm), write only to the doc
-    (asm fallback only when the companion is missing). Raises MiniMaxError
+    (asm fallback only when the companion is missing). Raises LLMError
     on provider failure (the caller maps it onto the error contract)."""
     source_hash = translation_source_hash(track, title_text, target_language, style_hint)
     artifact = None
@@ -241,7 +241,7 @@ async def synthesize_dub(
             duration_s=round(total_end, 2),
             encoder=ext,
         )
-    except (MiniMaxError, VoiceError, DubAssemblyError) as e:
+    except (LLMError, VoiceError, DubAssemblyError) as e:
         raise TransientNodeError(
             f"dub provider call failed: {e}", user_key=propagate_key(e, "voice_unavailable")
         ) from e

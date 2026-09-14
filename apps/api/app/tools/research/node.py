@@ -27,7 +27,7 @@ from app.pipeline.step_display import (
     _set_stage,
     ui_lang_of,
 )
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.tools.research.agents import researcher
 from app.tools.research.web import fetch_text, web_search
 
@@ -107,7 +107,7 @@ class ResearchNode(BoundedLoopNode):
                 # A malformed verdict (action without its payload) costs one
                 # iteration — the next pass sees the same evidence and picks
                 # again; the cap bounds the waste.
-        except MiniMaxError as e:
+        except LLMError as e:
             logger.warning("research_funnel_failed", run_id=str(run.id), error=str(e))
             caveat = "Research unavailable (the researcher failed) — continuing without fresh grounding."
 

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.agents import registry
-from app.providers.llm.minimax import MiniMaxError
+from app.providers.llm.base import LLMError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.dependencies.auth import DEFAULT_USER_ID
 from app.memory.brand import PERSONA_CRAFT_KEYS
@@ -238,7 +238,7 @@ async def generate_persona(
             language=persona.language,
             asset_texts=asset_texts,
         )
-    except MiniMaxError as e:
+    except LLMError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),

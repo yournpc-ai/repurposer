@@ -79,7 +79,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, func, select  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
-from app.providers.llm.minimax import MiniMaxError, MiniMaxSchemaError  # noqa: E402
+from app.providers.llm.base import LLMError, LLMSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import MediaInput, TaskItem  # noqa: E402
 from app.pipeline.graph import NODE_KINDS, fold_estimates  # noqa: E402
@@ -1032,26 +1032,26 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     raised = None
     try:
         await _probe_agent(stub, name="scenario_probe_2").call()
-    except MiniMaxSchemaError as exc:
+    except LLMSchemaError as exc:
         raised = exc
-    check(isinstance(raised, MiniMaxSchemaError), "the second rejection raises")
+    check(isinstance(raised, LLMSchemaError), "the second rejection raises")
     check(len(stub.calls) == 2, "no third call after the repair round",
           len(stub.calls))
 
-    # 3. Transport-class MiniMaxError is NOT repaired (client tenacity owns it).
-    stub = _StubClient([MiniMaxError("MiniMax HTTP 500"), _ProbeResult(text="x")])
+    # 3. Transport-class LLMError is NOT repaired (client tenacity owns it).
+    stub = _StubClient([LLMError("MiniMax HTTP 500"), _ProbeResult(text="x")])
     raised = None
     try:
         await _probe_agent(stub, name="scenario_probe_3").call()
-    except MiniMaxError as exc:
+    except LLMError as exc:
         raised = exc
-    check(isinstance(raised, MiniMaxError)
-          and not isinstance(raised, MiniMaxSchemaError),
+    check(isinstance(raised, LLMError)
+          and not isinstance(raised, LLMSchemaError),
           "transport failure propagates unrepaired")
     check(len(stub.calls) == 1, "transport failure: no repair round", len(stub.calls))
 
     # 4. Declared fallback: a failed call returns the declaration's result.
-    stub = _StubClient([MiniMaxError("MiniMax HTTP 500")])
+    stub = _StubClient([LLMError("MiniMax HTTP 500")])
     result = await _probe_agent(
         stub, name="scenario_probe_4",
         fallback=lambda: _ProbeResult(text="declared"),
@@ -1122,7 +1122,7 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
 
     # 7b. Brittleness (non-schema) → the text-only degradation runs INSIDE the
     #     attempt: string payload, no echo, the repair round unconsumed.
-    stub = _StubClient([MiniMaxError("MiniMax HTTP 500"), _ProbeResult(text="ok")])
+    stub = _StubClient([LLMError("MiniMax HTTP 500"), _ProbeResult(text="ok")])
     result = await _media_agent(stub, name="scenario_probe_7b").call()
     check(result.text == "ok", "media degradation returns", result)
     check(len(stub.calls) == 2,
@@ -1139,7 +1139,7 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     #     round re-carries media + echo (3 calls; the degradation never
     #     streams).
     stub = _StubClient(
-        [MiniMaxError("MiniMax HTTP 500"), "schema", _ProbeResult(text="ok")]
+        [LLMError("MiniMax HTTP 500"), "schema", _ProbeResult(text="ok")]
     )
     result = await _media_agent(stub, name="scenario_probe_7c").call()
     check(result.text == "ok", "brittle-then-schema composition survives",
@@ -1166,7 +1166,7 @@ class _ProbeResult(BaseModel):
 class _StubClient:
     """Scripted MiniMaxClient stand-in: records every call, plays outcomes.
 
-    Script items: ``"schema"`` (raise MiniMaxSchemaError), an exception
+    Script items: ``"schema"`` (raise LLMSchemaError), an exception
     instance (raise it), or a ``_ProbeResult`` (return it).
     """
 
@@ -1178,7 +1178,7 @@ class _StubClient:
         self.calls.append((kind, messages))
         item = self.script.pop(0)
         if item == "schema":
-            raise MiniMaxSchemaError("Failed to validate response: boom")
+            raise LLMSchemaError("Failed to validate response: boom")
         if isinstance(item, Exception):
             raise item
         return item  # type: ignore[return-value]
