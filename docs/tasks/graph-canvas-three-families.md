@@ -140,7 +140,7 @@ writer 链：`素材 → transcript →（research brief）→ post/article(散�
 - 门层测试三族化 + legacy 容忍用例。
 - 绿：pytest 全绿。
 
-**C2b — stamp 核心三族化（本批重心）**
+**C2b — stamp 核心三族化（本批重心）** ✅ 已落 `f9c667f`
 graph_fill.py：
 - **退役 `_graph_kind_of`**（1108-1114）：判族改读 `NODE_KINDS[step.kind]` 的 node_type/prototype 声明（materialize_source/align_stills/revise_script 的 fold-into 语义保留；revise 折叠处 624 行硬编 "generator" 改读目标族）。
 - **两站 stamp**：doc_station 非空的 kind → asm 族（type=video，prototype=editor）+ doc 族（key=`{fill_key}#doc`，type=table，prototype=manual，spec.role=doc_station 值）。**机制细则**：doc 站不走通用 family 循环（空 steps 会炸 `fam_steps[0]`、§6 回填循环会把 step.spec.graph_node_id 错指 doc）——asm 族 stamp 时预生 doc pinned id（任务书 743 行同款先定后连），doc 节点在 companion 块 add（无 tool/prompt/step_ids），asm.spec.doc_node_id 写入含 reused 分支；§6 回填循环只认 asm 族。
