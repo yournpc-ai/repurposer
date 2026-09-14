@@ -270,8 +270,9 @@ export interface WorkflowStep {
 // certificate), so the legacy five kinds never reach the client. The two
 // transitional words ride for rows whose node species retires later:
 // ``modifier`` (morph modifiers — 批 B4 退役) and ``materialize``
-// (pre-fold whole-source nodes — 历史清理收).
-export type GraphNodeKind =
+// (pre-fold whole-source nodes — 历史清理收). (C5b: the field itself
+// renamed kind → type — the graph node's family word, 词表 v3.)
+export type GraphNodeType =
   | "text"
   | "table"
   | "image"
@@ -308,7 +309,7 @@ export interface GraphNodeAsset {
 
 export interface GraphNode {
   id: string
-  kind: GraphNodeKind
+  type: GraphNodeType
   state: GraphNodeState
   /** The node's program: prompt / params / role / fill_key / frame_class /
    * summary — the node type's own shape, rendered as-is. */

@@ -184,8 +184,8 @@ async def _build_context(
         lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
         for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
             spec = n.spec or {}
-            label = spec.get("summary") or n.kind
-            row = f"- {n.kind} id={n.id} state={n.state} — {label}"
+            label = spec.get("summary") or n.type
+            row = f"- {n.type} id={n.id} state={n.state} — {label}"
             prompt = spec.get("prompt")
             if prompt:
                 row += f" | program: {str(prompt)[:140]}"

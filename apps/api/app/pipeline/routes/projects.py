@@ -264,9 +264,9 @@ async def get_project_results(
 # The canvas-facing node vocabulary is the five media values (+ the two
 # transitional words for rows whose node species retires with 批 B4 / the
 # history sweep). DB rows never migrate (grow-only — a C2b+ re-stamp reuses
-# the old row without rewriting its kind), so the mapping happens HERE, at
+# the old row without rewriting its type), so the mapping happens HERE, at
 # the one read frame. Key = spec.tool (the execution truth), never the bare
-# kind — it covers reused legacy rows whose kind is stale.
+# type — it covers reused legacy rows whose type is stale.
 _READ_FACE_MEDIA = frozenset({"text", "table", "image", "video", "audio"})
 
 # asset_type → 媒介值 (上传素材 = 媒介×manual, ADR-076 映射律): a slides
@@ -283,12 +283,12 @@ _ASSET_MEDIUM = {
 }
 
 
-def _read_face(kind: str, spec: dict, outputs: list) -> tuple[str, dict]:
+def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     """Map one graph row to the canvas's v3 face: (type, spec). Pure.
 
     - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
     - asset → its asset_type's medium × manual (the asset dossier still
-      joins on the ORM kind — the response carries it under `asset`).
+      joins on the ORM type — the response carries it under `asset`).
     - document (transcript / task_book / research_brief / role-less) →
       text × manual (spec.role rides along as the internal birth certificate).
     - generator / processor / agent → by spec.tool: writers·research·revise
@@ -299,12 +299,12 @@ def _read_face(kind: str, spec: dict, outputs: list) -> tuple[str, dict]:
       (历史清理收).
     - 无 tool 回退 = text×manual (the full-text card is the safest reading).
     """
-    if kind in _READ_FACE_MEDIA:
-        return kind, spec
-    if kind == "asset":
+    if row_type in _READ_FACE_MEDIA:
+        return row_type, spec
+    if row_type == "asset":
         medium = _ASSET_MEDIUM.get(str(spec.get("asset_type") or ""), "text")
         return medium, {**spec, "prototype": "manual"}
-    if kind == "document":
+    if row_type == "document":
         return "text", {**spec, "prototype": "manual"}
     tool = str(spec.get("tool") or "")
     if tool in ("write_post", "write_article", "research", "revise_script"):
@@ -366,7 +366,7 @@ async def get_project_graph(
     hidden_book_ids = {
         str(n.id)
         for n in nodes
-        if n.kind == "document" and (n.spec or {}).get("role") == "task_book"
+        if n.type == "document" and (n.spec or {}).get("role") == "task_book"
     }
     if hidden_book_ids:
         nodes = [n for n in nodes if str(n.id) not in hidden_book_ids]
@@ -421,7 +421,7 @@ async def get_project_graph(
     asset_node_by_asset = {
         str((n.spec or {}).get("asset_id")): str(n.id)
         for n in nodes
-        if n.kind == "asset" and (n.spec or {}).get("asset_id")
+        if n.type == "asset" and (n.spec or {}).get("asset_id")
     }
     have_edge_triples = {
         (str(e.from_node), str(e.to_node), str(e.edge_type)) for e in edges
@@ -435,7 +435,7 @@ async def get_project_graph(
     # snapshot is semantically identical.
     orm_edges = list(edges)
     for n in nodes:
-        if n.kind != "document" or (n.spec or {}).get("role") != "transcript":
+        if n.type != "document" or (n.spec or {}).get("role") != "transcript":
             continue
         asset_node_id = asset_node_by_asset.get(str((n.spec or {}).get("asset_id") or ""))
         if asset_node_id is None:
@@ -466,7 +466,7 @@ async def get_project_graph(
     asset_ids = [
         UUID(str((n.spec or {}).get("asset_id")))
         for n in nodes
-        if n.kind == "asset" and (n.spec or {}).get("asset_id")
+        if n.type == "asset" and (n.spec or {}).get("asset_id")
     ]
     assets_by_id = {}
     if asset_ids:
@@ -530,7 +530,7 @@ async def get_project_graph(
                 credits_at_ratio(usd_high, ratio),
             ]
         asset_resp = None
-        if node.kind == "asset":
+        if node.type == "asset":
             asset = assets_by_id.get(str(spec.get("asset_id") or ""))
             if asset is not None:
                 asset_resp = AssetResponse.model_validate(asset)
@@ -552,13 +552,13 @@ async def get_project_graph(
         )
         # 读面 legacy 映射 (批 C4): the canvas-facing type/spec — legacy
         # rows map to the v3 vocabulary, new rows pass through. The ORM
-        # kind stays the domain truth everywhere above (lite patches /
+        # type stays the domain truth everywhere above (lite patches /
         # asset dossier join).
-        face_kind, face_spec = _read_face(node.kind, spec, node_outputs)
+        face_type, face_spec = _read_face(node.type, spec, node_outputs)
         resp_nodes.append(
             GraphNodeResponse(
                 id=node.id,
-                kind=face_kind,
+                type=face_type,
                 state=node.state,
                 spec=face_spec,
                 layout=node.layout or {},

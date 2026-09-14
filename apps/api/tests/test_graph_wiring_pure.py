@@ -50,8 +50,8 @@ Covered:
   server-internal asset/document; legacy generator/processor/agent dead at
   the schema boundary since C4), v3 port table (text accepts ctx — the
   task-book→writer ctx edge lands), legacy rows still derive into v3 nodes,
-  EditPromptOp's transition gate (tool presence or legacy kind fallback —
-  tool-less documents rejected), task_for_graph_node's execution-truth skip
+  EditPromptOp's transition gate (tool presence or legacy type-value
+  fallback — tool-less documents rejected), task_for_graph_node's execution-truth skip
   (P0-B)
 - _read_face (C4 读面 legacy 映射): asset→媒介×manual / document→text×manual
   / legacy generator·processor·agent 按 spec.tool 落 (writer 卡 spec.text
@@ -191,11 +191,11 @@ class _StubDb:
         self.flush_count += 1
 
 
-def _node(kind, *, state="draft", spec=None, layout=None):
+def _node(node_type, *, state="draft", spec=None, layout=None):
     return GraphNode(
         id=uuid4(),
         project_id=_PROJECT_ID,
-        kind=kind,
+        type=node_type,
         state=state,
         spec=spec or {},
         layout=dict(layout or {"x": 0, "y": 0, "w": 280, "h": 260}),
@@ -226,7 +226,7 @@ async def test_add_node_with_after_derives_edge_state_layout():
         _PROJECT_ID,
         # ``after`` is connect's shorthand — the edge's type derives off the
         # two ends' ports (a video asset → a video node = the video flow).
-        [{"op": "add_node", "kind": "video", "spec": {"prompt": "p"}, "after": [asset.id]}],
+        [{"op": "add_node", "type": "video", "spec": {"prompt": "p"}, "after": [asset.id]}],
     )
     assert len(delta.affected) == 1
     newborn = next(n for n in db.added if isinstance(n, GraphNode) and n.id == delta.affected[0])
@@ -250,7 +250,7 @@ async def test_add_node_with_after_derives_edge_state_layout():
 async def test_asset_node_is_born_done():
     db = _StubDb()
     await apply_wiring_ops(
-        db, _PROJECT_ID, [{"op": "add_node", "kind": "asset", "spec": {"asset_type": "audio"}}]
+        db, _PROJECT_ID, [{"op": "add_node", "type": "asset", "spec": {"asset_type": "audio"}}]
     )
     assert db.added[0].state == "done"  # an input, not an execution unit
 
@@ -447,7 +447,7 @@ async def test_disconnect_a_same_batch_newborn_edge_just_drops_it():
         db,
         _PROJECT_ID,
         [
-            {"op": "add_node", "id": newborn_id, "kind": "video", "spec": {"prompt": "p"}, "after": [a.id]},
+            {"op": "add_node", "id": newborn_id, "type": "video", "spec": {"prompt": "p"}, "after": [a.id]},
             {"op": "disconnect", "from_node": a.id, "to_node": newborn_id, "edge_type": "video"},
         ],
     )
@@ -593,7 +593,7 @@ async def test_transcript_node_born_done_with_text_edge_and_idempotent():
     doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
     assert doc is not None
     assert doc.state == "done"  # an artifact, not an execution unit
-    assert doc.kind == "document"
+    assert doc.type == "document"
     assert doc.spec["role"] == "transcript"
     assert doc.spec["text"] == "the quick brown fox"
     edge = next(e for e in db.edges if e.to_node == doc.id)
@@ -648,17 +648,17 @@ async def test_research_collapses_to_one_text_node_and_sweeps_without_it():
         db, project, _research_chain(), run=None, ui_language="en", draft=True, book_text="b"
     )
     research_node = next(n for n in db.nodes if (n.spec or {}).get("tool") == "research")
-    assert research_node.kind == "text"
+    assert research_node.type == "text"
     assert research_node.spec["prototype"] == "generator"
     assert research_node.spec["fill_key"] == "research"
     assert research_node.spec["prompt"] == "grid storage"  # query 即程序
     assert research_node.state == "draft"  # the preview's promise
     # 无 agent、无 brief 文档 — the agent family and the brief role retired.
-    assert not [n for n in db.nodes if n.kind == "agent"]
+    assert not [n for n in db.nodes if n.type == "agent"]
     assert not [n for n in db.nodes if (n.spec or {}).get("role") == "research_brief"]
     # the writer wires from the RESEARCH node (the execution truth, text flow)
     writer = next(n for n in db.nodes if (n.spec or {}).get("tool") == "write_post")
-    assert writer.kind == "text"
+    assert writer.type == "text"
     assert any(
         str(e.from_node) == str(research_node.id)
         and str(e.to_node) == str(writer.id)
@@ -747,12 +747,12 @@ async def test_two_station_stamp_asm_and_doc_companion():
     await _stamp_graph_core(
         db, project, steps, run=run, ui_language="en", draft=False, book_text=None
     )
-    asm = next(n for n in db.nodes if n.kind == "video")
-    doc = next(n for n in db.nodes if n.kind == "table")
+    asm = next(n for n in db.nodes if n.type == "video")
+    doc = next(n for n in db.nodes if n.type == "table")
     transcript_doc = next(
-        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "transcript"
+        n for n in db.nodes if n.type == "document" and (n.spec or {}).get("role") == "transcript"
     )
-    asset_node = next(n for n in db.nodes if n.kind == "asset")
+    asset_node = next(n for n in db.nodes if n.type == "asset")
     key = "translate_clip#fr#False#False"
     # asm 站: the executor's identity (词表 v3 媒介×原型 + tool + 双站链接)
     assert asm.spec["fill_key"] == key
@@ -806,7 +806,7 @@ async def test_materialize_folds_into_the_translate_family(monkeypatch):
     await _stamp_graph_core(
         db, project, [materialize, translate], run=run, ui_language="en", draft=False, book_text=None
     )
-    video_nodes = [n for n in db.nodes if n.kind == "video"]
+    video_nodes = [n for n in db.nodes if n.type == "video"]
     assert len(video_nodes) == 1  # the folded materialize grows no twin
     asm = video_nodes[0]
     assert asm.spec["fill_key"] == "translate_clip#fr#False#False"
@@ -819,7 +819,7 @@ async def test_materialize_folds_into_the_translate_family(monkeypatch):
     assert materialize.spec["graph_node_id"] == str(asm.id)
     assert translate.spec["graph_node_id"] == str(asm.id)
     # P0-C: the host root eats the raw assets — never the old producer
-    asset_node = next(n for n in db.nodes if n.kind == "asset")
+    asset_node = next(n for n in db.nodes if n.type == "asset")
     assert any(
         str(e.from_node) == str(asset_node.id) and str(e.to_node) == str(asm.id)
         and e.edge_type == "video"
@@ -892,8 +892,8 @@ async def test_two_station_estimate_seats_and_requote_on_reuse():
     await _stamp_graph_core(
         db, project, [translate], run=run, ui_language="en", draft=False, book_text=None
     )
-    asm = next(n for n in db.nodes if n.kind == "video")
-    doc = next(n for n in db.nodes if n.kind == "table")
+    asm = next(n for n in db.nodes if n.type == "video")
+    doc = next(n for n in db.nodes if n.type == "table")
     assert doc.spec["estimate"] == translate.estimate
     assert doc.spec["estimate"]["units"] == {}  # capture-0 账面结构
     assert asm.spec["estimate"] is None  # 「估价随运行」(ADR-063 诚实面)
@@ -916,11 +916,11 @@ async def test_two_station_estimate_seats_and_requote_on_reuse():
     )
     dub_asm = next(
         n for n in db2.nodes
-        if n.kind == "video" and (n.spec or {}).get("tool") == "dub_clip"
+        if n.type == "video" and (n.spec or {}).get("tool") == "dub_clip"
     )
     dub_doc = next(
         n for n in db2.nodes
-        if n.kind == "table" and (n.spec or {}).get("role") == "dub_script"
+        if n.type == "table" and (n.spec or {}).get("role") == "dub_script"
     )
     assert dub_doc.spec["estimate"] == {
         "prompt_tokens": [10, 20], "completion_tokens": [30, 40], "units": {}
@@ -1072,7 +1072,7 @@ def _post_chain():
 
 def _book_node(db):
     return next(
-        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "task_book"
+        n for n in db.nodes if n.type == "document" and (n.spec or {}).get("role") == "task_book"
     )
 
 
@@ -1177,9 +1177,9 @@ async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
         db,
         _PROJECT_ID,
         [
-            {"op": "add_node", "id": book_id, "kind": "document",
+            {"op": "add_node", "id": book_id, "type": "document",
              "spec": {"role": "task_book", "text": "1 LinkedIn post · English"}},
-            {"op": "add_node", "id": writer_id, "kind": "text",
+            {"op": "add_node", "id": writer_id, "type": "text",
              "spec": {"fill_key": "write_post#post#0", "frame_class": "text"}},
             {"op": "connect", "from_node": book_id, "to_node": writer_id, "edge_type": "ctx"},
         ],
@@ -1200,7 +1200,7 @@ async def test_add_node_pinned_id_collision_rejected():
         await apply_wiring_ops(
             db,
             _PROJECT_ID,
-            [{"op": "add_node", "id": existing.id, "kind": "text", "spec": {}}],
+            [{"op": "add_node", "id": existing.id, "type": "text", "spec": {}}],
         )
 
 
@@ -1280,21 +1280,21 @@ async def test_add_node_accepts_the_v3_medium_vocabulary():
         db,
         _PROJECT_ID,
         [
-            {"op": "add_node", "kind": "video",
+            {"op": "add_node", "type": "video",
              "spec": {"tool": "translate_clip"}, "after": [asset.id]},
-            {"op": "add_node", "kind": "text",
+            {"op": "add_node", "type": "text",
              "spec": {"tool": "write_post"}, "after": [asset.id]},
         ],
     )
     assert len(delta.affected) == 2
-    by_kind = {n.kind: n for n in db.added if isinstance(n, GraphNode)}
+    by_type = {n.type: n for n in db.added if isinstance(n, GraphNode)}
     edge_types = {
         str(e.to_node): e.edge_type for e in db.added if isinstance(e, GraphEdge)
     }
     # asset(video) offers {video,audio,text} — the concrete video flow wins
     # into the video node; the text node takes the concrete text flow.
-    assert edge_types[str(by_kind["video"].id)] == "video"
-    assert edge_types[str(by_kind["text"].id)] == "text"
+    assert edge_types[str(by_type["video"].id)] == "video"
+    assert edge_types[str(by_type["text"].id)] == "text"
 
 
 @pytest.mark.asyncio
@@ -1306,7 +1306,7 @@ async def test_add_node_rejects_a_kind_outside_the_v3_vocabulary():
     for dead in ("hologram", "generator", "processor", "agent"):
         db = _StubDb()
         with pytest.raises(ValidationError):
-            await apply_wiring_ops(db, _PROJECT_ID, [{"op": "add_node", "kind": dead}])
+            await apply_wiring_ops(db, _PROJECT_ID, [{"op": "add_node", "type": dead}])
         assert db.flush_count == 0
 
 

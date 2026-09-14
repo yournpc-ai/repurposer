@@ -6,9 +6,9 @@
  * renderer knows nothing about topology semantics; every edge carries its
  * meaning, every node is real. */
 
-import type { GraphEdgeType, GraphNodeKind, GraphNodeState } from "@/lib/types"
+import type { GraphEdgeType, GraphNodeState, GraphNodeType } from "@/lib/types"
 
-export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
+export type { GraphEdgeType, GraphNodeState, GraphNodeType }
 
 /** 出锚语义律 (2026-09-11 用户拍板): the OUT anchor names the SOURCE's own
  * production medium, never the edge's carried type — an edge reads "from
@@ -21,12 +21,12 @@ export type { GraphEdgeType, GraphNodeKind, GraphNodeState }
  * crosses the wire as an edge type, it only names an out anchor. */
 export type OutPortType = GraphEdgeType | "image"
 
-/** Graph canvas (GraphNodeKind): the v3 node types — five media values +
+/** Graph canvas (GraphNodeType): the v3 node types — five media values +
  * the two transitional read-face words (modifier / materialize); asset
  * rows arrive as their medium value with the joined `asset` dossier as
  * the birth certificate (C4 read face). Recipe surface: its own three
  * words — "asset" (a recipe's manual asset node) | "step" | "output". */
-export type FlowNodeKind = GraphNodeKind | "asset" | "output" | "step"
+export type FlowNodeKind = GraphNodeType | "asset" | "output" | "step"
 
 /** Graph canvas node state (the graph row's own state vocabulary). The
  * recipe surface leaves status unset — its cards have no liveness. */

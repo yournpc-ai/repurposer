@@ -239,7 +239,7 @@ async def stamp_asset_node(
         await db.execute(
             select(GraphNode).where(
                 GraphNode.project_id == project_id,
-                GraphNode.kind == "asset",
+                GraphNode.type == "asset",
                 GraphNode.spec["asset_id"].as_string() == str(asset.id),
             )
         )
@@ -264,7 +264,7 @@ async def stamp_asset_node(
         [
             {
                 "op": "add_node",
-                "kind": "asset",
+                "type": "asset",
                 "spec": {
                     "asset_id": str(asset.id),
                     "asset_type": str(asset.type.value if hasattr(asset.type, "value") else asset.type),
@@ -302,8 +302,8 @@ async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) 
     victims = [
         n
         for n in existing
-        if n.kind == "asset"
-        or (n.kind == "document" and (n.spec or {}).get("role") == _TRANSCRIPT_ROLE)
+        if n.type == "asset"
+        or (n.type == "document" and (n.spec or {}).get("role") == _TRANSCRIPT_ROLE)
     ]
     if victims:
         await apply_wiring_ops(
@@ -331,7 +331,7 @@ async def stamp_transcript_node(
         await db.execute(
             select(GraphNode).where(
                 GraphNode.project_id == project_id,
-                GraphNode.kind == "document",
+                GraphNode.type == "document",
                 GraphNode.spec["role"].as_string() == _TRANSCRIPT_ROLE,
                 GraphNode.spec["asset_id"].as_string() == str(asset.id),
             )
@@ -348,7 +348,7 @@ async def stamp_transcript_node(
         [
             {
                 "op": "add_node",
-                "kind": "document",
+                "type": "document",
                 "spec": {
                     "role": _TRANSCRIPT_ROLE,
                     "asset_id": str(asset.id),
@@ -494,11 +494,11 @@ async def clear_draft_graph(db: AsyncSession, project_id: UUID) -> None:
     victims = [
         n
         for n in nodes
-        if n.kind != "asset"
+        if n.type != "asset"
         and (
             str(n.state) == "draft"
             or (
-                n.kind == "document"
+                n.type == "document"
                 and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
                 and not (n.spec or {}).get("run_id")
             )
@@ -710,7 +710,7 @@ async def _stamp_graph_core(
         (
             n
             for n in existing_nodes
-            if n.kind == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
+            if n.type == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
         ),
         None,
     )
@@ -740,10 +740,10 @@ async def _stamp_graph_core(
         orphans = [
             n
             for n in existing_nodes
-            if n.kind != "asset"
+            if n.type != "asset"
             and str(n.state) == "draft"
             and not (
-                n.kind == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
+                n.type == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
             )
             and (n.spec or {}).get("fill_key") not in sweep_keys
         ]
@@ -814,7 +814,7 @@ async def _stamp_graph_core(
                 {
                     "op": "add_node",
                     "id": book_newborn_id,
-                    "kind": "document",
+                    "type": "document",
                     "spec": {
                         "role": _TASK_BOOK_ROLE,
                         "text": book_text,
@@ -938,7 +938,7 @@ async def _stamp_graph_core(
                     {
                         "op": "add_node",
                         "id": doc_node_id,
-                        "kind": "table",
+                        "type": "table",
                         "spec": {
                             "fill_key": doc_key,
                             "role": doc_role,
@@ -1014,7 +1014,7 @@ async def _stamp_graph_core(
             {
                 "op": "add_node",
                 "id": newborn_id,
-                "kind": fam["type"],
+                "type": fam["type"],
                 "spec": {
                     "fill_key": key,
                     "summary": _node_label(head, ui_language),
@@ -1465,7 +1465,7 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
     # The task-book document's text rides the plan step's runtime book — the
     # refined book_summary overwrites the compile-time fallback when planning
     # lands (same source as the stamp, no flicker).
-    if node.kind == "document" and (node.spec or {}).get("role") == _TASK_BOOK_ROLE:
+    if node.type == "document" and (node.spec or {}).get("role") == _TASK_BOOK_ROLE:
         plan_step = next((s for s in family if s.kind == "plan"), None)
         book_summary = ((plan_step.spec or {}).get("book_summary")) if plan_step else None
         if book_summary and book_summary != (node.spec or {}).get("text"):

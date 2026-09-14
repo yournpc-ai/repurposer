@@ -55,11 +55,11 @@ class AddNodeOp(BaseModel):
     island guess repaired by a second pass). Chat proposals never carry one."""
 
     op: Literal["add_node"]
-    # 词表 v3 (ADR-076, C4 收窄): 出生词表 = 媒介五值 + 服务端内部两词
-    # (asset / document — 素材与文档的出生地词, 读面映射归 _read_face)。
-    # generator/processor/agent 三死词退役出出生词表 (legacy 容忍条目只留
-    # 端口表 _NODE_PORTS — 旧行连线仍要过门; 列改名 kind→type 归 C5b)。
-    kind: Literal[
+    # 词表 v3 (ADR-076; C4 收窄, C5b 终名 type): 出生词表 = 媒介五值 +
+    # 服务端内部两词 (asset / document — 素材与文档的出生地词, 读面映射归
+    # _read_face)。generator/processor/agent 三死词退役出出生词表 (legacy
+    # 容忍条目只留端口表 _NODE_PORTS — 旧行连线仍要过门)。
+    type: Literal[
         "asset", "document",
         "text", "table", "image", "video", "audio",
     ]
@@ -152,7 +152,7 @@ def wiring_catalog_lines() -> str:
     (assets / documents are server-born, never proposed)."""
     return "\n".join(
         [
-            "- add_node: place a node (kind: text|table|image|video|audio; "
+            "- add_node: place a node (type: text|table|image|video|audio; "
             "spec: the node's program — prompt/params; after: upstream node ids to wire from)",
             "- connect: wire a typed flow between two nodes "
             "(edge_type: video|audio|text|ctx — ctx = the reference/context flow)",
@@ -166,7 +166,7 @@ def wiring_catalog_lines() -> str:
 
 # ---- ports (the port law's data half) ---------------------------------------
 
-# kind → (offers, accepts). An edge's type must be offered by its source and
+# type → (offers, accepts). An edge's type must be offered by its source and
 # accepted by its target; ctx is the universal context flow (never the only
 # choice when a concrete type is shared — the derivation prefers it last).
 _NODE_PORTS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
@@ -212,15 +212,15 @@ _ASSET_OFFERS: dict[str, frozenset[str]] = {
 
 
 def _offers(node: GraphNode) -> frozenset[str]:
-    if node.kind == "asset":
+    if node.type == "asset":
         return _ASSET_OFFERS.get(
             str((node.spec or {}).get("asset_type") or ""), frozenset({"text"})
         )
-    return _NODE_PORTS.get(node.kind, (frozenset(), frozenset()))[0]
+    return _NODE_PORTS.get(node.type, (frozenset(), frozenset()))[0]
 
 
 def _accepts(node: GraphNode) -> frozenset[str]:
-    return _NODE_PORTS.get(node.kind, (frozenset(), frozenset()))[1]
+    return _NODE_PORTS.get(node.type, (frozenset(), frozenset()))[1]
 
 
 def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
@@ -232,7 +232,7 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
     if "ctx" in common or "ctx" in _accepts(to_node):
         return "ctx"
     raise WiringRejected(
-        f"No compatible port between {from_node.kind} and {to_node.kind}"
+        f"No compatible port between {from_node.type} and {to_node.type}"
     )
 
 
@@ -495,7 +495,7 @@ def settle_frames_with_edges(
         depth = depth_of(nid, set())
         parents = parents_of(nid)
         column = [n for n in working if depth_of(UUID(str(n.id)), set()) == depth]
-        node.layout = _assign_layout(node.kind, node.spec or {}, depth, parents, column)
+        node.layout = _assign_layout(node.type, node.spec or {}, depth, parents, column)
 
     settled = {UUID(str(n.id)) for n in placed}
     working = list(placed)
@@ -612,10 +612,10 @@ async def apply_wiring_ops(
         etype = edge_type or _derive_edge_type(from_node, to_node)
         if etype not in _offers(from_node):
             raise WiringRejected(
-                f"connect: {from_node.kind} does not offer {etype}"
+                f"connect: {from_node.type} does not offer {etype}"
             )
         if etype not in _accepts(to_node):
-            raise WiringRejected(f"connect: {to_node.kind} does not accept {etype}")
+            raise WiringRejected(f"connect: {to_node.type} does not accept {etype}")
         if reaches(to_id, from_id):
             raise WiringRejected("connect: the edge would close a cycle")
         if any(
@@ -651,7 +651,7 @@ async def apply_wiring_ops(
                 if parent is None:
                     raise WiringRejected(f"add_node: unknown upstream {parent_id}")
                 parents.append(parent)
-            pw, ph = _frame_of(op.kind, dict(op.spec))
+            pw, ph = _frame_of(op.type, dict(op.spec))
             node = GraphNode(
                 # Explicit ids: the working map wires after-edges off them
                 # BEFORE the flush (the column default only fires at INSERT).
@@ -660,12 +660,12 @@ async def apply_wiring_ops(
                 # knowledge.
                 id=op.id or uuid4(),
                 project_id=project_id,
-                kind=op.kind,
+                type=op.type,
                 # Assets are inputs, not execution units — their content is
                 # self-evident at birth (processing status lives on the
                 # asset row itself). Everything else is born a draft
                 # (图先展示后运行 — zero consumption until a run fills it).
-                state="done" if op.kind == "asset" else "draft",
+                state="done" if op.type == "asset" else "draft",
                 spec=dict(op.spec),
                 # Provisional frame (a placeholder — the door's settle
                 # replaces it with the frame law's output before the flush,
@@ -724,9 +724,9 @@ async def apply_wiring_ops(
             # covers pre-v3 rows stamped without tool. 终态闸门 =
             # prototype=="generator" (批 B4 set_param 落地前 editor 的修订
             # 路不能断), 卡面 hover wash 与本报文同真值 (批 C1).
-            if not (node.spec or {}).get("tool") and node.kind not in ("generator", "agent"):
+            if not (node.spec or {}).get("tool") and node.type not in ("generator", "agent"):
                 raise WiringRejected(
-                    f"edit_prompt: a {node.kind} node has no prompt to edit"
+                    f"edit_prompt: a {node.type} node has no prompt to edit"
                 )
             if node.state in ("queued", "running"):
                 raise WiringRejected(

@@ -259,16 +259,19 @@ class GraphNode(Base):
     The graph IS the product object: a project = one persistent, mutable
     graph (a forest — islands are legal), built and revised by the wiring
     layer (``pipeline/graph_store.apply_wiring_ops``, the ONLY writer), with
-    chat as its only consumer surface. ``kind`` is one of the five node
-    types — asset | document | generator | processor | agent. ``state`` is
-    the orthogonal lifecycle dimension — draft | queued | running | done |
-    failed | skipped | stale. ``spec`` is the node's program: prompt /
-    params / the estimate fold of its internal workflow / the produced
-    ``output_id`` back-reference / the internal step keys (steps stay
-    step-grained inside the node — composition, not projection). ``layout``
-    is the settled canvas frame (append-only: assigned once at add_node,
-    existing nodes never move). Execution semantics (workflow_steps /
-    NodeBase / queue / hold→capture→release) are untouched by this table.
+    chat as its only consumer surface. ``type`` is the node's family word
+    (词表 v3, ADR-076 — renamed from ``kind`` in C5b to end the
+    step.kind double meaning): the five medium values text | table | image
+    | video | audio, plus the two server-internal birth words asset |
+    document. ``state`` is the orthogonal lifecycle dimension — draft |
+    queued | running | done | failed | skipped | stale. ``spec`` is the
+    node's program: prompt / params / the estimate fold of its internal
+    workflow / the produced ``output_id`` back-reference / the internal
+    step keys (steps stay step-grained inside the node — composition, not
+    projection). ``layout`` is the settled canvas frame (append-only:
+    assigned once at add_node, existing nodes never move). Execution
+    semantics (workflow_steps / NodeBase / queue / hold→capture→release)
+    are untouched by this table.
     """
 
     __tablename__ = "graph_nodes"
@@ -280,7 +283,7 @@ class GraphNode(Base):
         nullable=False,
         index=True,
     )
-    kind = Column(String(20), nullable=False)
+    type = Column(String(20), nullable=False)
     state = Column(String(20), nullable=False, default="draft")
     spec = Column(JSONB, nullable=False, default=dict)
     # {x, y, w, h} — the settled canvas frame, assigned once at birth.

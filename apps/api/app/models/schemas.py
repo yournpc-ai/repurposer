@@ -2870,7 +2870,10 @@ class GraphNodeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    kind: str
+    # The family word (词表 v3, ADR-076 / C5b): medium five values +
+    # server-internal birth words, mapped through _read_face for legacy rows.
+    # Distinct from ``step.kind`` (the tool name, N-35).
+    type: str
     state: str
     spec: dict = Field(default_factory=dict)
     layout: dict = Field(default_factory=dict)

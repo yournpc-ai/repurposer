@@ -47,7 +47,7 @@ def task_for_graph_node(node: GraphNode) -> TaskItem | None:
     (词表 v3 评审修正 P0-B, ADR-076: a writer upgraded to the text type
     keeps its run bridge — a kind-based skip would 422 every graph/revise +
     chat revision run aimed at it)."""
-    if node.kind == "asset":
+    if node.type == "asset":
         return None
     spec = node.spec or {}
     tool = spec.get("tool")

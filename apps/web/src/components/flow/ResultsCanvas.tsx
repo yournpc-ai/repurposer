@@ -158,15 +158,15 @@ export function ResultsCanvas({
         w: Number(layout.w ?? 280),
         h: Number(layout.h ?? 260),
       }
-      // 素材卡 (C4 读面后资产行已是媒介 kind — the joined asset dossier is
-      // the birth certificate): the card derives from the dossier, the kind
+      // 素材卡 (C4 读面后资产行已是媒介 type — the joined asset dossier is
+      // the birth certificate): the card derives from the dossier, the type
       // passthrough keeps the medium's own frame/port semantics.
       if (n.asset) {
         const asset = n.asset
         const mediaUrl = toAbsoluteUrl(asset.stream_url ?? asset.file_url ?? null)
         return {
           id: n.id,
-          kind: n.kind,
+          kind: n.type,
           label: t(`generationOverlay.assetTypes.${asset.type ?? spec.asset_type ?? ""}`, {
             defaultValue: String(asset.type ?? spec.asset_type ?? "asset"),
           }),
@@ -188,14 +188,14 @@ export function ResultsCanvas({
         }
       }
       // 词表 v3 (ADR-076, C5): the read face already mapped every row — the
-      // kind passthrough re-derives the anatomy at the card dispatch; the
+      // type passthrough re-derives the anatomy at the card dispatch; the
       // label falls back through the role-derived document names (the doc
       // stations never carry spec.summary — ADR-072) to the medium's own
       // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
       return {
         id: n.id,
-        kind: n.kind,
+        kind: n.type,
         label:
           spec.summary ??
           (spec.role === "task_book"
@@ -210,7 +210,7 @@ export function ResultsCanvas({
                     ? t("results.canvas.dubScriptDoc")
                     : spec.role
                       ? t("results.canvas.document")
-                      : t(`results.canvas.nodeType.${n.kind}`, { defaultValue: n.kind })),
+                      : t(`results.canvas.nodeType.${n.type}`, { defaultValue: n.type })),
         status: n.state,
         spec,
         outputs,
