@@ -182,20 +182,27 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
-    # 画布三族 (ADR-072 批 A3): the node family this kind's stamps belong to —
-    # "document" (散文档/表格档) or "assemble" (装配站). Declared per node
-    # class (注册表纪律: 禁平行映射表 — this attribute replaced graph_fill's
-    # retired _graph_kind_of central mapping). Kinds that never own a stamp
-    # declare the family they FOLD INTO: revise_script rides its target
-    # writer's document node; materialize_source / align_stills ride the
-    # downstream producer's assemble node. The internal crew (app.pipeline.*)
-    # never stamps — the declaration is moot there.
-    family: str | None = None
+    # 词表 v3 (ADR-076): the graph node's MEDIUM type — one of the five
+    # generic workflow-node values (text/table/image/video/audio), never a
+    # business word (业务身份 = spec.summary + spec.tool). Card anatomy
+    # derives from it (text/table → 全文卡, image/video/audio → 媒体卡).
+    # Declared per node class (注册表纪律: 禁平行映射表 — this attribute
+    # replaced graph_fill's retired _graph_kind_of central mapping). Kinds
+    # that never own a stamp declare the type of the node they FOLD INTO:
+    # revise_script rides its target writer's text node; materialize_source /
+    # align_stills ride the downstream producer's video node. The internal
+    # crew (app.pipeline.*) never stamps — the declaration is moot there.
+    node_type: str | None = None
+    # 能力原型 (ADR-076): the program region's form — "generator" (散文程序:
+    # PROMPT 区 = 用户原话) / "editor" (参数程序: 杠杆行) / "manual" (无程序
+    # 区, 改动 = 直操内容本体). Stamped into spec.prototype; execution
+    # semantics (估价折叠 / 修订通道 / 版本分页) untouched.
+    prototype: str | None = None
     # 两站拆分 (ADR-072): when set, the stamp derives a second DOCUMENT-station
     # family (the translated script — cue rows, the persistent editable
     # artifact) next to this kind's assemble station; the value is the doc's
-    # spec.role. First seats: translate_clip ("translation") / dub_clip
-    # ("dub_script").
+    # spec.role. The doc station is always type=table × prototype=manual.
+    # First seats: translate_clip ("translation") / dub_clip ("dub_script").
     doc_station: str | None = None
     # Internal topology node (ADR-043): compile-injected, never a registered
     # tool — users never say its name (materialize_source is the whole-

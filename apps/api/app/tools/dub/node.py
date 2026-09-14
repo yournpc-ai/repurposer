@@ -42,7 +42,8 @@ logger = structlog.get_logger()
 
 class DubClip(NodeBase):
     kind = "dub_clip"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 装配站 (配音成片)
+    node_type = "video"  # 词表 v3 (ADR-076) — 装配站 (配音成片)
+    prototype = "editor"  # 参数程序 (杠杆行; 过渡期 compose 行照盖, B5 才拆)
     doc_station = "dub_script"  # 两站拆分: 文档站 = 译文稿 (ADR-072)
     task_name = "Dub voice"
     task_name_zh = "声音配音"

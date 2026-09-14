@@ -57,7 +57,8 @@ from app.tools.captions.procedure import (
 
 class TranslateClip(NodeBase):
     kind = "translate_clip"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 装配站 (字幕成片)
+    node_type = "video"  # 词表 v3 (ADR-076) — 装配站 (字幕成片)
+    prototype = "editor"  # 参数程序 (杠杆行; 过渡期 compose 行照盖, B5 才拆)
     doc_station = "translation"  # 两站拆分: 文档站 = 译文稿 (ADR-072)
     task_name = "Translate captions"
     task_name_zh = "翻译字幕"
@@ -123,11 +124,17 @@ class TranslateClip(NodeBase):
         await _guard_target_differs_from_source(
             db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
         )
-        # 译文 artifact 复用钩 (ADR-072 批 A2): the cue rows live on the graph
-        # node's spec (persistent across runs — a re-render revision reads
-        # them, translator capture 0). Hash = source cue times+words + title +
-        # language; the TRANSLATED text is never hashed — the user's edit of
-        # the 译文 IS the artifact's content (改字后重渲染不再买翻译).
+        # 译文 artifact 复用钩 (ADR-072 批 A2): the cue rows live on the
+        # DOC station's spec (两站拆分, persistent across runs — a re-render
+        # revision reads them, translator capture 0). Hash = source cue
+        # times+words + title + language; the TRANSLATED text is never
+        # hashed — the user's edit of the 译文 IS the artifact's content
+        # (改字后重渲染不再买翻译). 迁移期读写纪律 (§3.5.5-3): the step's
+        # back-pointer names the ASM node — resolve its spec.doc_node_id
+        # for the doc; read `doc or asm` (pre-v3 rows carried the artifact
+        # on the asm — zero re-buy at the boundary), write only to the doc
+        # (asm fallback only when the companion is missing, e.g. a run
+        # resumed from before the split).
         from app.pipeline.graph_fill import (  # deferred: import cycle
             merge_translation_artifact,
         )
@@ -136,8 +143,15 @@ class TranslateClip(NodeBase):
         gnode = (
             await db.get(GraphNode, UUID(str(gnode_id))) if gnode_id else None
         )
+        doc_gnode = None
+        doc_id = (gnode.spec or {}).get("doc_node_id") if gnode is not None else None
+        if doc_id:
+            doc_gnode = await db.get(GraphNode, UUID(str(doc_id)))
+        artifact_node = doc_gnode or gnode
         artifact = (
-            (gnode.spec or {}).get(TRANSLATION_ARTIFACT_KEY) if gnode else None
+            (artifact_node.spec or {}).get(TRANSLATION_ARTIFACT_KEY)
+            if artifact_node
+            else None
         )
         touched: list[UUID] = []
         for output in clips:
@@ -169,11 +183,11 @@ class TranslateClip(NodeBase):
                         if title_src
                         else ""
                     )
-                    if gnode is not None:
+                    if artifact_node is not None:
                         # Persist per clip as it lands (own session): a retry
                         # mid-loop never re-buys the clips already translated.
                         await merge_translation_artifact(
-                            UUID(str(gnode.id)),
+                            UUID(str(artifact_node.id)),
                             {
                                 str(output.id): {
                                     "source_hash": source_hash,

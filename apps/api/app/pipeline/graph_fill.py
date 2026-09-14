@@ -28,13 +28,18 @@ Three directions:
   aggregateStatus logic's server-side home), and landed outputs back-write
   ``spec.output_ids``.
 
-Migration mapping (简报 §3): assets → asset / plan prelude → the task-book
-document / select_clips·writers·revise·translate·dub → generator /
-materialize·remove_filler·add_music·reframe → processor / research →
-agent. Render steps join NO family — their state rides the output row's
-render_status (the node's product region carries it in place).
-align_stills / verify live inside their downstream producer / their
-executor's node.
+Migration mapping (词表 v3, ADR-076): assets → asset (媒介×manual) / plan
+prelude → the task-book document / writers·research → text×generator /
+quotes·carousel → image×generator / select_clips·translate·dub·modifiers →
+video×editor (translate/dub 两站拆分: the asm family plus a table×manual
+doc-station companion — key `{fill_key}#doc`, role = the doc_station
+declaration, the persistent editable cue artifact's home) / revise folds
+into its target's family / materialize_source·align_stills fold into the
+nearest downstream family (the bare fill key grows no node — their step ids
+ride the host's `step_ids`, the host root inherits eat-the-asset) / verify
+folds into its executor's node. Render steps join NO family — their state
+rides the output row's render_status (the node's product region carries it
+in place).
 """
 
 from __future__ import annotations
@@ -65,11 +70,18 @@ logger = structlog.get_logger()
 # (interrupt) → plan). Kind strings, same source as node_runners.
 _PRELUDE_KINDS = frozenset({"preprocess", "persona_bootstrap", "understand", "interrupt", "plan"})
 
-# Modifier kinds that own a PROCESSOR node (deterministic, no LLM prompt —
-# params live in the factsbar); translate/dub are generators (parameterized
-# intent on the card). Kind-derived via NODE_KINDS at fill time — this set
-# only names the deterministic processor instances (简报 §3).
-_PROCESSOR_KINDS = frozenset({"materialize_source", "remove_filler", "add_music", "reframe_clip"})
+# Modifier kinds whose editor node carries NO prompt slot (deterministic
+# 工序 — the program region stays empty until 批 B4's lever row; the prompt
+# gate reads this set, 评审修正 P0-A). translate/dub/select_clips/writers/
+# research keep the composed line in the transition (compose 本体 B5 才拆).
+_NO_PROMPT_KINDS = frozenset({"materialize_source", "remove_filler", "add_music", "reframe_clip"})
+
+# Folded kinds — they grow no node of their own; their step ids ride the
+# nearest downstream family's `step_ids` (词表 v3 materialize 折叠, ADR-072
+# ⑦; align_stills 现成先例). A folded step's bare fill key is never a
+# family key, so `node_of` returns None and the step-input edge loop skips
+# it structurally.
+_FOLDED_KINDS = frozenset({"align_stills", "materialize_source"})
 
 # Clip-family kinds — edges between these carry the video flow.
 _CLIP_FAMILY_KINDS = frozenset({
@@ -78,13 +90,10 @@ _CLIP_FAMILY_KINDS = frozenset({
 })
 
 # 转写稿 document (ADR-057 document 型第二实例): the asset's ASR transcript /
-# extracted text as a first-class card. research brief (第三实例): the bounded
-# loop's closing artifact as its own card, fed by the agent node.
+# extracted text as a first-class card.
 # (_TASK_BOOK_ROLE's one home is graph_store — the door owns the graph's role
 # vocabulary.)
 _TRANSCRIPT_ROLE = "transcript"
-_RESEARCH_BRIEF_ROLE = "research_brief"
-_RESEARCH_BRIEF_KEY = "research_brief"
 
 # States a DRAFT re-stamp may revisit (K5): a live node (queued/running), a
 # finished one (done), or one mid-revision (stale) belongs to an earlier
@@ -131,6 +140,18 @@ def _fill_key_for_step(step: WorkflowStep) -> str:
     if isinstance(slot, dict):
         return f"{kind}#{slot.get('type') or ''}#{spec.get('slot_index') or 0}"
     return kind
+
+
+def _decl_of(kind: str) -> tuple[str, str]:
+    """The canvas identity declaration for a step kind (词表 v3, ADR-076):
+    (node_type, prototype) off the registered NodeBase (注册表纪律 — 禁平行
+    映射表; this lookup replaced the retired _graph_kind_of central
+    mapping). Unknown / legacy kinds read as text×manual — the full-text
+    card is the safest reading."""
+    node_cls = NODE_KINDS.get(kind)
+    node_type = (node_cls.node_type if node_cls is not None else None) or "text"
+    prototype = (node_cls.prototype if node_cls is not None else None) or "manual"
+    return node_type, prototype
 
 
 def _node_label(step: WorkflowStep, ui_language: str) -> str | None:
@@ -537,16 +558,18 @@ async def _stamp_graph_core(
     )
 
     # ── 1. Classify the steps into node families ─────────────────────────
-    # node_key → {"kind": graph kind, "steps": [step]}; every generation /
-    # processor / agent step owns or joins a node; the prelude belongs to
-    # the task-book document; align_stills folds into its downstream
-    # producer; verify folds into its executor's node. render joins nothing.
+    # node_key → {"type": 媒介 type, "prototype": 能力原型, "steps": [step]};
+    # every generation / processor / agent step owns or joins a node; the
+    # prelude belongs to the task-book document; folded kinds (align_stills /
+    # materialize_source) ride the nearest downstream family; revise rides
+    # its target's; verify folds into its executor's node. render joins
+    # nothing. 判族读注册表声明 (词表 v3, ADR-076 — _graph_kind_of 退役).
     families: dict[str, dict[str, Any]] = {}
 
-    def family_for(key: str, kind: str) -> dict[str, Any]:
+    def family_for(key: str, decl: tuple[str, str]) -> dict[str, Any]:
         fam = families.get(key)
         if fam is None:
-            fam = families[key] = {"kind": kind, "steps": []}
+            fam = families[key] = {"type": decl[0], "prototype": decl[1], "steps": []}
         return fam
 
     by_id = {str(s.id): s for s in steps}
@@ -554,8 +577,12 @@ async def _stamp_graph_core(
     # owns its target output — 修订 = 原地图变更, the revision never grows a
     # twin node. The target's producing step lives outside this run, so the
     # fill key is resolved in one batched lookup (missing/predated target →
-    # the bare-kind fallback family, same as any unrecognized step).
+    # the bare-kind fallback family, same as any unrecognized step). The
+    # family's canvas identity reads the TARGET producer's declaration
+    # (the revise fold's hardcoded "generator" is retired with the five-type
+    # vocabulary).
     revise_target_keys: dict[str, str] = {}  # revise step id → fill key
+    revise_target_decls: dict[str, tuple[str, str]] = {}  # → (type, prototype)
     revise_steps = [s for s in steps if s.kind == "revise_script"]
     if revise_steps:
         target_ids = [
@@ -586,44 +613,83 @@ async def _stamp_graph_core(
                 if producer_ids
                 else {}
             )
-            key_by_output = {
-                str(t.id): _fill_key_for_step(producers_by_id[str(t.workflow_step_id)])
-                for t in targets
-                if t.workflow_step_id is not None
-                and str(t.workflow_step_id) in producers_by_id
-            }
+            key_by_output: dict[str, str] = {}
+            decl_by_output: dict[str, tuple[str, str]] = {}
+            for t in targets:
+                producer = (
+                    producers_by_id.get(str(t.workflow_step_id))
+                    if t.workflow_step_id is not None
+                    else None
+                )
+                if producer is None:
+                    continue
+                key_by_output[str(t.id)] = _fill_key_for_step(producer)
+                decl_by_output[str(t.id)] = _decl_of(producer.kind)
             for s in revise_steps:
-                key = key_by_output.get(str((s.spec or {}).get("target_id") or ""))
-                if key:
-                    revise_target_keys[str(s.id)] = key
+                tid = str((s.spec or {}).get("target_id") or "")
+                if tid in key_by_output:
+                    revise_target_keys[str(s.id)] = key_by_output[tid]
+                    revise_target_decls[str(s.id)] = decl_by_output.get(
+                        tid, ("text", "generator")
+                    )
 
-    producers = [s for s in steps if s.kind not in _PRELUDE_KINDS and s.kind != "verify" and s.kind != "render" and s.kind != "align_stills"]
+    def family_owner_of(folded: WorkflowStep) -> Any | None:
+        """The family a folded step (align_stills / materialize_source)
+        rides: its nearest downstream consumer in the compile (the step
+        whose inputs name it), resolved TRANSITIVELY when the consumer
+        itself folds (stills profile: align_stills → materialize_source →
+        translate_clip — both ride the translate family). None = no consumer
+        in this run — the step joins nothing (its bare fill key grows no
+        node, so `node_of` returns None and it is naturally skipped
+        everywhere)."""
+        seen: set[str] = set()
+        current = folded
+        while str(current.id) not in seen:
+            seen.add(str(current.id))
+            nxt = next(
+                (
+                    s
+                    for s in steps
+                    if s.kind not in _PRELUDE_KINDS
+                    and s.kind not in ("verify", "render")
+                    and str(current.id) in (str(i) for i in (s.inputs or []))
+                ),
+                None,
+            )
+            if nxt is None:
+                return None
+            if nxt.kind not in _FOLDED_KINDS:
+                return nxt
+            current = nxt
+        return None
+
     for step in steps:
         if step.kind in _PRELUDE_KINDS or step.kind in ("render",):
             continue
         if step.kind == "verify":
             # The executor is the verify's first input (compile contract).
             executor = by_id.get(str((step.inputs or [None])[0]))
-            if executor is not None and executor.kind not in _PRELUDE_KINDS:
-                family_for(_fill_key_for_step(executor), _graph_kind_of(executor))["steps"].append(step)
+            if (
+                executor is not None
+                and executor.kind not in _PRELUDE_KINDS
+                and executor.kind not in _FOLDED_KINDS
+            ):
+                family_for(_fill_key_for_step(executor), _decl_of(executor.kind))["steps"].append(step)
             continue
-        if step.kind == "align_stills":
-            # Folds into the nearest downstream producer (its id appears in
-            # that step's inputs — direct child in the compile).
-            owner = next(
-                (s for s in producers if str(step.id) in (str(i) for i in (s.inputs or []))),
-                None,
-            )
+        if step.kind in _FOLDED_KINDS:
+            owner = family_owner_of(step)
             if owner is not None:
-                family_for(_fill_key_for_step(owner), _graph_kind_of(owner))["steps"].append(step)
+                family_for(_fill_key_for_step(owner), _decl_of(owner.kind))["steps"].append(step)
             continue
         if step.kind == "revise_script" and str(step.id) in revise_target_keys:
             # The revision rides its TARGET's node (原地图变更 — the same
             # fill key, so the reuse path re-queues the node with the new
             # program instead of growing a revise twin).
-            family_for(revise_target_keys[str(step.id)], "generator")["steps"].append(step)
+            family_for(
+                revise_target_keys[str(step.id)], revise_target_decls[str(step.id)]
+            )["steps"].append(step)
             continue
-        family_for(_fill_key_for_step(step), _graph_kind_of(step))["steps"].append(step)
+        family_for(_fill_key_for_step(step), _decl_of(step.kind))["steps"].append(step)
 
     # ── 2. Read the current graph (idempotent reuse) ─────────────────────
     existing_nodes = list(
@@ -666,8 +732,11 @@ async def _stamp_graph_core(
     # down through the same wiring door. The task-book document is never an
     # orphan (the draft always re-ensures its book below); live/finished
     # nodes are history, never the preview's business. The run fill never
-    # deletes — its graph only grows / re-fills.
+    # deletes — its graph only grows / re-fills. (The doc-station companion
+    # sweeps with its family: its `{fill_key}#doc` key is in `families` only
+    # while its asm's chain survives — see the sweep key set below.)
     if draft:
+        sweep_keys = set(families) | {f"{key}#doc" for key in families}
         orphans = [
             n
             for n in existing_nodes
@@ -676,13 +745,7 @@ async def _stamp_graph_core(
             and not (
                 n.kind == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
             )
-            and not (
-                # The brief doc lives as long as its research is in the chain
-                n.kind == "document"
-                and (n.spec or {}).get("role") == _RESEARCH_BRIEF_ROLE
-                and "research" in families
-            )
-            and (n.spec or {}).get("fill_key") not in families
+            and (n.spec or {}).get("fill_key") not in sweep_keys
         ]
         if orphans:
             orphan_ids = {UUID(str(n.id)) for n in orphans}
@@ -710,12 +773,18 @@ async def _stamp_graph_core(
         .all()
     )
     asset_node_ids: list[UUID] = []
+    # 转写稿文档按素材登记 (transcript → 译文稿/配音稿 的 text 边派生,
+    # ADR-072 边派生新规 — the A3-lite read-face synthesis turned production):
+    # asset id → its transcript document's id (textless assets have none).
+    transcript_doc_by_asset: dict[str, UUID] = {}
     for asset in assets:
         node = await stamp_asset_node(db, project_id, asset)
         asset_node_ids.append(UUID(str(node.id)))
         # 转写稿 document 随素材处理落地（幂等；无转写文本的素材跳过）——
         # 上传时处理、run 内 preprocess、存量回填三条路在这一个 ensure 汇合。
-        await stamp_transcript_node(db, project_id, asset)
+        transcript_doc = await stamp_transcript_node(db, project_id, asset)
+        if transcript_doc is not None:
+            transcript_doc_by_asset[str(asset.id)] = UUID(str(transcript_doc.id))
 
     # ── 4. The task-book document (the plan prelude's artifact — FLORA
     # text-node form; the prelude's steps are its internal workflow). Run
@@ -774,11 +843,24 @@ async def _stamp_graph_core(
         UUID(str(task_book_node.id)) if task_book_node is not None else None
     )
 
-    # ── 5. Generation / processor / agent nodes (idempotent by fill_key) ──
+    # ── 5. Generation / editor / doc-station nodes (idempotent by fill_key) ──
+    doc_pairs: list[tuple[UUID, UUID]] = []  # (doc station id, its asm id) — §7 wires them
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
-        head = next((s for s in fam_steps if s.kind not in ("verify", "align_stills")), fam_steps[0])
+        # The family's head drives label / params / tool / prompt — folded
+        # steps (align_stills / materialize_source) never head (their host
+        # inherits the eat-the-asset root semantics, 评审修正 P0-C; the
+        # family's tool identity stays the consumer's).
+        head = next(
+            (s for s in fam_steps if s.kind not in _FOLDED_KINDS and s.kind != "verify"),
+            fam_steps[0],
+        )
         estimate = _family_estimate(fam_steps)
+        # 评审修正 P0-A (prompt 闸门随词表改判): the #doc companion is not a
+        # family (文本站无 prompt 位, ADR-072 ③ — it is stamped in the
+        # companion block below, never here); deterministic modifiers carry
+        # no prompt slot; everything else keeps the composed / instruction /
+        # query line exactly as the five-type era did (compose 本体 B5 才拆).
         prompt = (
             (
                 compose_spec_prompt(head, ui_language)
@@ -787,7 +869,7 @@ async def _stamp_graph_core(
                 or (head.spec or {}).get("instruction")
                 or (head.spec or {}).get("query")
             )
-            if fam["kind"] in ("generator", "agent")
+            if head.kind not in _NO_PROMPT_KINDS
             else None
         )
         reused = by_fill_key.get(key)
@@ -812,12 +894,66 @@ async def _stamp_graph_core(
             and reused.state == "stale"
             and bool((reused.spec or {}).get("prompt"))
         )
+
+        # ── 两站拆分 (ADR-072): the doc-station companion — ensured BEFORE
+        # the reused branch so the draft-restamp guard's `continue` still
+        # births and registers it (the migration path for pre-v3 rows: a
+        # live legacy translate/dub node gains its companion here). The doc
+        # never joins the family loop (§3.5.5-1: an empty-steps family would
+        # explode `fam_steps[0]`; §6 back-pointing only knows the asm
+        # family). Pinned id (任务书同款先定后连); no tool / prompt /
+        # step_ids / output_ids — the persistent editable cue artifact is
+        # its whole content (spec.role = the doc_station declaration).
+        doc_node_id: UUID | None = None
+        head_cls = NODE_KINDS.get(head.kind)
+        doc_role = str(head_cls.doc_station or "") if head_cls is not None else ""
+        if doc_role:
+            doc_key = f"{key}#doc"
+            existing_doc = by_fill_key.get(doc_key)
+            if existing_doc is not None:
+                doc_node_id = UUID(str(existing_doc.id))
+                # grow-only: kind / fill_key / role / text never migrate —
+                # only the v3 marker refreshes (read-face mapping兜底归批 C4).
+                if (existing_doc.spec or {}).get("prototype") != "manual":
+                    existing_doc.spec = {**(existing_doc.spec or {}), "prototype": "manual"}
+            else:
+                doc_node_id = uuid4()
+                ops.append(
+                    {
+                        "op": "add_node",
+                        "id": doc_node_id,
+                        "kind": "table",
+                        "spec": {
+                            "fill_key": doc_key,
+                            "role": doc_role,
+                            "prototype": "manual",
+                            # The text-lane frame reservation (340×560): the
+                            # cue text lands mid-run and the client grows
+                            # content-height inside it, never outgrowing it.
+                            "frame_class": "text",
+                        },
+                    }
+                )
+            node_id_by_key[doc_key] = doc_node_id
+
         if reused is not None:
             node_id_by_key[key] = UUID(str(reused.id))
+            if doc_node_id is not None:
+                doc_pairs.append((doc_node_id, UUID(str(reused.id))))
             if draft and str(reused.state) not in _DRAFT_RESTAMP_STATES:
                 # A live / finished / mid-revision node belongs to an
-                # earlier run's truth — the draft preview leaves it
-                # untouched (edges still derive to it via the key map).
+                # earlier run's truth — the draft preview leaves its program
+                # and state untouched (edges still derive to it via the key
+                # map). The doc-station LINK is still written: additive,
+                # idempotent, content-free (and it lets the node's next sync
+                # mirror the companion immediately).
+                if doc_node_id is not None and (reused.spec or {}).get(
+                    "doc_node_id"
+                ) != str(doc_node_id):
+                    reused.spec = {
+                        **(reused.spec or {}),
+                        "doc_node_id": str(doc_node_id),
+                    }
                 continue
             # The node is being re-filled: refresh its program + internal
             # workflow and re-queue it (修订/重跑 = 原地图变更, never a twin).
@@ -830,10 +966,12 @@ async def _stamp_graph_core(
                 **({} if revise_headed else {"summary": _node_label(head, ui_language)}),
                 **({"prompt": prompt} if prompt and (revise_headed or not keep_edited_prompt) else {}),
                 **({} if revise_headed else {"params": _params_of(head)}),
+                "prototype": fam["prototype"],
                 "estimate": estimate,
                 "frame_class": frame_class,
                 **({"frame_aspect": frame_aspect} if frame_aspect else {}),
                 **({} if revise_headed else {"tool": head.kind}),
+                **({"doc_node_id": str(doc_node_id)} if doc_node_id is not None else {}),
                 **(
                     {}
                     if draft
@@ -851,20 +989,24 @@ async def _stamp_graph_core(
         # stacked at x=0 and repaired).
         newborn_id = uuid4()
         node_id_by_key[key] = newborn_id
+        if doc_node_id is not None:
+            doc_pairs.append((doc_node_id, newborn_id))
         ops.append(
             {
                 "op": "add_node",
                 "id": newborn_id,
-                "kind": fam["kind"],
+                "kind": fam["type"],
                 "spec": {
                     "fill_key": key,
                     "summary": _node_label(head, ui_language),
                     **({"prompt": prompt} if prompt else {}),
                     "params": _params_of(head),
+                    "prototype": fam["prototype"],
                     "estimate": estimate,
                     "frame_class": frame_class,
                     **({"frame_aspect": frame_aspect} if frame_aspect else {}),
                     "tool": head.kind,
+                    **({"doc_node_id": str(doc_node_id)} if doc_node_id is not None else {}),
                     **(
                         {}
                         if draft
@@ -877,37 +1019,6 @@ async def _stamp_graph_core(
                 },
             }
         )
-
-    # ── 6b-create. The research-brief document's add op rides the SAME
-    # batch (document 型第三实例 — the loop's closing artifact gets its own
-    # card, fed by the agent node): the agent's id is already pinned above,
-    # so the after-shorthand resolves in-batch. The doc's state + the
-    # agent↔brief link settle after the batch (§6b-tail).
-    research_node_id = node_id_by_key.get("research")
-    brief_newborn_id: UUID | None = None
-    brief_doc: GraphNode | None = None
-    if research_node_id is not None:
-        brief_doc = by_fill_key.get(_RESEARCH_BRIEF_KEY)
-        if brief_doc is None:
-            brief_newborn_id = uuid4()
-            ops.append(
-                {
-                    "op": "add_node",
-                    "id": brief_newborn_id,
-                    "kind": "document",
-                    "spec": {
-                        "role": _RESEARCH_BRIEF_ROLE,
-                        "fill_key": _RESEARCH_BRIEF_KEY,
-                    },
-                    "after": [research_node_id],
-                }
-            )
-            # Register the after-shorthand's derivation edge — §7's
-            # re-ensure dedupes against it.
-            have_edge.add((str(research_node_id), str(brief_newborn_id), "text"))
-    brief_doc_id = brief_newborn_id or (
-        UUID(str(brief_doc.id)) if brief_doc is not None else None
-    )
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     want_edge: set[tuple[str, str, str]] = set()
@@ -946,16 +1057,19 @@ async def _stamp_graph_core(
                 target_node,
                 "video" if upstream.kind in _CLIP_FAMILY_KINDS else "text",
             )
-    # The brief doc's derivation edge (newborns got it from the after-
-    # shorthand above; a reused doc re-ensures it — dedupe wins).
-    if research_node_id is not None and brief_doc_id is not None:
-        connect(research_node_id, brief_doc_id, "text")
+    # The doc station's two text legs (ADR-072 边派生新规 — 文流经 doc 站
+    # 中转, the transcript → 成片 direct edge is never stamped): the asm's
+    # own words arrive from its doc station…
+    for doc_id, asm_id in doc_pairs:
+        connect(doc_id, asm_id, "text")
     # Assets feed the graph: text into the task book and the writers, the
-    # media flow into the clip-family roots (a root = no clip-family
-    # upstream inside this run). A root that acts on the project's EXISTING
-    # clips (mode② — the project already has clips from an earlier run)
-    # wires from that run's producer node instead: the clips it consumes
-    # are that node's products, not the raw assets.
+    # media flow into the clip-family roots. A root = a clip-family node
+    # with NO clip-family upstream mapped to a DIFFERENT node (folded
+    # upstreams — materialize_source / align_stills — map to None and never
+    # disqualify: their host IS the chain's head). A root that acts on the
+    # project's EXISTING clips (mode② — the project already has clips from
+    # an earlier run) wires from that run's producer node instead: the clips
+    # it consumes are that node's products, not the raw assets.
     if task_book_id is not None:
         for asset_node_id in asset_node_ids:
             connect(asset_node_id, task_book_id, "text")
@@ -968,6 +1082,8 @@ async def _stamp_graph_core(
         and not any(
             (upstream := by_id.get(str(u))) is not None
             and upstream.kind in _CLIP_FAMILY_KINDS
+            and (up_node := node_of(upstream)) is not None
+            and up_node != node_of(s)
             for u in (s.inputs or [])
         )
     ]
@@ -979,25 +1095,45 @@ async def _stamp_graph_core(
     # The asset's flow type is its own truth: media assets carry the video
     # flow into clip roots; text-only assets (transcripts / pasted text)
     # carry text everywhere — a "video" edge from a transcript would be a
-    # lie (and the port law rejects it). Source consumers (select_clips /
-    # materialize_source) ALWAYS eat the raw asset; only modifiers hanging
-    # off no in-run producer eat the existing clips' producer node.
+    # lie (and the port law rejects it). Source consumers (select_clips)
+    # ALWAYS eat the raw asset. 评审修正 P0-C (materialize 折叠的宿主继承):
+    # materialize_source injects only under the media/stills profile (mode②
+    # existing never injects — orchestrator._compile_task_list), so a run
+    # CONTAINING one materializes the raw source and EVERY root of that run
+    # inherits eat-the-asset — otherwise an old project with existing clips
+    # would wire the whole-source chain from the old producer (画布撒谎).
     from app.models.schemas import AssetType  # deferred: schema leaf
 
     _MEDIA_TYPES = {AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES}
     _SOURCE_CONSUMERS = {"select_clips", "materialize_source"}
+    run_materializes = any(s.kind == "materialize_source" for s in steps)
+    asset_fed = False
     for step in clip_roots:
-        target = node_id_by_key[_fill_key_for_step(step)]
-        if step.kind not in _SOURCE_CONSUMERS and existing_producer_ids:
+        key = _fill_key_for_step(step)
+        target = node_id_by_key[key]
+        if (
+            step.kind not in _SOURCE_CONSUMERS
+            and not run_materializes
+            and existing_producer_ids
+        ):
             for producer_id in existing_producer_ids:
                 connect(producer_id, target, "video")
             continue
+        asset_fed = True
         for asset_node_id, asset in zip(asset_node_ids, assets):
             connect(
                 asset_node_id,
                 target,
                 "video" if asset.type in _MEDIA_TYPES else "text",
             )
+    # …and the transcript document feeds every doc station its words
+    # translate/dub (按 asset_id 找 transcript 文档 — the A3-lite read-face
+    # synthesis turned production; mode② chains eat existing clips, so the
+    # lineage edge stays the lite patch's business, never stamped here).
+    if asset_fed:
+        for transcript_doc_id in transcript_doc_by_asset.values():
+            for doc_id, _asm_id in doc_pairs:
+                connect(transcript_doc_id, doc_id, "text")
     for asset_node_id, asset in zip(asset_node_ids, assets):
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
@@ -1015,9 +1151,8 @@ async def _stamp_graph_core(
     # as stale and double-deleted — the door would raise on the missing row).
     claimed: set[str] = {str(nid) for nid in node_id_by_key.values()}
     claimed.update(str(nid) for nid in asset_node_ids)
-    for nid in (task_book_id, brief_doc_id, research_node_id):
-        if nid is not None:
-            claimed.add(str(nid))
+    if task_book_id is not None:
+        claimed.add(str(task_book_id))
     # Disconnects lead the batch: the door's cycle check walks the working
     # edge set, so a topology flip (old B→A stale, new A→B wanted) must see
     # the post-retraction set when its connect is checked — stale edges only
@@ -1068,33 +1203,20 @@ async def _stamp_graph_core(
             for step in prelude_steps:
                 step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
 
-    # ── 6b-tail. The research-brief document's state + the agent↔brief
-    # link (document 型第三实例): draft = the preview's promise / run =
-    # queued with its agent; the text back-writes at sync (the agent's
-    # terminal mirrors onto it). A LEAF face — consuming writers still wire
-    # from the agent (the execution truth), the doc is the artifact's
-    # readable face.
-    if research_node_id is not None:
-        if brief_newborn_id is not None:
-            brief_doc = await db.get(GraphNode, brief_newborn_id)
-        if brief_doc is not None:
-            # The agent↔brief link — sync_graph_node_for_step mirrors the
-            # agent's terminal state + renders the brief onto the doc.
-            agent_node = await db.get(GraphNode, research_node_id)
-            if agent_node is not None and (agent_node.spec or {}).get(
-                "brief_doc_id"
-            ) != str(brief_doc.id):
-                agent_node.spec = {
-                    **(agent_node.spec or {}),
-                    "brief_doc_id": str(brief_doc.id),
-                }
-            if draft:
-                # A live/finished brief doc is an earlier run's truth — the
-                # preview leaves it (the generation nodes' own restamp rule).
-                if str(brief_doc.state) in _DRAFT_RESTAMP_STATES:
-                    brief_doc.state = "draft"
-            else:
-                brief_doc.state = "queued"
+    # ── 6b. The doc-station companions mirror their asm's state law (两站
+    # 双站 sync 之前的第一拍): run = queued with its assembly; draft = the
+    # preview's promise (a live/finished doc is an earlier run's truth — the
+    # same restamp guard as the asm's). Afterwards sync_graph_node_for_step
+    # keeps each doc in lockstep with its asm and renders the cue text.
+    for doc_id, _asm_id in doc_pairs:
+        doc = await db.get(GraphNode, doc_id)
+        if doc is None:
+            continue
+        if draft:
+            if str(doc.state) in _DRAFT_RESTAMP_STATES:
+                doc.state = "draft"
+        else:
+            doc.state = "queued"
 
     logger.info(
         "graph_stamped",
@@ -1103,15 +1225,6 @@ async def _stamp_graph_core(
         nodes=len(node_id_by_key) + (1 if task_book_node is not None else 0),
         edges=sum(1 for op in ops if op["op"] == "connect"),
     )
-
-
-def _graph_kind_of(step: WorkflowStep) -> str:
-    """Step kind → the graph node's five-type (简报 §3 migration mapping)."""
-    if step.kind == "research":
-        return "agent"
-    if step.kind in _PROCESSOR_KINDS:
-        return "processor"
-    return "generator"
 
 
 def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
@@ -1228,6 +1341,41 @@ def _research_brief_text(brief: dict) -> str | None:
     return "\n".join(lines) or None
 
 
+def _fmt_cue_time(seconds: Any) -> str:
+    """A cue timestamp as m:ss (the doc station's row prefix)."""
+    try:
+        total = max(0, int(float(seconds or 0)))
+    except (TypeError, ValueError):
+        total = 0
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def _translation_artifact_text(artifact: Any) -> str | None:
+    """The doc station's readable face (ADR-072 两站拆分的文档站卡面): the
+    translation artifact's cue rows baked as `start–end text` lines, clips
+    separated by a blank line. The rows render as stored — user edits
+    included (the edit IS the artifact's content; 词级时间戳永远不动)."""
+    if not isinstance(artifact, dict):
+        return None
+    clips = artifact.get("clips")
+    if not isinstance(clips, dict) or not clips:
+        return None
+    blocks: list[str] = []
+    for entry in clips.values():
+        rows = entry.get("rows") if isinstance(entry, dict) else None
+        if not isinstance(rows, list):
+            continue
+        lines = [
+            f"{_fmt_cue_time(row.get('start'))}–{_fmt_cue_time(row.get('end'))} "
+            f"{str(row.get('text') or '').strip()}"
+            for row in rows
+            if isinstance(row, dict)
+        ]
+        if lines:
+            blocks.append("\n".join(lines))
+    return "\n\n".join(blocks) or None
+
+
 async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None:
     """Back-write (the orchestrator's execute_step hook): re-aggregate the
     owning node's state from its internal step family and back-write the
@@ -1286,16 +1434,52 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
     )
     if output_ids != ((node.spec or {}).get("output_ids") or []):
         node.spec = {**(node.spec or {}), "output_ids": output_ids}
-    # The research loop's brief document mirrors its agent node: state in
-    # lockstep (queued → running → done/failed with the loop), text = the
-    # closing artifact rendered the moment it exists.
-    if node.kind == "agent":
-        doc_id = (node.spec or {}).get("brief_doc_id")
-        if doc_id:
-            doc = await db.get(GraphNode, UUID(str(doc_id)))
-            if doc is not None:
-                doc.state = node.state
-                brief = (step.spec or {}).get("research_brief")
-                text = _research_brief_text(brief) if isinstance(brief, dict) else None
-                if text and text != (doc.spec or {}).get("text"):
-                    doc.spec = {**(doc.spec or {}), "text": text}
+    # writer 升 text 型 (词表 v3): the landed product's content back-writes
+    # the node's spec.text — the 全文卡 reads the node's own words (the
+    # latest Output of THIS step; the single-row-per-step invariant is kept
+    # by derivative_dispatch's sweep). A revision's morph reassigns the
+    # row's workflow_step_id to the revise step, so a revise run refreshes
+    # the same card's text.
+    if (node.spec or {}).get("tool") in ("write_post", "write_article") and (
+        step.output_refs
+    ):
+        latest = (
+            await db.execute(
+                select(Output)
+                .where(Output.workflow_step_id == step.id)
+                .order_by(Output.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        content = ((latest.payload or {}).get("content")) if latest is not None else None
+        if (
+            isinstance(content, str)
+            and content
+            and content != (node.spec or {}).get("text")
+        ):
+            node.spec = {**(node.spec or {}), "text": content}
+    # research 塌缩单节点 (词表 v3 — the brief doc / agent mirror retired):
+    # the bounded loop's closing artifact renders straight onto the research
+    # node's own spec.text.
+    if (node.spec or {}).get("tool") == "research":
+        brief = (step.spec or {}).get("research_brief")
+        text = _research_brief_text(brief) if isinstance(brief, dict) else None
+        if text and text != (node.spec or {}).get("text"):
+            node.spec = {**(node.spec or {}), "text": text}
+    # 两站双站镜像 (ADR-072): the doc station tracks its asm's state in
+    # lockstep and renders the translation artifact's cue rows as its
+    # readable text (`start–end text` per row — user edits included: the
+    # edit IS the row). 迁移期读回退 (§3.5.5-3): pre-v3 rows carried the
+    # artifact on the asm — read doc first, fall back to the asm, never
+    # re-buy the translation at the boundary.
+    doc_id = (node.spec or {}).get("doc_node_id")
+    if doc_id:
+        doc = await db.get(GraphNode, UUID(str(doc_id)))
+        if doc is not None:
+            doc.state = node.state
+            artifact = (doc.spec or {}).get(TRANSLATION_ARTIFACT_KEY) or (
+                (node.spec or {}).get(TRANSLATION_ARTIFACT_KEY)
+            )
+            text = _translation_artifact_text(artifact)
+            if text and text != (doc.spec or {}).get("text"):
+                doc.spec = {**(doc.spec or {}), "text": text}

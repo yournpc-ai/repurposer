@@ -29,7 +29,8 @@ from app.tools.quotes.agents import quotes_writer
 
 class WriteQuotes(DerivativeWriterNode):
     kind = "write_quotes"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 金句卡装配
+    node_type = "image"  # 词表 v3 (ADR-076) — 金句卡 (静帧族)
+    prototype = "generator"  # 散文程序: 选句指令即程序
     task_name = "Create quote cards"
     task_name_zh = "制作金句卡"
     output_type = "quotes"

@@ -40,7 +40,8 @@ _SEARCH_SNIPPET_CAP = 300
 
 class ResearchNode(BoundedLoopNode):
     kind = "research"
-    family = "document"  # 画布三族 (ADR-072 批 A3) — 调研 = 一个文档节点 (调研简报即节点本体, agent 族退役)
+    node_type = "text"  # 词表 v3 (ADR-076) — 单节点塌缩 (调研简报即节点本体, agent 族退役)
+    prototype = "generator"  # 散文程序: query 即程序
     task_name = "Research"
     task_name_zh = "调研"
     # Zero-material legal (requires=()): grounding a topic-only draft is the

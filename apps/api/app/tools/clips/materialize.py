@@ -43,7 +43,8 @@ logger = structlog.get_logger()
 
 class MaterializeSource(NodeBase):
     kind = "materialize_source"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 折叠: 不盖章, step 并入下游装配家族
+    node_type = "video"  # 词表 v3 (ADR-076) — 折叠: 不盖章, step 并入下游装配家族
+    prototype = "editor"  # fold-into 语义不变 (宿主继承)
     task_name = "Prepare full video"
     task_name_zh = "准备整条视频"
     # The derived type word "video" (整条视频) is display vocabulary only —

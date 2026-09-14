@@ -23,7 +23,8 @@ logger = structlog.get_logger()
 
 class AlignStills(NodeBase):
     kind = "align_stills"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 折叠进下游 producer
+    node_type = "video"  # 词表 v3 (ADR-076) — 折叠进下游 producer 的媒介
+    prototype = "editor"  # fold-into 语义不变 (宿主继承)
     task_name = "Time transcript"
     task_name_zh = "对齐文字稿节奏"
     requires = (TRANSCRIPT,)

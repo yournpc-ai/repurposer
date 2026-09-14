@@ -28,7 +28,8 @@ from app.platform.project_context import resolve_persona
 
 class AddMusic(NodeBase):
     kind = "add_music"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — modifier, 批 B4 杠杆化后不再盖章
+    node_type = "video"  # 词表 v3 (ADR-076) — modifier, 批 B4 杠杆化后不再盖章
+    prototype = "editor"  # 参数程序 (配乐 mood 杠杆)
     task_name = "Score clips"
     task_name_zh = "片段配乐"
     after = ("select_clips", "materialize_source")

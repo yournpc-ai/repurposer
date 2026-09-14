@@ -19,7 +19,8 @@ from app.tools.revise.procedure import revise_by_instruction
 
 class ReviseScript(NodeBase):
     kind = "revise_script"
-    family = "document"  # 画布三族 (ADR-072 批 A3) — 折叠进目标写手节点 (原地图变更)
+    node_type = "text"  # 词表 v3 (ADR-076) — 折叠进目标写手节点 (原地图变更)
+    prototype = "generator"  # 散文程序 (宿主继承)
     task_name = "Write script"
     task_name_zh = "撰写脚本"
     produces_outputs = True

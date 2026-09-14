@@ -25,11 +25,19 @@ Covered:
   half-applied graph (the caller's transaction rolls back)
 - sync_graph_node_for_step's 版本累积: a re-fill's landed products JOIN the
   node's existing output_ids (the pager's version lineage), never a cleared
-  slate; the research agent's brief document mirrors its terminal + text
+  slate; the v3 text back-writes — a writer node's spec.text reads its
+  latest Output's content, a research node's spec.text renders the brief
 - stamp_transcript_node (转写稿 document): born done with the text edge,
   idempotent, refreshes on reprocess, skips text-less assets
-- _stamp_graph_core's research-brief document: born with its agent (draft /
-  queued), derivation edge, orphan-swept when the chain drops research
+- _stamp_graph_core 三族化 (ADR-072/076 批 C2b): research collapses to ONE
+  text×generator node (no agent, no brief doc — a re-dock without research
+  sweeps it); translate/dub stamp the two-station pair (asm video×editor +
+  `{fill_key}#doc` table×manual companion, doc_node_id linkage, the new
+  edge law transcript→doc / doc→asm / asset→asm — never transcript→asm);
+  materialize_source folds into its nearest downstream family (no node of
+  its own, its step id rides the host's step_ids, and a run containing one
+  makes EVERY clip root eat the assets — 评审修正 P0-C); the sync mirrors
+  the doc station's state + renders the cue text
 - _fill_key_for_step idempotency fingerprints (graph_fill): producer slot /
   translate·dub transform / bare-kind shapes — a re-run of the same slot
   finds its node, a new slot grows one
@@ -51,7 +59,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.schemas import AssetType
-from app.models.tables import Asset, GraphEdge, GraphNode, Project, WorkflowRun, WorkflowStep
+from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, WorkflowRun, WorkflowStep
+from app.pipeline import graph_fill
 from app.pipeline.graph_fill import (
     _fill_key_for_step,
     _stamp_graph_core,
@@ -85,13 +94,20 @@ class _StubResult:
 class _StubDb:
     """AsyncSession stand-in: serves GraphNode/GraphEdge selects off lists,
     records writes. ``flush_count`` is the batch-atomicity witness — a
-    rejected batch must die BEFORE any flush."""
+    rejected batch must die BEFORE any flush. The C2b tests also seed the
+    Asset / Output tables (the stamp's §1+§3 asset reads, the writer-text
+    back-write). Stub limitation: a COLUMN select (e.g.
+    ``select(Output.workflow_step_id)``) returns the whole row objects — the
+    mode② producer walk therefore always reads empty here; tests that need
+    existing producers monkeypatch ``graph_fill._existing_clip_producer_nodes``."""
 
-    def __init__(self, nodes=(), edges=(), steps=()):
+    def __init__(self, nodes=(), edges=(), steps=(), assets=(), outputs=()):
         self.project = Project(id=_PROJECT_ID)
         self.nodes = list(nodes)
         self.edges = list(edges)
         self.steps = list(steps)
+        self.assets = list(assets)
+        self.outputs = list(outputs)
         self.added: list = []
         self.deleted: list = []
         self.flush_count = 0
@@ -113,6 +129,10 @@ class _StubDb:
             rows = self.edges
         elif entity is WorkflowStep:
             rows = self.steps
+        elif entity is Asset:
+            rows = self.assets
+        elif entity is Output:
+            rows = self.outputs
         else:
             return _StubResult([])
         return _StubResult(self._apply_where(list(rows), stmt))
@@ -591,7 +611,7 @@ async def test_transcript_node_text_refreshes_on_reprocess():
     assert again.spec["text"] == "v2 — reprocessed"
 
 
-# ---- research brief document (_stamp_graph_core + sync mirror) ---------------
+# ---- research 单节点塌缩 (批 C2b — agent 族与 brief 文档退役) ---------------
 
 
 def _research_chain():
@@ -611,38 +631,48 @@ def _research_chain():
 
 
 @pytest.mark.asyncio
-async def test_research_brief_doc_born_with_agent_and_swept_without_it():
+async def test_research_collapses_to_one_text_node_and_sweeps_without_it():
+    """词表 v3 塌缩律: the bounded loop IS one node (text×generator, the
+    query as its program) — no agent node, no research_brief document, the
+    writer wires from the research node itself, and a re-docked chain
+    without research orphan-sweeps it."""
     project = Project(id=_PROJECT_ID)
     db = _StubDb()
     await _stamp_graph_core(
         db, project, _research_chain(), run=None, ui_language="en", draft=True, book_text="b"
     )
-    agent = next(n for n in db.nodes if n.kind == "agent")
-    doc = next(
-        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
-    )
-    assert doc.state == "draft"  # the preview's promise
-    assert (agent.spec or {}).get("brief_doc_id") == str(doc.id)
-    edge = next(e for e in db.edges if str(e.to_node) == str(doc.id))
-    assert (str(edge.from_node), edge.edge_type) == (str(agent.id), "text")
-    # the writer still wires from the AGENT (the execution truth — leaf face)
-    writer = next(n for n in db.nodes if n.kind == "generator")
+    research_node = next(n for n in db.nodes if (n.spec or {}).get("tool") == "research")
+    assert research_node.kind == "text"
+    assert research_node.spec["prototype"] == "generator"
+    assert research_node.spec["fill_key"] == "research"
+    assert research_node.spec["prompt"] == "grid storage"  # query 即程序
+    assert research_node.state == "draft"  # the preview's promise
+    # 无 agent、无 brief 文档 — the agent family and the brief role retired.
+    assert not [n for n in db.nodes if n.kind == "agent"]
+    assert not [n for n in db.nodes if (n.spec or {}).get("role") == "research_brief"]
+    # the writer wires from the RESEARCH node (the execution truth, text flow)
+    writer = next(n for n in db.nodes if (n.spec or {}).get("tool") == "write_post")
+    assert writer.kind == "text"
     assert any(
-        str(e.from_node) == str(agent.id) and str(e.to_node) == str(writer.id) for e in db.edges
+        str(e.from_node) == str(research_node.id)
+        and str(e.to_node) == str(writer.id)
+        and e.edge_type == "text"
+        for e in db.edges
     )
-    # a re-docked chain WITHOUT research orphan-sweeps the brief doc
+    # a re-docked chain WITHOUT research orphan-sweeps the research node
     db2 = _StubDb(nodes=list(db.nodes), edges=list(db.edges))
     post_only = [_research_chain()[1]]
     await _stamp_graph_core(
         db2, project, post_only, run=None, ui_language="en", draft=True, book_text="b"
     )
-    assert not [
-        n for n in db2.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
-    ]
+    assert not [n for n in db2.nodes if (n.spec or {}).get("tool") == "research"]
 
 
 @pytest.mark.asyncio
-async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
+async def test_research_node_run_fill_and_sync_renders_the_brief():
+    """Run fill births the single research node (draft — the newborn law;
+    sync queues it as the steps execute); the sync renders the loop's
+    closing brief straight onto its own spec.text (brief 文档镜像随塌缩退役)."""
     project = Project(id=_PROJECT_ID)
     run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
     steps = _research_chain()
@@ -650,12 +680,10 @@ async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
     await _stamp_graph_core(
         db, project, steps, run=run, ui_language="en", draft=False, book_text=None
     )
-    doc = next(
-        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "research_brief"
-    )
-    assert doc.state == "queued"
+    research_node = next(n for n in db.nodes if (n.spec or {}).get("tool") == "research")
+    assert research_node.state == "draft"  # the newborn law — sync queues it
     # the loop closes: the brief lands on the research step's spec, the sync
-    # mirrors the agent's terminal + renders the text onto the doc
+    # mirrors the node's terminal + renders the text onto the node itself
     research = steps[0]
     research.status = "done"
     research.spec = {
@@ -668,9 +696,219 @@ async def test_research_brief_doc_queued_in_run_mode_and_mirrored_at_sync():
         },
     }
     await sync_graph_node_for_step(db, research)
-    assert doc.state == "done"
-    assert "Storage is the bottleneck." in doc.spec["text"]
-    assert "• Fact one" in doc.spec["text"]
+    assert research_node.state == "done"
+    assert "Storage is the bottleneck." in research_node.spec["text"]
+    assert "• Fact one" in research_node.spec["text"]
+
+
+# ---- 两站拆分 stamp (批 C2b, ADR-072) -----------------------------------------
+
+
+def _translate_chain(with_materialize=False):
+    steps = []
+    if with_materialize:
+        materialize = WorkflowStep(
+            id=uuid4(), kind="materialize_source", seq=1, spec={}, estimate=None
+        )
+        materialize.inputs = []
+        steps.append(materialize)
+    translate = WorkflowStep(
+        id=uuid4(),
+        kind="translate_clip",
+        seq=2 if with_materialize else 1,
+        spec={"target_language": "fr"},
+        estimate=None,
+    )
+    translate.inputs = [str(steps[0].id)] if with_materialize else []
+    steps.append(translate)
+    return steps
+
+
+@pytest.mark.asyncio
+async def test_two_station_stamp_asm_and_doc_companion():
+    """ADR-072 两站拆分: a translate run stamps the asm station (video×editor,
+    the executor) plus its `{fill_key}#doc` companion (table×manual — the
+    persistent editable cue artifact's home), linked by spec.doc_node_id.
+    The companion carries NO tool / prompt / step_ids / output_ids — it is
+    not an execution unit. The new edge law: 文流经 doc 站中转 (transcript→
+    doc→asm), the media flow feeds the asm direct (asset→asm), and the old
+    transcript→asm direct edge is never stamped."""
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    steps = _translate_chain()
+    asset = _asset(transcript="hello world")
+    db = _StubDb(steps=steps, assets=[asset])
+    await _stamp_graph_core(
+        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
+    )
+    asm = next(n for n in db.nodes if n.kind == "video")
+    doc = next(n for n in db.nodes if n.kind == "table")
+    transcript_doc = next(
+        n for n in db.nodes if n.kind == "document" and (n.spec or {}).get("role") == "transcript"
+    )
+    asset_node = next(n for n in db.nodes if n.kind == "asset")
+    key = "translate_clip#fr#False#False"
+    # asm 站: the executor's identity (词表 v3 媒介×原型 + tool + 双站链接)
+    assert asm.spec["fill_key"] == key
+    assert asm.spec["tool"] == "translate_clip"
+    assert asm.spec["prototype"] == "editor"
+    assert asm.spec["doc_node_id"] == str(doc.id)
+    assert asm.spec["step_ids"] == [str(steps[-1].id)]
+    # 出生律 (pre-C2b 照旧): a newborn family node leaves the stamp at DRAFT
+    # even in run mode — sync re-aggregates it to queued/running/done as
+    # the steps execute (only REUSED nodes re-queue at stamp time).
+    assert asm.state == "draft"
+    # doc 站: table×manual, role = the doc_station declaration — no tool /
+    # prompt / step_ids / output_ids (the cue artifact is its whole content)
+    assert doc.spec["fill_key"] == f"{key}#doc"
+    assert doc.spec["role"] == "translation"
+    assert doc.spec["prototype"] == "manual"
+    assert doc.spec["frame_class"] == "text"  # 340×560 reservation
+    assert "tool" not in doc.spec
+    assert "prompt" not in doc.spec
+    assert "step_ids" not in doc.spec
+    assert "output_ids" not in doc.spec
+    assert doc.state == "queued"  # §6b — run 模式与 asm 同排
+    # 边派生新规: exactly the four edges, transcript→asm 永不存在
+    triples = {(str(e.from_node), str(e.to_node), e.edge_type) for e in db.edges}
+    assert triples == {
+        (str(asset_node.id), str(transcript_doc.id), "text"),
+        (str(transcript_doc.id), str(doc.id), "text"),
+        (str(doc.id), str(asm.id), "text"),
+        (str(asset_node.id), str(asm.id), "video"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_materialize_folds_into_the_translate_family(monkeypatch):
+    """materialize 折叠 (ADR-072 ⑦): no node of its own — its step id rides
+    the host family's step_ids, the host's tool identity stays the
+    consumer's (translate), and 评审修正 P0-C: a run CONTAINING a
+    materialize makes every clip root eat the raw assets even when the
+    project has existing clips (otherwise the whole-source chain mis-wires
+    to the old producer — 画布撒谎)."""
+    fake_producer = uuid4()
+
+    async def _existing_producers(db, project_id):
+        return [fake_producer]
+
+    monkeypatch.setattr(graph_fill, "_existing_clip_producer_nodes", _existing_producers)
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    materialize, translate = _translate_chain(with_materialize=True)
+    db = _StubDb(steps=[materialize, translate], assets=[_asset()])
+    await _stamp_graph_core(
+        db, project, [materialize, translate], run=run, ui_language="en", draft=False, book_text=None
+    )
+    video_nodes = [n for n in db.nodes if n.kind == "video"]
+    assert len(video_nodes) == 1  # the folded materialize grows no twin
+    asm = video_nodes[0]
+    assert asm.spec["fill_key"] == "translate_clip#fr#False#False"
+    assert asm.spec["tool"] == "translate_clip"  # never "materialize_source"
+    assert asm.spec["prompt"]  # P0-A: the translate head keeps its prompt
+    assert not [n for n in db.nodes if (n.spec or {}).get("fill_key") == "materialize_source"]
+    # the folded step's id rides the host family's step_ids (seq order)…
+    assert asm.spec["step_ids"] == [str(materialize.id), str(translate.id)]
+    # …and §6 back-points BOTH steps to the host node
+    assert materialize.spec["graph_node_id"] == str(asm.id)
+    assert translate.spec["graph_node_id"] == str(asm.id)
+    # P0-C: the host root eats the raw assets — never the old producer
+    asset_node = next(n for n in db.nodes if n.kind == "asset")
+    assert any(
+        str(e.from_node) == str(asset_node.id) and str(e.to_node) == str(asm.id)
+        and e.edge_type == "video"
+        for e in db.edges
+    )
+    assert not [e for e in db.edges if str(e.from_node) == str(fake_producer)]
+
+
+# ---- sync back-write: v3 文本回写 + 两站双站镜像 (批 C2b) ---------------------
+
+
+@pytest.mark.asyncio
+async def test_sync_back_writes_writer_text_from_the_latest_output():
+    """writer 升 text 型: the landed product's content back-writes the node's
+    spec.text — the 全文卡 reads the node's own words (the version lineage
+    still accumulates alongside)."""
+    out_id = uuid4()
+    step = WorkflowStep(
+        id=uuid4(), kind="write_post", status="done", spec={}, output_refs=[out_id]
+    )
+    node = _node("text", state="running", spec={"tool": "write_post", "step_ids": [str(step.id)]})
+    step.spec["graph_node_id"] = str(node.id)
+    out = Output(
+        id=out_id,
+        project_id=_PROJECT_ID,
+        workflow_step_id=step.id,
+        type="post",
+        payload={"content": "Bonjour le monde"},
+    )
+    db = _StubDb(nodes=[node], steps=[step], outputs=[out])
+    await sync_graph_node_for_step(db, step)
+    assert node.state == "done"
+    assert node.spec["text"] == "Bonjour le monde"
+    assert node.spec["output_ids"] == [str(out_id)]
+
+
+@pytest.mark.asyncio
+async def test_sync_mirrors_the_doc_station_and_renders_the_cue_text():
+    """两站双站镜像 (ADR-072): the doc station tracks its asm's state in
+    lockstep and renders the translation artifact's cue rows as `start–end
+    text` lines. 迁移期读回退: a legacy row carrying the artifact on the ASM
+    still renders (迁移边界零重买翻译)."""
+    step = WorkflowStep(id=uuid4(), kind="translate_clip", status="done", spec={}, output_refs=[])
+    artifact = {
+        "clips": {
+            "out1": {
+                "source_hash": "h",
+                "rows": [
+                    {"start": 0, "end": 2, "text": "Bonjour"},
+                    {"start": 65, "end": 67.5, "text": "le monde"},
+                ],
+            }
+        }
+    }
+    doc = _node(
+        "table",
+        state="queued",
+        spec={
+            "fill_key": "translate_clip#fr#False#False#doc",
+            "role": "translation",
+            "translation": artifact,
+        },
+    )
+    asm = _node(
+        "video",
+        state="running",
+        spec={"tool": "translate_clip", "doc_node_id": str(doc.id), "step_ids": [str(step.id)]},
+    )
+    step.spec["graph_node_id"] = str(asm.id)
+    db = _StubDb(nodes=[asm, doc], steps=[step])
+    await sync_graph_node_for_step(db, step)
+    assert asm.state == "done"
+    assert doc.state == "done"  # lockstep with its asm
+    assert doc.spec["text"] == "0:00–0:02 Bonjour\n1:05–1:07 le monde"
+    # 迁移期读回退: the artifact living on the ASM (a pre-v3 row) renders the
+    # same face — the doc's own (empty) artifact never shadows it.
+    doc2 = _node(
+        "table",
+        state="queued",
+        spec={"fill_key": "translate_clip#de#False#False#doc", "role": "translation"},
+    )
+    asm2 = _node(
+        "video",
+        state="running",
+        spec={
+            "tool": "translate_clip",
+            "doc_node_id": str(doc2.id),
+            "step_ids": [str(step.id)],
+            "translation": artifact,
+        },
+    )
+    db2 = _StubDb(nodes=[asm2, doc2], steps=[step])
+    step.spec = {**step.spec, "graph_node_id": str(asm2.id)}
+    await sync_graph_node_for_step(db2, step)
+    assert doc2.spec["text"] == "0:00–0:02 Bonjour\n1:05–1:07 le monde"
 
 
 # ---- task book face (全文卡律 判词④: prose birth + 双面 back-write 律) ------

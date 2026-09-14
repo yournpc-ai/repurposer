@@ -1740,19 +1740,23 @@ def assert_runners_registered() -> None:
             )
         output_owners[node.output_type] = node.kind
 
-    # 画布三族 (ADR-072 批 A3): every non-internal tool-package node declares
-    # its stamp family (the declaration replaced the retired _graph_kind_of
-    # central mapping — 注册表纪律: 禁平行映射表). Folding kinds declare the
-    # family they fold INTO.
+    # 词表 v3 (ADR-076): every non-internal tool-package node declares its
+    # stamp identity — node_type (媒介五值: 卡面解剖) + prototype (能力原型
+    # 三值: 程序区形态) — the declaration replaced the retired _graph_kind_of
+    # central mapping (注册表纪律: 禁平行映射表). Folding kinds declare the
+    # identity of the node they fold INTO.
     for node in NODE_KINDS.values():
-        if (
-            not type(node).__module__.startswith("app.pipeline.")
-            and not node.internal
-            and node.family not in ("document", "assemble")
-        ):
+        if type(node).__module__.startswith("app.pipeline.") or node.internal:
+            continue
+        if node.node_type not in ("text", "table", "image", "video", "audio"):
             raise RuntimeError(
-                f"Node '{node.kind}': no canvas family declared "
-                "(family: document | assemble)"
+                f"Node '{node.kind}': no canvas node_type declared "
+                "(node_type: text | table | image | video | audio)"
+            )
+        if node.prototype not in ("generator", "editor", "manual"):
+            raise RuntimeError(
+                f"Node '{node.kind}': no canvas prototype declared "
+                "(prototype: generator | editor | manual)"
             )
 
     from app.agents.base import AGENTS, Agent  # deferred: metering-free leaf

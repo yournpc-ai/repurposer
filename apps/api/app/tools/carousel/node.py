@@ -7,7 +7,8 @@ from app.tools.carousel.agents import carousel_writer
 
 class WriteCarousel(DerivativeWriterNode):
     kind = "write_carousel"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — 轮图装配
+    node_type = "image"  # 词表 v3 (ADR-076) — 轮图 (静帧族)
+    prototype = "generator"  # 散文程序: 选图指令即程序
     task_name = "Build carousel"
     task_name_zh = "制作轮播图"
     output_type = "carousel"

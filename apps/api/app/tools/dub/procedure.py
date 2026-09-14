@@ -75,17 +75,28 @@ async def translate_dub_script(
 ) -> tuple[list[dict[str, Any]], str]:
     """The dub DOCUMENT station (ADR-072 批 A2 接缝): the translated script
     as unit cue rows + the translated title. The rows are the reusable
-    artifact — cached on the graph node's ``spec.translation`` keyed by the
+    artifact — cached on the DOC station's ``spec.translation`` keyed by the
     source hash (source cue times+words + title + language + persona style
     hint); a hit (including USER-EDITED rows — the edit is the content)
     skips the translator entirely. ``graph_node_id=None`` (the editor sync
-    endpoint) always translates fresh. Raises MiniMaxError on provider
-    failure (the caller maps it onto the error contract)."""
+    endpoint) always translates fresh. 迁移期读写纪律 (§3.5.5-3): the passed
+    id is the ASM node's — resolve its spec.doc_node_id; read `doc or asm`
+    (pre-v3 rows carried the artifact on the asm), write only to the doc
+    (asm fallback only when the companion is missing). Raises MiniMaxError
+    on provider failure (the caller maps it onto the error contract)."""
     source_hash = translation_source_hash(track, title_text, target_language, style_hint)
     artifact = None
+    artifact_node = None
     if graph_node_id is not None:
         gnode = await db.get(GraphNode, graph_node_id)
-        artifact = (gnode.spec or {}).get(TRANSLATION_ARTIFACT_KEY) if gnode else None
+        doc_id = (gnode.spec or {}).get("doc_node_id") if gnode is not None else None
+        doc_gnode = await db.get(GraphNode, doc_id) if doc_id else None
+        artifact_node = doc_gnode or gnode
+        artifact = (
+            (artifact_node.spec or {}).get(TRANSLATION_ARTIFACT_KEY)
+            if artifact_node is not None
+            else None
+        )
     cached = find_reusable_translation(artifact, str(output.id), source_hash)
     if cached is not None:
         return cached["rows"], str((cached.get("title") or {}).get("text") or "")
@@ -98,13 +109,13 @@ async def translate_dub_script(
         if title_text
         else ""
     )
-    if graph_node_id is not None:
+    if artifact_node is not None:
         from app.pipeline.graph_fill import (  # deferred: import cycle
             merge_translation_artifact,
         )
 
         await merge_translation_artifact(
-            graph_node_id,
+            artifact_node.id,
             {
                 str(output.id): {
                     "source_hash": source_hash,

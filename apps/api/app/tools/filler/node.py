@@ -28,7 +28,8 @@ from app.tools.filler.detect import detect
 
 class RemoveFiller(NodeBase):
     kind = "remove_filler"
-    family = "assemble"  # 画布三族 (ADR-072 批 A3) — modifier, 批 B4 杠杆化后不再盖章
+    node_type = "video"  # 词表 v3 (ADR-076) — modifier, 批 B4 杠杆化后不再盖章
+    prototype = "editor"  # 参数程序 (去口头禅开关)
     task_name = "Remove filler words"
     task_name_zh = "去除口头禅"
     after = ("select_clips", "materialize_source")
