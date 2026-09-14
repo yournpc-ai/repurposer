@@ -30,7 +30,10 @@ agents' streaming form (N-26).
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
+
+if TYPE_CHECKING:  # the loop form's sibling declaration (no runtime import — tool_loop imports THIS module)
+    from app.agents.tool_loop import ToolLoopAgent
 
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -59,8 +62,11 @@ MAX_CHARS_PER_TEXT = 150_000
 # declarations (``tools/<pkg>/agents.py``) alike, so ``AGENTS`` enumerates
 # the whole crew once the registry door (``app/tools/__init__.py``) has
 # imported every package. The startup self-check walks node→agent references
-# against it (ADR-039 P2).
-AGENTS: dict[str, "Agent"] = {}
+# against it (ADR-039 P2). Two declaration forms register here: ``Agent``
+# (the single-call funnel) and ``agents/tool_loop.py``'s ``ToolLoopAgent``
+# (the chat surface's bounded tool loop, ADR-077 判词②) — the self-check's
+# pack resolution reads only ``name``/``packs``, shared by both.
+AGENTS: dict[str, "Agent | ToolLoopAgent"] = {}
 
 # assemble() returns (template kwargs, multimodal inputs).
 AssembleResult = tuple[dict[str, Any], list[MediaInput]]
