@@ -133,7 +133,7 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-> **（ADR-072 注，2026-09-12 拍板待实施）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖），但**画布用户面改由三族管辖**：源 / 文档（散文档 + 表格档）/ 装配（媒体产物 + 参数杠杆行），generator/processor/agent 卡种退役为出生史维度；materialize_source 折叠为消费节点内部 step，modifier（music/filler/reframe）收成装配卡杠杆，翻译/配音拆两站，分镜表升格表格档。施工简报 `docs/tasks/graph-canvas-three-families.md`。
+> **（ADR-072 / ADR-076，2026-09-14 三族批 C1~C6 落地）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，kind→type 已改名，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research 塌缩单节点（text×generator）；write_post/write_article 升 text×generator。generator/processor/agent 卡种退役为出生史维度——旧行永不迁移，读面 `_read_face` 映射；modifier（music/filler/reframe）/ materialize 旧词随未折叠旧行存活。施工简报 `docs/tasks/done/graph-canvas-three-families.md`；modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
 
 - **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。

@@ -26,7 +26,7 @@
 | 环境 | 人（每轮等待输入） | 队列（worker 认领执行） |
 | 保证 | 单待决问题 / brief 合并优先级 | 报价=fold / 执行=topo / 草稿图（dock 即 stamp，ADR-057） |
 
-**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **任务书**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。**（2026-09-07 ADR-057 修订：接口载体从「一次性编译图」翻案为「持久可变图」——chat 建/改草稿图（wiring 层唯一消费面），确认 → run 填充节点，修订 = 原地图变更。账本机制不动——账本 = 对话引擎状态。）（2026-09-12 ADR-072 再修订，待实施）：任务书不再并入图感知层——task_book 画布节点下线，它的真身各归其位：用户的话在 chat、链 = 图结构、确认 = dock pill 唯一座位；pending_brief 项目状态不动。**
+**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **任务书**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。接口载体 = **持久可变图**（ADR-057）：chat 建/改草稿图（wiring 层唯一消费面），确认 → run 填充节点，修订 = 原地图变更；账本机制不动——账本 = 对话引擎状态。**（ADR-072 注，待实施——批 B1）：任务书不再并入图感知层——task_book 画布节点下线，它的真身各归其位：用户的话在 chat、链 = 图结构、确认 = dock pill 唯一座位（读面隐藏已先行：B1-lite 在读帧过滤书节点）；pending_brief 项目状态不动。**
 
 ### 2.3 router（意图路由）
 
@@ -39,7 +39,7 @@ chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）�
 - **槽位**（初版）：`topic` / `audience` / `tone` / `constraints[]` / `material_state`（none | pasted | attached）+ 任务链与 derived（原样保留）。
 - **每槽带来源**：`user-stated` / `inferred` / `default`。合并是代码的事：**user-stated > inferred > default**（LLM proposes, code decides 不变——LLM 每轮提议更新，代码按来源优先级合并，永不反向覆盖）。
 - **上下文工程的主压缩件**：账本存在后，累积 prompt 叙事退居存档位，recent 窗口保留——账本比任何 message window 便宜且抗遗忘。
-- **（ADR-057 注）**账本与 run 的接缝不变：账本 → 任务书 → 起 run；变化的是任务书的落地形态——图上的 document 节点（修订 = 图变更 wiring op，不再是「任务书文档层 + 投影补丁」）。
+- 账本与 run 的接缝不变：账本 → 任务书 → 起 run；任务书的落地形态 = 图上的 document 节点（ADR-057——修订 = 图变更 wiring op，不再是「任务书文档层 + 投影补丁」）。
 
 ### 2.5 角色 = 节点的 display 属性
 

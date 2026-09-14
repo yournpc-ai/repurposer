@@ -1527,7 +1527,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-072: 画布三族 + 两站拆分 + 任务书节点下线——画布 = 过程图与改点暴露
 
-**Status**: Decided (2026-09-12)，已拍板待实施（施工简报 `docs/tasks/graph-canvas-three-families.md`；前端 ctx→T 入锚折叠与 @ glyph 退役已随拍板当日落地，tsc 绿）
+**Status**: Decided (2026-09-12)；三族批 C1~C6 已落地（2026-09-14——词表 v3 三轴 / 两站 / materialize 折叠 / research 塌缩 / writer 升族 / 读面映射 / 相机批；task_book 节点下线 / ctx 边退役 / 分镜表表格档 / modifier 收杠杆 / compose 退役归后续批；施工简报 `docs/tasks/done/graph-canvas-three-families.md`；前端 ctx→T 入锚折叠与 @ glyph 退役已随拍板当日落地）
 
 **Context**: 画布走查三伤连根——① 线与锚歪（出生动画 transform 污染 xyflow 挂载期 `getBoundingClientRect` 测量，事后无重测）；② 节点左舷冒出 @ 锚（task_book → 每节点的 ctx 叙事边）；③ PROMPT 区只有一行参数复读（`compose_spec_prompt` 拼装的假程序）。讨论中用户立下画布公理：**图 = 我们替用户完成任务的过程图，并暴露过程中用户可能想知道和修改的点**——筛子 = 每个元素回答「用户在这儿能知道什么、能改什么」，答不上就降级或删；prompt 测试 = 「改这段话，产出会变吗」，不会变的就是假杠杆。用户拓扑判词：transcript → 派生译文文档 → 派生成片；task_book 节点不该存在。MiniMax Design 节点划分（文本/表格/图片/视频/音频——按媒介不按生成方式，深度编辑面与驻留卡分离）互证。
 
@@ -1610,7 +1610,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-076: 画布词表 v3——type = 媒介五值、prototype = 能力原型三值、业务身份归 label/tool
 
-**Status**: Decided (2026-09-14，用户三参照五轮收敛拍板——ChatCut 功能菜单 / ElevenLabs「添加节点」（图像·视频·音频·文本 筛选 tab + 直白业务能力词菜单项）/ MiniMax Design「添加节点」（文本/表格/图片/视频/音频 媒介列表）；施工落点 = 简报 `docs/tasks/graph-canvas-three-families.md` §3.5）
+**Status**: Decided (2026-09-14，用户三参照五轮收敛拍板——ChatCut 功能菜单 / ElevenLabs「添加节点」（图像·视频·音频·文本 筛选 tab + 直白业务能力词菜单项）/ MiniMax Design「添加节点」（文本/表格/图片/视频/音频 媒介列表）)；三族批 C1~C6 同日落地（简报 `docs/tasks/done/graph-canvas-three-families.md` §3.5）
 
 **Context**: 画布三族批（ADR-072）批 A3 主体动工前的词表评审，五轮收敛：① `kind` 一词双义（`step.kind` = 工具名 N-35 vs 图节点 kind = 族）必须拆；② 节点身份词表先后两案被否——抽象案（源/文档/装配三词）「不直接」、业务案（post/captions/dubbing 业务词）「越层」——用户判词：**type 怎么可能和业务强绑定；type 是通用工作流流程节点概念，「能用于表达 xxx 业务」但本身不 named after 业务**（ElevenLabs 的媒介 tab = type 本身，菜单项 = type 上配置出的业务能力；MiniMax 的媒介列表同构互证）；③ generator/editor 之分是真实产品轴——编辑链配方卡的 PROMPT 参数回声 = editor 卡上挂了不属于它的部件——作为**能力原型**地基落成，缺省值定名 `manual`；④ `prototype` 属性名由用户亲定（不用 nature）。
 
@@ -1628,3 +1628,45 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 施工 = 简报 §3.5 的 C1→C6 批次（词表迁移含其中：列改名走 Alembic；legacy 五值行映射——asset→按 asset_type 落媒介值+manual；document+role→text；generator/processor/agent→按 tool 落媒介值+各自 prototype；三个 morph modifier→`modifier` 旧词随 B4 退役；materialize→`materialize` 过渡词随历史清理收）。翻译/配音两站的文档站恒 type=table、prototype=manual。配方画廊 generate/edit 分组徽标与能力路线（MG 动画 / 文生媒体 / 对话剪辑工具）入 PROGRESS 需求池，不占本批。收口时本文 §4.5 注记与 CHAT_ARCH §5、DIALOG_WORKFLOW §2.2 同批改现在时。
 
 **Related**: ADR-072（判词①⑪由本条修订——解剖三族保留、身份词表与 generator 地基按本条落地）/ ADR-057（图即产品对象）/ ADR-058（二源律——label 的座位）/ ADR-067（端口法则媒介化）/ ADR-075（画幅分档——video/image 的框架律）
+
+## ADR-077: 会话层工具 loop 化——常备否决收窄终裁：生产封闭 / 服务收编 / 执行永拒
+
+**Status**: Decided (2026-09-14，用户需求模拟四轮讨论拍板——起点 = 乔布斯判词「完美的技术从产品需求入手」；走查参照 = ChatCut 式会话编辑器三连截图 + 终极旅程「把原视频做成案例视频那样子」；施工落点 = 简报 `docs/tasks/chat-tool-loop-migration.md`；旅程母文档 = `docs/JOURNEYS.md`)
+
+**Context**: chat 体验「少了智能」的病根经代码级诊断定案（`agents/base|contexts`、`chat/intent|service`、`pipeline/graph|orchestrator`、`providers/llm/minimax` 通读）：**脊柱（四层工程地图）无病，Loop 层被建成了纯裁决器**——有嘴（散文）有判断（verdict）没眼睛（感知）、没有在对的时刻说话的座位（主动发声）、一次定音（轮内单调用）。三轮需求模拟逐拍倒推（迷失用户首产 / 后续更改服务 / 终极案例仿制，全文 = JOURNEYS）：缺口集中于①感知（read-before-write 是相对量指令与推荐的**功能前提**，不是体验糖）②触发回合（理解完成 / run 完成时 agent 主动说话）③收官 reviewer（判断 + 下一步）④镜头跟随。同期 spike 实证（2026-09-11/12）：M3 唯一遵循 schema 的通道 = tool_calls（json_schema 被完全无视；截断 ~11% 走工具错误反馈吸收）——**模型为工具形态训练，JSON-in-prompt 判决逆模型纹理**（顺形律 ADR-064 的架构层兑现）。且我们已在逐个重建标准件（BoundedLoopNode = agent-in-step、ask 判决 = AskUserQuestion 工具、四态 union = 工具集）——方言翻译表（AGENT_ARCH §2.5）的存在本身就是方言的证据。修补判词：当年判「零 agent 全 workflow」时恐惧的对象 = 不可估价/不可测试/不可预测的**开放式自主**；本轮模拟证明该恐惧只命中执行 loop 与拓扑塑形，不命中有界感知。
+
+**Decision**:
+
+1. **常备否决收窄终裁**（「tool-call loop 维持拒绝」翻案，边界三层各自钉死）：
+   - **生产层 = 编译期封闭 DAG，永不变**——看什么/做什么编译期可枚举；报价=fold、执行=topo、拓扑代码定（ADR-028）不动摇；
+   - **服务感知 = 有界只读 loop，收编**——chat 边缘 agent 可调一族**只读工具**（读 spec / 曲库 / 样式目录 / 理解摘要 / run 状态…）；迭代封顶（`max_iterations` 声明）+ 报价 = fold（上限 × 单次）+ 终产仍是「一份判决 + 工具序列」；
+   - **执行 loop 永拒**——写世界永远走三扇唯一门（edit ops / wiring ops / `create_run`），loop 内零副作用。
+   「是否做 ReAct / 是否做 loop」问题注销：每层各有答案。
+2. **会话层全面工具化**：现有判决 union 机械翻译为工具集——`type` 字段 = 工具名、各态字段 = 工具参数（ask → `ask_user` / draft → `present_plan` / start → `start_run` / task_list → `propose_tasks` / edit_ops → `apply_edit_ops` / WiringProposal → `edit_graph`）。**护栏语义搬进工具执行内**：出书门槛 = `present_plan` 的执行内校验（无根 → 工具拒绝 + 结构化反馈，修复回声的同族座位）；出生地 422 不变（`start_run` 内部仍走 `create_run` 零旁路）；dock 生命周期 / 单待决 / autoResume 结算 = UI 状态机 + 代码，原样保留。读工具一族住 `app/chat/perception/`（注册表纪律同 TOOL_REGISTRY：name + params schema + execute + 碎碎念文案键，静态注册随代码部署；与 `app/tools/` 的分工 = **世界的读法 vs 世界的改法**）。loop 驱动 = harness 新形态（迭代封顶 + **终态工具**（ask_user / present_plan / start_run / 最终回复）一调即停）。
+3. **触发回合（trigger turn）**：chat 回合的「用户消息」可以是系统事件（白名单首批 = 理解完成 / run 完成）——agent 借读工具看世界再说话。**主动发声（感知缺口 B2）与收官 reviewer + 建议 pills（B3）合并为此机制的两个触发器**；建议 pill 点击 = 把文本作为下一条用户消息发出（修订型走 chat 唯一意图面）或直达动作（导出/下载）。09-04「收官无下一步」拍板由本条翻案（当时反对的是 recap 复读机语境下的空洞模板；reviewer 看过产物后下一步有据可依）；09-04 退役 recap 的判词（复读 spec.summary 零增量）**维持**——reviewer 的产出 = 判断 + 引导，不是清单复读。
+4. **多 provider 线格式三层**（通用地板 + 高级处理 + 自动降级，用户判词「始终考虑多 provider」）：Tier 0 地板 = action-JSON-in-prompt loop（research 节点已验证此形态可承载全部语义）；Tier 1 原生 tool_calls（M3 唯一 schema 遵循通道，spike 已验）；Tier 2 provider 特有（strict schema / parallel calls / reasoning 控制，逐 provider 声明）。**法则：层只换线格式，永不动判决契约**——各层产出同一校验后结果，降级天然安全，修复/错误反馈语义同构。client 声明能力旗标（`supports_native_tools` / `supports_json_schema` / reasoning 方言），harness 选双方共持最高层；PRICING 按 provider+model 分家；prompt gate（ADR-071）按 provider 参数化复跑。配套结构收口：错误类型去品牌化（`MiniMaxError` 族随迁移批改中性名，user_key 税制不动）；方言消化归各自 client（ADR-066 不变）。
+5. **预效果一致性纪律**：agent 的「思路与方向」描述恒从提案对象派生（summary/ops 同一对象两投影——summary 到嘴、ops 到手），校验先于庆祝（ops 过裁决后收官才落地），流式预览翻案即回滚（`question.preview` 既有纪律覆盖）；**不做渲染预览**（用户拍板：口头描述与画布变动一致即可）。
+6. **NAMING 批 v3 原则**：会话层方言词一次性退役、行业词直取（提问机器 → ask_user、verdict → tool call、任务书 → plan、brief 账本 → session state，全表随简报）；AGENT_ARCH §2.5 翻译表的方言侧随批消融；命名批纪律沿用（每 commit 冷启动自绿）。
+
+**Consequences**: 施工 = 简报批次 T1（线格式三层 + 错误去品牌化）→ T2（工具 loop 内核：判决 union → 工具集 + 读工具注册表 + 护栏搬入 + service.py 拆解 + SSE 工具事件帧）→ T3（触发回合：主动发声 + 收官 reviewer + 建议 pills）→ T4（剧本测试断言改工具序列 / prompt gate 适配 / NAMING v3 / CHAT_ARCH + DIALOG_WORKFLOW 现在时改写）→ T5（decompiler 批，ADR-078）；B4 画布镜头跟随（纯前端）随时插入不占跑道。资产存活：schema（变工具参数）、护栏语义（搬入工具执行）、执行层（零改动）、提问机器 UX（dock/单待决/结算全留）。打字机律三牙（CLAUDE.md）在工具线格式下重述：散文 = content 通道（spike：~1s 先达）、工具调用 = 相位帧（「正在查曲库…」免费碎碎念）、零 delta 路径仍走 paceSettledProse。风险挂账：M3 多工具多轮择工具准确率（工具数 ~12，低于 Agno 实测 ~20 幻觉线）+ 截断率吸收——prompt gate 与剧本测试是验收网。画布卡面直改（ADR-058/063）与手动布线永禁（ADR-035）不受本批影响。
+
+**Related**: ADR-039（四层工程地图——本条是其 Loop 层的形态修订，脊柱不变）/ ADR-052（厚 agent 判词修订：常备否决收窄）/ ADR-064（顺形律——架构层兑现）/ ADR-066（方言归 client）/ ADR-071（prompt gate 按 provider 参数化）/ ADR-028（拓扑铁律不破）/ ADR-043（任务书语法——draft 载荷随工具化平移）/ ADR-053（提问机器形态律——机制留存，形态工具化）/ ADR-057（图即产品对象——edit_graph 工具的唯一写口不变）/ ADR-078（decompiler——本条的终极旅程内核）
+
+## ADR-078: decompiler 反向编译器——视频 = 可编程时序结构，remix = 换内容留风格
+
+**Status**: Decided (2026-09-14，用户判词：「视频产物的实质 = 时序数据的数组（含画面颜色分布）；既然能把一个视频做成可编程的，就能够利用 LLM 反向拆解一个视频为可编程数据结构」；终极旅程「你能帮我把我的原视频做成案例视频这样子吗？」的技术内核；旅程全文 = `docs/JOURNEYS.md` §2)
+
+**Context**: 终极旅程逐拍走查证明：全旅程只需**三个新概念**即被现有架构撑住（资产角色 / decompiler / exemplar 参数源），其余每拍都是已落地机器或已挂账缺口。本条是其中最重的一个。正向链 clip-spec → video（renderer，黑盒）早已存在；用户洞察指出反向必然成立——clip-spec 就是视频的可编程表示，反向拆解 = 把案例视频编译回这个表示。craft 解剖（`research/craft-anatomy-2026-08-22.md`）与轨道模型（ADR-044）是它的地基。
+
+**Decision**:
+
+1. **decompiler = video → clip-spec 骨架**：案例视频进、一个 clip-spec 形状的骨架出。字段按确定性分层——镜头切分 / 节奏 / 画幅 = 确定性检测（scene cut 一族，零 LLM）；字幕 preset / 颜色 = 视觉最近邻 best-fit 枚举（只在契约枚举内取值）；配乐 mood / hook 装置 = LLM 判断；**内容槽位留空待填**。产物落库（资产级、内容寻址、可复用——understand 的复用纪律原样继承）。
+2. **契约即能力边界**：反向编译只产出 clip-spec 里**有家**的字段；案例里超契约的效果（动图形 / 多轨合成 / L3 清单）在分解时没有座位——「这个我做不到」清单 = 结构对比的副产品，带理由纠偏的素材自动成立（顾问姿态②的兑现机制）。
+3. **remix = 内容槽替换**：我的素材经 understand / plan / select_clips 填进骨架内容槽，风格字段（字幕 / 配乐 / 节奏 / 画幅）原样保留；产物天然可渲染——分解输出的就是渲染器消费的同一 schema，可执行性由构造保证。
+4. **资产角色（source / reference）**：双素材场景的角色消歧走提问机器（一词可答，选项 = 文件名）或 mention 指认；reference 资产常驻项目、可回读（后续修订的比较基准）；角色可反转（reference → source，链照跑）。
+5. **exemplar 参数源**：任务书参数的第四来源（user-stated / inferred / default 之外 + **exemplar-derived**）。纪律：**参数由代码从骨架映射，LLM 永不写 spec**——拓扑铁律（ADR-028）不破，骨架是数据不是指令。
+6. **双抽取分工**：understand 答「它说了什么」（内容），decompile 答「它怎么做的」（工艺）——两种抽取皆资产级、内容寻址、跨项目可复用；plan 的装配签名加 craft 骨架输入（纯度签名化扩展先例 = §5.3 纪律内）。
+
+**Consequences**: 施工归简报 T5（`docs/tasks/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
+
+**Related**: ADR-077（会话层工具 loop 化——终极旅程的服务面）/ ADR-016（clip-spec 唯一契约——本条是它的反向通道）/ ADR-044（轨道模型——骨架的字段家）/ ADR-028（拓扑铁律——exemplar 参数源不破它）/ ADR-043（任务书语法——第四参数源的语法座位）
