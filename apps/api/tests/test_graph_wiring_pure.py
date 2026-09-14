@@ -234,12 +234,12 @@ async def test_add_node_with_after_derives_edge_state_layout():
     edge = next(e for e in db.added if isinstance(e, GraphEdge))
     assert (edge.from_node, edge.to_node, edge.edge_type) == (asset.id, newborn.id, "video")
     # 定居取景 (统一摆位律): x = depth × pitch (the parent's generation 0 →
-    # the child lands one pitch right; pitch = the widest class 400 + 96
+    # the child lands one pitch right; pitch = the widest class 400 + 64
     # since the 2026-09-13 分档加宽批); a fresh column's first node RISES
     # above its parent (2026-09-09); existing frames never move
     # (append-only 保序律).
-    assert newborn.layout["x"] == 496
-    assert newborn.layout["y"] == -126
+    assert newborn.layout["x"] == 464
+    assert newborn.layout["y"] == -88
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # TWO flushes (ADR-059 分裂 flush 律): nodes strictly before edges — the
     # UOW never orders bare-FK inserts, so the door stages them.
@@ -1187,9 +1187,9 @@ async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
     book = next(n for n in db.nodes if n.id == book_id)
     writer = next(n for n in db.nodes if n.id == writer_id)
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    assert writer.layout["x"] == 496
+    assert writer.layout["x"] == 464
     # A fresh column's first node rises above its parent (2026-09-09).
-    assert writer.layout["y"] == -126
+    assert writer.layout["y"] == -88
 
 
 @pytest.mark.asyncio
@@ -1221,18 +1221,18 @@ def test_settle_frames_chain_grows_right_not_down():
     settle_frames_with_edges([book, writer, verify_free_second], [], edges)
     # The book has no parents — it stays at the origin island.
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    # Children settle one depth-pitch right (496 since the 2026-09-13 分档
-    # 加宽批: the widest class 400 + GAP_MAIN 96): the first RISES above
+    # Children settle one depth-pitch right (464 since the 2026-09-13 分档
+    # 加宽批: the widest class 400 + GAP_MAIN 64): the first RISES above
     # the book (2026-09-09), the second stacks INSIDE the shared column
     # (same depth) under its sibling (cross gap).
-    assert writer.layout["x"] == 496
-    assert writer.layout["y"] == -126
-    assert verify_free_second.layout["x"] == 496
+    assert writer.layout["x"] == 464
+    assert writer.layout["y"] == -88
+    assert verify_free_second.layout["x"] == 464
     # The sibling stack's gap derives from the frame-class RESERVATION
     # (text = 560 since 2026-09-10 卡高内容驱动, was 440), never from the
     # node's provisional layout h — the fixture's 440 is deliberately stale
     # to prove the reservation drives.
-    assert verify_free_second.layout["y"] == -126 + 560 + 24
+    assert verify_free_second.layout["y"] == -88 + 560 + 16
 
 
 def test_settle_frames_parent_chain_one_link_per_pass():
@@ -1244,10 +1244,10 @@ def test_settle_frames_parent_chain_one_link_per_pass():
     c = _node("processor", spec={"frame_class": "clip"}, layout={"x": 0, "y": 688, "w": 280, "h": 660})
     edges = [_edge(a.id, b.id, "ctx"), _edge(b.id, c.id, "text")]
     settle_frames_with_edges([a, b, c], [], edges)
-    assert b.layout["x"] == 496
-    assert c.layout["x"] == 2 * 496
+    assert b.layout["x"] == 464
+    assert c.layout["x"] == 2 * 464
     # The rise compounds link by link: b above a, c above b.
-    assert c.layout["y"] == -252
+    assert c.layout["y"] == -176
 
 
 def test_settle_frames_never_moves_settled_history():
@@ -1262,8 +1262,8 @@ def test_settle_frames_never_moves_settled_history():
     settle_frames_with_edges([book, writer], [asset], edges)
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # The book rises above its settled parent; the settled frame is untouched.
-    assert (book.layout["x"], book.layout["y"]) == (496, -126)
-    assert writer.layout["x"] == 2 * 496
+    assert (book.layout["x"], book.layout["y"]) == (464, -88)
+    assert writer.layout["x"] == 2 * 464
 
 
 # ---- 词表 v3 门层 (ADR-076, C2a): 媒介五值 + legacy 容忍 ---------------------

@@ -300,6 +300,18 @@ function ProjectDetailPage() {
   // user is reading the receipt. Rising edge only — the mount observation
   // (a refreshed already-terminal project) never fires.
   const [canvasEpoch, setCanvasEpoch] = useState(0)
+  // 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): the armed user-initiated
+  // camera beat — armed ONLY inside the dock's own send/Start handlers
+  // (background polling / SSE refetches never arm, so they never move the
+  // camera), consumed by FlowView on the first arrival carrying a node-id
+  // delta (or retired by its timeout). Arming is gated on the LIVE canvas:
+  // the pre-world morph's settle framing owns the first show, and the
+  // mobile dock has no focus business (mobile stays run-driven).
+  const [cameraBeat, setCameraBeat] = useState<{
+    token: number
+    mode: "fit" | "pan"
+  } | null>(null)
+  const clearCameraBeat = useCallback(() => setCameraBeat(null), [])
   const lastRunStatusRef = useRef<string | null>(null)
   useEffect(() => {
     const status = latestRun?.status ?? null
@@ -981,6 +993,9 @@ function ProjectDetailPage() {
               dockRef.current?.closeHistory()
               setSelectedOutputId(null)
             }}
+            cameraBeat={cameraBeat}
+            onCameraBeatConsumed={clearCameraBeat}
+            occludedRightPx={panelCoversCorner ? 504 : 0}
           />
         </div>
       ) : (
@@ -1073,6 +1088,11 @@ function ProjectDetailPage() {
         // rides the same fetch — a book-turn can CREATE assets server-side
         // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
+          // C6 聚焦转场: the run fill's newborns land via the refetch loop —
+          // arm a pan-keep-zoom beat to where they settled.
+          if (graphLive && !isMobile) {
+            setCameraBeat({ token: Date.now(), mode: "pan" })
+          }
           void fetchResults()
         }}
         // K5 图先展示后运行: a book dock / bail changes the draft graph
@@ -1081,6 +1101,11 @@ function ProjectDetailPage() {
         // run; without this the flip only ever fired on the first run and
         // the chain preview never showed — 2026-09-09 取证).
         onDraftGraphChange={() => {
+          // C6 聚焦转场: the re-stamped draft chain's arrival = 整链 fit
+          // (user-initiated beat — a re-dock on a live canvas re-frames).
+          if (graphLive && !isMobile) {
+            setCameraBeat({ token: Date.now(), mode: "fit" })
+          }
           void fetchGraph()
         }}
       />

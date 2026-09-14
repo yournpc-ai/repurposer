@@ -254,6 +254,21 @@ export interface FlowViewProps {
    * surface owns the witnessing (its first hydrated frame passes NOTHING —
    * refresh / reconnect / history render instantly, 铁律). */
   bornIds?: ReadonlySet<string>
+  /** 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): a USER-initiated camera beat
+   * armed by the surface — "fit" (chat-send draft arrival = 整链 fit,
+   * reusing the settle framing's recipe) or "pan" (mid-session newborns =
+   * setCenter 平移锁 zoom). Consumes on the first arrival carrying a
+   * node-id delta; a racing no-delta fetch never eats it, a ~5s timeout
+   * retires it. Background refetches never ARM, so they never move the
+   * camera (the 2026-08-19 growth law's narrowing, not its repeal). */
+  cameraBeat?: { token: number; mode: "fit" | "pan" } | null
+  /** The armed beat was spent (fired / gesture-shielded / hidden-surface /
+   * timed-out) — the surface clears its state. */
+  onCameraBeatConsumed?: () => void
+  /** docked 几何面板遮挡补偿 (C6): the right-edge occlusion in screen px
+   * (the docked chat panel's footprint; 0 otherwise) — "fit" pads right,
+   * "pan" centers the newborn cluster in the VISIBLE region. */
+  occludedRightPx?: number
   /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
    * frames behind member node clusters, naming the region. */
   groups?: FlowGroup[]

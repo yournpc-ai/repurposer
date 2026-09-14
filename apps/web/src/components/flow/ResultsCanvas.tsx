@@ -112,6 +112,15 @@ export interface ResultsCanvasProps {
    * docked-panel avoidance — the page offsets both clear of the open chat
    * panel so nothing sits under the frost. */
   controlsClassName?: string
+  /** 聚焦转场 (C6 画布相机批): the page-armed user beat (chat-send draft
+   * arrival = 整链 fit / run-start newborns = setCenter 平移锁 zoom) and
+   * its consumed callback; occludedRightPx = the docked panel's right-edge
+   * footprint (0 in float geometry / hidden / mobile). Pass-through to
+   * FlowView — background refetches never arm, so they never move the
+   * camera. */
+  cameraBeat?: { token: number; mode: "fit" | "pan" } | null
+  onCameraBeatConsumed?: () => void
+  occludedRightPx?: number
   className?: string
 }
 
@@ -131,6 +140,9 @@ export function ResultsCanvas({
   selectedOutputId = null,
   onPaneClick,
   controlsClassName,
+  cameraBeat = null,
+  onCameraBeatConsumed,
+  occludedRightPx = 0,
   className,
 }: ResultsCanvasProps) {
   const { t } = useTranslation()
@@ -724,6 +736,9 @@ export function ResultsCanvas({
         pendingProgram={promptEdit}
         promptConfirm={promptConfirmPayload}
         draftConfirm={draftConfirmPayload}
+        cameraBeat={cameraBeat}
+        onCameraBeatConsumed={onCameraBeatConsumed}
+        occludedRightPx={occludedRightPx}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its

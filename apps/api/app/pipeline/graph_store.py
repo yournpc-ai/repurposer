@@ -247,8 +247,8 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 # bar 44). A node's class comes from spec.frame_class (the fill stamps it
 # from the family's product vocabulary); an unstamped generator/processor/
 # agent reserves the clip maximum — safe by construction.
-_GAP_MAIN = 96
-_GAP_CROSS = 24
+_GAP_MAIN = 64
+_GAP_CROSS = 16
 
 # ---- display aspect classes (2026-09-13 用户拍板 — 产物卡跟源比例 + 分档加宽)
 # The source media's REAL pixels snap to the nearest of the three display
@@ -279,12 +279,14 @@ def resolve_source_aspect(dims: list[tuple[int, int]]) -> str | None:
 # bottom-LEFT (~204px from its top at the draft anatomy: 26+120+88+44 −
 # inBase 60 − half the anchor), so a top-aligned child forces every edge
 # into a steep S across the gap. Lifting the child by the port-geometry
-# delta + a breath of slack (204 − 54 − 24) lets the line arc gently.
-_FRESH_COLUMN_RISE = 126
+# delta minus slack (204 − 54 − 62) lets the line arc gently — the slack
+# term grew with the C6 间距收紧 (2026-09-14 拍板 88): tighter columns
+# rise less above their parents.
+_FRESH_COLUMN_RISE = 88
 _FRAME_CLASS: dict[str, tuple[int, int]] = {
     "asset": (280, 260),
     # 260 → 340 (2026-09-13 用户拍板——文字节点增大): the document joins the
-    # text/agent lane width; the pitch (496) is unaffected since the widest
+    # text/agent lane width; the pitch (464) is unaffected since the widest
     # class stays the 400 clip. The measurement law's chars-per-line scales
     # with the column (below); nodes born at 260 keep their stamped frame
     # (append-only 保序律, the text-class precedent).
@@ -394,7 +396,7 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
 # rendering of it, never the source of truth. Frames of projects born
 # before this law are replayed once by migration (see
 # migrations/versions/e7a9c1d35b28_depth_pitch_frames.py).
-_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 400 + 96
+_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 400 + 64
 
 
 def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:

@@ -363,8 +363,10 @@ export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
  * 2026-08-17; 做薄 2026-08-19): 8px gap + the 36px frosted bar. */
 export const ASSET_TOOLBAR_PX = 44
 
-const GAP_MAIN = 96
-const GAP_CROSS = 24
+// 间距常数收紧 (C6, 2026-09-14 拍板 64/16/88): one law with the server
+// mirror graph_store._GAP_MAIN/_GAP_CROSS (the rise is server-stamped).
+const GAP_MAIN = 64
+const GAP_CROSS = 16
 
 /** Birth-choreography stagger quantum (ADR-036 补记 3): the delay between
  * consecutive nodes' entrances in compile-order replay — shared by the node

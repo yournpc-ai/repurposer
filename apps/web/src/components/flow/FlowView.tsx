@@ -13,6 +13,7 @@ import {
 } from "@xyflow/react"
 
 import { cn } from "@/lib/utils"
+import { Maximize } from "lucide-react"
 
 import "@xyflow/react/dist/style.css"
 import "./flow.css"
@@ -161,6 +162,116 @@ function ViewportController({
   return null
 }
 
+/** 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): user-initiated beats move the
+ * camera — NEVER background refetches (the surface arms a beat only inside
+ * its own send / Start handlers, so a polling / SSE arrival carrying new
+ * ids can't yank the view; the 2026-08-19「增长不动视口」law's narrowing,
+ * not its repeal). Guards:
+ * - 手势防护: a user drag/zoom within the last 3s shields the beat (they
+ *   grabbed the canvas mid-flight — don't fight the hand);
+ * - prefers-reduced-motion: the transition degrades to an instant jump;
+ * - a hidden surface (no box) spends the beat WITHOUT moving — the
+ *   settle/morph framing owns the first show;
+ * - docked 面板遮挡补偿: "fit" pads the occluded right edge, "pan" centers
+ *   the newborn cluster in the VISIBLE region.
+ * One-shot: consumes on the FIRST arrival carrying a node-id delta — a
+ * racing no-delta fetch (SSE tick) never eats the beat early; a ~5s
+ * timeout retires an arm whose stamp never lands. */
+const GESTURE_SHIELD_MS = 3000
+const CAMERA_BEAT_TIMEOUT_MS = 5000
+
+function CameraBeats({
+  nodes,
+  beat,
+  wrapperRef,
+  occludedRightPx = 0,
+  lastGestureRef,
+  onConsumed,
+}: {
+  nodes: FlowNode[]
+  beat: { token: number; mode: "fit" | "pan" } | null | undefined
+  wrapperRef: React.RefObject<HTMLDivElement | null>
+  occludedRightPx?: number
+  lastGestureRef: React.RefObject<number>
+  onConsumed?: () => void
+}) {
+  const rf = useReactFlow()
+  const prevIdsRef = useRef<ReadonlySet<string> | null>(null)
+  const armedTokenRef = useRef<number | null>(null)
+
+  // Track the current arm by token (declared BEFORE the delta effect so a
+  // same-render arm+arrival still reads the fresh token).
+  useEffect(() => {
+    armedTokenRef.current = beat?.token ?? null
+  }, [beat])
+
+  // Timeout: an arm whose stamp never carries new ids expires.
+  useEffect(() => {
+    if (!beat) return
+    const timer = setTimeout(() => onConsumed?.(), CAMERA_BEAT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [beat, onConsumed])
+
+  useEffect(() => {
+    const ids = new Set(nodes.map((n) => n.id))
+    const prev = prevIdsRef.current
+    prevIdsRef.current = ids
+    // The baseline frame is never a beat (refresh / reconnect / the heal
+    // remount render instantly — 铁律).
+    if (prev === null) return
+    if (!beat || armedTokenRef.current !== beat.token) return
+    const newborns = nodes.filter((n) => !prev.has(n.id))
+    if (newborns.length === 0) return // a racing no-delta fetch — arm survives
+    const el = wrapperRef.current
+    if (!el || !el.clientWidth || !el.clientHeight) return onConsumed?.()
+    if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
+      return onConsumed?.()
+    }
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    if (beat.mode === "fit") {
+      void rf.fitView({
+        ...FIT_VIEW_OPTIONS,
+        padding:
+          occludedRightPx > 0
+            ? { top: 0.2, bottom: 0.2, left: 0.2, right: `${occludedRightPx + 48}px` }
+            : FIT_VIEW_OPTIONS.padding,
+        duration: reduce ? 0 : 300,
+      })
+    } else {
+      // setCenter on the newborn cluster's bbox — zoom LOCKED (pan only).
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      let framed = 0
+      for (const n of newborns) {
+        const f = n.frame
+        if (!f) continue
+        framed += 1
+        minX = Math.min(minX, f.x)
+        minY = Math.min(minY, f.y)
+        maxX = Math.max(maxX, f.x + f.w)
+        maxY = Math.max(maxY, f.y + f.h)
+      }
+      if (framed > 0) {
+        const zoom = rf.getViewport().zoom
+        // 遮挡补偿: center the cluster in the VISIBLE region — anchoring the
+        // world point half an occlusion RIGHT of the cluster's center puts
+        // the cluster half an occlusion LEFT of the viewport center (world
+        // px = screen px / zoom).
+        const cx = (minX + maxX) / 2 + occludedRightPx / 2 / zoom
+        const cy = (minY + maxY) / 2
+        void rf.setCenter(cx, cy, { zoom, duration: reduce ? 0 : 500 })
+      }
+    }
+    onConsumed?.()
+  }, [nodes, beat, rf, wrapperRef, occludedRightPx, lastGestureRef, onConsumed])
+
+  return null
+}
+
 /** Region frames (2026-08-19 预留, the FLORA technique-workflow form — the
  * recipe surface uses it first): one large rounded frame behind each member
  * cluster, labeled with the region's 大叙事. Bounds are pure layout math
@@ -249,8 +360,12 @@ function FlowControls({ className }: { className?: string }) {
         aria-label={t("results.canvas.zoomFit")}
         title={t("results.canvas.zoomFit")}
         onClick={fit}
-        className="dock-surface flex h-9 items-center rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
+        className="dock-surface flex h-9 items-center gap-1.5 rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
       >
+        {/* 俯视 discoverability (C6): the fit icon makes「点击 = fit」
+            visible — the bare percentage was invisible knowledge since the
+            2026-09-05 瘦身拍板. */}
+        <Maximize className="size-4" aria-hidden />
         {Math.round(zoom * 100)}%
       </button>
     </Panel>
@@ -280,6 +395,9 @@ export function FlowView({
   controlsClassName,
   settleKey,
   bornIds,
+  cameraBeat = null,
+  onCameraBeatConsumed,
+  occludedRightPx = 0,
   groups = [],
   overlay,
   dots = false,
@@ -290,6 +408,11 @@ export function FlowView({
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const wrapperRef = useRef<HTMLDivElement>(null)
+  // 手势防护 (C6): the last USER pan/zoom timestamp — CameraBeats yields to
+  // a hand that grabbed the canvas mid-flight. onMoveStart's event arg is
+  // null for PROGRAMMATIC moves (fit/setCenter), non-null only for real
+  // gestures, so the camera's own beats never self-shield.
+  const lastGestureRef = useRef(0)
 
   const { rfNodes, rfEdges, layout, sizes, bornRanks } = useMemo(() => {
     const layout = layoutFlow(nodes, edges)
@@ -463,6 +586,9 @@ export function FlowView({
         panOnScroll={false}
         elementsSelectable
         edgesFocusable={false}
+        onMoveStart={(event) => {
+          if (event) lastGestureRef.current = Date.now()
+        }}
         onNodeClick={(_, node) => onSelect?.(node.id)}
         onPaneClick={onPaneClick}
       >
@@ -498,6 +624,14 @@ export function FlowView({
           wrapperRef={wrapperRef}
           navigation={navigation}
           settleKey={settleKey}
+        />
+        <CameraBeats
+          nodes={nodes}
+          beat={cameraBeat}
+          wrapperRef={wrapperRef}
+          occludedRightPx={occludedRightPx}
+          lastGestureRef={lastGestureRef}
+          onConsumed={onCameraBeatConsumed}
         />
         {/* The zoom pill is canvas chrome for explore surfaces only — a
             fit-locked surface has no zoom business (the prop is ignored). */}
